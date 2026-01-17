@@ -78,18 +78,7 @@
             :src="currentImage.url"
             :alt="currentImage.filename"
             class="w-full h-full object-contain"
-            @load="onImageLoad"
-            @error="onImageError"
           />
-
-          <div
-            v-if="imageLoading"
-            class="absolute inset-0 flex items-center justify-center bg-slate-800"
-          >
-            <div
-              class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"
-            ></div>
-          </div>
 
           <div
             v-if="swipeDirection"
@@ -111,7 +100,7 @@
         </div>
 
         <div class="text-center text-sm text-slate-400 mb-4">
-          {{ currentImage.filename }}
+          {{ currentImage?.filename || '' }}
         </div>
 
         <div class="flex gap-4 w-full max-w-md">
@@ -144,13 +133,6 @@
             @click="undo"
           >
             撤销
-          </button>
-
-          <button
-            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg text-sm"
-            @click="skip"
-          >
-            跳过
           </button>
         </div>
       </div>
@@ -193,7 +175,6 @@ const sessionId = route.params.id as string;
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
-const imageLoading = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
 
 const { showError } = useNotification();
@@ -244,19 +225,9 @@ onMounted(() => {
   });
 });
 
-function onImageLoad() {
-  imageLoading.value = false;
-}
-
-function onImageError() {
-  showError("图片加载失败");
-  imageLoading.value = false;
-}
 
 async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
   if (!currentImage.value) return;
-
-  imageLoading.value = true;
 
   try {
     await mutate(MarkImageDocument, {
@@ -272,7 +243,6 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
     showError(
       "操作失败: " + (err instanceof Error ? err.message : "Unknown error")
     );
-    imageLoading.value = false;
   }
 }
 
@@ -285,13 +255,6 @@ async function undo() {
     showError(
       "撤销失败: " + (err instanceof Error ? err.message : "Unknown error")
     );
-  }
-}
-
-function skip() {
-  if (currentImage.value) {
-    imageLoading.value = true;
-    markImage("PENDING");
   }
 }
 
@@ -341,6 +304,12 @@ function handleTouchEnd(e: TouchEvent) {
   touchEndX.value = e.changedTouches[0].screenX;
   touchEndY.value = e.changedTouches[0].screenY;
   handleGesture();
+  
+  // 重置触摸坐标，清除滑动方向
+  setTimeout(() => {
+    touchEndX.value = touchStartX.value;
+    touchEndY.value = touchStartY.value;
+  }, 100);
 }
 
 function handleGesture() {
