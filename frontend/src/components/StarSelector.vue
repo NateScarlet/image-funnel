@@ -8,15 +8,10 @@
         class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 active:scale-95"
         :disabled="disabled"
         @click="toggleStar(star.value)"
+        @mouseenter="hoveredStar = star.value"
+        @mouseleave="hoveredStar = null"
       >
-        <svg 
-          class="w-6 h-6" 
-          viewBox="0 0 24 24" 
-          fill="currentColor"
-          :class="isSelected(star.value) ? getStarColorClass(star.value) : 'text-slate-500'"
-        >
-          <path :d="isSelected(star.value) ? star.filledIcon : star.outlineIcon" />
-        </svg>
+        <RatingIcon :rating="star.value" :filled="isSelected(star.value) || hoveredStar === star.value" />
       </button>
     </div>
     <div v-if="label" class="text-sm text-slate-400 mt-1">{{ label }}</div>
@@ -24,7 +19,9 @@
 </template>
 
 <script setup lang="ts">
-import { STAR_CONFIGS, type StarConfig, getStarColorClass } from '../utils/starConfig'
+import { ref } from 'vue'
+import { STAR_CONFIGS, type StarConfig } from '../utils/starConfig'
+import RatingIcon from './RatingIcon.vue'
 
 interface Props {
   modelValue: number | number[]
@@ -44,6 +41,7 @@ const emit = defineEmits<{
 }>()
 
 const stars: StarConfig[] = STAR_CONFIGS
+const hoveredStar = ref<number | null>(null)
 
 function isSelected(value: number): boolean {
   if (props.mode === 'single') {

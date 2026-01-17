@@ -124,14 +124,7 @@
                             class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
                             :class="{ 'ring-1 ring-blue-400': filterRating.includes(rc.rating) }"
                           >
-                            <svg
-                              class="w-3 h-3"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              :class="getStarColorClass(rc.rating)"
-                            >
-                              <path :d="mdiStar" />
-                            </svg>
+                            <RatingIcon :rating="rc.rating" />
                             <span class="text-xs">{{ rc.count }}</span>
                           </div>
                         </div>
@@ -185,8 +178,7 @@ import mutate from '../graphql/utils/mutate'
 import { CreateSessionDocument, GetDirectoriesDocument } from '../graphql/generated'
 import { usePresets } from '../composables/usePresets'
 import StarSelector from '../components/StarSelector.vue'
-import { mdiStar } from '@mdi/js'
-import { getStarColorClass } from '../utils/starConfig'
+import RatingIcon from '../components/RatingIcon.vue'
 
 const router = useRouter()
 const { presets, getPreset } = usePresets()
