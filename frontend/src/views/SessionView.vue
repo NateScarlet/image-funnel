@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-    <header class="bg-slate-800 border-b border-slate-700 p-2 md:p-4">
+  <div class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden">
+    <header class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex-1">
           <div class="text-xs md:text-sm text-slate-400">
@@ -74,7 +74,7 @@
         没有更多图片
       </div>
 
-      <div v-else class="w-full max-w-5xl flex flex-col items-center h-full">
+      <div v-else class="w-full max-w-5xl flex flex-col items-center h-full min-h-0">
         <div
           class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
         >
@@ -143,7 +143,7 @@
     </main>
 
     <footer
-      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400"
+      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0"
     >
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
