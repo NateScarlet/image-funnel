@@ -86,7 +86,7 @@ interface CommitResult {
 }
 
 const props = defineProps<Props>()
-defineEmits(['close', 'committed'])
+const emit = defineEmits(['close', 'committed'])
 
 const { data: sessionData } = useQuery(GetSessionDocument, {
   variables: () => ({ id: props.sessionId })
@@ -106,6 +106,12 @@ async function commit() {
     
     if (data) {
       commitResult.value = data.commitChanges
+      
+      if (data.commitChanges.success && data.commitChanges.failed === 0) {
+        setTimeout(() => {
+          emit('committed')
+        }, 500)
+      }
     }
   } catch (err: unknown) {
     commitResult.value = {
