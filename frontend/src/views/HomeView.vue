@@ -40,7 +40,7 @@
                 当前目录下没有可用的子目录
               </div>
 
-              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div v-else class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
                   v-for="dir in directories"
                   :key="dir.id"
@@ -196,7 +196,7 @@ const selectedPreset = computed(() => {
 })
 
 const canCreate = computed(() => {
-  return filterRating.value.length > 0 && targetKeep.value > 0 && selectedDirectory.value
+  return filterRating.value.length > 0 && targetKeep.value > 0
 })
 
 watch(() => selectedPreset.value, (preset) => {
@@ -249,7 +249,7 @@ async function createSession() {
             rating: filterRating.value
           },
           targetKeep: targetKeep.value,
-          directory: selectedDirectory.value
+          directory: selectedDirectory.value || ''
         }
       }
     })
