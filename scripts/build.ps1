@@ -41,7 +41,15 @@ if (Test-Path $FRONTEND_DIST) {
 # 构建后端
 Write-Host "构建后端项目..."
 Push-Location $ROOT_DIR
-go build -o "$BUILD_DIR/image-funnel.exe" ./cmd/server
+$gitVersion = git describe --tags --always --dirty 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
+    $gitVersion = "dev"
+    Write-Host "无法获取 git 版本号，使用默认值: dev"
+} else {
+    Write-Host "获取到 git 版本号: $gitVersion"
+}
+$ldflags = "-X main.BuildEnv=$gitVersion"
+go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server
 Pop-Location
 
 # 检查构建结果
