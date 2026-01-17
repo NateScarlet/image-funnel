@@ -1,12 +1,12 @@
 <template>
   <div class="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-    <header class="bg-slate-800 border-b border-slate-700 p-4">
+    <header class="bg-slate-800 border-b border-slate-700 p-2 md:p-4">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex-1">
-          <div class="text-sm text-slate-400">
+          <div class="text-xs md:text-sm text-slate-400">
             {{ session?.directory || "加载中..." }}
           </div>
-          <div class="text-lg font-semibold">
+          <div class="text-sm md:text-lg font-semibold">
             {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
             <span class="text-green-400 ml-2"
               >保留: {{ stats?.kept || 0 }} /
@@ -15,7 +15,16 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-4">
+        <button
+          class="md:hidden p-2 rounded-lg hover:bg-slate-700 transition-colors"
+          @click="showMenu = true"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <div class="hidden md:flex items-center gap-4">
           <div class="text-right text-sm">
             <div class="text-slate-400">预设</div>
             <div>{{ session?.preset?.name }}</div>
@@ -39,7 +48,7 @@
       </div>
     </header>
 
-    <main class="flex-1 flex items-center justify-center p-4 overflow-hidden">
+    <main class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden">
       <div v-if="loading" class="text-center text-slate-400">加载中...</div>
 
       <div v-else-if="!session" class="text-center">
@@ -72,7 +81,7 @@
 
       <div v-else class="w-full max-w-5xl flex flex-col items-center">
         <div
-          class="relative w-full aspect-video bg-slate-800 rounded-lg overflow-hidden mb-4"
+          class="relative w-full aspect-video md:h-full bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4"
         >
           <ImageViewer
             v-if="currentImage"
@@ -99,11 +108,11 @@
           </div>
         </div>
 
-        <div class="text-center text-sm text-slate-400 mb-4">
+        <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
           {{ currentImage?.filename || "" }}
         </div>
 
-        <div class="flex gap-4 w-full max-w-md">
+        <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
           <button
             class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-lg"
             @click="markImage('REJECT')"
@@ -126,7 +135,7 @@
           </button>
         </div>
 
-        <div class="mt-4 flex gap-4">
+        <div class="hidden md:flex mt-4 gap-4">
           <button
             :disabled="!session?.canUndo"
             class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg text-sm"
@@ -143,6 +152,52 @@
     >
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
+
+    <div
+      v-if="showMenu"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      @click.self="showMenu = false"
+    >
+      <div class="bg-slate-800 rounded-lg p-6 w-full max-w-sm">
+        <div class="mb-6">
+          <h3 class="text-lg font-bold mb-2">会话信息</h3>
+          <div class="text-sm text-slate-400 mb-1">预设</div>
+          <div class="text-base">{{ session?.preset?.name }}</div>
+        </div>
+
+        <div class="space-y-3">
+          <button
+            :disabled="!session?.canUndo"
+            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            @click="undo(); showMenu = false"
+          >
+            撤销
+          </button>
+
+          <button
+            :disabled="!session?.canCommit"
+            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            @click="showCommitModal = true; showMenu = false"
+          >
+            提交
+          </button>
+
+          <button
+            class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors"
+            @click="confirmAbandon"
+          >
+            放弃
+          </button>
+        </div>
+
+        <button
+          class="mt-4 w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+          @click="showMenu = false"
+        >
+          关闭
+        </button>
+      </div>
+    </div>
 
     <CommitModal
       v-if="showCommitModal"
@@ -177,6 +232,7 @@ const sessionId = route.params.id as string;
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 const showCommitModal = ref<boolean>(false);
+const showMenu = ref<boolean>(false);
 
 const { showError } = useNotification();
 
@@ -262,6 +318,7 @@ async function undo() {
 }
 
 function confirmAbandon() {
+  showMenu.value = false;
   if (confirm("确定要放弃当前会话吗？所有未提交的更改将会丢失。")) {
     router.push("/");
   }
@@ -273,7 +330,7 @@ function onCommitted() {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (showCommitModal.value) return;
+  if (showCommitModal.value || showMenu.value) return;
 
   switch (e.key) {
     case "ArrowDown":
@@ -318,7 +375,7 @@ function handleTouchEnd(e: TouchEvent) {
 }
 
 function handleGesture() {
-  if (showCommitModal.value) return;
+  if (showCommitModal.value || showMenu.value) return;
   if (!swipeDirection.value) return;
 
   const minSwipeDistance = 50;
