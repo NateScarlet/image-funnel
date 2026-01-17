@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from "vue";
+import { ref, toValue, watch, type MaybeRefOrGetter, type Ref } from "vue";
 import createEventListeners from "@/utils/createEventListeners";
 
 export default function useDragInput({
@@ -10,7 +10,7 @@ export default function useDragInput({
   el: () => HTMLElement | null | undefined;
   x?: Ref<number>;
   y?: Ref<number>;
-  cursorStyle?: () => string;
+  cursorStyle?: MaybeRefOrGetter<string>;
 }) {
   const stack = new DisposableStack();
   const dragging = ref(false);
@@ -18,7 +18,7 @@ export default function useDragInput({
   if (cursorStyle) {
     stack.defer(
       watch(
-        [cursorStyle, dragging, el],
+        [() => toValue(cursorStyle), dragging, el],
         ([cursorStyle, v, el], _, onCleanup) => {
           if (!el) {
             return;

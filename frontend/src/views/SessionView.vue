@@ -184,8 +184,11 @@ const touchStartX = ref<number>(0);
 const touchStartY = ref<number>(0);
 const touchEndX = ref<number>(0);
 const touchEndY = ref<number>(0);
+const isSingleTouch = ref<boolean>(true);
 
 const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
+  if (!isSingleTouch.value) return null;
+
   const deltaX = touchEndX.value - touchStartX.value;
   const deltaY = touchEndY.value - touchStartY.value;
   const minSwipeDistance = 30;
@@ -289,6 +292,7 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 function handleTouchStart(e: TouchEvent) {
+  isSingleTouch.value = e.touches.length === 1;
   touchStartX.value = e.changedTouches[0].screenX;
   touchStartY.value = e.changedTouches[0].screenY;
   touchEndX.value = touchStartX.value;
@@ -296,6 +300,7 @@ function handleTouchStart(e: TouchEvent) {
 }
 
 function handleTouchMove(e: TouchEvent) {
+  isSingleTouch.value = e.touches.length === 1;
   touchEndX.value = e.changedTouches[0].screenX;
   touchEndY.value = e.changedTouches[0].screenY;
 }
