@@ -8,12 +8,14 @@
     "preview": "vite preview",
     "generate:graphql": "graphql-codegen --config codegen.ts",
     "build:tsc": "vue-tsc -p ./src/tsconfig.json",
+    "check": "npm run build:tsc && npm run lint",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "@apollo/client": "^3.8.0",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@mdi/js": "^7.4.47",
     "@vue/apollo-composable": "^4.2.2",
     "@vue/composition-api": "^1.7.2",
     "core-js": "^3.47.0",

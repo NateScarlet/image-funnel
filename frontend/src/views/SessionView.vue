@@ -42,10 +42,6 @@
     <main class="flex-1 flex items-center justify-center p-4 overflow-hidden">
       <div v-if="loading" class="text-center text-slate-400">加载中...</div>
 
-      <div v-else-if="error" class="text-center text-red-400">
-        {{ error }}
-      </div>
-
       <div v-else-if="!session" class="text-center">
         <div class="text-4xl mb-4">🔍</div>
         <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
@@ -188,6 +184,7 @@ import {
 } from "../graphql/generated";
 import CommitModal from "../components/CommitModal.vue";
 import useEventListeners from "../composables/useEventListeners";
+import useNotification from "../composables/useNotification";
 
 const route = useRoute();
 const router = useRouter();
@@ -196,9 +193,10 @@ const sessionId = route.params.id as string;
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
-const error = ref<string>("");
 const imageLoading = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
+
+const { showError } = useNotification();
 
 const touchStartX = ref<number>(0);
 const touchStartY = ref<number>(0);
@@ -251,7 +249,7 @@ function onImageLoad() {
 }
 
 function onImageError() {
-  error.value = "图片加载失败";
+  showError("图片加载失败");
   imageLoading.value = false;
 }
 
@@ -271,8 +269,9 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
       },
     });
   } catch (err: unknown) {
-    error.value =
-      "操作失败: " + (err instanceof Error ? err.message : "Unknown error");
+    showError(
+      "操作失败: " + (err instanceof Error ? err.message : "Unknown error")
+    );
     imageLoading.value = false;
   }
 }
@@ -283,8 +282,9 @@ async function undo() {
       variables: { input: { sessionId } },
     });
   } catch (err: unknown) {
-    error.value =
-      "撤销失败: " + (err instanceof Error ? err.message : "Unknown error");
+    showError(
+      "撤销失败: " + (err instanceof Error ? err.message : "Unknown error")
+    );
   }
 }
 

@@ -100,10 +100,10 @@ setter 应该验证输入值的有效性，避免无效状态。
 
 2. **修改 GraphQL schema 后：**
    - 运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码
-   - 运行 `pnpm run build:tsc` 来检查 TypeScript 类型
+   - 运行 `pnpm run check` 来检查错误
 
 3. **修改前端代码后：**
-   - 运行 `pnpm run build:tsc` 来检查 TypeScript 类型
+   - 运行 `pnpm run check` 来检查错误
 
 4. **修改后端代码后：**
    - 添加必要的测试用例
