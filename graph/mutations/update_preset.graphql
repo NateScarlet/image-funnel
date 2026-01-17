@@ -1,0 +1,14 @@
+input UpdatePresetInput {
+  sessionId: ID!
+  presetId: ID!
+  clientMutationId: String
+}
+
+type UpdatePresetPayload {
+  session: Session!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  updatePreset(input: UpdatePresetInput!): UpdatePresetPayload!
+}

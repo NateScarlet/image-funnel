@@ -1,0 +1,7 @@
+#import '../fragments/PresetFragment.gql'
+
+query GetPresets {
+  presets {
+    ...PresetFragment
+  }
+}

@@ -1,0 +1,28 @@
+#import './PresetFragment.gql'
+#import './StatsFragment.gql'
+#import './ImageFragment.gql'
+
+fragment SessionFragment on Session {
+  id
+  directory
+  preset {
+    ...PresetFragment
+  }
+  targetKeep
+  status
+  stats {
+    ...StatsFragment
+  }
+  createdAt
+  updatedAt
+  canCommit
+  canUndo
+  currentImage {
+    ...ImageFragment
+  }
+  queueStatus {
+    currentIndex
+    totalImages
+    progress
+  }
+}

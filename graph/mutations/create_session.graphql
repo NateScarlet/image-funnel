@@ -1,0 +1,14 @@
+input CreateSessionInput {
+  presetId: ID!
+  targetKeep: Int!
+  clientMutationId: String
+}
+
+type CreateSessionPayload {
+  session: Session!
+  clientMutationId: String
+}
+
+type Mutation {
+  createSession(input: CreateSessionInput!): CreateSessionPayload!
+}

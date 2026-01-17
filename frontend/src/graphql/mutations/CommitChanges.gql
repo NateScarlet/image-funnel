@@ -1,0 +1,14 @@
+mutation CommitChanges($input: CommitChangesInput!) {
+  commitChanges(input: $input) {
+    success
+    written
+    failed
+    errors
+    session {
+      id
+      status
+      canCommit
+    }
+    clientMutationId
+  }
+}

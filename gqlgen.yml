@@ -1,0 +1,19 @@
+# gqlgen configuration
+schema:
+  - graph/*.graphql
+  - graph/mutations/*.graphql
+exec:
+  filename: graph/generated.go
+  package: graph
+model:
+  filename: graph/models_gen.go
+  package: graph
+resolver:
+  layout: follow-schema
+  dir: graph
+  package: graph
+models:
+  Time:
+    model: time.Time
+  Upload:
+    model: github.com/99designs/gqlgen/graphql.Upload

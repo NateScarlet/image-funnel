@@ -1,0 +1,15 @@
+input MarkImageInput {
+  sessionId: ID!
+  imageId: ID!
+  action: ImageAction!
+  clientMutationId: String
+}
+
+type MarkImagePayload {
+  session: Session!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  markImage(input: MarkImageInput!): MarkImagePayload!
+}

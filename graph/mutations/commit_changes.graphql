@@ -1,0 +1,17 @@
+input CommitChangesInput {
+  sessionId: ID!
+  clientMutationId: String
+}
+
+type CommitChangesPayload {
+  success: Boolean!
+  written: Int!
+  failed: Int!
+  errors: [String!]!
+  session: Session
+  clientMutationId: String
+}
+
+extend type Mutation {
+  commitChanges(input: CommitChangesInput!): CommitChangesPayload!
+}

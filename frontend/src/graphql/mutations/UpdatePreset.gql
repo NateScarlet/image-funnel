@@ -1,0 +1,10 @@
+#import '../fragments/SessionFragment.gql'
+
+mutation UpdatePreset($input: UpdatePresetInput!) {
+  updatePreset(input: $input) {
+    session {
+      ...SessionFragment
+    }
+    clientMutationId
+  }
+}

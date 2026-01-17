@@ -1,0 +1,10 @@
+#import '../fragments/SessionFragment.gql'
+
+mutation CreateSession($input: CreateSessionInput!) {
+  createSession(input: $input) {
+    session {
+      ...SessionFragment
+    }
+    clientMutationId
+  }
+}

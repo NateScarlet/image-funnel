@@ -1,0 +1,7 @@
+#import '../fragments/SessionFragment.gql'
+
+subscription SessionUpdated($sessionId: ID!) {
+  sessionUpdated(sessionId: $sessionId) {
+    ...SessionFragment
+  }
+}

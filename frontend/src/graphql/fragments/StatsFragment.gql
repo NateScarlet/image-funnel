@@ -1,0 +1,8 @@
+fragment StatsFragment on SessionStats {
+  total
+  processed
+  kept
+  reviewed
+  rejected
+  remaining
+}

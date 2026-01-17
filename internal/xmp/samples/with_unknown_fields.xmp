@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <Description rdf:about=""
+   xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:exif="http://ns.adobe.com/exif/1.0/"
+   xmp:Rating="3"
+   dc:title="Test Image"
+   exif:GPSLatitude="40.7128"
+   exif:GPSLongitude="-74.0060"/>
+ </RDF>
+</x:xmpmeta>

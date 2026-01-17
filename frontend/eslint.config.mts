@@ -1,0 +1,52 @@
+import js from "@eslint/js";
+import vue from "eslint-plugin-vue";
+import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
+import graphql from "@graphql-eslint/eslint-plugin";
+
+export default tseslint.config(
+  { ignores: ["dist/**", "node_modules/**", "*.config.js", "codegen.ts"] },
+  {
+    extends: [
+      js.configs.recommended,
+      ...tseslint.configs.strict,
+      ...tseslint.configs.stylistic,
+      ...vue.configs["flat/recommended"],
+    ],
+    files: ["**/*.{ts,tsx,vue}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        console: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearTimeout: "readonly",
+        clearInterval: "readonly",
+        localStorage: "readonly",
+        confirm: "readonly",
+      },
+      parserOptions: {
+        parser: tseslint.parser,
+        project: "./src/tsconfig.json",
+        extraFileExtensions: [".vue"],
+      },
+    },
+    rules: {},
+  },
+  {
+    files: ["**/*.gql", "**/*.graphql"],
+    plugins: {
+      "@graphql-eslint": graphql,
+    },
+    languageOptions: {
+      parser: graphql.parser,
+    },
+    rules: {
+      ...graphql.configs["flat/schema-recommended"].rules,
+    },
+  },
+  prettier
+);

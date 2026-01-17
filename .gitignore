@@ -1,0 +1,29 @@
+# GraphQL
+graph/*.graphql
+graph/generated.go
+
+# Environment
+.env
+
+# IDE
+.vscode
+.idea
+
+# OSa
+.DS_Store
+Thumbs.db
+
+# Build
+*.exe
+*.dll
+*.so
+bin/
+dist/
+build/
+
+*.local
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

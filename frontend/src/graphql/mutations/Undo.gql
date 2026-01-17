@@ -1,0 +1,10 @@
+#import '../fragments/SessionFragment.gql'
+
+mutation Undo($input: UndoInput!) {
+  undo(input: $input) {
+    session {
+      ...SessionFragment
+    }
+    clientMutationId
+  }
+}

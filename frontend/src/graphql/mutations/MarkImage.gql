@@ -1,0 +1,10 @@
+#import '../fragments/SessionFragment.gql'
+
+mutation MarkImage($input: MarkImageInput!) {
+  markImage(input: $input) {
+    session {
+      ...SessionFragment
+    }
+    clientMutationId
+  }
+}

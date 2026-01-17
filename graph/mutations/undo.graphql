@@ -1,0 +1,13 @@
+input UndoInput {
+  sessionId: ID!
+  clientMutationId: String
+}
+
+type UndoPayload {
+  session: Session
+  clientMutationId: String
+}
+
+extend type Mutation {
+  undo(input: UndoInput!): UndoPayload
+}
