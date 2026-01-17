@@ -97,14 +97,11 @@
                     <div class="flex-1 min-w-0">
                       <h3 class="font-semibold text-lg mb-1 truncate">{{ getDirectoryName(dir.path) }}</h3>
                       <div class="text-xs text-slate-300 space-y-1">
-                        <div>
-                          <span class="opacity-70">图片:</span> {{ dir.imageCount }}
-                        </div>
                         <div v-if="dir.subdirectoryCount > 0">
                           <span class="opacity-70">子目录:</span> {{ dir.subdirectoryCount }}
                         </div>
-                        <div v-if="getMatchedImageCount(dir) > 0">
-                          <span class="opacity-70">匹配:</span> {{ getMatchedImageCount(dir) }}
+                        <div v-if="dir.latestImageModTime">
+                          <span class="opacity-70">修改:</span> {{ formatDate(dir.latestImageModTime) }}
                         </div>
                         <div v-if="dir.ratingCounts && dir.ratingCounts.length > 0" class="flex flex-wrap gap-2 mt-2">
                           <div
@@ -168,6 +165,7 @@ import { CreateSessionDocument, GetDirectoriesDocument } from '../graphql/genera
 import { usePresets } from '../composables/usePresets'
 import StarSelector from '../components/StarSelector.vue'
 import RatingIcon from '../components/RatingIcon.vue'
+import { formatDate } from '../utils/date'
 
 const router = useRouter()
 const { presets, getPreset } = usePresets()
