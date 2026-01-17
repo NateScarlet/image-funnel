@@ -26,14 +26,17 @@
 
         <div class="hidden md:flex items-center gap-4">
           <button
-            :disabled="!session?.canUndo"
+            :disabled="!session?.canUndo || undoing"
             class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
             @click="undo"
           >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <svg v-if="undoing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiUndo" fill="currentColor" />
             </svg>
-            撤销
+            <span>{{ undoing ? '撤销中...' : '撤销' }}</span>
           </button>
 
           <button
@@ -132,33 +135,45 @@
 
         <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
           <button
-            class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
+            :disabled="marking"
+            class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('REJECT')"
           >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
               <path :d="mdiDeleteOutline" fill="currentColor" />
             </svg>
-            排除
+            <span>{{ marking ? '处理中...' : '排除' }}</span>
           </button>
 
           <button
-            class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
+            :disabled="marking"
+            class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('PENDING')"
           >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
               <path :d="mdiClockOutline" fill="currentColor" />
             </svg>
-            稍后再看
+            <span>{{ marking ? '处理中...' : '稍后再看' }}</span>
           </button>
 
           <button
-            class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
+            :disabled="marking"
+            class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('KEEP')"
           >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
               <path :d="mdiHeartOutline" fill="currentColor" />
             </svg>
-            保留
+            <span>{{ marking ? '处理中...' : '保留' }}</span>
           </button>
         </div>
       </div>
@@ -184,14 +199,17 @@
 
         <div class="space-y-3">
           <button
-            :disabled="!session?.canUndo"
+            :disabled="!session?.canUndo || undoing"
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="undo(); showMenu = false"
           >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <svg v-if="undoing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiUndo" fill="currentColor" />
             </svg>
-            撤销
+            <span>{{ undoing ? '撤销中...' : '撤销' }}</span>
           </button>
 
           <button
@@ -258,6 +276,7 @@ import {
   mdiDeleteOutline,
   mdiClockOutline,
   mdiHeartOutline,
+  mdiLoading,
 } from "@mdi/js";
 
 const route = useRoute();
@@ -269,6 +288,8 @@ const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 const showCommitModal = ref<boolean>(false);
 const showMenu = ref<boolean>(false);
+const undoing = ref(false);
+const marking = ref(false);
 
 const { showError } = useNotification();
 
@@ -324,6 +345,8 @@ onMounted(() => {
 async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
   if (!currentImage.value) return;
 
+  marking.value = true;
+
   try {
     await mutate(MarkImageDocument, {
       variables: {
@@ -338,10 +361,14 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
     showError(
       "操作失败: " + (err instanceof Error ? err.message : "Unknown error")
     );
+  } finally {
+    marking.value = false;
   }
 }
 
 async function undo() {
+  undoing.value = true;
+
   try {
     await mutate(UndoDocument, {
       variables: { input: { sessionId } },
@@ -350,6 +377,8 @@ async function undo() {
     showError(
       "撤销失败: " + (err instanceof Error ? err.message : "Unknown error")
     );
+  } finally {
+    undoing.value = false;
   }
 }
 

@@ -41,12 +41,7 @@
         </div>
       </div>
       
-      <div v-if="committing" class="text-center mb-4">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-        <p class="text-slate-400">正在写入...</p>
-      </div>
-      
-      <div v-else-if="commitResult" class="mb-4">
+      <div v-if="commitResult" class="mb-4">
         <div :class="commitResult.success ? 'text-green-400' : 'text-red-400'">
           {{ commitResult.success ? '✓ 提交成功' : '✗ 提交失败' }}
         </div>
@@ -69,10 +64,13 @@
         <button
           v-if="!commitResult"
           :disabled="committing"
-          class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg"
+          class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2"
           @click="commit"
         >
-          确认提交
+          <svg v-if="committing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+            <path :d="mdiLoading" fill="currentColor" />
+          </svg>
+          <span>{{ committing ? '提交中...' : '确认提交' }}</span>
         </button>
         <button
           v-else
@@ -93,6 +91,7 @@ import mutate from '../graphql/utils/mutate'
 import { GetSessionDocument, CommitChangesDocument } from '../graphql/generated'
 import { usePresets } from '../composables/usePresets'
 import StarSelector from './StarSelector.vue'
+import { mdiLoading } from '@mdi/js'
 
 interface Props {
   sessionId: string

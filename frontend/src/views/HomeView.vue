@@ -62,8 +62,9 @@
                 <div></div>
               </div>
 
-              <div v-if="loadingDirectories" class="text-center text-slate-400 py-4">
-                加载目录中...
+              <div v-if="loadingDirectories" class="space-y-4">
+                <div class="bg-slate-700 rounded-lg p-4"><div class="animate-pulse"><div class="h-4 bg-slate-600 rounded mb-2 w-3/4"></div><div class="h-3 bg-slate-600 rounded w-1/2"></div></div></div>
+                <div class="bg-slate-700 rounded-lg p-4"><div class="animate-pulse"><div class="h-4 bg-slate-600 rounded mb-2 w-3/4"></div><div class="h-3 bg-slate-600 rounded w-1/2"></div></div></div>
               </div>
 
               <div v-else-if="filteredDirectories.length === 0" class="text-center text-slate-400 py-4">
@@ -135,11 +136,14 @@
           </div>
 
           <button
-            :disabled="!canCreate"
-            class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            :disabled="!canCreate || creatingSession"
+            class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             @click="createSession"
           >
-            开始筛选
+            <svg v-if="creatingSession" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <span>{{ creatingSession ? '创建中...' : '开始筛选' }}</span>
           </button>
         </div>
       </div>
@@ -165,6 +169,7 @@ import { usePresets } from '../composables/usePresets'
 import StarSelector from '../components/StarSelector.vue'
 import RatingIcon from '../components/RatingIcon.vue'
 import { formatDate } from '../utils/date'
+import { mdiLoading } from '@mdi/js'
 
 const router = useRouter()
 const { presets, getPreset } = usePresets()
