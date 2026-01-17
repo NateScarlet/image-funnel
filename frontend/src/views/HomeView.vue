@@ -108,9 +108,8 @@
                             v-for="rc in sortedRatingCounts(dir.ratingCounts)"
                             :key="rc.rating"
                             class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
-                            :class="{ 'ring-1 ring-blue-400': filterRating.includes(rc.rating) }"
                           >
-                            <RatingIcon :rating="rc.rating" />
+                            <RatingIcon :rating="rc.rating" :filled="filterRating.includes(rc.rating)" />
                             <span class="text-xs">{{ rc.count }}</span>
                           </div>
                         </div>
