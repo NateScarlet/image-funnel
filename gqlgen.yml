@@ -14,6 +14,6 @@ resolver:
   package: graph
 models:
   Time:
-    model: time.Time
+    model: main/graph.Time
   Upload:
     model: github.com/99designs/gqlgen/graphql.Upload

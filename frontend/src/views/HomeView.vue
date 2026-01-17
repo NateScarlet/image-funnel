@@ -12,6 +12,77 @@
         <div class="space-y-6">
           <div>
             <label class="block text-sm font-medium text-slate-300 mb-4">
+              选择目录
+            </label>
+            <div class="bg-slate-700 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-4">
+                <button
+                  v-if="currentPath !== ''"
+                  class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+                  @click="goToParent"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  返回上级
+                </button>
+                <div class="text-sm text-slate-400">
+                  {{ currentPath || '根目录' }}
+                </div>
+                <div></div>
+              </div>
+
+              <div v-if="loadingDirectories" class="text-center text-slate-400 py-4">
+                加载目录中...
+              </div>
+
+              <div v-else-if="directories.length === 0" class="text-center text-slate-400 py-4">
+                当前目录下没有可用的子目录
+              </div>
+
+              <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="dir in directories"
+                  :key="dir.id"
+                  :class="[
+                    'p-4 rounded-lg cursor-pointer transition-all border-2',
+                    selectedDirectory === dir.path
+                      ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/30'
+                      : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550'
+                  ]"
+                  @click="selectDirectory(dir)"
+                >
+                  <div class="flex items-start gap-3">
+                    <div
+                      v-if="dir.latestImagePath"
+                      class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
+                    >
+                      <img
+                        v-if="dir.latestImageUrl"
+                        :src="dir.latestImageUrl"
+                        :alt="dir.path"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h3 class="font-semibold text-lg mb-1 truncate">{{ getDirectoryName(dir.path) }}</h3>
+                      <div class="text-xs text-slate-300 space-y-1">
+                        <div>
+                          <span class="opacity-70">图片:</span> {{ dir.imageCount }}
+                        </div>
+                        <div v-if="dir.subdirectoryCount > 0">
+                          <span class="opacity-70">子目录:</span> {{ dir.subdirectoryCount }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-4">
               选择评分预设
             </label>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -103,7 +174,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import useQuery from '../graphql/utils/useQuery'
 import mutate from '../graphql/utils/mutate'
-import { GetPresetsDocument, CreateSessionDocument } from '../graphql/generated'
+import { GetPresetsDocument, CreateSessionDocument, GetDirectoriesDocument } from '../graphql/generated'
 
 const router = useRouter()
 
@@ -120,12 +191,26 @@ const presets = computed(() => presetsData.value?.presets || [])
 const selectedPresetId = ref<string>('')
 const targetKeep = ref<number>(10)
 
+const currentPath = ref<string>('')
+const selectedDirectory = ref<string>('')
+const loadingDirectories = ref(false)
+
+const { data: directoriesData } = useQuery(
+  GetDirectoriesDocument,
+  {
+    variables: () => ({ path: currentPath.value }),
+    loadingCount,
+  }
+)
+
+const directories = computed(() => directoriesData.value?.directories || [])
+
 const selectedPreset = computed(() => {
   return presets.value.find(p => p.id === selectedPresetId.value)
 })
 
 const canCreate = computed(() => {
-  return selectedPresetId.value && targetKeep.value > 0
+  return selectedPresetId.value && targetKeep.value > 0 && selectedDirectory.value
 })
 
 watch(presets, (newPresets) => {
@@ -139,6 +224,27 @@ watch(presets, (newPresets) => {
   }
 }, { immediate: true })
 
+function getDirectoryName(path: string): string {
+  const parts = path.split('/')
+  return parts[parts.length - 1] || path
+}
+
+function selectDirectory(dir: { path: string; subdirectoryCount: number }) {
+  if (dir.subdirectoryCount > 0) {
+    currentPath.value = dir.path
+    selectedDirectory.value = ''
+  } else {
+    selectedDirectory.value = dir.path
+  }
+}
+
+function goToParent() {
+  const parts = currentPath.value.split('/')
+  parts.pop()
+  currentPath.value = parts.join('/')
+  selectedDirectory.value = ''
+}
+
 async function createSession() {
   creatingSession.value = true
   error.value = ''
@@ -148,7 +254,8 @@ async function createSession() {
       variables: {
         input: {
           presetId: selectedPresetId.value,
-          targetKeep: targetKeep.value
+          targetKeep: targetKeep.value,
+          directory: selectedDirectory.value
         }
       }
     })

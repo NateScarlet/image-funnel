@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
 )
 
 type CommitChangesInput struct {
@@ -26,12 +27,23 @@ type CommitChangesPayload struct {
 type CreateSessionInput struct {
 	PresetID         string  `json:"presetId"`
 	TargetKeep       int     `json:"targetKeep"`
+	Directory        string  `json:"directory"`
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionPayload struct {
 	Session          *Session `json:"session"`
 	ClientMutationID *string  `json:"clientMutationId,omitempty"`
+}
+
+type Directory struct {
+	ID                 string    `json:"id"`
+	Path               string    `json:"path"`
+	ImageCount         int       `json:"imageCount"`
+	SubdirectoryCount  int       `json:"subdirectoryCount"`
+	LatestImageModTime time.Time `json:"latestImageModTime"`
+	LatestImagePath    *string   `json:"latestImagePath,omitempty"`
+	LatestImageURL     *string   `json:"latestImageUrl,omitempty"`
 }
 
 type Image struct {

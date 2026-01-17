@@ -1,6 +1,7 @@
 input CreateSessionInput {
   presetId: ID!
   targetKeep: Int!
+  directory: String!
   clientMutationId: String
 }
 

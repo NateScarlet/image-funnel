@@ -1,0 +1,11 @@
+query GetDirectories($path: String!) {
+  directories(path: $path) {
+    id
+    path
+    imageCount
+    subdirectoryCount
+    latestImageModTime
+    latestImagePath
+    latestImageUrl
+  }
+}

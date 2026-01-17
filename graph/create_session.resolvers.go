@@ -8,6 +8,8 @@ package graph
 import (
 	"context"
 	"fmt"
+	"main/internal/scanner"
+	"path/filepath"
 )
 
 // CreateSession is the resolver for the createSession field.
@@ -17,7 +19,14 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessio
 		return nil, fmt.Errorf("preset not found")
 	}
 
-	sess, err := r.Resolver.SessionManager.Create(r.Resolver.RootDir, p, input.TargetKeep)
+	s := scanner.NewScanner(r.RootDir)
+	if err := s.ValidateDirectoryPath(input.Directory); err != nil {
+		return nil, fmt.Errorf("invalid directory: %w", err)
+	}
+
+	dirPath := filepath.Join(r.RootDir, input.Directory)
+
+	sess, err := r.Resolver.SessionManager.Create(dirPath, p, input.TargetKeep)
 	if err != nil {
 		return nil, err
 	}

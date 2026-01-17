@@ -19,6 +19,11 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*Session, error
 	return r.Resolver.Session(ctx, id)
 }
 
+// Directories is the resolver for the directories field.
+func (r *queryResolver) Directories(ctx context.Context, path string) ([]*Directory, error) {
+	return r.Resolver.Directories(ctx, path)
+}
+
 // SessionUpdated is the resolver for the sessionUpdated field.
 func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID string) (<-chan *Session, error) {
 	return r.Resolver.SessionUpdated(ctx, sessionID)

@@ -15,6 +15,7 @@
   "dependencies": {
     "@apollo/client": "^3.8.0",
     "@graphql-typed-document-node/core": "^3.2.0",
+    "@juggle/resize-observer": "^3.4.0",
     "@mdi/js": "^7.4.47",
     "@vue/apollo-composable": "^4.2.2",
     "@vue/composition-api": "^1.7.2",
