@@ -5,10 +5,19 @@ import (
 	"sync"
 	"time"
 
-	"main/internal/preset"
 	"main/internal/scanner"
 	"main/internal/xmp"
 )
+
+type ImageFilters struct {
+	Rating []int
+}
+
+type WriteActions struct {
+	KeepRating    int
+	PendingRating int
+	RejectRating  int
+}
 
 type Status string
 
@@ -41,7 +50,7 @@ type Stats struct {
 type Session struct {
 	ID         string
 	Directory  string
-	Preset     *preset.Preset
+	Filter     *ImageFilters
 	TargetKeep int
 	Status     Status
 	CreatedAt  time.Time
@@ -167,7 +176,7 @@ func NewManager() *Manager {
 	}
 }
 
-func (m *Manager) Create(dirPath string, preset *preset.Preset, targetKeep int) (*Session, error) {
+func (m *Manager) Create(dirPath string, filter *ImageFilters, targetKeep int) (*Session, error) {
 	scanner := scanner.NewScanner(dirPath)
 	images, err := scanner.Scan()
 	if err != nil {
@@ -176,7 +185,7 @@ func (m *Manager) Create(dirPath string, preset *preset.Preset, targetKeep int) 
 
 	var queue []*ImageInfo
 	for _, img := range images {
-		if img.CurrentRating == preset.QueueRating || img.CurrentRating == 0 {
+		if contains(filter.Rating, img.CurrentRating) || img.CurrentRating == 0 {
 			queue = append(queue, convertImageInfo(img))
 		}
 	}
@@ -184,7 +193,7 @@ func (m *Manager) Create(dirPath string, preset *preset.Preset, targetKeep int) 
 	session := &Session{
 		ID:         generateID(),
 		Directory:  dirPath,
-		Preset:     preset,
+		Filter:     filter,
 		TargetKeep: targetKeep,
 		Status:     StatusActive,
 		CreatedAt:  time.Now(),
@@ -321,7 +330,7 @@ func (m *Manager) CurrentImage(sessionID string) (*ImageInfo, error) {
 	return session.CurrentImage(), nil
 }
 
-func (m *Manager) Commit(sessionID string) (int, []error) {
+func (m *Manager) Commit(sessionID string, writeActions *WriteActions) (int, []error) {
 	session, exists := m.Get(sessionID)
 	if !exists {
 		return 0, []error{fmt.Errorf("session not found")}
@@ -340,11 +349,11 @@ func (m *Manager) Commit(sessionID string) (int, []error) {
 		var rating int
 		switch action {
 		case ActionKeep:
-			rating = session.Preset.KeepRating
+			rating = writeActions.KeepRating
 		case ActionPending:
-			rating = session.Preset.ReviewRating
+			rating = writeActions.PendingRating
 		case ActionReject:
-			rating = session.Preset.RejectRating
+			rating = writeActions.RejectRating
 		}
 		if rating == 0 && !img.XMPExists() {
 			continue
@@ -355,7 +364,6 @@ func (m *Manager) Commit(sessionID string) (int, []error) {
 			Action:    string(action),
 			SessionID: session.ID,
 			Timestamp: time.Now(),
-			Preset:    session.Preset.Name,
 		}
 
 		if err := xmp.Write(img.Path(), xmpData); err != nil {
@@ -386,4 +394,13 @@ func convertImageInfo(img *scanner.ImageInfo) *ImageInfo {
 
 func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+func contains(slice []int, item int) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

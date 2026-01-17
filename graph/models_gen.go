@@ -6,13 +6,15 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"main/internal/session"
 	"strconv"
 	"time"
 )
 
 type CommitChangesInput struct {
-	SessionID        string  `json:"sessionId"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
+	SessionID        string                `json:"sessionId"`
+	WriteActions     *session.WriteActions `json:"writeActions"`
+	ClientMutationID *string               `json:"clientMutationId,omitempty"`
 }
 
 type CommitChangesPayload struct {
@@ -25,10 +27,10 @@ type CommitChangesPayload struct {
 }
 
 type CreateSessionInput struct {
-	PresetID         string  `json:"presetId"`
-	TargetKeep       int     `json:"targetKeep"`
-	Directory        string  `json:"directory"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
+	Filter           *session.ImageFilters `json:"filter"`
+	TargetKeep       int                   `json:"targetKeep"`
+	Directory        string                `json:"directory"`
+	ClientMutationID *string               `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionPayload struct {
@@ -70,16 +72,6 @@ type MarkImagePayload struct {
 type Mutation struct {
 }
 
-type Preset struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	QueueRating  int    `json:"queueRating"`
-	KeepRating   int    `json:"keepRating"`
-	ReviewRating int    `json:"reviewRating"`
-	RejectRating int    `json:"rejectRating"`
-}
-
 type Query struct {
 }
 
@@ -91,18 +83,18 @@ type QueueStatus struct {
 }
 
 type Session struct {
-	ID           string        `json:"id"`
-	Directory    string        `json:"directory"`
-	Preset       *Preset       `json:"preset"`
-	TargetKeep   int           `json:"targetKeep"`
-	Status       SessionStatus `json:"status"`
-	Stats        *SessionStats `json:"stats"`
-	CreatedAt    string        `json:"createdAt"`
-	UpdatedAt    string        `json:"updatedAt"`
-	CanCommit    bool          `json:"canCommit"`
-	CanUndo      bool          `json:"canUndo"`
-	CurrentImage *Image        `json:"currentImage,omitempty"`
-	QueueStatus  *QueueStatus  `json:"queueStatus"`
+	ID           string                `json:"id"`
+	Directory    string                `json:"directory"`
+	Filter       *session.ImageFilters `json:"filter"`
+	TargetKeep   int                   `json:"targetKeep"`
+	Status       SessionStatus         `json:"status"`
+	Stats        *SessionStats         `json:"stats"`
+	CreatedAt    string                `json:"createdAt"`
+	UpdatedAt    string                `json:"updatedAt"`
+	CanCommit    bool                  `json:"canCommit"`
+	CanUndo      bool                  `json:"canUndo"`
+	CurrentImage *Image                `json:"currentImage,omitempty"`
+	QueueStatus  *QueueStatus          `json:"queueStatus"`
 }
 
 type SessionStats struct {
@@ -124,17 +116,6 @@ type UndoInput struct {
 
 type UndoPayload struct {
 	Session          *Session `json:"session,omitempty"`
-	ClientMutationID *string  `json:"clientMutationId,omitempty"`
-}
-
-type UpdatePresetInput struct {
-	SessionID        string  `json:"sessionId"`
-	PresetID         string  `json:"presetId"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
-}
-
-type UpdatePresetPayload struct {
-	Session          *Session `json:"session"`
 	ClientMutationID *string  `json:"clientMutationId,omitempty"`
 }
 

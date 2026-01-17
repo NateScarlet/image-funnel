@@ -9,11 +9,6 @@ import (
 	"context"
 )
 
-// Presets is the resolver for the presets field.
-func (r *queryResolver) Presets(ctx context.Context) ([]*Preset, error) {
-	return r.Resolver.Presets(ctx)
-}
-
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id string) (*Session, error) {
 	return r.Resolver.Session(ctx, id)

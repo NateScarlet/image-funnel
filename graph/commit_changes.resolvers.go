@@ -11,7 +11,7 @@ import (
 
 // CommitChanges is the resolver for the commitChanges field.
 func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error) {
-	success, errors := r.Resolver.SessionManager.Commit(input.SessionID)
+	success, errors := r.Resolver.SessionManager.Commit(input.SessionID, input.WriteActions)
 
 	var errorStrings []string
 	for _, err := range errors {

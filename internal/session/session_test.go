@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"main/internal/preset"
 	"main/internal/scanner"
 
 	"github.com/stretchr/testify/assert"
@@ -14,13 +13,8 @@ import (
 func TestMarkImage_AllKeep_ShouldStartNextRound(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -38,7 +32,7 @@ func TestMarkImage_AllKeep_ShouldStartNextRound(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -72,13 +66,8 @@ func TestMarkImage_AllKeep_ShouldStartNextRound(t *testing.T) {
 func TestMarkImage_AllReject_ShouldComplete(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -96,7 +85,7 @@ func TestMarkImage_AllReject_ShouldComplete(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -125,13 +114,8 @@ func TestMarkImage_AllReject_ShouldComplete(t *testing.T) {
 func TestMarkImage_WithReview_ShouldStartNextRound(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -149,7 +133,7 @@ func TestMarkImage_WithReview_ShouldStartNextRound(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -163,6 +147,7 @@ func TestMarkImage_WithReview_ShouldStartNextRound(t *testing.T) {
 	initialStats := session.Stats()
 	assert.Equal(t, 0, initialStats.Processed, "Initial processed should be 0")
 	assert.Equal(t, 10, initialStats.Total, "Initial total should be 10")
+	assert.Equal(t, 10, initialStats.Remaining, "Initial remaining should be 10")
 
 	for i := 0; i < 10; i++ {
 		action := ActionKeep
@@ -198,13 +183,8 @@ func TestMarkImage_WithReview_ShouldStartNextRound(t *testing.T) {
 func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -222,7 +202,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -258,13 +238,8 @@ func convertImages(images []*scanner.ImageInfo) []*ImageInfo {
 }
 
 func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -282,7 +257,7 @@ func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -295,13 +270,8 @@ func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -319,7 +289,7 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -337,13 +307,8 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -361,7 +326,7 @@ func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusCommitting,
 		images:     convertImages(images),
@@ -374,13 +339,8 @@ func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -398,7 +358,7 @@ func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusError,
 		images:     convertImages(images),
@@ -411,13 +371,8 @@ func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -435,7 +390,7 @@ func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -448,13 +403,8 @@ func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -472,7 +422,7 @@ func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -490,13 +440,8 @@ func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -514,7 +459,7 @@ func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -529,13 +474,8 @@ func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
 func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -553,7 +493,7 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -583,13 +523,8 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -607,7 +542,7 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -630,13 +565,8 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -654,7 +584,7 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),
@@ -678,13 +608,8 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) {
 	manager := NewManager()
 
-	testPreset := &preset.Preset{
-		ID:           "test-preset",
-		Name:         "测试预设",
-		QueueRating:  0,
-		KeepRating:   4,
-		ReviewRating: 0,
-		RejectRating: 2,
+	testFilter := &ImageFilters{
+		Rating: []int{0},
 	}
 
 	images := make([]*scanner.ImageInfo, 10)
@@ -702,7 +627,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 	session := &Session{
 		ID:         "test-session",
 		Directory:  "/test",
-		Preset:     testPreset,
+		Filter:     testFilter,
 		TargetKeep: 5,
 		Status:     StatusActive,
 		images:     convertImages(images),

@@ -1,6 +1,13 @@
 input CommitChangesInput {
   sessionId: ID!
+  writeActions: WriteActionsInput!
   clientMutationId: String
+}
+
+input WriteActionsInput @goModel(model: "main/internal/session.WriteActions") {
+  keepRating: Int!
+  pendingRating: Int!
+  rejectRating: Int!
 }
 
 type CommitChangesPayload {

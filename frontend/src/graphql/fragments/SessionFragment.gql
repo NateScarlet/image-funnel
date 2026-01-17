@@ -1,12 +1,11 @@
-#import './PresetFragment.gql'
 #import './StatsFragment.gql'
 #import './ImageFragment.gql'
 
 fragment SessionFragment on Session {
   id
   directory
-  preset {
-    ...PresetFragment
+  filter {
+    rating
   }
   targetKeep
   status

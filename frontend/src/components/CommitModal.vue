@@ -22,6 +22,24 @@
           </div>
         </div>
       </div>
+
+      <div v-if="!commitResult" class="mb-4 bg-slate-700 rounded-lg p-4">
+        <h3 class="font-medium mb-4">写入操作设置</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-slate-400 mb-2">保留图片评分</label>
+            <StarSelector v-model="writeActions.keepRating" mode="single" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-2">稍后图片评分</label>
+            <StarSelector v-model="writeActions.pendingRating" mode="single" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-2">排除图片评分</label>
+            <StarSelector v-model="writeActions.rejectRating" mode="single" />
+          </div>
+        </div>
+      </div>
       
       <div v-if="committing" class="text-center mb-4">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
@@ -69,10 +87,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import useQuery from '../graphql/utils/useQuery'
 import mutate from '../graphql/utils/mutate'
 import { GetSessionDocument, CommitChangesDocument } from '../graphql/generated'
+import { usePresets } from '../composables/usePresets'
+import StarSelector from './StarSelector.vue'
 
 interface Props {
   sessionId: string
@@ -88,6 +108,8 @@ interface CommitResult {
 const props = defineProps<Props>()
 const emit = defineEmits(['close', 'committed'])
 
+const { getPreset } = usePresets()
+
 const { data: sessionData } = useQuery(GetSessionDocument, {
   variables: () => ({ id: props.sessionId })
 })
@@ -96,12 +118,33 @@ const stats = computed(() => sessionData.value?.session?.stats)
 const committing = ref(false)
 const commitResult = ref<CommitResult | null>(null)
 
+const writeActions = ref({
+  keepRating: 4,
+  pendingRating: 0,
+  rejectRating: 2
+})
+
+onMounted(() => {
+  const lastPresetId = localStorage.getItem('lastSelectedPresetId')
+  if (lastPresetId) {
+    const preset = getPreset(lastPresetId)
+    if (preset) {
+      writeActions.value = { ...preset.writeActions }
+    }
+  }
+})
+
 async function commit() {
   committing.value = true
   
   try {
     const { data } = await mutate(CommitChangesDocument, {
-      variables: { input: { sessionId: props.sessionId } }
+      variables: { 
+        input: { 
+          sessionId: props.sessionId,
+          writeActions: writeActions.value
+        } 
+      }
     })
     
     if (data) {

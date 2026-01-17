@@ -25,11 +25,6 @@
         </button>
 
         <div class="hidden md:flex items-center gap-4">
-          <div class="text-right text-sm">
-            <div class="text-slate-400">预设</div>
-            <div>{{ session?.preset?.name }}</div>
-          </div>
-
           <button
             class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700"
             @click="confirmAbandon"
@@ -161,8 +156,8 @@
       <div class="bg-slate-800 rounded-lg p-6 w-full max-w-sm">
         <div class="mb-6">
           <h3 class="text-lg font-bold mb-2">会话信息</h3>
-          <div class="text-sm text-slate-400 mb-1">预设</div>
-          <div class="text-base">{{ session?.preset?.name }}</div>
+          <div class="text-sm text-slate-400 mb-1">筛选条件</div>
+          <div class="text-base">{{ session?.filter?.rating?.join(', ') || '无' }}</div>
         </div>
 
         <div class="space-y-3">

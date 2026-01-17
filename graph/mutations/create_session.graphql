@@ -1,8 +1,12 @@
 input CreateSessionInput {
-  presetId: ID!
+  filter: ImageFiltersInput!
   targetKeep: Int!
   directory: String!
   clientMutationId: String
+}
+
+input ImageFiltersInput @goModel(model: "main/internal/session.ImageFilters") {
+  rating: [Int!]!
 }
 
 type CreateSessionPayload {

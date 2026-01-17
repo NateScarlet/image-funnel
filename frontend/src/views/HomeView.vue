@@ -104,19 +104,20 @@
           </div>
 
           <div v-if="selectedPreset" class="bg-slate-700 rounded-lg p-4">
-            <h3 class="font-medium mb-2">已选择预设详情</h3>
+            <h3 class="font-medium mb-4">筛选条件</h3>
+            <div class="mb-4">
+              <label class="block text-sm text-slate-400 mb-2">队列评分（多选）</label>
+              <StarSelector v-model="filterRating" mode="multi" />
+            </div>
             <div class="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <span class="text-slate-400">队列评分:</span> {{ selectedPreset.queueRating }}
+                <span class="text-slate-400">保留评分:</span> {{ selectedPreset.writeActions.keepRating }}
               </div>
               <div>
-                <span class="text-slate-400">保留评分:</span> {{ selectedPreset.keepRating }}
+                <span class="text-slate-400">稍后再看:</span> {{ selectedPreset.writeActions.pendingRating }}
               </div>
               <div>
-                <span class="text-slate-400">稍后再看:</span> {{ selectedPreset.reviewRating }}
-              </div>
-              <div>
-                <span class="text-slate-400">排除评分:</span> {{ selectedPreset.rejectRating }}
+                <span class="text-slate-400">排除评分:</span> {{ selectedPreset.writeActions.rejectRating }}
               </div>
             </div>
           </div>
@@ -160,22 +161,21 @@ import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import useQuery from '../graphql/utils/useQuery'
 import mutate from '../graphql/utils/mutate'
-import { GetPresetsDocument, CreateSessionDocument, GetDirectoriesDocument } from '../graphql/generated'
+import { CreateSessionDocument, GetDirectoriesDocument } from '../graphql/generated'
+import { usePresets } from '../composables/usePresets'
+import StarSelector from '../components/StarSelector.vue'
 
 const router = useRouter()
+const { presets, getPreset } = usePresets()
 
 const loadingCount = ref(0)
 const loading = computed(() => loadingCount.value > 0 || creatingSession.value)
 const creatingSession = ref(false)
 const error = ref<string>('')
 
-const { data: presetsData } = useQuery(GetPresetsDocument, {
-  loadingCount,
-})
-
-const presets = computed(() => presetsData.value?.presets || [])
 const selectedPresetId = ref<string>('')
 const targetKeep = ref<number>(10)
+const filterRating = ref<number[]>([])
 
 const currentPath = ref<string>('')
 const selectedDirectory = ref<string>('')
@@ -192,12 +192,18 @@ const { data: directoriesData } = useQuery(
 const directories = computed(() => directoriesData.value?.directories || [])
 
 const selectedPreset = computed(() => {
-  return presets.value.find(p => p.id === selectedPresetId.value)
+  return getPreset(selectedPresetId.value)
 })
 
 const canCreate = computed(() => {
-  return selectedPresetId.value && targetKeep.value > 0 && selectedDirectory.value
+  return filterRating.value.length > 0 && targetKeep.value > 0 && selectedDirectory.value
 })
+
+watch(() => selectedPreset.value, (preset) => {
+  if (preset) {
+    filterRating.value = [...preset.filter.rating]
+  }
+}, { immediate: true })
 
 watch(presets, (newPresets) => {
   if (newPresets.length > 0) {
@@ -239,7 +245,9 @@ async function createSession() {
     const { data } = await mutate(CreateSessionDocument, {
       variables: {
         input: {
-          presetId: selectedPresetId.value,
+          filter: {
+            rating: filterRating.value
+          },
           targetKeep: targetKeep.value,
           directory: selectedDirectory.value
         }

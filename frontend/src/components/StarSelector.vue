@@ -1,0 +1,125 @@
+<template>
+  <div class="star-selector">
+    <div class="flex items-center gap-1">
+      <button
+        v-for="star in stars"
+        :key="star.value"
+        type="button"
+        class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 active:scale-95"
+        :disabled="disabled"
+        @click="toggleStar(star.value)"
+      >
+        <svg 
+          class="w-6 h-6" 
+          viewBox="0 0 24 24" 
+          :fill="isSelected(star.value) ? star.color : 'currentColor'"
+          :style="{ color: isSelected(star.value) ? star.color : '#64748b' }"
+        >
+          <path :d="isSelected(star.value) ? star.filledIcon : star.outlineIcon" />
+        </svg>
+      </button>
+    </div>
+    <div v-if="label" class="text-sm text-slate-400 mt-1">{{ label }}</div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { mdiStar, mdiStarOutline } from '@mdi/js'
+
+interface Star {
+  value: number
+  color: string
+  label: string
+  filledIcon: string
+  outlineIcon: string
+}
+
+interface Props {
+  modelValue: number | number[]
+  mode?: 'single' | 'multi'
+  disabled?: boolean
+  label?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  mode: 'single',
+  disabled: false,
+  label: ''
+})
+
+const emit = defineEmits<{
+  'update:modelValue': [value: number | number[]]
+}>()
+
+const stars: Star[] = [
+  { 
+    value: 0, 
+    color: '#64748b', 
+    label: '未评分',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  },
+  { 
+    value: 1, 
+    color: '#ef4444', 
+    label: '1星',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  },
+  { 
+    value: 2, 
+    color: '#f97316', 
+    label: '2星',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  },
+  { 
+    value: 3, 
+    color: '#eab308', 
+    label: '3星',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  },
+  { 
+    value: 4, 
+    color: '#22c55e', 
+    label: '4星',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  },
+  { 
+    value: 5, 
+    color: '#3b82f6', 
+    label: '5星',
+    filledIcon: mdiStar,
+    outlineIcon: mdiStarOutline
+  }
+]
+
+function isSelected(value: number): boolean {
+  if (props.mode === 'single') {
+    return props.modelValue === value
+  } else {
+    return Array.isArray(props.modelValue) && props.modelValue.includes(value)
+  }
+}
+
+function toggleStar(value: number) {
+  if (props.disabled) return
+
+  if (props.mode === 'single') {
+    emit('update:modelValue', value)
+  } else {
+    const current = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+    const index = current.indexOf(value)
+    
+    if (index === -1) {
+      current.push(value)
+    } else {
+      current.splice(index, 1)
+    }
+    
+    emit('update:modelValue', current)
+  }
+}
+</script>

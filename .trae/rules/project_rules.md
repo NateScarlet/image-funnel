@@ -67,6 +67,8 @@
 
 不要手动更新 graphql 查询结果，而是依赖 ./src/graphql/useQuery.ts 的响应式系统自动更新。InMemoryCache会自动更新查询结果。
 
+使用 @mdi/js 来获取 Material Design Icons 图标
+
 #### 后端
 
 所有字段没有特别理由，都不应该导出，只能通过方法访问。

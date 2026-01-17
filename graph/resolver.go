@@ -9,14 +9,12 @@ import (
 	_ "image/png"
 	"time"
 
-	"main/internal/preset"
 	"main/internal/pubsub"
 	"main/internal/session"
 	"main/internal/url"
 )
 
 type Resolver struct {
-	PresetManager  *preset.Manager
 	SessionManager *session.Manager
 	RootDir        string
 	Signer         *url.Signer
@@ -26,21 +24,11 @@ type Resolver struct {
 func NewResolver(rootDir string, signer *url.Signer) *Resolver {
 	topic, _ := pubsub.NewInMemoryTopic[*Session]()
 	return &Resolver{
-		PresetManager:  preset.NewManager(),
 		SessionManager: session.NewManager(),
 		RootDir:        rootDir,
 		Signer:         signer,
 		SessionTopic:   topic,
 	}
-}
-
-func (r *Resolver) Presets(ctx context.Context) ([]*Preset, error) {
-	presets := r.PresetManager.GetAll()
-	var result []*Preset
-	for _, p := range presets {
-		result = append(result, r.convertToGQLPreset(p))
-	}
-	return result, nil
 }
 
 func (r *Resolver) Session(ctx context.Context, id string) (*Session, error) {
@@ -89,18 +77,6 @@ func (r *Resolver) convertToGQLImageFromSession(img *session.ImageInfo) *Image {
 	}
 }
 
-func (r *Resolver) convertToGQLPreset(p *preset.Preset) *Preset {
-	return &Preset{
-		ID:           p.ID,
-		Name:         p.Name,
-		Description:  p.Description,
-		QueueRating:  p.QueueRating,
-		KeepRating:   p.KeepRating,
-		ReviewRating: p.ReviewRating,
-		RejectRating: p.RejectRating,
-	}
-}
-
 func (r *Resolver) convertToGQLSession(s *session.Session) *Session {
 	stats := s.Stats()
 	currentImg := s.CurrentImage()
@@ -117,7 +93,7 @@ func (r *Resolver) convertToGQLSession(s *session.Session) *Session {
 	return &Session{
 		ID:           s.ID,
 		Directory:    s.Directory,
-		Preset:       r.convertToGQLPreset(s.Preset),
+		Filter:       s.Filter,
 		TargetKeep:   s.TargetKeep,
 		Status:       SessionStatus(s.Status),
 		Stats:        r.convertToGQLStats(&stats),

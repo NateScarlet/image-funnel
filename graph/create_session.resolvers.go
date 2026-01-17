@@ -14,11 +14,6 @@ import (
 
 // CreateSession is the resolver for the createSession field.
 func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error) {
-	p, exists := r.Resolver.PresetManager.GetByID(input.PresetID)
-	if !exists {
-		return nil, fmt.Errorf("preset not found")
-	}
-
 	s := scanner.NewScanner(r.RootDir)
 	if err := s.ValidateDirectoryPath(input.Directory); err != nil {
 		return nil, fmt.Errorf("invalid directory: %w", err)
@@ -26,7 +21,7 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessio
 
 	dirPath := filepath.Join(r.RootDir, input.Directory)
 
-	sess, err := r.Resolver.SessionManager.Create(dirPath, p, input.TargetKeep)
+	sess, err := r.Resolver.SessionManager.Create(dirPath, input.Filter, input.TargetKeep)
 	if err != nil {
 		return nil, err
 	}

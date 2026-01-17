@@ -1,9 +1,0 @@
-fragment PresetFragment on Preset {
-  id
-  name
-  description
-  queueRating
-  keepRating
-  reviewRating
-  rejectRating
-}
