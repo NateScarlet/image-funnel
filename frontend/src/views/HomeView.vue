@@ -38,17 +38,6 @@
               <label class="block text-sm text-slate-400 mb-2">队列评分（多选）</label>
               <StarSelector v-model="filterRating" mode="multi" />
             </div>
-            <div class="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span class="text-slate-400">保留评分:</span> {{ selectedPreset.writeActions.keepRating }}
-              </div>
-              <div>
-                <span class="text-slate-400">稍后再看:</span> {{ selectedPreset.writeActions.pendingRating }}
-              </div>
-              <div>
-                <span class="text-slate-400">排除评分:</span> {{ selectedPreset.writeActions.rejectRating }}
-              </div>
-            </div>
           </div>
 
           <div>
