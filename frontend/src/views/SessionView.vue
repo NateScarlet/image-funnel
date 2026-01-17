@@ -93,14 +93,14 @@
             <div class="text-6xl font-bold text-white drop-shadow-lg">
               <span v-if="swipeDirection === 'DOWN'">↓ 排除</span>
               <span v-else-if="swipeDirection === 'UP'">↑ 稍后再看</span>
-              <span v-else-if="swipeDirection === 'RIGHT'">→ 保留</span>
-              <span v-else-if="swipeDirection === 'LEFT'">← 撤销</span>
+              <span v-else-if="swipeDirection === 'RIGHT'">← 撤销</span>
+              <span v-else-if="swipeDirection === 'LEFT'">→ 保留</span>
             </div>
           </div>
         </div>
 
         <div class="text-center text-sm text-slate-400 mb-4">
-          {{ currentImage?.filename || '' }}
+          {{ currentImage?.filename || "" }}
         </div>
 
         <div class="flex gap-4 w-full max-w-md">
@@ -225,7 +225,6 @@ onMounted(() => {
   });
 });
 
-
 async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
   if (!currentImage.value) return;
 
@@ -304,7 +303,7 @@ function handleTouchEnd(e: TouchEvent) {
   touchEndX.value = e.changedTouches[0].screenX;
   touchEndY.value = e.changedTouches[0].screenY;
   handleGesture();
-  
+
   // 重置触摸坐标，清除滑动方向
   setTimeout(() => {
     touchEndX.value = touchStartX.value;
@@ -335,10 +334,10 @@ function handleGesture() {
       markImage("REJECT");
       break;
     case "LEFT":
-      undo();
+      markImage("KEEP");
       break;
     case "RIGHT":
-      markImage("KEEP");
+      undo();
       break;
   }
 }
