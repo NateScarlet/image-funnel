@@ -74,9 +74,9 @@
         没有更多图片
       </div>
 
-      <div v-else class="w-full max-w-5xl flex flex-col items-center">
+      <div v-else class="w-full max-w-5xl flex flex-col items-center h-full">
         <div
-          class="relative w-full aspect-video md:h-full bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4"
+          class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
         >
           <ImageViewer
             v-if="currentImage"
