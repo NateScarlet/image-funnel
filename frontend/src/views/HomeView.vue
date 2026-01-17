@@ -119,7 +119,7 @@
                         </div>
                         <div v-if="dir.ratingCounts && dir.ratingCounts.length > 0" class="flex flex-wrap gap-2 mt-2">
                           <div
-                            v-for="rc in dir.ratingCounts"
+                            v-for="rc in sortedRatingCounts(dir.ratingCounts)"
                             :key="rc.rating"
                             class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
                             :class="{ 'ring-1 ring-blue-400': filterRating.includes(rc.rating) }"
@@ -238,6 +238,10 @@ function getMatchedImageCount(dir: { ratingCounts?: { rating: number; count: num
   return dir.ratingCounts
     .filter(rc => filterRating.value.includes(rc.rating))
     .reduce((sum, rc) => sum + rc.count, 0)
+}
+
+function sortedRatingCounts(ratingCounts: { rating: number; count: number }[]): { rating: number; count: number }[] {
+  return [...ratingCounts].sort((a, b) => a.rating - b.rating)
 }
 
 watch(() => selectedPreset.value, (preset) => {
