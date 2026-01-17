@@ -74,10 +74,10 @@
         <div
           class="relative w-full aspect-video bg-slate-800 rounded-lg overflow-hidden mb-4"
         >
-          <img
+          <ImageViewer
+            v-if="currentImage"
             :src="currentImage.url"
             :alt="currentImage.filename"
-            class="w-full h-full object-contain"
           />
 
           <div
@@ -165,6 +165,7 @@ import {
   ImageAction,
 } from "../graphql/generated";
 import CommitModal from "../components/CommitModal.vue";
+import ImageViewer from "../components/ImageViewer.vue";
 import useEventListeners from "../composables/useEventListeners";
 import useNotification from "../composables/useNotification";
 
