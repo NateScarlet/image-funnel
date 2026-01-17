@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
-	"time"
 )
 
 // Signer is a utility for generating and validating signed URLs
@@ -31,7 +31,13 @@ func (s *Signer) GenerateSignedURL(path string) (string, error) {
 		return "", err
 	}
 
-	timestamp := time.Now().Unix()
+	absPath := filepath.Join(s.rootDir, relativePath)
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get file info: %v", err)
+	}
+
+	timestamp := fileInfo.ModTime().Unix()
 
 	message := fmt.Sprintf("%s|%d", relativePath, timestamp)
 
