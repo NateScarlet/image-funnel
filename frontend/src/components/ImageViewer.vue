@@ -42,6 +42,16 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
       <span class="min-w-16">{{ imageSize.width }} × {{ imageSize.height }}</span>
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
+      <button
+        class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        :title="isFullscreen ? '退出全屏' : '全屏'"
+        @click="handleToggleFullscreen"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path :d="isFullscreen ? mdiFullscreenExit : mdiFullscreen" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
@@ -52,6 +62,8 @@ import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
 import useAsyncTask from "../composables/useAsyncTask";
+import useElementFullscreen from "../composables/useElementFullscreen";
+import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
 
 interface Props {
   src: string;
@@ -69,6 +81,12 @@ const props = withDefaults(defineProps<Props>(), {
 const containerRef = ref<HTMLElement>();
 const rendererRef = ref<HTMLElement>();
 const imageRef = ref<HTMLImageElement>();
+
+const { toggleFullscreen, isFullscreen } = useElementFullscreen(containerRef);
+
+function handleToggleFullscreen() {
+  toggleFullscreen();
+}
 
 const { result: size, restart: updateSize } = useAsyncTask({
   args: () => {
