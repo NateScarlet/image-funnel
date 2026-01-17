@@ -127,8 +127,8 @@
                             <svg
                               class="w-3 h-3"
                               viewBox="0 0 24 24"
-                              :fill="filterRating.includes(rc.rating) ? getStarColor(rc.rating) : 'currentColor'"
-                              :style="{ color: filterRating.includes(rc.rating) ? getStarColor(rc.rating) : '#64748b' }"
+                              :fill="getStarColor(rc.rating)"
+                              :style="{ color: getStarColor(rc.rating) }"
                             >
                               <path :d="mdiStar" />
                             </svg>
