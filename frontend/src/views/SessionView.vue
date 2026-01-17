@@ -20,31 +20,40 @@
           @click="showMenu = true"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            <path :d="mdiMenu" fill="currentColor" />
           </svg>
         </button>
 
         <div class="hidden md:flex items-center gap-4">
           <button
             :disabled="!session?.canUndo"
-            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
             @click="undo"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiUndo" fill="currentColor" />
+            </svg>
             撤销
           </button>
 
           <button
-            class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700"
+            class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700 flex items-center gap-2 whitespace-nowrap"
             @click="confirmAbandon"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCloseCircleOutline" fill="currentColor" />
+            </svg>
             放弃
           </button>
 
           <button
             :disabled="!session?.canCommit"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
             @click="showCommitModal = true"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCheck" fill="currentColor" />
+            </svg>
             提交
           </button>
         </div>
@@ -59,9 +68,12 @@
         <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
         <p class="text-slate-400 mb-4">找不到指定的筛选会话</p>
         <button
-          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium"
+          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
           @click="router.push('/')"
         >
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path :d="mdiHome" fill="currentColor" />
+          </svg>
           返回主页
         </button>
       </div>
@@ -71,9 +83,12 @@
         <h2 class="text-2xl font-bold mb-2">筛选完成！</h2>
         <p class="text-slate-400 mb-4">保留了 {{ stats?.kept }} 张图片</p>
         <button
-          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium"
+          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
           @click="showCommitModal = true"
         >
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path :d="mdiCheck" fill="currentColor" />
+          </svg>
           提交更改
         </button>
       </div>
@@ -117,23 +132,32 @@
 
         <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
           <button
-            class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-lg"
+            class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('REJECT')"
           >
+            <svg class="w-6 h-6" viewBox="0 0 24 24">
+              <path :d="mdiDeleteOutline" fill="currentColor" />
+            </svg>
             排除
           </button>
 
           <button
-            class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-lg"
+            class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('PENDING')"
           >
+            <svg class="w-6 h-6" viewBox="0 0 24 24">
+              <path :d="mdiClockOutline" fill="currentColor" />
+            </svg>
             稍后再看
           </button>
 
           <button
-            class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-lg"
+            class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
             @click="markImage('KEEP')"
           >
+            <svg class="w-6 h-6" viewBox="0 0 24 24">
+              <path :d="mdiHeartOutline" fill="currentColor" />
+            </svg>
             保留
           </button>
         </div>
@@ -161,24 +185,33 @@
         <div class="space-y-3">
           <button
             :disabled="!session?.canUndo"
-            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="undo(); showMenu = false"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiUndo" fill="currentColor" />
+            </svg>
             撤销
           </button>
 
           <button
             :disabled="!session?.canCommit"
-            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="showCommitModal = true; showMenu = false"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCheck" fill="currentColor" />
+            </svg>
             提交
           </button>
 
           <button
-            class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors"
+            class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="confirmAbandon"
           >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCloseCircleOutline" fill="currentColor" />
+            </svg>
             放弃
           </button>
         </div>
@@ -216,6 +249,16 @@ import CommitModal from "../components/CommitModal.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import useEventListeners from "../composables/useEventListeners";
 import useNotification from "../composables/useNotification";
+import {
+  mdiMenu,
+  mdiUndo,
+  mdiCloseCircleOutline,
+  mdiCheck,
+  mdiHome,
+  mdiDeleteOutline,
+  mdiClockOutline,
+  mdiHeartOutline,
+} from "@mdi/js";
 
 const route = useRoute();
 const router = useRouter();
