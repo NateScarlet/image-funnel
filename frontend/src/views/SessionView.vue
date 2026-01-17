@@ -2,11 +2,11 @@
   <div class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden">
     <header class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
-        <div class="flex-1">
-          <div class="text-xs md:text-sm text-slate-400">
+        <div class="flex-1 min-w-0 mr-4">
+          <div class="text-xs md:text-sm text-slate-400 truncate">
             {{ session?.directory || "加载中..." }}
           </div>
-          <div class="text-sm md:text-lg font-semibold">
+          <div class="text-sm md:text-lg font-semibold truncate">
             {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
             <span class="text-green-400 ml-2"
               >保留: {{ stats?.kept || 0 }} /
