@@ -26,6 +26,14 @@
 
         <div class="hidden md:flex items-center gap-4">
           <button
+            :disabled="!session?.canUndo"
+            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+            @click="undo"
+          >
+            撤销
+          </button>
+
+          <button
             class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700"
             @click="confirmAbandon"
           >
@@ -127,16 +135,6 @@
             @click="markImage('KEEP')"
           >
             保留
-          </button>
-        </div>
-
-        <div class="hidden md:flex mt-4 gap-4">
-          <button
-            :disabled="!session?.canUndo"
-            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg text-sm"
-            @click="undo"
-          >
-            撤销
           </button>
         </div>
       </div>
