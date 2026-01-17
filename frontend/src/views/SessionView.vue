@@ -279,8 +279,8 @@ const isCompleted = computed(() => {
 onMounted(() => {
   useEventListeners(window, ({ on }) => {
     on("keydown", handleKeyDown);
-    on("touchstart", handleTouchStart, { passive: true });
-    on("touchmove", handleTouchMove, { passive: true });
+    on("touchstart", handleTouchStart, { passive: false });
+    on("touchmove", handleTouchMove, { passive: false });
     on("touchend", handleTouchEnd, { passive: true });
   });
 });
@@ -354,12 +354,23 @@ function handleTouchStart(e: TouchEvent) {
   touchStartY.value = e.changedTouches[0].screenY;
   touchEndX.value = touchStartX.value;
   touchEndY.value = touchStartY.value;
+
+  if (isSingleTouch.value) {
+    e.preventDefault();
+  }
 }
 
 function handleTouchMove(e: TouchEvent) {
   isSingleTouch.value = e.touches.length === 1;
   touchEndX.value = e.changedTouches[0].screenX;
   touchEndY.value = e.changedTouches[0].screenY;
+
+  const deltaX = touchEndX.value - touchStartX.value;
+  const deltaY = touchEndY.value - touchStartY.value;
+
+  if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
+    e.preventDefault();
+  }
 }
 
 function handleTouchEnd(e: TouchEvent) {
