@@ -39,13 +39,14 @@ type CreateSessionPayload struct {
 }
 
 type Directory struct {
-	ID                 string    `json:"id"`
-	Path               string    `json:"path"`
-	ImageCount         int       `json:"imageCount"`
-	SubdirectoryCount  int       `json:"subdirectoryCount"`
-	LatestImageModTime time.Time `json:"latestImageModTime"`
-	LatestImagePath    *string   `json:"latestImagePath,omitempty"`
-	LatestImageURL     *string   `json:"latestImageUrl,omitempty"`
+	ID                 string         `json:"id"`
+	Path               string         `json:"path"`
+	ImageCount         int            `json:"imageCount"`
+	SubdirectoryCount  int            `json:"subdirectoryCount"`
+	LatestImageModTime time.Time      `json:"latestImageModTime"`
+	LatestImagePath    *string        `json:"latestImagePath,omitempty"`
+	LatestImageURL     *string        `json:"latestImageUrl,omitempty"`
+	RatingCounts       []*RatingCount `json:"ratingCounts"`
 }
 
 type Image struct {
@@ -80,6 +81,11 @@ type QueueStatus struct {
 	TotalImages  int     `json:"totalImages"`
 	CurrentImage *Image  `json:"currentImage,omitempty"`
 	Progress     float64 `json:"progress"`
+}
+
+type RatingCount struct {
+	Rating int `json:"rating"`
+	Count  int `json:"count"`
 }
 
 type Session struct {

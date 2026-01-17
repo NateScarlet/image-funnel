@@ -35,6 +35,14 @@ func (r *Resolver) Directories(ctx context.Context, path string) ([]*Directory, 
 			}
 		}
 
+		var ratingCounts []*RatingCount
+		for rating, count := range dir.RatingCounts {
+			ratingCounts = append(ratingCounts, &RatingCount{
+				Rating: rating,
+				Count:  count,
+			})
+		}
+
 		result = append(result, &Directory{
 			ID:                 dir.Path,
 			Path:               dir.Path,
@@ -43,6 +51,7 @@ func (r *Resolver) Directories(ctx context.Context, path string) ([]*Directory, 
 			LatestImageModTime: dir.LatestImageModTime,
 			LatestImagePath:    &latestImagePath,
 			LatestImageURL:     latestImageUrl,
+			RatingCounts:       ratingCounts,
 		})
 	}
 

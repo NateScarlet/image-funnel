@@ -25,6 +25,7 @@ type DirectoryInfo struct {
 	SubdirectoryCount  int
 	LatestImageModTime time.Time
 	LatestImagePath    string
+	RatingCounts       map[int]int
 }
 
 type Scanner struct {
@@ -105,7 +106,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 		subRelPath := filepath.Join(relPath, entry.Name())
 		subAbsPath := filepath.Join(absPath, entry.Name())
 
-		imageCount, subdirectoryCount, latestModTime, latestImagePath, err := s.analyzeDirectory(subAbsPath)
+		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.analyzeDirectory(subAbsPath)
 		if err != nil {
 			continue
 		}
@@ -120,6 +121,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 			SubdirectoryCount:  subdirectoryCount,
 			LatestImageModTime: latestModTime,
 			LatestImagePath:    latestImagePath,
+			RatingCounts:       ratingCounts,
 		}
 
 		directories = append(directories, dirInfo)
@@ -128,16 +130,17 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 	return directories, nil
 }
 
-func (s *Scanner) analyzeDirectory(absPath string) (int, int, time.Time, string, error) {
+func (s *Scanner) analyzeDirectory(absPath string) (int, int, time.Time, string, map[int]int, error) {
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		return 0, 0, time.Time{}, "", err
+		return 0, 0, time.Time{}, "", nil, err
 	}
 
 	imageCount := 0
 	subdirectoryCount := 0
 	var latestModTime time.Time
 	var latestImagePath string
+	ratingCounts := make(map[int]int)
 
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".") {
@@ -159,13 +162,26 @@ func (s *Scanner) analyzeDirectory(absPath string) (int, int, time.Time, string,
 			continue
 		}
 
+		imagePath := filepath.Join(absPath, entry.Name())
 		if info.ModTime().After(latestModTime) {
 			latestModTime = info.ModTime()
-			latestImagePath = filepath.Join(absPath, entry.Name())
+			latestImagePath = imagePath
+		}
+
+		xmpPath := imagePath + ".xmp"
+		if _, err := os.Stat(xmpPath); err == nil {
+			xmpData, err := xmp.Read(imagePath)
+			if err == nil {
+				ratingCounts[xmpData.Rating]++
+			} else {
+				ratingCounts[0]++
+			}
+		} else {
+			ratingCounts[0]++
 		}
 	}
 
-	return imageCount, subdirectoryCount, latestModTime, latestImagePath, nil
+	return imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, nil
 }
 
 func (s *Scanner) ValidateDirectoryPath(relPath string) error {

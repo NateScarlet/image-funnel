@@ -12,77 +12,6 @@
         <div class="space-y-6">
           <div>
             <label class="block text-sm font-medium text-slate-300 mb-4">
-              选择目录
-            </label>
-            <div class="bg-slate-700 rounded-lg p-4">
-              <div class="flex items-center justify-between mb-4">
-                <button
-                  v-if="currentPath !== ''"
-                  class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
-                  @click="goToParent"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                  </svg>
-                  返回上级
-                </button>
-                <div class="text-sm text-slate-400">
-                  {{ currentPath || '根目录' }}
-                </div>
-                <div></div>
-              </div>
-
-              <div v-if="loadingDirectories" class="text-center text-slate-400 py-4">
-                加载目录中...
-              </div>
-
-              <div v-else-if="directories.length === 0" class="text-center text-slate-400 py-4">
-                当前目录下没有可用的子目录
-              </div>
-
-              <div v-else class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div
-                  v-for="dir in directories"
-                  :key="dir.id"
-                  :class="[
-                    'p-4 rounded-lg cursor-pointer transition-all border-2',
-                    selectedDirectory === dir.path
-                      ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/30'
-                      : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550'
-                  ]"
-                  @click="selectDirectory(dir)"
-                >
-                  <div class="flex items-start gap-3">
-                    <div
-                      v-if="dir.latestImagePath"
-                      class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
-                    >
-                      <img
-                        v-if="dir.latestImageUrl"
-                        :src="dir.latestImageUrl"
-                        :alt="dir.path"
-                        class="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <h3 class="font-semibold text-lg mb-1 truncate">{{ getDirectoryName(dir.path) }}</h3>
-                      <div class="text-xs text-slate-300 space-y-1">
-                        <div>
-                          <span class="opacity-70">图片:</span> {{ dir.imageCount }}
-                        </div>
-                        <div v-if="dir.subdirectoryCount > 0">
-                          <span class="opacity-70">子目录:</span> {{ dir.subdirectoryCount }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-slate-300 mb-4">
               选择评分预设
             </label>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -118,6 +47,98 @@
               </div>
               <div>
                 <span class="text-slate-400">排除评分:</span> {{ selectedPreset.writeActions.rejectRating }}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-4">
+              选择目录
+            </label>
+            <div class="bg-slate-700 rounded-lg p-4">
+              <div class="flex items-center justify-between mb-4">
+                <button
+                  v-if="currentPath !== ''"
+                  class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+                  @click="goToParent"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  返回上级
+                </button>
+                <div class="text-sm text-slate-400">
+                  {{ currentPath || '根目录' }}
+                </div>
+                <div></div>
+              </div>
+
+              <div v-if="loadingDirectories" class="text-center text-slate-400 py-4">
+                加载目录中...
+              </div>
+
+              <div v-else-if="filteredDirectories.length === 0" class="text-center text-slate-400 py-4">
+                当前目录下没有可用的子目录
+              </div>
+
+              <div v-else class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="dir in filteredDirectories"
+                  :key="dir.id"
+                  :class="[
+                    'p-4 rounded-lg cursor-pointer transition-all border-2',
+                    selectedDirectory === dir.path
+                      ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/30'
+                      : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550'
+                  ]"
+                  @click="selectDirectory(dir)"
+                >
+                  <div class="flex items-start gap-3">
+                    <div
+                      v-if="dir.latestImagePath"
+                      class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
+                    >
+                      <img
+                        v-if="dir.latestImageUrl"
+                        :src="dir.latestImageUrl"
+                        :alt="dir.path"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <h3 class="font-semibold text-lg mb-1 truncate">{{ getDirectoryName(dir.path) }}</h3>
+                      <div class="text-xs text-slate-300 space-y-1">
+                        <div>
+                          <span class="opacity-70">图片:</span> {{ dir.imageCount }}
+                        </div>
+                        <div v-if="dir.subdirectoryCount > 0">
+                          <span class="opacity-70">子目录:</span> {{ dir.subdirectoryCount }}
+                        </div>
+                        <div v-if="getMatchedImageCount(dir) > 0">
+                          <span class="opacity-70">匹配:</span> {{ getMatchedImageCount(dir) }}
+                        </div>
+                        <div v-if="dir.ratingCounts && dir.ratingCounts.length > 0" class="flex flex-wrap gap-2 mt-2">
+                          <div
+                            v-for="rc in dir.ratingCounts"
+                            :key="rc.rating"
+                            class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
+                            :class="{ 'ring-1 ring-blue-400': filterRating.includes(rc.rating) }"
+                          >
+                            <svg
+                              class="w-3 h-3"
+                              viewBox="0 0 24 24"
+                              :fill="filterRating.includes(rc.rating) ? getStarColor(rc.rating) : 'currentColor'"
+                              :style="{ color: filterRating.includes(rc.rating) ? getStarColor(rc.rating) : '#64748b' }"
+                            >
+                              <path :d="mdiStar" />
+                            </svg>
+                            <span class="text-xs">{{ rc.count }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -164,6 +185,8 @@ import mutate from '../graphql/utils/mutate'
 import { CreateSessionDocument, GetDirectoriesDocument } from '../graphql/generated'
 import { usePresets } from '../composables/usePresets'
 import StarSelector from '../components/StarSelector.vue'
+import { mdiStar } from '@mdi/js'
+import { getStarColor } from '../utils/starConfig'
 
 const router = useRouter()
 const { presets, getPreset } = usePresets()
@@ -191,6 +214,15 @@ const { data: directoriesData } = useQuery(
 
 const directories = computed(() => directoriesData.value?.directories || [])
 
+const filteredDirectories = computed(() => {
+  return directories.value.filter(dir => {
+    if (dir.subdirectoryCount > 0) {
+      return true
+    }
+    return getMatchedImageCount(dir) > 0
+  })
+})
+
 const selectedPreset = computed(() => {
   return getPreset(selectedPresetId.value)
 })
@@ -198,6 +230,15 @@ const selectedPreset = computed(() => {
 const canCreate = computed(() => {
   return filterRating.value.length > 0 && targetKeep.value > 0
 })
+
+function getMatchedImageCount(dir: { ratingCounts?: { rating: number; count: number }[] }): number {
+  if (!dir.ratingCounts || filterRating.value.length === 0) {
+    return 0
+  }
+  return dir.ratingCounts
+    .filter(rc => filterRating.value.includes(rc.rating))
+    .reduce((sum, rc) => sum + rc.count, 0)
+}
 
 watch(() => selectedPreset.value, (preset) => {
   if (preset) {
