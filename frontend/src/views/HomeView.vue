@@ -98,21 +98,7 @@
                 @click="selectedPresetId = preset.id"
               >
                 <h3 class="font-semibold text-lg mb-2">{{ preset.name }}</h3>
-                <p class="text-sm opacity-80 mb-3">{{ preset.description }}</p>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span class="opacity-70">队列评分:</span> {{ preset.queueRating }}
-                  </div>
-                  <div>
-                    <span class="opacity-70">保留评分:</span> {{ preset.keepRating }}
-                  </div>
-                  <div>
-                    <span class="opacity-70">稍后再看:</span> {{ preset.reviewRating }}
-                  </div>
-                  <div>
-                    <span class="opacity-70">排除评分:</span> {{ preset.rejectRating }}
-                  </div>
-                </div>
+                <p class="text-sm opacity-80">{{ preset.description }}</p>
               </div>
             </div>
           </div>

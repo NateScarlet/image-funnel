@@ -19,7 +19,7 @@ var (
 		{
 			ID:           uuid.New().String(),
 			Name:         "草稿阶段筛选",
-			Description:  "从大量生成结果中快速筛选，保留评分4，排除评分2",
+			Description:  "从大量生成结果中快速筛选",
 			QueueRating:  4,
 			KeepRating:   4,
 			ReviewRating: 0,
@@ -28,7 +28,7 @@ var (
 		{
 			ID:           uuid.New().String(),
 			Name:         "细化阶段筛选",
-			Description:  "从待定图片中精细筛选，保留移除评分，排除评分1",
+			Description:  "从待定图片中精细筛选",
 			QueueRating:  0,
 			KeepRating:   0,
 			ReviewRating: 0,
