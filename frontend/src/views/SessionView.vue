@@ -349,7 +349,11 @@ function handleTouchStart(e: TouchEvent) {
   touchEndY.value = touchStartY.value;
 
   if (isSingleTouch.value) {
-    e.preventDefault();
+    const target = e.target as HTMLElement;
+    const isButton = target.closest('button, a, input, select, textarea');
+    if (!isButton) {
+      e.preventDefault();
+    }
   }
 }
 
