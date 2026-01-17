@@ -127,8 +127,8 @@
                             <svg
                               class="w-3 h-3"
                               viewBox="0 0 24 24"
-                              :fill="getStarColor(rc.rating)"
-                              :style="{ color: getStarColor(rc.rating) }"
+                              fill="currentColor"
+                              :class="getStarColorClass(rc.rating)"
                             >
                               <path :d="mdiStar" />
                             </svg>
@@ -186,7 +186,7 @@ import { CreateSessionDocument, GetDirectoriesDocument } from '../graphql/genera
 import { usePresets } from '../composables/usePresets'
 import StarSelector from '../components/StarSelector.vue'
 import { mdiStar } from '@mdi/js'
-import { getStarColor } from '../utils/starConfig'
+import { getStarColorClass } from '../utils/starConfig'
 
 const router = useRouter()
 const { presets, getPreset } = usePresets()

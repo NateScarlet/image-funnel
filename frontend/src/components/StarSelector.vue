@@ -12,8 +12,8 @@
         <svg 
           class="w-6 h-6" 
           viewBox="0 0 24 24" 
-          :fill="isSelected(star.value) ? star.color : 'currentColor'"
-          :style="{ color: isSelected(star.value) ? star.color : '#64748b' }"
+          fill="currentColor"
+          :class="isSelected(star.value) ? getStarColorClass(star.value) : 'text-slate-500'"
         >
           <path :d="isSelected(star.value) ? star.filledIcon : star.outlineIcon" />
         </svg>
@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { STAR_CONFIGS, type StarConfig } from '../utils/starConfig'
+import { STAR_CONFIGS, type StarConfig, getStarColorClass } from '../utils/starConfig'
 
 interface Props {
   modelValue: number | number[]
