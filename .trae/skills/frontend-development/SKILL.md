@@ -65,6 +65,8 @@ Vite 会自动热重载。
 
 运行 `pnpm check` 来检查错误。
 
+如果错误提示说有可以自动修复的错误，直接使用 `pnpm lint:fix` 来修复。
+
 ### 测试
 
 访问 http://localhost:3000（前端）。

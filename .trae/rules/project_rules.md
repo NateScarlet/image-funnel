@@ -67,6 +67,8 @@
 
 ## 开发工作流
 
+根据任务需求，使用 SKILL frontend-development 或 backend-development
+
 ### 修改 GraphQL schema 后
 
 运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码
@@ -97,3 +99,4 @@ image-funnel/
 ├── internal/            # 后端业务逻辑
 └── data.local/          # 图片目录（默认）
 ```
+
