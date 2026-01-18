@@ -185,7 +185,6 @@ const filterRating = ref<number[]>([])
 
 const currentPath = ref<string>('')
 const selectedDirectory = ref<string>('')
-const loadingDirectories = ref(false)
 
 const { data: directoriesData } = useQuery(
   GetDirectoriesDocument,
@@ -194,6 +193,8 @@ const { data: directoriesData } = useQuery(
     loadingCount,
   }
 )
+
+const loadingDirectories = computed(() => loadingCount.value > 0)
 
 const directories = computed(() => directoriesData.value?.directories || [])
 
