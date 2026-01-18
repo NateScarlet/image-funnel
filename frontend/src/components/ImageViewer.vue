@@ -1,20 +1,22 @@
 <template>
   <div
-    ref="containerRef"
+    ref="rootEl"
     class="relative w-full h-full flex flex-col bg-slate-800 rounded-lg overflow-hidden"
-    v-bind="containerAttrs"
   >
     <div
-      ref="rendererRef"
-      class="flex-1 flex items-center justify-center overflow-auto"
+      ref="containerRef"
+      class="flex-auto w-full h-64 overflow-auto flex items-center [scrollbar-gutter:stable]"
+      v-bind="containerAttrs"
     >
-      <img
-        ref="imageRef"
-        :src="src"
-        :alt="alt"
-        class="block max-w-none"
-        v-bind="zoomAttrs"
-      />
+      <!-- zoom -->
+      <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
+        <img
+          ref="imageRef"
+          :src="src"
+          :alt="alt"
+          class="object-contain w-full h-full"
+        />
+      </div>
     </div>
 
     <!-- 图片尺寸和缩放操作 -->
@@ -110,10 +112,10 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const containerRef = ref<HTMLElement>();
-const rendererRef = ref<HTMLElement>();
 const imageRef = ref<HTMLImageElement>();
+const rootEl = ref<HTMLElement>();
 
-const { toggleFullscreen, isFullscreen } = useElementFullscreen(containerRef);
+const { toggleFullscreen, isFullscreen } = useElementFullscreen(rootEl);
 
 function handleToggleFullscreen() {
   toggleFullscreen();
@@ -152,7 +154,6 @@ const imageSize = computed(() => {
 
 const zoom = useImageZoom({
   container: containerRef,
-  renderer: rendererRef,
   size: imageSize,
 });
 
@@ -167,7 +168,7 @@ const {
 
 useGrabScroll(() => {
   if (!zoom.fitContainer.value) {
-    return rendererRef.value;
+    return containerRef.value;
   }
 });
 

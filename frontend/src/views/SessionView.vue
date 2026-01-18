@@ -115,10 +115,7 @@
         没有更多图片
       </div>
 
-      <div
-        v-else
-        class="w-full max-w-5xl flex flex-col items-center h-full min-h-0"
-      >
+      <div v-else class="w-full flex flex-col items-center h-full min-h-0">
         <div
           class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
         >
