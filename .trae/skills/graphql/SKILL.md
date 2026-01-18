@@ -1,6 +1,6 @@
 ---
 name: "graphql"
-description: "GraphQL 开发指南，包含 schema 定义、resolver 实现、类型系统和代码生成。Invoke when working with GraphQL schema, resolvers, or running generate-graphql.ps1."
+description: "GraphQL 开发指南，包含 schema 定义、resolver 实现、类型系统、代码生成和前后端集成。Invoke when working with GraphQL schema, resolvers, running generate-graphql.ps1, or implementing GraphQL-related functionality."
 ---
 
 # GraphQL 开发指南
@@ -34,38 +34,25 @@ GraphQL 相关文件分为两个目录：
 │   │   ├── base.graphql    # Subscription 基础定义
 │   │   └── session.graphql # extend Subscription sessionUpdated
 │   └── mutations/          # Mutation 定义
-└── internal/interfaces/graphql/  # GraphQL 实现代码
-    ├── generated.go        # gqlgen 自动生成的执行代码
-    ├── models_gen.go       # gqlgen 自动生成的模型
-    ├── resolver.go        # 主 resolver 入口
-    ├── scalars.go         # 自定义标量类型（Time、Upload、URI）
-    └── *.resolvers.go     # 各 mutation/query 的 resolver 实现
+├── internal/interfaces/graphql/  # GraphQL 实现代码
+│   ├── generated.go        # gqlgen 自动生成的执行代码
+│   ├── models_gen.go       # gqlgen 自动生成的模型
+│   ├── resolver.go        # 主 resolver 入口
+│   ├── scalars.go         # 自定义标量类型（Time、Upload、URI）
+│   └── *.resolvers.go     # 各 mutation/query 的 resolver 实现
+└── frontend/src/graphql/    # 前端 GraphQL 相关代码
+    ├── fragments/          # GraphQL 片段
+    ├── mutations/          # GraphQL 变更
+    ├── queries/            # GraphQL 查询
+    ├── subscriptions/      # GraphQL 订阅
+    ├── utils/              # GraphQL 工具函数
+    ├── client.ts           # GraphQL 客户端
+    └── generated.ts        # 自动生成的前端 GraphQL 代码
 ```
 
 ## 配置文件
 
-`gqlgen.yml` 配置：
-
-```yaml
-schema:
-  - graph/scalars.graphql
-  - graph/directives.graphql
-  - graph/types/*.graphql
-  - graph/enums/*.graphql
-  - graph/queries/*.graphql
-  - graph/subscriptions/*.graphql
-  - graph/mutations/*.graphql
-exec:
-  filename: internal/interfaces/graphql/generated.go
-  package: graphql
-model:
-  filename: internal/interfaces/graphql/models_gen.go
-  package: graphql
-resolver:
-  layout: follow-schema
-  dir: internal/interfaces/graphql
-  package: graphql
-```
+`gqlgen.yml` 包含对应配置
 
 ## 开发工作流
 
@@ -82,8 +69,9 @@ resolver:
 
 - `graph/` 目录只包含 `.graphql` 定义文件
 - `internal/interfaces/graphql/` 目录包含所有生成的 Go 代码
-- 不要手动编辑生成的文件（`generated.go`、`models_gen.go`）
-- 自定义代码放在 `resolver.go`、`scalars.go` 和 `*.resolvers.go` 中
+- `frontend/src/graphql/` 目录包含前端 GraphQL 相关代码
+- 不要手动编辑生成的文件（`generated.go`、`models_gen.go`、`generated.ts`）
+- 自定义代码放在 `resolver.go`、`scalars.go`、`*.resolvers.go` 和前端的对应目录中
 
 ## Schema 文件组织规则
 
@@ -136,6 +124,24 @@ resolver:
 5. 在 `internal/interfaces/graphql/*.resolvers.go` 中实现 resolver 逻辑
 6. 在 `internal/application/` 对应的 handler 中实现订阅逻辑
 
+### 在前端使用 GraphQL
+
+#### 创建新的前端查询
+
+1. 在 `frontend/src/graphql/queries/` 目录下创建对应的 `.gql` 文件
+2. 定义查询内容，使用生成的类型
+3. 在组件中使用 `@/graphql/utils/useQuery` 或 `@/graphql/utils/query` 工具函数执行查询
+
+#### 创建新的前端变更
+
+1. 在 `frontend/src/graphql/mutations/` 目录下创建对应的 `.gql` 文件
+2. 定义变更内容，使用生成的类型
+3. 在组件中使用 `@/graphql/utils/mutate` 工具函数执行变更
+
+#### 创建新的前端订阅
+
+前端暂时不使用订阅，如果有需求请要求用户添加 useSubscription 工具函数。
+
 ## 类型映射
 
 ### 自定义标量类型
@@ -159,8 +165,15 @@ extend type Session @goModel(model: "main/internal/application/session.SessionDT
 
 ## 注意事项
 
-- 不要手动编辑 `generated.go` 和 `models_gen.go`，这些文件会在下次生成时被覆盖
+- 不要手动编辑 `generated.go`、`models_gen.go` 和 `generated.ts`，这些文件会在下次生成时被覆盖
 - 自定义的 resolver 实现不会被覆盖，可以安全编辑
+- 前端的查询、变更和订阅文件不会被自动覆盖，可以安全编辑
 - 使用 `var _` 编译时检查确保接口实现正确
 - 确保所有公共 API 都有文档注释
 - 使用 context 包传递请求上下文
+- 修改 schema 后必须重新生成代码
+- 生成后运行 `pnpm check` 检查前端错误
+- 使用 `pnpm lint:fix` 修复可以自动修复的前端错误
+- 确保前后端类型定义一致
+- 保持 schema 的向后兼容性
+- 使用描述性名称和注释

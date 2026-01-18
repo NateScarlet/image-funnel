@@ -45,7 +45,7 @@
 
 ### 关键设计决策
 
-**元数据策略：**
+**元数据策略：**bu
 
 - XMP Sidecar 优先，不修改原始图片
 - 保护 AI 生成工具写入的元数据
@@ -65,29 +65,6 @@
 
 直接要求用户按 F5 键启动调试器，不要尝试自己启动
 
-## 开发工作流
-
-根据任务需求，使用 SKILL frontend-development 或 backend-development
-
-### 修改 GraphQL schema 后
-
-运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码
-
-运行 `pnpm check` 来检查错误
-
-### 修改前端代码后
-
-运行 `pnpm check` 来检查错误
-
-### 修改后端代码后
-
-运行 `.\scripts\build.ps1` 来重新编译前端和后端
-
-### 测试
-
-- 访问 http://localhost:8080（前端）
-- 访问 http://localhost:8000/graphql（GraphQL Playground）
-
 ## 项目结构
 
 ```
@@ -95,8 +72,7 @@ image-funnel/
 |-- scripts/             # 构建脚本
 ├── cmd/server/          # 后端入口
 ├── frontend/            # 前端项目
-├── graph/               # GraphQL schema 和 resolver
+├── graph/               # GraphQL schema
 ├── internal/            # 后端业务逻辑
 └── data.local/          # 图片目录（默认）
 ```
-
