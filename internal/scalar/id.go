@@ -34,7 +34,7 @@ var _ graphql.Marshaler = ID{}
 var _ graphql.Unmarshaler = (*ID)(nil)
 
 func (id ID) MarshalGQL(w io.Writer) {
-	io.WriteString(w, id.str)
+	graphql.MarshalString(id.str).MarshalGQL(w)
 }
 
 func (id *ID) UnmarshalGQL(v interface{}) error {
