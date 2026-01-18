@@ -9,23 +9,26 @@ import (
 )
 
 type Handler struct {
-	sessionRepo session.Repository
-	dirScanner  directory.Scanner
-	eventBus    EventBus
-	urlSigner   URLSigner
+	sessionRepo    session.Repository
+	sessionService *session.Service
+	dirScanner     directory.Scanner
+	eventBus       EventBus
+	urlSigner      URLSigner
 }
 
 func NewHandler(
 	sessionRepo session.Repository,
+	sessionService *session.Service,
 	dirScanner directory.Scanner,
 	eventBus EventBus,
 	urlSigner URLSigner,
 ) *Handler {
 	return &Handler{
-		sessionRepo: sessionRepo,
-		dirScanner:  dirScanner,
-		eventBus:    eventBus,
-		urlSigner:   urlSigner,
+		sessionRepo:    sessionRepo,
+		sessionService: sessionService,
+		dirScanner:     dirScanner,
+		eventBus:       eventBus,
+		urlSigner:      urlSigner,
 	}
 }
 
@@ -130,7 +133,7 @@ func (h *Handler) Commit(
 	}
 
 	writeActions := session.NewWriteActions(keepRating, pendingRating, rejectRating)
-	success, errors := sess.Commit(writeActions)
+	success, errors := h.sessionService.Commit(sess, writeActions)
 
 	if err := h.sessionRepo.Save(sess); err != nil {
 		return 0, []error{fmt.Errorf("failed to save session: %w", err)}

@@ -11,7 +11,8 @@ import (
 
 	"main/internal/application"
 	"main/internal/application/directory"
-	"main/internal/application/session"
+	appsession "main/internal/application/session"
+	"main/internal/domain/session"
 	"main/internal/infrastructure/ebus"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/localfs"
@@ -64,11 +65,13 @@ func main() {
 	signer := urlconv.NewSigner(secretKey, absRootDir)
 
 	sessionRepo := inmem.NewSessionRepository()
+	metadataRepo := xmpsidecar.NewRepository()
+	sessionService := session.NewService(metadataRepo)
 	dirScanner := localfs.NewScanner(absRootDir)
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.SessionDTO]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[*appsession.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 
-	sessionHandler := session.NewHandler(sessionRepo, dirScanner, eventBus, signer)
+	sessionHandler := appsession.NewHandler(sessionRepo, sessionService, dirScanner, eventBus, signer)
 	directoryHandler := directory.NewHandler(dirScanner)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)

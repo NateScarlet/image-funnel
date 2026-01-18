@@ -1,7 +1,6 @@
 package session
 
 import (
-	"main/internal/domain/metadata"
 	"time"
 
 	"github.com/google/uuid"
@@ -296,42 +295,6 @@ func (s *Session) Undo() error {
 	}
 
 	return ErrSessionNotFound
-}
-
-func (s *Session) Commit(writeActions *WriteActions) (int, []error) {
-	s.status = StatusCommitting
-
-	var errors []error
-	success := 0
-
-	for _, img := range s.images {
-		action := img.Action()
-
-		var rating int
-		switch action {
-		case ActionKeep:
-			rating = writeActions.keepRating
-		case ActionPending:
-			rating = writeActions.pendingRating
-		case ActionReject:
-			rating = writeActions.rejectRating
-		}
-		if rating == 0 && !img.XMPExists() {
-			continue
-		}
-
-		xmpData := metadata.NewXMPData(rating, string(action), s.id, time.Now(), "")
-
-		if err := WriteXMP(img.Path(), xmpData); err != nil {
-			errors = append(errors, err)
-			continue
-		}
-		success++
-	}
-
-	s.status = StatusCompleted
-
-	return success, errors
 }
 
 func (s *Session) Images() []*Image {
