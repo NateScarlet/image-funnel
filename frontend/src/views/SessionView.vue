@@ -141,23 +141,26 @@
             </template>
           </ImageViewer>
 
-          <div
-            v-if="swipeDirection"
-            class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200"
-            :class="{
-              'bg-red-600/30': swipeDirection === 'DOWN',
-              'bg-yellow-600/30': swipeDirection === 'UP',
-              'bg-green-600/30': swipeDirection === 'RIGHT',
-              'bg-slate-600/30': swipeDirection === 'LEFT',
-            }"
-          >
-            <div class="text-6xl font-bold text-white drop-shadow-lg">
-              <span v-if="swipeDirection === 'DOWN'">↓ 排除</span>
-              <span v-else-if="swipeDirection === 'UP'">↑ 稍后再看</span>
-              <span v-else-if="swipeDirection === 'RIGHT'">← 撤销</span>
-              <span v-else-if="swipeDirection === 'LEFT'">→ 保留</span>
+          <!-- 滑动方向提示 -->
+          <Teleport :to="rendererEl">
+            <div
+              v-if="swipeDirection"
+              class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200"
+              :class="{
+                'bg-red-600/30': swipeDirection === 'DOWN',
+                'bg-yellow-600/30': swipeDirection === 'UP',
+                'bg-green-600/30': swipeDirection === 'RIGHT',
+                'bg-slate-600/30': swipeDirection === 'LEFT',
+              }"
+            >
+              <div class="text-6xl font-bold text-white drop-shadow-lg">
+                <span v-if="swipeDirection === 'DOWN'">↓ 排除</span>
+                <span v-else-if="swipeDirection === 'UP'">↑ 稍后再看</span>
+                <span v-else-if="swipeDirection === 'RIGHT'">← 撤销</span>
+                <span v-else-if="swipeDirection === 'LEFT'">→ 保留</span>
+              </div>
             </div>
-          </div>
+          </Teleport>
         </div>
 
         <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
@@ -333,7 +336,9 @@ import {
   mdiHeartOutline,
   mdiLoading,
 } from "@mdi/js";
+import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 
+const rendererEl = useFullscreenRendererElement();
 const route = useRoute();
 const router = useRouter();
 

@@ -4,8 +4,9 @@ import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier/recommended";
 import graphql from "@graphql-eslint/eslint-plugin";
+import { defineConfig } from "eslint/config";
 
-export default tseslint.config(
+export default defineConfig(
   { ignores: ["dist/**", "node_modules/**", "*.config.js", "codegen.ts"] },
   {
     extends: [
@@ -50,5 +51,5 @@ export default tseslint.config(
     },
   },
   prettier,
-  prettierPlugin
+  prettierPlugin,
 );
