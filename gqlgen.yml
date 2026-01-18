@@ -22,3 +22,5 @@ models:
     model: main/internal/interfaces/graphql.Time
   Upload:
     model: github.com/99designs/gqlgen/graphql.Upload
+  ID:
+    model: main/internal/scalar.ID

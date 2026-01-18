@@ -1,9 +1,13 @@
 package session
 
-import "time"
+import (
+	"time"
+
+	"main/internal/scalar"
+)
 
 type SessionDTO struct {
-	ID           string
+	ID           scalar.ID
 	Directory    string
 	Filter       *ImageFilters
 	TargetKeep   int
@@ -18,7 +22,7 @@ type SessionDTO struct {
 }
 
 type ImageDTO struct {
-	ID            string
+	ID            scalar.ID
 	Filename      string
 	Size          int64
 	URL           string

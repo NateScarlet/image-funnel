@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"main/internal/application/directory"
+	"main/internal/scalar"
 )
 
 // LatestImageURL is the resolver for the latestImageUrl field.
@@ -40,9 +41,9 @@ func (r *directoryResolver) Directories(ctx context.Context, obj *directory.Dire
 }
 
 // Directory is the resolver for the directory field.
-func (r *queryResolver) Directory(ctx context.Context, id *string) (*directory.DirectoryDTO, error) {
+func (r *queryResolver) Directory(ctx context.Context, id *scalar.ID) (*directory.DirectoryDTO, error) {
 	if id == nil {
-		return r.app.GetDirectory(ctx, "")
+		return r.app.GetDirectory(ctx, scalar.ID{})
 	}
 	return r.app.GetDirectory(ctx, *id)
 }

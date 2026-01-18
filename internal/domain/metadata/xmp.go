@@ -9,39 +9,45 @@ import (
 type XMPData struct {
 	rating    int
 	action    string
-	sessionID string
 	timestamp time.Time
 	preset    string
 }
 
-func NewXMPData(rating int, action, sessionID string, timestamp time.Time, preset string) *XMPData {
+func (d *XMPData) Rating() (_ int) {
+	if d == nil {
+		return
+	}
+	return d.rating
+}
+
+func (d *XMPData) Action() (_ string) {
+	if d == nil {
+		return
+	}
+	return d.action
+}
+
+func (d *XMPData) Timestamp() (_ time.Time) {
+	if d == nil {
+		return
+	}
+	return d.timestamp
+}
+
+func (d *XMPData) Preset() (_ string) {
+	if d == nil {
+		return
+	}
+	return d.preset
+}
+
+func NewXMPData(rating int, action string, timestamp time.Time, preset string) *XMPData {
 	return &XMPData{
 		rating:    rating,
 		action:    action,
-		sessionID: sessionID,
 		timestamp: timestamp,
 		preset:    preset,
 	}
-}
-
-func (x *XMPData) Rating() int {
-	return x.rating
-}
-
-func (x *XMPData) Action() string {
-	return x.action
-}
-
-func (x *XMPData) SessionID() string {
-	return x.sessionID
-}
-
-func (x *XMPData) Timestamp() time.Time {
-	return x.timestamp
-}
-
-func (x *XMPData) Preset() string {
-	return x.preset
 }
 
 func IsSupportedImage(filename string) bool {

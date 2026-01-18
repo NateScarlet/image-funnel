@@ -8,10 +8,11 @@ package graphql
 import (
 	"context"
 	"main/internal/application/session"
+	"main/internal/scalar"
 )
 
 // Session is the resolver for the session field.
-func (r *queryResolver) Session(ctx context.Context, id string) (*session.SessionDTO, error) {
+func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*session.SessionDTO, error) {
 	return r.app.GetSession(ctx, id)
 }
 
@@ -31,7 +32,7 @@ func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *session.SessionDTO
 }
 
 // SessionUpdated is the resolver for the sessionUpdated field.
-func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID string) (<-chan *session.SessionDTO, error) {
+func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *session.SessionDTO, error) {
 	ch := make(chan *session.SessionDTO, 10)
 
 	go func() {

@@ -1,10 +1,14 @@
 package directory
 
-import "time"
+import (
+	"time"
+
+	"main/internal/scalar"
+)
 
 type DirectoryDTO struct {
-	ID                 string
-	ParentID           string
+	ID                 scalar.ID
+	ParentID           scalar.ID
 	Path               string
 	Root               bool
 	ImageCount         int

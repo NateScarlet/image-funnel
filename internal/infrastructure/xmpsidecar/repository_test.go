@@ -52,7 +52,7 @@ func TestReadExternalSamples(t *testing.T) {
 
 func TestWriteAndRead(t *testing.T) {
 	repo := NewRepository()
-	testData := metadata.NewXMPData(3, "keep", "", time.Now(), "default")
+	testData := metadata.NewXMPData(3, "keep", time.Now(), "default")
 
 	tempFile := filepath.Join(os.TempDir(), "test-image.jpg")
 	defer os.Remove(tempFile)
@@ -70,8 +70,8 @@ func TestWriteAndRead(t *testing.T) {
 
 func TestBatchWrite(t *testing.T) {
 	repo := NewRepository()
-	testData1 := metadata.NewXMPData(1, "", "", time.Now(), "")
-	testData2 := metadata.NewXMPData(2, "", "", time.Now(), "")
+	testData1 := metadata.NewXMPData(1, "keep", time.Now(), "default")
+	testData2 := metadata.NewXMPData(2, "keep", time.Now(), "default")
 
 	tempFile1 := filepath.Join(os.TempDir(), "test-image-1.jpg")
 	tempFile2 := filepath.Join(os.TempDir(), "test-image-2.jpg")

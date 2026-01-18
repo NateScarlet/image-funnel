@@ -1,8 +1,6 @@
 package localfs
 
 import (
-	"time"
-
 	"main/internal/domain/metadata"
 )
 
@@ -13,7 +11,7 @@ func newMockMetadataRepository() metadata.Repository {
 }
 
 func (m *mockMetadataRepository) Read(imagePath string) (*metadata.XMPData, error) {
-	return metadata.NewXMPData(0, "", "", time.Time{}, ""), nil
+	return nil, nil
 }
 
 func (m *mockMetadataRepository) Write(imagePath string, data *metadata.XMPData) error {

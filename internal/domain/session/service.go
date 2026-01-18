@@ -37,7 +37,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 			continue
 		}
 
-		xmpData := metadata.NewXMPData(rating, string(action), session.id, time.Now(), "")
+		xmpData := metadata.NewXMPData(rating, string(action), time.Now(), "")
 
 		if err := s.metadataRepo.Write(img.Path(), xmpData); err != nil {
 			errors = append(errors, err)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"main/internal/domain/session"
+	"main/internal/scalar"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestNewSessionRepository(t *testing.T) {
 func TestSave(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := session.NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
+	img := session.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 	sess := session.NewSession("test-dir", session.NewImageFilters(nil), 5, []*session.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)
@@ -31,7 +32,7 @@ func TestSave(t *testing.T) {
 func TestFindByID(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := session.NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
+	img := session.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 	sess := session.NewSession("test-dir", session.NewImageFilters(nil), 5, []*session.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)
@@ -44,17 +45,17 @@ func TestFindByID(t *testing.T) {
 func TestFindByID_NotFound(t *testing.T) {
 	repo := NewSessionRepository()
 
-	_, err := repo.FindByID("non-existent-id")
+	_, err := repo.FindByID(scalar.ToID("non-existent-id"))
 	require.Error(t, err)
 }
 
 func TestFindAll(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img1 := session.NewImage("test-id-1", "test1.jpg", "/test/test1.jpg", 1000, time.Now(), 0, false)
+	img1 := session.NewImage(scalar.ToID("test-id-1"), "test1.jpg", "/test/test1.jpg", 1000, time.Now(), 0, false)
 	sess1 := session.NewSession("test-dir-1", session.NewImageFilters(nil), 5, []*session.Image{img1})
 
-	img2 := session.NewImage("test-id-2", "test2.jpg", "/test/test2.jpg", 1000, time.Now(), 0, false)
+	img2 := session.NewImage(scalar.ToID("test-id-2"), "test2.jpg", "/test/test2.jpg", 1000, time.Now(), 0, false)
 	sess2 := session.NewSession("test-dir-2", session.NewImageFilters(nil), 5, []*session.Image{img2})
 
 	err := repo.Save(sess1)
@@ -70,7 +71,7 @@ func TestFindAll(t *testing.T) {
 func TestDelete(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := session.NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
+	img := session.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 	sess := session.NewSession("test-dir", session.NewImageFilters(nil), 5, []*session.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)

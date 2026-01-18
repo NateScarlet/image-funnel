@@ -1,8 +1,10 @@
 package session
 
+import "main/internal/scalar"
+
 type Repository interface {
 	Save(session *Session) error
-	FindByID(id string) (*Session, error)
+	FindByID(id scalar.ID) (*Session, error)
 	FindAll() ([]*Session, error)
-	Delete(id string) error
+	Delete(id scalar.ID) error
 }

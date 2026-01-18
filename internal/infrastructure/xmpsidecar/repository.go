@@ -33,7 +33,7 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 	data, err := os.ReadFile(xmpPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return metadata.NewXMPData(0, "", "", time.Time{}, ""), nil
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to read XMP file: %w", err)
 	}
@@ -78,7 +78,6 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 	return metadata.NewXMPData(
 		result.Rating,
 		result.Action,
-		result.SessionID,
 		result.Timestamp,
 		result.Preset,
 	), nil
@@ -90,7 +89,6 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	xmpData := &XMPData{
 		Rating:    data.Rating(),
 		Action:    data.Action(),
-		SessionID: data.SessionID(),
 		Timestamp: data.Timestamp(),
 		Preset:    data.Preset(),
 	}
@@ -156,7 +154,6 @@ func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadat
 		xmpData := &XMPData{
 			Rating:    data.Rating(),
 			Action:    data.Action(),
-			SessionID: data.SessionID(),
 			Timestamp: data.Timestamp(),
 			Preset:    data.Preset(),
 		}
@@ -229,7 +226,6 @@ type XMPData struct {
 	Preset    string
 }
 
-
 func findElementText(elem *etree.Element, tags []string) string {
 	for _, tag := range tags {
 		parts := strings.Split(tag, ":")
@@ -248,7 +244,6 @@ func findElementText(elem *etree.Element, tags []string) string {
 	}
 	return ""
 }
-
 
 func createOrUpdateElement(parent *etree.Element, tag, value string) {
 	parts := strings.Split(tag, ":")
@@ -287,7 +282,6 @@ func writeXMPFile(doc *etree.Document, path string) error {
 
 	return nil
 }
-
 
 func IsSupportedImage(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))

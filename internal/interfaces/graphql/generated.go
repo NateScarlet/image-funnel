@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"main/internal/application/directory"
 	"main/internal/application/session"
+	"main/internal/scalar"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -111,9 +112,9 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Directory func(childComplexity int, id *string) int
+		Directory func(childComplexity int, id *scalar.ID) int
 		Meta      func(childComplexity int) int
-		Session   func(childComplexity int, id string) int
+		Session   func(childComplexity int, id scalar.ID) int
 	}
 
 	QueueStatus struct {
@@ -153,7 +154,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		SessionUpdated func(childComplexity int, sessionID string) int
+		SessionUpdated func(childComplexity int, sessionID scalar.ID) int
 	}
 
 	UndoPayload struct {
@@ -181,8 +182,8 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Meta(ctx context.Context) (*Meta, error)
-	Directory(ctx context.Context, id *string) (*directory.DirectoryDTO, error)
-	Session(ctx context.Context, id string) (*session.SessionDTO, error)
+	Directory(ctx context.Context, id *scalar.ID) (*directory.DirectoryDTO, error)
+	Session(ctx context.Context, id scalar.ID) (*session.SessionDTO, error)
 }
 type SessionResolver interface {
 	Status(ctx context.Context, obj *session.SessionDTO) (SessionStatus, error)
@@ -191,7 +192,7 @@ type SessionResolver interface {
 	UpdatedAt(ctx context.Context, obj *session.SessionDTO) (string, error)
 }
 type SubscriptionResolver interface {
-	SessionUpdated(ctx context.Context, sessionID string) (<-chan *session.SessionDTO, error)
+	SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *session.SessionDTO, error)
 }
 
 type executableSchema struct {
@@ -461,7 +462,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Directory(childComplexity, args["id"].(*string)), true
+		return e.complexity.Query.Directory(childComplexity, args["id"].(*scalar.ID)), true
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
 			break
@@ -478,7 +479,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Session(childComplexity, args["id"].(string)), true
+		return e.complexity.Query.Session(childComplexity, args["id"].(scalar.ID)), true
 
 	case "QueueStatus.currentImage":
 		if e.complexity.QueueStatus.CurrentImage == nil {
@@ -638,7 +639,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Subscription.SessionUpdated(childComplexity, args["sessionId"].(string)), true
+		return e.complexity.Subscription.SessionUpdated(childComplexity, args["sessionId"].(scalar.ID)), true
 
 	case "UndoPayload.clientMutationId":
 		if e.complexity.UndoPayload.ClientMutationID == nil {
@@ -1054,7 +1055,7 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 func (ec *executionContext) field_Query_directory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalOID2ᚖstring)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID)
 	if err != nil {
 		return nil, err
 	}
@@ -1065,7 +1066,7 @@ func (ec *executionContext) field_Query_directory_args(ctx context.Context, rawA
 func (ec *executionContext) field_Query_session_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
 	if err != nil {
 		return nil, err
 	}
@@ -1076,7 +1077,7 @@ func (ec *executionContext) field_Query_session_args(ctx context.Context, rawArg
 func (ec *executionContext) field_Subscription_sessionUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
 	if err != nil {
 		return nil, err
 	}
@@ -1430,7 +1431,7 @@ func (ec *executionContext) _Directory_id(ctx context.Context, field graphql.Col
 			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
 		true,
 		true,
 	)
@@ -1459,7 +1460,7 @@ func (ec *executionContext) _Directory_parentId(ctx context.Context, field graph
 			return obj.ParentID, nil
 		},
 		nil,
-		ec.marshalOID2string,
+		ec.marshalOID2mainᚋinternalᚋscalarᚐID,
 		true,
 		false,
 	)
@@ -1779,7 +1780,7 @@ func (ec *executionContext) _Image_id(ctx context.Context, field graphql.Collect
 			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
 		true,
 		true,
 	)
@@ -2382,7 +2383,7 @@ func (ec *executionContext) _Query_directory(ctx context.Context, field graphql.
 		ec.fieldContext_Query_directory,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Directory(ctx, fc.Args["id"].(*string))
+			return ec.resolvers.Query().Directory(ctx, fc.Args["id"].(*scalar.ID))
 		},
 		nil,
 		ec.marshalODirectory2ᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTO,
@@ -2447,7 +2448,7 @@ func (ec *executionContext) _Query_session(ctx context.Context, field graphql.Co
 		ec.fieldContext_Query_session,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Session(ctx, fc.Args["id"].(string))
+			return ec.resolvers.Query().Session(ctx, fc.Args["id"].(scalar.ID))
 		},
 		nil,
 		ec.marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
@@ -2814,7 +2815,7 @@ func (ec *executionContext) _Session_id(ctx context.Context, field graphql.Colle
 			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
 		true,
 		true,
 	)
@@ -3378,7 +3379,7 @@ func (ec *executionContext) _Subscription_sessionUpdated(ctx context.Context, fi
 		ec.fieldContext_Subscription_sessionUpdated,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Subscription().SessionUpdated(ctx, fc.Args["sessionId"].(string))
+			return ec.resolvers.Subscription().SessionUpdated(ctx, fc.Args["sessionId"].(scalar.ID))
 		},
 		nil,
 		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
@@ -5070,7 +5071,7 @@ func (ec *executionContext) unmarshalInputCommitChangesInput(ctx context.Context
 		switch k {
 		case "sessionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5125,7 +5126,7 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 			it.TargetKeep = data
 		case "directoryId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5186,14 +5187,14 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 		switch k {
 		case "sessionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.SessionID = data
 		case "imageId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("imageId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5234,7 +5235,7 @@ func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any
 		switch k {
 		case "sessionId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6846,20 +6847,14 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 	return graphql.WrapContextMarshaler(ctx, res)
 }
 
-func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalID(v)
+func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {
+	var res scalar.ID
+	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
-	_ = sel
-	res := graphql.MarshalID(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
+func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋinterfacesᚋgraphqlᚐImageAction(ctx context.Context, v any) (ImageAction, error) {
@@ -7458,34 +7453,30 @@ func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋapplication�
 	return ec._Directory(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOID2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalID(v)
+func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {
+	var res scalar.ID
+	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalID(v)
-	return res
+func (ec *executionContext) marshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
+	return v
 }
 
-func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
+func (ec *executionContext) unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
 	if v == nil {
 		return nil, nil
 	}
-	res, err := graphql.UnmarshalID(v)
-	return &res, graphql.ErrorOnPath(ctx, err)
+	var res = new(scalar.ID)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+func (ec *executionContext) marshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v *scalar.ID) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalID(*v)
-	return res
+	return v
 }
 
 func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *session.ImageDTO) graphql.Marshaler {

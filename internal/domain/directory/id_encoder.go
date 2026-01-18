@@ -4,27 +4,30 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+
+	"main/internal/scalar"
 )
 
-const directoryIDPrefix = "data:text/x.dir,"
+const idPrefix = "data:text/x.dir,"
 
-func EncodeDirectoryID(path string) string {
+func EncodeID(path string) scalar.ID {
 	if path == "." {
-		return ""
+		return scalar.ID{}
 	}
 	encoded := base64.URLEncoding.EncodeToString([]byte(path))
-	return directoryIDPrefix + encoded
+	return scalar.ToID(idPrefix + encoded)
 }
 
-func DecodeDirectoryID(id string) (string, error) {
-	if id == "" {
+func DecodeID(id scalar.ID) (string, error) {
+	idStr := id.String()
+	if idStr == "" {
 		return ".", nil
 	}
-	if !strings.HasPrefix(id, directoryIDPrefix) {
+	if !strings.HasPrefix(idStr, idPrefix) {
 		return "", fmt.Errorf("invalid directory ID format")
 	}
 
-	encoded := strings.TrimPrefix(id, directoryIDPrefix)
+	encoded := strings.TrimPrefix(idStr, idPrefix)
 	decoded, err := base64.URLEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode directory ID: %w", err)

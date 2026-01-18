@@ -4,16 +4,17 @@ import (
 	"sync"
 
 	"main/internal/domain/session"
+	"main/internal/scalar"
 )
 
 type SessionRepository struct {
-	sessions map[string]*session.Session
+	sessions map[scalar.ID]*session.Session
 	mu       sync.RWMutex
 }
 
 func NewSessionRepository() *SessionRepository {
 	return &SessionRepository{
-		sessions: make(map[string]*session.Session),
+		sessions: make(map[scalar.ID]*session.Session),
 	}
 }
 
@@ -24,7 +25,7 @@ func (r *SessionRepository) Save(sess *session.Session) error {
 	return nil
 }
 
-func (r *SessionRepository) FindByID(id string) (*session.Session, error) {
+func (r *SessionRepository) FindByID(id scalar.ID) (*session.Session, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	sess, exists := r.sessions[id]
@@ -44,7 +45,7 @@ func (r *SessionRepository) FindAll() ([]*session.Session, error) {
 	return result, nil
 }
 
-func (r *SessionRepository) Delete(id string) error {
+func (r *SessionRepository) Delete(id scalar.ID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.sessions, id)

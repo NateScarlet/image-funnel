@@ -5,9 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"main/internal/application/session"
 	"main/internal/pubsub"
+	"main/internal/scalar"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewEventBus(t *testing.T) {
@@ -23,11 +25,11 @@ func TestPublishSession(t *testing.T) {
 	bus := NewEventBus(topic)
 
 	dto := &session.SessionDTO{
-		ID:        "test-id",
+		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:     session.StatusActive,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		Status:    session.StatusActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	ctx := context.Background()
@@ -39,11 +41,11 @@ func TestSubscribeSession(t *testing.T) {
 	bus := NewEventBus(topic)
 
 	dto := &session.SessionDTO{
-		ID:        "test-id",
+		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:     session.StatusActive,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
+		Status:    session.StatusActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -59,7 +61,7 @@ func TestSubscribeSession(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if dto.ID == "test-id" {
+		if dto.ID == scalar.ToID("test-id") {
 			received = true
 			break
 		}

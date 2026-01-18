@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"main/internal/application/session"
+	"main/internal/scalar"
 	"strconv"
 )
 
 type CommitChangesInput struct {
-	SessionID        string                `json:"sessionId"`
+	SessionID        scalar.ID             `json:"sessionId"`
 	WriteActions     *session.WriteActions `json:"writeActions"`
 	ClientMutationID *string               `json:"clientMutationId,omitempty"`
 }
@@ -28,7 +29,7 @@ type CommitChangesPayload struct {
 type CreateSessionInput struct {
 	Filter           *session.ImageFilters `json:"filter"`
 	TargetKeep       int                   `json:"targetKeep"`
-	DirectoryID      string                `json:"directoryId"`
+	DirectoryID      scalar.ID             `json:"directoryId"`
 	ClientMutationID *string               `json:"clientMutationId,omitempty"`
 }
 
@@ -38,8 +39,8 @@ type CreateSessionPayload struct {
 }
 
 type MarkImageInput struct {
-	SessionID        string      `json:"sessionId"`
-	ImageID          string      `json:"imageId"`
+	SessionID        scalar.ID   `json:"sessionId"`
+	ImageID          scalar.ID   `json:"imageId"`
 	Action           ImageAction `json:"action"`
 	ClientMutationID *string     `json:"clientMutationId,omitempty"`
 }
@@ -69,8 +70,8 @@ type Subscription struct {
 }
 
 type UndoInput struct {
-	SessionID        string  `json:"sessionId"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
+	SessionID        scalar.ID `json:"sessionId"`
+	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
 type UndoPayload struct {

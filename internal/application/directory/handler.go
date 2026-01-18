@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"main/internal/domain/directory"
+	"main/internal/scalar"
 	"path/filepath"
 )
 
@@ -18,12 +19,12 @@ func NewHandler(scanner directory.Scanner) *Handler {
 	}
 }
 
-func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, error) {
-	if id == "" {
-		id = directory.EncodeDirectoryID(".")
+func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*DirectoryDTO, error) {
+	if id.String() == "" {
+		id = directory.EncodeID(".")
 	}
 
-	path, err := directory.DecodeDirectoryID(id)
+	path, err := directory.DecodeID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -37,13 +38,13 @@ func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, e
 		return nil, err
 	}
 
-	var parentID string
+	var parentID scalar.ID
 	if path != "." {
 		parentPath := filepath.Dir(path)
 		if parentPath != "." {
-			parentID = directory.EncodeDirectoryID(parentPath)
+			parentID = directory.EncodeID(parentPath)
 		} else {
-			parentID = directory.EncodeDirectoryID(".")
+			parentID = directory.EncodeID(".")
 		}
 	}
 
@@ -51,8 +52,8 @@ func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, e
 	return h.dtoFactory.New(dirInfo, parentID, path == ".")
 }
 
-func (h *Handler) GetDirectories(ctx context.Context, parentID string) ([]*DirectoryDTO, error) {
-	path, err := directory.DecodeDirectoryID(parentID)
+func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*DirectoryDTO, error) {
+	path, err := directory.DecodeID(parentID)
 	if err != nil {
 		return nil, err
 	}

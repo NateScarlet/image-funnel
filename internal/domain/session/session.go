@@ -1,9 +1,8 @@
 package session
 
 import (
+	"main/internal/scalar"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Status string
@@ -102,7 +101,7 @@ func (s *Stats) Remaining() int {
 }
 
 type Session struct {
-	id         string
+	id         scalar.ID
 	directory  string
 	filter     *ImageFilters
 	targetKeep int
@@ -127,7 +126,7 @@ type RoundSnapshot struct {
 
 func NewSession(directory string, filter *ImageFilters, targetKeep int, images []*Image) *Session {
 	return &Session{
-		id:           generateID(),
+		id:           scalar.NewID(),
 		directory:    directory,
 		filter:       filter,
 		targetKeep:   targetKeep,
@@ -143,7 +142,7 @@ func NewSession(directory string, filter *ImageFilters, targetKeep int, images [
 	}
 }
 
-func (s *Session) ID() string {
+func (s *Session) ID() scalar.ID {
 	return s.id
 }
 
@@ -223,7 +222,7 @@ func (s *Session) CanUndo() bool {
 	return len(s.undoStack) > 0
 }
 
-func (s *Session) MarkImage(imageID string, action Action) error {
+func (s *Session) MarkImage(imageID scalar.ID, action Action) error {
 	if s.status != StatusActive {
 		return ErrSessionNotActive
 	}
@@ -331,7 +330,7 @@ func (s *Session) Images() []*Image {
 }
 
 type Image struct {
-	imageID       string
+	imageID       scalar.ID
 	filename      string
 	imagePath     string
 	size          int64
@@ -341,7 +340,7 @@ type Image struct {
 	action        Action
 }
 
-func NewImage(id, filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *Image {
+func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *Image {
 	return &Image{
 		imageID:       id,
 		filename:      filename,
@@ -354,7 +353,7 @@ func NewImage(id, filename, path string, size int64, modTime time.Time, currentR
 	}
 }
 
-func (i *Image) ID() string {
+func (i *Image) ID() scalar.ID {
 	return i.imageID
 }
 
@@ -394,12 +393,8 @@ func (i *Image) SetAction(action Action) {
 }
 
 type UndoEntry struct {
-	imageID string
+	imageID scalar.ID
 	action  Action
-}
-
-func generateID() string {
-	return uuid.New().String()
 }
 
 var (

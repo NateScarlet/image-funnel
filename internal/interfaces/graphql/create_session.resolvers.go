@@ -7,12 +7,15 @@ package graphql
 
 import (
 	"context"
+	"main/internal/scalar"
 )
 
-// CreateSession is resolver for the createSession field.
+// CreateSession is the resolver for the createSession field.
 func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error) {
-	sessionID, err := r.app.CreateSession(
+	sessionID := scalar.NewID()
+	err := r.app.CreateSession(
 		ctx,
+		sessionID,
 		input.DirectoryID,
 		input.Filter,
 		input.TargetKeep,

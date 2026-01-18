@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"main/internal/scalar"
 	"testing"
 	"time"
 
@@ -126,7 +127,7 @@ func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 
 	session := NewSession("/test", filter, 5, images)
 
-	err := session.MarkImage("invalid-id", ActionKeep)
+	err := session.MarkImage(scalar.ToID("invalid-id"), ActionKeep)
 	assert.Error(t, err, "Should return error for invalid image ID")
 	assert.Equal(t, ErrSessionNotFound, err, "Error should be ErrSessionNotFound")
 }
@@ -340,7 +341,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 
 	session := NewSession("/test", filter, 5, images)
 
-	keptImageIDs := make(map[string]bool)
+	keptImageIDs := make(map[scalar.ID]bool)
 
 	for i := 0; i < 10; i++ {
 		action := ActionKeep
@@ -421,13 +422,13 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 }
 
 func TestImage_Action_ShouldDefaultToPending(t *testing.T) {
-	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
+	img := NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 
 	assert.Equal(t, ActionPending, img.Action(), "Action should default to PENDING")
 }
 
 func TestImage_SetAction_ShouldUpdateAction(t *testing.T) {
-	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
+	img := NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 
 	img.SetAction(ActionKeep)
 	assert.Equal(t, ActionKeep, img.Action(), "Action should be KEEP")
@@ -484,7 +485,7 @@ func createTestImages(count int) []*Image {
 	images := make([]*Image, count)
 	for i := 0; i < count; i++ {
 		images[i] = NewImage(
-			fmt.Sprintf("img-%d", i),
+			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
 			1000,
@@ -500,7 +501,7 @@ func createTestImagesWithRatings(ratings []int) []*Image {
 	images := make([]*Image, len(ratings))
 	for i, rating := range ratings {
 		images[i] = NewImage(
-			fmt.Sprintf("img-%d", i),
+			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
 			1000,

@@ -3,11 +3,12 @@ package directory
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"main/internal/scalar"
 	"time"
 )
 
 type DirectoryInfo struct {
-	id                 string
+	id                 scalar.ID
 	path               string
 	imageCount         int
 	subdirectoryCount  int
@@ -18,7 +19,7 @@ type DirectoryInfo struct {
 
 func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImageModTime time.Time, latestImagePath string, ratingCounts map[int]int) *DirectoryInfo {
 	return &DirectoryInfo{
-		id:                 EncodeDirectoryID(path),
+		id:                 EncodeID(path),
 		path:               path,
 		imageCount:         imageCount,
 		subdirectoryCount:  subdirectoryCount,
@@ -28,7 +29,7 @@ func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImag
 	}
 }
 
-func (d *DirectoryInfo) ID() string {
+func (d *DirectoryInfo) ID() scalar.ID {
 	return d.id
 }
 
@@ -57,7 +58,7 @@ func (d *DirectoryInfo) RatingCounts() map[int]int {
 }
 
 type ImageInfo struct {
-	id            string
+	id            scalar.ID
 	filename      string
 	path          string
 	size          int64
@@ -68,7 +69,7 @@ type ImageInfo struct {
 
 func NewImageInfo(filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *ImageInfo {
 	return &ImageInfo{
-		id:            generateID(path, modTime),
+		id:            newID(path, modTime),
 		filename:      filename,
 		path:          path,
 		size:          size,
@@ -78,7 +79,7 @@ func NewImageInfo(filename, path string, size int64, modTime time.Time, currentR
 	}
 }
 
-func (i *ImageInfo) ID() string {
+func (i *ImageInfo) ID() scalar.ID {
 	return i.id
 }
 
@@ -110,9 +111,9 @@ func (i *ImageInfo) SetCurrentRating(rating int) {
 	i.currentRating = rating
 }
 
-func generateID(path string, modTime time.Time) string {
+func newID(path string, modTime time.Time) scalar.ID {
 	hash := sha256.New()
 	hash.Write([]byte(path))
 	hash.Write([]byte(modTime.String()))
-	return hex.EncodeToString(hash.Sum(nil))[:16]
+	return scalar.ToID(hex.EncodeToString(hash.Sum(nil))[:16])
 }
