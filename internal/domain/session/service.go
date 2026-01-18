@@ -33,7 +33,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 		case ActionReject:
 			rating = writeActions.rejectRating
 		}
-		if rating == 0 && !img.XMPExists() {
+		if rating == img.Rating() {
 			continue
 		}
 
