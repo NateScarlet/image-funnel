@@ -335,11 +335,8 @@ const selectedPreset = computed(() => {
 });
 
 const canCreate = computed(() => {
-  return (
-    filterRating.value.length > 0 &&
-    targetKeep.value > 0 &&
-    selectedDirectoryId.value !== ""
-  );
+  // 根目录是允许创建会话的
+  return filterRating.value.length > 0 && targetKeep.value > 0;
 });
 
 function getMatchedImageCount(dir: {
