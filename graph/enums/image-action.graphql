@@ -1,0 +1,5 @@
+enum ImageAction {
+  KEEP
+  PENDING
+  REJECT
+}

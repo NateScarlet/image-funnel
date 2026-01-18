@@ -63,11 +63,6 @@ func (r *directoryResolver) Directories(ctx context.Context, obj *Directory) ([]
 	return result, nil
 }
 
-// Session is the resolver for the session field.
-func (r *queryResolver) Session(ctx context.Context, id string) (*Session, error) {
-	return r.Resolver.Session(ctx, id)
-}
-
 // Directory is the resolver for the directory field.
 func (r *queryResolver) Directory(ctx context.Context, id *string) (*Directory, error) {
 	s := scanner.NewScanner(r.RootDir)
@@ -122,28 +117,7 @@ func (r *queryResolver) Directory(ctx context.Context, id *string) (*Directory, 
 	}, nil
 }
 
-// Meta is the resolver for the meta field.
-func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
-	return &Meta{
-		RootPath: r.RootDir,
-		Version:  r.Version,
-	}, nil
-}
-
-// SessionUpdated is the resolver for the sessionUpdated field.
-func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID string) (<-chan *Session, error) {
-	return r.Resolver.SessionUpdated(ctx, sessionID)
-}
-
 // Directory returns DirectoryResolver implementation.
 func (r *Resolver) Directory() DirectoryResolver { return &directoryResolver{r} }
 
-// Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-// Subscription returns SubscriptionResolver implementation.
-func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
-
 type directoryResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
-type subscriptionResolver struct{ *Resolver }

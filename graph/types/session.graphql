@@ -1,0 +1,14 @@
+type Session {
+  id: ID!
+  directory: String!
+  filter: ImageFilters!
+  targetKeep: Int!
+  status: SessionStatus!
+  stats: SessionStats!
+  createdAt: String!
+  updatedAt: String!
+  canCommit: Boolean!
+  canUndo: Boolean!
+  currentImage: Image
+  queueStatus: QueueStatus!
+}

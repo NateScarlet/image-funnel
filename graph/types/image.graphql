@@ -1,0 +1,8 @@
+type Image {
+  id: ID!
+  filename: String!
+  size: Int!
+  url: URI!
+  currentRating: Int
+  xmpExists: Boolean!
+}

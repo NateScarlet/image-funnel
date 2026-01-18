@@ -1,0 +1,3 @@
+type Subscription {
+  sessionUpdated(sessionId: ID!): Session!
+}

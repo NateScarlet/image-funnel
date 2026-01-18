@@ -1,0 +1,8 @@
+type SessionStats {
+  total: Int!
+  processed: Int!
+  kept: Int!
+  reviewed: Int!
+  rejected: Int!
+  remaining: Int!
+}

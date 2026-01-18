@@ -1,0 +1,11 @@
+type Directory {
+  id: ID!
+  path: String!
+  imageCount: Int!
+  subdirectoryCount: Int!
+  latestImageModTime: Time!
+  latestImagePath: String
+  latestImageUrl: URI
+  ratingCounts: [RatingCount!]!
+  directories: [Directory!]! @goField(forceResolver: true)
+}

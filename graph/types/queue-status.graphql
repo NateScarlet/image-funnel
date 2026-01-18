@@ -1,0 +1,6 @@
+type QueueStatus {
+  currentIndex: Int!
+  totalImages: Int!
+  currentImage: Image
+  progress: Float!
+}

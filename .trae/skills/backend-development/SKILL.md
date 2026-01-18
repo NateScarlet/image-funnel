@@ -48,12 +48,33 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 ```
 ├── cmd/server/          # 后端入口
 ├── graph/               # GraphQL schema 和 resolver
-│   ├── schema.graphql  # 主 GraphQL schema 定义
-│   ├── models_gen.go   # gqlgen 自动生成的模型
-│   ├── resolver.go     # 主 resolver 入口
-│   ├── scalars.go      # 自定义标量类型（Time、Upload、URI）
-│   ├── *.resolvers.go  # 各 mutation/query 的 resolver 实现
-│   └── mutations/      # Mutation 定义文件
+│   ├── scalars.graphql     # Scalar 类型定义
+│   ├── directives.graphql  # Directive 定义
+│   ├── types/              # Type 类型定义
+│   │   ├── meta.graphql
+│   │   ├── image.graphql
+│   │   ├── directory.graphql
+│   │   ├── rating-count.graphql
+│   │   ├── image-filters.graphql
+│   │   ├── write-actions.graphql
+│   │   ├── session.graphql
+│   │   ├── session-stats.graphql
+│   │   └── queue-status.graphql
+│   ├── enums/             # Enum 类型定义
+│   │   ├── session-status.graphql
+│   │   └── image-action.graphql
+│   ├── queries/            # Query 定义
+│   │   ├── base.graphql    # Query 基础定义（包含 meta）
+│   │   ├── session.graphql # extend Query session
+│   │   └── directory.graphql # extend Query directory
+│   ├── subscriptions/      # Subscription 定义
+│   │   ├── base.graphql    # Subscription 基础定义
+│   │   └── session.graphql # extend Subscription sessionUpdated
+│   ├── mutations/          # Mutation 定义
+│   ├── models_gen.go       # gqlgen 自动生成的模型
+│   ├── resolver.go        # 主 resolver 入口
+│   ├── scalars.go         # 自定义标量类型（Time、Upload、URI）
+│   └── *.resolvers.go     # 各 mutation/query 的 resolver 实现
 └── internal/
     ├── preset/          # 预设管理
     ├── scanner/         # 图片扫描
@@ -106,18 +127,41 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 
 ### 添加新的 GraphQL Query
 
-1. 在 `graph/schema.graphql` 中定义查询
+1. 在 `graph/queries/` 目录下创建对应的 `.graphql` 文件
+2. 使用 `extend type Query` 的形式定义（除了 `base.graphql` 中的 meta）
+3. 文件命名与查询名称对应（如 `session.graphql`）
+4. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
+5. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
+6. 在 `internal/` 对应的 domain 中实现业务逻辑
+
+### 添加新的 GraphQL Mutation
+
+1. 在 `graph/mutations/` 目录下创建变更定义文件
 2. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
 3. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
 4. 在 `internal/` 对应的 domain 中实现业务逻辑
 
-### 添加新的 GraphQL Mutation
+### 添加新的 GraphQL Schema 类型
 
-1. 在 `graph/schema.graphql` 中定义变更
-2. 在 `graph/mutations/` 目录下创建变更定义文件
-3. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
-4. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
-5. 在 `internal/` 对应的 domain 中实现业务逻辑
+1. 在 `graph/types/` 目录下创建对应的 `.graphql` 文件
+2. 文件命名使用 kebab-case（如 `image-filters.graphql`）
+3. 每个 type 单独一个文件
+4. 运行 `.\scripts\generate-graphql.ps1` 生成类型定义
+
+### 添加新的 GraphQL Enum
+
+1. 在 `graph/enums/` 目录下创建对应的 `.graphql` 文件
+2. 文件命名使用 kebab-case（如 `session-status.graphql`）
+3. 运行 `.\scripts\generate-graphql.ps1` 生成类型定义
+
+### 添加新的 GraphQL Subscription
+
+1. 在 `graph/subscriptions/` 目录下创建对应的 `.graphql` 文件
+2. 使用 `extend type Subscription` 的形式定义
+3. 文件命名与订阅名称对应（如 `session.graphql`）
+4. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
+5. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
+6. 在 `internal/` 对应的 domain 中实现业务逻辑
 
 ### 添加新的 Domain
 
@@ -134,3 +178,9 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 - 保持代码的可读性和可维护性
 - 确保所有公共 API 都有文档注释
 - 使用 context 包传递请求上下文
+- GraphQL Schema 文件组织规则：
+  - 每个 type 单独一个文件，放在 `graph/types/` 目录
+  - 每个 enum 单独一个文件，放在 `graph/enums/` 目录
+  - Query 使用 `extend type Query` 形式定义，除了 `base.graphql` 中的 meta
+  - Subscription 使用 `extend type Subscription` 形式定义
+  - 文件命名使用 kebab-case（如 `image-filters.graphql`）

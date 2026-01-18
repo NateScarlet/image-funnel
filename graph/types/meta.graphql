@@ -1,0 +1,4 @@
+type Meta {
+  rootPath: String!
+  version: String!
+}

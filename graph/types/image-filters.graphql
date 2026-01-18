@@ -1,0 +1,3 @@
+type ImageFilters @goModel(model: "main/internal/session.ImageFilters") {
+  rating: [Int!]!
+}

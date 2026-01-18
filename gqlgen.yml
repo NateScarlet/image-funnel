@@ -1,6 +1,11 @@
 # gqlgen configuration
 schema:
-  - graph/*.graphql
+  - graph/scalars.graphql
+  - graph/directives.graphql
+  - graph/types/*.graphql
+  - graph/enums/*.graphql
+  - graph/queries/*.graphql
+  - graph/subscriptions/*.graphql
   - graph/mutations/*.graphql
 exec:
   filename: graph/generated.go

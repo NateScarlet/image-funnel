@@ -1,0 +1,5 @@
+type WriteActions @goModel(model: "main/internal/session.WriteActions") {
+  keepRating: Int!
+  pendingRating: Int!
+  rejectRating: Int!
+}
