@@ -8,17 +8,17 @@ schema:
   - graph/subscriptions/*.graphql
   - graph/mutations/*.graphql
 exec:
-  filename: graph/generated.go
-  package: graph
+  filename: internal/interfaces/graphql/generated.go
+  package: graphql
 model:
-  filename: graph/models_gen.go
-  package: graph
+  filename: internal/interfaces/graphql/models_gen.go
+  package: graphql
 resolver:
   layout: follow-schema
-  dir: graph
-  package: graph
+  dir: internal/interfaces/graphql
+  package: graphql
 models:
   Time:
-    model: main/graph.Time
+    model: main/internal/interfaces/graphql.Time
   Upload:
     model: github.com/99designs/gqlgen/graphql.Upload

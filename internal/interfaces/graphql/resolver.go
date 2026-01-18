@@ -1,6 +1,6 @@
 //go:generate go tool github.com/99designs/gqlgen
 
-package graph
+package graphql
 
 import (
 	"main/internal/application"

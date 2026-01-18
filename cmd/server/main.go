@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"main/graph"
 	"main/internal/application"
 	"main/internal/application/directory"
 	"main/internal/application/session"
@@ -18,6 +17,7 @@ import (
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/infrastructure/xmpsidecar"
+	"main/internal/interfaces/graphql"
 	"main/internal/pubsub"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -73,9 +73,9 @@ func main() {
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)
 
-	resolver := graph.NewResolver(appRoot, absRootDir, signer, version)
+	resolver := graphql.NewResolver(appRoot, absRootDir, signer, version)
 
-	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
+	srv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: resolver}))
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
 	var frontendDir string

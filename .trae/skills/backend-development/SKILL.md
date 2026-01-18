@@ -1,6 +1,6 @@
 ---
 name: "backend-development"
-description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设计（DDD）和测试的开发规范和最佳实践"
+description: "后端开发指南，包含 Go 语言、领域驱动设计（DDD）和测试的开发规范和最佳实践。Invoke when working on backend code, domain logic, or Go development."
 ---
 
 # 后端开发指南
@@ -10,7 +10,6 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 ## 技术栈
 
 - **语言**: Go
-- **GraphQL 框架**: gqlgen
 - **架构**: 领域驱动设计（DDD）
 - **测试**: testify
 
@@ -47,34 +46,6 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 
 ```
 ├── cmd/server/          # 后端入口
-├── graph/               # GraphQL schema 和 resolver
-│   ├── scalars.graphql    # Scalar 类型定义
-│   ├── directives.graphql  # Directive 定义
-│   ├── types/              # Type 类型定义
-│   │   ├── meta.graphql
-│   │   ├── image.graphql
-│   │   ├── directory.graphql
-│   │   ├── rating-count.graphql
-│   │   ├── image-filters.graphql
-│   │   ├── write-actions.graphql
-│   │   ├── session.graphql
-│   │   ├── session-stats.graphql
-│   │   └── queue-status.graphql
-│   ├── enums/             # Enum 类型定义
-│   │   ├── session-status.graphql
-│   │   └── image-action.graphql
-│   ├── queries/            # Query 定义
-│   │   ├── base.graphql    # Query 基础定义（包含 meta）
-│   │   ├── session.graphql # extend Query session
-│   │   └── directory.graphql # extend Query directory
-│   ├── subscriptions/      # Subscription 定义
-│   │   ├── base.graphql    # Subscription 基础定义
-│   │   └── session.graphql # extend Subscription sessionUpdated
-│   ├── mutations/          # Mutation 定义
-│   ├── models_gen.go       # gqlgen 自动生成的模型
-│   ├── resolver.go        # 主 resolver 入口
-│   ├── scalars.go         # 自定义标量类型（Time、Upload、URI）
-│   └── *.resolvers.go     # 各 mutation/query 的 resolver 实现
 └── internal/
     ├── application/       # 应用层：协调领域对象执行业务用例
     │   ├── session/        # Session 应用服务
@@ -116,6 +87,13 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
     │   └── ebus/          # 事件总线实现
     │       ├── event_bus.go  # 事件总线
     │       └── event_bus_test.go
+    ├── interfaces/       # 接口层：处理外部交互
+    │   └── graphql/       # GraphQL 接口
+    │       ├── generated.go   # gqlgen 生成的执行代码
+    │       ├── models_gen.go  # gqlgen 生成的模型
+    │       ├── resolver.go    # 主 resolver 入口
+    │       ├── scalars.go     # 自定义标量类型
+    │       └── *.resolvers.go # 各 mutation/query 的 resolver 实现
     ├── pubsub/           # 发布订阅抽象
     │   ├── topic.go       # Topic 接口
     │   ├── in_memory.go   # 内存 Topic 实现
@@ -188,10 +166,6 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 
 调试器会自动重新编译（如使用 `dlv`）。
 
-### 修改 GraphQL schema 后
-
-运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码。
-
 ### 添加测试用例
 
 修改后端代码后，添加必要的测试用例。
@@ -204,10 +178,6 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 ### 重新编译
 
 运行 `.\scripts\build.ps1` 来重新编译前端和后端。
-
-### 测试
-
-访问 http://localhost:8080（GraphQL Playground）。
 
 ## 测试规范
 
@@ -225,54 +195,13 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 
 ## 常见任务
 
-### 添加新的 GraphQL Query
-
-1. 在 `graph/queries/` 目录下创建对应的 `.graphql` 文件
-2. 使用 `extend type Query` 的形式定义（除了 `base.graphql` 中的 meta）
-3. 文件命名与查询名称对应（如 `session.graphql`）
-4. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
-5. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
-6. 在 `internal/application/` 对应的 handler 中实现应用逻辑
-7. 在 `internal/domain/` 对应的 domain 中实现领域逻辑（如需要）
-
-### 添加新的 GraphQL Mutation
-
-1. 在 `graph/mutations/` 目录下创建变更定义文件
-2. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
-3. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
-4. 在 `internal/application/` 对应的 handler 中实现应用逻辑
-5. 在 `internal/domain/` 对应的 domain 中实现领域逻辑（如需要）
-
-### 添加新的 GraphQL Schema 类型
-
-1. 在 `graph/types/` 目录下创建对应的 `.graphql` 文件
-2. 文件命名使用 kebab-case（如 `image-filters.graphql`）
-3. 每个 type 单独一个文件
-4. 使用 `@goModel` 指定对应的 Go 类型（通常在 `internal/application/` 或 `internal/domain/`）
-5. 运行 `.\scripts\generate-graphql.ps1` 生成类型定义
-
-### 添加新的 GraphQL Enum
-
-1. 在 `graph/enums/` 目录下创建对应的 `.graphql` 文件
-2. 文件命名使用 kebab-case（如 `session-status.graphql`）
-3. 运行 `.\scripts\generate-graphql.ps1` 生成类型定义
-
-### 添加新的 GraphQL Subscription
-
-1. 在 `graph/subscriptions/` 目录下创建对应的 `.graphql` 文件
-2. 使用 `extend type Subscription` 的形式定义
-3. 文件命名与订阅名称对应（如 `session.graphql`）
-4. 运行 `.\scripts\generate-graphql.ps1` 生成 resolver 模板
-5. 在 `graph/*.resolvers.go` 中实现 resolver 逻辑
-6. 在 `internal/application/` 对应的 handler 中实现订阅逻辑
-
 ### 添加新的 Domain
 
 1. 在 `internal/domain/` 目录下创建新的 domain 目录
 2. 定义 domain 的接口和模型
 3. 实现 domain 的业务逻辑
 4. 编写测试用例
-5. 在 GraphQL resolver 中调用 domain 方法
+5. 在接口层（如 GraphQL resolver）中调用 domain 方法
 
 ### 添加新的 Application Handler
 
@@ -296,12 +225,6 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 - 保持代码的可读性和可维护性
 - 确保所有公共 API 都有文档注释
 - 使用 context 包传递请求上下文
-- GraphQL Schema 文件组织规则：
-  - 每个 type 单独一个文件，放在 `graph/types/` 目录
-  - 每个 enum 单独一个文件，放在 `graph/enums/` 目录
-  - Query 使用 `extend type Query` 形式定义，除了 `base.graphql` 中的 meta
-  - Subscription 使用 `extend type Subscription` 形式定义
-  - 文件命名使用 kebab-case（如 `image-filters.graphql`）
 - 使用 `var _` 编译时检查确保接口实现正确
 - 领域层使用 UUID 生成唯一标识符
 - 基础设施层使用适当的并发控制（如 `sync.RWMutex`）

@@ -17,7 +17,7 @@ Write-Host "项目根目录: $ProjectRoot" -ForegroundColor Gray
 Write-Host "1. 更新后端 GraphQL 代码..." -ForegroundColor Cyan
 Push-Location $ProjectRoot
 try {
-    go generate ./graph
+    go generate ./internal/interfaces/graphql
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host "后端 GraphQL 代码更新失败！" -ForegroundColor Red
@@ -26,7 +26,7 @@ try {
 
     # 搜索未实现的 resolver
     Write-Host "检查未实现的 resolver..." -ForegroundColor Cyan
-    $notImplementedFiles = Get-ChildItem -Path "graph" -Filter "*.resolvers.go" -Recurse | Where-Object {
+    $notImplementedFiles = Get-ChildItem -Path "internal/interfaces/graphql" -Filter "*.resolvers.go" -Recurse | Where-Object {
         $content = Get-Content $_.FullName -Raw
         $content -match "not implemented:"
     }
