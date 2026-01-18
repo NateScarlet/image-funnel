@@ -4,6 +4,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"sync"
 	"time"
 )
 
@@ -83,6 +84,8 @@ type Session struct {
 
 	roundHistory []RoundSnapshot
 	currentRound int
+
+	mu sync.RWMutex
 }
 
 type RoundSnapshot struct {
@@ -115,34 +118,50 @@ func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targ
 }
 
 func (s *Session) ID() scalar.ID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.id
 }
 
 func (s *Session) Directory() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.directory
 }
 
 func (s *Session) Filter() *image.ImageFilters {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.filter
 }
 
 func (s *Session) TargetKeep() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.targetKeep
 }
 
 func (s *Session) Status() shared.SessionStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.status
 }
 
 func (s *Session) CreatedAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.createdAt
 }
 
 func (s *Session) UpdatedAt() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.updatedAt
 }
 
 func (s *Session) CurrentImage() *image.Image {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.currentIdx < len(s.queue) {
 		return s.queue[s.currentIdx]
 	}
@@ -150,10 +169,18 @@ func (s *Session) CurrentImage() *image.Image {
 }
 
 func (s *Session) CurrentIndex() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.currentIdx
 }
 
 func (s *Session) Stats() *Stats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.stats()
+}
+
+func (s *Session) stats() *Stats {
 	var stats Stats
 	stats.total = len(s.queue)
 	stats.processed = s.currentIdx
@@ -178,6 +205,8 @@ func (s *Session) Stats() *Stats {
 }
 
 func (s *Session) CanCommit() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
 		return false
 	}
@@ -191,10 +220,15 @@ func (s *Session) CanCommit() bool {
 }
 
 func (s *Session) CanUndo() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return len(s.undoStack) > 0
 }
 
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.status != shared.SessionStatusActive {
 		return ErrSessionNotActive
 	}
@@ -230,7 +264,8 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	s.currentIdx++
 
 	if s.currentIdx >= len(s.queue) {
-		if s.Stats().reviewed > 0 || s.Stats().kept > 0 {
+		stats := s.stats()
+		if stats.reviewed > 0 || stats.kept > 0 {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]
@@ -264,6 +299,9 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 }
 
 func (s *Session) Undo() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if len(s.undoStack) == 0 {
 		if len(s.roundHistory) == 0 {
 			return ErrNothingToUndo
@@ -298,10 +336,14 @@ func (s *Session) Undo() error {
 }
 
 func (s *Session) Images() []*image.Image {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.images
 }
 
 func (s *Session) GetAction(imageID scalar.ID) shared.ImageAction {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if action, exists := s.actions[imageID]; exists {
 		return action
 	}
@@ -309,6 +351,8 @@ func (s *Session) GetAction(imageID scalar.ID) shared.ImageAction {
 }
 
 func (s *Session) SetAction(imageID scalar.ID, action shared.ImageAction) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.actions[imageID] = action
 }
 
