@@ -52,6 +52,13 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
       const errorMessages = graphQLErrors
         .map((err: GraphQLFormattedError) => err.message)
         .join("; ");
+
+      if (import.meta.env.DEV) {
+        console.error({
+          operation,
+          graphQLErrors,
+        });
+      }
       errorOnce(errorMessages);
     }
   }
