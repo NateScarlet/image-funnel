@@ -57,39 +57,6 @@
 - 阶段化筛选：支持不同筛选阶段使用不同评分策略
 - 可控提交：批量操作后确认再写入
 
-### 开发注意事项
-
-对于不常见的情况或特殊修复，添加注释说明
-
-#### 前端
-
-尽量基于 ./graphql/generated 中的类型定义，不要自己定义重复的类型
-
-避免使用 watch, 尽量使用 computed 进行数据转换和计算。
-
-不要手动更新 graphql 查询结果，而是依赖 ./src/graphql/useQuery.ts 的响应式系统自动更新。InMemoryCache会自动更新查询结果。
-
-使用 @mdi/js 来获取 Material Design Icons 图标
-
-主要按钮和交互使用 secondary 颜色
-
-#### 后端
-
-所有字段没有特别理由，都不应该导出，只能通过方法访问。
-getter 应该处理 nil 值，返回默认值或空字符串等。避免给getter添加`Get`前缀。
-setter 应该验证输入值的有效性，避免无效状态。
-构建函数使用 NewXXX 风格命名，校验参数是否有效，参数顺序与字段顺序一致。
-
-使用Options模式来指定命名参数。命名参数的名称以 `{函数名称}With` 开头，后面跟着参数名的驼峰式命名。
-
-使用领域驱动设计（DDD）架构，将业务逻辑与数据访问分离。
-
-测试出错时，在测试中添加详细的日志输出，帮助定位问题。
-
-编写测试时可以用 github.com/stretchr/testify/assert 或 require 来验证结果是否符合预期。
-
-不要用 go run 编写测试，直接用 go test 运行测试。
-
 ## 环境配置
 
 项目已配置好 VS Code 调试启动器，位于 `image-funnel.code-workspace`。
@@ -100,25 +67,24 @@ setter 应该验证输入值的有效性，避免无效状态。
 
 ## 开发工作流
 
-1. **修改代码后：**
-   - 后端：调试器会自动重新编译（如使用 `dlv`）
-   - 前端：Vite 会自动热重载
+### 修改 GraphQL schema 后
 
-2. **修改 GraphQL schema 后：**
-   - 运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码
-   - 运行 `pnpm check` 来检查错误
+运行 `.\scripts\generate-graphql.ps1` 命令来同时更新前后端的 GraphQL 相关代码
 
-3. **修改前端代码后：**
-   - 运行 `pnpm check` 来检查错误
+运行 `pnpm check` 来检查错误
 
-4. **修改后端代码后：**
-   - 添加必要的测试用例
-   - 运行 `go test --timeout 30s` 测试修改的模块，如果大量修改　直接运行 `go test --timeout 600s ./...` 测试所有模块
-   - 运行 `.\scripts\build.ps1` 来重新编译前端和后端
+### 修改前端代码后
 
-5. **测试：**
-   - 访问 http://localhost:3000（前端）
-   - 访问 http://localhost:8080（GraphQL Playground）
+运行 `pnpm check` 来检查错误
+
+### 修改后端代码后
+
+运行 `.\scripts\build.ps1` 来重新编译前端和后端
+
+### 测试
+
+- 访问 http://localhost:8080（前端）
+- 访问 http://localhost:8000/graphql（GraphQL Playground）
 
 ## 项目结构
 
@@ -127,27 +93,7 @@ image-funnel/
 |-- scripts/             # 构建脚本
 ├── cmd/server/          # 后端入口
 ├── frontend/            # 前端项目
-│   └── src/
-│       ├── components/  # Vue 组件
-│       ├── graphql/    # GraphQL 客户端
-│       │   ├── fragments/    # GraphQL 片段
-│       │   ├── mutations/    # GraphQL 变更操作
-│       │   ├── queries/      # GraphQL 查询
-│       │   ├── subscriptions/# GraphQL 订阅
-│       │   ├── client.ts     # GraphQL 客户端配置
-│       │   └── generated.ts  # 自动生成的类型
-│       └── views/       # 页面视图
 ├── graph/               # GraphQL schema 和 resolver
-│   ├── schema.graphql  # 主 GraphQL schema 定义
-│   ├── models_gen.go   # gqlgen 自动生成的模型
-│   ├── resolver.go     # 主 resolver 入口
-│   ├── scalars.go      # 自定义标量类型（Time、Upload、URI）
-│   ├── *.resolvers.go  # 各 mutation/query 的 resolver 实现
-│   └── mutations/      # Mutation 定义文件
-├── internal/
-│   ├── preset/          # 预设管理
-│   ├── scanner/         # 图片扫描
-│   ├── session/         # 会话管理
-│   └── xmp/             # XMP 文件处理
+├── internal/            # 后端业务逻辑
 └── data.local/          # 图片目录（默认）
 ```
