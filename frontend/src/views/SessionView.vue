@@ -127,18 +127,20 @@
             :src="currentImage.url"
             :alt="currentImage.filename"
           >
-            <template #info>
-              <span class="min-w-24">
+            <template #info="{ isFullscreen }">
+              <span class="lg:min-w-24 hidden md:block">
                 {{ formatDate(currentImage.modTime) }}
               </span>
-              <div class="w-px h-4 bg-white/30 mx-1"></div>
-              <span class="min-w-24">
-                {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
-              </span>
-              <div class="w-px h-4 bg-white/30 mx-1"></div>
-              <span class="text-green-400 min-w-24">
-                保留: {{ stats?.kept || 0 }} / {{ session?.targetKeep || 0 }}
-              </span>
+              <template v-if="isFullscreen">
+                <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+                <span class="lg:min-w-24">
+                  {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
+                </span>
+                <div class="w-px h-4 bg-white/30 mx-1"></div>
+                <span class="lg:min-w-24 text-green-400">
+                  保留: {{ stats?.kept || 0 }} / {{ session?.targetKeep || 0 }}
+                </span>
+              </template>
             </template>
           </ImageViewer>
 

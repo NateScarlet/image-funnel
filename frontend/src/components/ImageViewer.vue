@@ -17,12 +17,13 @@
       />
     </div>
 
+    <!-- 图片尺寸和缩放操作 -->
     <div
       v-if="imageSize"
-      class="flex items-center justify-center gap-2 bg-black/70 text-white text-xs px-2 py-1"
+      class="flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
       <button
-        class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        class="hover:bg-white/20 w-6 h-6 items-center justify-center rounded transition-colors hidden md:flex"
         title="缩小"
         @click="zoomOut"
       >
@@ -40,9 +41,11 @@
           />
         </svg>
       </button>
-      <span class="min-w-12 text-center">{{ zoomAsPercent }}%</span>
+      <span class="min-w-12 text-center hidden md:block"
+        >{{ zoomAsPercent }}%</span
+      >
       <button
-        class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        class="hover:bg-white/20 w-6 h-6 items-center justify-center rounded transition-colors hidden md:flex"
         title="放大"
         @click="zoomIn"
       >
@@ -60,15 +63,19 @@
           />
         </svg>
       </button>
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
-      <span class="min-w-16"
+      <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+      <span class="min-w-16 hidden md:block"
         >{{ imageSize.width }} × {{ imageSize.height }}</span
       >
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
-      <slot name="info" />
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
+      <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+      <slot name="info" :is-fullscreen />
+      <div
+        class="w-px h-4 bg-white/30 mx-1"
+        :class="isFullscreen ? '' : 'hidden md:block'"
+      ></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        :class="isFullscreen ? '' : 'hidden md:block'"
         :title="isFullscreen ? '退出全屏' : '全屏'"
         @click="handleToggleFullscreen"
       >
