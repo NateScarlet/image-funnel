@@ -83,6 +83,7 @@ type ComplexityRoot struct {
 		CurrentRating func(childComplexity int) int
 		Filename      func(childComplexity int) int
 		ID            func(childComplexity int) int
+		ModTime       func(childComplexity int) int
 		Size          func(childComplexity int) int
 		URL           func(childComplexity int) int
 		XMPExists     func(childComplexity int) int
@@ -347,6 +348,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.ID(childComplexity), true
+	case "Image.modTime":
+		if e.complexity.Image.ModTime == nil {
+			break
+		}
+
+		return e.complexity.Image.ModTime(childComplexity), true
 	case "Image.size":
 		if e.complexity.Image.Size == nil {
 			break
@@ -824,6 +831,7 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on 
   filename: String!
   size: Int!
   url: URI!
+  modTime: Time!
   currentRating: Int
   xmpExists: Boolean!
 }
@@ -1877,6 +1885,35 @@ func (ec *executionContext) fieldContext_Image_url(_ context.Context, field grap
 	return fc, nil
 }
 
+func (ec *executionContext) _Image_modTime(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_modTime,
+		func(ctx context.Context) (any, error) {
+			return obj.ModTime, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_modTime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Image_currentRating(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2667,6 +2704,8 @@ func (ec *executionContext) fieldContext_QueueStatus_currentImage(_ context.Cont
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
 			case "currentRating":
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
@@ -3105,6 +3144,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
 			case "currentRating":
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
@@ -5560,6 +5601,11 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "url":
 			out.Values[i] = ec._Image_url(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "modTime":
+			out.Values[i] = ec._Image_modTime(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

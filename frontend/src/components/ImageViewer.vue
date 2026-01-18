@@ -65,6 +65,8 @@
         >{{ imageSize.width }} × {{ imageSize.height }}</span
       >
       <div class="w-px h-4 bg-white/30 mx-1"></div>
+      <slot name="info" />
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
         :title="isFullscreen ? '退出全屏' : '全屏'"

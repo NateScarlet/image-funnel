@@ -343,17 +343,19 @@ type Image struct {
 	filename      string
 	imagePath     string
 	size          int64
+	modTime       time.Time
 	currentRating int
 	xmpExists     bool
 	action        Action
 }
 
-func NewImage(id, filename, path string, size int64, currentRating int, xmpExists bool) *Image {
+func NewImage(id, filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *Image {
 	return &Image{
 		imageID:       id,
 		filename:      filename,
 		imagePath:     path,
 		size:          size,
+		modTime:       modTime,
 		currentRating: currentRating,
 		xmpExists:     xmpExists,
 		action:        ActionPending,
@@ -374,6 +376,10 @@ func (i *Image) Path() string {
 
 func (i *Image) Size() int64 {
 	return i.size
+}
+
+func (i *Image) ModTime() time.Time {
+	return i.modTime
 }
 
 func (i *Image) Rating() int {

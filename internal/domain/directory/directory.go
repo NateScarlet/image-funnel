@@ -61,6 +61,7 @@ type ImageInfo struct {
 	filename      string
 	path          string
 	size          int64
+	modTime       time.Time
 	currentRating int
 	xmpExists     bool
 }
@@ -71,6 +72,7 @@ func NewImageInfo(filename, path string, size int64, modTime time.Time, currentR
 		filename:      filename,
 		path:          path,
 		size:          size,
+		modTime:       modTime,
 		currentRating: currentRating,
 		xmpExists:     xmpExists,
 	}
@@ -90,6 +92,10 @@ func (i *ImageInfo) Path() string {
 
 func (i *ImageInfo) Size() int64 {
 	return i.size
+}
+
+func (i *ImageInfo) ModTime() time.Time {
+	return i.modTime
 }
 
 func (i *ImageInfo) CurrentRating() int {

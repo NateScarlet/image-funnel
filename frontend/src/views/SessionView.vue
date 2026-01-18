@@ -126,7 +126,13 @@
             v-if="currentImage"
             :src="currentImage.url"
             :alt="currentImage.filename"
-          />
+          >
+            <template #info>
+              <span class="min-w-24">
+                {{ formatDate(currentImage.modTime) }}
+              </span>
+            </template>
+          </ImageViewer>
 
           <div
             v-if="swipeDirection"
@@ -308,6 +314,7 @@ import {
 import CommitModal from "../components/CommitModal.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import useEventListeners from "../composables/useEventListeners";
+import { formatDate } from "../utils/date";
 import {
   mdiMenu,
   mdiUndo,

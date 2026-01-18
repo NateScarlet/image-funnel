@@ -51,6 +51,7 @@ func (h *Handler) CreateSession(
 			img.Filename(),
 			img.Path(),
 			img.Size(),
+			img.ModTime(),
 			img.CurrentRating(),
 			img.XMPExists(),
 		)
@@ -219,6 +220,7 @@ func (h *Handler) toImageDTO(img *session.Image) *ImageDTO {
 		Filename:      img.Filename(),
 		Size:          img.Size(),
 		URL:           url,
+		ModTime:       img.ModTime(),
 		CurrentRating: img.Rating(),
 		XMPExists:     img.XMPExists(),
 	}

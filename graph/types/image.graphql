@@ -3,6 +3,7 @@ type Image @goModel(model: "main/internal/application/session.ImageDTO") {
   filename: String!
   size: Int!
   url: URI!
+  modTime: Time!
   currentRating: Int
   xmpExists: Boolean!
 }
