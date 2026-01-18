@@ -1,6 +1,10 @@
 package directory
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
 type DirectoryInfo struct {
 	path               string
@@ -55,9 +59,9 @@ type ImageInfo struct {
 	xmpExists     bool
 }
 
-func NewImageInfo(id, filename, path string, size int64, currentRating int, xmpExists bool) *ImageInfo {
+func NewImageInfo(filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *ImageInfo {
 	return &ImageInfo{
-		id:            id,
+		id:            generateID(path, modTime),
 		filename:      filename,
 		path:          path,
 		size:          size,
@@ -92,4 +96,11 @@ func (i *ImageInfo) XMPExists() bool {
 
 func (i *ImageInfo) SetCurrentRating(rating int) {
 	i.currentRating = rating
+}
+
+func generateID(path string, modTime time.Time) string {
+	hash := sha256.New()
+	hash.Write([]byte(path))
+	hash.Write([]byte(modTime.String()))
+	return hex.EncodeToString(hash.Sum(nil))[:16]
 }

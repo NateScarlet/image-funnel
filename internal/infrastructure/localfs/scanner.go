@@ -48,10 +48,10 @@ func (s *Scanner) Scan(dirPath string) ([]*directory.ImageInfo, error) {
 		}
 
 		imageInfo := directory.NewImageInfo(
-			s.generateID(path),
 			entry.Name(),
 			path,
 			info.Size(),
+			info.ModTime(),
 			0,
 			s.xmpExists(path),
 		)
@@ -200,10 +200,6 @@ func (s *Scanner) ValidateDirectoryPath(relPath string) error {
 func (s *Scanner) xmpExists(imagePath string) bool {
 	_, err := os.Stat(imagePath + ".xmp")
 	return err == nil
-}
-
-func (s *Scanner) generateID(path string) string {
-	return fmt.Sprintf("%x", time.Now().UnixNano())
 }
 
 func (s *Scanner) isSupportedImage(filename string) bool {
