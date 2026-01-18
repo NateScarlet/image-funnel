@@ -16,10 +16,9 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gorilla/mux"
-	"github.com/rs/cors"
 )
 
-const defaultPort = "8000"
+const defaultPort = "34898"
 
 var BuildEnv string
 
@@ -67,13 +66,6 @@ func main() {
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
-	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"*"},
-		AllowCredentials: true,
-	})
-
 	// Determine frontend directory based on environment
 	var frontendDir string
 	isProduction := env != "dev"
@@ -102,7 +94,6 @@ func main() {
 	}
 
 	r := mux.NewRouter()
-	r.Use(c.Handler)
 
 	// Handle GraphQL endpoint with playground
 	r.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {

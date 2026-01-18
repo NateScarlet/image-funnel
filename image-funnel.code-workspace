@@ -27,6 +27,7 @@
         "output": "${workspaceFolder:Root}/main_debug.exe",
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder:Root}/data.local",
+          "IMAGE_FUNNEL_PORT": "8080",
         },
       },
     ],
