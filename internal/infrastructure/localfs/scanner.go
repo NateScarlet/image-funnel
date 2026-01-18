@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"main/internal/domain/directory"
+	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 )
 
@@ -23,14 +24,14 @@ func NewScanner(rootDir string, xmpRepo metadata.Repository) *Scanner {
 	}
 }
 
-func (s *Scanner) Scan(dirPath string) ([]*directory.ImageInfo, error) {
+func (s *Scanner) Scan(dirPath string) ([]*image.Image, error) {
 	absPath := filepath.Join(s.rootDir, dirPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	var images []*directory.ImageInfo
+	var images []*image.Image
 
 	for _, entry := range entries {
 		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
@@ -47,23 +48,23 @@ func (s *Scanner) Scan(dirPath string) ([]*directory.ImageInfo, error) {
 			continue
 		}
 
-		imageInfo := directory.NewImageInfo(
+		var xmpData *metadata.XMPData
+		if s.xmpExists(path) {
+			xmpData, err = s.xmpRepo.Read(path)
+			if err != nil {
+				xmpData = nil
+			}
+		}
+
+		img := image.NewImageFromPath(
 			entry.Name(),
 			path,
 			info.Size(),
 			info.ModTime(),
-			0,
-			s.xmpExists(path),
+			xmpData,
 		)
 
-		if imageInfo.XMPExists() {
-			xmpData, err := s.xmpRepo.Read(path)
-			if err == nil {
-				imageInfo.SetCurrentRating(xmpData.Rating())
-			}
-		}
-
-		images = append(images, imageInfo)
+		images = append(images, img)
 	}
 
 	return images, nil

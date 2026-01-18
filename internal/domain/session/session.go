@@ -1,6 +1,7 @@
 package session
 
 import (
+	"main/internal/domain/image"
 	"main/internal/scalar"
 	"time"
 )
@@ -23,23 +24,6 @@ const (
 	ActionPending Action = "PENDING"
 	ActionReject  Action = "REJECT"
 )
-
-type ImageFilters struct {
-	rating []int
-}
-
-func NewImageFilters(rating []int) *ImageFilters {
-	return &ImageFilters{
-		rating: rating,
-	}
-}
-
-func (f *ImageFilters) Rating() []int {
-	if f == nil {
-		return nil
-	}
-	return f.rating
-}
 
 type WriteActions struct {
 	keepRating    int
@@ -103,28 +87,33 @@ func (s *Stats) Remaining() int {
 type Session struct {
 	id         scalar.ID
 	directory  string
-	filter     *ImageFilters
+	filter     *image.ImageFilters
 	targetKeep int
 	status     Status
 	createdAt  time.Time
 	updatedAt  time.Time
 
-	images     []*Image
-	queue      []*Image
+	images     []*image.Image
+	queue      []*image.Image
 	currentIdx int
 	undoStack  []UndoEntry
+	actions    map[scalar.ID]Action
 
 	roundHistory []RoundSnapshot
 	currentRound int
 }
 
 type RoundSnapshot struct {
-	queue      []*Image
+	queue      []*image.Image
 	currentIdx int
 	undoStack  []UndoEntry
 }
 
-func NewSession(directory string, filter *ImageFilters, targetKeep int, images []*Image) *Session {
+func NewSession(directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
+	actions := make(map[scalar.ID]Action)
+	for _, img := range images {
+		actions[img.ID()] = ActionPending
+	}
 	return &Session{
 		id:           scalar.NewID(),
 		directory:    directory,
@@ -137,6 +126,7 @@ func NewSession(directory string, filter *ImageFilters, targetKeep int, images [
 		queue:        images,
 		currentIdx:   0,
 		undoStack:    make([]UndoEntry, 0),
+		actions:      actions,
 		roundHistory: make([]RoundSnapshot, 0),
 		currentRound: 0,
 	}
@@ -150,7 +140,7 @@ func (s *Session) Directory() string {
 	return s.directory
 }
 
-func (s *Session) Filter() *ImageFilters {
+func (s *Session) Filter() *image.ImageFilters {
 	return s.filter
 }
 
@@ -170,7 +160,7 @@ func (s *Session) UpdatedAt() time.Time {
 	return s.updatedAt
 }
 
-func (s *Session) CurrentImage() *Image {
+func (s *Session) CurrentImage() *image.Image {
 	if s.currentIdx < len(s.queue) {
 		return s.queue[s.currentIdx]
 	}
@@ -189,7 +179,7 @@ func (s *Session) Stats() *Stats {
 
 	for i := 0; i < s.currentIdx; i++ {
 		img := s.queue[i]
-		action := img.Action()
+		action := s.actions[img.ID()]
 		switch action {
 		case ActionKeep:
 			stats.kept++
@@ -249,19 +239,19 @@ func (s *Session) MarkImage(imageID scalar.ID, action Action) error {
 
 	s.undoStack = append(s.undoStack, UndoEntry{
 		imageID: imageID,
-		action:  currentImage.Action(),
+		action:  s.actions[imageID],
 	})
 
-	currentImage.SetAction(action)
+	s.actions[imageID] = action
 	s.updatedAt = time.Now()
 
 	s.currentIdx++
 
 	if s.currentIdx >= len(s.queue) {
 		if s.Stats().reviewed > 0 || s.Stats().kept > 0 {
-			var newQueue []*Image
+			var newQueue []*image.Image
 			for _, img := range s.queue {
-				action := img.Action()
+				action := s.actions[img.ID()]
 				if action == ActionPending || action == ActionKeep {
 					newQueue = append(newQueue, img)
 				}
@@ -313,7 +303,7 @@ func (s *Session) Undo() error {
 
 	for _, img := range s.images {
 		if img.ID() == lastEntry.imageID {
-			img.SetAction(lastEntry.action)
+			s.actions[img.ID()] = lastEntry.action
 
 			s.currentIdx--
 			s.status = StatusActive
@@ -325,71 +315,19 @@ func (s *Session) Undo() error {
 	return ErrSessionNotFound
 }
 
-func (s *Session) Images() []*Image {
+func (s *Session) Images() []*image.Image {
 	return s.images
 }
 
-type Image struct {
-	imageID       scalar.ID
-	filename      string
-	imagePath     string
-	size          int64
-	modTime       time.Time
-	currentRating int
-	xmpExists     bool
-	action        Action
-}
-
-func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time, currentRating int, xmpExists bool) *Image {
-	return &Image{
-		imageID:       id,
-		filename:      filename,
-		imagePath:     path,
-		size:          size,
-		modTime:       modTime,
-		currentRating: currentRating,
-		xmpExists:     xmpExists,
-		action:        ActionPending,
+func (s *Session) GetAction(imageID scalar.ID) Action {
+	if action, exists := s.actions[imageID]; exists {
+		return action
 	}
+	return ActionPending
 }
 
-func (i *Image) ID() scalar.ID {
-	return i.imageID
-}
-
-func (i *Image) Filename() string {
-	return i.filename
-}
-
-func (i *Image) Path() string {
-	return i.imagePath
-}
-
-func (i *Image) Size() int64 {
-	return i.size
-}
-
-func (i *Image) ModTime() time.Time {
-	return i.modTime
-}
-
-func (i *Image) Rating() int {
-	return i.currentRating
-}
-
-func (i *Image) XMPExists() bool {
-	return i.xmpExists
-}
-
-func (i *Image) Action() Action {
-	if i.action == "" {
-		return ActionPending
-	}
-	return i.action
-}
-
-func (i *Image) SetAction(action Action) {
-	i.action = action
+func (s *Session) SetAction(imageID scalar.ID, action Action) {
+	s.actions[imageID] = action
 }
 
 type UndoEntry struct {

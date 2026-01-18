@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"main/internal/application/image"
 	"main/internal/application/session"
 	"main/internal/scalar"
 	"strconv"
@@ -27,10 +28,10 @@ type CommitChangesPayload struct {
 }
 
 type CreateSessionInput struct {
-	Filter           *session.ImageFilters `json:"filter"`
-	TargetKeep       int                   `json:"targetKeep"`
-	DirectoryID      scalar.ID             `json:"directoryId"`
-	ClientMutationID *string               `json:"clientMutationId,omitempty"`
+	Filter           *image.ImageFilters `json:"filter"`
+	TargetKeep       int                 `json:"targetKeep"`
+	DirectoryID      scalar.ID           `json:"directoryId"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionPayload struct {

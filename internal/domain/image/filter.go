@@ -1,4 +1,4 @@
-package session
+package image
 
 func BuildImageFilter(filter *ImageFilters) func(*Image) bool {
 	if filter == nil || len(filter.Rating()) == 0 {

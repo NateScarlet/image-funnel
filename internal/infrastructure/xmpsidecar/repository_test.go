@@ -106,8 +106,7 @@ func TestReadNonExistentFile(t *testing.T) {
 
 	data, err := repo.Read(nonExistentFile)
 	require.NoError(t, err, "Expected no error for non-existent file")
-	require.NotNil(t, data, "Expected non-nil data for non-existent file")
-	assert.Equal(t, 0, data.Rating(), "Expected rating 0 for non-existent file")
+	require.Nil(t, data, "Expected nil data for non-existent file")
 }
 
 func TestIsSupportedImage(t *testing.T) {

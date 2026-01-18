@@ -1,21 +1,22 @@
 package session
 
 import (
+	appimage "main/internal/application/image"
 	"main/internal/domain/session"
 )
 
 type SessionDTOFactory struct {
-	urlSigner URLSigner
+	urlSigner appimage.URLSigner
 }
 
-func NewSessionDTOFactory(urlSigner URLSigner) *SessionDTOFactory {
+func NewSessionDTOFactory(urlSigner appimage.URLSigner) *SessionDTOFactory {
 	return &SessionDTOFactory{
 		urlSigner: urlSigner,
 	}
 }
 
 func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
-	imageDTOFactory := NewImageDTOFactory(f.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	statsDTOFactory := NewStatsDTOFactory()
 	queueStatusDTOFactory := NewQueueStatusDTOFactory(f.urlSigner)
 
@@ -29,7 +30,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
 		return nil, err
 	}
 
-	var currentImage *ImageDTO
+	var currentImage *appimage.ImageDTO
 	if img := sess.CurrentImage(); img != nil {
 		currentImage, err = imageDTOFactory.New(img)
 		if err != nil {
@@ -53,29 +54,6 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
 	}, nil
 }
 
-type ImageDTOFactory struct {
-	urlSigner URLSigner
-}
-
-func NewImageDTOFactory(urlSigner URLSigner) *ImageDTOFactory {
-	return &ImageDTOFactory{
-		urlSigner: urlSigner,
-	}
-}
-
-func (f *ImageDTOFactory) New(img *session.Image) (*ImageDTO, error) {
-	url, _ := f.urlSigner.GenerateSignedURL(img.Path())
-	return &ImageDTO{
-		ID:            img.ID(),
-		Filename:      img.Filename(),
-		Size:          img.Size(),
-		URL:           url,
-		ModTime:       img.ModTime(),
-		CurrentRating: img.Rating(),
-		XMPExists:     img.XMPExists(),
-	}, nil
-}
-
 type StatsDTOFactory struct{}
 
 func NewStatsDTOFactory() *StatsDTOFactory {
@@ -94,24 +72,24 @@ func (f *StatsDTOFactory) New(stats *session.Stats) (*StatsDTO, error) {
 }
 
 type QueueStatusDTOFactory struct {
-	urlSigner URLSigner
+	urlSigner appimage.URLSigner
 }
 
-func NewQueueStatusDTOFactory(urlSigner URLSigner) *QueueStatusDTOFactory {
+func NewQueueStatusDTOFactory(urlSigner appimage.URLSigner) *QueueStatusDTOFactory {
 	return &QueueStatusDTOFactory{
 		urlSigner: urlSigner,
 	}
 }
 
 func (f *QueueStatusDTOFactory) New(sess *session.Session) (*QueueStatusDTO, error) {
-	imageDTOFactory := NewImageDTOFactory(f.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	stats := sess.Stats()
 	progress := float64(0)
 	if stats.Total() > 0 {
 		progress = float64(stats.Processed()) / float64(stats.Total()) * 100
 	}
 
-	var currentImage *ImageDTO
+	var currentImage *appimage.ImageDTO
 	if img := sess.CurrentImage(); img != nil {
 		var err error
 		currentImage, err = imageDTOFactory.New(img)

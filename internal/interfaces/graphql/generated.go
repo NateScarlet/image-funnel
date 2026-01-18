@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"main/internal/application/directory"
+	"main/internal/application/image"
 	"main/internal/application/session"
 	"main/internal/scalar"
 	"strconv"
@@ -823,11 +824,11 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on 
   directories: [Directory!]! @goField(forceResolver: true)
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters @goModel(model: "main/internal/application/session.ImageFilters") {
+	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters @goModel(model: "main/internal/application/image.ImageFilters") {
   rating: [Int!]
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/application/session.ImageDTO") {
+	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/application/image.ImageDTO") {
   id: ID!
   filename: String!
   size: Int!
@@ -947,7 +948,7 @@ extend type Mutation {
   clientMutationId: String
 }
 
-input ImageFiltersInput @goModel(model: "main/internal/application/session.ImageFilters") {
+input ImageFiltersInput @goModel(model: "main/internal/application/image.ImageFilters") {
   rating: [Int!]!
 }
 
@@ -1770,7 +1771,7 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_id(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_id(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1799,7 +1800,7 @@ func (ec *executionContext) fieldContext_Image_id(_ context.Context, field graph
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_filename(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_filename(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1828,7 +1829,7 @@ func (ec *executionContext) fieldContext_Image_filename(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_size(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_size(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1857,7 +1858,7 @@ func (ec *executionContext) fieldContext_Image_size(_ context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_url(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_url(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1886,7 +1887,7 @@ func (ec *executionContext) fieldContext_Image_url(_ context.Context, field grap
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_modTime(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_modTime(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1915,7 +1916,7 @@ func (ec *executionContext) fieldContext_Image_modTime(_ context.Context, field 
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_currentRating(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_currentRating(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1944,7 +1945,7 @@ func (ec *executionContext) fieldContext_Image_currentRating(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_xmpExists(ctx context.Context, field graphql.CollectedField, obj *session.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_xmpExists(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1973,7 +1974,7 @@ func (ec *executionContext) fieldContext_Image_xmpExists(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *session.ImageFilters) (ret graphql.Marshaler) {
+func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *image.ImageFilters) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2683,7 +2684,7 @@ func (ec *executionContext) _QueueStatus_currentImage(ctx context.Context, field
 			return obj.CurrentImage, nil
 		},
 		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageDTO,
+		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO,
 		true,
 		false,
 	)
@@ -2873,7 +2874,7 @@ func (ec *executionContext) _Session_filter(ctx context.Context, field graphql.C
 			return obj.Filter, nil
 		},
 		nil,
-		ec.marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageFilters,
+		ec.marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters,
 		true,
 		true,
 	)
@@ -3123,7 +3124,7 @@ func (ec *executionContext) _Session_currentImage(ctx context.Context, field gra
 			return obj.CurrentImage, nil
 		},
 		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageDTO,
+		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO,
 		true,
 		false,
 	)
@@ -5112,7 +5113,7 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 		switch k {
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageFilters(ctx, v)
+			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5144,8 +5145,8 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (session.ImageFilters, error) {
-	var it session.ImageFilters
+func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (image.ImageFilters, error) {
+	var it image.ImageFilters
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -5576,7 +5577,7 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 
 var imageImplementors = []string{"Image"}
 
-func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, obj *session.ImageDTO) graphql.Marshaler {
+func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, obj *image.ImageDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, imageImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -5642,7 +5643,7 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 
 var imageFiltersImplementors = []string{"ImageFilters"}
 
-func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.SelectionSet, obj *session.ImageFilters) graphql.Marshaler {
+func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.SelectionSet, obj *image.ImageFilters) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, imageFiltersImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6867,7 +6868,7 @@ func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋinterfacesᚋg
 	return v
 }
 
-func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *session.ImageFilters) graphql.Marshaler {
+func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *image.ImageFilters) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -6877,7 +6878,7 @@ func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋapplicatio
 	return ec._ImageFilters(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageFilters(ctx context.Context, v any) (*session.ImageFilters, error) {
+func (ec *executionContext) unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, v any) (*image.ImageFilters, error) {
 	res, err := ec.unmarshalInputImageFiltersInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -7479,7 +7480,7 @@ func (ec *executionContext) marshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx cont
 	return v
 }
 
-func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋapplicationᚋsessionᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *session.ImageDTO) graphql.Marshaler {
+func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *image.ImageDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

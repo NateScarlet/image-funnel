@@ -1,3 +1,9 @@
-type ImageFilters @goModel(model: "main/internal/application/session.ImageFilters") {
+type ImageFilters
+  @goModel(model: "main/internal/application/image.ImageFilters") {
   rating: [Int!]
+}
+
+input ImageFiltersInput
+  @goModel(model: "main/internal/application/image.ImageFilters") {
+  rating: [Int!]!
 }

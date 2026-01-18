@@ -22,7 +22,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 	success := 0
 
 	for _, img := range session.images {
-		action := img.Action()
+		action := session.GetAction(img.ID())
 
 		var rating int
 		switch action {

@@ -2,6 +2,8 @@ package session
 
 import (
 	"fmt"
+	"main/internal/domain/image"
+	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"testing"
 	"time"
@@ -11,7 +13,7 @@ import (
 )
 
 func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
-	filter := NewImageFilters([]int{0, 1, 2})
+	filter := image.NewImageFilters([]int{0, 1, 2})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -28,7 +30,7 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 }
 
 func TestStats_InitialState(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -44,7 +46,7 @@ func TestStats_InitialState(t *testing.T) {
 }
 
 func TestStats_AfterMarkingImages(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -75,7 +77,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 }
 
 func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -93,7 +95,7 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 }
 
 func TestMarkImage_ShouldUpdateAction(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -103,12 +105,12 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, session.CurrentIndex(), "CurrentIndex should be 1")
-	assert.Equal(t, ActionKeep, session.queue[0].Action(), "Action should be KEEP")
+	assert.Equal(t, ActionKeep, session.GetAction(session.queue[0].ID()), "Action should be KEEP")
 	assert.True(t, session.CanUndo(), "CanUndo should be true")
 }
 
 func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -118,11 +120,11 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, ActionPending, session.queue[2].Action(), "Action should be PENDING")
+	assert.Equal(t, ActionPending, session.GetAction(session.queue[2].ID()), "Action should be PENDING")
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -133,7 +135,7 @@ func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 }
 
 func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -145,7 +147,7 @@ func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
 }
 
 func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -159,7 +161,7 @@ func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -188,7 +190,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -210,7 +212,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 }
 
 func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -219,7 +221,7 @@ func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -233,7 +235,7 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -243,7 +245,7 @@ func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -253,7 +255,7 @@ func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -262,7 +264,7 @@ func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -274,7 +276,7 @@ func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -283,7 +285,7 @@ func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -305,7 +307,7 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 }
 
 func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -320,7 +322,7 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 }
 
 func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -336,7 +338,7 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 }
 
 func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -366,13 +368,13 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 
 	for _, img := range session.queue {
 		if keptImageIDs[img.ID()] {
-			assert.Equal(t, ActionKeep, img.Action(), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), img.Action())
+			assert.Equal(t, ActionKeep, session.GetAction(img.ID()), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), session.GetAction(img.ID()))
 		}
 	}
 }
 
 func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -387,12 +389,12 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.Equal(t, ActionPending, session.queue[0].Action(), "Action should be restored to PENDING")
+	assert.Equal(t, ActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
 func TestUndo_NothingToUndo_ShouldReturnError(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -403,7 +405,7 @@ func TestUndo_NothingToUndo_ShouldReturnError(t *testing.T) {
 }
 
 func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -419,34 +421,6 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, StatusActive, session.Status(), "Status should be restored to ACTIVE")
-}
-
-func TestImage_Action_ShouldDefaultToPending(t *testing.T) {
-	img := NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
-
-	assert.Equal(t, ActionPending, img.Action(), "Action should default to PENDING")
-}
-
-func TestImage_SetAction_ShouldUpdateAction(t *testing.T) {
-	img := NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
-
-	img.SetAction(ActionKeep)
-	assert.Equal(t, ActionKeep, img.Action(), "Action should be KEEP")
-
-	img.SetAction(ActionReject)
-	assert.Equal(t, ActionReject, img.Action(), "Action should be REJECT")
-}
-
-func TestImageFilters_Rating(t *testing.T) {
-	filter := NewImageFilters([]int{0, 1, 2})
-
-	assert.Equal(t, []int{0, 1, 2}, filter.Rating(), "Rating should match")
-}
-
-func TestImageFilters_Nil_ShouldReturnNil(t *testing.T) {
-	var filter *ImageFilters
-
-	assert.Nil(t, filter.Rating(), "Rating should be nil when filter is nil")
 }
 
 func TestWriteActions_Getters(t *testing.T) {
@@ -481,93 +455,39 @@ func TestSessionError_Error(t *testing.T) {
 	assert.Equal(t, "test error", err.Error(), "Error message should match")
 }
 
-func createTestImages(count int) []*Image {
-	images := make([]*Image, count)
+func createTestImages(count int) []*image.Image {
+	images := make([]*image.Image, count)
 	for i := 0; i < count; i++ {
-		images[i] = NewImage(
+		images[i] = image.NewImage(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
 			1000,
 			time.Now(),
-			0,
-			false,
+			nil,
 		)
 	}
 	return images
 }
 
-func createTestImagesWithRatings(ratings []int) []*Image {
-	images := make([]*Image, len(ratings))
+func createTestImagesWithRatings(ratings []int) []*image.Image {
+	images := make([]*image.Image, len(ratings))
 	for i, rating := range ratings {
-		images[i] = NewImage(
+		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
+		images[i] = image.NewImage(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
 			1000,
 			time.Now(),
-			rating,
-			false,
+			xmpData,
 		)
 	}
 	return images
-}
-
-func TestBuildImageFilter_WithRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 0, 1, 2, 3, 4})
-
-	filter := NewImageFilters([]int{0, 1})
-	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
-
-	assert.Equal(t, 4, len(filtered), "Should filter to 4 images with rating 0 or 1")
-	for _, img := range filtered {
-		assert.Contains(t, []int{0, 1}, img.Rating(), "Image rating should be 0 or 1")
-	}
-}
-
-func TestBuildImageFilter_WithNilFilter(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
-
-	filterFunc := BuildImageFilter(nil)
-	filtered := FilterImages(images, filterFunc)
-
-	assert.Equal(t, 6, len(filtered), "Should include all images when filter is nil")
-}
-
-func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
-
-	filter := NewImageFilters([]int{})
-	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
-
-	assert.Equal(t, 6, len(filtered), "Should include all images when rating is empty")
-}
-
-func TestBuildImageFilter_WithSingleRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5, 2, 2})
-
-	filter := NewImageFilters([]int{2})
-	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
-
-	assert.Equal(t, 3, len(filtered), "Should filter to 3 images with rating 2")
-	for _, img := range filtered {
-		assert.Equal(t, 2, img.Rating(), "All images should have rating 2")
-	}
-}
-
-func TestFilterImages_WithNilFilter(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
-
-	filtered := FilterImages(images, nil)
-
-	assert.Equal(t, 6, len(filtered), "Should return all images when filter is nil")
 }
 
 func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -593,12 +513,12 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	err = session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, ActionPending, session.queue[0].Action(), "Action should be restored to PENDING after undo in second round")
+	assert.Equal(t, ActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
 func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -628,7 +548,7 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 }
 
 func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -646,7 +566,7 @@ func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
 }
 
 func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -664,7 +584,7 @@ func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
 }
 
 func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
-	filter := NewImageFilters([]int{0})
+	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
 	session := NewSession("/test", filter, 5, images)
@@ -680,5 +600,5 @@ func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, StatusActive, session.Status(), "Session should be ACTIVE after undo")
-	assert.Equal(t, ActionPending, session.queue[9].Action(), "Last image action should be restored to PENDING")
+	assert.Equal(t, ActionPending, session.GetAction(session.queue[9].ID()), "Last image action should be restored to PENDING")
 }

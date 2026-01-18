@@ -24,3 +24,5 @@ models:
     model: github.com/99designs/gqlgen/graphql.Upload
   ID:
     model: main/internal/scalar.ID
+  Image:
+    model: main/internal/application/image.ImageDTO

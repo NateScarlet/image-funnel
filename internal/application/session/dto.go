@@ -3,13 +3,14 @@ package session
 import (
 	"time"
 
+	appimage "main/internal/application/image"
 	"main/internal/scalar"
 )
 
 type SessionDTO struct {
 	ID           scalar.ID
 	Directory    string
-	Filter       *ImageFilters
+	Filter       *appimage.ImageFilters
 	TargetKeep   int
 	Status       Status
 	Stats        *StatsDTO
@@ -17,18 +18,8 @@ type SessionDTO struct {
 	UpdatedAt    time.Time
 	CanCommit    bool
 	CanUndo      bool
-	CurrentImage *ImageDTO
+	CurrentImage *appimage.ImageDTO
 	QueueStatus  *QueueStatusDTO
-}
-
-type ImageDTO struct {
-	ID            scalar.ID
-	Filename      string
-	Size          int64
-	URL           string
-	ModTime       time.Time
-	CurrentRating int
-	XMPExists     bool
 }
 
 type StatsDTO struct {
@@ -43,7 +34,7 @@ type StatsDTO struct {
 type QueueStatusDTO struct {
 	CurrentIndex int
 	TotalImages  int
-	CurrentImage *ImageDTO
+	CurrentImage *appimage.ImageDTO
 	Progress     float64
 }
 
@@ -59,10 +50,6 @@ type WriteActions struct {
 	KeepRating    int
 	PendingRating int
 	RejectRating  int
-}
-
-type ImageFilters struct {
-	Rating []int
 }
 
 type Status string

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
+	domainimage "main/internal/domain/image"
 	"main/internal/domain/session"
 	"main/internal/scalar"
 )
@@ -14,7 +16,7 @@ type Handler struct {
 	sessionService *session.Service
 	dirScanner     directory.Scanner
 	eventBus       EventBus
-	urlSigner      URLSigner
+	urlSigner      appimage.URLSigner
 	dtoFactory     *SessionDTOFactory
 }
 
@@ -23,7 +25,7 @@ func NewHandler(
 	sessionService *session.Service,
 	dirScanner directory.Scanner,
 	eventBus EventBus,
-	urlSigner URLSigner,
+	urlSigner appimage.URLSigner,
 ) *Handler {
 	return &Handler{
 		sessionRepo:    sessionRepo,
@@ -39,7 +41,7 @@ func (h *Handler) CreateSession(
 	ctx context.Context,
 	id scalar.ID,
 	directoryId scalar.ID,
-	filter *ImageFilters,
+	filter *appimage.ImageFilters,
 	target_keep int,
 ) error {
 	path, err := directory.DecodeID(directoryId)
@@ -52,23 +54,9 @@ func (h *Handler) CreateSession(
 	}
 
 	domainFilter := toDomainFilter(filter)
-	filterFunc := session.BuildImageFilter(domainFilter)
+	filterFunc := domainimage.BuildImageFilter(domainFilter)
 
-	var filteredImages []*session.Image
-	for _, img := range images {
-		domainImg := session.NewImage(
-			img.ID(),
-			img.Filename(),
-			img.Path(),
-			img.Size(),
-			img.ModTime(),
-			img.CurrentRating(),
-			img.XMPExists(),
-		)
-		if filterFunc(domainImg) {
-			filteredImages = append(filteredImages, domainImg)
-		}
-	}
+	filteredImages := domainimage.FilterImages(images, filterFunc)
 
 	directory, err := directory.DecodeID(directoryId)
 	if err != nil {
@@ -177,7 +165,7 @@ func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*Session
 	return h.dtoFactory.New(sess)
 }
 
-func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*ImageDTO, error) {
+func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*appimage.ImageDTO, error) {
 	sess, err := h.sessionRepo.FindByID(sessionID)
 	if err != nil {
 		return nil, err
@@ -188,7 +176,7 @@ func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*Im
 		return nil, nil
 	}
 
-	imageDTOFactory := NewImageDTOFactory(h.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
 	return imageDTOFactory.New(img)
 }
 
@@ -202,18 +190,18 @@ func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*St
 	return statsDTOFactory.New(sess.Stats())
 }
 
-func toDomainFilter(filter *ImageFilters) *session.ImageFilters {
+func toDomainFilter(filter *appimage.ImageFilters) *domainimage.ImageFilters {
 	if filter == nil {
-		return session.NewImageFilters(nil)
+		return domainimage.NewImageFilters(nil)
 	}
-	return session.NewImageFilters(filter.Rating)
+	return domainimage.NewImageFilters(filter.Rating)
 }
 
-func toDTOFilter(filter *session.ImageFilters) *ImageFilters {
+func toDTOFilter(filter *domainimage.ImageFilters) *appimage.ImageFilters {
 	if filter == nil {
-		return &ImageFilters{Rating: nil}
+		return &appimage.ImageFilters{Rating: nil}
 	}
-	return &ImageFilters{
+	return &appimage.ImageFilters{
 		Rating: filter.Rating(),
 	}
 }
