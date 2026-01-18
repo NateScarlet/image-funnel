@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -420,13 +421,13 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 }
 
 func TestImage_Action_ShouldDefaultToPending(t *testing.T) {
-	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, 0, false)
+	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 
 	assert.Equal(t, ActionPending, img.Action(), "Action should default to PENDING")
 }
 
 func TestImage_SetAction_ShouldUpdateAction(t *testing.T) {
-	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, 0, false)
+	img := NewImage("test-id", "test.jpg", "/test/test.jpg", 1000, time.Now(), 0, false)
 
 	img.SetAction(ActionKeep)
 	assert.Equal(t, ActionKeep, img.Action(), "Action should be KEEP")
@@ -487,11 +488,81 @@ func createTestImages(count int) []*Image {
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
 			1000,
+			time.Now(),
 			0,
 			false,
 		)
 	}
 	return images
+}
+
+func createTestImagesWithRatings(ratings []int) []*Image {
+	images := make([]*Image, len(ratings))
+	for i, rating := range ratings {
+		images[i] = NewImage(
+			fmt.Sprintf("img-%d", i),
+			"test.jpg",
+			fmt.Sprintf("/test/test-%d.jpg", i),
+			1000,
+			time.Now(),
+			rating,
+			false,
+		)
+	}
+	return images
+}
+
+func TestBuildImageFilter_WithRating(t *testing.T) {
+	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 0, 1, 2, 3, 4})
+
+	filter := NewImageFilters([]int{0, 1})
+	filterFunc := BuildImageFilter(filter)
+	filtered := FilterImages(images, filterFunc)
+
+	assert.Equal(t, 4, len(filtered), "Should filter to 4 images with rating 0 or 1")
+	for _, img := range filtered {
+		assert.Contains(t, []int{0, 1}, img.Rating(), "Image rating should be 0 or 1")
+	}
+}
+
+func TestBuildImageFilter_WithNilFilter(t *testing.T) {
+	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+
+	filterFunc := BuildImageFilter(nil)
+	filtered := FilterImages(images, filterFunc)
+
+	assert.Equal(t, 6, len(filtered), "Should include all images when filter is nil")
+}
+
+func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
+	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+
+	filter := NewImageFilters([]int{})
+	filterFunc := BuildImageFilter(filter)
+	filtered := FilterImages(images, filterFunc)
+
+	assert.Equal(t, 6, len(filtered), "Should include all images when rating is empty")
+}
+
+func TestBuildImageFilter_WithSingleRating(t *testing.T) {
+	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5, 2, 2})
+
+	filter := NewImageFilters([]int{2})
+	filterFunc := BuildImageFilter(filter)
+	filtered := FilterImages(images, filterFunc)
+
+	assert.Equal(t, 3, len(filtered), "Should filter to 3 images with rating 2")
+	for _, img := range filtered {
+		assert.Equal(t, 2, img.Rating(), "All images should have rating 2")
+	}
+}
+
+func TestFilterImages_WithNilFilter(t *testing.T) {
+	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+
+	filtered := FilterImages(images, nil)
+
+	assert.Equal(t, 6, len(filtered), "Should return all images when filter is nil")
 }
 
 func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {

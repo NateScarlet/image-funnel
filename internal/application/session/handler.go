@@ -44,9 +44,12 @@ func (h *Handler) CreateSession(
 		return "", fmt.Errorf("failed to scan directory: %w", err)
 	}
 
-	domainImages := make([]*session.Image, len(images))
-	for i, img := range images {
-		domainImages[i] = session.NewImage(
+	domainFilter := toDomainFilter(filter)
+	filterFunc := session.BuildImageFilter(domainFilter)
+
+	var filteredImages []*session.Image
+	for _, img := range images {
+		domainImg := session.NewImage(
 			img.ID(),
 			img.Filename(),
 			img.Path(),
@@ -55,9 +58,12 @@ func (h *Handler) CreateSession(
 			img.CurrentRating(),
 			img.XMPExists(),
 		)
+		if filterFunc(domainImg) {
+			filteredImages = append(filteredImages, domainImg)
+		}
 	}
 
-	sess := session.NewSession(directoryId, toDomainFilter(filter), targetKeep, domainImages)
+	sess := session.NewSession(directoryId, toDomainFilter(filter), targetKeep, filteredImages)
 
 	if err := h.sessionRepo.Save(sess); err != nil {
 		return "", fmt.Errorf("failed to save session: %w", err)
