@@ -7,12 +7,14 @@ import (
 )
 
 type Handler struct {
-	scanner directory.Scanner
+	scanner    directory.Scanner
+	dtoFactory *DirectoryDTOFactory
 }
 
 func NewHandler(scanner directory.Scanner) *Handler {
 	return &Handler{
-		scanner: scanner,
+		scanner:    scanner,
+		dtoFactory: NewDirectoryDTOFactory(),
 	}
 }
 
@@ -45,17 +47,8 @@ func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, e
 		}
 	}
 
-	return &DirectoryDTO{
-		ID:                 id,
-		ParentID:           parentID,
-		Path:               path,
-		Root:               path == ".",
-		ImageCount:         imageCount,
-		SubdirectoryCount:  subdirectoryCount,
-		LatestImageModTime: latestModTime,
-		LatestImagePath:    latestImagePath,
-		RatingCounts:       ratingCounts,
-	}, nil
+	dirInfo := directory.NewDirectoryInfo(path, imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts)
+	return h.dtoFactory.New(dirInfo, parentID, path == ".")
 }
 
 func (h *Handler) GetDirectories(ctx context.Context, parentID string) ([]*DirectoryDTO, error) {
@@ -75,17 +68,11 @@ func (h *Handler) GetDirectories(ctx context.Context, parentID string) ([]*Direc
 
 	result := make([]*DirectoryDTO, len(dirs))
 	for i, dir := range dirs {
-		result[i] = &DirectoryDTO{
-			ID:                 directory.EncodeDirectoryID(dir.Path()),
-			ParentID:           parentID,
-			Path:               dir.Path(),
-			Root:               false,
-			ImageCount:         dir.ImageCount(),
-			SubdirectoryCount:  dir.SubdirectoryCount(),
-			LatestImageModTime: dir.LatestImageModTime(),
-			LatestImagePath:    dir.LatestImagePath(),
-			RatingCounts:       dir.RatingCounts(),
+		dirDTO, err := h.dtoFactory.New(dir, parentID, false)
+		if err != nil {
+			return nil, err
 		}
+		result[i] = dirDTO
 	}
 
 	return result, nil
