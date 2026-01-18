@@ -144,11 +144,7 @@ const selectedPreset = computed(() => {
 
 const canCreate = computed(() => {
   // 根目录是允许创建会话的
-  return (
-    filterRating.value.length > 0 &&
-    targetKeep.value > 0 &&
-    selectedDirectoryId.value !== ""
-  );
+  return filterRating.value.length > 0 && targetKeep.value > 0;
 });
 
 watch(
