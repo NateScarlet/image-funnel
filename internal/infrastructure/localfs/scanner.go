@@ -8,18 +8,18 @@ import (
 	"time"
 
 	"main/internal/domain/directory"
-	"main/internal/infrastructure/xmpsidecar"
+	"main/internal/domain/metadata"
 )
 
 type Scanner struct {
 	rootDir string
-	xmpRepo *xmpsidecar.Repository
+	xmpRepo metadata.Repository
 }
 
-func NewScanner(rootDir string) *Scanner {
+func NewScanner(rootDir string, xmpRepo metadata.Repository) *Scanner {
 	return &Scanner{
 		rootDir: rootDir,
-		xmpRepo: xmpsidecar.NewRepository(),
+		xmpRepo: xmpRepo,
 	}
 }
 

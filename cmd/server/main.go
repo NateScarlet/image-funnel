@@ -67,7 +67,7 @@ func main() {
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
 	sessionService := session.NewService(metadataRepo)
-	dirScanner := localfs.NewScanner(absRootDir)
+	dirScanner := localfs.NewScanner(absRootDir, metadataRepo)
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*appsession.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 

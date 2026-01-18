@@ -10,14 +10,14 @@ import (
 )
 
 func TestNewScanner(t *testing.T) {
-	scanner := NewScanner(t.TempDir())
+	scanner := NewScanner(t.TempDir(), newMockMetadataRepository())
 	assert.NotNil(t, scanner)
 	assert.NotEmpty(t, scanner.rootDir)
 }
 
 func TestScan(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	testFile := filepath.Join(tmpDir, "test.jpg")
 	err := os.WriteFile(testFile, []byte("test"), 0644)
@@ -31,7 +31,7 @@ func TestScan(t *testing.T) {
 
 func TestScan_EmptyDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	images, err := scanner.Scan(".")
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestScan_EmptyDirectory(t *testing.T) {
 
 func TestScanDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	subDir := filepath.Join(tmpDir, "subdir")
 	err := os.Mkdir(subDir, 0755)
@@ -58,7 +58,7 @@ func TestScanDirectories(t *testing.T) {
 
 func TestAnalyzeDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	testFile := filepath.Join(tmpDir, "test.jpg")
 	err := os.WriteFile(testFile, []byte("test"), 0644)
@@ -75,7 +75,7 @@ func TestAnalyzeDirectory(t *testing.T) {
 
 func TestValidateDirectoryPath(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	err := scanner.ValidateDirectoryPath(".")
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestValidateDirectoryPath(t *testing.T) {
 
 func TestValidateDirectoryPath_Invalid(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	err := scanner.ValidateDirectoryPath("../test")
 	assert.Error(t, err)
@@ -91,7 +91,7 @@ func TestValidateDirectoryPath_Invalid(t *testing.T) {
 
 func TestValidateDirectoryPath_Absolute(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	err := scanner.ValidateDirectoryPath("/absolute/path")
 	assert.Error(t, err)
@@ -99,7 +99,7 @@ func TestValidateDirectoryPath_Absolute(t *testing.T) {
 
 func TestValidateDirectoryPath_WithDriveLetter(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	err := scanner.ValidateDirectoryPath("C:\\Windows\\System32")
 	assert.Error(t, err)
@@ -107,7 +107,7 @@ func TestValidateDirectoryPath_WithDriveLetter(t *testing.T) {
 
 func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	testCases := []string{
 		"../escape",
@@ -128,7 +128,7 @@ func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
 
 func TestAnalyzeDirectory_PathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	_, _, _, _, _, err := scanner.AnalyzeDirectory("../escape")
 	assert.Error(t, err)
@@ -136,7 +136,7 @@ func TestAnalyzeDirectory_PathTraversal(t *testing.T) {
 
 func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	_, _, _, _, _, err := scanner.AnalyzeDirectory("/absolute/path")
 	assert.Error(t, err)
@@ -144,7 +144,7 @@ func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
 
 func TestScanDirectories_PathTraversal(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	_, err := scanner.ScanDirectories("../escape")
 	assert.Error(t, err)
@@ -152,7 +152,7 @@ func TestScanDirectories_PathTraversal(t *testing.T) {
 
 func TestScanDirectories_AbsolutePath(t *testing.T) {
 	tmpDir := t.TempDir()
-	scanner := NewScanner(tmpDir)
+	scanner := NewScanner(tmpDir, newMockMetadataRepository())
 
 	_, err := scanner.ScanDirectories("/absolute/path")
 	assert.Error(t, err)
@@ -181,7 +181,7 @@ func TestIsSupportedImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
-			scanner := NewScanner(t.TempDir())
+			scanner := NewScanner(t.TempDir(), newMockMetadataRepository())
 			result := scanner.isSupportedImage(tt.filename)
 			assert.Equal(t, tt.expected, result)
 		})
