@@ -64,7 +64,7 @@
 
           <button
             :disabled="!session?.canCommit"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+            class="px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
             @click="showCommitModal = true"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@
         <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
         <p class="text-slate-400 mb-4">找不到指定的筛选会话</p>
         <button
-          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
+          class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
           @click="router.push('/')"
         >
           <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -101,7 +101,7 @@
         <h2 class="text-2xl font-bold mb-2">筛选完成！</h2>
         <p class="text-slate-400 mb-4">保留了 {{ stats?.kept }} 张图片</p>
         <button
-          class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
+          class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
           @click="showCommitModal = true"
         >
           <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -253,7 +253,7 @@
 
           <button
             :disabled="!session?.canCommit"
-            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+            class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               showCommitModal = true;
               showMenu = false;

@@ -23,7 +23,7 @@
                 :class="[
                   'p-4 rounded-lg cursor-pointer transition-all border-2',
                   selectedPresetId === preset.id
-                    ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/30'
+                    ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
                     : 'bg-slate-700 border-slate-600 hover:border-slate-500 hover:bg-slate-650',
                 ]"
                 @click="selectedPresetId = preset.id"
@@ -65,7 +65,7 @@
               <div class="flex items-center justify-between mb-4">
                 <button
                   v-if="currentPath !== ''"
-                  class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1"
+                  class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
                   @click="goToParent"
                 >
                   <svg
@@ -83,7 +83,14 @@
                   </svg>
                   返回上级
                 </button>
-                <div class="text-sm text-slate-400">
+                <div
+                  :class="[
+                    'text-sm',
+                    currentPath == selectedDirectory
+                      ? 'text-secondary-400 font-medium'
+                      : 'text-slate-400',
+                  ]"
+                >
                   {{ currentPath || "根目录" }}
                 </div>
                 <div></div>
@@ -121,7 +128,7 @@
                   :class="[
                     'p-4 rounded-lg cursor-pointer transition-all border-2',
                     selectedDirectory === dir.path
-                      ? 'bg-blue-600 border-blue-500 shadow-lg shadow-blue-500/30'
+                      ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
                       : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550',
                   ]"
                   @click="selectDirectory(dir)"
@@ -179,7 +186,7 @@
 
           <button
             :disabled="!canCreate || creatingSession"
-            class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+            class="w-full py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             @click="createSession"
           >
             <svg

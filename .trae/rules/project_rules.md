@@ -71,6 +71,8 @@
 
 使用 @mdi/js 来获取 Material Design Icons 图标
 
+主要按钮和交互使用 secondary 颜色
+
 #### 后端
 
 所有字段没有特别理由，都不应该导出，只能通过方法访问。
