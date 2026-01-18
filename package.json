@@ -1,0 +1,14 @@
+{
+  "name": "image-funnel",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter image-funnel-frontend dev",
+    "build": "pnpm --filter image-funnel-frontend build",
+    "preview": "pnpm --filter image-funnel-frontend preview",
+    "generate:graphql": "pnpm --filter image-funnel-frontend generate:graphql",
+    "build:tsc": "pnpm --filter image-funnel-frontend build:tsc",
+    "check": "pnpm --filter image-funnel-frontend check",
+    "lint": "pnpm --filter image-funnel-frontend lint",
+    "lint:fix": "pnpm --filter image-funnel-frontend lint:fix"
+  }
+}
