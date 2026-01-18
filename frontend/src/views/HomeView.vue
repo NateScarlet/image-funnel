@@ -90,6 +90,7 @@
                 </button>
               </div>
 
+              <!-- 当前目录 -->
               <div
                 v-if="currentDirectory && currentDirectory.imageCount > 0"
                 class="mb-4 p-4 bg-slate-600 rounded-lg border-2 cursor-pointer transition-all"
@@ -114,7 +115,11 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <h3 class="font-semibold text-lg mb-1">
-                      {{ rootPath || "根目录" }}
+                      {{
+                        currentDirectory.parentId
+                          ? currentDirectory.path
+                          : rootPath
+                      }}
                     </h3>
                     <div class="text-xs text-slate-300 space-y-1">
                       <div v-if="currentDirectory.latestImageModTime">
@@ -177,6 +182,7 @@
                 当前目录下没有可用的子目录
               </div>
 
+              <!-- 子目录列表 -->
               <div
                 v-else
                 class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
@@ -190,7 +196,7 @@
                       ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
                       : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550',
                   ]"
-                  @click="selectDirectory(dir)"
+                  @click="selectedDirectoryId = dir.id"
                 >
                   <div class="flex items-start gap-3">
                     <div
@@ -289,7 +295,6 @@ const selectedPresetId = ref<string>("");
 const targetKeep = ref<number>(10);
 const filterRating = ref<number[]>([]);
 
-const currentDirID = ref<string>("");
 const selectedDirectoryId = ref<string>("");
 
 const { data: metaData } = useQuery(GetMetaDocument, {
@@ -297,7 +302,7 @@ const { data: metaData } = useQuery(GetMetaDocument, {
 });
 
 const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
-  variables: () => ({ id: currentDirID.value }),
+  variables: () => ({ id: selectedDirectoryId.value }),
   loadingCount,
 });
 
@@ -325,7 +330,11 @@ const selectedPreset = computed(() => {
 
 const canCreate = computed(() => {
   // 根目录是允许创建会话的
-  return filterRating.value.length > 0 && targetKeep.value > 0;
+  return (
+    filterRating.value.length > 0 &&
+    targetKeep.value > 0 &&
+    selectedDirectoryId.value !== ""
+  );
 });
 
 function getMatchedImageCount(dir: {
@@ -376,19 +385,6 @@ function getDirectoryName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function selectDirectory(dir: {
-  id: string;
-  path: string;
-  subdirectoryCount: number;
-}) {
-  if (dir.subdirectoryCount > 0) {
-    currentDirID.value = dir.id;
-    selectedDirectoryId.value = "";
-  } else {
-    selectedDirectoryId.value = dir.id;
-  }
-}
-
 function selectCurrentDirectory() {
   if (currentDirectory.value && currentDirectory.value.imageCount > 0) {
     selectedDirectoryId.value = currentDirectory.value.id || "";
@@ -398,13 +394,11 @@ function selectCurrentDirectory() {
 function goToParent() {
   const currentDir = currentDirectory.value;
   if (!currentDir || !currentDir.parentId) {
-    currentDirID.value = "";
     selectedDirectoryId.value = "";
     return;
   }
 
-  currentDirID.value = currentDir.parentId;
-  selectedDirectoryId.value = "";
+  selectedDirectoryId.value = currentDir.parentId || "";
 }
 
 async function createSession() {
@@ -418,7 +412,7 @@ async function createSession() {
             rating: filterRating.value,
           },
           targetKeep: targetKeep.value,
-          directoryId: selectedDirectoryId.value || "",
+          directoryId: selectedDirectoryId.value,
         },
       },
     });

@@ -57,8 +57,8 @@ func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, e
 	}, nil
 }
 
-func (h *Handler) GetDirectories(ctx context.Context, id string) ([]*DirectoryDTO, error) {
-	path, err := directory.DecodeDirectoryID(id)
+func (h *Handler) GetDirectories(ctx context.Context, parentID string) ([]*DirectoryDTO, error) {
+	path, err := directory.DecodeDirectoryID(parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +76,7 @@ func (h *Handler) GetDirectories(ctx context.Context, id string) ([]*DirectoryDT
 	for i, dir := range dirs {
 		result[i] = &DirectoryDTO{
 			ID:                 directory.EncodeDirectoryID(dir.Path()),
+			ParentID:           parentID,
 			Path:               dir.Path(),
 			ImageCount:         dir.ImageCount(),
 			SubdirectoryCount:  dir.SubdirectoryCount(),
