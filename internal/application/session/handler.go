@@ -35,7 +35,11 @@ func (h *Handler) CreateSession(
 	filter *ImageFilters,
 	targetKeep int,
 ) (string, error) {
-	images, err := h.dirScanner.Scan(directoryId)
+	path, err := directory.DecodeDirectoryID(directoryId)
+	if err != nil {
+		return "", err
+	}
+	images, err := h.dirScanner.Scan(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to scan directory: %w", err)
 	}
