@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/util"
+
 	"github.com/beevik/etree"
 )
 
@@ -189,7 +191,11 @@ func writeXMP(doc *etree.Document, path string) error {
 		return fmt.Errorf("failed to marshal XMP: %w", err)
 	}
 
-	if err := os.WriteFile(path, []byte(output), 0644); err != nil {
+	err = util.AtomicSave(path, func(file *os.File) error {
+		_, err := file.WriteString(output)
+		return err
+	}, util.AtomicSaveWithBackupSuffix("~"))
+	if err != nil {
 		return fmt.Errorf("failed to write XMP file: %w", err)
 	}
 
