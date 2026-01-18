@@ -202,7 +202,8 @@ const filteredDirectories = computed(() => {
     if (dir.subdirectoryCount > 0) {
       return true
     }
-    return getMatchedImageCount(dir) > 0
+    const matchedCount = getMatchedImageCount(dir)
+    return matchedCount > targetKeep.value
   })
 })
 
@@ -230,6 +231,7 @@ function sortedRatingCounts(ratingCounts: { rating: number; count: number }[]): 
 watch(() => selectedPreset.value, (preset) => {
   if (preset) {
     filterRating.value = [...preset.filter.rating]
+    targetKeep.value = preset.targetKeep
   }
 }, { immediate: true })
 

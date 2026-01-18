@@ -12,6 +12,7 @@ export interface Preset {
     pendingRating: number;
     rejectRating: number;
   };
+  targetKeep: number;
 }
 
 const STORAGE_KEY = "imagefunnel-presets";
@@ -29,6 +30,7 @@ const defaultPresets: Preset[] = [
       pendingRating: 0,
       rejectRating: 2,
     },
+    targetKeep: 4,
   },
   {
     id: "refine-filter",
@@ -42,6 +44,7 @@ const defaultPresets: Preset[] = [
       pendingRating: 0,
       rejectRating: 1,
     },
+    targetKeep: 1,
   },
 ];
 
