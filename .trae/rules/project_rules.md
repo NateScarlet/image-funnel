@@ -83,4 +83,4 @@ image-funnel/
 
 - id 不承诺固定格式， 客户端不应该尝试解析 id
 - 修改前端代码后，使用 `pnpm check` 检查，详见 frontend-check SKILL
-- 修改后端代码后，使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
+- 修改后端代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
