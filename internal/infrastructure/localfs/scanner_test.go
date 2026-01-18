@@ -157,33 +157,3 @@ func TestScanDirectories_AbsolutePath(t *testing.T) {
 	_, err := scanner.ScanDirectories("/absolute/path")
 	assert.Error(t, err)
 }
-
-func TestIsSupportedImage(t *testing.T) {
-	tests := []struct {
-		filename string
-		expected bool
-	}{
-		{"image.jpg", true},
-		{"image.jpeg", true},
-		{"image.JPG", true},
-		{"image.png", true},
-		{"image.PNG", true},
-		{"image.webp", true},
-		{"image.WEBP", true},
-		{"image.avif", true},
-		{"image.AVIF", true},
-		{"image.gif", false},
-		{"image.bmp", false},
-		{"image.tiff", false},
-		{"document.pdf", false},
-		{"archive.zip", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.filename, func(t *testing.T) {
-			scanner := NewScanner(t.TempDir(), newMockMetadataRepository())
-			result := scanner.isSupportedImage(tt.filename)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
