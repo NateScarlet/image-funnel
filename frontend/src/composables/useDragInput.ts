@@ -34,8 +34,8 @@ export default function useDragInput({
             document.body.style.cursor = cursorStyle;
           }
         },
-        { immediate: true }
-      )
+        { immediate: true },
+      ),
     );
   }
   stack.defer(
@@ -61,7 +61,7 @@ export default function useDragInput({
             startX = x?.value;
             startY = y?.value;
           });
-        })
+        }),
       );
       stack.use(
         createEventListeners(window, ({ on }) => {
@@ -81,9 +81,9 @@ export default function useDragInput({
               y.value = startY + deltaY;
             }
           });
-        })
+        }),
       );
-    })
+    }),
   );
 
   return {

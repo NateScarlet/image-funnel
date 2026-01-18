@@ -52,7 +52,7 @@ export default function useAsyncTask<
         keepLatest?: boolean;
         /** 外部加载计数引用，用于跟踪加载状态 */
         loadingCount?: Ref<number>;
-      }
+      },
 ) {
   // 简化单函数参数的情况
   if (typeof options === "function") {
@@ -141,7 +141,7 @@ export default function useAsyncTask<
       currentArgs = currentArgs ?? args?.();
       if (currentArgs == null) {
         throw new Error(
-          "restart async task requires args, but args() returned undefined"
+          "restart async task requires args, but args() returned undefined",
         );
       }
       return run(ctx, ...currentArgs);
@@ -162,7 +162,7 @@ export default function useAsyncTask<
         }
         restart(...newArgs);
       },
-      { immediate: true }
+      { immediate: true },
     );
   } else {
     // @ts-expect-error 无参数的 run 必定支持直接执行

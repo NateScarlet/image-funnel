@@ -21,13 +21,13 @@ export default function useEventListeners<
     target: T;
     on: T["addEventListener"];
     stack: DisposableStack;
-  }) => void
+  }) => void,
 ): Disposable {
   function setup(stack: DisposableStack, v: T) {
     stack.use(
       createEventListeners(v, (ctx) => {
         return init({ ...ctx, target: v, stack });
-      })
+      }),
     );
   }
 
@@ -51,8 +51,8 @@ export default function useEventListeners<
           onCleanup(() => stack.dispose());
           setup(stack, v);
         },
-        { immediate: true }
-      )
+        { immediate: true },
+      ),
     );
   } else if (target) {
     setup(stack, target);

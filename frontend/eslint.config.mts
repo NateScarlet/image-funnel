@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import vue from "eslint-plugin-vue";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import prettierPlugin from "eslint-plugin-prettier/recommended";
 import graphql from "@graphql-eslint/eslint-plugin";
 
 export default tseslint.config(
@@ -48,5 +49,6 @@ export default tseslint.config(
       ...graphql.configs["flat/schema-recommended"].rules,
     },
   },
-  prettier
+  prettier,
+  prettierPlugin
 );

@@ -32,7 +32,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   } & Pick<
     WatchQueryOptions<TVariables>,
     "fetchPolicy" | "nextFetchPolicy" | "errorPolicy" | "pollInterval"
-  > = {}
+  > = {},
 ): {
   data: Ref<TData | undefined>;
   query: ObservableQuery<TData, TVariables>;
@@ -47,7 +47,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
       variables: options.variables?.(),
       notifyOnNetworkStatusChange: true,
     }),
-    (i) => i.stopPolling()
+    (i) => i.stopPolling(),
   );
   const resultBuffer = shallowRef<{ v?: ApolloQueryResult<TData> }>();
   const resultModel = computed({
@@ -76,8 +76,8 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
             });
           }
         },
-        { immediate: true }
-      )
+        { immediate: true },
+      ),
     );
   }
   function read() {
@@ -99,7 +99,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
           next: read,
           error: () => undefined,
         }),
-        (i) => i.unsubscribe()
+        (i) => i.unsubscribe(),
       );
     })();
     return stack;
@@ -120,8 +120,8 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
           const stack = run(n);
           onCleanup(() => stack.dispose());
         },
-        { immediate: true }
-      )
+        { immediate: true },
+      ),
     );
   } else {
     stack.use(run());

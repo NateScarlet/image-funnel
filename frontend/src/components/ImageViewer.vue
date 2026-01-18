@@ -26,8 +26,18 @@
         title="缩小"
         @click="zoomOut"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M20 12H4"
+          />
         </svg>
       </button>
       <span class="min-w-12 text-center">{{ zoomAsPercent }}%</span>
@@ -36,12 +46,24 @@
         title="放大"
         @click="zoomIn"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 4v16m8-8H4"
+          />
         </svg>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
-      <span class="min-w-16">{{ imageSize.width }} × {{ imageSize.height }}</span>
+      <span class="min-w-16"
+        >{{ imageSize.width }} × {{ imageSize.height }}</span
+      >
       <div class="w-px h-4 bg-white/30 mx-1"></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
@@ -125,7 +147,14 @@ const zoom = useImageZoom({
   size: imageSize,
 });
 
-const { containerAttrs, zoomAsPercent, toggleZoom, zoomIn, zoomOut, zoomAttrs } = zoom;
+const {
+  containerAttrs,
+  zoomAsPercent,
+  toggleZoom,
+  zoomIn,
+  zoomOut,
+  zoomAttrs,
+} = zoom;
 
 useGrabScroll(() => {
   if (!zoom.fitContainer.value) {
@@ -154,7 +183,7 @@ useEventListeners(containerRef, ({ on }) => {
         initialZoom = zoom.zoom.value;
       }
     },
-    { passive: false }
+    { passive: false },
   );
 
   on(
@@ -170,7 +199,7 @@ useEventListeners(containerRef, ({ on }) => {
         }
       }
     },
-    { passive: false }
+    { passive: false },
   );
 
   on("touchend", (e: Event) => {

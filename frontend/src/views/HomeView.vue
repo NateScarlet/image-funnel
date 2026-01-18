@@ -275,7 +275,7 @@ function getMatchedImageCount(dir: {
 }
 
 function sortedRatingCounts(
-  ratingCounts: { rating: number; count: number }[]
+  ratingCounts: { rating: number; count: number }[],
 ): { rating: number; count: number }[] {
   return [...ratingCounts].sort((a, b) => a.rating - b.rating);
 }
@@ -288,7 +288,7 @@ watch(
       targetKeep.value = preset.targetKeep;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 watch(
@@ -303,7 +303,7 @@ watch(
       }
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 function getDirectoryName(path: string): string {

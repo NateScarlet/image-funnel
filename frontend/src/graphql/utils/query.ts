@@ -15,7 +15,7 @@ export default function query<TData, TVariables extends OperationVariables>(
     context?: OperationContext;
     fetchPolicy?: FetchPolicy;
     errorPolicy?: ErrorPolicy;
-  } = {}
+  } = {},
 ): Promise<ApolloQueryResult<TData>> {
   return apolloClient.query({
     ...options,

@@ -10,7 +10,7 @@ async function loadResizeObserver() {
 
 export default function addResizeListener(
   el: Element,
-  fn: (entry: ResizeObserverEntry) => void
+  fn: (entry: ResizeObserverEntry) => void,
 ): () => void {
   const stack = new DisposableStack();
   loadResizeObserver().then((Observer) => {
@@ -23,7 +23,7 @@ export default function addResizeListener(
           fn(i);
         });
       }),
-      (ob) => ob.disconnect()
+      (ob) => ob.disconnect(),
     );
     ob.observe(el);
   });

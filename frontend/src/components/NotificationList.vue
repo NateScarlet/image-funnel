@@ -6,7 +6,7 @@
         :key="notification.id"
         :class="[
           'p-4 rounded-lg shadow-lg flex items-start gap-3 cursor-pointer',
-          typeClasses[notification.type]
+          typeClasses[notification.type],
         ]"
         @click="remove(notification.id)"
       >
@@ -16,10 +16,7 @@
             viewBox="0 0 24 24"
             class="w-6 h-6"
           >
-            <path
-              :d="iconPaths[notification.type]"
-              fill="currentColor"
-            />
+            <path :d="iconPaths[notification.type]" fill="currentColor" />
           </svg>
         </div>
         <div class="flex-1 min-w-0">

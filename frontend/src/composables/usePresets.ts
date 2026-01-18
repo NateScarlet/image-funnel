@@ -79,7 +79,7 @@ watch(
   (newPresets) => {
     savePresets(newPresets);
   },
-  { deep: true }
+  { deep: true },
 );
 
 export function usePresets() {

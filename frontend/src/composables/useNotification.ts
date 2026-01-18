@@ -15,7 +15,7 @@ export default function useNotification() {
   function show(
     message: string,
     type: NotificationType = "info",
-    duration = 3000
+    duration = 3000,
   ) {
     const id = Date.now().toString();
     const notification: Notification = {

@@ -38,10 +38,10 @@ export default function useElementFullscreen(el: Ref<HTMLElement | undefined>) {
       stack.use(
         createEventListeners(n, ({ on }) => {
           on("fullscreenchange", updateFullscreen);
-        })
+        }),
       );
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   return {

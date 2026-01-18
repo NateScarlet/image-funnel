@@ -82,7 +82,7 @@ export default function usePolling({
       }
       run();
     },
-    { immediate: true }
+    { immediate: true },
   );
   import.meta.hot?.dispose(dispose);
   return {

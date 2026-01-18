@@ -1,10 +1,10 @@
-import type { MaybeRefOrGetter } from 'vue';
-import { ref, watch } from 'vue';
-import addResizeListener from '@/utils/addResizeListener';
-import isWatchSource from '@/utils/isWatchSource';
+import type { MaybeRefOrGetter } from "vue";
+import { ref, watch } from "vue";
+import addResizeListener from "@/utils/addResizeListener";
+import isWatchSource from "@/utils/isWatchSource";
 
 export default function useElementSize(
-  el: MaybeRefOrGetter<Element | null | undefined>
+  el: MaybeRefOrGetter<Element | null | undefined>,
 ) {
   const borderBoxWidth = ref(0);
   const borderBoxHeight = ref(0);
@@ -48,10 +48,10 @@ export default function useElementSize(
             requestAnimationFrame(() => {
               update(el, entry);
             });
-          })
+          }),
         );
       },
-      { immediate: true }
+      { immediate: true },
     );
   } else if (el) {
     update(el);

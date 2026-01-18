@@ -15,7 +15,7 @@ export default function mutate<TData, TVariables extends OperationVariables>(
     context?: OperationContext;
     fetchPolicy?: MutationFetchPolicy;
     errorPolicy?: ErrorPolicy;
-  } = {}
+  } = {},
 ): Promise<FetchResult<TData>> {
   return apolloClient.mutate({
     ...options,

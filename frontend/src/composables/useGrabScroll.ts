@@ -17,7 +17,7 @@ function posOf(e: PointerEvent) {
 }
 
 export default function useGrabScroll(
-  el: MaybeRefOrGetter<HTMLElement | null | undefined>
+  el: MaybeRefOrGetter<HTMLElement | null | undefined>,
 ): Disposable {
   function setup(stack: DisposableStack, el: HTMLElement) {
     const oldCursor = el.style.cursor;
@@ -64,7 +64,7 @@ export default function useGrabScroll(
           isGrabbing = false;
           render();
         });
-      })
+      }),
     );
   }
 
@@ -83,7 +83,7 @@ export default function useGrabScroll(
         const stack = new DisposableStack();
         onCleanup(() => stack.dispose());
         setup(stack, el);
-      })
+      }),
     );
   } else if (el) {
     setup(stack, el);

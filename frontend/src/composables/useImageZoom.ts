@@ -74,7 +74,7 @@ export default function useImageZoom({
     }
     return Math.min(
       contentBoxWidth.value / value.width,
-      contentBoxHeight.value / value.height
+      contentBoxHeight.value / value.height,
     );
   });
   const zoomModel = computed({
@@ -138,7 +138,7 @@ export default function useImageZoom({
                 (el.scrollLeft - 0.5 * (el.scrollWidth - el.clientWidth)) /
                   el.scrollWidth +
                   0.5,
-                2
+                2,
               )
             : 0.5,
         y:
@@ -147,7 +147,7 @@ export default function useImageZoom({
                 (el.scrollTop - 0.5 * (el.scrollHeight - el.clientHeight)) /
                   el.scrollHeight +
                   0.5,
-                2
+                2,
               )
             : 0.5,
       },
