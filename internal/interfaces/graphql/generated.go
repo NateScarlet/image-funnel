@@ -72,6 +72,7 @@ type ComplexityRoot struct {
 		LatestImageModTime func(childComplexity int) int
 		LatestImagePath    func(childComplexity int) int
 		LatestImageURL     func(childComplexity int) int
+		ParentID           func(childComplexity int) int
 		Path               func(childComplexity int) int
 		RatingCounts       func(childComplexity int) int
 		SubdirectoryCount  func(childComplexity int) int
@@ -296,6 +297,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.LatestImageURL(childComplexity), true
+	case "Directory.parentId":
+		if e.complexity.Directory.ParentID == nil {
+			break
+		}
+
+		return e.complexity.Directory.ParentID(childComplexity), true
 	case "Directory.path":
 		if e.complexity.Directory.Path == nil {
 			break
@@ -789,6 +796,7 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on 
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO") {
   id: ID!
+  parentId: ID
   path: String!
   imageCount: Int!
   subdirectoryCount: Int!
@@ -1425,6 +1433,35 @@ func (ec *executionContext) fieldContext_Directory_id(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Directory_parentId(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_parentId,
+		func(ctx context.Context) (any, error) {
+			return obj.ParentID, nil
+		},
+		nil,
+		ec.marshalOID2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_parentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Directory_path(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1660,6 +1697,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "imageCount":
@@ -2286,6 +2325,8 @@ func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, fi
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "imageCount":
@@ -5293,6 +5334,8 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "parentId":
+			out.Values[i] = ec._Directory_parentId(ctx, field, obj)
 		case "path":
 			out.Values[i] = ec._Directory_path(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -7321,6 +7364,18 @@ func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋapplication�
 		return graphql.Null
 	}
 	return ec._Directory(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOID2string(ctx context.Context, v any) (string, error) {
+	res, err := graphql.UnmarshalID(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalID(v)
+	return res
 }
 
 func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {

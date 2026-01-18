@@ -1,6 +1,7 @@
 query GetDirectories($id: ID) {
   directory(id: $id) {
     id
+    parentId
     path
     imageCount
     subdirectoryCount
@@ -13,6 +14,7 @@ query GetDirectories($id: ID) {
     }
     directories {
       id
+      parentId
       path
       imageCount
       subdirectoryCount

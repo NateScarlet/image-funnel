@@ -4,6 +4,7 @@ import "time"
 
 type DirectoryDTO struct {
 	ID                 string
+	ParentID           string
 	Path               string
 	ImageCount         int
 	SubdirectoryCount  int

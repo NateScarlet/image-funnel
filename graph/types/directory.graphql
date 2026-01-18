@@ -1,5 +1,6 @@
 type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO") {
   id: ID!
+  parentId: ID
   path: String!
   imageCount: Int!
   subdirectoryCount: Int!

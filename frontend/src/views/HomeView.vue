@@ -68,7 +68,7 @@
               选择目录
             </label>
             <div class="bg-slate-700 rounded-lg p-4">
-              <div v-if="currentPath !== ''" class="mb-4">
+              <div v-if="currentDirectory?.parentId" class="mb-4">
                 <button
                   class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
                   @click="goToParent"
@@ -94,7 +94,7 @@
                 v-if="currentDirectory && currentDirectory.imageCount > 0"
                 class="mb-4 p-4 bg-slate-600 rounded-lg border-2 cursor-pointer transition-all"
                 :class="[
-                  selectedDirectoryId === currentPath || ''
+                  selectedDirectoryId === currentDirectory.id
                     ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
                     : 'border-slate-500 hover:border-slate-400 hover:bg-slate-550',
                 ]"
@@ -114,7 +114,7 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <h3 class="font-semibold text-lg mb-1">
-                      {{ currentPath ? currentPath : rootPath || "根目录" }}
+                      {{ currentDirectory.path || rootPath || "根目录" }}
                     </h3>
                     <div class="text-xs text-slate-300 space-y-1">
                       <div v-if="currentDirectory.latestImageModTime">
@@ -300,7 +300,7 @@ const selectedPresetId = ref<string>("");
 const targetKeep = ref<number>(10);
 const filterRating = ref<number[]>([]);
 
-const currentPath = ref<string>("");
+const currentDirID = ref<string>("");
 const selectedDirectoryId = ref<string>("");
 
 const { data: metaData } = useQuery(GetMetaDocument, {
@@ -308,7 +308,7 @@ const { data: metaData } = useQuery(GetMetaDocument, {
 });
 
 const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
-  variables: () => ({ id: currentPath.value }),
+  variables: () => ({ id: currentDirID.value }),
   loadingCount,
 });
 
@@ -387,25 +387,34 @@ function getDirectoryName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-function selectDirectory(dir: { path: string; subdirectoryCount: number }) {
+function selectDirectory(dir: {
+  id: string;
+  path: string;
+  subdirectoryCount: number;
+}) {
   if (dir.subdirectoryCount > 0) {
-    currentPath.value = dir.path;
+    currentDirID.value = dir.id;
     selectedDirectoryId.value = "";
   } else {
-    selectedDirectoryId.value = dir.path;
+    selectedDirectoryId.value = dir.id;
   }
 }
 
 function selectCurrentDirectory() {
   if (currentDirectory.value && currentDirectory.value.imageCount > 0) {
-    selectedDirectoryId.value = currentPath.value || "";
+    selectedDirectoryId.value = currentDirectory.value.id || "";
   }
 }
 
 function goToParent() {
-  const parts = currentPath.value.split("/");
-  parts.pop();
-  currentPath.value = parts.join("/");
+  const currentDir = currentDirectory.value;
+  if (!currentDir || !currentDir.parentId) {
+    currentDirID.value = "";
+    selectedDirectoryId.value = "";
+    return;
+  }
+
+  currentDirID.value = currentDir.parentId;
   selectedDirectoryId.value = "";
 }
 

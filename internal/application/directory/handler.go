@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"main/internal/domain/directory"
+	"path/filepath"
 )
 
 type Handler struct {
@@ -34,8 +35,19 @@ func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, e
 		return nil, err
 	}
 
+	var parentID string
+	if path != "." {
+		parentPath := filepath.Dir(path)
+		if parentPath != "." {
+			parentID = directory.EncodeDirectoryID(parentPath)
+		} else {
+			parentID = directory.EncodeDirectoryID(".")
+		}
+	}
+
 	return &DirectoryDTO{
 		ID:                 id,
+		ParentID:           parentID,
 		Path:               path,
 		ImageCount:         imageCount,
 		SubdirectoryCount:  subdirectoryCount,
