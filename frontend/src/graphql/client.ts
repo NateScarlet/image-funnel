@@ -27,6 +27,16 @@ const httpLink = createHttpLink({
 });
 
 const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
+  const knownMessages = new Set();
+  const errorOnce = (msg: string) => {
+    if (knownMessages.has(msg)) {
+      return;
+    }
+    const { showError } = useNotification();
+    showError(`${operation.operationName}: ${msg}`);
+    knownMessages.add(msg);
+  };
+
   const context = operation.getContext() as OperationContext;
   const suppressError = context.suppressError;
 
@@ -39,11 +49,10 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
     }
 
     if (!shouldSuppress) {
-      const { showError } = useNotification();
       const errorMessages = graphQLErrors
         .map((err: GraphQLFormattedError) => err.message)
         .join("; ");
-      showError(`GraphQL 错误: ${errorMessages}`);
+      errorOnce(errorMessages);
     }
   }
 
@@ -56,8 +65,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
     }
 
     if (!shouldSuppress) {
-      const { showError } = useNotification();
-      showError(
+      errorOnce(
         `网络错误: ${networkError instanceof Error ? networkError.message : "Unknown error"}`,
       );
     }
