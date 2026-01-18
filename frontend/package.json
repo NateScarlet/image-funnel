@@ -9,7 +9,7 @@
     "generate:graphql": "graphql-codegen --config codegen.ts",
     "build:tsc": "vue-tsc -p ./src/tsconfig.json",
     "check": "npm run build:tsc && npm run lint",
-    "lint": "eslint .",
+    "lint": "echo '提示：如果发现 lint 问题，可以运行 pnpm lint:fix 来自动修复' && eslint .",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
