@@ -109,13 +109,13 @@ type RoundSnapshot struct {
 	undoStack  []UndoEntry
 }
 
-func NewSession(directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
+func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]Action)
 	for _, img := range images {
 		actions[img.ID()] = ActionPending
 	}
 	return &Session{
-		id:           scalar.NewID(),
+		id:           id,
 		directory:    directory,
 		filter:       filter,
 		targetKeep:   targetKeep,

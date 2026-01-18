@@ -62,7 +62,7 @@ func (h *Handler) CreateSession(
 	if err != nil {
 		return err
 	}
-	sess := session.NewSession(directory, domainFilter, target_keep, filteredImages)
+	sess := session.NewSession(id, directory, domainFilter, target_keep, filteredImages)
 
 	if err = h.sessionRepo.Save(sess); err != nil {
 		return fmt.Errorf("failed to save session: %w", err)
