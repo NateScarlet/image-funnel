@@ -37,7 +37,6 @@ func TestReadExternalSamples(t *testing.T) {
 			case "valid_xmp.xmp":
 				assert.Equal(t, 5, data.Rating, "valid_xmp.xmp should have rating 5")
 				assert.Equal(t, "keep", data.Action, "valid_xmp.xmp should have action keep")
-				assert.Equal(t, "test-session-123", data.SessionID, "valid_xmp.xmp should have session ID test-session-123")
 				assert.Equal(t, "default", data.Preset, "valid_xmp.xmp should have preset default")
 			case "with_unknown_fields.xmp":
 				assert.Equal(t, 3, data.Rating, "with_unknown_fields.xmp should have rating 3")
@@ -54,7 +53,6 @@ func TestWriteAndRead(t *testing.T) {
 	testData := &XMPData{
 		Rating:    3,
 		Action:    "keep",
-		SessionID: "test-session-123",
 		Timestamp: time.Now(),
 		Preset:    "default",
 	}
@@ -71,7 +69,6 @@ func TestWriteAndRead(t *testing.T) {
 
 	assert.Equal(t, testData.Rating, readData.Rating)
 	assert.Equal(t, testData.Action, readData.Action)
-	assert.Equal(t, testData.SessionID, readData.SessionID)
 	assert.Equal(t, testData.Preset, readData.Preset)
 }
 
@@ -119,7 +116,6 @@ func TestDebugWriteAndRead(t *testing.T) {
 	testData := &XMPData{
 		Rating:    3,
 		Action:    "keep",
-		SessionID: "test-session-123",
 		Timestamp: time.Now(),
 		Preset:    "default",
 	}
@@ -139,8 +135,8 @@ func TestDebugWriteAndRead(t *testing.T) {
 	readData, err := Read(tempFile)
 	require.NoError(t, err, "Failed to read XMP")
 
-	t.Logf("Read data: Rating=%d, Action=%s, SessionID=%s, Preset=%s",
-		readData.Rating, readData.Action, readData.SessionID, readData.Preset)
+	t.Logf("Read data: Rating=%d, Action=%s, Preset=%s",
+		readData.Rating, readData.Action, readData.Preset)
 }
 
 func TestRequiredFields(t *testing.T) {
@@ -179,7 +175,6 @@ func TestRead_ValidXMP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 5, data.Rating)
 	assert.Equal(t, "keep", data.Action)
-	assert.Equal(t, "test-session-123", data.SessionID)
 	assert.Equal(t, "default", data.Preset)
 	assert.Equal(t, "2024-01-15T10:30:00Z", data.Timestamp.Format(time.RFC3339))
 }
@@ -225,7 +220,6 @@ func TestWrite_CreateNewXMP(t *testing.T) {
 	data := &XMPData{
 		Rating:    5,
 		Action:    "keep",
-		SessionID: "test-session",
 		Timestamp: timestamp,
 		Preset:    "default",
 	}
@@ -239,7 +233,6 @@ func TestWrite_CreateNewXMP(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), `<xmp:Rating>5</xmp:Rating>`)
 	assert.Contains(t, string(content), `<imagefunnel:Action>keep</imagefunnel:Action>`)
-	assert.Contains(t, string(content), `<imagefunnel:SessionID>test-session</imagefunnel:SessionID>`)
 	assert.Contains(t, string(content), `<imagefunnel:Preset>default</imagefunnel:Preset>`)
 }
 
@@ -269,7 +262,6 @@ func TestWrite_UpdateExistingXMP_PreserveUnknownFields(t *testing.T) {
 	data := &XMPData{
 		Rating:    5,
 		Action:    "keep",
-		SessionID: "test-session",
 		Timestamp: timestamp,
 		Preset:    "default",
 	}
@@ -300,8 +292,7 @@ func TestWrite_UpdateExistingXMP_WithImageFunnelFields(t *testing.T) {
    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
    xmlns:imagefunnel="http://ns.imagefunnel.app/1.0/"
    xmp:Rating="2"
-   imagefunnel:Action="discard"
-   imagefunnel:SessionID="old-session"/>
+   imagefunnel:Action="discard"/>
  </RDF>
 </x:xmpmeta>`
 
@@ -326,9 +317,7 @@ func TestWrite_UpdateExistingXMP_WithImageFunnelFields(t *testing.T) {
 
 	assert.Contains(t, updatedStr, `xmp:Rating="5"`)
 	assert.Contains(t, updatedStr, `imagefunnel:Action="keep"`)
-	assert.Contains(t, updatedStr, `imagefunnel:SessionID="new-session"`)
 	assert.NotContains(t, updatedStr, `imagefunnel:Action="discard"`)
-	assert.NotContains(t, updatedStr, `imagefunnel:SessionID="old-session"`)
 }
 
 func TestBatchWrite_PartialFailure(t *testing.T) {
@@ -344,14 +333,12 @@ func TestBatchWrite_PartialFailure(t *testing.T) {
 		imagePaths[0]: {
 			Rating:    5,
 			Action:    "keep",
-			SessionID: "session1",
 			Timestamp: timestamp,
 			Preset:    "default",
 		},
 		imagePaths[1]: {
 			Rating:    3,
 			Action:    "maybe",
-			SessionID: "session2",
 			Timestamp: timestamp,
 			Preset:    "default",
 		},
@@ -417,7 +404,6 @@ func TestReadWriteRoundTrip(t *testing.T) {
 	originalData := &XMPData{
 		Rating:    5,
 		Action:    "keep",
-		SessionID: "test-session-123",
 		Timestamp: timestamp,
 		Preset:    "custom-preset",
 	}
@@ -430,7 +416,6 @@ func TestReadWriteRoundTrip(t *testing.T) {
 
 	assert.Equal(t, originalData.Rating, readData.Rating)
 	assert.Equal(t, originalData.Action, readData.Action)
-	assert.Equal(t, originalData.SessionID, readData.SessionID)
 	assert.Equal(t, originalData.Timestamp, readData.Timestamp)
 	assert.Equal(t, originalData.Preset, readData.Preset)
 }
@@ -450,7 +435,6 @@ func TestReadWriteRoundTrip_WithUnknownFields(t *testing.T) {
 	updateData := &XMPData{
 		Rating:    5,
 		Action:    "keep",
-		SessionID: "test-session",
 		Timestamp: timestamp,
 		Preset:    "default",
 	}

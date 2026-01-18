@@ -40,7 +40,7 @@
 4. **XMP Sidecar 实现**
    - 文件格式：标准 XMP RDF/XML
    - 核心字段：`xmp:Rating`（主评分 0-5）
-   - 扩展字段：`imagefunnel:Action`、`imagefunnel:SessionID`、`imagefunnel:Timestamp`
+   - 扩展字段：`imagefunnel:Action`、`imagefunnel:Timestamp`、`imagefunnel:Preset`
    - 写入策略：批量写入、原子操作、增量更新
 
 ### 关键设计决策

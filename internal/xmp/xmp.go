@@ -142,7 +142,6 @@ func createNewXMP(data *XMPData) *etree.Document {
 	createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating))
 	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(data.Rating))
 	createOrUpdateElement(desc, "imagefunnel:Action", data.Action)
-	createOrUpdateElement(desc, "imagefunnel:SessionID", data.SessionID)
 	createOrUpdateElement(desc, "imagefunnel:Timestamp", data.Timestamp.Format(time.RFC3339))
 	createOrUpdateElement(desc, "imagefunnel:Preset", data.Preset)
 
@@ -155,7 +154,6 @@ func updateExistingXMP(doc *etree.Document, data *XMPData) error {
 			createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating))
 			createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(data.Rating))
 			createOrUpdateElement(desc, "imagefunnel:Action", data.Action)
-			createOrUpdateElement(desc, "imagefunnel:SessionID", data.SessionID)
 			createOrUpdateElement(desc, "imagefunnel:Timestamp", data.Timestamp.Format(time.RFC3339))
 			createOrUpdateElement(desc, "imagefunnel:Preset", data.Preset)
 		}
