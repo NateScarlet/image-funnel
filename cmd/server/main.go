@@ -55,8 +55,14 @@ func main() {
 		log.Printf("Generated random secret key for this session")
 	}
 
+	// Determine environment
+	env := BuildEnv
+	if env == "" {
+		env = "dev"
+	}
+
 	signer := url.NewSigner(secretKey, absRootDir)
-	resolver := graph.NewResolver(absRootDir, signer)
+	resolver := graph.NewResolver(absRootDir, signer, env)
 
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 	gui := playground.Handler("GraphQL Playground", "/graphql")
@@ -70,11 +76,6 @@ func main() {
 
 	// Determine frontend directory based on environment
 	var frontendDir string
-	env := BuildEnv
-	if env == "" {
-		env = "dev"
-	}
-
 	isProduction := env != "dev"
 
 	// Get the directory of the executable itself

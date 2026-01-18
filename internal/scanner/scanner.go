@@ -106,7 +106,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 		subRelPath := filepath.Join(relPath, entry.Name())
 		subAbsPath := filepath.Join(absPath, entry.Name())
 
-		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.analyzeDirectory(subAbsPath)
+		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(subAbsPath)
 		if err != nil {
 			continue
 		}
@@ -130,7 +130,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 	return directories, nil
 }
 
-func (s *Scanner) analyzeDirectory(absPath string) (int, int, time.Time, string, map[int]int, error) {
+func (s *Scanner) AnalyzeDirectory(absPath string) (int, int, time.Time, string, map[int]int, error) {
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return 0, 0, time.Time{}, "", nil, err

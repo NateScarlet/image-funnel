@@ -1,7 +1,7 @@
 input CreateSessionInput {
   filter: ImageFiltersInput!
   targetKeep: Int!
-  directory: String!
+  directoryId: ID!
   clientMutationId: String
 }
 

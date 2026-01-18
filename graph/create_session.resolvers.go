@@ -15,11 +15,16 @@ import (
 // CreateSession is the resolver for the createSession field.
 func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error) {
 	s := scanner.NewScanner(r.RootDir)
-	if err := s.ValidateDirectoryPath(input.Directory); err != nil {
-		return nil, fmt.Errorf("invalid directory: %w", err)
-	}
 
-	dirPath := filepath.Join(r.RootDir, input.Directory)
+	var dirPath string
+	if input.DirectoryID == "" {
+		dirPath = r.RootDir
+	} else {
+		if err := s.ValidateDirectoryPath(input.DirectoryID); err != nil {
+			return nil, fmt.Errorf("invalid directory: %w", err)
+		}
+		dirPath = filepath.Join(r.RootDir, input.DirectoryID)
+	}
 
 	sess, err := r.Resolver.SessionManager.Create(dirPath, input.Filter, input.TargetKeep)
 	if err != nil {

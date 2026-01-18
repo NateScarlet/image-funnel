@@ -1,0 +1,6 @@
+query GetMeta {
+  meta {
+    rootPath
+    version
+  }
+}

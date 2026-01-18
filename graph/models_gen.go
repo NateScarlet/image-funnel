@@ -29,7 +29,7 @@ type CommitChangesPayload struct {
 type CreateSessionInput struct {
 	Filter           *session.ImageFilters `json:"filter"`
 	TargetKeep       int                   `json:"targetKeep"`
-	Directory        string                `json:"directory"`
+	DirectoryID      string                `json:"directoryId"`
 	ClientMutationID *string               `json:"clientMutationId,omitempty"`
 }
 
@@ -47,6 +47,7 @@ type Directory struct {
 	LatestImagePath    *string        `json:"latestImagePath,omitempty"`
 	LatestImageURL     *string        `json:"latestImageUrl,omitempty"`
 	RatingCounts       []*RatingCount `json:"ratingCounts"`
+	Directories        []*Directory   `json:"directories"`
 }
 
 type Image struct {
@@ -68,6 +69,11 @@ type MarkImageInput struct {
 type MarkImagePayload struct {
 	Session          *Session `json:"session"`
 	ClientMutationID *string  `json:"clientMutationId,omitempty"`
+}
+
+type Meta struct {
+	RootPath string `json:"rootPath"`
+	Version  string `json:"version"`
 }
 
 type Mutation struct {

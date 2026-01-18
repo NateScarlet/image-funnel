@@ -4,6 +4,12 @@
       <header class="mb-8">
         <h1 class="text-3xl md:text-4xl font-bold text-center mb-2">
           ImageFunnel
+          <span
+            v-if="version"
+            class="text-lg md:text-xl text-slate-400 font-normal ml-2"
+          >
+            {{ version }}
+          </span>
         </h1>
         <p class="text-slate-400 text-center">AI生成图片筛选工具</p>
       </header>
@@ -62,9 +68,8 @@
               选择目录
             </label>
             <div class="bg-slate-700 rounded-lg p-4">
-              <div class="flex items-center justify-between mb-4">
+              <div v-if="currentPath !== ''" class="mb-4">
                 <button
-                  v-if="currentPath !== ''"
                   class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
                   @click="goToParent"
                 >
@@ -83,17 +88,71 @@
                   </svg>
                   返回上级
                 </button>
-                <div
-                  :class="[
-                    'text-sm',
-                    currentPath == selectedDirectory
-                      ? 'text-secondary-400 font-medium'
-                      : 'text-slate-400',
-                  ]"
-                >
-                  {{ currentPath || "根目录" }}
+              </div>
+
+              <div
+                v-if="currentDirectory && currentDirectory.imageCount > 0"
+                class="mb-4 p-4 bg-slate-600 rounded-lg border-2 cursor-pointer transition-all"
+                :class="[
+                  selectedDirectoryId === currentPath || ''
+                    ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
+                    : 'border-slate-500 hover:border-slate-400 hover:bg-slate-550',
+                ]"
+                @click="selectCurrentDirectory"
+              >
+                <div class="flex items-start gap-3">
+                  <div
+                    v-if="currentDirectory.latestImagePath"
+                    class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
+                  >
+                    <img
+                      v-if="currentDirectory.latestImageUrl"
+                      :src="currentDirectory.latestImageUrl"
+                      :alt="currentDirectory.path"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="font-semibold text-lg mb-1">
+                      {{ currentPath ? currentPath : rootPath || "根目录" }}
+                    </h3>
+                    <div class="text-xs text-slate-300 space-y-1">
+                      <div v-if="currentDirectory.latestImageModTime">
+                        {{ formatDate(currentDirectory.latestImageModTime) }}
+                      </div>
+                      <div
+                        v-if="
+                          currentDirectory.ratingCounts &&
+                          currentDirectory.ratingCounts.length > 0
+                        "
+                        class="flex flex-wrap gap-2 mt-2"
+                      >
+                        <div
+                          v-for="rc in sortedRatingCounts(
+                            currentDirectory.ratingCounts,
+                          )"
+                          :key="rc.rating"
+                          class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
+                        >
+                          <RatingIcon
+                            :rating="rc.rating"
+                            :filled="filterRating.includes(rc.rating)"
+                          />
+                          <span class="text-xs">{{ rc.count }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div></div>
+              </div>
+
+              <div
+                v-else-if="
+                  currentDirectory && currentDirectory.imageCount === 0
+                "
+                class="text-center text-slate-400 py-4 mb-4 bg-slate-600 rounded-lg"
+              >
+                当前目录下没有图片
               </div>
 
               <div v-if="loadingDirectories" class="space-y-4">
@@ -127,7 +186,7 @@
                   :key="dir.id"
                   :class="[
                     'p-4 rounded-lg cursor-pointer transition-all border-2',
-                    selectedDirectory === dir.path
+                    selectedDirectoryId === dir.id
                       ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
                       : 'bg-slate-600 border-slate-500 hover:border-slate-400 hover:bg-slate-550',
                   ]"
@@ -221,6 +280,7 @@ import mutate from "../graphql/utils/mutate";
 import {
   CreateSessionDocument,
   GetDirectoriesDocument,
+  GetMetaDocument,
 } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import StarSelector from "../components/StarSelector.vue";
@@ -241,16 +301,24 @@ const targetKeep = ref<number>(10);
 const filterRating = ref<number[]>([]);
 
 const currentPath = ref<string>("");
-const selectedDirectory = ref<string>("");
+const selectedDirectoryId = ref<string>("");
+
+const { data: metaData } = useQuery(GetMetaDocument, {
+  loadingCount,
+});
 
 const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
-  variables: () => ({ path: currentPath.value }),
+  variables: () => ({ id: currentPath.value }),
   loadingCount,
 });
 
 const loadingDirectories = computed(() => loadingCount.value > 0);
 
-const directories = computed(() => directoriesData.value?.directories || []);
+const currentDirectory = computed(() => directoriesData.value?.directory);
+const directories = computed(() => currentDirectory.value?.directories || []);
+
+const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
+const version = computed(() => metaData.value?.meta?.version || "");
 
 const filteredDirectories = computed(() => {
   return directories.value.filter((dir) => {
@@ -267,7 +335,11 @@ const selectedPreset = computed(() => {
 });
 
 const canCreate = computed(() => {
-  return filterRating.value.length > 0 && targetKeep.value > 0;
+  return (
+    filterRating.value.length > 0 &&
+    targetKeep.value > 0 &&
+    selectedDirectoryId.value !== ""
+  );
 });
 
 function getMatchedImageCount(dir: {
@@ -321,9 +393,15 @@ function getDirectoryName(path: string): string {
 function selectDirectory(dir: { path: string; subdirectoryCount: number }) {
   if (dir.subdirectoryCount > 0) {
     currentPath.value = dir.path;
-    selectedDirectory.value = "";
+    selectedDirectoryId.value = "";
   } else {
-    selectedDirectory.value = dir.path;
+    selectedDirectoryId.value = dir.path;
+  }
+}
+
+function selectCurrentDirectory() {
+  if (currentDirectory.value && currentDirectory.value.imageCount > 0) {
+    selectedDirectoryId.value = currentPath.value || "";
   }
 }
 
@@ -331,7 +409,7 @@ function goToParent() {
   const parts = currentPath.value.split("/");
   parts.pop();
   currentPath.value = parts.join("/");
-  selectedDirectory.value = "";
+  selectedDirectoryId.value = "";
 }
 
 async function createSession() {
@@ -346,7 +424,7 @@ async function createSession() {
             rating: filterRating.value,
           },
           targetKeep: targetKeep.value,
-          directory: selectedDirectory.value || "",
+          directoryId: selectedDirectoryId.value || "",
         },
       },
     });

@@ -7,16 +7,127 @@ package graph
 
 import (
 	"context"
+	"main/internal/scanner"
+	"path/filepath"
+	"sort"
 )
+
+// Directories is the resolver for the directories field.
+func (r *directoryResolver) Directories(ctx context.Context, obj *Directory) ([]*Directory, error) {
+	s := scanner.NewScanner(r.RootDir)
+
+	dirs, err := s.ScanDirectories(obj.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(dirs, func(i, j int) bool {
+		return dirs[i].LatestImageModTime.Before(dirs[j].LatestImageModTime)
+	})
+
+	var result []*Directory
+	for _, dir := range dirs {
+		latestImagePath := ""
+		var latestImageUrl *string
+		if dir.LatestImagePath != "" {
+			relPath, err := filepath.Rel(r.RootDir, dir.LatestImagePath)
+			if err == nil {
+				latestImagePath = relPath
+				url, err := r.Signer.GenerateSignedURL(dir.LatestImagePath)
+				if err == nil {
+					latestImageUrl = &url
+				}
+			}
+		}
+
+		var ratingCounts []*RatingCount
+		for rating, count := range dir.RatingCounts {
+			ratingCounts = append(ratingCounts, &RatingCount{
+				Rating: rating,
+				Count:  count,
+			})
+		}
+
+		result = append(result, &Directory{
+			ID:                 dir.Path,
+			Path:               dir.Path,
+			ImageCount:         dir.ImageCount,
+			SubdirectoryCount:  dir.SubdirectoryCount,
+			LatestImageModTime: dir.LatestImageModTime,
+			LatestImagePath:    &latestImagePath,
+			LatestImageURL:     latestImageUrl,
+			RatingCounts:       ratingCounts,
+		})
+	}
+
+	return result, nil
+}
 
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id string) (*Session, error) {
 	return r.Resolver.Session(ctx, id)
 }
 
-// Directories is the resolver for the directories field.
-func (r *queryResolver) Directories(ctx context.Context, path string) ([]*Directory, error) {
-	return r.Resolver.Directories(ctx, path)
+// Directory is the resolver for the directory field.
+func (r *queryResolver) Directory(ctx context.Context, id *string) (*Directory, error) {
+	s := scanner.NewScanner(r.RootDir)
+
+	var absPath string
+	if id == nil || *id == "" {
+		absPath = r.RootDir
+	} else {
+		absPath = filepath.Join(r.RootDir, *id)
+	}
+
+	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	latestImagePathRel := ""
+	var latestImageUrl *string
+	if latestImagePath != "" {
+		relPath, err := filepath.Rel(r.RootDir, latestImagePath)
+		if err == nil {
+			latestImagePathRel = relPath
+			url, err := r.Signer.GenerateSignedURL(latestImagePath)
+			if err == nil {
+				latestImageUrl = &url
+			}
+		}
+	}
+
+	var ratingCountsResult []*RatingCount
+	for rating, count := range ratingCounts {
+		ratingCountsResult = append(ratingCountsResult, &RatingCount{
+			Rating: rating,
+			Count:  count,
+		})
+	}
+
+	path := ""
+	if id != nil {
+		path = *id
+	}
+
+	return &Directory{
+		ID:                 path,
+		Path:               path,
+		ImageCount:         imageCount,
+		SubdirectoryCount:  subdirectoryCount,
+		LatestImageModTime: latestModTime,
+		LatestImagePath:    &latestImagePathRel,
+		LatestImageURL:     latestImageUrl,
+		RatingCounts:       ratingCountsResult,
+	}, nil
+}
+
+// Meta is the resolver for the meta field.
+func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
+	return &Meta{
+		RootPath: r.RootDir,
+		Version:  r.Version,
+	}, nil
 }
 
 // SessionUpdated is the resolver for the sessionUpdated field.
@@ -24,11 +135,15 @@ func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID str
 	return r.Resolver.SessionUpdated(ctx, sessionID)
 }
 
+// Directory returns DirectoryResolver implementation.
+func (r *Resolver) Directory() DirectoryResolver { return &directoryResolver{r} }
+
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
 // Subscription returns SubscriptionResolver implementation.
 func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
 
+type directoryResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }

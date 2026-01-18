@@ -1,5 +1,5 @@
-query GetDirectories($path: String!) {
-  directories(path: $path) {
+query GetDirectories($id: ID) {
+  directory(id: $id) {
     id
     path
     imageCount
@@ -10,6 +10,19 @@ query GetDirectories($path: String!) {
     ratingCounts {
       rating
       count
+    }
+    directories {
+      id
+      path
+      imageCount
+      subdirectoryCount
+      latestImageModTime
+      latestImagePath
+      latestImageUrl
+      ratingCounts {
+        rating
+        count
+      }
     }
   }
 }

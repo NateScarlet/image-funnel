@@ -19,15 +19,17 @@ type Resolver struct {
 	RootDir        string
 	Signer         *url.Signer
 	SessionTopic   pubsub.Topic[*Session]
+	Version        string
 }
 
-func NewResolver(rootDir string, signer *url.Signer) *Resolver {
+func NewResolver(rootDir string, signer *url.Signer, version string) *Resolver {
 	topic, _ := pubsub.NewInMemoryTopic[*Session]()
 	return &Resolver{
 		SessionManager: session.NewManager(),
 		RootDir:        rootDir,
 		Signer:         signer,
 		SessionTopic:   topic,
+		Version:        version,
 	}
 }
 
