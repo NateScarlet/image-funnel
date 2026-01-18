@@ -56,6 +56,7 @@ Pop-Location
 Write-Host "构建完成，检查结果..."
 if (Test-Path "$BUILD_DIR/image-funnel.exe") {
     Write-Host "✅ 后端构建成功: $BUILD_DIR/image-funnel.exe"
+    Write-Host "⚠️ 注意: 后端构建未包含测试代码，可能 'go test ./...' 会失败"
 } else {
     Write-Host "❌ 后端构建失败"
     exit 1
