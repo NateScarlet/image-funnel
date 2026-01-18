@@ -114,21 +114,32 @@ type Session struct {
 	queue      []*Image
 	currentIdx int
 	undoStack  []UndoEntry
+
+	roundHistory []RoundSnapshot
+	currentRound int
+}
+
+type RoundSnapshot struct {
+	queue      []*Image
+	currentIdx int
+	undoStack  []UndoEntry
 }
 
 func NewSession(directory string, filter *ImageFilters, targetKeep int, images []*Image) *Session {
 	return &Session{
-		id:         generateID(),
-		directory:  directory,
-		filter:     filter,
-		targetKeep: targetKeep,
-		status:     StatusActive,
-		createdAt:  time.Now(),
-		updatedAt:  time.Now(),
-		images:     images,
-		queue:      images,
-		currentIdx: 0,
-		undoStack:  make([]UndoEntry, 0),
+		id:           generateID(),
+		directory:    directory,
+		filter:       filter,
+		targetKeep:   targetKeep,
+		status:       StatusActive,
+		createdAt:    time.Now(),
+		updatedAt:    time.Now(),
+		images:       images,
+		queue:        images,
+		currentIdx:   0,
+		undoStack:    make([]UndoEntry, 0),
+		roundHistory: make([]RoundSnapshot, 0),
+		currentRound: 0,
 	}
 }
 
@@ -260,6 +271,12 @@ func (s *Session) MarkImage(imageID string, action Action) error {
 				if len(newQueue) <= s.targetKeep {
 					s.status = StatusCompleted
 				} else {
+					s.roundHistory = append(s.roundHistory, RoundSnapshot{
+						queue:      s.queue,
+						currentIdx: s.currentIdx,
+						undoStack:  s.undoStack,
+					})
+					s.currentRound++
 					s.queue = newQueue
 					s.currentIdx = 0
 					s.undoStack = make([]UndoEntry, 0)
@@ -277,7 +294,19 @@ func (s *Session) MarkImage(imageID string, action Action) error {
 
 func (s *Session) Undo() error {
 	if len(s.undoStack) == 0 {
-		return ErrNothingToUndo
+		if len(s.roundHistory) == 0 {
+			return ErrNothingToUndo
+		}
+
+		lastRound := s.roundHistory[len(s.roundHistory)-1]
+		s.roundHistory = s.roundHistory[:len(s.roundHistory)-1]
+		s.currentRound--
+		s.queue = lastRound.queue
+		s.currentIdx = lastRound.currentIdx
+		s.undoStack = lastRound.undoStack
+		s.status = StatusActive
+		s.updatedAt = time.Now()
+		return nil
 	}
 
 	lastEntry := s.undoStack[len(s.undoStack)-1]

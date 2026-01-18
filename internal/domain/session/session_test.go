@@ -596,6 +596,36 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
+func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
+	filter := NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession("/test", filter, 5, images)
+
+	for i := 0; i < 10; i++ {
+		action := ActionKeep
+		if i%3 == 0 {
+			action = ActionPending
+		} else if i%3 == 1 {
+			action = ActionReject
+		}
+		err := session.MarkImage(session.queue[i].ID(), action)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after first round")
+	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
+	assert.Equal(t, 1, session.currentRound, "CurrentRound should be 1")
+
+	err := session.Undo()
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, session.currentRound, "CurrentRound should be 0 after undo to previous round")
+	assert.Equal(t, 10, len(session.queue), "Queue should be restored to 10 images")
+	assert.Equal(t, 10, session.CurrentIndex(), "CurrentIndex should be 10 after undo to previous round")
+	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after undo")
+}
+
 func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
 	filter := NewImageFilters([]int{0})
 	images := createTestImages(10)
