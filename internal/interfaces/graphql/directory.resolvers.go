@@ -15,7 +15,7 @@ func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *directory.D
 	if obj.LatestImagePath == "" {
 		return nil, nil
 	}
-	url, err := r.Signer.GenerateSignedURL(obj.LatestImagePath)
+	url, err := r.signer.GenerateSignedURL(obj.LatestImagePath)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (r *directoryResolver) RatingCounts(ctx context.Context, obj *directory.Dir
 
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *directory.DirectoryDTO) ([]*directory.DirectoryDTO, error) {
-	return r.App.GetDirectories(ctx, obj.Path)
+	return r.app.GetDirectories(ctx, obj.Path)
 }
 
 // Directory is the resolver for the directory field.
@@ -45,7 +45,7 @@ func (r *queryResolver) Directory(ctx context.Context, id *string) (*directory.D
 	if id != nil {
 		path = *id
 	}
-	return r.App.GetDirectory(ctx, path)
+	return r.app.GetDirectory(ctx, path)
 }
 
 // Directory returns DirectoryResolver implementation.

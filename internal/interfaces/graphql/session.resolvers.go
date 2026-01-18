@@ -12,7 +12,7 @@ import (
 
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id string) (*session.SessionDTO, error) {
-	return r.App.GetSession(ctx, id)
+	return r.app.GetSession(ctx, id)
 }
 
 // Status is the resolver for the status field.
@@ -37,7 +37,7 @@ func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID str
 	go func() {
 		defer close(ch)
 
-		for dto, err := range r.App.SubscribeSession(ctx) {
+		for dto, err := range r.app.SubscribeSession(ctx) {
 			if err != nil {
 				return
 			}

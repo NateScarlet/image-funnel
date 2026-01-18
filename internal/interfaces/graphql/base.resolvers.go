@@ -12,8 +12,8 @@ import (
 // Meta is the resolver for the meta field.
 func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
 	return &Meta{
-		RootPath: r.RootDir,
-		Version:  r.Version,
+		RootPath: r.rootDir,
+		Version:  r.version,
 	}, nil
 }
 

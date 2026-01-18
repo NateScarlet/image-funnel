@@ -11,7 +11,7 @@ import (
 
 // CreateSession is resolver for the createSession field.
 func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error) {
-	sessionID, err := r.App.CreateSession(
+	sessionID, err := r.app.CreateSession(
 		ctx,
 		input.DirectoryID,
 		input.Filter,
@@ -21,7 +21,7 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessio
 		return nil, err
 	}
 
-	sess, err := r.App.GetSession(ctx, sessionID)
+	sess, err := r.app.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

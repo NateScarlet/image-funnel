@@ -11,12 +11,12 @@ import (
 
 // Undo is the resolver for the undo field.
 func (r *mutationResolver) Undo(ctx context.Context, input UndoInput) (*UndoPayload, error) {
-	err := r.App.Undo(ctx, input.SessionID)
+	err := r.app.Undo(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	sess, err := r.App.GetSession(ctx, input.SessionID)
+	sess, err := r.app.GetSession(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}

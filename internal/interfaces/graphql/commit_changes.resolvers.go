@@ -11,7 +11,7 @@ import (
 
 // CommitChanges is the resolver for the commitChanges field.
 func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error) {
-	success, errors := r.App.Commit(
+	success, errors := r.app.Commit(
 		ctx,
 		input.SessionID,
 		input.WriteActions.KeepRating,
@@ -19,7 +19,7 @@ func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChange
 		input.WriteActions.RejectRating,
 	)
 
-	sess, err := r.App.GetSession(ctx, input.SessionID)
+	sess, err := r.app.GetSession(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}

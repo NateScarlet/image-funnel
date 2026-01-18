@@ -8,17 +8,17 @@ import (
 )
 
 type Resolver struct {
-	App     *application.Root
-	RootDir string
-	Signer  *urlconv.Signer
-	Version string
+	app     *application.Root
+	rootDir string
+	signer  *urlconv.Signer
+	version string
 }
 
 func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, version string) *Resolver {
 	return &Resolver{
-		App:     app,
-		RootDir: rootDir,
-		Signer:  signer,
-		Version: version,
+		app:     app,
+		rootDir: rootDir,
+		signer:  signer,
+		version: version,
 	}
 }

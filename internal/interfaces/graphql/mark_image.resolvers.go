@@ -12,7 +12,7 @@ import (
 
 // MarkImage is the resolver for the markImage field.
 func (r *mutationResolver) MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error) {
-	err := r.App.MarkImage(
+	err := r.app.MarkImage(
 		ctx,
 		input.SessionID,
 		input.ImageID,
@@ -22,7 +22,7 @@ func (r *mutationResolver) MarkImage(ctx context.Context, input MarkImageInput) 
 		return nil, err
 	}
 
-	sess, err := r.App.GetSession(ctx, input.SessionID)
+	sess, err := r.app.GetSession(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}
