@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
 } else {
     Write-Host "获取到 git 版本号: $gitVersion"
 }
-$ldflags = "-X main.BuildEnv=$gitVersion"
+$ldflags = "-X main.version=$gitVersion"
 go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server
 Pop-Location
 

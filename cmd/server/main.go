@@ -20,7 +20,7 @@ import (
 
 const defaultPort = "34898"
 
-var BuildEnv string
+var version = "dev" // 注入内容：构建时通过 -ldflags 覆盖此值
 
 func generateRandomSecretKey() string {
 	key := make([]byte, 32)
@@ -54,21 +54,15 @@ func main() {
 		log.Printf("Generated random secret key for this session")
 	}
 
-	// Determine environment
-	env := BuildEnv
-	if env == "" {
-		env = "dev"
-	}
-
 	signer := url.NewSigner(secretKey, absRootDir)
-	resolver := graph.NewResolver(absRootDir, signer, env)
+	resolver := graph.NewResolver(absRootDir, signer, version)
 
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
 	// Determine frontend directory based on environment
 	var frontendDir string
-	isProduction := env != "dev"
+	isProduction := version != "dev"
 
 	// Get the directory of the executable itself
 	execPath, err := os.Executable()
@@ -81,12 +75,12 @@ func main() {
 	if isProduction {
 		// Production: use dist directory relative to executable
 		frontendDir = filepath.Join(execDir, "dist")
-		log.Printf("Running in production mode (version: %s), serving frontend from: %s", env, frontendDir)
+		log.Printf("Running in production mode (version: %s), serving frontend from: %s", version, frontendDir)
 	} else {
 		// Development: use frontend/dist directory relative to project root
 		// For development, we still use project root relative path for consistency
 		frontendDir = filepath.Join("frontend", "dist")
-		log.Printf("Running in development mode (version: %s), serving frontend from: %s", env, frontendDir)
+		log.Printf("Running in development mode (version: %s), serving frontend from: %s", version, frontendDir)
 	}
 
 	if _, err := os.Stat(frontendDir); os.IsNotExist(err) {
@@ -143,7 +137,7 @@ func main() {
 
 	log.Printf("🚀 Server ready at http://localhost:%s", port)
 	log.Printf("📁 Root directory: %s", absRootDir)
-	log.Printf("🏷️  Version: %s", env)
+	log.Printf("🏷️  Version: %s", version)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
