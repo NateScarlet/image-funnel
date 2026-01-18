@@ -295,8 +295,8 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE")
-	assert.True(t, session.CanCommit(), "CanCommit should return true at start of second round (with rejected images)")
+	assert.Equal(t, StatusCompleted, session.Status(), "Session status should be COMPLETED when new queue length equals target")
+	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with kept images")
 
 	stats := session.Stats()
 	assert.Equal(t, 5, stats.Rejected(), "Expected 5 rejected images")
@@ -492,4 +492,91 @@ func createTestImages(count int) []*Image {
 		)
 	}
 	return images
+}
+
+func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
+	filter := NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession("/test", filter, 5, images)
+
+	for i := 0; i < 10; i++ {
+		action := ActionKeep
+		if i%3 == 0 {
+			action = ActionPending
+		} else if i%3 == 1 {
+			action = ActionReject
+		}
+		err := session.MarkImage(session.queue[i].ID(), action)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after first round")
+	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
+	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 for second round")
+
+	err := session.MarkImage(session.queue[0].ID(), ActionKeep)
+	require.NoError(t, err)
+
+	err = session.Undo()
+	require.NoError(t, err)
+
+	assert.Equal(t, ActionPending, session.queue[0].Action(), "Action should be restored to PENDING after undo in second round")
+	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
+}
+
+func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
+	filter := NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession("/test", filter, 5, images)
+
+	for i := 0; i < 10; i++ {
+		action := ActionKeep
+		if i >= 5 {
+			action = ActionReject
+		}
+		err := session.MarkImage(session.queue[i].ID(), action)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED when kept <= target")
+}
+
+func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
+	filter := NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession("/test", filter, 5, images)
+
+	for i := 0; i < 10; i++ {
+		action := ActionKeep
+		if i >= 5 {
+			action = ActionReject
+		}
+		err := session.MarkImage(session.queue[i].ID(), action)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED when kept == target")
+}
+
+func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
+	filter := NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession("/test", filter, 5, images)
+
+	for i := 0; i < 10; i++ {
+		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED")
+
+	err := session.Undo()
+	require.NoError(t, err)
+
+	assert.Equal(t, StatusActive, session.Status(), "Session should be ACTIVE after undo")
+	assert.Equal(t, ActionPending, session.queue[9].Action(), "Last image action should be restored to PENDING")
 }

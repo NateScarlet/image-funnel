@@ -258,9 +258,13 @@ func (s *Session) MarkImage(imageID string, action Action) error {
 				}
 			}
 			if len(newQueue) > 0 {
-				s.queue = newQueue
-				s.currentIdx = 0
-				s.undoStack = make([]UndoEntry, 0)
+				if len(newQueue) <= s.targetKeep {
+					s.status = StatusCompleted
+				} else {
+					s.queue = newQueue
+					s.currentIdx = 0
+					s.undoStack = make([]UndoEntry, 0)
+				}
 			} else {
 				s.status = StatusCompleted
 			}
