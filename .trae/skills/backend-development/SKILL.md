@@ -5,6 +5,8 @@ description: "后端开发指南，包含 Go 语言、GraphQL、领域驱动设�
 
 # 后端开发指南
 
+所有包名为："main/"　下的子包，例如："main/internal/"，"main/graph/" 等。
+
 ## 技术栈
 
 - **语言**: Go
