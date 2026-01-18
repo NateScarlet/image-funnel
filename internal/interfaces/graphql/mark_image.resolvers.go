@@ -7,7 +7,6 @@ package graphql
 
 import (
 	"context"
-	"main/internal/application/session"
 )
 
 // MarkImage is the resolver for the markImage field.
@@ -16,7 +15,7 @@ func (r *mutationResolver) MarkImage(ctx context.Context, input MarkImageInput) 
 		ctx,
 		input.SessionID,
 		input.ImageID,
-		session.Action(input.Action),
+		input.Action,
 	)
 	if err != nil {
 		return nil, err

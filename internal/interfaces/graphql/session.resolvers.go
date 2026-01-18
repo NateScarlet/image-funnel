@@ -16,11 +16,6 @@ func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*session.Ses
 	return r.app.GetSession(ctx, id)
 }
 
-// Status is the resolver for the status field.
-func (r *sessionResolver) Status(ctx context.Context, obj *session.SessionDTO) (SessionStatus, error) {
-	return SessionStatus(obj.Status), nil
-}
-
 // CreatedAt is the resolver for the createdAt field.
 func (r *sessionResolver) CreatedAt(ctx context.Context, obj *session.SessionDTO) (string, error) {
 	return obj.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), nil

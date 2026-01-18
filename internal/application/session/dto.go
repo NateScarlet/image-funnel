@@ -5,6 +5,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/scalar"
+	"main/internal/shared"
 )
 
 type SessionDTO struct {
@@ -12,7 +13,7 @@ type SessionDTO struct {
 	Directory    string
 	Filter       *appimage.ImageFilters
 	TargetKeep   int
-	Status       Status
+	Status       shared.SessionStatus
 	Stats        *StatsDTO
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -38,27 +39,8 @@ type QueueStatusDTO struct {
 	Progress     float64
 }
 
-type Action string
-
-const (
-	ActionKeep    Action = "KEEP"
-	ActionPending Action = "PENDING"
-	ActionReject  Action = "REJECT"
-)
-
 type WriteActions struct {
 	KeepRating    int
 	PendingRating int
 	RejectRating  int
 }
-
-type Status string
-
-const (
-	StatusInitializing Status = "INITIALIZING"
-	StatusActive       Status = "ACTIVE"
-	StatusPaused       Status = "PAUSED"
-	StatusCompleted    Status = "COMPLETED"
-	StatusCommitting   Status = "COMMITTING"
-	StatusError        Status = "ERROR"
-)

@@ -9,6 +9,7 @@ import (
 	domainimage "main/internal/domain/image"
 	"main/internal/domain/session"
 	"main/internal/scalar"
+	"main/internal/shared"
 )
 
 type Handler struct {
@@ -81,14 +82,14 @@ func (h *Handler) MarkImage(
 	ctx context.Context,
 	sessionID scalar.ID,
 	imageID scalar.ID,
-	action Action,
+	action shared.ImageAction,
 ) error {
 	sess, err := h.sessionRepo.FindByID(sessionID)
 	if err != nil {
 		return fmt.Errorf("session not found: %w", err)
 	}
 
-	if err := sess.MarkImage(imageID, toDomainAction(action)); err != nil {
+	if err := sess.MarkImage(imageID, action); err != nil {
 		return fmt.Errorf("failed to mark image: %w", err)
 	}
 
@@ -204,10 +205,6 @@ func toDTOFilter(filter *domainimage.ImageFilters) *appimage.ImageFilters {
 	return &appimage.ImageFilters{
 		Rating: filter.Rating(),
 	}
-}
-
-func toDomainAction(action Action) session.Action {
-	return session.Action(action)
 }
 
 func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*SessionDTO, error] {

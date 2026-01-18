@@ -3,26 +3,8 @@ package session
 import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
+	"main/internal/shared"
 	"time"
-)
-
-type Status string
-
-const (
-	StatusInitializing Status = "INITIALIZING"
-	StatusActive       Status = "ACTIVE"
-	StatusPaused       Status = "PAUSED"
-	StatusCompleted    Status = "COMPLETED"
-	StatusCommitting   Status = "COMMITTING"
-	StatusError        Status = "ERROR"
-)
-
-type Action string
-
-const (
-	ActionKeep    Action = "KEEP"
-	ActionPending Action = "PENDING"
-	ActionReject  Action = "REJECT"
 )
 
 type WriteActions struct {
@@ -89,7 +71,7 @@ type Session struct {
 	directory  string
 	filter     *image.ImageFilters
 	targetKeep int
-	status     Status
+	status     shared.SessionStatus
 	createdAt  time.Time
 	updatedAt  time.Time
 
@@ -97,7 +79,7 @@ type Session struct {
 	queue      []*image.Image
 	currentIdx int
 	undoStack  []UndoEntry
-	actions    map[scalar.ID]Action
+	actions    map[scalar.ID]shared.ImageAction
 
 	roundHistory []RoundSnapshot
 	currentRound int
@@ -110,16 +92,16 @@ type RoundSnapshot struct {
 }
 
 func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
-	actions := make(map[scalar.ID]Action)
+	actions := make(map[scalar.ID]shared.ImageAction)
 	for _, img := range images {
-		actions[img.ID()] = ActionPending
+		actions[img.ID()] = shared.ImageActionPending
 	}
 	return &Session{
 		id:           id,
 		directory:    directory,
 		filter:       filter,
 		targetKeep:   targetKeep,
-		status:       StatusActive,
+		status:       shared.SessionStatusActive,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),
 		images:       images,
@@ -148,7 +130,7 @@ func (s *Session) TargetKeep() int {
 	return s.targetKeep
 }
 
-func (s *Session) Status() Status {
+func (s *Session) Status() shared.SessionStatus {
 	return s.status
 }
 
@@ -181,11 +163,11 @@ func (s *Session) Stats() *Stats {
 		img := s.queue[i]
 		action := s.actions[img.ID()]
 		switch action {
-		case ActionKeep:
+		case shared.ImageActionKeep:
 			stats.kept++
-		case ActionPending:
+		case shared.ImageActionPending:
 			stats.reviewed++
-		case ActionReject:
+		case shared.ImageActionReject:
 			stats.rejected++
 		}
 	}
@@ -196,7 +178,7 @@ func (s *Session) Stats() *Stats {
 }
 
 func (s *Session) CanCommit() bool {
-	if s.status == StatusCommitting || s.status == StatusError {
+	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
 		return false
 	}
 
@@ -212,8 +194,8 @@ func (s *Session) CanUndo() bool {
 	return len(s.undoStack) > 0
 }
 
-func (s *Session) MarkImage(imageID scalar.ID, action Action) error {
-	if s.status != StatusActive {
+func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error {
+	if s.status != shared.SessionStatusActive {
 		return ErrSessionNotActive
 	}
 
@@ -252,13 +234,13 @@ func (s *Session) MarkImage(imageID scalar.ID, action Action) error {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]
-				if action == ActionPending || action == ActionKeep {
+				if action == shared.ImageActionPending || action == shared.ImageActionKeep {
 					newQueue = append(newQueue, img)
 				}
 			}
 			if len(newQueue) > 0 {
 				if len(newQueue) <= s.targetKeep {
-					s.status = StatusCompleted
+					s.status = shared.SessionStatusCompleted
 				} else {
 					s.roundHistory = append(s.roundHistory, RoundSnapshot{
 						queue:      s.queue,
@@ -271,10 +253,10 @@ func (s *Session) MarkImage(imageID scalar.ID, action Action) error {
 					s.undoStack = make([]UndoEntry, 0)
 				}
 			} else {
-				s.status = StatusCompleted
+				s.status = shared.SessionStatusCompleted
 			}
 		} else {
-			s.status = StatusCompleted
+			s.status = shared.SessionStatusCompleted
 		}
 	}
 
@@ -293,7 +275,7 @@ func (s *Session) Undo() error {
 		s.queue = lastRound.queue
 		s.currentIdx = lastRound.currentIdx
 		s.undoStack = lastRound.undoStack
-		s.status = StatusActive
+		s.status = shared.SessionStatusActive
 		s.updatedAt = time.Now()
 		return nil
 	}
@@ -306,7 +288,7 @@ func (s *Session) Undo() error {
 			s.actions[img.ID()] = lastEntry.action
 
 			s.currentIdx--
-			s.status = StatusActive
+			s.status = shared.SessionStatusActive
 			s.updatedAt = time.Now()
 			return nil
 		}
@@ -319,20 +301,20 @@ func (s *Session) Images() []*image.Image {
 	return s.images
 }
 
-func (s *Session) GetAction(imageID scalar.ID) Action {
+func (s *Session) GetAction(imageID scalar.ID) shared.ImageAction {
 	if action, exists := s.actions[imageID]; exists {
 		return action
 	}
-	return ActionPending
+	return shared.ImageActionPending
 }
 
-func (s *Session) SetAction(imageID scalar.ID, action Action) {
+func (s *Session) SetAction(imageID scalar.ID, action shared.ImageAction) {
 	s.actions[imageID] = action
 }
 
 type UndoEntry struct {
 	imageID scalar.ID
-	action  Action
+	action  shared.ImageAction
 }
 
 var (

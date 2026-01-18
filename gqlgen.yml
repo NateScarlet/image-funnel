@@ -26,3 +26,7 @@ models:
     model: main/internal/scalar.ID
   Image:
     model: main/internal/application/image.ImageDTO
+  ImageAction:
+    model: main/internal/shared.ImageAction
+  SessionStatus:
+    model: main/internal/shared.SessionStatus

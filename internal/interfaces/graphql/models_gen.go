@@ -3,13 +3,11 @@
 package graphql
 
 import (
-	"bytes"
-	"fmt"
-	"io"
 	"main/internal/application/image"
 	"main/internal/application/session"
+	"main/internal/enum"
 	"main/internal/scalar"
-	"strconv"
+	"main/internal/shared"
 )
 
 type CommitChangesInput struct {
@@ -40,10 +38,10 @@ type CreateSessionPayload struct {
 }
 
 type MarkImageInput struct {
-	SessionID        scalar.ID   `json:"sessionId"`
-	ImageID          scalar.ID   `json:"imageId"`
-	Action           ImageAction `json:"action"`
-	ClientMutationID *string     `json:"clientMutationId,omitempty"`
+	SessionID        scalar.ID                         `json:"sessionId"`
+	ImageID          scalar.ID                         `json:"imageId"`
+	Action           enum.Enum[shared.ImageActionMeta] `json:"action"`
+	ClientMutationID *string                           `json:"clientMutationId,omitempty"`
 }
 
 type MarkImagePayload struct {
@@ -78,124 +76,4 @@ type UndoInput struct {
 type UndoPayload struct {
 	Session          *session.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string             `json:"clientMutationId,omitempty"`
-}
-
-type ImageAction string
-
-const (
-	ImageActionKeep    ImageAction = "KEEP"
-	ImageActionPending ImageAction = "PENDING"
-	ImageActionReject  ImageAction = "REJECT"
-)
-
-var AllImageAction = []ImageAction{
-	ImageActionKeep,
-	ImageActionPending,
-	ImageActionReject,
-}
-
-func (e ImageAction) IsValid() bool {
-	switch e {
-	case ImageActionKeep, ImageActionPending, ImageActionReject:
-		return true
-	}
-	return false
-}
-
-func (e ImageAction) String() string {
-	return string(e)
-}
-
-func (e *ImageAction) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = ImageAction(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid ImageAction", str)
-	}
-	return nil
-}
-
-func (e ImageAction) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *ImageAction) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e ImageAction) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type SessionStatus string
-
-const (
-	SessionStatusInitializing SessionStatus = "INITIALIZING"
-	SessionStatusActive       SessionStatus = "ACTIVE"
-	SessionStatusPaused       SessionStatus = "PAUSED"
-	SessionStatusCompleted    SessionStatus = "COMPLETED"
-	SessionStatusCommitting   SessionStatus = "COMMITTING"
-	SessionStatusError        SessionStatus = "ERROR"
-)
-
-var AllSessionStatus = []SessionStatus{
-	SessionStatusInitializing,
-	SessionStatusActive,
-	SessionStatusPaused,
-	SessionStatusCompleted,
-	SessionStatusCommitting,
-	SessionStatusError,
-}
-
-func (e SessionStatus) IsValid() bool {
-	switch e {
-	case SessionStatusInitializing, SessionStatusActive, SessionStatusPaused, SessionStatusCompleted, SessionStatusCommitting, SessionStatusError:
-		return true
-	}
-	return false
-}
-
-func (e SessionStatus) String() string {
-	return string(e)
-}
-
-func (e *SessionStatus) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = SessionStatus(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid SessionStatus", str)
-	}
-	return nil
-}
-
-func (e SessionStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *SessionStatus) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e SessionStatus) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
 }

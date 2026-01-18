@@ -43,7 +43,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
 		Directory:    sess.Directory(),
 		Filter:       toDTOFilter(sess.Filter()),
 		TargetKeep:   sess.TargetKeep(),
-		Status:       Status(sess.Status()),
+		Status:       sess.Status(),
 		Stats:        stats,
 		CreatedAt:    sess.CreatedAt(),
 		UpdatedAt:    sess.UpdatedAt(),

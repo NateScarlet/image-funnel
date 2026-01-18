@@ -8,6 +8,7 @@ import (
 	"main/internal/application/session"
 	"main/internal/pubsub"
 	"main/internal/scalar"
+	"main/internal/shared"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -27,7 +28,7 @@ func TestPublishSession(t *testing.T) {
 	dto := &session.SessionDTO{
 		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:    session.StatusActive,
+		Status:    shared.SessionStatusActive,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -43,7 +44,7 @@ func TestSubscribeSession(t *testing.T) {
 	dto := &session.SessionDTO{
 		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:    session.StatusActive,
+		Status:    shared.SessionStatusActive,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

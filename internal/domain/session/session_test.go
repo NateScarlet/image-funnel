@@ -5,6 +5,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
+	"main/internal/shared"
 	"testing"
 	"time"
 
@@ -16,13 +17,13 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 	filter := image.NewImageFilters([]int{0, 1, 2})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	assert.NotEmpty(t, session.ID(), "Session ID should not be empty")
 	assert.Equal(t, "/test", session.Directory(), "Directory should match")
 	assert.Equal(t, filter, session.Filter(), "Filter should match")
 	assert.Equal(t, 5, session.TargetKeep(), "TargetKeep should match")
-	assert.Equal(t, StatusActive, session.Status(), "Status should be ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Status should be ACTIVE")
 	assert.Equal(t, 10, len(session.Images()), "Images count should match")
 	assert.Equal(t, 10, len(session.queue), "Queue count should match")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
@@ -33,7 +34,7 @@ func TestStats_InitialState(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	stats := session.Stats()
 
@@ -49,20 +50,20 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 3; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionKeep)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionKeep)
 		require.NoError(t, err)
 	}
 
 	for i := 3; i < 6; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionPending)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionPending)
 		require.NoError(t, err)
 	}
 
 	for i := 6; i < 9; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionReject)
 		require.NoError(t, err)
 	}
 
@@ -80,13 +81,13 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	currentImage := session.CurrentImage()
 	assert.NotNil(t, currentImage, "CurrentImage should not be nil")
 	assert.Equal(t, images[0].ID(), currentImage.ID(), "CurrentImage ID should match")
 
-	err := session.MarkImage(session.queue[0].ID(), ActionKeep)
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	currentImage = session.CurrentImage()
@@ -98,14 +99,14 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	imageID := session.queue[0].ID()
-	err := session.MarkImage(imageID, ActionKeep)
+	err := session.MarkImage(imageID, shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, session.CurrentIndex(), "CurrentIndex should be 1")
-	assert.Equal(t, ActionKeep, session.GetAction(session.queue[0].ID()), "Action should be KEEP")
+	assert.Equal(t, shared.ImageActionKeep, session.GetAction(session.queue[0].ID()), "Action should be KEEP")
 	assert.True(t, session.CanUndo(), "CanUndo should be true")
 }
 
@@ -113,23 +114,23 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	imageID := session.queue[2].ID()
-	err := session.MarkImage(imageID, ActionPending)
+	err := session.MarkImage(imageID, shared.ImageActionPending)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, ActionPending, session.GetAction(session.queue[2].ID()), "Action should be PENDING")
+	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[2].ID()), "Action should be PENDING")
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
-	err := session.MarkImage(scalar.ToID("invalid-id"), ActionKeep)
+	err := session.MarkImage(scalar.ToID("invalid-id"), shared.ImageActionKeep)
 	assert.Error(t, err, "Should return error for invalid image ID")
 	assert.Equal(t, ErrSessionNotFound, err, "Error should be ErrSessionNotFound")
 }
@@ -138,10 +139,10 @@ func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
-	session.status = StatusCompleted
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
+	session.status = shared.SessionStatusCompleted
 
-	err := session.MarkImage(session.queue[0].ID(), ActionKeep)
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
 	assert.Error(t, err, "Should return error when session is not active")
 	assert.Equal(t, ErrSessionNotActive, err, "Error should be ErrSessionNotActive")
 }
@@ -150,34 +151,34 @@ func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionReject)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Status should be COMPLETED")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Status should be COMPLETED")
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%3 == 0 {
-			action = ActionPending
+			action = shared.ImageActionPending
 		} else if i%3 == 1 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE")
 
 	newRoundStats := session.Stats()
 	assert.Equal(t, 0, newRoundStats.Processed(), "New round processed should be 0")
@@ -193,18 +194,18 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%2 == 0 {
-			action = ActionPending
+			action = shared.ImageActionPending
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE")
 
 	expectedQueueLength := 10
 	assert.Equal(t, expectedQueueLength, len(session.queue), "Queue length should be %d", expectedQueueLength)
@@ -215,7 +216,7 @@ func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	assert.False(t, session.CanCommit(), "CanCommit should return false for initial state")
 }
@@ -224,10 +225,10 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 3; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionKeep)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionKeep)
 		require.NoError(t, err)
 	}
 
@@ -238,8 +239,8 @@ func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
-	session.status = StatusCommitting
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
+	session.status = shared.SessionStatusCommitting
 
 	assert.False(t, session.CanCommit(), "CanCommit should return false for COMMITTING status")
 }
@@ -248,8 +249,8 @@ func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
-	session.status = StatusError
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
+	session.status = shared.SessionStatusError
 
 	assert.False(t, session.CanCommit(), "CanCommit should return false for ERROR status")
 }
@@ -258,7 +259,7 @@ func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	assert.False(t, session.CanUndo(), "CanUndo should return false for initial state")
 }
@@ -267,9 +268,9 @@ func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
-	err := session.MarkImage(session.queue[0].ID(), ActionKeep)
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	assert.True(t, session.CanUndo(), "CanUndo should return true after marking images")
@@ -279,7 +280,7 @@ func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	assert.False(t, session.CanUndo(), "CanUndo should return false when undoStack is empty")
 }
@@ -288,18 +289,18 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%2 == 0 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Session status should be COMPLETED when new queue length equals target")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session status should be COMPLETED when new queue length equals target")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with kept images")
 
 	stats := session.Stats()
@@ -310,14 +311,14 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionReject)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Session status should be COMPLETED when all images are rejected")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session status should be COMPLETED when all images are rejected")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with rejected images")
 }
 
@@ -325,12 +326,12 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
-	err := session.MarkImage(session.queue[0].ID(), ActionReject)
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionReject)
 	require.NoError(t, err)
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after rejecting one image in first round")
 
 	stats := session.Stats()
@@ -341,26 +342,26 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	keptImageIDs := make(map[scalar.ID]bool)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%3 == 0 {
-			action = ActionPending
+			action = shared.ImageActionPending
 		} else if i%3 == 1 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		imageID := session.queue[i].ID()
-		if action == ActionKeep {
+		if action == shared.ImageActionKeep {
 			keptImageIDs[imageID] = true
 		}
 		err := session.MarkImage(imageID, action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE")
 
 	expectedQueueLength := 7
 	assert.Equal(t, expectedQueueLength, len(session.queue), "Queue length should be %d", expectedQueueLength)
@@ -368,7 +369,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 
 	for _, img := range session.queue {
 		if keptImageIDs[img.ID()] {
-			assert.Equal(t, ActionKeep, session.GetAction(img.ID()), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), session.GetAction(img.ID()))
+			assert.Equal(t, shared.ImageActionKeep, session.GetAction(img.ID()), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), session.GetAction(img.ID()))
 		}
 	}
 }
@@ -377,10 +378,10 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	imageID := session.queue[0].ID()
-	err := session.MarkImage(imageID, ActionKeep)
+	err := session.MarkImage(imageID, shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, session.CurrentIndex(), "CurrentIndex should be 1")
@@ -389,7 +390,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.Equal(t, ActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING")
+	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
@@ -397,7 +398,7 @@ func TestUndo_NothingToUndo_ShouldReturnError(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	err := session.Undo()
 	assert.Error(t, err, "Should return error when nothing to undo")
@@ -408,19 +409,19 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionReject)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Status should be COMPLETED")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Status should be COMPLETED")
 
 	err := session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, StatusActive, session.Status(), "Status should be restored to ACTIVE")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Status should be restored to ACTIVE")
 }
 
 func TestWriteActions_Getters(t *testing.T) {
@@ -490,30 +491,30 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%3 == 0 {
-			action = ActionPending
+			action = shared.ImageActionPending
 		} else if i%3 == 1 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after first round")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE after first round")
 	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 for second round")
 
-	err := session.MarkImage(session.queue[0].ID(), ActionKeep)
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	err = session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, ActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
+	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
@@ -521,20 +522,20 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i%3 == 0 {
-			action = ActionPending
+			action = shared.ImageActionPending
 		} else if i%3 == 1 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after first round")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE after first round")
 	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
 	assert.Equal(t, 1, session.currentRound, "CurrentRound should be 1")
 
@@ -544,61 +545,63 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 	assert.Equal(t, 0, session.currentRound, "CurrentRound should be 0 after undo to previous round")
 	assert.Equal(t, 10, len(session.queue), "Queue should be restored to 10 images")
 	assert.Equal(t, 10, session.CurrentIndex(), "CurrentIndex should be 10 after undo to previous round")
-	assert.Equal(t, StatusActive, session.Status(), "Session status should be ACTIVE after undo")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE after undo")
 }
 
 func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i >= 5 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED when kept <= target")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session should be COMPLETED when kept <= target")
 }
 
 func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		action := ActionKeep
+		action := shared.ImageActionKeep
 		if i >= 5 {
-			action = ActionReject
+			action = shared.ImageActionReject
 		}
 		err := session.MarkImage(session.queue[i].ID(), action)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED when kept == target")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session should be COMPLETED when kept == target")
 }
 
 func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
 	filter := image.NewImageFilters([]int{0})
 	images := createTestImages(10)
 
-	session := NewSession("/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
 
 	for i := 0; i < 10; i++ {
-		err := session.MarkImage(session.queue[i].ID(), ActionReject)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionReject)
 		require.NoError(t, err)
 	}
 
-	assert.Equal(t, StatusCompleted, session.Status(), "Session should be COMPLETED")
+	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session should be COMPLETED")
 
 	err := session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, StatusActive, session.Status(), "Session should be ACTIVE after undo")
-	assert.Equal(t, ActionPending, session.GetAction(session.queue[9].ID()), "Last image action should be restored to PENDING")
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session should be ACTIVE after undo")
+	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[9].ID()), "Last image action should be restored to PENDING")
 }
+
+

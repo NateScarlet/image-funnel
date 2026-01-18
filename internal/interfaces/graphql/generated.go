@@ -10,7 +10,9 @@ import (
 	"main/internal/application/directory"
 	"main/internal/application/image"
 	"main/internal/application/session"
+	"main/internal/enum"
 	"main/internal/scalar"
+	"main/internal/shared"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -187,8 +189,6 @@ type QueryResolver interface {
 	Session(ctx context.Context, id scalar.ID) (*session.SessionDTO, error)
 }
 type SessionResolver interface {
-	Status(ctx context.Context, obj *session.SessionDTO) (SessionStatus, error)
-
 	CreatedAt(ctx context.Context, obj *session.SessionDTO) (string, error)
 	UpdatedAt(ctx context.Context, obj *session.SessionDTO) (string, error)
 }
@@ -824,8 +824,14 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on 
   directories: [Directory!]! @goField(forceResolver: true)
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters @goModel(model: "main/internal/application/image.ImageFilters") {
+	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters
+  @goModel(model: "main/internal/application/image.ImageFilters") {
   rating: [Int!]
+}
+
+input ImageFiltersInput
+  @goModel(model: "main/internal/application/image.ImageFilters") {
+  rating: [Int!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/application/image.ImageDTO") {
@@ -946,10 +952,6 @@ extend type Mutation {
   targetKeep: Int!
   directoryId: ID!
   clientMutationId: String
-}
-
-input ImageFiltersInput @goModel(model: "main/internal/application/image.ImageFilters") {
-  rating: [Int!]!
 }
 
 type CreateSessionPayload {
@@ -2933,10 +2935,10 @@ func (ec *executionContext) _Session_status(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_Session_status,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Session().Status(ctx, obj)
+			return obj.Status, nil
 		},
 		nil,
-		ec.marshalNSessionStatus2mainᚋinternalᚋinterfacesᚋgraphqlᚐSessionStatus,
+		ec.marshalNSessionStatus2mainᚋinternalᚋenumᚐEnum,
 		true,
 		true,
 	)
@@ -2946,8 +2948,8 @@ func (ec *executionContext) fieldContext_Session_status(_ context.Context, field
 	fc = &graphql.FieldContext{
 		Object:     "Session",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type SessionStatus does not have child fields")
 		},
@@ -5202,7 +5204,7 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 			it.ImageID = data
 		case "action":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("action"))
-			data, err := ec.unmarshalNImageAction2mainᚋinternalᚋinterfacesᚋgraphqlᚐImageAction(ctx, v)
+			data, err := ec.unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6066,41 +6068,10 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "status":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Session_status(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
+			out.Values[i] = ec._Session_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
 			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "stats":
 			out.Values[i] = ec._Session_stats(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6858,13 +6829,13 @@ func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context
 	return v
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋinterfacesᚋgraphqlᚐImageAction(ctx context.Context, v any) (ImageAction, error) {
-	var res ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋinterfacesᚋgraphqlᚐImageAction(ctx context.Context, sel ast.SelectionSet, v ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -7066,13 +7037,13 @@ func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋapplicatio
 	return ec._SessionStats(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNSessionStatus2mainᚋinternalᚋinterfacesᚋgraphqlᚐSessionStatus(ctx context.Context, v any) (SessionStatus, error) {
-	var res SessionStatus
+func (ec *executionContext) unmarshalNSessionStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.SessionStatusMeta], error) {
+	var res enum.Enum[shared.SessionStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNSessionStatus2mainᚋinternalᚋinterfacesᚋgraphqlᚐSessionStatus(ctx context.Context, sel ast.SelectionSet, v SessionStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNSessionStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.SessionStatusMeta]) graphql.Marshaler {
 	return v
 }
 
