@@ -131,6 +131,14 @@
               <span class="min-w-24">
                 {{ formatDate(currentImage.modTime) }}
               </span>
+              <div class="w-px h-4 bg-white/30 mx-1"></div>
+              <span class="min-w-24">
+                {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
+              </span>
+              <div class="w-px h-4 bg-white/30 mx-1"></div>
+              <span class="text-green-400 min-w-24">
+                保留: {{ stats?.kept || 0 }} / {{ session?.targetKeep || 0 }}
+              </span>
             </template>
           </ImageViewer>
 
