@@ -23,7 +23,6 @@ try {
         Write-Host "后端 GraphQL 代码更新失败！" -ForegroundColor Red
         exit 1
     }
-    Write-Host "后端 GraphQL 代码更新成功！" -ForegroundColor Green
 
     # 搜索未实现的 resolver
     Write-Host "检查未实现的 resolver..." -ForegroundColor Cyan
@@ -37,9 +36,10 @@ try {
         foreach ($file in $notImplementedFiles) {
             Write-Host "  - $($file.FullName)" -ForegroundColor Yellow
         }
+        Write-Host "后端 GraphQL 代码更新成功，但还需要实现 resolver！" -ForegroundColor Yellow
     }
     else {
-        Write-Host "没有发现未实现的 resolver" -ForegroundColor Green
+        Write-Host "后端 GraphQL 代码更新成功！" -ForegroundColor Green
     }
 }
 finally {
