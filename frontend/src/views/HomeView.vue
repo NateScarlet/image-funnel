@@ -68,7 +68,7 @@
               选择目录
             </label>
             <div class="bg-slate-700 rounded-lg p-4">
-              <div v-if="currentDirectory?.parentId" class="mb-4">
+              <div v-if="!currentDirectory?.root" class="mb-4">
                 <button
                   class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
                   @click="goToParent"
@@ -116,9 +116,7 @@
                   <div class="flex-1 min-w-0">
                     <h3 class="font-semibold text-lg mb-1">
                       {{
-                        currentDirectory.parentId
-                          ? currentDirectory.path
-                          : rootPath
+                        currentDirectory.root ? rootPath : currentDirectory.path
                       }}
                     </h3>
                     <div class="text-xs text-slate-300 space-y-1">

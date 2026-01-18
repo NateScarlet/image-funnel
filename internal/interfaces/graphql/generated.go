@@ -75,6 +75,7 @@ type ComplexityRoot struct {
 		ParentID           func(childComplexity int) int
 		Path               func(childComplexity int) int
 		RatingCounts       func(childComplexity int) int
+		Root               func(childComplexity int) int
 		SubdirectoryCount  func(childComplexity int) int
 	}
 
@@ -315,6 +316,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.RatingCounts(childComplexity), true
+	case "Directory.root":
+		if e.complexity.Directory.Root == nil {
+			break
+		}
+
+		return e.complexity.Directory.Root(childComplexity), true
 	case "Directory.subdirectoryCount":
 		if e.complexity.Directory.SubdirectoryCount == nil {
 			break
@@ -798,6 +805,7 @@ directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on 
   id: ID!
   parentId: ID
   path: String!
+  root: Boolean!
   imageCount: Int!
   subdirectoryCount: Int!
   latestImageModTime: Time!
@@ -1491,6 +1499,35 @@ func (ec *executionContext) fieldContext_Directory_path(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Directory_root(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_root,
+		func(ctx context.Context) (any, error) {
+			return obj.Root, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_root(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Directory_imageCount(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1701,6 +1738,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_parentId(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
 			case "imageCount":
 				return ec.fieldContext_Directory_imageCount(ctx, field)
 			case "subdirectoryCount":
@@ -2329,6 +2368,8 @@ func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, fi
 				return ec.fieldContext_Directory_parentId(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
 			case "imageCount":
 				return ec.fieldContext_Directory_imageCount(ctx, field)
 			case "subdirectoryCount":
@@ -5338,6 +5379,11 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = ec._Directory_parentId(ctx, field, obj)
 		case "path":
 			out.Values[i] = ec._Directory_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "root":
+			out.Values[i] = ec._Directory_root(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

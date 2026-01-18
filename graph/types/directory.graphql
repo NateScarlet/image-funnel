@@ -2,6 +2,7 @@ type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO
   id: ID!
   parentId: ID
   path: String!
+  root: Boolean!
   imageCount: Int!
   subdirectoryCount: Int!
   latestImageModTime: Time!

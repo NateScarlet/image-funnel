@@ -3,6 +3,7 @@ query GetDirectories($id: ID) {
     id
     parentId
     path
+    root
     imageCount
     subdirectoryCount
     latestImageModTime
@@ -16,6 +17,7 @@ query GetDirectories($id: ID) {
       id
       parentId
       path
+      root
       imageCount
       subdirectoryCount
       latestImageModTime
