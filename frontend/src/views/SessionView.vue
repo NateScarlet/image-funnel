@@ -231,7 +231,7 @@
 
         <div class="space-y-3">
           <button
-            :disabled="!session?.canUndo || undoing"
+            :disabled="!canUndo"
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               undo();
@@ -401,7 +401,9 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
   }
 }
 
+const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
+  if (!canUndo.value) return;
   undoing.value = true;
 
   try {
