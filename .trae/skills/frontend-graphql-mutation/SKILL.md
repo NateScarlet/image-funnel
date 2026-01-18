@@ -14,6 +14,7 @@ description: "添加新的 GraphQL 变更，包括创建变更文件、使用类
 ## 使用变更
 
 在组件中使用 `@/graphql/utils/mutate` 进行 mutations。
+不需要手动处理错误，有全局错误处理机制。
 
 ## 注意事项
 

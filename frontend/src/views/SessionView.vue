@@ -308,7 +308,6 @@ import {
 import CommitModal from "../components/CommitModal.vue";
 import ImageViewer from "../components/ImageViewer.vue";
 import useEventListeners from "../composables/useEventListeners";
-import useNotification from "../composables/useNotification";
 import {
   mdiMenu,
   mdiUndo,
@@ -332,8 +331,6 @@ const showCommitModal = ref<boolean>(false);
 const showMenu = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
-
-const { showError } = useNotification();
 
 const touchStartX = ref<number>(0);
 const touchStartY = ref<number>(0);
@@ -399,10 +396,6 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
         },
       },
     });
-  } catch (err: unknown) {
-    showError(
-      "操作失败: " + (err instanceof Error ? err.message : "Unknown error"),
-    );
   } finally {
     marking.value = false;
   }
@@ -415,10 +408,6 @@ async function undo() {
     await mutate(UndoDocument, {
       variables: { input: { sessionId } },
     });
-  } catch (err: unknown) {
-    showError(
-      "撤销失败: " + (err instanceof Error ? err.message : "Unknown error"),
-    );
   } finally {
     undoing.value = false;
   }

@@ -259,13 +259,6 @@
           </button>
         </div>
       </div>
-
-      <div
-        v-if="error"
-        class="bg-red-900 border border-red-700 rounded-lg p-4 mb-6"
-      >
-        <p class="text-red-200">{{ error }}</p>
-      </div>
     </div>
   </div>
 </template>
@@ -291,7 +284,6 @@ const { presets, getPreset } = usePresets();
 
 const loadingCount = ref(0);
 const creatingSession = ref(false);
-const error = ref<string>("");
 
 const selectedPresetId = ref<string>("");
 const targetKeep = ref<number>(10);
@@ -417,7 +409,6 @@ function goToParent() {
 
 async function createSession() {
   creatingSession.value = true;
-  error.value = "";
 
   try {
     const { data } = await mutate(CreateSessionDocument, {
@@ -436,9 +427,6 @@ async function createSession() {
     if (data?.createSession) {
       router.push(`/session/${data.createSession.session.id}`);
     }
-  } catch (err: unknown) {
-    error.value =
-      "创建会话失败: " + (err instanceof Error ? err.message : "Unknown error");
   } finally {
     creatingSession.value = false;
   }

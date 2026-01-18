@@ -15,6 +15,7 @@ description: "添加新的 GraphQL 查询，包括创建查询文件、使用类
 
 在组件中使用 `@/graphql/utils/useQuery` 获取数据，数据是响应式的不需要手动处理。
 在组件中使用 `@/graphql/utils/query` 进行单次异步查询，可搭配 `@/composables/useAsyncTask` 实现复杂查询。
+不需要手动处理错误，有全局错误处理机制。
 
 ## 项目特定规则
 
