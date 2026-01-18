@@ -114,7 +114,7 @@
                   </div>
                   <div class="flex-1 min-w-0">
                     <h3 class="font-semibold text-lg mb-1">
-                      {{ currentDirectory.path || rootPath || "根目录" }}
+                      {{ rootPath || "根目录" }}
                     </h3>
                     <div class="text-xs text-slate-300 space-y-1">
                       <div v-if="currentDirectory.latestImageModTime">
@@ -266,8 +266,6 @@
       >
         <p class="text-red-200">{{ error }}</p>
       </div>
-
-      <div v-if="loading" class="text-center text-slate-400">加载中...</div>
     </div>
   </div>
 </template>
@@ -292,7 +290,6 @@ const router = useRouter();
 const { presets, getPreset } = usePresets();
 
 const loadingCount = ref(0);
-const loading = computed(() => loadingCount.value > 0 || creatingSession.value);
 const creatingSession = ref(false);
 const error = ref<string>("");
 
