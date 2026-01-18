@@ -64,7 +64,7 @@ func TestAnalyzeDirectory(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := scanner.AnalyzeDirectory(tmpDir)
+	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := scanner.AnalyzeDirectory(".")
 	require.NoError(t, err)
 	assert.Equal(t, 1, imageCount)
 	assert.Equal(t, 0, subdirectoryCount)
@@ -94,6 +94,67 @@ func TestValidateDirectoryPath_Absolute(t *testing.T) {
 	scanner := NewScanner(tmpDir)
 
 	err := scanner.ValidateDirectoryPath("/absolute/path")
+	assert.Error(t, err)
+}
+
+func TestValidateDirectoryPath_WithDriveLetter(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	err := scanner.ValidateDirectoryPath("C:\\Windows\\System32")
+	assert.Error(t, err)
+}
+
+func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	testCases := []string{
+		"../escape",
+		"../../escape",
+		"./../escape",
+		"subdir/../../escape",
+		"..\\escape",
+		"..\\..\\escape",
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc, func(t *testing.T) {
+			err := scanner.ValidateDirectoryPath(tc)
+			assert.Error(t, err, "path traversal should be rejected: %s", tc)
+		})
+	}
+}
+
+func TestAnalyzeDirectory_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	_, _, _, _, _, err := scanner.AnalyzeDirectory("../escape")
+	assert.Error(t, err)
+}
+
+func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	_, _, _, _, _, err := scanner.AnalyzeDirectory("/absolute/path")
+	assert.Error(t, err)
+}
+
+func TestScanDirectories_PathTraversal(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	_, err := scanner.ScanDirectories("../escape")
+	assert.Error(t, err)
+}
+
+func TestScanDirectories_AbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	_, err := scanner.ScanDirectories("/absolute/path")
 	assert.Error(t, err)
 }
 

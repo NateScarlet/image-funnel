@@ -70,6 +70,12 @@ func (s *Scanner) Scan(dirPath string) ([]*directory.ImageInfo, error) {
 }
 
 func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, error) {
+	if relPath != "" {
+		if err := s.ValidateDirectoryPath(relPath); err != nil {
+			return nil, err
+		}
+	}
+
 	absPath := filepath.Join(s.rootDir, relPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
@@ -84,9 +90,8 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, e
 		}
 
 		subRelPath := filepath.Join(relPath, entry.Name())
-		subAbsPath := filepath.Join(absPath, entry.Name())
 
-		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(subAbsPath)
+		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
 		if err != nil {
 			continue
 		}
@@ -110,7 +115,12 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, e
 	return directories, nil
 }
 
-func (s *Scanner) AnalyzeDirectory(absPath string) (int, int, time.Time, string, map[int]int, error) {
+func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, time.Time, string, map[int]int, error) {
+	if err := s.ValidateDirectoryPath(relPath); err != nil {
+		return 0, 0, time.Time{}, "", nil, err
+	}
+
+	absPath := filepath.Join(s.rootDir, relPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return 0, 0, time.Time{}, "", nil, err
@@ -164,6 +174,10 @@ func (s *Scanner) AnalyzeDirectory(absPath string) (int, int, time.Time, string,
 }
 
 func (s *Scanner) ValidateDirectoryPath(relPath string) error {
+	if relPath == "" {
+		relPath = "."
+	}
+
 	if strings.Contains(relPath, "..") {
 		return fmt.Errorf("invalid path: contains parent directory reference")
 	}

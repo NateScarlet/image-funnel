@@ -36,16 +36,15 @@ func (r *directoryResolver) RatingCounts(ctx context.Context, obj *directory.Dir
 
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *directory.DirectoryDTO) ([]*directory.DirectoryDTO, error) {
-	return r.app.GetDirectories(ctx, obj.Path)
+	return r.app.GetDirectories(ctx, obj.ID)
 }
 
 // Directory is the resolver for the directory field.
 func (r *queryResolver) Directory(ctx context.Context, id *string) (*directory.DirectoryDTO, error) {
-	path := ""
-	if id != nil {
-		path = *id
+	if id == nil {
+		return r.app.GetDirectory(ctx, "")
 	}
-	return r.app.GetDirectory(ctx, path)
+	return r.app.GetDirectory(ctx, *id)
 }
 
 // Directory returns DirectoryResolver implementation.

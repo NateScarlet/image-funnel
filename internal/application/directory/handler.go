@@ -15,14 +15,27 @@ func NewHandler(scanner directory.Scanner) *Handler {
 	}
 }
 
-func (h *Handler) GetDirectory(ctx context.Context, path string) (*DirectoryDTO, error) {
+func (h *Handler) GetDirectory(ctx context.Context, id string) (*DirectoryDTO, error) {
+	if id == "" {
+		id = directory.EncodeDirectoryID(".")
+	}
+
+	path, err := directory.DecodeDirectoryID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
+		return nil, err
+	}
+
 	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := h.scanner.AnalyzeDirectory(path)
 	if err != nil {
 		return nil, err
 	}
 
 	return &DirectoryDTO{
-		ID:                 path,
+		ID:                 id,
 		Path:               path,
 		ImageCount:         imageCount,
 		SubdirectoryCount:  subdirectoryCount,
@@ -32,8 +45,17 @@ func (h *Handler) GetDirectory(ctx context.Context, path string) (*DirectoryDTO,
 	}, nil
 }
 
-func (h *Handler) GetDirectories(ctx context.Context, relPath string) ([]*DirectoryDTO, error) {
-	dirs, err := h.scanner.ScanDirectories(relPath)
+func (h *Handler) GetDirectories(ctx context.Context, id string) ([]*DirectoryDTO, error) {
+	path, err := directory.DecodeDirectoryID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
+		return nil, err
+	}
+
+	dirs, err := h.scanner.ScanDirectories(path)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +63,7 @@ func (h *Handler) GetDirectories(ctx context.Context, relPath string) ([]*Direct
 	result := make([]*DirectoryDTO, len(dirs))
 	for i, dir := range dirs {
 		result[i] = &DirectoryDTO{
-			ID:                 dir.Path(),
+			ID:                 directory.EncodeDirectoryID(dir.Path()),
 			Path:               dir.Path(),
 			ImageCount:         dir.ImageCount(),
 			SubdirectoryCount:  dir.SubdirectoryCount(),

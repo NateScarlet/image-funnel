@@ -7,6 +7,7 @@ import (
 )
 
 type DirectoryInfo struct {
+	id                 string
 	path               string
 	imageCount         int
 	subdirectoryCount  int
@@ -17,6 +18,7 @@ type DirectoryInfo struct {
 
 func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImageModTime time.Time, latestImagePath string, ratingCounts map[int]int) *DirectoryInfo {
 	return &DirectoryInfo{
+		id:                 EncodeDirectoryID(path),
 		path:               path,
 		imageCount:         imageCount,
 		subdirectoryCount:  subdirectoryCount,
@@ -24,6 +26,10 @@ func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImag
 		latestImagePath:    latestImagePath,
 		ratingCounts:       ratingCounts,
 	}
+}
+
+func (d *DirectoryInfo) ID() string {
+	return d.id
 }
 
 func (d *DirectoryInfo) Path() string {
