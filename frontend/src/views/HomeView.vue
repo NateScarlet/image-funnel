@@ -41,6 +41,19 @@
           </div>
 
           <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              保留目标数量
+            </label>
+            <input
+              v-model.number="targetKeep"
+              type="number"
+              min="1"
+              max="100"
+              class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+            />
+          </div>
+
+          <div>
             <label class="block text-sm font-medium text-slate-300 mb-4">
               选择目录
             </label>
@@ -120,19 +133,6 @@
                 </div>
               </div>
             </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-slate-300 mb-2">
-              保留目标数量
-            </label>
-            <input
-              v-model.number="targetKeep"
-              type="number"
-              min="1"
-              max="100"
-              class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
-            />
           </div>
 
           <button
