@@ -1,0 +1,128 @@
+package localfs
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewScanner(t *testing.T) {
+	scanner := NewScanner(t.TempDir())
+	assert.NotNil(t, scanner)
+	assert.NotEmpty(t, scanner.rootDir)
+}
+
+func TestScan(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	testFile := filepath.Join(tmpDir, "test.jpg")
+	err := os.WriteFile(testFile, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	images, err := scanner.Scan(".")
+	require.NoError(t, err)
+	assert.Len(t, images, 1)
+	assert.Equal(t, "test.jpg", images[0].Filename())
+}
+
+func TestScan_EmptyDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	images, err := scanner.Scan(".")
+	require.NoError(t, err)
+	assert.Empty(t, images)
+}
+
+func TestScanDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	subDir := filepath.Join(tmpDir, "subdir")
+	err := os.Mkdir(subDir, 0755)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(subDir, "test.jpg")
+	err = os.WriteFile(testFile, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	dirs, err := scanner.ScanDirectories(".")
+	require.NoError(t, err)
+	assert.Len(t, dirs, 1)
+	assert.Equal(t, "subdir", dirs[0].Path())
+}
+
+func TestAnalyzeDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	testFile := filepath.Join(tmpDir, "test.jpg")
+	err := os.WriteFile(testFile, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := scanner.AnalyzeDirectory(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, imageCount)
+	assert.Equal(t, 0, subdirectoryCount)
+	assert.NotZero(t, latestModTime)
+	assert.Equal(t, testFile, latestImagePath)
+	assert.Equal(t, 1, ratingCounts[0])
+}
+
+func TestValidateDirectoryPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	err := scanner.ValidateDirectoryPath(".")
+	require.NoError(t, err)
+}
+
+func TestValidateDirectoryPath_Invalid(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	err := scanner.ValidateDirectoryPath("../test")
+	assert.Error(t, err)
+}
+
+func TestValidateDirectoryPath_Absolute(t *testing.T) {
+	tmpDir := t.TempDir()
+	scanner := NewScanner(tmpDir)
+
+	err := scanner.ValidateDirectoryPath("/absolute/path")
+	assert.Error(t, err)
+}
+
+func TestIsSupportedImage(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected bool
+	}{
+		{"image.jpg", true},
+		{"image.jpeg", true},
+		{"image.JPG", true},
+		{"image.png", true},
+		{"image.PNG", true},
+		{"image.webp", true},
+		{"image.WEBP", true},
+		{"image.avif", true},
+		{"image.AVIF", true},
+		{"image.gif", false},
+		{"image.bmp", false},
+		{"image.tiff", false},
+		{"document.pdf", false},
+		{"archive.zip", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			scanner := NewScanner(t.TempDir())
+			result := scanner.isSupportedImage(tt.filename)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

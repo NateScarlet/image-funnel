@@ -1,4 +1,4 @@
-type SessionStats {
+type SessionStats @goModel(model: "main/internal/application/session.StatsDTO") {
   total: Int!
   processed: Int!
   kept: Int!

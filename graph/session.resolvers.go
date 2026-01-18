@@ -7,19 +7,58 @@ package graph
 
 import (
 	"context"
+	"main/internal/application/session"
 )
 
 // Session is the resolver for the session field.
-func (r *queryResolver) Session(ctx context.Context, id string) (*Session, error) {
-	return r.Resolver.Session(ctx, id)
+func (r *queryResolver) Session(ctx context.Context, id string) (*session.SessionDTO, error) {
+	return r.App.GetSession(ctx, id)
+}
+
+// Status is the resolver for the status field.
+func (r *sessionResolver) Status(ctx context.Context, obj *session.SessionDTO) (SessionStatus, error) {
+	return SessionStatus(obj.Status), nil
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *sessionResolver) CreatedAt(ctx context.Context, obj *session.SessionDTO) (string, error) {
+	return obj.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *session.SessionDTO) (string, error) {
+	return obj.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
 // SessionUpdated is the resolver for the sessionUpdated field.
-func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID string) (<-chan *Session, error) {
-	return r.Resolver.SessionUpdated(ctx, sessionID)
+func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID string) (<-chan *session.SessionDTO, error) {
+	ch := make(chan *session.SessionDTO, 10)
+
+	go func() {
+		defer close(ch)
+
+		for dto, err := range r.App.SubscribeSession(ctx) {
+			if err != nil {
+				return
+			}
+			if dto.ID == sessionID {
+				select {
+				case ch <- dto:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return ch, nil
 }
+
+// Session returns SessionResolver implementation.
+func (r *Resolver) Session() SessionResolver { return &sessionResolver{r} }
 
 // Subscription returns SubscriptionResolver implementation.
 func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
 
+type sessionResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }

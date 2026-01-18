@@ -5,7 +5,7 @@ input CreateSessionInput {
   clientMutationId: String
 }
 
-input ImageFiltersInput @goModel(model: "main/internal/session.ImageFilters") {
+input ImageFiltersInput @goModel(model: "main/internal/application/session.ImageFilters") {
   rating: [Int!]!
 }
 

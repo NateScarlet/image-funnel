@@ -10,8 +10,15 @@ import (
 	"strings"
 
 	"main/graph"
-	"main/internal/url"
-	"main/internal/xmp"
+	"main/internal/application"
+	"main/internal/application/directory"
+	"main/internal/application/session"
+	"main/internal/infrastructure/ebus"
+	"main/internal/infrastructure/inmem"
+	"main/internal/infrastructure/localfs"
+	"main/internal/infrastructure/urlconv"
+	"main/internal/infrastructure/xmpsidecar"
+	"main/internal/pubsub"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -20,7 +27,7 @@ import (
 
 const defaultPort = "34898"
 
-var version = "dev" // 注入内容：构建时通过 -ldflags 覆盖此值
+var version = "dev"
 
 func generateRandomSecretKey() string {
 	key := make([]byte, 32)
@@ -54,17 +61,26 @@ func main() {
 		log.Printf("Generated random secret key for this session")
 	}
 
-	signer := url.NewSigner(secretKey, absRootDir)
-	resolver := graph.NewResolver(absRootDir, signer, version)
+	signer := urlconv.NewSigner(secretKey, absRootDir)
+
+	sessionRepo := inmem.NewSessionRepository()
+	dirScanner := localfs.NewScanner(absRootDir)
+	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.SessionDTO]()
+	eventBus := ebus.NewEventBus(sessionTopic)
+
+	sessionHandler := session.NewHandler(sessionRepo, dirScanner, eventBus, signer)
+	directoryHandler := directory.NewHandler(dirScanner)
+
+	appRoot := application.NewRoot(sessionHandler, directoryHandler)
+
+	resolver := graph.NewResolver(appRoot, absRootDir, signer, version)
 
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(graph.Config{Resolvers: resolver}))
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
-	// Determine frontend directory based on environment
 	var frontendDir string
 	isProduction := version != "dev"
 
-	// Get the directory of the executable itself
 	execPath, err := os.Executable()
 	if err != nil {
 		log.Printf("Warning: Failed to get executable path: %v", err)
@@ -73,12 +89,9 @@ func main() {
 	execDir := filepath.Dir(execPath)
 
 	if isProduction {
-		// Production: use dist directory relative to executable
 		frontendDir = filepath.Join(execDir, "dist")
 		log.Printf("Running in production mode (version: %s), serving frontend from: %s", version, frontendDir)
 	} else {
-		// Development: use frontend/dist directory relative to project root
-		// For development, we still use project root relative path for consistency
 		frontendDir = filepath.Join("frontend", "dist")
 		log.Printf("Running in development mode (version: %s), serving frontend from: %s", version, frontendDir)
 	}
@@ -89,7 +102,6 @@ func main() {
 
 	r := mux.NewRouter()
 
-	// Handle GraphQL endpoint with playground
 	r.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			f := negotiateFormat(r, "application/json", "text/html")
@@ -124,7 +136,7 @@ func main() {
 			return
 		}
 
-		if !xmp.IsSupportedImage(absPath) {
+		if !xmpsidecar.IsSupportedImage(absPath) {
 			http.Error(w, "unsupported image type", http.StatusBadRequest)
 			return
 		}
@@ -132,7 +144,6 @@ func main() {
 		http.ServeFile(w, r, absPath)
 	})
 
-	// Add static routes
 	addStaticRoutes(r, frontendDir)
 
 	log.Printf("🚀 Server ready at http://localhost:%s", port)
@@ -141,7 +152,6 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
-// negotiateFormat mimics gin's NegotiateFormat for content negotiation
 func negotiateFormat(r *http.Request, formats ...string) string {
 	accept := r.Header.Get("Accept")
 	if accept == "" && len(formats) > 0 {

@@ -6,7 +6,16 @@ function defineConfig(v: CodegenConfig) {
 
 export default defineConfig({
   overwrite: true,
-  schema: ["../graph/schema.graphql", "../graph/mutations/*.graphql"],
+  schema: [
+    "../graph/schema.graphql",
+    "../graph/mutations/*.graphql",
+    "../graph/queries/*.graphql",
+    "../graph/subscriptions/*.graphql",
+    "../graph/types/*.graphql",
+    "../graph/enums/*.graphql",
+    "../graph/directives.graphql",
+    "../graph/scalars.graphql",
+  ],
   documents: ["src/graphql/**/*.js", "src/graphql/**/*.gql"],
   generates: {
     "src/graphql/generated.ts": {

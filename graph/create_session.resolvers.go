@@ -7,32 +7,27 @@ package graph
 
 import (
 	"context"
-	"fmt"
-	"main/internal/scanner"
-	"path/filepath"
 )
 
-// CreateSession is the resolver for the createSession field.
+// CreateSession is resolver for the createSession field.
 func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error) {
-	s := scanner.NewScanner(r.RootDir)
-
-	var dirPath string
-	if input.DirectoryID == "" {
-		dirPath = r.RootDir
-	} else {
-		if err := s.ValidateDirectoryPath(input.DirectoryID); err != nil {
-			return nil, fmt.Errorf("invalid directory: %w", err)
-		}
-		dirPath = filepath.Join(r.RootDir, input.DirectoryID)
+	sessionID, err := r.App.CreateSession(
+		ctx,
+		input.DirectoryID,
+		input.Filter,
+		input.TargetKeep,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	sess, err := r.Resolver.SessionManager.Create(dirPath, input.Filter, input.TargetKeep)
+	sess, err := r.App.GetSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CreateSessionPayload{
-		Session:          r.Resolver.convertToGQLSession(sess),
+		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

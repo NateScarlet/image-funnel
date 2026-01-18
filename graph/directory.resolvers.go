@@ -7,114 +7,45 @@ package graph
 
 import (
 	"context"
-	"main/internal/scanner"
-	"path/filepath"
-	"sort"
+	"main/internal/application/directory"
 )
 
-// Directories is the resolver for the directories field.
-func (r *directoryResolver) Directories(ctx context.Context, obj *Directory) ([]*Directory, error) {
-	s := scanner.NewScanner(r.RootDir)
-
-	dirs, err := s.ScanDirectories(obj.Path)
+// LatestImageURL is the resolver for the latestImageUrl field.
+func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *directory.DirectoryDTO) (*string, error) {
+	if obj.LatestImagePath == "" {
+		return nil, nil
+	}
+	url, err := r.Signer.GenerateSignedURL(obj.LatestImagePath)
 	if err != nil {
 		return nil, err
 	}
-
-	sort.Slice(dirs, func(i, j int) bool {
-		return dirs[i].LatestImageModTime.Before(dirs[j].LatestImageModTime)
-	})
-
-	var result []*Directory
-	for _, dir := range dirs {
-		latestImagePath := ""
-		var latestImageUrl *string
-		if dir.LatestImagePath != "" {
-			relPath, err := filepath.Rel(r.RootDir, dir.LatestImagePath)
-			if err == nil {
-				latestImagePath = relPath
-				url, err := r.Signer.GenerateSignedURL(dir.LatestImagePath)
-				if err == nil {
-					latestImageUrl = &url
-				}
-			}
-		}
-
-		var ratingCounts []*RatingCount
-		for rating, count := range dir.RatingCounts {
-			ratingCounts = append(ratingCounts, &RatingCount{
-				Rating: rating,
-				Count:  count,
-			})
-		}
-
-		result = append(result, &Directory{
-			ID:                 dir.Path,
-			Path:               dir.Path,
-			ImageCount:         dir.ImageCount,
-			SubdirectoryCount:  dir.SubdirectoryCount,
-			LatestImageModTime: dir.LatestImageModTime,
-			LatestImagePath:    &latestImagePath,
-			LatestImageURL:     latestImageUrl,
-			RatingCounts:       ratingCounts,
-		})
-	}
-
-	return result, nil
+	return &url, nil
 }
 
-// Directory is the resolver for the directory field.
-func (r *queryResolver) Directory(ctx context.Context, id *string) (*Directory, error) {
-	s := scanner.NewScanner(r.RootDir)
-
-	var absPath string
-	if id == nil || *id == "" {
-		absPath = r.RootDir
-	} else {
-		absPath = filepath.Join(r.RootDir, *id)
-	}
-
-	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(absPath)
-	if err != nil {
-		return nil, err
-	}
-
-	latestImagePathRel := ""
-	var latestImageUrl *string
-	if latestImagePath != "" {
-		relPath, err := filepath.Rel(r.RootDir, latestImagePath)
-		if err == nil {
-			latestImagePathRel = relPath
-			url, err := r.Signer.GenerateSignedURL(latestImagePath)
-			if err == nil {
-				latestImageUrl = &url
-			}
-		}
-	}
-
-	var ratingCountsResult []*RatingCount
-	for rating, count := range ratingCounts {
-		ratingCountsResult = append(ratingCountsResult, &RatingCount{
+// RatingCounts is the resolver for the ratingCounts field.
+func (r *directoryResolver) RatingCounts(ctx context.Context, obj *directory.DirectoryDTO) ([]*RatingCount, error) {
+	var result []*RatingCount
+	for rating, count := range obj.RatingCounts {
+		result = append(result, &RatingCount{
 			Rating: rating,
 			Count:  count,
 		})
 	}
+	return result, nil
+}
 
+// Directories is the resolver for the directories field.
+func (r *directoryResolver) Directories(ctx context.Context, obj *directory.DirectoryDTO) ([]*directory.DirectoryDTO, error) {
+	return r.App.GetDirectories(ctx, obj.Path)
+}
+
+// Directory is the resolver for the directory field.
+func (r *queryResolver) Directory(ctx context.Context, id *string) (*directory.DirectoryDTO, error) {
 	path := ""
 	if id != nil {
 		path = *id
 	}
-
-	return &Directory{
-		ID:                 path,
-		Path:               path,
-		ImageCount:         imageCount,
-		SubdirectoryCount:  subdirectoryCount,
-		LatestImageModTime: latestModTime,
-		LatestImagePath:    &latestImagePathRel,
-		LatestImageURL:     latestImageUrl,
-		RatingCounts:       ratingCountsResult,
-	}, nil
+	return r.App.GetDirectory(ctx, path)
 }
 
 // Directory returns DirectoryResolver implementation.

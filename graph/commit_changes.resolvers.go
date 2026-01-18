@@ -11,18 +11,22 @@ import (
 
 // CommitChanges is the resolver for the commitChanges field.
 func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error) {
-	success, errors := r.Resolver.SessionManager.Commit(input.SessionID, input.WriteActions)
+	success, errors := r.App.Commit(
+		ctx,
+		input.SessionID,
+		input.WriteActions.KeepRating,
+		input.WriteActions.PendingRating,
+		input.WriteActions.RejectRating,
+	)
+
+	sess, err := r.App.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return nil, err
+	}
 
 	var errorStrings []string
 	for _, err := range errors {
 		errorStrings = append(errorStrings, err.Error())
-	}
-
-	sess, exists := r.Resolver.SessionManager.Get(input.SessionID)
-	var session *Session
-	if exists {
-		session = r.Resolver.convertToGQLSession(sess)
-		r.Resolver.SessionTopic.Publish(ctx, session)
 	}
 
 	return &CommitChangesPayload{
@@ -30,7 +34,7 @@ func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChange
 		Written:          success,
 		Failed:           len(errors),
 		Errors:           errorStrings,
-		Session:          session,
+		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

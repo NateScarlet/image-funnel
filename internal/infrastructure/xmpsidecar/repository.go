@@ -1,4 +1,4 @@
-package xmp
+package xmpsidecar
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/domain/metadata"
 	"main/internal/util"
 
 	"github.com/beevik/etree"
@@ -20,6 +21,62 @@ const (
 	MicrosoftPhotoNS = "http://ns.microsoft.com/photo/1.0/"
 )
 
+type Repository struct {
+	xmpReader   func(string) (*XMPData, error)
+	xmpWriter   func(string, *XMPData) error
+	batchWriter func([]string, map[string]*XMPData) (int, []error)
+}
+
+func NewRepository() *Repository {
+	return &Repository{
+		xmpReader:   readXMP,
+		xmpWriter:   writeXMP,
+		batchWriter: batchWrite,
+	}
+}
+
+func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
+	xmpData, err := r.xmpReader(imagePath)
+	if err != nil {
+		return nil, err
+	}
+
+	return metadata.NewXMPData(
+		xmpData.Rating,
+		xmpData.Action,
+		xmpData.SessionID,
+		xmpData.Timestamp,
+		xmpData.Preset,
+	), nil
+}
+
+func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
+	xmpData := &XMPData{
+		Rating:    data.Rating(),
+		Action:    data.Action(),
+		SessionID: data.SessionID(),
+		Timestamp: data.Timestamp(),
+		Preset:    data.Preset(),
+	}
+
+	return r.xmpWriter(imagePath, xmpData)
+}
+
+func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadata.XMPData) (int, []error) {
+	xmpDataMap := make(map[string]*XMPData)
+	for path, data := range dataMap {
+		xmpDataMap[path] = &XMPData{
+			Rating:    data.Rating(),
+			Action:    data.Action(),
+			SessionID: data.SessionID(),
+			Timestamp: data.Timestamp(),
+			Preset:    data.Preset(),
+		}
+	}
+
+	return r.batchWriter(imagePaths, xmpDataMap)
+}
+
 type XMPData struct {
 	Rating    int
 	Action    string
@@ -28,7 +85,7 @@ type XMPData struct {
 	Preset    string
 }
 
-func Read(imagePath string) (*XMPData, error) {
+func readXMP(imagePath string) (*XMPData, error) {
 	xmpPath := imagePath + ".xmp"
 
 	data, err := os.ReadFile(xmpPath)
@@ -45,7 +102,6 @@ func Read(imagePath string) (*XMPData, error) {
 	}
 
 	result := &XMPData{Rating: 0}
-
 	for _, rdf := range doc.FindElements("//RDF/Description") {
 		rating := findElementText(rdf, []string{"xmp:Rating", "Rating", "MicrosoftPhoto:Rating"})
 		if rating != "" {
@@ -87,7 +143,6 @@ func findElementText(elem *etree.Element, tags []string) string {
 			prefix := parts[0]
 			localName := parts[1]
 			attrKey := prefix + ":" + localName
-
 			if attr := elem.SelectAttr(attrKey); attr != nil {
 				return attr.Value
 			}
@@ -100,7 +155,7 @@ func findElementText(elem *etree.Element, tags []string) string {
 	return ""
 }
 
-func Write(imagePath string, data *XMPData) error {
+func writeXMP(imagePath string, data *XMPData) error {
 	xmpPath := imagePath + ".xmp"
 
 	var doc *etree.Document
@@ -113,13 +168,13 @@ func Write(imagePath string, data *XMPData) error {
 				if err := updateExistingXMP(doc, data); err != nil {
 					return err
 				}
-				return writeXMP(doc, xmpPath)
+				return writeXMPFile(doc, xmpPath)
 			}
 		}
 	}
 
 	doc = createNewXMP(data)
-	return writeXMP(doc, xmpPath)
+	return writeXMPFile(doc, xmpPath)
 }
 
 func createNewXMP(data *XMPData) *etree.Document {
@@ -128,7 +183,6 @@ func createNewXMP(data *XMPData) *etree.Document {
 
 	xmpmeta := doc.CreateElement("x:xmpmeta")
 	xmpmeta.CreateAttr("xmlns:x", "adobe:ns:meta/")
-
 	rdf := xmpmeta.CreateElement("rdf:RDF")
 	rdf.CreateAttr("xmlns:rdf", RDFNamespace)
 	rdf.CreateAttr("xmlns:xmp", XMPNamespace)
@@ -140,7 +194,6 @@ func createNewXMP(data *XMPData) *etree.Document {
 
 	desc := rdf.CreateElement("rdf:Description")
 	desc.CreateAttr("rdf:about", "")
-
 	createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating))
 	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(data.Rating))
 	createOrUpdateElement(desc, "imagefunnel:Action", data.Action)
@@ -169,7 +222,6 @@ func createOrUpdateElement(parent *etree.Element, tag, value string) {
 		prefix := parts[0]
 		localName := parts[1]
 		attrKey := prefix + ":" + localName
-
 		if attr := parent.SelectAttr(attrKey); attr != nil {
 			attr.Value = value
 			return
@@ -184,7 +236,7 @@ func createOrUpdateElement(parent *etree.Element, tag, value string) {
 	}
 }
 
-func writeXMP(doc *etree.Document, path string) error {
+func writeXMPFile(doc *etree.Document, path string) error {
 	doc.Indent(2)
 	output, err := doc.WriteToString()
 	if err != nil {
@@ -202,7 +254,7 @@ func writeXMP(doc *etree.Document, path string) error {
 	return nil
 }
 
-func BatchWrite(imagePaths []string, dataMap map[string]*XMPData) (int, []error) {
+func batchWrite(imagePaths []string, dataMap map[string]*XMPData) (int, []error) {
 	success := 0
 	var errors []error
 
@@ -212,7 +264,7 @@ func BatchWrite(imagePaths []string, dataMap map[string]*XMPData) (int, []error)
 			continue
 		}
 
-		if err := Write(path, data); err != nil {
+		if err := writeXMP(path, data); err != nil {
 			errors = append(errors, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
@@ -222,11 +274,9 @@ func BatchWrite(imagePaths []string, dataMap map[string]*XMPData) (int, []error)
 	return success, errors
 }
 
-func GetXMPPath(imagePath string) string {
-	return imagePath + ".xmp"
-}
-
 func IsSupportedImage(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".avif"
 }
+
+var _ metadata.Repository = (*Repository)(nil)

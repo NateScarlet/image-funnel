@@ -11,17 +11,18 @@ import (
 
 // Undo is the resolver for the undo field.
 func (r *mutationResolver) Undo(ctx context.Context, input UndoInput) (*UndoPayload, error) {
-	_, _, err := r.Resolver.SessionManager.Undo(input.SessionID)
+	err := r.App.Undo(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	sess, _ := r.Resolver.SessionManager.Get(input.SessionID)
-	gqlSession := r.Resolver.convertToGQLSession(sess)
-	r.Resolver.SessionTopic.Publish(ctx, gqlSession)
+	sess, err := r.App.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &UndoPayload{
-		Session:          gqlSession,
+		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

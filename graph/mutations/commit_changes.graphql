@@ -4,7 +4,7 @@ input CommitChangesInput {
   clientMutationId: String
 }
 
-input WriteActionsInput @goModel(model: "main/internal/session.WriteActions") {
+input WriteActionsInput @goModel(model: "main/internal/application/session.WriteActions") {
   keepRating: Int!
   pendingRating: Int!
   rejectRating: Int!

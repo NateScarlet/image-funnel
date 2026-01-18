@@ -6,9 +6,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"main/internal/session"
+	"main/internal/application/session"
 	"strconv"
-	"time"
 )
 
 type CommitChangesInput struct {
@@ -18,12 +17,12 @@ type CommitChangesInput struct {
 }
 
 type CommitChangesPayload struct {
-	Success          bool     `json:"success"`
-	Written          int      `json:"written"`
-	Failed           int      `json:"failed"`
-	Errors           []string `json:"errors"`
-	Session          *Session `json:"session,omitempty"`
-	ClientMutationID *string  `json:"clientMutationId,omitempty"`
+	Success          bool                `json:"success"`
+	Written          int                 `json:"written"`
+	Failed           int                 `json:"failed"`
+	Errors           []string            `json:"errors"`
+	Session          *session.SessionDTO `json:"session,omitempty"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionInput struct {
@@ -34,29 +33,8 @@ type CreateSessionInput struct {
 }
 
 type CreateSessionPayload struct {
-	Session          *Session `json:"session"`
-	ClientMutationID *string  `json:"clientMutationId,omitempty"`
-}
-
-type Directory struct {
-	ID                 string         `json:"id"`
-	Path               string         `json:"path"`
-	ImageCount         int            `json:"imageCount"`
-	SubdirectoryCount  int            `json:"subdirectoryCount"`
-	LatestImageModTime time.Time      `json:"latestImageModTime"`
-	LatestImagePath    *string        `json:"latestImagePath,omitempty"`
-	LatestImageURL     *string        `json:"latestImageUrl,omitempty"`
-	RatingCounts       []*RatingCount `json:"ratingCounts"`
-	Directories        []*Directory   `json:"directories"`
-}
-
-type Image struct {
-	ID            string `json:"id"`
-	Filename      string `json:"filename"`
-	Size          int    `json:"size"`
-	URL           string `json:"url"`
-	CurrentRating *int   `json:"currentRating,omitempty"`
-	XmpExists     bool   `json:"xmpExists"`
+	Session          *session.SessionDTO `json:"session"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
 
 type MarkImageInput struct {
@@ -67,8 +45,8 @@ type MarkImageInput struct {
 }
 
 type MarkImagePayload struct {
-	Session          *Session `json:"session"`
-	ClientMutationID *string  `json:"clientMutationId,omitempty"`
+	Session          *session.SessionDTO `json:"session"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
 
 type Meta struct {
@@ -82,40 +60,9 @@ type Mutation struct {
 type Query struct {
 }
 
-type QueueStatus struct {
-	CurrentIndex int     `json:"currentIndex"`
-	TotalImages  int     `json:"totalImages"`
-	CurrentImage *Image  `json:"currentImage,omitempty"`
-	Progress     float64 `json:"progress"`
-}
-
 type RatingCount struct {
 	Rating int `json:"rating"`
 	Count  int `json:"count"`
-}
-
-type Session struct {
-	ID           string                `json:"id"`
-	Directory    string                `json:"directory"`
-	Filter       *session.ImageFilters `json:"filter"`
-	TargetKeep   int                   `json:"targetKeep"`
-	Status       SessionStatus         `json:"status"`
-	Stats        *SessionStats         `json:"stats"`
-	CreatedAt    string                `json:"createdAt"`
-	UpdatedAt    string                `json:"updatedAt"`
-	CanCommit    bool                  `json:"canCommit"`
-	CanUndo      bool                  `json:"canUndo"`
-	CurrentImage *Image                `json:"currentImage,omitempty"`
-	QueueStatus  *QueueStatus          `json:"queueStatus"`
-}
-
-type SessionStats struct {
-	Total     int `json:"total"`
-	Processed int `json:"processed"`
-	Kept      int `json:"kept"`
-	Reviewed  int `json:"reviewed"`
-	Rejected  int `json:"rejected"`
-	Remaining int `json:"remaining"`
 }
 
 type Subscription struct {
@@ -127,8 +74,8 @@ type UndoInput struct {
 }
 
 type UndoPayload struct {
-	Session          *Session `json:"session,omitempty"`
-	ClientMutationID *string  `json:"clientMutationId,omitempty"`
+	Session          *session.SessionDTO `json:"session,omitempty"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
 
 type ImageAction string

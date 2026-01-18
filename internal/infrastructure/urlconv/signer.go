@@ -1,4 +1,4 @@
-package url
+package urlconv
 
 import (
 	"crypto/hmac"
@@ -8,15 +8,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"main/internal/application/session"
 )
 
-// Signer is a utility for generating and validating signed URLs
 type Signer struct {
 	secretKey []byte
 	rootDir   string
 }
 
-// NewSigner creates a new Signer with the given secret key and root directory
 func NewSigner(secretKey, rootDir string) *Signer {
 	return &Signer{
 		secretKey: []byte(secretKey),
@@ -24,7 +24,6 @@ func NewSigner(secretKey, rootDir string) *Signer {
 	}
 }
 
-// GenerateSignedURL creates a signed URL for the given image path
 func (s *Signer) GenerateSignedURL(path string) (string, error) {
 	relativePath, err := s.toRelativePath(path)
 	if err != nil {
@@ -58,29 +57,30 @@ func (s *Signer) toRelativePath(absPath string) (string, error) {
 	rootDir := filepath.Clean(s.rootDir)
 
 	if !filepath.IsAbs(absPath) {
-		return absPath, nil
+		return filepath.ToSlash(absPath), nil
 	}
 
 	relPath, err := filepath.Rel(rootDir, absPath)
 	if err != nil {
-		return absPath, nil
+		return filepath.ToSlash(absPath), nil
 	}
 
-	return relPath, nil
+	relPath = filepath.Clean(relPath)
+	if relPath == "." {
+		relPath = filepath.Base(absPath)
+	}
+
+	return filepath.ToSlash(relPath), nil
 }
 
-// ValidateSignedURL validates the signature in the given URL
 func (s *Signer) ValidateSignedURL(urlStr string) (string, error) {
-	// Parse the URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL: %v", err)
 	}
 
-	// Get the query parameters
 	params := parsedURL.Query()
 
-	// Get the required parameters
 	path := params.Get("path")
 	timestampStr := params.Get("t")
 	signature := params.Get("sig")
@@ -89,15 +89,12 @@ func (s *Signer) ValidateSignedURL(urlStr string) (string, error) {
 		return "", fmt.Errorf("missing required parameters")
 	}
 
-	// Create the message to verify
 	message := fmt.Sprintf("%s|%s", path, timestampStr)
 
-	// Create the expected signature
 	mac := hmac.New(sha256.New, s.secretKey)
 	mac.Write([]byte(message))
 	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
 
-	// Compare the signatures
 	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
 		return "", fmt.Errorf("invalid signature")
 	}
@@ -105,24 +102,22 @@ func (s *Signer) ValidateSignedURL(urlStr string) (string, error) {
 	return path, nil
 }
 
-// ValidateRequest validates the signature from request parameters
 func (s *Signer) ValidateRequest(path, timestamp, signature string) (bool, error) {
 	if path == "" || timestamp == "" || signature == "" {
 		return false, fmt.Errorf("missing required parameters")
 	}
 
-	// Create the message to verify
 	message := fmt.Sprintf("%s|%s", path, timestamp)
 
-	// Create the expected signature
 	mac := hmac.New(sha256.New, s.secretKey)
 	mac.Write([]byte(message))
 	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
 
-	// Compare the signatures
 	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
 		return false, fmt.Errorf("invalid signature")
 	}
 
 	return true, nil
 }
+
+var _ session.URLSigner = (*Signer)(nil)

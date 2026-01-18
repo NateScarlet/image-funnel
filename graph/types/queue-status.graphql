@@ -1,4 +1,4 @@
-type QueueStatus {
+type QueueStatus @goModel(model: "main/internal/application/session.QueueStatusDTO") {
   currentIndex: Int!
   totalImages: Int!
   currentImage: Image

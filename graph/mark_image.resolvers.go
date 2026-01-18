@@ -7,35 +7,28 @@ package graph
 
 import (
 	"context"
-	"fmt"
-	"main/internal/session"
+	"main/internal/application/session"
 )
 
 // MarkImage is the resolver for the markImage field.
 func (r *mutationResolver) MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error) {
-	var sessAction session.Action
-	switch input.Action {
-	case ImageActionKeep:
-		sessAction = session.ActionKeep
-	case ImageActionPending:
-		sessAction = session.ActionPending
-	case ImageActionReject:
-		sessAction = session.ActionReject
-	default:
-		return nil, fmt.Errorf("invalid action")
-	}
-
-	_, _, err := r.Resolver.SessionManager.MarkImage(input.SessionID, input.ImageID, sessAction)
+	err := r.App.MarkImage(
+		ctx,
+		input.SessionID,
+		input.ImageID,
+		session.Action(input.Action),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	sess, _ := r.Resolver.SessionManager.Get(input.SessionID)
-	gqlSession := r.Resolver.convertToGQLSession(sess)
-	r.Resolver.SessionTopic.Publish(ctx, gqlSession)
+	sess, err := r.App.GetSession(ctx, input.SessionID)
+	if err != nil {
+		return nil, err
+	}
 
 	return &MarkImagePayload{
-		Session:          gqlSession,
+		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

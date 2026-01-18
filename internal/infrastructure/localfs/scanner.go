@@ -1,4 +1,4 @@
-package scanner
+package localfs
 
 import (
 	"fmt"
@@ -7,70 +7,59 @@ import (
 	"strings"
 	"time"
 
-	"main/internal/xmp"
+	"main/internal/domain/directory"
+	"main/internal/infrastructure/xmpsidecar"
 )
-
-type ImageInfo struct {
-	ID            string
-	Filename      string
-	Path          string
-	Size          int64
-	CurrentRating int
-	XMPExists     bool
-}
-
-type DirectoryInfo struct {
-	Path               string
-	ImageCount         int
-	SubdirectoryCount  int
-	LatestImageModTime time.Time
-	LatestImagePath    string
-	RatingCounts       map[int]int
-}
 
 type Scanner struct {
 	rootDir string
+	xmpRepo *xmpsidecar.Repository
 }
 
 func NewScanner(rootDir string) *Scanner {
-	return &Scanner{rootDir: rootDir}
+	return &Scanner{
+		rootDir: rootDir,
+		xmpRepo: xmpsidecar.NewRepository(),
+	}
 }
 
-func (s *Scanner) Scan() ([]*ImageInfo, error) {
-	entries, err := os.ReadDir(s.rootDir)
+func (s *Scanner) Scan(dirPath string) ([]*directory.ImageInfo, error) {
+	absPath := filepath.Join(s.rootDir, dirPath)
+	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	var images []*ImageInfo
+	var images []*directory.ImageInfo
 
 	for _, entry := range entries {
 		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 
-		if !xmp.IsSupportedImage(entry.Name()) {
+		if !s.isSupportedImage(entry.Name()) {
 			continue
 		}
 
-		path := filepath.Join(s.rootDir, entry.Name())
+		path := filepath.Join(absPath, entry.Name())
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
 
-		imageInfo := &ImageInfo{
-			ID:        generateID(path),
-			Filename:  entry.Name(),
-			Path:      path,
-			Size:      info.Size(),
-			XMPExists: s.xmpExists(path),
-		}
+		imageInfo := directory.NewImageInfo(
+			s.generateID(path),
+			entry.Name(),
+			path,
+			info.Size(),
+			0,
+			s.xmpExists(path),
+		)
 
-		if imageInfo.XMPExists {
-			xmpData, err := xmp.Read(path)
+		if imageInfo.XMPExists() {
+			xmpData, err := s.xmpRepo.Read(path)
 			if err == nil {
-				imageInfo.CurrentRating = xmpData.Rating
+				imageInfo.SetCurrentRating(xmpData.Rating())
 			}
 		}
 
@@ -80,23 +69,14 @@ func (s *Scanner) Scan() ([]*ImageInfo, error) {
 	return images, nil
 }
 
-func (s *Scanner) xmpExists(imagePath string) bool {
-	_, err := os.Stat(imagePath + ".xmp")
-	return err == nil
-}
-
-func generateID(path string) string {
-	return fmt.Sprintf("%x", time.Now().UnixNano())
-}
-
-func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
+func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, error) {
 	absPath := filepath.Join(s.rootDir, relPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	var directories []*DirectoryInfo
+	var directories []*directory.DirectoryInfo
 
 	for _, entry := range entries {
 		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
@@ -115,14 +95,14 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*DirectoryInfo, error) {
 			continue
 		}
 
-		dirInfo := &DirectoryInfo{
-			Path:               subRelPath,
-			ImageCount:         imageCount,
-			SubdirectoryCount:  subdirectoryCount,
-			LatestImageModTime: latestModTime,
-			LatestImagePath:    latestImagePath,
-			RatingCounts:       ratingCounts,
-		}
+		dirInfo := directory.NewDirectoryInfo(
+			subRelPath,
+			imageCount,
+			subdirectoryCount,
+			latestModTime,
+			latestImagePath,
+			ratingCounts,
+		)
 
 		directories = append(directories, dirInfo)
 	}
@@ -152,7 +132,7 @@ func (s *Scanner) AnalyzeDirectory(absPath string) (int, int, time.Time, string,
 			continue
 		}
 
-		if !xmp.IsSupportedImage(entry.Name()) {
+		if !s.isSupportedImage(entry.Name()) {
 			continue
 		}
 
@@ -168,11 +148,10 @@ func (s *Scanner) AnalyzeDirectory(absPath string) (int, int, time.Time, string,
 			latestImagePath = imagePath
 		}
 
-		xmpPath := imagePath + ".xmp"
-		if _, err := os.Stat(xmpPath); err == nil {
-			xmpData, err := xmp.Read(imagePath)
+		if s.xmpExists(imagePath) {
+			xmpData, err := s.xmpRepo.Read(imagePath)
 			if err == nil {
-				ratingCounts[xmpData.Rating]++
+				ratingCounts[xmpData.Rating()]++
 			} else {
 				ratingCounts[0]++
 			}
@@ -217,3 +196,19 @@ func (s *Scanner) ValidateDirectoryPath(relPath string) error {
 
 	return nil
 }
+
+func (s *Scanner) xmpExists(imagePath string) bool {
+	_, err := os.Stat(imagePath + ".xmp")
+	return err == nil
+}
+
+func (s *Scanner) generateID(path string) string {
+	return fmt.Sprintf("%x", time.Now().UnixNano())
+}
+
+func (s *Scanner) isSupportedImage(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".avif"
+}
+
+var _ directory.Scanner = (*Scanner)(nil)
