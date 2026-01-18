@@ -3,7 +3,9 @@ import {
   InMemoryCache,
   createHttpLink,
 } from "@apollo/client/core";
+import { onError } from "@apollo/client/link/error";
 import type { GraphQLFormattedError } from "graphql";
+import useNotification from "../composables/useNotification";
 
 export interface OperationContext {
   anonymous?: boolean;
@@ -24,8 +26,46 @@ const httpLink = createHttpLink({
   uri: "graphql",
 });
 
+const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
+  const context = operation.getContext() as OperationContext;
+  const suppressError = context.suppressError;
+
+  if (graphQLErrors) {
+    let shouldSuppress = false;
+    if (typeof suppressError === "function") {
+      shouldSuppress = suppressError({ graphQLErrors });
+    } else if (suppressError === true) {
+      shouldSuppress = true;
+    }
+
+    if (!shouldSuppress) {
+      const { showError } = useNotification();
+      const errorMessages = graphQLErrors
+        .map((err: GraphQLFormattedError) => err.message)
+        .join("; ");
+      showError(`GraphQL 错误: ${errorMessages}`);
+    }
+  }
+
+  if (networkError) {
+    let shouldSuppress = false;
+    if (typeof suppressError === "function") {
+      shouldSuppress = suppressError({ graphQLErrors: undefined });
+    } else if (suppressError === true) {
+      shouldSuppress = true;
+    }
+
+    if (!shouldSuppress) {
+      const { showError } = useNotification();
+      showError(
+        `网络错误: ${networkError instanceof Error ? networkError.message : "Unknown error"}`,
+      );
+    }
+  }
+});
+
 export const apolloClient = new ApolloClient({
-  link: httpLink,
+  link: errorLink.concat(httpLink),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: {
