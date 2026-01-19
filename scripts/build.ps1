@@ -49,7 +49,13 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
     Write-Host "获取到 git 版本号: $gitVersion"
 }
 $ldflags = "-X main.version=$gitVersion"
-go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server
+# 直接使用重定向，不捕获到变量
+go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Go编译失败"
+    Pop-Location
+    exit 1
+}
 Pop-Location
 
 # 检查构建结果
