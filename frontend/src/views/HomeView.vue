@@ -11,7 +11,7 @@
             {{ version }}
           </span>
         </h1>
-        <p class="text-slate-400 text-center">AI生成图片筛选工具</p>
+        <p class="text-slate-400 text-center">图片人工筛选工具</p>
       </header>
 
       <div class="bg-slate-800 rounded-lg p-6 mb-6">
