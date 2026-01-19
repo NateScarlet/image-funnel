@@ -7,28 +7,37 @@ package graphql
 
 import (
 	"context"
-	"main/internal/application/session"
+	"errors"
+	sessionapp "main/internal/application/session"
+	"main/internal/domain/session"
 	"main/internal/scalar"
 )
 
 // Session is the resolver for the session field.
-func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*session.SessionDTO, error) {
-	return r.app.GetSession(ctx, id)
+func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*sessionapp.SessionDTO, error) {
+	sess, err := r.app.GetSession(ctx, id)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return sess, nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
-func (r *sessionResolver) CreatedAt(ctx context.Context, obj *session.SessionDTO) (string, error) {
+func (r *sessionResolver) CreatedAt(ctx context.Context, obj *sessionapp.SessionDTO) (string, error) {
 	return obj.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
-func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *session.SessionDTO) (string, error) {
+func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *sessionapp.SessionDTO) (string, error) {
 	return obj.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
 // SessionUpdated is the resolver for the sessionUpdated field.
-func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *session.SessionDTO, error) {
-	ch := make(chan *session.SessionDTO, 10)
+func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *sessionapp.SessionDTO, error) {
+	ch := make(chan *sessionapp.SessionDTO, 10)
 
 	go func() {
 		defer close(ch)
