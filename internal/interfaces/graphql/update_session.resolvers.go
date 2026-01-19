@@ -7,15 +7,15 @@ package graphql
 
 import (
 	"context"
-	appimage "main/internal/application/image"
+	"main/internal/shared"
 )
 
 // UpdateSession is the resolver for the updateSession field.
 func (r *mutationResolver) UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error) {
 	// Convert ImageFiltersInput to application layer ImageFilters
-	var filter *appimage.ImageFilters
+	var filter *shared.ImageFilters
 	if input.Filter != nil {
-		filter = &appimage.ImageFilters{
+		filter = &shared.ImageFilters{
 			Rating: input.Filter.Rating,
 		}
 	}

@@ -3,6 +3,7 @@ package session
 import (
 	appimage "main/internal/application/image"
 	"main/internal/domain/session"
+	"main/internal/shared"
 )
 
 type SessionDTOFactory struct {
@@ -15,7 +16,7 @@ func NewSessionDTOFactory(urlSigner appimage.URLSigner) *SessionDTOFactory {
 	}
 }
 
-func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
+func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, error) {
 	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	statsDTOFactory := NewStatsDTOFactory()
 	queueStatusDTOFactory := NewQueueStatusDTOFactory(f.urlSigner)
@@ -30,7 +31,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
 		return nil, err
 	}
 
-	var currentImage *appimage.ImageDTO
+	var currentImage *shared.ImageDTO
 	if img := sess.CurrentImage(); img != nil {
 		currentImage, err = imageDTOFactory.New(img)
 		if err != nil {
@@ -38,7 +39,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*SessionDTO, error) {
 		}
 	}
 
-	return &SessionDTO{
+	return &shared.SessionDTO{
 		ID:           sess.ID(),
 		Directory:    sess.Directory(),
 		Filter:       sess.Filter(),
@@ -60,8 +61,8 @@ func NewStatsDTOFactory() *StatsDTOFactory {
 	return &StatsDTOFactory{}
 }
 
-func (f *StatsDTOFactory) New(stats *session.Stats) (*StatsDTO, error) {
-	return &StatsDTO{
+func (f *StatsDTOFactory) New(stats *session.Stats) (*shared.StatsDTO, error) {
+	return &shared.StatsDTO{
 		Total:     stats.Total(),
 		Processed: stats.Processed(),
 		Kept:      stats.Kept(),
@@ -81,7 +82,7 @@ func NewQueueStatusDTOFactory(urlSigner appimage.URLSigner) *QueueStatusDTOFacto
 	}
 }
 
-func (f *QueueStatusDTOFactory) New(sess *session.Session) (*QueueStatusDTO, error) {
+func (f *QueueStatusDTOFactory) New(sess *session.Session) (*shared.QueueStatusDTO, error) {
 	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	stats := sess.Stats()
 	progress := float64(0)
@@ -89,7 +90,7 @@ func (f *QueueStatusDTOFactory) New(sess *session.Session) (*QueueStatusDTO, err
 		progress = float64(stats.Processed()) / float64(stats.Total()) * 100
 	}
 
-	var currentImage *appimage.ImageDTO
+	var currentImage *shared.ImageDTO
 	if img := sess.CurrentImage(); img != nil {
 		var err error
 		currentImage, err = imageDTOFactory.New(img)
@@ -98,7 +99,7 @@ func (f *QueueStatusDTOFactory) New(sess *session.Session) (*QueueStatusDTO, err
 		}
 	}
 
-	return &QueueStatusDTO{
+	return &shared.QueueStatusDTO{
 		CurrentIndex: sess.CurrentIndex(),
 		TotalImages:  stats.Total(),
 		CurrentImage: currentImage,

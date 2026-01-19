@@ -4,6 +4,7 @@ import (
 	"context"
 	"main/internal/domain/directory"
 	"main/internal/scalar"
+	"main/internal/shared"
 	"path/filepath"
 )
 
@@ -19,7 +20,7 @@ func NewHandler(scanner directory.Scanner) *Handler {
 	}
 }
 
-func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*DirectoryDTO, error) {
+func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.DirectoryDTO, error) {
 	if id.String() == "" {
 		id = directory.EncodeID(".")
 	}
@@ -52,7 +53,7 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*DirectoryDTO
 	return h.dtoFactory.New(dirInfo, parentID, path == ".")
 }
 
-func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*DirectoryDTO, error) {
+func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
 	path, err := directory.DecodeID(parentID)
 	if err != nil {
 		return nil, err
@@ -67,7 +68,7 @@ func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*Di
 		return nil, err
 	}
 
-	result := make([]*DirectoryDTO, len(dirs))
+	result := make([]*shared.DirectoryDTO, len(dirs))
 	for i, dir := range dirs {
 		dirDTO, err := h.dtoFactory.New(dir, parentID, false)
 		if err != nil {

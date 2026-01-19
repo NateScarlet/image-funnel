@@ -1,9 +1,9 @@
 type ImageFilters
-  @goModel(model: "main/internal/application/image.ImageFilters") {
+  @goModel(model: "main/internal/shared.ImageFilters") {
   rating: [Int!]
 }
 
 input ImageFiltersInput
-  @goModel(model: "main/internal/application/image.ImageFilters") {
+  @goModel(model: "main/internal/shared.ImageFilters") {
   rating: [Int!]!
 }

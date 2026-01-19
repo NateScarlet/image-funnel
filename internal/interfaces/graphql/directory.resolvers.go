@@ -7,12 +7,12 @@ package graphql
 
 import (
 	"context"
-	"main/internal/application/directory"
 	"main/internal/scalar"
+	"main/internal/shared"
 )
 
 // LatestImageURL is the resolver for the latestImageUrl field.
-func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *directory.DirectoryDTO) (*string, error) {
+func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *shared.DirectoryDTO) (*string, error) {
 	if obj.LatestImagePath == "" {
 		return nil, nil
 	}
@@ -24,7 +24,7 @@ func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *directory.D
 }
 
 // RatingCounts is the resolver for the ratingCounts field.
-func (r *directoryResolver) RatingCounts(ctx context.Context, obj *directory.DirectoryDTO) ([]*RatingCount, error) {
+func (r *directoryResolver) RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error) {
 	var result []*RatingCount
 	for rating, count := range obj.RatingCounts {
 		result = append(result, &RatingCount{
@@ -36,12 +36,12 @@ func (r *directoryResolver) RatingCounts(ctx context.Context, obj *directory.Dir
 }
 
 // Directories is the resolver for the directories field.
-func (r *directoryResolver) Directories(ctx context.Context, obj *directory.DirectoryDTO) ([]*directory.DirectoryDTO, error) {
+func (r *directoryResolver) Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error) {
 	return r.app.GetDirectories(ctx, obj.ID)
 }
 
 // Directory is the resolver for the directory field.
-func (r *queryResolver) Directory(ctx context.Context, id *scalar.ID) (*directory.DirectoryDTO, error) {
+func (r *queryResolver) Directory(ctx context.Context, id *scalar.ID) (*shared.DirectoryDTO, error) {
 	if id == nil {
 		return r.app.GetDirectory(ctx, scalar.ID{})
 	}

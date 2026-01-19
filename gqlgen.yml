@@ -24,9 +24,4 @@ models:
     model: github.com/99designs/gqlgen/graphql.Upload
   ID:
     model: main/internal/scalar.ID
-  Image:
-    model: main/internal/application/image.ImageDTO
-  ImageAction:
-    model: main/internal/shared.ImageAction
-  SessionStatus:
-    model: main/internal/shared.SessionStatus
+  # 对于 shared 包下的类型，使用 @goModel 指令进行定义，避免本文件无限增长

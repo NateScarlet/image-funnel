@@ -1,4 +1,4 @@
-type SessionStats @goModel(model: "main/internal/application/session.StatsDTO") {
+type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int!
   processed: Int!
   kept: Int!

@@ -1,4 +1,4 @@
-type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO") {
+type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
   path: String!

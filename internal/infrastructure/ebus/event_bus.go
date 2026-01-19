@@ -3,25 +3,26 @@ package ebus
 import (
 	"context"
 	"iter"
-	"main/internal/application/session"
+	session "main/internal/application/session"
 	"main/internal/pubsub"
+	"main/internal/shared"
 )
 
 type EventBus struct {
-	Session pubsub.Topic[*session.SessionDTO]
+	Session pubsub.Topic[*shared.SessionDTO]
 }
 
-func NewEventBus(sessionTopic pubsub.Topic[*session.SessionDTO]) *EventBus {
+func NewEventBus(sessionTopic pubsub.Topic[*shared.SessionDTO]) *EventBus {
 	return &EventBus{
 		Session: sessionTopic,
 	}
 }
 
-func (b *EventBus) PublishSession(ctx context.Context, sessionDTO *session.SessionDTO) {
+func (b *EventBus) PublishSession(ctx context.Context, sessionDTO *shared.SessionDTO) {
 	b.Session.Publish(ctx, sessionDTO)
 }
 
-func (b *EventBus) SubscribeSession(ctx context.Context) iter.Seq2[*session.SessionDTO, error] {
+func (b *EventBus) SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error] {
 	return b.Session.Subscribe(ctx)
 }
 

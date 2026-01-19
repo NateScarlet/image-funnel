@@ -7,9 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"main/internal/application/directory"
-	"main/internal/application/image"
-	"main/internal/application/session"
 	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -179,9 +176,9 @@ type ComplexityRoot struct {
 }
 
 type DirectoryResolver interface {
-	LatestImageURL(ctx context.Context, obj *directory.DirectoryDTO) (*string, error)
-	RatingCounts(ctx context.Context, obj *directory.DirectoryDTO) ([]*RatingCount, error)
-	Directories(ctx context.Context, obj *directory.DirectoryDTO) ([]*directory.DirectoryDTO, error)
+	LatestImageURL(ctx context.Context, obj *shared.DirectoryDTO) (*string, error)
+	RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error)
+	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
@@ -192,15 +189,15 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Meta(ctx context.Context) (*Meta, error)
-	Directory(ctx context.Context, id *scalar.ID) (*directory.DirectoryDTO, error)
-	Session(ctx context.Context, id scalar.ID) (*session.SessionDTO, error)
+	Directory(ctx context.Context, id *scalar.ID) (*shared.DirectoryDTO, error)
+	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
 }
 type SessionResolver interface {
-	CreatedAt(ctx context.Context, obj *session.SessionDTO) (string, error)
-	UpdatedAt(ctx context.Context, obj *session.SessionDTO) (string, error)
+	CreatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
+	UpdatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 }
 type SubscriptionResolver interface {
-	SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *session.SessionDTO, error)
+	SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error)
 }
 
 type executableSchema struct {
@@ -850,7 +847,7 @@ directive @goField(
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 `, BuiltIn: false},
-	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO") {
+	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
   path: String!
@@ -865,16 +862,16 @@ directive @goField(
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters
-  @goModel(model: "main/internal/application/image.ImageFilters") {
+  @goModel(model: "main/internal/shared.ImageFilters") {
   rating: [Int!]
 }
 
 input ImageFiltersInput
-  @goModel(model: "main/internal/application/image.ImageFilters") {
+  @goModel(model: "main/internal/shared.ImageFilters") {
   rating: [Int!]!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/application/image.ImageDTO") {
+	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
   filename: String!
   size: Int!
@@ -889,7 +886,7 @@ input ImageFiltersInput
   version: String!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/queue-status.graphql", Input: `type QueueStatus @goModel(model: "main/internal/application/session.QueueStatusDTO") {
+	{Name: "../../../graph/types/queue-status.graphql", Input: `type QueueStatus @goModel(model: "main/internal/shared.QueueStatusDTO") {
   currentIndex: Int!
   totalImages: Int!
   currentImage: Image
@@ -901,7 +898,7 @@ input ImageFiltersInput
   count: Int!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/session-stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/application/session.StatsDTO") {
+	{Name: "../../../graph/types/session-stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int!
   processed: Int!
   kept: Int!
@@ -910,7 +907,7 @@ input ImageFiltersInput
   remaining: Int!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/application/session.SessionDTO") {
+	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
   directory: String!
   filter: ImageFilters!
@@ -925,7 +922,7 @@ input ImageFiltersInput
   queueStatus: QueueStatus!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/application/session.WriteActions") {
+	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
   pendingRating: Int!
   rejectRating: Int!
@@ -968,7 +965,7 @@ input ImageFiltersInput
   clientMutationId: String
 }
 
-input WriteActionsInput @goModel(model: "main/internal/application/session.WriteActions") {
+input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
   pendingRating: Int!
   rejectRating: Int!
@@ -1332,7 +1329,7 @@ func (ec *executionContext) _CommitChangesPayload_session(ctx context.Context, f
 			return obj.Session, nil
 		},
 		nil,
-		ec.marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		false,
 	)
@@ -1416,7 +1413,7 @@ func (ec *executionContext) _CreateSessionPayload_session(ctx context.Context, f
 			return obj.Session, nil
 		},
 		nil,
-		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		true,
 	)
@@ -1490,7 +1487,7 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_clientMutationId(_
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_id(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_id(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1519,7 +1516,7 @@ func (ec *executionContext) fieldContext_Directory_id(_ context.Context, field g
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_parentId(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_parentId(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1548,7 +1545,7 @@ func (ec *executionContext) fieldContext_Directory_parentId(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_path(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_path(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1577,7 +1574,7 @@ func (ec *executionContext) fieldContext_Directory_path(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_root(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_root(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1606,7 +1603,7 @@ func (ec *executionContext) fieldContext_Directory_root(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_imageCount(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_imageCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1635,7 +1632,7 @@ func (ec *executionContext) fieldContext_Directory_imageCount(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_subdirectoryCount(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_subdirectoryCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1664,7 +1661,7 @@ func (ec *executionContext) fieldContext_Directory_subdirectoryCount(_ context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_latestImageModTime(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_latestImageModTime(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1693,7 +1690,7 @@ func (ec *executionContext) fieldContext_Directory_latestImageModTime(_ context.
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_latestImagePath(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_latestImagePath(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1722,7 +1719,7 @@ func (ec *executionContext) fieldContext_Directory_latestImagePath(_ context.Con
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_latestImageUrl(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_latestImageUrl(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1751,7 +1748,7 @@ func (ec *executionContext) fieldContext_Directory_latestImageUrl(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_ratingCounts(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_ratingCounts(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1786,7 +1783,7 @@ func (ec *executionContext) fieldContext_Directory_ratingCounts(_ context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_directories(ctx context.Context, field graphql.CollectedField, obj *directory.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_directories(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1796,7 +1793,7 @@ func (ec *executionContext) _Directory_directories(ctx context.Context, field gr
 			return ec.resolvers.Directory().Directories(ctx, obj)
 		},
 		nil,
-		ec.marshalNDirectory2ᚕᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTOᚄ,
+		ec.marshalNDirectory2ᚕᚖmainᚋinternalᚋsharedᚐDirectoryDTOᚄ,
 		true,
 		true,
 	)
@@ -1839,7 +1836,7 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_id(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_id(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1868,7 +1865,7 @@ func (ec *executionContext) fieldContext_Image_id(_ context.Context, field graph
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_filename(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_filename(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1897,7 +1894,7 @@ func (ec *executionContext) fieldContext_Image_filename(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_size(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_size(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1926,7 +1923,7 @@ func (ec *executionContext) fieldContext_Image_size(_ context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_url(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_url(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1955,7 +1952,7 @@ func (ec *executionContext) fieldContext_Image_url(_ context.Context, field grap
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_modTime(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_modTime(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -1984,7 +1981,7 @@ func (ec *executionContext) fieldContext_Image_modTime(_ context.Context, field 
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_currentRating(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_currentRating(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2013,7 +2010,7 @@ func (ec *executionContext) fieldContext_Image_currentRating(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_xmpExists(ctx context.Context, field graphql.CollectedField, obj *image.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_xmpExists(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2042,7 +2039,7 @@ func (ec *executionContext) fieldContext_Image_xmpExists(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *image.ImageFilters) (ret graphql.Marshaler) {
+func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2081,7 +2078,7 @@ func (ec *executionContext) _MarkImagePayload_session(ctx context.Context, field
 			return obj.Session, nil
 		},
 		nil,
-		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		true,
 	)
@@ -2502,7 +2499,7 @@ func (ec *executionContext) _Query_directory(ctx context.Context, field graphql.
 			return ec.resolvers.Query().Directory(ctx, fc.Args["id"].(*scalar.ID))
 		},
 		nil,
-		ec.marshalODirectory2ᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTO,
+		ec.marshalODirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
 		true,
 		false,
 	)
@@ -2567,7 +2564,7 @@ func (ec *executionContext) _Query_session(ctx context.Context, field graphql.Co
 			return ec.resolvers.Query().Session(ctx, fc.Args["id"].(scalar.ID))
 		},
 		nil,
-		ec.marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		false,
 	)
@@ -2731,7 +2728,7 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _QueueStatus_currentIndex(ctx context.Context, field graphql.CollectedField, obj *session.QueueStatusDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _QueueStatus_currentIndex(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2760,7 +2757,7 @@ func (ec *executionContext) fieldContext_QueueStatus_currentIndex(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _QueueStatus_totalImages(ctx context.Context, field graphql.CollectedField, obj *session.QueueStatusDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _QueueStatus_totalImages(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2789,7 +2786,7 @@ func (ec *executionContext) fieldContext_QueueStatus_totalImages(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _QueueStatus_currentImage(ctx context.Context, field graphql.CollectedField, obj *session.QueueStatusDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _QueueStatus_currentImage(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2799,7 +2796,7 @@ func (ec *executionContext) _QueueStatus_currentImage(ctx context.Context, field
 			return obj.CurrentImage, nil
 		},
 		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO,
+		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
 		true,
 		false,
 	)
@@ -2834,7 +2831,7 @@ func (ec *executionContext) fieldContext_QueueStatus_currentImage(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _QueueStatus_progress(ctx context.Context, field graphql.CollectedField, obj *session.QueueStatusDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _QueueStatus_progress(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2921,7 +2918,7 @@ func (ec *executionContext) fieldContext_RatingCount_count(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_id(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_id(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2950,7 +2947,7 @@ func (ec *executionContext) fieldContext_Session_id(_ context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_directory(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_directory(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2979,7 +2976,7 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_filter(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_filter(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -2989,7 +2986,7 @@ func (ec *executionContext) _Session_filter(ctx context.Context, field graphql.C
 			return obj.Filter, nil
 		},
 		nil,
-		ec.marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters,
+		ec.marshalNImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters,
 		true,
 		true,
 	)
@@ -3012,7 +3009,7 @@ func (ec *executionContext) fieldContext_Session_filter(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_targetKeep(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_targetKeep(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3041,7 +3038,7 @@ func (ec *executionContext) fieldContext_Session_targetKeep(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_status(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_status(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3070,7 +3067,7 @@ func (ec *executionContext) fieldContext_Session_status(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_stats(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_stats(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3080,7 +3077,7 @@ func (ec *executionContext) _Session_stats(ctx context.Context, field graphql.Co
 			return obj.Stats, nil
 		},
 		nil,
-		ec.marshalNSessionStats2ᚖmainᚋinternalᚋapplicationᚋsessionᚐStatsDTO,
+		ec.marshalNSessionStats2ᚖmainᚋinternalᚋsharedᚐStatsDTO,
 		true,
 		true,
 	)
@@ -3113,7 +3110,7 @@ func (ec *executionContext) fieldContext_Session_stats(_ context.Context, field 
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_createdAt(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_createdAt(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3142,7 +3139,7 @@ func (ec *executionContext) fieldContext_Session_createdAt(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_updatedAt(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_updatedAt(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3171,7 +3168,7 @@ func (ec *executionContext) fieldContext_Session_updatedAt(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_canCommit(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_canCommit(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3200,7 +3197,7 @@ func (ec *executionContext) fieldContext_Session_canCommit(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_canUndo(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_canUndo(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3229,7 +3226,7 @@ func (ec *executionContext) fieldContext_Session_canUndo(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_currentImage(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_currentImage(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3239,7 +3236,7 @@ func (ec *executionContext) _Session_currentImage(ctx context.Context, field gra
 			return obj.CurrentImage, nil
 		},
 		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO,
+		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
 		true,
 		false,
 	)
@@ -3274,7 +3271,7 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_queueStatus(ctx context.Context, field graphql.CollectedField, obj *session.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_queueStatus(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3284,7 +3281,7 @@ func (ec *executionContext) _Session_queueStatus(ctx context.Context, field grap
 			return obj.QueueStatus, nil
 		},
 		nil,
-		ec.marshalNQueueStatus2ᚖmainᚋinternalᚋapplicationᚋsessionᚐQueueStatusDTO,
+		ec.marshalNQueueStatus2ᚖmainᚋinternalᚋsharedᚐQueueStatusDTO,
 		true,
 		true,
 	)
@@ -3313,7 +3310,7 @@ func (ec *executionContext) fieldContext_Session_queueStatus(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_total(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_total(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3342,7 +3339,7 @@ func (ec *executionContext) fieldContext_SessionStats_total(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_processed(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_processed(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3371,7 +3368,7 @@ func (ec *executionContext) fieldContext_SessionStats_processed(_ context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_kept(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_kept(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3400,7 +3397,7 @@ func (ec *executionContext) fieldContext_SessionStats_kept(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_reviewed(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_reviewed(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3429,7 +3426,7 @@ func (ec *executionContext) fieldContext_SessionStats_reviewed(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_rejected(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_rejected(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3458,7 +3455,7 @@ func (ec *executionContext) fieldContext_SessionStats_rejected(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_remaining(ctx context.Context, field graphql.CollectedField, obj *session.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_remaining(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3498,7 +3495,7 @@ func (ec *executionContext) _Subscription_sessionUpdated(ctx context.Context, fi
 			return ec.resolvers.Subscription().SessionUpdated(ctx, fc.Args["sessionId"].(scalar.ID))
 		},
 		nil,
-		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		true,
 	)
@@ -3564,7 +3561,7 @@ func (ec *executionContext) _UndoPayload_session(ctx context.Context, field grap
 			return obj.Session, nil
 		},
 		nil,
-		ec.marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		false,
 	)
@@ -3648,7 +3645,7 @@ func (ec *executionContext) _UpdateSessionPayload_session(ctx context.Context, f
 			return obj.Session, nil
 		},
 		nil,
-		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		ec.marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
 		true,
 		true,
 	)
@@ -3722,7 +3719,7 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_clientMutationId(_
 	return fc, nil
 }
 
-func (ec *executionContext) _WriteActions_keepRating(ctx context.Context, field graphql.CollectedField, obj *session.WriteActions) (ret graphql.Marshaler) {
+func (ec *executionContext) _WriteActions_keepRating(ctx context.Context, field graphql.CollectedField, obj *shared.WriteActions) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3751,7 +3748,7 @@ func (ec *executionContext) fieldContext_WriteActions_keepRating(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _WriteActions_pendingRating(ctx context.Context, field graphql.CollectedField, obj *session.WriteActions) (ret graphql.Marshaler) {
+func (ec *executionContext) _WriteActions_pendingRating(ctx context.Context, field graphql.CollectedField, obj *shared.WriteActions) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -3780,7 +3777,7 @@ func (ec *executionContext) fieldContext_WriteActions_pendingRating(_ context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _WriteActions_rejectRating(ctx context.Context, field graphql.CollectedField, obj *session.WriteActions) (ret graphql.Marshaler) {
+func (ec *executionContext) _WriteActions_rejectRating(ctx context.Context, field graphql.CollectedField, obj *shared.WriteActions) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -5278,7 +5275,7 @@ func (ec *executionContext) unmarshalInputCommitChangesInput(ctx context.Context
 			it.SessionID = data
 		case "writeActions":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("writeActions"))
-			data, err := ec.unmarshalNWriteActionsInput2ᚖmainᚋinternalᚋapplicationᚋsessionᚐWriteActions(ctx, v)
+			data, err := ec.unmarshalNWriteActionsInput2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5312,7 +5309,7 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 		switch k {
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx, v)
+			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5344,8 +5341,8 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (image.ImageFilters, error) {
-	var it image.ImageFilters
+func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (shared.ImageFilters, error) {
+	var it shared.ImageFilters
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -5483,7 +5480,7 @@ func (ec *executionContext) unmarshalInputUpdateSessionInput(ctx context.Context
 			it.TargetKeep = data
 		case "filter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
-			data, err := ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx, v)
+			data, err := ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5501,8 +5498,8 @@ func (ec *executionContext) unmarshalInputUpdateSessionInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context, obj any) (session.WriteActions, error) {
-	var it session.WriteActions
+func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context, obj any) (shared.WriteActions, error) {
+	var it shared.WriteActions
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -5651,7 +5648,7 @@ func (ec *executionContext) _CreateSessionPayload(ctx context.Context, sel ast.S
 
 var directoryImplementors = []string{"Directory"}
 
-func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet, obj *directory.DirectoryDTO) graphql.Marshaler {
+func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, directoryImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -5824,7 +5821,7 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 
 var imageImplementors = []string{"Image"}
 
-func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, obj *image.ImageDTO) graphql.Marshaler {
+func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, imageImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -5890,7 +5887,7 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 
 var imageFiltersImplementors = []string{"ImageFilters"}
 
-func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.SelectionSet, obj *image.ImageFilters) graphql.Marshaler {
+func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageFilters) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, imageFiltersImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6195,7 +6192,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 
 var queueStatusImplementors = []string{"QueueStatus"}
 
-func (ec *executionContext) _QueueStatus(ctx context.Context, sel ast.SelectionSet, obj *session.QueueStatusDTO) graphql.Marshaler {
+func (ec *executionContext) _QueueStatus(ctx context.Context, sel ast.SelectionSet, obj *shared.QueueStatusDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, queueStatusImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6290,7 +6287,7 @@ func (ec *executionContext) _RatingCount(ctx context.Context, sel ast.SelectionS
 
 var sessionImplementors = []string{"Session"}
 
-func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, obj *session.SessionDTO) graphql.Marshaler {
+func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, obj *shared.SessionDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, sessionImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6443,7 +6440,7 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 
 var sessionStatsImplementors = []string{"SessionStats"}
 
-func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.SelectionSet, obj *session.StatsDTO) graphql.Marshaler {
+func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.SelectionSet, obj *shared.StatsDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, sessionStatsImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -6606,7 +6603,7 @@ func (ec *executionContext) _UpdateSessionPayload(ctx context.Context, sel ast.S
 
 var writeActionsImplementors = []string{"WriteActions"}
 
-func (ec *executionContext) _WriteActions(ctx context.Context, sel ast.SelectionSet, obj *session.WriteActions) graphql.Marshaler {
+func (ec *executionContext) _WriteActions(ctx context.Context, sel ast.SelectionSet, obj *shared.WriteActions) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, writeActionsImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -7042,7 +7039,7 @@ func (ec *executionContext) marshalNCreateSessionPayload2ᚖmainᚋinternalᚋin
 	return ec._CreateSessionPayload(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNDirectory2ᚕᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*directory.DirectoryDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNDirectory2ᚕᚖmainᚋinternalᚋsharedᚐDirectoryDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.DirectoryDTO) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -7066,7 +7063,7 @@ func (ec *executionContext) marshalNDirectory2ᚕᚖmainᚋinternalᚋapplicatio
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNDirectory2ᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTO(ctx, sel, v[i])
+			ret[i] = ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -7086,7 +7083,7 @@ func (ec *executionContext) marshalNDirectory2ᚕᚖmainᚋinternalᚋapplicatio
 	return ret
 }
 
-func (ec *executionContext) marshalNDirectory2ᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v *directory.DirectoryDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -7132,7 +7129,7 @@ func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ct
 	return v
 }
 
-func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *image.ImageFilters) graphql.Marshaler {
+func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *shared.ImageFilters) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -7142,7 +7139,7 @@ func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋapplicatio
 	return ec._ImageFilters(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, v any) (*image.ImageFilters, error) {
+func (ec *executionContext) unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, v any) (*shared.ImageFilters, error) {
 	res, err := ec.unmarshalInputImageFiltersInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -7242,7 +7239,7 @@ func (ec *executionContext) marshalNMeta2ᚖmainᚋinternalᚋinterfacesᚋgraph
 	return ec._Meta(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNQueueStatus2ᚖmainᚋinternalᚋapplicationᚋsessionᚐQueueStatusDTO(ctx context.Context, sel ast.SelectionSet, v *session.QueueStatusDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNQueueStatus2ᚖmainᚋinternalᚋsharedᚐQueueStatusDTO(ctx context.Context, sel ast.SelectionSet, v *shared.QueueStatusDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -7306,11 +7303,11 @@ func (ec *executionContext) marshalNRatingCount2ᚖmainᚋinternalᚋinterfaces�
 	return ec._RatingCount(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNSession2mainᚋinternalᚋapplicationᚋsessionᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v session.SessionDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNSession2mainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v shared.SessionDTO) graphql.Marshaler {
 	return ec._Session(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *session.SessionDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.SessionDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -7320,7 +7317,7 @@ func (ec *executionContext) marshalNSession2ᚖmainᚋinternalᚋapplicationᚋs
 	return ec._Session(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋapplicationᚋsessionᚐStatsDTO(ctx context.Context, sel ast.SelectionSet, v *session.StatsDTO) graphql.Marshaler {
+func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋsharedᚐStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.StatsDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -7442,7 +7439,7 @@ func (ec *executionContext) marshalNUpdateSessionPayload2ᚖmainᚋinternalᚋin
 	return ec._UpdateSessionPayload(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNWriteActionsInput2ᚖmainᚋinternalᚋapplicationᚋsessionᚐWriteActions(ctx context.Context, v any) (*session.WriteActions, error) {
+func (ec *executionContext) unmarshalNWriteActionsInput2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx context.Context, v any) (*shared.WriteActions, error) {
 	res, err := ec.unmarshalInputWriteActionsInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -7730,7 +7727,7 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋapplicationᚋdirectoryᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v *directory.DirectoryDTO) graphql.Marshaler {
+func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -7763,14 +7760,14 @@ func (ec *executionContext) marshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx cont
 	return v
 }
 
-func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *image.ImageDTO) graphql.Marshaler {
+func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, v any) (*image.ImageFilters, error) {
+func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, v any) (*shared.ImageFilters, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7844,7 +7841,7 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	return res
 }
 
-func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *session.SessionDTO) graphql.Marshaler {
+func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.SessionDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

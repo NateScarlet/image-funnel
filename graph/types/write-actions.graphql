@@ -1,4 +1,4 @@
-type WriteActions @goModel(model: "main/internal/application/session.WriteActions") {
+type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
   pendingRating: Int!
   rejectRating: Int!

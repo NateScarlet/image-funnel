@@ -1,4 +1,4 @@
-type Image @goModel(model: "main/internal/application/image.ImageDTO") {
+type Image @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
   filename: String!
   size: Int!

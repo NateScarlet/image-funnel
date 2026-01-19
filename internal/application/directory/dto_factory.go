@@ -3,6 +3,7 @@ package directory
 import (
 	"main/internal/domain/directory"
 	"main/internal/scalar"
+	"main/internal/shared"
 )
 
 type DirectoryDTOFactory struct{}
@@ -11,8 +12,8 @@ func NewDirectoryDTOFactory() *DirectoryDTOFactory {
 	return &DirectoryDTOFactory{}
 }
 
-func (f *DirectoryDTOFactory) New(dirInfo *directory.DirectoryInfo, parentID scalar.ID, isRoot bool) (*DirectoryDTO, error) {
-	return &DirectoryDTO{
+func (f *DirectoryDTOFactory) New(dirInfo *directory.DirectoryInfo, parentID scalar.ID, isRoot bool) (*shared.DirectoryDTO, error) {
+	return &shared.DirectoryDTO{
 		ID:                 dirInfo.ID(),
 		ParentID:           parentID,
 		Path:               dirInfo.Path(),

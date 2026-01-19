@@ -84,7 +84,7 @@ func (s *Stats) Remaining() int {
 type Session struct {
 	id         scalar.ID            // 会话唯一标识符
 	directory  string               // 处理的图片目录路径
-	filter     *image.ImageFilters  // 图片过滤器，用于筛选特定类型的图片
+	filter     *shared.ImageFilters // 图片过滤器，用于筛选特定类型的图片
 	targetKeep int                  // 目标保留图片数量
 	status     shared.SessionStatus // 会话状态（活跃/提交中/完成/错误）
 	createdAt  time.Time            // 会话创建时间
@@ -118,7 +118,7 @@ type RoundSnapshot struct {
 // - filter: 图片过滤器
 // - targetKeep: 目标保留图片数量
 // - images: 待处理的图片集合
-func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
+func NewSession(id scalar.ID, directory string, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	for _, img := range images {
 		actions[img.ID()] = shared.ImageActionPending
@@ -152,7 +152,7 @@ func (s *Session) Directory() string {
 	return s.directory
 }
 
-func (s *Session) Filter() *image.ImageFilters {
+func (s *Session) Filter() *shared.ImageFilters {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.filter
@@ -219,7 +219,7 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 }
 
 // setFilter 更新会话的图片过滤器
-func (s *Session) setFilter(filter *image.ImageFilters) error {
+func (s *Session) setFilter(filter *shared.ImageFilters) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -236,7 +236,7 @@ func (s *Session) setFilter(filter *image.ImageFilters) error {
 // 参数：
 // - filter: 图片过滤器
 // - filteredImages: 新的筛选后图片队列
-func (s *Session) nextRound(filter *image.ImageFilters, filteredImages []*image.Image) error {
+func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
 	// 检查是否已经获取了锁
 	// 由于 MarkImage 函数已经获取了锁，这里需要避免重复获取
 	// 直接执行逻辑，不获取锁
@@ -275,7 +275,7 @@ func (s *Session) nextRound(filter *image.ImageFilters, filteredImages []*image.
 
 // NextRound 开启新一轮筛选（带锁版本）
 // 用于外部直接调用，会自动获取和释放锁
-func (s *Session) NextRound(filter *image.ImageFilters, filteredImages []*image.Image) error {
+func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.nextRound(filter, filteredImages)

@@ -26,7 +26,7 @@ func NewService(sessionRepo Repository, metadataRepo metadata.Repository, dirSca
 // UpdateOptions 定义会话更新选项
 type UpdateOptions struct {
 	targetKeep *int
-	filter     *image.ImageFilters
+	filter     *shared.ImageFilters
 }
 
 // UpdateOption 定义更新选项的函数类型
@@ -40,7 +40,7 @@ func WithTargetKeep(targetKeep int) UpdateOption {
 }
 
 // WithFilter 设置过滤器
-func WithFilter(filter *image.ImageFilters) UpdateOption {
+func WithFilter(filter *shared.ImageFilters) UpdateOption {
 	return func(opts *UpdateOptions) {
 		opts.filter = filter
 	}
@@ -128,7 +128,7 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 
 // Create 初始化一个新的会话
 // 扫描目录、应用过滤器并创建会话
-func (s *Service) Create(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int) (*Session, error) {
+func (s *Service) Create(id scalar.ID, directory string, filter *shared.ImageFilters, targetKeep int) (*Session, error) {
 	images, err := s.dirScanner.Scan(directory)
 	if err != nil {
 		return nil, err

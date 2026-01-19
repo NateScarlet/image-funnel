@@ -20,6 +20,7 @@ import (
 	"main/internal/infrastructure/xmpsidecar"
 	"main/internal/interfaces/graphql"
 	"main/internal/pubsub"
+	"main/internal/shared"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
@@ -68,7 +69,7 @@ func main() {
 	metadataRepo := xmpsidecar.NewRepository()
 	dirScanner := localfs.NewScanner(absRootDir, metadataRepo)
 	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*appsession.SessionDTO]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)

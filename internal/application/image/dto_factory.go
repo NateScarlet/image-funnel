@@ -2,6 +2,7 @@ package image
 
 import (
 	"main/internal/domain/image"
+	"main/internal/shared"
 )
 
 type ImageDTOFactory struct {
@@ -14,9 +15,9 @@ func NewImageDTOFactory(urlSigner URLSigner) *ImageDTOFactory {
 	}
 }
 
-func (f *ImageDTOFactory) New(img *image.Image) (*ImageDTO, error) {
+func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 	url, _ := f.urlSigner.GenerateSignedURL(img.Path())
-	return &ImageDTO{
+	return &shared.ImageDTO{
 		ID:            img.ID(),
 		Filename:      img.Filename(),
 		Size:          img.Size(),

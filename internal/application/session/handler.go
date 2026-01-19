@@ -35,7 +35,7 @@ func (h *Handler) CreateSession(
 	ctx context.Context,
 	id scalar.ID,
 	directoryId scalar.ID,
-	filter *appimage.ImageFilters,
+	filter *shared.ImageFilters,
 	target_keep int,
 ) error {
 	directory, err := directory.DecodeID(directoryId)
@@ -116,7 +116,7 @@ func (h *Handler) Commit(
 	return success, errors
 }
 
-func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*SessionDTO, error) {
+func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*shared.SessionDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*Session
 	return h.dtoFactory.New(sess)
 }
 
-func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*appimage.ImageDTO, error) {
+func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*shared.ImageDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*ap
 	return imageDTOFactory.New(img)
 }
 
-func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*StatsDTO, error) {
+func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*shared.StatsDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*St
 	return statsDTOFactory.New(sess.Stats())
 }
 
-func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*SessionDTO, error] {
+func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error] {
 	return h.eventBus.SubscribeSession(ctx)
 }
 
@@ -159,7 +159,7 @@ func (h *Handler) UpdateSession(
 	ctx context.Context,
 	sessionID scalar.ID,
 	targetKeep *int,
-	filter *appimage.ImageFilters,
+	filter *shared.ImageFilters,
 ) error {
 	var options []session.UpdateOption
 

@@ -3,38 +3,36 @@
 package graphql
 
 import (
-	"main/internal/application/image"
-	"main/internal/application/session"
 	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
 
 type CommitChangesInput struct {
-	SessionID        scalar.ID             `json:"sessionId"`
-	WriteActions     *session.WriteActions `json:"writeActions"`
-	ClientMutationID *string               `json:"clientMutationId,omitempty"`
+	SessionID        scalar.ID            `json:"sessionId"`
+	WriteActions     *shared.WriteActions `json:"writeActions"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type CommitChangesPayload struct {
-	Success          bool                `json:"success"`
-	Written          int                 `json:"written"`
-	Failed           int                 `json:"failed"`
-	Errors           []string            `json:"errors"`
-	Session          *session.SessionDTO `json:"session,omitempty"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Success          bool               `json:"success"`
+	Written          int                `json:"written"`
+	Failed           int                `json:"failed"`
+	Errors           []string           `json:"errors"`
+	Session          *shared.SessionDTO `json:"session,omitempty"`
+	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionInput struct {
-	Filter           *image.ImageFilters `json:"filter"`
-	TargetKeep       int                 `json:"targetKeep"`
-	DirectoryID      scalar.ID           `json:"directoryId"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Filter           *shared.ImageFilters `json:"filter"`
+	TargetKeep       int                  `json:"targetKeep"`
+	DirectoryID      scalar.ID            `json:"directoryId"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionPayload struct {
-	Session          *session.SessionDTO `json:"session"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Session          *shared.SessionDTO `json:"session"`
+	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
 type MarkImageInput struct {
@@ -45,8 +43,8 @@ type MarkImageInput struct {
 }
 
 type MarkImagePayload struct {
-	Session          *session.SessionDTO `json:"session"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Session          *shared.SessionDTO `json:"session"`
+	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
 type Meta struct {
@@ -74,18 +72,18 @@ type UndoInput struct {
 }
 
 type UndoPayload struct {
-	Session          *session.SessionDTO `json:"session,omitempty"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Session          *shared.SessionDTO `json:"session,omitempty"`
+	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
 type UpdateSessionInput struct {
-	SessionID        scalar.ID           `json:"sessionId"`
-	TargetKeep       *int                `json:"targetKeep,omitempty"`
-	Filter           *image.ImageFilters `json:"filter,omitempty"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	SessionID        scalar.ID            `json:"sessionId"`
+	TargetKeep       *int                 `json:"targetKeep,omitempty"`
+	Filter           *shared.ImageFilters `json:"filter,omitempty"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type UpdateSessionPayload struct {
-	Session          *session.SessionDTO `json:"session"`
-	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+	Session          *shared.SessionDTO `json:"session"`
+	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }

@@ -1,4 +1,4 @@
-type Session @goModel(model: "main/internal/application/session.SessionDTO") {
+type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
   directory: String!
   filter: ImageFilters!

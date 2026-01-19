@@ -88,6 +88,7 @@ image-funnel/
 - id 不承诺固定格式， 客户端不应该尝试解析 id
 - 代码逻辑块之间添加对理解上下文有帮助的注释，使用中文，避免简单翻译代码本身
 - 长段关联的代码　用 vscode的 region comment （例如　`// #region {分组名称}` `// #endregion` ）包裹
+- 不要手动修改生成的代码，而是用对应的脚本重新生成
 - **frontend:** 修改前端代码后，使用 `pnpm check` 检查，详见 frontend-check SKILL
 - **powershell:** 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
