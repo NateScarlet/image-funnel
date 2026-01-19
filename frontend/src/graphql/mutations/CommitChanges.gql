@@ -6,7 +6,6 @@ mutation CommitChanges($input: CommitChangesInput!) {
     errors
     session {
       id
-      status
       canCommit
     }
     clientMutationId

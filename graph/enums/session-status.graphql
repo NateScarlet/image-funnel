@@ -1,8 +1,0 @@
-enum SessionStatus {
-  INITIALIZING
-  ACTIVE
-  PAUSED
-  COMPLETED
-  COMMITTING
-  ERROR
-}

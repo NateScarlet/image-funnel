@@ -118,13 +118,6 @@ type ComplexityRoot struct {
 		Session   func(childComplexity int, id scalar.ID) int
 	}
 
-	QueueStatus struct {
-		CurrentImage func(childComplexity int) int
-		CurrentIndex func(childComplexity int) int
-		Progress     func(childComplexity int) int
-		TotalImages  func(childComplexity int) int
-	}
-
 	RatingCount struct {
 		Count  func(childComplexity int) int
 		Rating func(childComplexity int) int
@@ -138,20 +131,19 @@ type ComplexityRoot struct {
 		Directory    func(childComplexity int) int
 		Filter       func(childComplexity int) int
 		ID           func(childComplexity int) int
-		QueueStatus  func(childComplexity int) int
 		Stats        func(childComplexity int) int
-		Status       func(childComplexity int) int
 		TargetKeep   func(childComplexity int) int
 		UpdatedAt    func(childComplexity int) int
 	}
 
 	SessionStats struct {
-		Kept      func(childComplexity int) int
-		Processed func(childComplexity int) int
-		Rejected  func(childComplexity int) int
-		Remaining func(childComplexity int) int
-		Reviewed  func(childComplexity int) int
-		Total     func(childComplexity int) int
+		IsCompleted func(childComplexity int) int
+		Kept        func(childComplexity int) int
+		Processed   func(childComplexity int) int
+		Rejected    func(childComplexity int) int
+		Remaining   func(childComplexity int) int
+		Reviewed    func(childComplexity int) int
+		Total       func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -497,31 +489,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Query.Session(childComplexity, args["id"].(scalar.ID)), true
 
-	case "QueueStatus.currentImage":
-		if e.complexity.QueueStatus.CurrentImage == nil {
-			break
-		}
-
-		return e.complexity.QueueStatus.CurrentImage(childComplexity), true
-	case "QueueStatus.currentIndex":
-		if e.complexity.QueueStatus.CurrentIndex == nil {
-			break
-		}
-
-		return e.complexity.QueueStatus.CurrentIndex(childComplexity), true
-	case "QueueStatus.progress":
-		if e.complexity.QueueStatus.Progress == nil {
-			break
-		}
-
-		return e.complexity.QueueStatus.Progress(childComplexity), true
-	case "QueueStatus.totalImages":
-		if e.complexity.QueueStatus.TotalImages == nil {
-			break
-		}
-
-		return e.complexity.QueueStatus.TotalImages(childComplexity), true
-
 	case "RatingCount.count":
 		if e.complexity.RatingCount.Count == nil {
 			break
@@ -577,24 +544,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.ID(childComplexity), true
-	case "Session.queueStatus":
-		if e.complexity.Session.QueueStatus == nil {
-			break
-		}
-
-		return e.complexity.Session.QueueStatus(childComplexity), true
 	case "Session.stats":
 		if e.complexity.Session.Stats == nil {
 			break
 		}
 
 		return e.complexity.Session.Stats(childComplexity), true
-	case "Session.status":
-		if e.complexity.Session.Status == nil {
-			break
-		}
-
-		return e.complexity.Session.Status(childComplexity), true
 	case "Session.targetKeep":
 		if e.complexity.Session.TargetKeep == nil {
 			break
@@ -608,6 +563,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Session.UpdatedAt(childComplexity), true
 
+	case "SessionStats.isCompleted":
+		if e.complexity.SessionStats.IsCompleted == nil {
+			break
+		}
+
+		return e.complexity.SessionStats.IsCompleted(childComplexity), true
 	case "SessionStats.kept":
 		if e.complexity.SessionStats.Kept == nil {
 			break
@@ -886,13 +847,6 @@ input ImageFiltersInput
   version: String!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/queue-status.graphql", Input: `type QueueStatus @goModel(model: "main/internal/shared.QueueStatusDTO") {
-  currentIndex: Int!
-  totalImages: Int!
-  currentImage: Image
-  progress: Float!
-}
-`, BuiltIn: false},
 	{Name: "../../../graph/types/rating-count.graphql", Input: `type RatingCount {
   rating: Int!
   count: Int!
@@ -905,6 +859,7 @@ input ImageFiltersInput
   reviewed: Int!
   rejected: Int!
   remaining: Int!
+  isCompleted: Boolean!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/shared.SessionDTO") {
@@ -912,14 +867,12 @@ input ImageFiltersInput
   directory: String!
   filter: ImageFilters!
   targetKeep: Int!
-  status: SessionStatus!
   stats: SessionStats!
   createdAt: String!
   updatedAt: String!
   canCommit: Boolean!
   canUndo: Boolean!
   currentImage: Image
-  queueStatus: QueueStatus!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
@@ -928,19 +881,10 @@ input ImageFiltersInput
   rejectRating: Int!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/enums/image-action.graphql", Input: `enum ImageAction {
+	{Name: "../../../graph/enums/image-action.graphql", Input: `enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   KEEP
   PENDING
   REJECT
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/enums/session-status.graphql", Input: `enum SessionStatus {
-  INITIALIZING
-  ACTIVE
-  PAUSED
-  COMPLETED
-  COMMITTING
-  ERROR
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/queries/base.graphql", Input: `type Query {
@@ -1351,8 +1295,6 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -1365,8 +1307,6 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -1435,8 +1375,6 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -1449,8 +1387,6 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2100,8 +2036,6 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -2114,8 +2048,6 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2586,8 +2518,6 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -2600,8 +2530,6 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2723,138 +2651,6 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QueueStatus_currentIndex(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QueueStatus_currentIndex,
-		func(ctx context.Context) (any, error) {
-			return obj.CurrentIndex, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QueueStatus_currentIndex(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QueueStatus",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QueueStatus_totalImages(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QueueStatus_totalImages,
-		func(ctx context.Context) (any, error) {
-			return obj.TotalImages, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QueueStatus_totalImages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QueueStatus",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QueueStatus_currentImage(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QueueStatus_currentImage,
-		func(ctx context.Context) (any, error) {
-			return obj.CurrentImage, nil
-		},
-		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_QueueStatus_currentImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QueueStatus",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Image_id(ctx, field)
-			case "filename":
-				return ec.fieldContext_Image_filename(ctx, field)
-			case "size":
-				return ec.fieldContext_Image_size(ctx, field)
-			case "url":
-				return ec.fieldContext_Image_url(ctx, field)
-			case "modTime":
-				return ec.fieldContext_Image_modTime(ctx, field)
-			case "currentRating":
-				return ec.fieldContext_Image_currentRating(ctx, field)
-			case "xmpExists":
-				return ec.fieldContext_Image_xmpExists(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QueueStatus_progress(ctx context.Context, field graphql.CollectedField, obj *shared.QueueStatusDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QueueStatus_progress,
-		func(ctx context.Context) (any, error) {
-			return obj.Progress, nil
-		},
-		nil,
-		ec.marshalNFloat2float64,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QueueStatus_progress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QueueStatus",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Float does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3038,35 +2834,6 @@ func (ec *executionContext) fieldContext_Session_targetKeep(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_status(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Session_status,
-		func(ctx context.Context) (any, error) {
-			return obj.Status, nil
-		},
-		nil,
-		ec.marshalNSessionStatus2mainᚋinternalᚋenumᚐEnum,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Session_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Session",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionStatus does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Session_stats(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3103,6 +2870,8 @@ func (ec *executionContext) fieldContext_Session_stats(_ context.Context, field 
 				return ec.fieldContext_SessionStats_rejected(ctx, field)
 			case "remaining":
 				return ec.fieldContext_SessionStats_remaining(ctx, field)
+			case "isCompleted":
+				return ec.fieldContext_SessionStats_isCompleted(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionStats", field.Name)
 		},
@@ -3266,45 +3035,6 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_xmpExists(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Session_queueStatus(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Session_queueStatus,
-		func(ctx context.Context) (any, error) {
-			return obj.QueueStatus, nil
-		},
-		nil,
-		ec.marshalNQueueStatus2ᚖmainᚋinternalᚋsharedᚐQueueStatusDTO,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Session_queueStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Session",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "currentIndex":
-				return ec.fieldContext_QueueStatus_currentIndex(ctx, field)
-			case "totalImages":
-				return ec.fieldContext_QueueStatus_totalImages(ctx, field)
-			case "currentImage":
-				return ec.fieldContext_QueueStatus_currentImage(ctx, field)
-			case "progress":
-				return ec.fieldContext_QueueStatus_progress(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type QueueStatus", field.Name)
 		},
 	}
 	return fc, nil
@@ -3484,6 +3214,35 @@ func (ec *executionContext) fieldContext_SessionStats_remaining(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionStats_isCompleted(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_isCompleted,
+		func(ctx context.Context) (any, error) {
+			return obj.IsCompleted, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_isCompleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_sessionUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -3517,8 +3276,6 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -3531,8 +3288,6 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3583,8 +3338,6 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -3597,8 +3350,6 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3667,8 +3418,6 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_Session_targetKeep(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
 			case "stats":
 				return ec.fieldContext_Session_stats(ctx, field)
 			case "createdAt":
@@ -3681,8 +3430,6 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_canUndo(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "queueStatus":
-				return ec.fieldContext_Session_queueStatus(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -6190,57 +5937,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	return out
 }
 
-var queueStatusImplementors = []string{"QueueStatus"}
-
-func (ec *executionContext) _QueueStatus(ctx context.Context, sel ast.SelectionSet, obj *shared.QueueStatusDTO) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, queueStatusImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("QueueStatus")
-		case "currentIndex":
-			out.Values[i] = ec._QueueStatus_currentIndex(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "totalImages":
-			out.Values[i] = ec._QueueStatus_totalImages(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "currentImage":
-			out.Values[i] = ec._QueueStatus_currentImage(ctx, field, obj)
-		case "progress":
-			out.Values[i] = ec._QueueStatus_progress(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var ratingCountImplementors = []string{"RatingCount"}
 
 func (ec *executionContext) _RatingCount(ctx context.Context, sel ast.SelectionSet, obj *RatingCount) graphql.Marshaler {
@@ -6313,11 +6009,6 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "targetKeep":
 			out.Values[i] = ec._Session_targetKeep(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "status":
-			out.Values[i] = ec._Session_status(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -6410,11 +6101,6 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "currentImage":
 			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
-		case "queueStatus":
-			out.Values[i] = ec._Session_queueStatus(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6476,6 +6162,11 @@ func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.Selection
 			}
 		case "remaining":
 			out.Values[i] = ec._SessionStats_remaining(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isCompleted":
+			out.Values[i] = ec._SessionStats_isCompleted(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -7093,22 +6784,6 @@ func (ec *executionContext) marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDire
 	return ec._Directory(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNFloat2float64(ctx context.Context, v any) (float64, error) {
-	res, err := graphql.UnmarshalFloatContext(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.SelectionSet, v float64) graphql.Marshaler {
-	_ = sel
-	res := graphql.MarshalFloatContext(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return graphql.WrapContextMarshaler(ctx, res)
-}
-
 func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {
 	var res scalar.ID
 	err := res.UnmarshalGQL(v)
@@ -7239,16 +6914,6 @@ func (ec *executionContext) marshalNMeta2ᚖmainᚋinternalᚋinterfacesᚋgraph
 	return ec._Meta(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNQueueStatus2ᚖmainᚋinternalᚋsharedᚐQueueStatusDTO(ctx context.Context, sel ast.SelectionSet, v *shared.QueueStatusDTO) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._QueueStatus(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*RatingCount) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -7325,16 +6990,6 @@ func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋsharedᚐS
 		return graphql.Null
 	}
 	return ec._SessionStats(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNSessionStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.SessionStatusMeta], error) {
-	var res enum.Enum[shared.SessionStatusMeta]
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNSessionStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.SessionStatusMeta]) graphql.Marshaler {
-	return v
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {

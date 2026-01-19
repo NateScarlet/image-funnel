@@ -5,4 +5,5 @@ fragment StatsFragment on SessionStats {
   reviewed
   rejected
   remaining
+  isCompleted
 }

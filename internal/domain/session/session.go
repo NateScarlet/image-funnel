@@ -40,13 +40,14 @@ func (a *WriteActions) RejectRating() int {
 // Stats 表示会话的统计信息，用于跟踪筛选进度和结果
 
 type Stats struct {
-	total      int
-	processed  int
-	kept       int
-	reviewed   int
-	rejected   int
-	remaining  int
-	targetKeep int
+	total       int
+	processed   int
+	kept        int
+	reviewed    int
+	rejected    int
+	remaining   int
+	targetKeep  int
+	isCompleted bool
 }
 
 func (s *Stats) Total() int {
@@ -77,28 +78,8 @@ func (s *Stats) TargetKeep() int {
 	return s.targetKeep
 }
 
-// Status 根据统计数据计算会话状态
-func (s *Stats) Status() shared.SessionStatus {
-	// 如果还有剩余图片，状态为 Active
-	if s.remaining > 0 {
-		return shared.SessionStatusActive
-	}
-
-	// 如果没有剩余图片，根据处理结果判断
-	if s.kept > 0 || s.reviewed > 0 {
-		// 计算新队列长度（保留和稍后再看的图片）
-		newQueueLength := s.kept + s.reviewed
-		if newQueueLength <= s.targetKeep {
-			// 新队列长度小于等于目标保留数量，会话完成
-			return shared.SessionStatusCompleted
-		} else {
-			// 新队列长度大于目标保留数量，会开启新一轮筛选，状态为 Active
-			return shared.SessionStatusActive
-		}
-	}
-	// 所有图片都被标记为排除，会话完成
-	return shared.SessionStatusCompleted
-
+func (s *Stats) IsCompleted() bool {
+	return s.isCompleted
 }
 
 // Session 表示一个图片筛选会话，包含筛选过程中的所有状态和操作
@@ -189,12 +170,6 @@ func (s *Session) TargetKeep() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.targetKeep
-}
-
-func (s *Session) Status() shared.SessionStatus {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.stats().Status()
 }
 
 func (s *Session) CreatedAt() time.Time {
@@ -319,6 +294,28 @@ func (s *Session) stats() *Stats {
 	}
 
 	stats.rejected += len(s.actions) - len(s.queue)
+
+	// 计算isCompleted字段
+	if stats.remaining > 0 {
+		// 还有剩余图片，会话未完成
+		stats.isCompleted = false
+	} else {
+		// 没有剩余图片，根据处理结果判断
+		if stats.kept > 0 || stats.reviewed > 0 {
+			// 计算新队列长度（保留和稍后再看的图片）
+			newQueueLength := stats.kept + stats.reviewed
+			if newQueueLength <= stats.targetKeep {
+				// 新队列长度小于等于目标保留数量，会话完成
+				stats.isCompleted = true
+			} else {
+				// 新队列长度大于目标保留数量，会开启新一轮筛选，会话未完成
+				stats.isCompleted = false
+			}
+		} else {
+			// 所有图片都被标记为排除，会话完成
+			stats.isCompleted = true
+		}
+	}
 
 	return &stats
 }

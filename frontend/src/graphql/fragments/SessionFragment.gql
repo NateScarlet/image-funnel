@@ -8,7 +8,6 @@ fragment SessionFragment on Session {
     rating
   }
   targetKeep
-  status
   stats {
     ...StatsFragment
   }
@@ -18,10 +17,5 @@ fragment SessionFragment on Session {
   canUndo
   currentImage {
     ...ImageFragment
-  }
-  queueStatus {
-    currentIndex
-    totalImages
-    progress
   }
 }

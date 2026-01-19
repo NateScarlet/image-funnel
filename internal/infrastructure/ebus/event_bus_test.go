@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"main/internal/application/session"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -14,7 +13,7 @@ import (
 )
 
 func TestNewEventBus(t *testing.T) {
-	topic, _ := pubsub.NewInMemoryTopic[*session.SessionDTO]()
+	topic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	bus := NewEventBus(topic)
 
 	assert.NotNil(t, bus)
@@ -22,13 +21,21 @@ func TestNewEventBus(t *testing.T) {
 }
 
 func TestPublishSession(t *testing.T) {
-	topic, _ := pubsub.NewInMemoryTopic[*session.SessionDTO]()
+	topic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	bus := NewEventBus(topic)
 
-	dto := &session.SessionDTO{
+	dto := &shared.SessionDTO{
 		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:    shared.SessionStatusActive,
+		Stats: &shared.StatsDTO{
+			Total:       10,
+			Processed:   0,
+			Kept:        0,
+			Reviewed:    0,
+			Rejected:    0,
+			Remaining:   10,
+			IsCompleted: false,
+		},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -38,13 +45,21 @@ func TestPublishSession(t *testing.T) {
 }
 
 func TestSubscribeSession(t *testing.T) {
-	topic, _ := pubsub.NewInMemoryTopic[*session.SessionDTO]()
+	topic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	bus := NewEventBus(topic)
 
-	dto := &session.SessionDTO{
+	dto := &shared.SessionDTO{
 		ID:        scalar.ToID("test-id"),
 		Directory: "test-dir",
-		Status:    shared.SessionStatusActive,
+		Stats: &shared.StatsDTO{
+			Total:       10,
+			Processed:   0,
+			Kept:        0,
+			Reviewed:    0,
+			Rejected:    0,
+			Remaining:   10,
+			IsCompleted: false,
+		},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

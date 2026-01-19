@@ -1,6 +1,0 @@
-type QueueStatus @goModel(model: "main/internal/shared.QueueStatusDTO") {
-  currentIndex: Int!
-  totalImages: Int!
-  currentImage: Image
-  progress: Float!
-}

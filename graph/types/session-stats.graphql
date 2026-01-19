@@ -5,4 +5,5 @@ type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   reviewed: Int!
   rejected: Int!
   remaining: Int!
+  isCompleted: Boolean!
 }

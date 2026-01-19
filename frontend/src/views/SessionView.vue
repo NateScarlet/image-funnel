@@ -446,7 +446,7 @@ const currentImage = computed(
 );
 
 const isCompleted = computed(() => {
-  return session.value?.status === "COMPLETED";
+	return stats.value?.isCompleted || false;
 });
 
 onMounted(() => {

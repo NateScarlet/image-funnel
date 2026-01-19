@@ -156,7 +156,7 @@ GraphQL 相关文件分为两个目录：
 使用 `@goModel` 指定 GraphQL 类型对应的 Go 类型：
 
 ```graphql
-extend type Session @goModel(model: "main/internal/application/session.SessionDTO") {
+extend type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
   status: SessionStatus!
   # ...

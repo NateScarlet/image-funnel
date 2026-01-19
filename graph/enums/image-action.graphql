@@ -1,4 +1,4 @@
-enum ImageAction {
+enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   KEEP
   PENDING
   REJECT

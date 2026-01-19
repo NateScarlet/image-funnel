@@ -36,32 +36,23 @@ type SessionDTO struct {
 	Directory    string
 	Filter       *ImageFilters
 	TargetKeep   int
-	Status       SessionStatus
 	Stats        *StatsDTO
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	CanCommit    bool
 	CanUndo      bool
 	CurrentImage *ImageDTO
-	QueueStatus  *QueueStatusDTO
 }
 
 // StatsDTO 会话统计数据
 type StatsDTO struct {
-	Total     int
-	Processed int
-	Kept      int
-	Reviewed  int
-	Rejected  int
-	Remaining int
-}
-
-// QueueStatusDTO 队列状态数据
-type QueueStatusDTO struct {
-	CurrentIndex int
-	TotalImages  int
-	CurrentImage *ImageDTO
-	Progress     float64
+	Total       int
+	Processed   int
+	Kept        int
+	Reviewed    int
+	Rejected    int
+	Remaining   int
+	IsCompleted bool
 }
 
 // WriteActions 写入操作配置
