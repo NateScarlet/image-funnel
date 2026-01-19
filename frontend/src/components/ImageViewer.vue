@@ -15,8 +15,7 @@
           :key="src"
           :src="src"
           :alt="alt"
-          class="object-contain w-full h-full transition-opacity duration-200"
-          :class="{ 'opacity-0': !imageSize }"
+          class="object-contain w-full h-full"
         />
       </div>
     </div>
