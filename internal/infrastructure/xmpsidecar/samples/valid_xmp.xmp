@@ -3,7 +3,7 @@
  <RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <Description rdf:about=""
    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
-   xmlns:imagefunnel="http://ns.imagefunnel.app/1.0/"
+   xmlns:imagefunnel="http://ns.imagefunnel.internal/1.0/"
    xmp:Rating="5"
    imagefunnel:Action="keep"
    imagefunnel:SessionID="test-session-123"
