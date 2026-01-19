@@ -126,25 +126,12 @@ func main() {
 			http.Error(w, "missing required parameters", http.StatusBadRequest)
 			return
 		}
-
-		absPath := filepath.Join(absRootDir, relativePath)
-
 		valid, err := signer.ValidateRequest(relativePath, timestamp, signature)
 		if err != nil || !valid {
 			http.Error(w, "invalid signature", http.StatusForbidden)
 			return
 		}
-
-		if !strings.HasPrefix(absPath, absRootDir) {
-			http.Error(w, "invalid path", http.StatusForbidden)
-			return
-		}
-
-		if !xmpsidecar.IsSupportedImage(absPath) {
-			http.Error(w, "unsupported image type", http.StatusBadRequest)
-			return
-		}
-
+		absPath := filepath.Join(absRootDir, relativePath)
 		http.ServeFile(w, r, absPath)
 	})
 
