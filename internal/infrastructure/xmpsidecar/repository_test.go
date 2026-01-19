@@ -74,3 +74,99 @@ func TestReadNonExistentFile(t *testing.T) {
 	require.NoError(t, err, "Expected no error for non-existent file")
 	require.Nil(t, data, "Expected nil data for non-existent file")
 }
+
+func TestWrite_UpdateExistingWithoutNamespace(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-update-no-ns.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	// 创建一个没有 imagefunnel 命名空间的 XMP
+	initialXMP := `<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+      <xmp:Rating>1</xmp:Rating>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>`
+	err := os.WriteFile(xmpPath, []byte(initialXMP), 0644)
+	require.NoError(t, err)
+
+	testData := metadata.NewXMPData(5, "keep", time.Now().Truncate(time.Second))
+	err = repo.Write(tempFile, testData)
+	require.NoError(t, err)
+
+	// 验证读取
+	readData, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	assert.Equal(t, 5, readData.Rating())
+	assert.Equal(t, "keep", readData.Action())
+
+	// 验证文件内容中包含命名空间
+	content, _ := os.ReadFile(xmpPath)
+	assert.Contains(t, string(content), ImageFunnelNS)
+}
+
+func TestWrite_UpdateExistingAttribute(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-update-attr.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	// 创建一个使用属性存储评分的 XMP
+	initialXMP := `<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="1" />
+  </rdf:RDF>
+</x:xmpmeta>`
+	err := os.WriteFile(xmpPath, []byte(initialXMP), 0644)
+	require.NoError(t, err)
+
+	testData := metadata.NewXMPData(4, "later", time.Now().Truncate(time.Second))
+	err = repo.Write(tempFile, testData)
+	require.NoError(t, err)
+
+	// 验证读取
+	readData, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	assert.Equal(t, 4, readData.Rating())
+
+	// 验证属性被更新而不是添加了新元素（或者至少能正确读取）
+	content, _ := os.ReadFile(xmpPath)
+	assert.Contains(t, string(content), `xmp:Rating="4"`)
+}
+
+func TestWrite_InvalidFileBackup(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-invalid.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	// 写入非法内容
+	invalidContent := "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF>" // 未闭合的标签
+	err := os.WriteFile(xmpPath, []byte(invalidContent), 0644)
+	require.NoError(t, err)
+
+	testData := metadata.NewXMPData(3, "keep", time.Now().Truncate(time.Second))
+	err = repo.Write(tempFile, testData)
+	require.NoError(t, err)
+
+	// 验证原文件被备份（找到以 .broken 开头的文件）
+	matches, err := filepath.Glob(xmpPath + ".broken*")
+	require.NoError(t, err)
+	require.NotEmpty(t, matches, "Should have created a backup file with .broken suffix")
+
+	backupPath := matches[0]
+	defer os.Remove(backupPath)
+
+	backupContent, err := os.ReadFile(backupPath)
+	require.NoError(t, err)
+	assert.Equal(t, invalidContent, string(backupContent))
+
+	// 验证新文件已写入且可读
+	readData, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	assert.Equal(t, 3, readData.Rating())
+}
