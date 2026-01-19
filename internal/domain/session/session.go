@@ -349,6 +349,7 @@ func (s *Session) Undo() error {
 	defer s.mu.Unlock()
 
 	if len(s.undoStack) == 0 {
+		// 跨轮次撤销
 		if len(s.roundHistory) == 0 {
 			return ErrNothingToUndo
 		}
@@ -364,21 +365,16 @@ func (s *Session) Undo() error {
 		return nil
 	}
 
+	// 普通撤销
 	lastEntry := s.undoStack[len(s.undoStack)-1]
 	s.undoStack = s.undoStack[:len(s.undoStack)-1]
 
-	for _, img := range s.images {
-		if img.ID() == lastEntry.imageID {
-			s.actions[img.ID()] = lastEntry.action
+	s.actions[lastEntry.imageID] = lastEntry.action
 
-			s.currentIdx--
-			s.status = shared.SessionStatusActive
-			s.updatedAt = time.Now()
-			return nil
-		}
-	}
-
-	return ErrSessionNotFound
+	s.currentIdx--
+	s.status = shared.SessionStatusActive
+	s.updatedAt = time.Now()
+	return nil
 }
 
 func (s *Session) Images() []*image.Image {
