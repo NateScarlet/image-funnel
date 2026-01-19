@@ -110,12 +110,12 @@ import DirectorySelector from "../components/DirectorySelector.vue";
 import { mdiLoading } from "@mdi/js";
 
 const router = useRouter();
-const { presets, getPreset } = usePresets();
+const { presets, getPreset, lastSelectedPresetId } = usePresets();
 
 const loadingCount = ref(0);
 const creatingSession = ref(false);
 
-const selectedPresetId = ref<string>("");
+const selectedPresetId = lastSelectedPresetId;
 const targetKeep = ref<number>(10);
 const filterRating = ref<number[]>([]);
 
@@ -139,7 +139,7 @@ const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 const version = computed(() => metaData.value?.meta?.version || "");
 
 const selectedPreset = computed(() => {
-  return getPreset(selectedPresetId.value);
+  return getPreset(selectedPresetId.value || "");
 });
 
 const canCreate = computed(() => {
@@ -161,13 +161,8 @@ watch(
 watch(
   presets,
   (newPresets) => {
-    if (newPresets.length > 0) {
-      const lastPresetId = localStorage.getItem("lastSelectedPresetId");
-      if (lastPresetId && newPresets.find((p) => p.id === lastPresetId)) {
-        selectedPresetId.value = lastPresetId;
-      } else {
-        selectedPresetId.value = newPresets[0].id;
-      }
+    if (newPresets.length > 0 && !selectedPresetId.value) {
+      selectedPresetId.value = newPresets[0].id;
     }
   },
   { immediate: true },
@@ -199,7 +194,6 @@ async function createSession() {
       },
     });
 
-    localStorage.setItem("lastSelectedPresetId", selectedPresetId.value);
     if (data?.createSession) {
       router.push(`/session/${data.createSession.session.id}`);
     }

@@ -1,4 +1,4 @@
-import { ref, watch } from "vue";
+import useStorage from "./useStorage";
 
 export interface Preset {
   id: string;
@@ -16,6 +16,7 @@ export interface Preset {
 }
 
 const STORAGE_KEY = "imagefunnel-presets";
+const LAST_PRESET_ID_KEY = "lastSelectedPresetId";
 
 const defaultPresets: Preset[] = [
   {
@@ -52,35 +53,16 @@ function generateId(): string {
   return `preset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function loadPresets(): Preset[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (err) {
-    console.error("Failed to load presets:", err);
-  }
-  return [...defaultPresets];
-}
+const presetsStorage = useStorage(localStorage, STORAGE_KEY, () => [
+  ...defaultPresets,
+]);
+const presets = presetsStorage.model;
 
-function savePresets(presets: Preset[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
-  } catch (err) {
-    console.error("Failed to save presets:", err);
-  }
-}
-
-const presets = ref<Preset[]>(loadPresets());
-
-watch(
-  presets,
-  (newPresets) => {
-    savePresets(newPresets);
-  },
-  { deep: true },
+const lastSelectedPresetIdStorage = useStorage<string>(
+  localStorage,
+  LAST_PRESET_ID_KEY,
 );
+const lastSelectedPresetId = lastSelectedPresetIdStorage.model;
 
 export function usePresets() {
   function getPreset(id: string): Preset | undefined {
@@ -92,7 +74,7 @@ export function usePresets() {
       ...preset,
       id: generateId(),
     };
-    presets.value.push(newPreset);
+    presets.value = [...presets.value, newPreset];
     return newPreset;
   }
 
@@ -100,15 +82,19 @@ export function usePresets() {
     const index = presets.value.findIndex((p) => p.id === id);
     if (index === -1) return null;
 
-    presets.value[index] = { ...presets.value[index], ...updates };
-    return presets.value[index];
+    const newPresets = [...presets.value];
+    newPresets[index] = { ...newPresets[index], ...updates };
+    presets.value = newPresets;
+    return newPresets[index];
   }
 
   function deletePreset(id: string): boolean {
     const index = presets.value.findIndex((p) => p.id === id);
     if (index === -1) return false;
 
-    presets.value.splice(index, 1);
+    const newPresets = [...presets.value];
+    newPresets.splice(index, 1);
+    presets.value = newPresets;
     return true;
   }
 
@@ -118,6 +104,7 @@ export function usePresets() {
 
   return {
     presets,
+    lastSelectedPresetId,
     getPreset,
     addPreset,
     updatePreset,

@@ -96,7 +96,8 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<(e: "close" | "updated") => void>();
 
-const { presets, getPreset } = usePresets();
+const { presets, getPreset, lastSelectedPresetId } = usePresets();
+
 const selectedPresetIdBuffer = ref<string>();
 const selectedPresetId = computed({
   get() {
@@ -163,6 +164,10 @@ async function update() {
         },
       },
     });
+
+    if (selectedPresetId.value !== "custom") {
+      lastSelectedPresetId.value = selectedPresetId.value;
+    }
 
     emit("updated");
     emit("close");

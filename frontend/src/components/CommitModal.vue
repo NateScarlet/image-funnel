@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed } from "vue";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
@@ -127,7 +127,7 @@ interface CommitResult {
 const props = defineProps<Props>();
 const emit = defineEmits(["close", "committed"]);
 
-const { getPreset } = usePresets();
+const { getPreset, lastSelectedPresetId } = usePresets();
 
 const { data: sessionData } = useQuery(GetSessionDocument, {
   variables: () => ({ id: props.sessionId }),
@@ -137,20 +137,38 @@ const stats = computed(() => sessionData.value?.session?.stats);
 const committing = ref(false);
 const commitResult = ref<CommitResult | null>(null);
 
-const writeActions = ref({
-  keepRating: 4,
-  pendingRating: 0,
-  rejectRating: 2,
+const writeActionsBuffer = ref<{
+  keepRating?: number;
+  pendingRating?: number;
+  rejectRating?: number;
+}>({});
+
+const selectedPreset = computed(() => {
+  return lastSelectedPresetId.value
+    ? getPreset(lastSelectedPresetId.value)
+    : undefined;
 });
 
-onMounted(() => {
-  const lastPresetId = localStorage.getItem("lastSelectedPresetId");
-  if (lastPresetId) {
-    const preset = getPreset(lastPresetId);
-    if (preset) {
-      writeActions.value = { ...preset.writeActions };
-    }
-  }
+const writeActions = computed({
+  get() {
+    return {
+      keepRating:
+        writeActionsBuffer.value.keepRating ??
+        selectedPreset.value?.writeActions.keepRating ??
+        4,
+      pendingRating:
+        writeActionsBuffer.value.pendingRating ??
+        selectedPreset.value?.writeActions.pendingRating ??
+        0,
+      rejectRating:
+        writeActionsBuffer.value.rejectRating ??
+        selectedPreset.value?.writeActions.rejectRating ??
+        2,
+    };
+  },
+  set(v) {
+    writeActionsBuffer.value = { ...v };
+  },
 });
 
 async function commit() {
