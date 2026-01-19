@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// WriteActions 定义了不同操作对应的评分值
+// 用于将图片操作映射到 XMP 评分系统
+
 type WriteActions struct {
 	keepRating    int
 	pendingRating int
@@ -33,6 +36,8 @@ func (a *WriteActions) PendingRating() int {
 func (a *WriteActions) RejectRating() int {
 	return a.rejectRating
 }
+
+// Stats 表示会话的统计信息，用于跟踪筛选进度和结果
 
 type Stats struct {
 	total     int
@@ -67,26 +72,38 @@ func (s *Stats) Remaining() int {
 	return s.remaining
 }
 
+// Session 表示一个图片筛选会话，包含筛选过程中的所有状态和操作
+//
+// 会话流程：
+// 1. 初始化时创建包含所有图片的队列
+// 2. 用户对图片进行评分（保留/稍后再看/排除）
+// 3. 当队列处理完成后，根据评分重新组织队列进行下一轮筛选
+// 4. 直到达到目标保留数量或所有图片都被处理
+// 5. 提交会话结果，将评分写入 XMP Sidecar 文件
+
 type Session struct {
-	id         scalar.ID
-	directory  string
-	filter     *image.ImageFilters
-	targetKeep int
-	status     shared.SessionStatus
-	createdAt  time.Time
-	updatedAt  time.Time
+	id         scalar.ID            // 会话唯一标识符
+	directory  string               // 处理的图片目录路径
+	filter     *image.ImageFilters  // 图片过滤器，用于筛选特定类型的图片
+	targetKeep int                  // 目标保留图片数量
+	status     shared.SessionStatus // 会话状态（活跃/提交中/完成/错误）
+	createdAt  time.Time            // 会话创建时间
+	updatedAt  time.Time            // 会话最后更新时间
 
-	images     []*image.Image
-	queue      []*image.Image
-	currentIdx int
-	undoStack  []UndoEntry
-	actions    map[scalar.ID]shared.ImageAction
+	images     []*image.Image                   // 原始图片集合
+	queue      []*image.Image                   // 当前待处理的图片队列
+	currentIdx int                              // 当前处理的图片在队列中的索引
+	undoStack  []UndoEntry                      // 撤销操作栈
+	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
 
-	roundHistory []RoundSnapshot
-	currentRound int
+	roundHistory []RoundSnapshot // 轮次历史记录
+	currentRound int             // 当前筛选轮次
 
-	mu sync.RWMutex
+	mu sync.RWMutex // 读写互斥锁，用于并发安全访问
 }
+
+// RoundSnapshot 表示一轮筛选的快照，用于存储筛选轮次的状态
+// 当需要撤销到上一轮时，使用此快照恢复状态
 
 type RoundSnapshot struct {
 	queue      []*image.Image
@@ -94,6 +111,14 @@ type RoundSnapshot struct {
 	undoStack  []UndoEntry
 }
 
+// NewSession 创建一个新的图片筛选会话
+//
+// 参数：
+// - id: 会话唯一标识符
+// - directory: 处理的图片目录路径
+// - filter: 图片过滤器
+// - targetKeep: 目标保留图片数量
+// - images: 待处理的图片集合
 func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	for _, img := range images {
@@ -180,6 +205,9 @@ func (s *Session) Stats() *Stats {
 	return s.stats()
 }
 
+// stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
+//
+// 注意：此方法是内部方法，不进行并发控制，调用者需要自行保证线程安全
 func (s *Session) stats() *Stats {
 	var stats Stats
 	stats.total = len(s.queue)
@@ -204,9 +232,16 @@ func (s *Session) stats() *Stats {
 	return &stats
 }
 
+// CanCommit 判断会话是否可以提交
+//
+// 提交条件：
+// 1. 会话状态不是提交中或错误状态
+// 2. 至少有一张图片已被处理
+// 3. 或者有图片被从队列中移除
 func (s *Session) CanCommit() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
 		return false
 	}
@@ -219,12 +254,20 @@ func (s *Session) CanCommit() bool {
 	return len(s.images) > len(s.queue)
 }
 
+// CanUndo 判断会话是否可以执行撤销操作
+//
+// 撤销条件：撤销栈不为空
 func (s *Session) CanUndo() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.undoStack) > 0
 }
 
+// MarkImage 标记指定图片的操作状态，并更新会话状态
+//
+// 参数：
+// - imageID: 要标记的图片 ID
+// - action: 要应用的操作状态
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -265,6 +308,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 
 	if s.currentIdx >= len(s.queue) {
 		stats := s.stats()
+
 		if stats.reviewed > 0 || stats.kept > 0 {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
@@ -273,6 +317,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 					newQueue = append(newQueue, img)
 				}
 			}
+
 			if len(newQueue) > 0 {
 				if len(newQueue) <= s.targetKeep {
 					s.status = shared.SessionStatusCompleted
@@ -298,6 +343,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	return nil
 }
 
+// Undo 撤销上一次图片标记操作，恢复到之前的状态
 func (s *Session) Undo() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -355,6 +401,9 @@ func (s *Session) SetAction(imageID scalar.ID, action shared.ImageAction) {
 	defer s.mu.Unlock()
 	s.actions[imageID] = action
 }
+
+// UndoEntry 表示一个可撤销的操作条目，用于存储图片操作的历史状态
+// 当执行撤销操作时，使用此条目恢复图片的原始操作状态
 
 type UndoEntry struct {
 	imageID scalar.ID
