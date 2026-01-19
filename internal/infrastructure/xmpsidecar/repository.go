@@ -69,7 +69,6 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 			}
 		}
 
-
 	}
 
 	return metadata.NewXMPData(
@@ -101,7 +100,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 						createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
 						createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 						createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-		
+
 					}
 				}
 				return writeXMPFile(doc, xmpPath)
@@ -130,87 +129,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 	createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
 
-
 	return writeXMPFile(doc, xmpPath)
-}
-
-func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadata.XMPData) (int, []error) {
-	success := 0
-	var errors []error
-
-	for _, path := range imagePaths {
-		data, exists := dataMap[path]
-		if !exists {
-			continue
-		}
-
-		xmpPath := path + ".xmp"
-
-		xmpData := &XMPData{
-			Rating:    data.Rating(),
-			Action:    data.Action(),
-			Timestamp: data.Timestamp(),
-
-		}
-
-		var doc *etree.Document
-
-		if _, err := os.Stat(xmpPath); err == nil {
-			existingData, err := os.ReadFile(xmpPath)
-			if err == nil {
-				doc = etree.NewDocument()
-				if err := doc.ReadFromBytes(existingData); err == nil {
-					for _, rdf := range doc.FindElements("//RDF") {
-						for _, desc := range rdf.FindElements("Description") {
-							createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(xmpData.Rating))
-							createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
-							createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
-							createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-
-						}
-					}
-					err = writeXMPFile(doc, xmpPath)
-					if err != nil {
-						errors = append(errors, fmt.Errorf("%s: %w", path, err))
-						continue
-					}
-					success++
-					continue
-				}
-			}
-		}
-
-		doc = etree.NewDocument()
-		doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
-
-		xmpmeta := doc.CreateElement("x:xmpmeta")
-		xmpmeta.CreateAttr("xmlns:x", "adobe:ns:meta/")
-		rdf := xmpmeta.CreateElement("rdf:RDF")
-		rdf.CreateAttr("xmlns:rdf", RDFNamespace)
-		rdf.CreateAttr("xmlns:xmp", XMPNamespace)
-		rdf.CreateAttr("xmlns:imagefunnel", ImageFunnelNS)
-		rdf.CreateAttr("xmlns:rdfs", "http://www.w3.org/2000/01/rdf-schema#")
-		rdf.CreateAttr("xmlns:dc", "http://purl.org/dc/elements/1.1/")
-		rdf.CreateAttr("xmlns:exif", "http://ns.adobe.com/exif/1.0/")
-		rdf.CreateAttr("xmlns:MicrosoftPhoto", MicrosoftPhotoNS)
-
-		desc := rdf.CreateElement("rdf:Description")
-		desc.CreateAttr("rdf:about", "")
-		createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(xmpData.Rating))
-		createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
-		createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
-		createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-
-
-		err := writeXMPFile(doc, xmpPath)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("%s: %w", path, err))
-			continue
-		}
-		success++
-	}
-
-	return success, errors
 }
 
 type XMPData struct {

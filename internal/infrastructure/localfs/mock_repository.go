@@ -17,7 +17,3 @@ func (m *mockMetadataRepository) Read(imagePath string) (*metadata.XMPData, erro
 func (m *mockMetadataRepository) Write(imagePath string, data *metadata.XMPData) error {
 	return nil
 }
-
-func (m *mockMetadataRepository) BatchWrite(imagePaths []string, dataMap map[string]*metadata.XMPData) (int, []error) {
-	return 0, nil
-}

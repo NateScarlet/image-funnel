@@ -63,39 +63,7 @@ func TestWriteAndRead(t *testing.T) {
 	readData, err := repo.Read(tempFile)
 	require.NoError(t, err, "Failed to read XMP")
 	assert.Equal(t, testData.Rating(), readData.Rating())
-		assert.Equal(t, testData.Action(), readData.Action())
-}
-
-func TestBatchWrite(t *testing.T) {
-	repo := NewRepository()
-	testData1 := metadata.NewXMPData(1, "keep", time.Now())
-		testData2 := metadata.NewXMPData(2, "keep", time.Now())
-
-	tempFile1 := filepath.Join(os.TempDir(), "test-image-1.jpg")
-	tempFile2 := filepath.Join(os.TempDir(), "test-image-2.jpg")
-
-	defer os.Remove(tempFile1)
-	defer os.Remove(tempFile1 + ".xmp")
-	defer os.Remove(tempFile2)
-	defer os.Remove(tempFile2 + ".xmp")
-
-	dataMap := map[string]*metadata.XMPData{
-		tempFile1: testData1,
-		tempFile2: testData2,
-	}
-
-	success, errors := repo.BatchWrite([]string{tempFile1, tempFile2}, dataMap)
-
-	assert.Equal(t, 2, success)
-	assert.Empty(t, errors)
-
-	readData1, err := repo.Read(tempFile1)
-	require.NoError(t, err, "Failed to read XMP for file 1")
-	assert.Equal(t, 1, readData1.Rating())
-
-	readData2, err := repo.Read(tempFile2)
-	require.NoError(t, err, "Failed to read XMP for file 2")
-	assert.Equal(t, 2, readData2.Rating())
+	assert.Equal(t, testData.Action(), readData.Action())
 }
 
 func TestReadNonExistentFile(t *testing.T) {
