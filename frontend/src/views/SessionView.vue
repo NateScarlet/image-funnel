@@ -164,8 +164,8 @@
               :class="{
                 'bg-red-600/30': swipeDirection === 'DOWN',
                 'bg-yellow-600/30': swipeDirection === 'UP',
-                'bg-green-600/30': swipeDirection === 'RIGHT',
-                'bg-slate-600/30': swipeDirection === 'LEFT',
+                'bg-green-600/30': swipeDirection === 'LEFT',
+                'bg-slate-600/30': swipeDirection === 'RIGHT',
               }"
             >
               <div class="text-6xl font-bold text-white drop-shadow-lg">
