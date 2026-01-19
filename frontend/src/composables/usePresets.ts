@@ -15,9 +15,6 @@ export interface Preset {
   targetKeep: number;
 }
 
-const STORAGE_KEY = "imagefunnel-presets";
-const LAST_PRESET_ID_KEY = "lastSelectedPresetId";
-
 const defaultPresets: Preset[] = [
   {
     id: "draft-filter",
@@ -53,14 +50,16 @@ function generateId(): string {
   return `preset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-const presetsStorage = useStorage(localStorage, STORAGE_KEY, () => [
-  ...defaultPresets,
-]);
+const presetsStorage = useStorage(
+  localStorage,
+  "presets@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
+  () => [...defaultPresets],
+);
 const presets = presetsStorage.model;
 
 const lastSelectedPresetIdStorage = useStorage<string>(
   localStorage,
-  LAST_PRESET_ID_KEY,
+  "lastPreset@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
 );
 const lastSelectedPresetId = lastSelectedPresetIdStorage.model;
 

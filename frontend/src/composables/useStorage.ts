@@ -27,9 +27,13 @@ function useStorage<T>(
   const buffer = shallowRef<T | undefined>();
   function reload() {
     const rawValue = storage.getItem(key);
-    const value = rawValue == null ? undefined : JSON.parse(rawValue);
-    buffer.value = value;
-    return value;
+    try {
+      const value = rawValue == null ? undefined : JSON.parse(rawValue);
+      buffer.value = value;
+      return value;
+    } catch {
+      buffer.value = undefined;
+    }
   }
   function flush() {
     const v = buffer.value;

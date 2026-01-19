@@ -112,6 +112,7 @@ const selectedPresetId = computed({
     targetKeepBuffer.value = undefined;
     ratingBuffer.value = undefined;
     selectedPresetIdBuffer.value = v;
+    lastSelectedPresetId.value = v;
   },
 });
 const selectedPreset = computed(() => {
