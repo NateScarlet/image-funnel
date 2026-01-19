@@ -47,3 +47,45 @@ image-funnel/
 - 不要手动修改生成的代码，而是用对应的脚本重新生成
 - **frontend:** 修改前端代码后，使用 `pnpm check` 检查
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建
+- **vue:** 禁止使用watch来维护可以被computed代替的状态，手动维护非常容易出错，参考风格
+
+```vue
+const { presets, getPreset } = usePresets();
+const selectedPresetIdBuffer = ref<string>();
+const selectedPresetId = computed({
+  get() {
+    if (targetKeepBuffer.value != null || ratingBuffer.value != null) {
+      return "custom";
+    }
+    return selectedPresetIdBuffer.value || "custom";
+  },
+  set(v) {
+    targetKeepBuffer.value = undefined;
+    ratingBuffer.value = undefined;
+    selectedPresetIdBuffer.value = v;
+  }
+});
+const selectedPreset = computed(() => {
+  return getPreset(selectedPresetId.value);
+});
+
+// 缓冲变量，用于存储用户主动修改的值
+const targetKeepBuffer = ref<number>();
+const ratingBuffer = ref<number[]>();
+
+// 目标保留数量的computed属性
+const targetKeep = computed({
+  get: () => targetKeepBuffer.value ?? selectedPreset.value?.targetKeep ?? props.targetKeep,
+  set: (value: number) => {
+    targetKeepBuffer.value = value;
+  },
+});
+
+// 筛选条件的rating属性
+const rating = computed({
+  get: () => ratingBuffer.value ?? selectedPreset.value?.filter.rating ?? [...props.filter.rating],
+  set: (value: number[]) => {
+    ratingBuffer.value = value;
+  },
+});
+```
