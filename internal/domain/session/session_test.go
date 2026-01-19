@@ -123,15 +123,6 @@ func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 	assert.Equal(t, ErrSessionNotFound, err, "Error should be ErrSessionNotFound")
 }
 
-func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
-	session.status = shared.SessionStatusCompleted
-
-	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
-	assert.Error(t, err, "Should return error when session is not active")
-	assert.Equal(t, ErrSessionNotActive, err, "Error should be ErrSessionNotActive")
-}
-
 func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
@@ -200,20 +191,6 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 	}
 
 	assert.True(t, session.CanCommit(), "CanCommit should return true after marking images")
-}
-
-func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
-	session.status = shared.SessionStatusCommitting
-
-	assert.False(t, session.CanCommit(), "CanCommit should return false for COMMITTING status")
-}
-
-func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
-	session.status = shared.SessionStatusError
-
-	assert.False(t, session.CanCommit(), "CanCommit should return false for ERROR status")
 }
 
 func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {

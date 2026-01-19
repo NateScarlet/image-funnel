@@ -40,12 +40,13 @@ func (a *WriteActions) RejectRating() int {
 // Stats 表示会话的统计信息，用于跟踪筛选进度和结果
 
 type Stats struct {
-	total     int
-	processed int
-	kept      int
-	reviewed  int
-	rejected  int
-	remaining int
+	total      int
+	processed  int
+	kept       int
+	reviewed   int
+	rejected   int
+	remaining  int
+	targetKeep int
 }
 
 func (s *Stats) Total() int {
@@ -72,6 +73,34 @@ func (s *Stats) Remaining() int {
 	return s.remaining
 }
 
+func (s *Stats) TargetKeep() int {
+	return s.targetKeep
+}
+
+// Status 根据统计数据计算会话状态
+func (s *Stats) Status() shared.SessionStatus {
+	// 如果还有剩余图片，状态为 Active
+	if s.remaining > 0 {
+		return shared.SessionStatusActive
+	}
+
+	// 如果没有剩余图片，根据处理结果判断
+	if s.kept > 0 || s.reviewed > 0 {
+		// 计算新队列长度（保留和稍后再看的图片）
+		newQueueLength := s.kept + s.reviewed
+		if newQueueLength <= s.targetKeep {
+			// 新队列长度小于等于目标保留数量，会话完成
+			return shared.SessionStatusCompleted
+		} else {
+			// 新队列长度大于目标保留数量，会开启新一轮筛选，状态为 Active
+			return shared.SessionStatusActive
+		}
+	}
+	// 所有图片都被标记为排除，会话完成
+	return shared.SessionStatusCompleted
+
+}
+
 // Session 表示一个图片筛选会话，包含筛选过程中的所有状态和操作
 //
 // 会话流程：
@@ -86,7 +115,6 @@ type Session struct {
 	directory  string               // 处理的图片目录路径
 	filter     *shared.ImageFilters // 图片过滤器，用于筛选特定类型的图片
 	targetKeep int                  // 目标保留图片数量
-	status     shared.SessionStatus // 会话状态（活跃/提交中/完成/错误）
 	createdAt  time.Time            // 会话创建时间
 	updatedAt  time.Time            // 会话最后更新时间
 
@@ -128,7 +156,6 @@ func NewSession(id scalar.ID, directory string, filter *shared.ImageFilters, tar
 		directory:    directory,
 		filter:       filter,
 		targetKeep:   targetKeep,
-		status:       shared.SessionStatusActive,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),
 		queue:        images,
@@ -167,7 +194,7 @@ func (s *Session) TargetKeep() int {
 func (s *Session) Status() shared.SessionStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.status
+	return s.stats().Status()
 }
 
 func (s *Session) CreatedAt() time.Time {
@@ -202,18 +229,8 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
-		return ErrSessionNotActive
-	}
-
 	s.targetKeep = targetKeep
 	s.updatedAt = time.Now()
-
-	// 如果目标数量已达到，更新状态为已完成
-	stats := s.stats()
-	if stats.kept >= targetKeep {
-		s.status = shared.SessionStatusCompleted
-	}
 
 	return nil
 }
@@ -222,10 +239,6 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 func (s *Session) setFilter(filter *shared.ImageFilters) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
-		return ErrSessionNotActive
-	}
 
 	s.filter = filter
 	s.updatedAt = time.Now()
@@ -240,10 +253,6 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	// 检查是否已经获取了锁
 	// 由于 MarkImage 函数已经获取了锁，这里需要避免重复获取
 	// 直接执行逻辑，不获取锁
-
-	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
-		return ErrSessionNotActive
-	}
 
 	// 保存当前状态到历史记录
 	if len(s.queue) > 0 {
@@ -267,7 +276,6 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	s.queue = filteredImages
 	s.currentIdx = 0
 	s.undoStack = make([]UndoEntry, 0)
-	s.status = shared.SessionStatusActive
 	s.updatedAt = time.Now()
 
 	return nil
@@ -295,6 +303,7 @@ func (s *Session) stats() *Stats {
 	stats.total = len(s.queue)
 	stats.processed = s.currentIdx
 	stats.remaining = len(s.queue) - s.currentIdx
+	stats.targetKeep = s.targetKeep
 
 	for i := 0; i < s.currentIdx; i++ {
 		img := s.queue[i]
@@ -317,16 +326,11 @@ func (s *Session) stats() *Stats {
 // CanCommit 判断会话是否可以提交
 //
 // 提交条件：
-// 1. 会话状态不是提交中或错误状态
-// 2. 至少有一张图片已被处理
-// 3. 或者有图片被从队列中移除
+// 1. 至少有一张图片已被处理
+// 2. 或者有图片被从队列中移除
 func (s *Session) CanCommit() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
-		return false
-	}
 
 	stats := s.Stats()
 	if stats.processed > 0 {
@@ -355,10 +359,6 @@ func (s *Session) CanUndo() bool {
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.status != shared.SessionStatusActive {
-		return ErrSessionNotActive
-	}
 
 	if s.currentIdx >= len(s.queue) {
 		return ErrNoMoreImages
@@ -403,19 +403,13 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 			}
 
 			if len(newQueue) > 0 {
-				if len(newQueue) <= s.targetKeep {
-					s.status = shared.SessionStatusCompleted
-				} else {
+				if len(newQueue) > s.targetKeep {
 					// 开启新一轮
 					if err := s.nextRound(nil, newQueue); err != nil {
 						return err
 					}
 				}
-			} else {
-				s.status = shared.SessionStatusCompleted
 			}
-		} else {
-			s.status = shared.SessionStatusCompleted
 		}
 	}
 
@@ -439,7 +433,6 @@ func (s *Session) Undo() error {
 		s.queue = lastRound.queue
 		s.currentIdx = lastRound.currentIdx
 		s.undoStack = lastRound.undoStack
-		s.status = shared.SessionStatusActive
 		s.updatedAt = time.Now()
 		return nil
 	}
@@ -451,7 +444,6 @@ func (s *Session) Undo() error {
 	s.actions[lastEntry.imageID] = lastEntry.action
 
 	s.currentIdx--
-	s.status = shared.SessionStatusActive
 	s.updatedAt = time.Now()
 	return nil
 }

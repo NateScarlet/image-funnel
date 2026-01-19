@@ -21,12 +21,17 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 	statsDTOFactory := NewStatsDTOFactory()
 	queueStatusDTOFactory := NewQueueStatusDTOFactory(f.urlSigner)
 
-	stats, err := statsDTOFactory.New(sess.Stats())
+	// 只计算一次统计信息
+	sessionStats := sess.Stats()
+
+	// 使用计算好的统计信息创建 StatsDTO
+	stats, err := statsDTOFactory.New(sessionStats)
 	if err != nil {
 		return nil, err
 	}
 
-	queueStatus, err := queueStatusDTOFactory.New(sess)
+	// 使用计算好的统计信息创建 QueueStatusDTO
+	queueStatus, err := queueStatusDTOFactory.NewWithStats(sess, sessionStats)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +49,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 		Directory:    sess.Directory(),
 		Filter:       sess.Filter(),
 		TargetKeep:   sess.TargetKeep(),
-		Status:       sess.Status(),
+		Status:       sessionStats.Status(),
 		Stats:        stats,
 		CreatedAt:    sess.CreatedAt(),
 		UpdatedAt:    sess.UpdatedAt(),
@@ -83,8 +88,12 @@ func NewQueueStatusDTOFactory(urlSigner appimage.URLSigner) *QueueStatusDTOFacto
 }
 
 func (f *QueueStatusDTOFactory) New(sess *session.Session) (*shared.QueueStatusDTO, error) {
-	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	stats := sess.Stats()
+	return f.NewWithStats(sess, stats)
+}
+
+func (f *QueueStatusDTOFactory) NewWithStats(sess *session.Session, stats *session.Stats) (*shared.QueueStatusDTO, error) {
+	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
 	progress := float64(0)
 	if stats.Total() > 0 {
 		progress = float64(stats.Processed()) / float64(stats.Total()) * 100

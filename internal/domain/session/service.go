@@ -47,8 +47,6 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 }
 
 func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []error) {
-	session.status = shared.SessionStatusCommitting
-
 	var errors []error
 	success := 0
 
@@ -76,8 +74,6 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 		}
 		success++
 	}
-
-	session.status = shared.SessionStatusCompleted
 
 	if err := s.sessionRepo.Save(session); err != nil {
 		errors = append(errors, err)
