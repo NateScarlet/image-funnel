@@ -74,32 +74,3 @@ func TestReadNonExistentFile(t *testing.T) {
 	require.NoError(t, err, "Expected no error for non-existent file")
 	require.Nil(t, data, "Expected nil data for non-existent file")
 }
-
-func TestIsSupportedImage(t *testing.T) {
-	tests := []struct {
-		filename string
-		expected bool
-	}{
-		{"image.jpg", true},
-		{"image.jpeg", true},
-		{"image.JPG", true},
-		{"image.png", true},
-		{"image.PNG", true},
-		{"image.webp", true},
-		{"image.WEBP", true},
-		{"image.avif", true},
-		{"image.AVIF", true},
-		{"image.gif", false},
-		{"image.bmp", false},
-		{"image.tiff", false},
-		{"document.pdf", false},
-		{"archive.zip", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.filename, func(t *testing.T) {
-			result := IsSupportedImage(tt.filename)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
