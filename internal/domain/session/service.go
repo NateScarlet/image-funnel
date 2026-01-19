@@ -114,11 +114,7 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 		filterFunc := image.BuildImageFilter(opts.filter)
 		filteredImages := image.FilterImages(images, filterFunc)
 
-		if err := sess.UpdateFilter(opts.filter); err != nil {
-			return nil, err
-		}
-
-		if err := sess.StartNewRound(filteredImages); err != nil {
+		if err := sess.NextRound(opts.filter, filteredImages); err != nil {
 			return nil, err
 		}
 	}

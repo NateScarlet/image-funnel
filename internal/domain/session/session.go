@@ -218,8 +218,8 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 	return nil
 }
 
-// UpdateFilter 更新会话的图片过滤器
-func (s *Session) UpdateFilter(filter *image.ImageFilters) error {
+// setFilter 更新会话的图片过滤器
+func (s *Session) setFilter(filter *image.ImageFilters) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -232,12 +232,14 @@ func (s *Session) UpdateFilter(filter *image.ImageFilters) error {
 	return nil
 }
 
-// StartNewRound 开启新一轮筛选
+// nextRound 开启新一轮筛选
 // 参数：
+// - filter: 图片过滤器
 // - filteredImages: 新的筛选后图片队列
-func (s *Session) StartNewRound(filteredImages []*image.Image) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Session) nextRound(filter *image.ImageFilters, filteredImages []*image.Image) error {
+	// 检查是否已经获取了锁
+	// 由于 MarkImage 函数已经获取了锁，这里需要避免重复获取
+	// 直接执行逻辑，不获取锁
 
 	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
 		return ErrSessionNotActive
@@ -245,15 +247,23 @@ func (s *Session) StartNewRound(filteredImages []*image.Image) error {
 
 	// 保存当前状态到历史记录
 	if len(s.queue) > 0 {
+		// 保存当前索引时，如果已经处理完所有图片，则保存最后一张图片的索引
+		saveIdx := s.currentIdx
+		if saveIdx >= len(s.queue) && len(s.queue) > 0 {
+			saveIdx = len(s.queue) - 1
+		}
 		s.roundHistory = append(s.roundHistory, RoundSnapshot{
 			queue:      s.queue,
-			currentIdx: s.currentIdx,
+			currentIdx: saveIdx,
 			undoStack:  s.undoStack,
 		})
 	}
 
 	// 开启新一轮
 	s.currentRound++
+	if filter != nil {
+		s.filter = filter
+	}
 	s.queue = filteredImages
 	s.currentIdx = 0
 	s.undoStack = make([]UndoEntry, 0)
@@ -261,6 +271,14 @@ func (s *Session) StartNewRound(filteredImages []*image.Image) error {
 	s.updatedAt = time.Now()
 
 	return nil
+}
+
+// NextRound 开启新一轮筛选（带锁版本）
+// 用于外部直接调用，会自动获取和释放锁
+func (s *Session) NextRound(filter *image.ImageFilters, filteredImages []*image.Image) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.nextRound(filter, filteredImages)
 }
 
 func (s *Session) Stats() *Stats {
@@ -386,15 +404,10 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 				if len(newQueue) <= s.targetKeep {
 					s.status = shared.SessionStatusCompleted
 				} else {
-					s.roundHistory = append(s.roundHistory, RoundSnapshot{
-						queue:      s.queue,
-						currentIdx: s.currentIdx - 1,
-						undoStack:  s.undoStack,
-					})
-					s.currentRound++
-					s.queue = newQueue
-					s.currentIdx = 0
-					s.undoStack = make([]UndoEntry, 0)
+					// 开启新一轮
+					if err := s.nextRound(nil, newQueue); err != nil {
+						return err
+					}
 				}
 			} else {
 				s.status = shared.SessionStatusCompleted
