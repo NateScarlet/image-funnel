@@ -1,3 +1,5 @@
+#import ../fragments/SessionFragment.gql
+
 mutation CommitChanges($input: CommitChangesInput!) {
   commitChanges(input: $input) {
     success
@@ -5,8 +7,7 @@ mutation CommitChanges($input: CommitChangesInput!) {
     failed
     errors
     session {
-      id
-      canCommit
+      ...SessionFragment
     }
     clientMutationId
   }
