@@ -222,13 +222,22 @@ const emit = defineEmits<{
 }>();
 
 const filteredDirectories = computed(() => {
-  return props.directories.filter((dir) => {
-    if (dir.subdirectoryCount > 0) {
-      return true;
-    }
-    const matchedCount = getMatchedImageCount(dir);
-    return matchedCount > props.targetKeep;
-  });
+  return props.directories
+    .filter((dir) => {
+      if (dir.subdirectoryCount > 0) {
+        return true;
+      }
+      const matchedCount = getMatchedImageCount(dir);
+      return matchedCount > props.targetKeep;
+    })
+    .sort((a, b) => {
+      // 按照最新图片修改日期从旧到新排序（最老的在前面）
+      const timeA = a.latestImageModTime || "";
+      const timeB = b.latestImageModTime || "";
+      if (timeA < timeB) return -1;
+      if (timeA > timeB) return 1;
+      return 0;
+    });
 });
 
 function getMatchedImageCount(dir: Directory): number {
