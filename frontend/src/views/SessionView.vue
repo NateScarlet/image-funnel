@@ -34,7 +34,7 @@
 
           <button
             class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="showUpdatePresetModal = true">
+            @click="showUpdateSessionModal = true">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCogOutline" fill="currentColor" />
             </svg>
@@ -215,7 +215,7 @@
           <button
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
-              showUpdatePresetModal = true;
+              showUpdateSessionModal = true;
             showMenu = false;
             ">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -256,9 +256,9 @@
     <CommitModal v-if="showCommitModal" :session-id="sessionId" @close="showCommitModal = false"
       @committed="onCommitted" />
 
-    <UpdatePresetModal v-if="showUpdatePresetModal" :target-keep="session?.targetKeep"
+    <UpdateSessionModal v-if="showUpdateSessionModal" :target-keep="session?.targetKeep"
       :filter="{ rating: session?.filter?.rating || [] }" :kept="stats?.kept || 0" :session-id="sessionId"
-      @close="showUpdatePresetModal = false" @updated="showUpdatePresetModal = false" />
+      @close="showUpdateSessionModal = false" @updated="showUpdateSessionModal = false" />
   </div>
 </template>
 
@@ -275,7 +275,7 @@ import {
 } from "../graphql/generated";
 import CommitModal from "../components/CommitModal.vue";
 import ImageViewer from "../components/ImageViewer.vue";
-import UpdatePresetModal from "../components/UpdatePresetModal.vue";
+import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
 import {
@@ -304,7 +304,7 @@ const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 const showCommitModal = ref<boolean>(false);
 const showMenu = ref<boolean>(false);
-const showUpdatePresetModal = ref<boolean>(false);
+const showUpdateSessionModal = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
 
