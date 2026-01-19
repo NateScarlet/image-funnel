@@ -180,7 +180,12 @@
 
         <!-- 预加载下一张图片 -->
         <Teleport to="head">
-          <link v-if="nextImage" rel="prefetch" :href="nextImage.url" as="image" />
+          <link
+            v-if="nextImage"
+            rel="prefetch"
+            :href="nextImage.url"
+            as="image"
+          />
         </Teleport>
 
         <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
