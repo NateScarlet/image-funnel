@@ -1,13 +1,8 @@
 {
   "folders": [
     {
-      "path": ".",
-      "name": "Root"
-    },
-    {
-      "path": "frontend",
-      "name": "Frontend",
-    },
+      "path": "."
+    }
   ],
   "settings": {},
   
@@ -19,14 +14,14 @@
         "type": "go",
         "request": "launch",
         "mode": "debug",
-        "program": "${workspaceFolder:Root}/cmd/server",
-        "envFile": "${workspaceFolder:Root}/.env",
-        "cwd": "${workspaceFolder:Root}",
+        "program": "${workspaceFolder}/cmd/server",
+        "envFile": "${workspaceFolder}/.env",
+        "cwd": "${workspaceFolder}",
         "preLaunchTask": "serve:web",
         "dlvFlags": ["--check-go-version=false"],
-        "output": "${workspaceFolder:Root}/main_debug.exe",
+        "output": "${workspaceFolder}/main_debug.exe",
         "env": {
-          "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder:Root}/data.local",
+          "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
           "IMAGE_FUNNEL_PORT": "8000",
         },
       },
@@ -55,7 +50,7 @@
         "isBackground": true,
         "command": "pnpm",
         "options": {
-          "cwd": "${workspaceFolder:Frontend}"
+          "cwd": "${workspaceFolder}/frontend"
         },
         "args": [
           "dev"
