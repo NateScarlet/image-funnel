@@ -197,6 +197,72 @@ func (s *Session) CurrentIndex() int {
 	return s.currentIdx
 }
 
+// UpdateTargetKeep 更新会话的目标保留数量
+func (s *Session) UpdateTargetKeep(targetKeep int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
+		return ErrSessionNotActive
+	}
+
+	s.targetKeep = targetKeep
+	s.updatedAt = time.Now()
+
+	// 如果目标数量已达到，更新状态为已完成
+	stats := s.stats()
+	if stats.kept >= targetKeep {
+		s.status = shared.SessionStatusCompleted
+	}
+
+	return nil
+}
+
+// UpdateFilter 更新会话的图片过滤器
+func (s *Session) UpdateFilter(filter *image.ImageFilters) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
+		return ErrSessionNotActive
+	}
+
+	s.filter = filter
+	s.updatedAt = time.Now()
+	return nil
+}
+
+// StartNewRound 开启新一轮筛选
+// 参数：
+// - filteredImages: 新的筛选后图片队列
+func (s *Session) StartNewRound(filteredImages []*image.Image) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.status == shared.SessionStatusCommitting || s.status == shared.SessionStatusError {
+		return ErrSessionNotActive
+	}
+
+	// 保存当前状态到历史记录
+	if len(s.queue) > 0 {
+		s.roundHistory = append(s.roundHistory, RoundSnapshot{
+			queue:      s.queue,
+			currentIdx: s.currentIdx,
+			undoStack:  s.undoStack,
+		})
+	}
+
+	// 开启新一轮
+	s.currentRound++
+	s.queue = filteredImages
+	s.currentIdx = 0
+	s.undoStack = make([]UndoEntry, 0)
+	s.status = shared.SessionStatusActive
+	s.updatedAt = time.Now()
+
+	return nil
+}
+
 func (s *Session) Stats() *Stats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -53,6 +53,16 @@
           </button>
 
           <button
+            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+            @click="showUpdatePresetModal = true"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCogOutline" fill="currentColor" />
+            </svg>
+            修改预设
+          </button>
+
+          <button
             class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700 flex items-center gap-2 whitespace-nowrap"
             @click="confirmAbandon"
           >
@@ -268,6 +278,19 @@
           </button>
 
           <button
+            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+            @click="
+              showUpdatePresetModal = true;
+              showMenu = false;
+            "
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCogOutline" fill="currentColor" />
+            </svg>
+            修改预设
+          </button>
+
+          <button
             :disabled="!session?.canCommit"
             class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
@@ -307,11 +330,21 @@
       @close="showCommitModal = false"
       @committed="onCommitted"
     />
+
+    <UpdatePresetModal
+      v-if="showUpdatePresetModal"
+      :target-keep="updateForm.targetKeep"
+      :filter="updateForm.filter"
+      :kept="stats?.kept || 0"
+      :session-id="sessionId"
+      @close="showUpdatePresetModal = false"
+      @updated="showUpdatePresetModal = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
@@ -323,6 +356,7 @@ import {
 } from "../graphql/generated";
 import CommitModal from "../components/CommitModal.vue";
 import ImageViewer from "../components/ImageViewer.vue";
+import UpdatePresetModal from "../components/UpdatePresetModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
 import {
@@ -335,12 +369,15 @@ import {
   mdiClockOutline,
   mdiHeartOutline,
   mdiLoading,
+  mdiCogOutline,
 } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
+import { usePresets } from "../composables/usePresets";
 
 const rendererEl = useFullscreenRendererElement();
 const route = useRoute();
 const router = useRouter();
+usePresets();
 
 const sessionId = route.params.id as string;
 
@@ -348,6 +385,7 @@ const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 const showCommitModal = ref<boolean>(false);
 const showMenu = ref<boolean>(false);
+const showUpdatePresetModal = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
 
@@ -356,6 +394,26 @@ const touchStartY = ref<number>(0);
 const touchEndX = ref<number>(0);
 const touchEndY = ref<number>(0);
 const isSingleTouch = ref<boolean>(true);
+
+// 更新预设表单
+const updateForm = ref({
+  targetKeep: 4,
+  filter: {
+    rating: [0, 4],
+  },
+});
+
+// 监听session变化，同步更新表单
+watch(
+  () => session.value,
+  (newSession) => {
+    if (newSession) {
+      updateForm.value.targetKeep = newSession.targetKeep;
+      updateForm.value.filter.rating = newSession.filter.rating || [];
+    }
+  },
+  { immediate: true, deep: true },
+);
 
 const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   if (!isSingleTouch.value) return null;

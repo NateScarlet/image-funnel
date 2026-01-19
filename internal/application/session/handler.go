@@ -210,3 +210,61 @@ func toDTOFilter(filter *domainimage.ImageFilters) *appimage.ImageFilters {
 func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*SessionDTO, error] {
 	return h.eventBus.SubscribeSession(ctx)
 }
+
+// UpdateSession 更新会话配置
+func (h *Handler) UpdateSession(
+	ctx context.Context,
+	sessionID scalar.ID,
+	targetKeep *int,
+	filter *appimage.ImageFilters,
+) error {
+	sess, err := h.sessionRepo.FindByID(sessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	// 更新目标保留数量
+	if targetKeep != nil {
+		if err := sess.UpdateTargetKeep(*targetKeep); err != nil {
+			return fmt.Errorf("failed to update target keep: %w", err)
+		}
+	}
+
+	// 更新过滤器 - 需要重新扫描目录
+	if filter != nil {
+		// 重新扫描目录
+		images, err := h.dirScanner.Scan(sess.Directory())
+		if err != nil {
+			return fmt.Errorf("failed to scan directory: %w", err)
+		}
+
+		// 应用新的过滤器
+		domainFilter := toDomainFilter(filter)
+		filterFunc := domainimage.BuildImageFilter(domainFilter)
+		filteredImages := domainimage.FilterImages(images, filterFunc)
+
+		// 更新会话的过滤器
+		if err := sess.UpdateFilter(domainFilter); err != nil {
+			return fmt.Errorf("failed to update filter: %w", err)
+		}
+
+		// 使用领域层的公共方法开启新一轮
+		if err := sess.StartNewRound(filteredImages); err != nil {
+			return fmt.Errorf("failed to start new round: %w", err)
+		}
+	}
+
+	// 保存会话
+	if err := h.sessionRepo.Save(sess); err != nil {
+		return fmt.Errorf("failed to save session: %w", err)
+	}
+
+	// 发布会话更新事件
+	sessionDTO, err := h.dtoFactory.New(sess)
+	if err != nil {
+		return fmt.Errorf("failed to create session DTO: %w", err)
+	}
+	h.eventBus.PublishSession(ctx, sessionDTO)
+
+	return nil
+}

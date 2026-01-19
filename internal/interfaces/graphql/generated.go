@@ -112,6 +112,7 @@ type ComplexityRoot struct {
 		CreateSession func(childComplexity int, input CreateSessionInput) int
 		MarkImage     func(childComplexity int, input MarkImageInput) int
 		Undo          func(childComplexity int, input UndoInput) int
+		UpdateSession func(childComplexity int, input UpdateSessionInput) int
 	}
 
 	Query struct {
@@ -165,6 +166,11 @@ type ComplexityRoot struct {
 		Session          func(childComplexity int) int
 	}
 
+	UpdateSessionPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Session          func(childComplexity int) int
+	}
+
 	WriteActions struct {
 		KeepRating    func(childComplexity int) int
 		PendingRating func(childComplexity int) int
@@ -182,6 +188,7 @@ type MutationResolver interface {
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
+	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
 type QueryResolver interface {
 	Meta(ctx context.Context) (*Meta, error)
@@ -452,6 +459,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.Undo(childComplexity, args["input"].(UndoInput)), true
+	case "Mutation.updateSession":
+		if e.complexity.Mutation.UpdateSession == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSession_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateSession(childComplexity, args["input"].(UpdateSessionInput)), true
 
 	case "Query.directory":
 		if e.complexity.Query.Directory == nil {
@@ -655,6 +673,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.UndoPayload.Session(childComplexity), true
 
+	case "UpdateSessionPayload.clientMutationId":
+		if e.complexity.UpdateSessionPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UpdateSessionPayload.ClientMutationID(childComplexity), true
+	case "UpdateSessionPayload.session":
+		if e.complexity.UpdateSessionPayload.Session == nil {
+			break
+		}
+
+		return e.complexity.UpdateSessionPayload.Session(childComplexity), true
+
 	case "WriteActions.keepRating":
 		if e.complexity.WriteActions.KeepRating == nil {
 			break
@@ -687,6 +718,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputUndoInput,
+		ec.unmarshalInputUpdateSessionInput,
 		ec.unmarshalInputWriteActionsInput,
 	)
 	first := true
@@ -803,12 +835,20 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 
 var sources = []*ast.Source{
 	{Name: "../../../graph/scalars.graphql", Input: `scalar Time
-scalar Upload
 scalar URI
-`, BuiltIn: false},
-	{Name: "../../../graph/directives.graphql", Input: `directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+scalar Upload`, BuiltIn: false},
+	{Name: "../../../graph/directives.graphql", Input: `directive @goModel(
+  model: String
+  models: [String!]
+  forceGenerate: Boolean
+) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
-directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+directive @goField(
+  forceResolver: Boolean
+  name: String
+  omittable: Boolean
+) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/application/directory.DirectoryDTO") {
   id: ID!
@@ -993,6 +1033,21 @@ extend type Mutation {
   undo(input: UndoInput!): UndoPayload
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_session.graphql", Input: `input UpdateSessionInput {
+  sessionId: ID!
+  targetKeep: Int
+  filter: ImageFiltersInput
+  clientMutationId: String
+}
+
+type UpdateSessionPayload {
+  session: Session!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  updateSession(input: UpdateSessionInput!): UpdateSessionPayload!
+}`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -1037,6 +1092,17 @@ func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArg
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUndoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUndoInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionInput)
 	if err != nil {
 		return nil, err
 	}
@@ -2343,6 +2409,53 @@ func (ec *executionContext) fieldContext_Mutation_undo(ctx context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updateSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateSession,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateSession(ctx, fc.Args["input"].(UpdateSessionInput))
+		},
+		nil,
+		ec.marshalNUpdateSessionPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateSession(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "session":
+				return ec.fieldContext_UpdateSessionPayload_session(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UpdateSessionPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UpdateSessionPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_meta(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3515,6 +3628,90 @@ func (ec *executionContext) _UndoPayload_clientMutationId(ctx context.Context, f
 func (ec *executionContext) fieldContext_UndoPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "UndoPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateSessionPayload_session(ctx context.Context, field graphql.CollectedField, obj *UpdateSessionPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateSessionPayload_session,
+		func(ctx context.Context) (any, error) {
+			return obj.Session, nil
+		},
+		nil,
+		ec.marshalNSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateSessionPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "directory":
+				return ec.fieldContext_Session_directory(ctx, field)
+			case "filter":
+				return ec.fieldContext_Session_filter(ctx, field)
+			case "targetKeep":
+				return ec.fieldContext_Session_targetKeep(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "stats":
+				return ec.fieldContext_Session_stats(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			case "canCommit":
+				return ec.fieldContext_Session_canCommit(ctx, field)
+			case "canUndo":
+				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentImage":
+				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "queueStatus":
+				return ec.fieldContext_Session_queueStatus(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateSessionPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UpdateSessionPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateSessionPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateSessionPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateSessionPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -5256,6 +5453,54 @@ func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateSessionInput(ctx context.Context, obj any) (UpdateSessionInput, error) {
+	var it UpdateSessionInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "targetKeep", "filter", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "targetKeep":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetKeep"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetKeep = data
+		case "filter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
+			data, err := ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Filter = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context, obj any) (session.WriteActions, error) {
 	var it session.WriteActions
 	asMap := map[string]any{}
@@ -5808,6 +6053,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_undo(ctx, field)
 			})
+		case "updateSession":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6288,6 +6540,47 @@ func (ec *executionContext) _UndoPayload(ctx context.Context, sel ast.SelectionS
 			out.Values[i] = ec._UndoPayload_session(ctx, field, obj)
 		case "clientMutationId":
 			out.Values[i] = ec._UndoPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var updateSessionPayloadImplementors = []string{"UpdateSessionPayload"}
+
+func (ec *executionContext) _UpdateSessionPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateSessionPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, updateSessionPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UpdateSessionPayload")
+		case "session":
+			out.Values[i] = ec._UpdateSessionPayload_session(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UpdateSessionPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7130,6 +7423,25 @@ func (ec *executionContext) unmarshalNUndoInput2mainᚋinternalᚋinterfacesᚋg
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNUpdateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionInput(ctx context.Context, v any) (UpdateSessionInput, error) {
+	res, err := ec.unmarshalInputUpdateSessionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUpdateSessionPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionPayload(ctx context.Context, sel ast.SelectionSet, v UpdateSessionPayload) graphql.Marshaler {
+	return ec._UpdateSessionPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUpdateSessionPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionPayload(ctx context.Context, sel ast.SelectionSet, v *UpdateSessionPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UpdateSessionPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNWriteActionsInput2ᚖmainᚋinternalᚋapplicationᚋsessionᚐWriteActions(ctx context.Context, v any) (*session.WriteActions, error) {
 	res, err := ec.unmarshalInputWriteActionsInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
@@ -7458,6 +7770,14 @@ func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋapplicationᚋima
 	return ec._Image(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋapplicationᚋimageᚐImageFilters(ctx context.Context, v any) (*image.ImageFilters, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputImageFiltersInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalOInt2int(ctx context.Context, v any) (int, error) {
 	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -7504,6 +7824,24 @@ func (ec *executionContext) marshalOInt2ᚕintᚄ(ctx context.Context, sel ast.S
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalInt(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.SelectionSet, v *int) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalInt(*v)
+	return res
 }
 
 func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋapplicationᚋsessionᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *session.SessionDTO) graphql.Marshaler {

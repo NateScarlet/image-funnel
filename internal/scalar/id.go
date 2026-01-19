@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// ToID 将字符串转换为 ID 类型
+// 注意：仅供领域层使用，外部必须直接原样传递ID类型，避免字符串误用
 func ToID(str string) ID {
 	return ID{str: str}
 }

@@ -77,3 +77,15 @@ type UndoPayload struct {
 	Session          *session.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string             `json:"clientMutationId,omitempty"`
 }
+
+type UpdateSessionInput struct {
+	SessionID        scalar.ID           `json:"sessionId"`
+	TargetKeep       *int                `json:"targetKeep,omitempty"`
+	Filter           *image.ImageFilters `json:"filter,omitempty"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+}
+
+type UpdateSessionPayload struct {
+	Session          *session.SessionDTO `json:"session"`
+	ClientMutationID *string             `json:"clientMutationId,omitempty"`
+}

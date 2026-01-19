@@ -1,0 +1,15 @@
+input UpdateSessionInput {
+  sessionId: ID!
+  targetKeep: Int
+  filter: ImageFiltersInput
+  clientMutationId: String
+}
+
+type UpdateSessionPayload {
+  session: Session!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  updateSession(input: UpdateSessionInput!): UpdateSessionPayload!
+}

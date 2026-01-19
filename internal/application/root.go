@@ -1,8 +1,6 @@
 package application
 
 import (
-	"context"
-	"iter"
 	"main/internal/application/directory"
 	"main/internal/application/session"
 )
@@ -10,6 +8,8 @@ import (
 type sessionHandler = session.Handler
 type directoryHandler = directory.Handler
 
+// Root 直接嵌入了Handler，可以使用所有Handler方法
+// 所有方法通过嵌入的Handler直接访问，不允许在Root结构体上重新声明
 type Root struct {
 	*sessionHandler
 	*directoryHandler
@@ -23,8 +23,4 @@ func NewRoot(
 		sessionHandler:   sessionHandler,
 		directoryHandler: directoryHandler,
 	}
-}
-
-func (r *Root) SubscribeSession(ctx context.Context) iter.Seq2[*session.SessionDTO, error] {
-	return r.sessionHandler.SubscribeSession(ctx)
 }

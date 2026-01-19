@@ -1,6 +1,7 @@
 package session
 
 import (
+	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/shared"
 	"time"
@@ -50,4 +51,21 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 	session.status = shared.SessionStatusCompleted
 
 	return success, errors
+}
+
+// UpdateSessionSettings 更新会话的设置配置
+func (s *Service) UpdateSessionSettings(session *Session, targetKeep *int, filter *image.ImageFilters) error {
+	if targetKeep != nil {
+		if err := session.UpdateTargetKeep(*targetKeep); err != nil {
+			return err
+		}
+	}
+
+	if filter != nil {
+		if err := session.UpdateFilter(filter); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
