@@ -73,7 +73,7 @@ func TestFilterImages_WithNilFilter(t *testing.T) {
 func createTestImagesWithRatings(ratings []int) []*Image {
 	images := make([]*Image, len(ratings))
 	for i, rating := range ratings {
-		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
+		xmpData := metadata.NewXMPData(rating, "", time.Time{})
 		images[i] = NewImage(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",

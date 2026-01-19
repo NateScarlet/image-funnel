@@ -40,7 +40,6 @@ func TestReadExternalSamples(t *testing.T) {
 			case "valid_xmp.xmp":
 				assert.Equal(t, 5, data.Rating(), "valid_xmp.xmp should have rating 5")
 				assert.Equal(t, "keep", data.Action(), "valid_xmp.xmp should have action keep")
-				assert.Equal(t, "default", data.Preset(), "valid_xmp.xmp should have preset default")
 			case "with_unknown_fields.xmp":
 				assert.Equal(t, 3, data.Rating(), "with_unknown_fields.xmp should have rating 3")
 			case "multiple_rating_sources.xmp":
@@ -52,7 +51,7 @@ func TestReadExternalSamples(t *testing.T) {
 
 func TestWriteAndRead(t *testing.T) {
 	repo := NewRepository()
-	testData := metadata.NewXMPData(3, "keep", time.Now(), "default")
+	testData := metadata.NewXMPData(3, "keep", time.Now())
 
 	tempFile := filepath.Join(os.TempDir(), "test-image.jpg")
 	defer os.Remove(tempFile)
@@ -64,14 +63,13 @@ func TestWriteAndRead(t *testing.T) {
 	readData, err := repo.Read(tempFile)
 	require.NoError(t, err, "Failed to read XMP")
 	assert.Equal(t, testData.Rating(), readData.Rating())
-	assert.Equal(t, testData.Action(), readData.Action())
-	assert.Equal(t, testData.Preset(), readData.Preset())
+		assert.Equal(t, testData.Action(), readData.Action())
 }
 
 func TestBatchWrite(t *testing.T) {
 	repo := NewRepository()
-	testData1 := metadata.NewXMPData(1, "keep", time.Now(), "default")
-	testData2 := metadata.NewXMPData(2, "keep", time.Now(), "default")
+	testData1 := metadata.NewXMPData(1, "keep", time.Now())
+		testData2 := metadata.NewXMPData(2, "keep", time.Now())
 
 	tempFile1 := filepath.Join(os.TempDir(), "test-image-1.jpg")
 	tempFile2 := filepath.Join(os.TempDir(), "test-image-2.jpg")

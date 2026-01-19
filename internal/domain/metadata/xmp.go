@@ -10,7 +10,6 @@ type XMPData struct {
 	rating    int
 	action    string
 	timestamp time.Time
-	preset    string
 }
 
 func (d *XMPData) Rating() (_ int) {
@@ -34,19 +33,11 @@ func (d *XMPData) Timestamp() (_ time.Time) {
 	return d.timestamp
 }
 
-func (d *XMPData) Preset() (_ string) {
-	if d == nil {
-		return
-	}
-	return d.preset
-}
-
-func NewXMPData(rating int, action string, timestamp time.Time, preset string) *XMPData {
+func NewXMPData(rating int, action string, timestamp time.Time) *XMPData {
 	return &XMPData{
 		rating:    rating,
 		action:    action,
 		timestamp: timestamp,
-		preset:    preset,
 	}
 }
 

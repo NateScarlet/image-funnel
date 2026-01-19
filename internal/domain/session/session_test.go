@@ -408,7 +408,7 @@ func createTestImages(count int) []*image.Image {
 func createTestImagesWithRatings(ratings []int) []*image.Image {
 	images := make([]*image.Image, len(ratings))
 	for i, rating := range ratings {
-		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
+		xmpData := metadata.NewXMPData(rating, "", time.Time{})
 		images[i] = image.NewImage(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",

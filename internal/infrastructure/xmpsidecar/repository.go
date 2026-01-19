@@ -69,17 +69,13 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 			}
 		}
 
-		preset := findElementText(rdf, []string{"imagefunnel:Preset", "Preset"})
-		if preset != "" {
-			result.Preset = preset
-		}
+
 	}
 
 	return metadata.NewXMPData(
 		result.Rating,
 		result.Action,
 		result.Timestamp,
-		result.Preset,
 	), nil
 }
 
@@ -90,7 +86,6 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 		Rating:    data.Rating(),
 		Action:    data.Action(),
 		Timestamp: data.Timestamp(),
-		Preset:    data.Preset(),
 	}
 
 	var doc *etree.Document
@@ -106,7 +101,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 						createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
 						createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 						createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-						createOrUpdateElement(desc, "imagefunnel:Preset", xmpData.Preset)
+		
 					}
 				}
 				return writeXMPFile(doc, xmpPath)
@@ -134,7 +129,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
 	createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 	createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-	createOrUpdateElement(desc, "imagefunnel:Preset", xmpData.Preset)
+
 
 	return writeXMPFile(doc, xmpPath)
 }
@@ -155,7 +150,7 @@ func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadat
 			Rating:    data.Rating(),
 			Action:    data.Action(),
 			Timestamp: data.Timestamp(),
-			Preset:    data.Preset(),
+
 		}
 
 		var doc *etree.Document
@@ -171,7 +166,7 @@ func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadat
 							createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
 							createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 							createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-							createOrUpdateElement(desc, "imagefunnel:Preset", xmpData.Preset)
+
 						}
 					}
 					err = writeXMPFile(doc, xmpPath)
@@ -205,7 +200,7 @@ func (r *Repository) BatchWrite(imagePaths []string, dataMap map[string]*metadat
 		createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(xmpData.Rating))
 		createOrUpdateElement(desc, "imagefunnel:Action", xmpData.Action)
 		createOrUpdateElement(desc, "imagefunnel:Timestamp", xmpData.Timestamp.Format(time.RFC3339))
-		createOrUpdateElement(desc, "imagefunnel:Preset", xmpData.Preset)
+
 
 		err := writeXMPFile(doc, xmpPath)
 		if err != nil {
@@ -223,7 +218,6 @@ type XMPData struct {
 	Action    string
 	SessionID string
 	Timestamp time.Time
-	Preset    string
 }
 
 func findElementText(elem *etree.Element, tags []string) string {
