@@ -1,18 +1,9 @@
 package image
 
-type ImageFilters struct {
-	rating []int
-}
+import (
+	"main/internal/shared"
+)
 
-func NewImageFilters(rating []int) *ImageFilters {
-	return &ImageFilters{
-		rating: rating,
-	}
-}
-
-func (f *ImageFilters) Rating() []int {
-	if f == nil {
-		return nil
-	}
-	return f.rating
-}
+// TODO: 已移动到 shared 包
+// ImageFilters 图片过滤条件
+type ImageFilters = shared.ImageFilters

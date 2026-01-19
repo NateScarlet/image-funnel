@@ -1,46 +1,21 @@
 package session
 
 import (
-	"time"
-
-	appimage "main/internal/application/image"
-	"main/internal/scalar"
 	"main/internal/shared"
 )
 
-type SessionDTO struct {
-	ID           scalar.ID
-	Directory    string
-	Filter       *appimage.ImageFilters
-	TargetKeep   int
-	Status       shared.SessionStatus
-	Stats        *StatsDTO
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	CanCommit    bool
-	CanUndo      bool
-	CurrentImage *appimage.ImageDTO
-	QueueStatus  *QueueStatusDTO
-}
+// TODO: 已移动到 shared 包
+// SessionDTO 会话数据传输对象
+type SessionDTO = shared.SessionDTO
 
-type StatsDTO struct {
-	Total     int
-	Processed int
-	Kept      int
-	Reviewed  int
-	Rejected  int
-	Remaining int
-}
+// TODO: 已移动到 shared 包
+// StatsDTO 会话统计数据
+type StatsDTO = shared.StatsDTO
 
-type QueueStatusDTO struct {
-	CurrentIndex int
-	TotalImages  int
-	CurrentImage *appimage.ImageDTO
-	Progress     float64
-}
+// TODO: 已移动到 shared 包
+// QueueStatusDTO 队列状态数据
+type QueueStatusDTO = shared.QueueStatusDTO
 
-type WriteActions struct {
-	KeepRating    int
-	PendingRating int
-	RejectRating  int
-}
+// TODO: 已移动到 shared 包
+// WriteActions 写入操作配置
+type WriteActions = shared.WriteActions

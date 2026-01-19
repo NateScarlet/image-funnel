@@ -6,7 +6,6 @@ import (
 	"iter"
 	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
-	domainimage "main/internal/domain/image"
 	"main/internal/domain/session"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -44,8 +43,7 @@ func (h *Handler) CreateSession(
 		return err
 	}
 
-	domainFilter := toDomainFilter(filter)
-	sess, err := h.sessionService.Create(id, directory, domainFilter, target_keep)
+	sess, err := h.sessionService.Create(id, directory, filter, target_keep)
 	if err != nil {
 		return fmt.Errorf("failed to initialize session: %w", err)
 	}
@@ -152,22 +150,6 @@ func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*St
 	return statsDTOFactory.New(sess.Stats())
 }
 
-func toDomainFilter(filter *appimage.ImageFilters) *domainimage.ImageFilters {
-	if filter == nil {
-		return domainimage.NewImageFilters(nil)
-	}
-	return domainimage.NewImageFilters(filter.Rating)
-}
-
-func toDTOFilter(filter *domainimage.ImageFilters) *appimage.ImageFilters {
-	if filter == nil {
-		return &appimage.ImageFilters{Rating: nil}
-	}
-	return &appimage.ImageFilters{
-		Rating: filter.Rating(),
-	}
-}
-
 func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*SessionDTO, error] {
 	return h.eventBus.SubscribeSession(ctx)
 }
@@ -186,8 +168,7 @@ func (h *Handler) UpdateSession(
 	}
 
 	if filter != nil {
-		domainFilter := toDomainFilter(filter)
-		options = append(options, session.WithFilter(domainFilter))
+		options = append(options, session.WithFilter(filter))
 	}
 
 	sess, err := h.sessionService.Update(sessionID, options...)

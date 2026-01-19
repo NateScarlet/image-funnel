@@ -1,19 +1,9 @@
 package directory
 
 import (
-	"time"
-
-	"main/internal/scalar"
+	"main/internal/shared"
 )
 
-type DirectoryDTO struct {
-	ID                 scalar.ID
-	ParentID           scalar.ID
-	Path               string
-	Root               bool
-	ImageCount         int
-	SubdirectoryCount  int
-	LatestImageModTime time.Time
-	LatestImagePath    string
-	RatingCounts       map[int]int
-}
+// TODO: 已移动到 shared 包
+// DirectoryDTO 目录数据传输对象
+type DirectoryDTO = shared.DirectoryDTO

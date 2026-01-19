@@ -14,7 +14,7 @@ import (
 )
 
 func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
-	filter := image.NewImageFilters([]int{0, 1, 2})
+	filter := &shared.ImageFilters{Rating: []int{0, 1, 2}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -31,7 +31,7 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 }
 
 func TestStats_InitialState(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -47,7 +47,7 @@ func TestStats_InitialState(t *testing.T) {
 }
 
 func TestStats_AfterMarkingImages(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -78,7 +78,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 }
 
 func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -96,7 +96,7 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 }
 
 func TestMarkImage_ShouldUpdateAction(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -111,7 +111,7 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 }
 
 func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -125,7 +125,7 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -136,7 +136,7 @@ func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 }
 
 func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -148,7 +148,7 @@ func TestMarkImage_SessionNotActive_ShouldReturnError(t *testing.T) {
 }
 
 func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -162,7 +162,7 @@ func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -191,7 +191,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -213,7 +213,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 }
 
 func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -222,7 +222,7 @@ func TestCanCommit_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -236,7 +236,7 @@ func TestCanCommit_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -246,7 +246,7 @@ func TestCanCommit_CommittingStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -256,7 +256,7 @@ func TestCanCommit_ErrorStatus_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -265,7 +265,7 @@ func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -277,7 +277,7 @@ func TestCanUndo_AfterMarkingImages_ShouldReturnTrue(t *testing.T) {
 }
 
 func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -286,7 +286,7 @@ func TestCanUndo_AfterUndoAll_ShouldReturnFalse(t *testing.T) {
 }
 
 func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -308,7 +308,7 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 }
 
 func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -323,7 +323,7 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 }
 
 func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -339,7 +339,7 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 }
 
 func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -375,7 +375,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 }
 
 func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -395,7 +395,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 }
 
 func TestUndo_NothingToUndo_ShouldReturnError(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -406,7 +406,7 @@ func TestUndo_NothingToUndo_ShouldReturnError(t *testing.T) {
 }
 
 func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -425,7 +425,7 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 }
 
 func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -522,7 +522,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 }
 
 func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -553,7 +553,7 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 }
 
 func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -583,7 +583,7 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 }
 
 func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -600,8 +600,8 @@ func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
 	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session should be COMPLETED when kept <= target")
 }
 
-func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+func TestSession_ShouldCompleteWhenKeepTargetReached(t *testing.T) {
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
@@ -618,8 +618,8 @@ func TestMarkImage_KeptEqualTarget_ShouldComplete(t *testing.T) {
 	assert.Equal(t, shared.SessionStatusCompleted, session.Status(), "Session should be COMPLETED when kept == target")
 }
 
-func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
-	filter := image.NewImageFilters([]int{0})
+func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
+	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(10)
 
 	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)

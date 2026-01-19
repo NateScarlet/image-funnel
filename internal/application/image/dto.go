@@ -1,21 +1,13 @@
 package image
 
 import (
-	"time"
-
-	"main/internal/scalar"
+	"main/internal/shared"
 )
 
-type ImageFilters struct {
-	Rating []int
-}
+// TODO: 已移动到 shared 包
+// ImageFilters 图片过滤条件
+type ImageFilters = shared.ImageFilters
 
-type ImageDTO struct {
-	ID            scalar.ID
-	Filename      string
-	Size          int64
-	URL           string
-	ModTime       time.Time
-	CurrentRating int
-	XMPExists     bool
-}
+// TODO: 已移动到 shared 包
+// ImageDTO 图片数据传输对象
+type ImageDTO = shared.ImageDTO
