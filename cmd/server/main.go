@@ -66,12 +66,12 @@ func main() {
 
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
-	sessionService := session.NewService(metadataRepo)
 	dirScanner := localfs.NewScanner(absRootDir, metadataRepo)
+	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*appsession.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 
-	sessionHandler := appsession.NewHandler(sessionRepo, sessionService, dirScanner, eventBus, signer)
+	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)
 	directoryHandler := directory.NewHandler(dirScanner)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)

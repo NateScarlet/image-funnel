@@ -13,25 +13,19 @@ import (
 )
 
 type Handler struct {
-	sessionRepo    session.Repository
 	sessionService *session.Service
-	dirScanner     directory.Scanner
 	eventBus       EventBus
 	urlSigner      appimage.URLSigner
 	dtoFactory     *SessionDTOFactory
 }
 
 func NewHandler(
-	sessionRepo session.Repository,
 	sessionService *session.Service,
-	dirScanner directory.Scanner,
 	eventBus EventBus,
 	urlSigner appimage.URLSigner,
 ) *Handler {
 	return &Handler{
-		sessionRepo:    sessionRepo,
 		sessionService: sessionService,
-		dirScanner:     dirScanner,
 		eventBus:       eventBus,
 		urlSigner:      urlSigner,
 		dtoFactory:     NewSessionDTOFactory(urlSigner),
@@ -45,28 +39,15 @@ func (h *Handler) CreateSession(
 	filter *appimage.ImageFilters,
 	target_keep int,
 ) error {
-	path, err := directory.DecodeID(directoryId)
-	if err != nil {
-		return err
-	}
-	images, err := h.dirScanner.Scan(path)
-	if err != nil {
-		return fmt.Errorf("failed to scan directory: %w", err)
-	}
-
-	domainFilter := toDomainFilter(filter)
-	filterFunc := domainimage.BuildImageFilter(domainFilter)
-
-	filteredImages := domainimage.FilterImages(images, filterFunc)
-
 	directory, err := directory.DecodeID(directoryId)
 	if err != nil {
 		return err
 	}
-	sess := session.NewSession(id, directory, domainFilter, target_keep, filteredImages)
 
-	if err = h.sessionRepo.Save(sess); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
+	domainFilter := toDomainFilter(filter)
+	sess, err := h.sessionService.Create(id, directory, domainFilter, target_keep)
+	if err != nil {
+		return fmt.Errorf("failed to initialize session: %w", err)
 	}
 
 	sessionDTO, err := h.dtoFactory.New(sess)
@@ -84,17 +65,9 @@ func (h *Handler) MarkImage(
 	imageID scalar.ID,
 	action shared.ImageAction,
 ) error {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.MarkImage(sessionID, imageID, action)
 	if err != nil {
-		return fmt.Errorf("session not found: %w", err)
-	}
-
-	if err := sess.MarkImage(imageID, action); err != nil {
 		return fmt.Errorf("failed to mark image: %w", err)
-	}
-
-	if err := h.sessionRepo.Save(sess); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
 	}
 
 	sessionDTO, err := h.dtoFactory.New(sess)
@@ -107,17 +80,9 @@ func (h *Handler) MarkImage(
 }
 
 func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) error {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.Undo(sessionID)
 	if err != nil {
-		return fmt.Errorf("session not found: %w", err)
-	}
-
-	if err := sess.Undo(); err != nil {
 		return fmt.Errorf("failed to undo: %w", err)
-	}
-
-	if err := h.sessionRepo.Save(sess); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
 	}
 
 	sessionDTO, err := h.dtoFactory.New(sess)
@@ -136,7 +101,7 @@ func (h *Handler) Commit(
 	pendingRating int,
 	rejectRating int,
 ) (int, []error) {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return 0, []error{fmt.Errorf("session not found: %w", err)}
 	}
@@ -144,13 +109,9 @@ func (h *Handler) Commit(
 	writeActions := session.NewWriteActions(keepRating, pendingRating, rejectRating)
 	success, errors := h.sessionService.Commit(sess, writeActions)
 
-	if err := h.sessionRepo.Save(sess); err != nil {
-		return 0, []error{fmt.Errorf("failed to save session: %w", err)}
-	}
-
 	sessionDTO, err := h.dtoFactory.New(sess)
 	if err != nil {
-		return 0, []error{fmt.Errorf("failed to create session DTO: %w", err)}
+		return success, append(errors, fmt.Errorf("failed to create session DTO: %w", err))
 	}
 	h.eventBus.PublishSession(ctx, sessionDTO)
 
@@ -158,7 +119,7 @@ func (h *Handler) Commit(
 }
 
 func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*SessionDTO, error) {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +128,7 @@ func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*Session
 }
 
 func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*appimage.ImageDTO, error) {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +143,7 @@ func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*ap
 }
 
 func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*StatsDTO, error) {
-	sess, err := h.sessionRepo.FindByID(sessionID)
+	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -218,48 +179,22 @@ func (h *Handler) UpdateSession(
 	targetKeep *int,
 	filter *appimage.ImageFilters,
 ) error {
-	sess, err := h.sessionRepo.FindByID(sessionID)
-	if err != nil {
-		return fmt.Errorf("session not found: %w", err)
-	}
+	var options []session.UpdateOption
 
-	// 更新目标保留数量
 	if targetKeep != nil {
-		if err := sess.UpdateTargetKeep(*targetKeep); err != nil {
-			return fmt.Errorf("failed to update target keep: %w", err)
-		}
+		options = append(options, session.WithTargetKeep(*targetKeep))
 	}
 
-	// 更新过滤器 - 需要重新扫描目录
 	if filter != nil {
-		// 重新扫描目录
-		images, err := h.dirScanner.Scan(sess.Directory())
-		if err != nil {
-			return fmt.Errorf("failed to scan directory: %w", err)
-		}
-
-		// 应用新的过滤器
 		domainFilter := toDomainFilter(filter)
-		filterFunc := domainimage.BuildImageFilter(domainFilter)
-		filteredImages := domainimage.FilterImages(images, filterFunc)
-
-		// 更新会话的过滤器
-		if err := sess.UpdateFilter(domainFilter); err != nil {
-			return fmt.Errorf("failed to update filter: %w", err)
-		}
-
-		// 使用领域层的公共方法开启新一轮
-		if err := sess.StartNewRound(filteredImages); err != nil {
-			return fmt.Errorf("failed to start new round: %w", err)
-		}
+		options = append(options, session.WithFilter(domainFilter))
 	}
 
-	// 保存会话
-	if err := h.sessionRepo.Save(sess); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
+	sess, err := h.sessionService.Update(sessionID, options...)
+	if err != nil {
+		return fmt.Errorf("failed to update session: %w", err)
 	}
 
-	// 发布会话更新事件
 	sessionDTO, err := h.dtoFactory.New(sess)
 	if err != nil {
 		return fmt.Errorf("failed to create session DTO: %w", err)

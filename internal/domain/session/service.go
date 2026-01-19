@@ -1,19 +1,48 @@
 package session
 
 import (
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
+	"main/internal/scalar"
 	"main/internal/shared"
 	"time"
 )
 
 type Service struct {
+	sessionRepo  Repository
 	metadataRepo metadata.Repository
+	dirScanner   directory.Scanner
 }
 
-func NewService(metadataRepo metadata.Repository) *Service {
+func NewService(sessionRepo Repository, metadataRepo metadata.Repository, dirScanner directory.Scanner) *Service {
 	return &Service{
+		sessionRepo:  sessionRepo,
 		metadataRepo: metadataRepo,
+		dirScanner:   dirScanner,
+	}
+}
+
+// UpdateOptions 定义会话更新选项
+type UpdateOptions struct {
+	targetKeep *int
+	filter     *image.ImageFilters
+}
+
+// UpdateOption 定义更新选项的函数类型
+type UpdateOption func(*UpdateOptions)
+
+// WithTargetKeep 设置目标保留数量
+func WithTargetKeep(targetKeep int) UpdateOption {
+	return func(opts *UpdateOptions) {
+		opts.targetKeep = &targetKeep
+	}
+}
+
+// WithFilter 设置过滤器
+func WithFilter(filter *image.ImageFilters) UpdateOption {
+	return func(opts *UpdateOptions) {
+		opts.filter = filter
 	}
 }
 
@@ -50,22 +79,112 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 
 	session.status = shared.SessionStatusCompleted
 
+	if err := s.sessionRepo.Save(session); err != nil {
+		errors = append(errors, err)
+	}
+
 	return success, errors
 }
 
-// UpdateSessionSettings 更新会话的设置配置
-func (s *Service) UpdateSessionSettings(session *Session, targetKeep *int, filter *image.ImageFilters) error {
-	if targetKeep != nil {
-		if err := session.UpdateTargetKeep(*targetKeep); err != nil {
-			return err
+// Update 更新会话配置
+// 使用 Options 模式支持灵活的更新选项
+func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error) {
+	sess, err := s.sessionRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := &UpdateOptions{}
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	if opts.targetKeep != nil {
+		if err := sess.UpdateTargetKeep(*opts.targetKeep); err != nil {
+			return nil, err
 		}
 	}
 
-	if filter != nil {
-		if err := session.UpdateFilter(filter); err != nil {
-			return err
+	if opts.filter != nil {
+		images, err := s.dirScanner.Scan(sess.Directory())
+		if err != nil {
+			return nil, err
+		}
+
+		filterFunc := image.BuildImageFilter(opts.filter)
+		filteredImages := image.FilterImages(images, filterFunc)
+
+		if err := sess.UpdateFilter(opts.filter); err != nil {
+			return nil, err
+		}
+
+		if err := sess.StartNewRound(filteredImages); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	if err := s.sessionRepo.Save(sess); err != nil {
+		return nil, err
+	}
+
+	return sess, nil
+}
+
+// Create 初始化一个新的会话
+// 扫描目录、应用过滤器并创建会话
+func (s *Service) Create(id scalar.ID, directory string, filter *image.ImageFilters, targetKeep int) (*Session, error) {
+	images, err := s.dirScanner.Scan(directory)
+	if err != nil {
+		return nil, err
+	}
+
+	filterFunc := image.BuildImageFilter(filter)
+	filteredImages := image.FilterImages(images, filterFunc)
+
+	sess := NewSession(id, directory, filter, targetKeep, filteredImages)
+	if err := s.sessionRepo.Save(sess); err != nil {
+		return nil, err
+	}
+	return sess, nil
+}
+
+// Get 根据 ID 获取会话
+func (s *Service) Get(id scalar.ID) (*Session, error) {
+	return s.sessionRepo.FindByID(id)
+}
+
+// MarkImage 标记图片并保存
+func (s *Service) MarkImage(sessionID scalar.ID, imageID scalar.ID, action shared.ImageAction) (*Session, error) {
+	sess, err := s.sessionRepo.FindByID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sess.MarkImage(imageID, action); err != nil {
+		return nil, err
+	}
+
+	if err := s.sessionRepo.Save(sess); err != nil {
+		return nil, err
+	}
+
+	return sess, nil
+}
+
+// Undo 撤销操作并保存
+func (s *Service) Undo(sessionID scalar.ID) (*Session, error) {
+	sess, err := s.sessionRepo.FindByID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := sess.Undo(); err != nil {
+		return nil, err
+	}
+
+	if err := s.sessionRepo.Save(sess); err != nil {
+		return nil, err
+	}
+
+	return sess, nil
 }
