@@ -424,6 +424,40 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Status should be restored to ACTIVE")
 }
 
+func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
+	filter := image.NewImageFilters([]int{0})
+	images := createTestImages(10)
+
+	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
+
+	// 完成第一轮筛选，进入第二轮
+	for i := 0; i < 10; i++ {
+		action := shared.ImageActionKeep
+		if i%3 == 0 {
+			action = shared.ImageActionPending
+		} else if i%3 == 1 {
+			action = shared.ImageActionReject
+		}
+		err := session.MarkImage(session.queue[i].ID(), action)
+		require.NoError(t, err)
+	}
+
+	// 验证会话状态为 ACTIVE（第二轮开始）
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE for second round")
+
+	// 验证 CanUndo 返回 true（支持跨轮撤销）
+	assert.True(t, session.CanUndo(), "CanUndo should return true after round completion for cross-round undo")
+
+	// 执行跨轮撤销
+	err := session.Undo()
+	require.NoError(t, err)
+
+	// 验证撤销成功，回到第一轮状态
+	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Status should be restored to ACTIVE after cross-round undo")
+	assert.Equal(t, 10, len(session.queue), "Queue length should be restored to original 10")
+	assert.Equal(t, 9, session.CurrentIndex(), "CurrentIndex should be restored to last processed index (9) after cross-round undo")
+}
+
 func TestWriteActions_Getters(t *testing.T) {
 	actions := NewWriteActions(5, 3, 1)
 

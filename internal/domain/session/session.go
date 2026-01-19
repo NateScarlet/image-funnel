@@ -338,11 +338,13 @@ func (s *Session) CanCommit() bool {
 
 // CanUndo 判断会话是否可以执行撤销操作
 //
-// 撤销条件：撤销栈不为空
+// 撤销条件：
+// 1. 撤销栈不为空，或
+// 2. 存在历史轮次（支持跨轮撤销）
 func (s *Session) CanUndo() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.undoStack) > 0
+	return len(s.undoStack) > 0 || len(s.roundHistory) > 0
 }
 
 // MarkImage 标记指定图片的操作状态，并更新会话状态
