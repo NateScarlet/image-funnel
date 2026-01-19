@@ -3,7 +3,9 @@
     <div v-if="showHeader" class="mb-4">
       <h2 v-if="title" class="text-xl font-bold mb-4">{{ title }}</h2>
       <p class="text-slate-300 mb-2">
-        将 {{ stats?.processed || 0 }} 个操作写入 XMP 文件
+        将
+        {{ stats.kept + stats.reviewed + stats.rejected }}
+        个操作写入 XMP 文件
       </p>
       <div class="grid grid-cols-3 gap-2 text-sm">
         <div class="bg-green-900 bg-opacity-30 rounded p-2 text-center">
@@ -109,18 +111,16 @@ import { mdiLoading } from "@mdi/js";
 
 interface Props {
   sessionId: string;
-  stats?: {
-    processed: number;
+  stats: {
     kept: number;
     reviewed: number;
     rejected: number;
-  } | null;
+  };
   showHeader?: boolean;
   title?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  stats: null,
   showHeader: true,
   title: "",
 });
