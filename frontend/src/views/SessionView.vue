@@ -1,10 +1,6 @@
 <template>
-  <div
-    class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden"
-  >
-    <header
-      class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0"
-    >
+  <div class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden">
+    <header class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex-1 min-w-0 mr-4">
           <div class="text-xs md:text-sm text-slate-400 truncate">
@@ -12,38 +8,22 @@
           </div>
           <div class="text-sm md:text-lg font-semibold truncate">
             {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
-            <span class="text-green-400 ml-2"
-              >保留: {{ stats?.kept || 0 }} /
-              {{ session?.targetKeep || 0 }}</span
-            >
+            <span class="text-green-400 ml-2">保留: {{ stats?.kept || 0 }} /
+              {{ session?.targetKeep || 0 }}</span>
           </div>
         </div>
 
-        <button
-          class="md:hidden p-2 rounded-lg hover:bg-slate-700 transition-colors"
-          @click="showMenu = true"
-        >
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+        <button class="md:hidden p-2 rounded-lg hover:bg-slate-700 transition-colors" @click="showMenu = true">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path :d="mdiMenu" fill="currentColor" />
           </svg>
         </button>
 
         <div class="hidden md:flex items-center gap-4">
-          <button
-            :disabled="!session?.canUndo || undoing"
+          <button :disabled="!session?.canUndo || undoing"
             class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="undo"
-          >
-            <svg
-              v-if="undoing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            @click="undo">
+            <svg v-if="undoing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
@@ -54,8 +34,7 @@
 
           <button
             class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="showUpdatePresetModal = true"
-          >
+            @click="showUpdatePresetModal = true">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCogOutline" fill="currentColor" />
             </svg>
@@ -64,19 +43,16 @@
 
           <button
             class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700 flex items-center gap-2 whitespace-nowrap"
-            @click="confirmAbandon"
-          >
+            @click="confirmAbandon">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCloseCircleOutline" fill="currentColor" />
             </svg>
             放弃
           </button>
 
-          <button
-            :disabled="!session?.canCommit"
+          <button :disabled="!session?.canCommit"
             class="px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="showCommitModal = true"
-          >
+            @click="showCommitModal = true">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCheck" fill="currentColor" />
             </svg>
@@ -86,9 +62,7 @@
       </div>
     </header>
 
-    <main
-      class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
-    >
+    <main class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden">
       <div v-if="loading" class="text-center text-slate-400">加载中...</div>
 
       <div v-else-if="!session" class="text-center">
@@ -97,8 +71,7 @@
         <p class="text-slate-400 mb-4">找不到指定的筛选会话</p>
         <button
           class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
-          @click="router.push('/')"
-        >
+          @click="router.push('/')">
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path :d="mdiHome" fill="currentColor" />
           </svg>
@@ -112,8 +85,7 @@
         <p class="text-slate-400 mb-4">保留了 {{ stats?.kept }} 张图片</p>
         <button
           class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
-          @click="showCommitModal = true"
-        >
+          @click="showCommitModal = true">
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path :d="mdiCheck" fill="currentColor" />
           </svg>
@@ -126,14 +98,8 @@
       </div>
 
       <div v-else class="w-full flex flex-col items-center h-full min-h-0">
-        <div
-          class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
-        >
-          <ImageViewer
-            v-if="currentImage"
-            :src="currentImage.url"
-            :alt="currentImage.filename"
-          >
+        <div class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0">
+          <ImageViewer v-if="currentImage" :src="currentImage.url" :alt="currentImage.filename">
             <template #info="{ isFullscreen }">
               <span class="lg:min-w-24 hidden md:block">
                 {{ formatDate(currentImage.modTime) }}
@@ -153,16 +119,14 @@
 
           <!-- 滑动方向提示 -->
           <Teleport :to="rendererEl">
-            <div
-              v-if="swipeDirection"
+            <div v-if="swipeDirection"
               class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200"
               :class="{
                 'bg-red-600/30': swipeDirection === 'DOWN',
                 'bg-yellow-600/30': swipeDirection === 'UP',
                 'bg-green-600/30': swipeDirection === 'RIGHT',
                 'bg-slate-600/30': swipeDirection === 'LEFT',
-              }"
-            >
+              }">
               <div class="text-6xl font-bold text-white drop-shadow-lg">
                 <span v-if="swipeDirection === 'DOWN'">↓ 排除</span>
                 <span v-else-if="swipeDirection === 'UP'">↑ 稍后再看</span>
@@ -178,16 +142,10 @@
         </div>
 
         <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
-          <button
-            :disabled="marking"
+          <button :disabled="marking"
             class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('REJECT')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            @click="markImage('REJECT')">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
@@ -196,16 +154,10 @@
             <span>{{ marking ? "处理中..." : "排除" }}</span>
           </button>
 
-          <button
-            :disabled="marking"
+          <button :disabled="marking"
             class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('PENDING')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            @click="markImage('PENDING')">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
@@ -214,16 +166,10 @@
             <span>{{ marking ? "处理中..." : "稍后再看" }}</span>
           </button>
 
-          <button
-            :disabled="marking"
+          <button :disabled="marking"
             class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('KEEP')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            @click="markImage('KEEP')">
+            <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
@@ -235,17 +181,12 @@
       </div>
     </main>
 
-    <footer
-      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0"
-    >
+    <footer class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0">
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
-    <div
-      v-if="showMenu"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      @click.self="showMenu = false"
-    >
+    <div v-if="showMenu" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      @click.self="showMenu = false">
       <div class="bg-slate-800 rounded-lg p-6 w-full max-w-sm">
         <div class="mb-6">
           <h3 class="text-lg font-bold mb-2">会话信息</h3>
@@ -256,19 +197,13 @@
         </div>
 
         <div class="space-y-3">
-          <button
-            :disabled="!canUndo"
+          <button :disabled="!canUndo"
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               undo();
-              showMenu = false;
-            "
-          >
-            <svg
-              v-if="undoing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            showMenu = false;
+            ">
+            <svg v-if="undoing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
@@ -281,23 +216,20 @@
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               showUpdatePresetModal = true;
-              showMenu = false;
-            "
-          >
+            showMenu = false;
+            ">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCogOutline" fill="currentColor" />
             </svg>
             修改预设
           </button>
 
-          <button
-            :disabled="!session?.canCommit"
+          <button :disabled="!session?.canCommit"
             class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               showCommitModal = true;
-              showMenu = false;
-            "
-          >
+            showMenu = false;
+            ">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCheck" fill="currentColor" />
             </svg>
@@ -306,8 +238,7 @@
 
           <button
             class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="confirmAbandon"
-          >
+            @click="confirmAbandon">
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCloseCircleOutline" fill="currentColor" />
             </svg>
@@ -315,36 +246,24 @@
           </button>
         </div>
 
-        <button
-          class="mt-4 w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
-          @click="showMenu = false"
-        >
+        <button class="mt-4 w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+          @click="showMenu = false">
           关闭
         </button>
       </div>
     </div>
 
-    <CommitModal
-      v-if="showCommitModal"
-      :session-id="sessionId"
-      @close="showCommitModal = false"
-      @committed="onCommitted"
-    />
+    <CommitModal v-if="showCommitModal" :session-id="sessionId" @close="showCommitModal = false"
+      @committed="onCommitted" />
 
-    <UpdatePresetModal
-      v-if="showUpdatePresetModal"
-      :target-keep="updateForm.targetKeep"
-      :filter="updateForm.filter"
-      :kept="stats?.kept || 0"
-      :session-id="sessionId"
-      @close="showUpdatePresetModal = false"
-      @updated="showUpdatePresetModal = false"
-    />
+    <UpdatePresetModal v-if="showUpdatePresetModal" :target-keep="session?.targetKeep"
+      :filter="{ rating: session?.filter?.rating || [] }" :kept="stats?.kept || 0" :session-id="sessionId"
+      @close="showUpdatePresetModal = false" @updated="showUpdatePresetModal = false" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
@@ -395,26 +314,6 @@ const touchEndX = ref<number>(0);
 const touchEndY = ref<number>(0);
 const isSingleTouch = ref<boolean>(true);
 
-// 更新预设表单
-const updateForm = ref({
-  targetKeep: 4,
-  filter: {
-    rating: [0, 4],
-  },
-});
-
-// 监听session变化，同步更新表单
-watch(
-  () => session.value,
-  (newSession) => {
-    if (newSession) {
-      updateForm.value.targetKeep = newSession.targetKeep;
-      updateForm.value.filter.rating = newSession.filter.rating || [];
-    }
-  },
-  { immediate: true, deep: true },
-);
-
 const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   if (!isSingleTouch.value) return null;
 
@@ -446,7 +345,7 @@ const currentImage = computed(
 );
 
 const isCompleted = computed(() => {
-	return stats.value?.isCompleted || false;
+  return stats.value?.isCompleted || false;
 });
 
 onMounted(() => {

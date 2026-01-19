@@ -94,3 +94,4 @@ image-funnel/
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
 - **go:** 所有测试必须带上合理的超时，防止死锁
 - **go:** 用 errors 包处理错误，避免直接比较
+- **vue:** 禁止使用watch更新ref的模式来处理数据变化，这种场景应该定义本地状态ref 和 computed，通过用 writable computed 更新本地状态，获取受数据影响后的本地状态
