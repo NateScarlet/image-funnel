@@ -87,7 +87,7 @@
           >
             <path :d="mdiLoading" fill="currentColor" />
           </svg>
-          <span>{{ committing ? "提交中..." : "确认提交" }}</span>
+          <span>确认提交</span>
         </button>
         <button
           v-else
