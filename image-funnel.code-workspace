@@ -5,7 +5,6 @@
     }
   ],
   "settings": {},
-  
   "launch": {
     "version": "0.2.0",
     "configurations": [
@@ -18,7 +17,9 @@
         "envFile": "${workspaceFolder}/.env",
         "cwd": "${workspaceFolder}",
         "preLaunchTask": "serve:web",
-        "dlvFlags": ["--check-go-version=false"],
+        "dlvFlags": [
+          "--check-go-version=false"
+        ],
         "output": "${workspaceFolder}/main_debug.exe",
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
@@ -41,6 +42,28 @@
         "command": "pwsh",
         "args": [
           "./scripts/build.ps1"
+        ],
+        "problemMatcher": []
+      },
+      {
+        "label": "build:frontend",
+        "type": "shell",
+        "group": "build",
+        "command": "pwsh",
+        "args": [
+          "./scripts/build.ps1",
+          "-Frontend"
+        ],
+        "problemMatcher": []
+      },
+      {
+        "label": "build:backend",
+        "type": "shell",
+        "group": "build",
+        "command": "pwsh",
+        "args": [
+          "./scripts/build.ps1",
+          "-Backend"
         ],
         "problemMatcher": []
       },

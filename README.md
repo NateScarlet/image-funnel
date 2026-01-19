@@ -14,7 +14,7 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 
 ### 安装
 
-通过 Release 页面下载最新版本的可执行文件或者使用 './scripts/build.ps1' 脚本构建。
+通过 Release 页面下载最新版本的可执行文件或者使用 `./scripts/build.ps1` 脚本构建。
 
 ### 配置
 

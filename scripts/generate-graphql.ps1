@@ -64,4 +64,4 @@ finally {
 
 Write-Host "=== GraphQL 更新完成 ===" -ForegroundColor Green
 Write-Host ""
-Write-Host "提示：如果修改了后端代码，请运行 .\scripts\build.ps1 来重新编译整个项目" -ForegroundColor Yellow
+Write-Host "提示：可以运行 .\scripts\build.ps1 来重新编译整个项目，或添加 -Frontend / -Backend 参数进行部分构建" -ForegroundColor Yellow

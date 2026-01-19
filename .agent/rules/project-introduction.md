@@ -46,7 +46,7 @@ image-funnel/
 - 长段关联的代码　用 vscode的 region comment （例如　`// #region {分组名称}` `// #endregion` ）包裹
 - 不要手动修改生成的代码，而是用对应的脚本重新生成
 - **frontend:** 修改前端代码后，使用 `pnpm check` 检查
-- **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建
+- **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，使用 `-Backend` 参数可以只构建后端
 - **vue:** 禁止使用watch来维护可以被computed代替的状态，手动维护非常容易出错，参考风格
 
 ```vue
