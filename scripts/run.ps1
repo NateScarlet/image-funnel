@@ -7,28 +7,53 @@ $BINARY = Join-Path $BUILD_DIR "image-funnel.exe"
 
 # #region 自动构建检查
 $needsBuild = $false
+
 if (-not (Test-Path $BINARY)) {
     Write-Host "未找到构建好的二进制文件，正在初始构建..." -ForegroundColor Yellow
     $needsBuild = $true
 } else {
     try {
-        $lastCommitTimestamp = git log -1 --format=%ct 2>$null
-        if ($LASTEXITCODE -eq 0 -and $lastCommitTimestamp) {
-            $lastCommitTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$lastCommitTimestamp).LocalDateTime
-            $binaryTime = (Get-Item $BINARY).LastWriteTime
-            
-            if ($lastCommitTime -gt $binaryTime) {
-                Write-Host ("代码有更新 (提交: {0:yyyy-MM-dd HH:mm:ss}, 当前构建: {1:yyyy-MM-dd HH:mm:ss})，正在重新构建..." -f $lastCommitTime, $binaryTime) -ForegroundColor Yellow
-                $needsBuild = $true
+        $binaryTime = (Get-Item $BINARY).LastWriteTime
+        
+        # 显式使用项目根目录执行 Git 命令
+        $gitArgs = "-C", "$ROOT_DIR"
+        Write-Host "项目根目录: $ROOT_DIR" -ForegroundColor DarkGray
+        
+        # 1. 检查工作区是否干净 (排除 build 目录和脚本自身)
+        $gitStatus = git $gitArgs status --porcelain -- ":(exclude)build" ":(exclude)scripts/run.ps1"
+        if ($gitStatus) {
+            Write-Host "工作区有未提交的更改，跳过自动构建。" -ForegroundColor Gray
+        } else {
+            # 2. 工作区干净，检查最新提交是否晚于构建时间
+            $commitInfo = git $gitArgs log -1 --format="%ct|%h|%D"
+            if ($commitInfo) {
+                $parts = $commitInfo.Split("|")
+                $lastCommitTimestamp = $parts[0]
+                $lastCommitHash = $parts[1]
+                $lastCommitRef = $parts[2]
+                
+                $lastCommitTime = [DateTimeOffset]::FromUnixTimeSeconds([long]$lastCommitTimestamp).LocalDateTime
+                
+                Write-Host ("最新提交: {0:yyyy-MM-dd HH:mm:ss} ({1}) [{2}]" -f $lastCommitTime, $lastCommitHash, $lastCommitRef) -ForegroundColor Gray
+                Write-Host ("当前构建: {0:yyyy-MM-dd HH:mm:ss}" -f $binaryTime) -ForegroundColor Gray
+
+                if ($lastCommitTime.Ticks -gt $binaryTime.Ticks) {
+                    Write-Host "检测到新提交，正在重新构建..." -ForegroundColor Yellow
+                    $needsBuild = $true
+                } else {
+                    Write-Host "当前构建已是最新。" -ForegroundColor Gray
+                }
             }
         }
-    } catch {}
+    } catch {
+        Write-Error "检查更新时发生异常: $_"
+    }
 }
 
 if ($needsBuild) {
     & (Join-Path $SCRIPT_DIR "build.ps1")
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ 构建失败，无法运行。" -ForegroundColor Red
+        Write-Error "❌ 构建失败，无法运行。"
         exit $LASTEXITCODE
     }
 }
@@ -39,7 +64,7 @@ $RUN_DIR = Join-Path $ROOT_DIR "build/run"
 
 # 确保运行目录干净
 if (Test-Path $RUN_DIR) {
-    Remove-Item -Path $RUN_DIR -Recurse -Force
+    Remove-Item -Path $RUN_DIR -Recurse -Force -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $RUN_DIR -Force | Out-Null
 
@@ -50,6 +75,7 @@ try {
     $runBinary = Join-Path $RUN_DIR "image-funnel.exe"
     
     Write-Host "--- 开始运行 ---" -ForegroundColor Green
+    # 直接运行二进制文件，不切换目录，使程序默认使用当前 Shell 路径作为 Root (CWD)
     & $runBinary $args
 }
 finally {
