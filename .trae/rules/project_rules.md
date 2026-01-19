@@ -70,7 +70,6 @@
 ```
 image-funnel/
 |-- scripts/             # 构建脚本
-├── cmd/server/          # 后端入口
 ├── frontend/            # 前端项目
 ├── graph/               # GraphQL schema
 ├── internal/            # 后端业务逻辑
@@ -80,6 +79,7 @@ image-funnel/
 ## 注意事项
 
 - id 不承诺固定格式， 客户端不应该尝试解析 id
-- 修改前端代码后，使用 `pnpm check` 检查，详见 frontend-check SKILL
-- 修改后端代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
-- powershell 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
+- **frontend:** 修改前端代码后，使用 `pnpm check` 检查，详见 frontend-check SKILL
+- **powershell:** 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
+- **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
+- **go:** 所有测试必须带上合理的超时，防止死锁
