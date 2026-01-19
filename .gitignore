@@ -1,7 +1,3 @@
-# GraphQL
-graph/*.graphql
-graph/generated.go
-
 # Environment
 .env
 
