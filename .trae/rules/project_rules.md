@@ -94,4 +94,46 @@ image-funnel/
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
 - **go:** 所有测试必须带上合理的超时，防止死锁
 - **go:** 用 errors 包处理错误，避免直接比较
-- **vue:** 禁止使用watch更新ref的模式来处理数据变化，这种场景应该定义本地状态ref 和 computed，通过用 writable computed 更新本地状态，获取受数据影响后的本地状态
+- **vue:** 禁止使用watch来维护可以被computed代替的状态，手动维护非常容易出错，参考风格
+
+```vue
+const { presets, getPreset } = usePresets();
+const selectedPresetIdBuffer = ref<string>();
+const selectedPresetId = computed({
+  get() {
+    if (targetKeepBuffer.value != null || ratingBuffer.value != null) {
+      return "custom";
+    }
+    return selectedPresetIdBuffer.value || "custom";
+  },
+  set(v) {
+    targetKeepBuffer.value = undefined;
+    ratingBuffer.value = undefined;
+    selectedPresetIdBuffer.value = v;
+  }
+});
+const selectedPreset = computed(() => {
+  return getPreset(selectedPresetId.value);
+});
+
+// 缓冲变量，用于存储用户主动修改的值
+const targetKeepBuffer = ref<number>();
+const ratingBuffer = ref<number[]>();
+
+// 目标保留数量的computed属性
+const targetKeep = computed({
+  get: () => targetKeepBuffer.value ?? selectedPreset.value?.targetKeep ?? props.targetKeep,
+  set: (value: number) => {
+    targetKeepBuffer.value = value;
+  },
+});
+
+// 筛选条件的rating属性
+const rating = computed({
+  get: () => ratingBuffer.value ?? selectedPreset.value?.filter.rating ?? [...props.filter.rating],
+  set: (value: number[]) => {
+    ratingBuffer.value = value;
+  },
+});
+```
+
