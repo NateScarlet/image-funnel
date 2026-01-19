@@ -44,6 +44,7 @@ type SessionDTO struct {
 	CurrentIndex int
 	CurrentSize  int
 	CurrentImage *ImageDTO
+	NextImage    *ImageDTO
 }
 
 // StatsDTO 会话统计数据

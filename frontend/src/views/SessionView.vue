@@ -178,6 +178,11 @@
           </Teleport>
         </div>
 
+        <!-- 预加载下一张图片 -->
+        <Teleport to="head">
+          <link v-if="nextImage" rel="prefetch" :href="nextImage.url" as="image" />
+        </Teleport>
+
         <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
           {{ currentImage?.filename || "" }}
         </div>
@@ -428,6 +433,7 @@ const { data: sessionData } = useQuery(GetSessionDocument, {
 const session = computed(() => sessionData.value?.session);
 const stats = computed(() => sessionData.value?.session?.stats);
 const currentImage = computed(() => sessionData.value?.session?.currentImage);
+const nextImage = computed(() => sessionData.value?.session?.nextImage);
 
 const isCompleted = computed(() => {
   return stats.value?.isCompleted || false;

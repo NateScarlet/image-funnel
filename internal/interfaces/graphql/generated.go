@@ -133,6 +133,7 @@ type ComplexityRoot struct {
 		Directory    func(childComplexity int) int
 		Filter       func(childComplexity int) int
 		ID           func(childComplexity int) int
+		NextImage    func(childComplexity int) int
 		Stats        func(childComplexity int) int
 		TargetKeep   func(childComplexity int) int
 		UpdatedAt    func(childComplexity int) int
@@ -557,6 +558,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.ID(childComplexity), true
+	case "Session.nextImage":
+		if e.complexity.Session.NextImage == nil {
+			break
+		}
+
+		return e.complexity.Session.NextImage(childComplexity), true
 	case "Session.stats":
 		if e.complexity.Session.Stats == nil {
 			break
@@ -881,6 +888,7 @@ input ImageFiltersInput
   currentIndex: Int!
   currentSize: Int!
   currentImage: Image
+  nextImage: Image
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
@@ -1319,6 +1327,8 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -1403,6 +1413,8 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2068,6 +2080,8 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2554,6 +2568,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3120,6 +3136,51 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Session_nextImage(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_nextImage,
+		func(ctx context.Context) (any, error) {
+			return obj.NextImage, nil
+		},
+		nil,
+		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_nextImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionStats_total(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3343,6 +3404,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3409,6 +3472,8 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3493,6 +3558,8 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImage":
+				return ec.fieldContext_Session_nextImage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -6174,6 +6241,8 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "currentImage":
 			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
+		case "nextImage":
+			out.Values[i] = ec._Session_nextImage(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

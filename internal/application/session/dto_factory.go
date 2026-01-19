@@ -37,6 +37,14 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 		}
 	}
 
+	var nextImage *shared.ImageDTO
+	if img := sess.NextImage(); img != nil {
+		nextImage, err = imageDTOFactory.New(img)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &shared.SessionDTO{
 		ID:           sess.ID(),
 		Directory:    sess.Directory(),
@@ -50,6 +58,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 		CurrentIndex: sess.CurrentIndex(),
 		CurrentSize:  sess.CurrentSize(),
 		CurrentImage: currentImage,
+		NextImage:    nextImage,
 	}, nil
 }
 
