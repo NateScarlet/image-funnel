@@ -104,7 +104,9 @@ const selectedPresetId = computed({
     if (targetKeepBuffer.value != null || ratingBuffer.value != null) {
       return "custom";
     }
-    return selectedPresetIdBuffer.value || "custom";
+    return (
+      selectedPresetIdBuffer.value || lastSelectedPresetId.value || "custom"
+    );
   },
   set(v) {
     targetKeepBuffer.value = undefined;
