@@ -544,7 +544,7 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 
 	assert.Equal(t, 0, session.currentRound, "CurrentRound should be 0 after undo to previous round")
 	assert.Equal(t, 10, len(session.queue), "Queue should be restored to 10 images")
-	assert.Equal(t, 10, session.CurrentIndex(), "CurrentIndex should be 10 after undo to previous round")
+	assert.Equal(t, 9, session.CurrentIndex(), "CurrentIndex should be 9 after undo to previous round")
 	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session status should be ACTIVE after undo")
 }
 
@@ -603,5 +603,3 @@ func TestUndo_ShouldWorkAfterCompletion(t *testing.T) {
 	assert.Equal(t, shared.SessionStatusActive, session.Status(), "Session should be ACTIVE after undo")
 	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[9].ID()), "Last image action should be restored to PENDING")
 }
-
-

@@ -324,7 +324,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 				} else {
 					s.roundHistory = append(s.roundHistory, RoundSnapshot{
 						queue:      s.queue,
-						currentIdx: s.currentIdx,
+						currentIdx: s.currentIdx - 1,
 						undoStack:  s.undoStack,
 					})
 					s.currentRound++
