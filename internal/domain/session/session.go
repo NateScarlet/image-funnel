@@ -90,7 +90,6 @@ type Session struct {
 	createdAt  time.Time            // 会话创建时间
 	updatedAt  time.Time            // 会话最后更新时间
 
-	images     []*image.Image                   // 原始图片集合
 	queue      []*image.Image                   // 当前待处理的图片队列
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []UndoEntry                      // 撤销操作栈
@@ -132,7 +131,6 @@ func NewSession(id scalar.ID, directory string, filter *image.ImageFilters, targ
 		status:       shared.SessionStatusActive,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),
-		images:       images,
 		queue:        images,
 		currentIdx:   0,
 		undoStack:    make([]UndoEntry, 0),
@@ -227,7 +225,7 @@ func (s *Session) stats() *Stats {
 		}
 	}
 
-	stats.rejected += len(s.images) - len(s.queue)
+	stats.rejected += len(s.actions) - len(s.queue)
 
 	return &stats
 }
@@ -251,7 +249,7 @@ func (s *Session) CanCommit() bool {
 		return true
 	}
 
-	return len(s.images) > len(s.queue)
+	return len(s.actions) > len(s.queue)
 }
 
 // CanUndo 判断会话是否可以执行撤销操作
@@ -380,7 +378,12 @@ func (s *Session) Undo() error {
 func (s *Session) Images() []*image.Image {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.images
+	if len(s.roundHistory) == 0 {
+		// 当前是第一轮，队列就是所有图片
+		return s.queue
+	}
+	// 返回第一轮的图片队列
+	return s.roundHistory[0].queue
 }
 
 func (s *Session) GetAction(imageID scalar.ID) shared.ImageAction {
