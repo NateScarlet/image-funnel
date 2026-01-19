@@ -47,6 +47,8 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 		UpdatedAt:    sess.UpdatedAt(),
 		CanCommit:    sess.CanCommit(),
 		CanUndo:      sess.CanUndo(),
+		CurrentIndex: sess.CurrentIndex(),
+		CurrentSize:  sess.CurrentSize(),
 		CurrentImage: currentImage,
 	}, nil
 }
@@ -60,7 +62,6 @@ func NewStatsDTOFactory() *StatsDTOFactory {
 func (f *StatsDTOFactory) New(stats *session.Stats) (*shared.StatsDTO, error) {
 	return &shared.StatsDTO{
 		Total:       stats.Total(),
-		Processed:   stats.Processed(),
 		Kept:        stats.Kept(),
 		Reviewed:    stats.Reviewed(),
 		Rejected:    stats.Rejected(),

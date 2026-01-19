@@ -11,7 +11,7 @@
             {{ session?.directory || "加载中..." }}
           </div>
           <div class="text-sm md:text-lg font-semibold truncate">
-            {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
+            {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
             <span class="text-green-400 ml-2"
               >保留: {{ stats?.kept || 0 }} /
               {{ session?.targetKeep || 0 }}</span
@@ -145,7 +145,8 @@
               <template v-if="isFullscreen">
                 <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
                 <span class="lg:min-w-24">
-                  {{ stats?.processed || 0 }} / {{ stats?.total || 0 }}
+                  {{ session?.currentIndex || 0 }} /
+                  {{ session?.currentSize || 0 }}
                 </span>
                 <div class="w-px h-4 bg-white/30 mx-1"></div>
                 <span class="lg:min-w-24 text-green-400">
@@ -425,10 +426,8 @@ const { data: sessionData } = useQuery(GetSessionDocument, {
 });
 
 const session = computed(() => sessionData.value?.session);
-const stats = computed(() => sessionData.value?.session?.stats ?? null);
-const currentImage = computed(
-  () => sessionData.value?.session?.currentImage ?? null,
-);
+const stats = computed(() => sessionData.value?.session?.stats);
+const currentImage = computed(() => sessionData.value?.session?.currentImage);
 
 const isCompleted = computed(() => {
   return stats.value?.isCompleted || false;

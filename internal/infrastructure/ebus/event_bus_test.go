@@ -29,7 +29,6 @@ func TestPublishSession(t *testing.T) {
 		Directory: "test-dir",
 		Stats: &shared.StatsDTO{
 			Total:       10,
-			Processed:   0,
 			Kept:        0,
 			Reviewed:    0,
 			Rejected:    0,
@@ -53,7 +52,6 @@ func TestSubscribeSession(t *testing.T) {
 		Directory: "test-dir",
 		Stats: &shared.StatsDTO{
 			Total:       10,
-			Processed:   0,
 			Kept:        0,
 			Reviewed:    0,
 			Rejected:    0,

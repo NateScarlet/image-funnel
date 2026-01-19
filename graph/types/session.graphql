@@ -8,5 +8,7 @@ type Session @goModel(model: "main/internal/shared.SessionDTO") {
   updatedAt: String!
   canCommit: Boolean!
   canUndo: Boolean!
+  currentIndex: Int!
+  currentSize: Int!
   currentImage: Image
 }

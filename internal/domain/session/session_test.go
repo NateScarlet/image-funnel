@@ -36,7 +36,7 @@ func TestStats_InitialState(t *testing.T) {
 	stats := session.Stats()
 
 	assert.Equal(t, 10, stats.Total(), "Total should be 10")
-	assert.Equal(t, 0, stats.Processed(), "Processed should be 0")
+	assert.Equal(t, 0, session.CurrentIndex(), "Processed should be 0")
 	assert.Equal(t, 0, stats.Kept(), "Kept should be 0")
 	assert.Equal(t, 0, stats.Reviewed(), "Reviewed should be 0")
 	assert.Equal(t, 0, stats.Rejected(), "Rejected should be 0")
@@ -67,7 +67,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 	stats := session.Stats()
 
 	assert.Equal(t, 10, stats.Total(), "Total should be 10")
-	assert.Equal(t, 9, stats.Processed(), "Processed should be 9")
+	assert.Equal(t, 9, session.CurrentIndex(), "Processed should be 9")
 	assert.Equal(t, 3, stats.Kept(), "Kept should be 3")
 	assert.Equal(t, 3, stats.Reviewed(), "Reviewed should be 3")
 	assert.Equal(t, 3, stats.Rejected(), "Rejected should be 3")
@@ -149,7 +149,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
 
 	newRoundStats := session.Stats()
-	assert.Equal(t, 0, newRoundStats.Processed(), "New round processed should be 0")
+	assert.Equal(t, 0, session.CurrentIndex(), "New round processed should be 0")
 	assert.Equal(t, 7, newRoundStats.Total(), "New round total should be 7")
 	assert.Equal(t, 7, newRoundStats.Remaining(), "New round remaining should be 7")
 
@@ -369,7 +369,6 @@ func TestWriteActions_Getters(t *testing.T) {
 func TestStats_Getters(t *testing.T) {
 	stats := &Stats{
 		total:     10,
-		processed: 5,
 		kept:      2,
 		reviewed:  2,
 		rejected:  1,
@@ -377,7 +376,6 @@ func TestStats_Getters(t *testing.T) {
 	}
 
 	assert.Equal(t, 10, stats.Total(), "Total should match")
-	assert.Equal(t, 5, stats.Processed(), "Processed should match")
 	assert.Equal(t, 2, stats.Kept(), "Kept should match")
 	assert.Equal(t, 2, stats.Reviewed(), "Reviewed should match")
 	assert.Equal(t, 1, stats.Rejected(), "Rejected should match")

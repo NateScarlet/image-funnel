@@ -94,6 +94,7 @@ image-funnel/
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建，详见 backend-build SKILL
 - **go:** 所有测试必须带上合理的超时，防止死锁
 - **go:** 用 errors 包处理错误，避免直接比较
+- **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
 - **vue:** 禁止使用watch来维护可以被computed代替的状态，手动维护非常容易出错，参考风格
 
 ```vue

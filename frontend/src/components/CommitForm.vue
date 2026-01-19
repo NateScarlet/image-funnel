@@ -111,7 +111,7 @@ import { mdiLoading } from "@mdi/js";
 
 interface Props {
   sessionId: string;
-  stats: {
+  stats?: {
     kept: number;
     reviewed: number;
     rejected: number;
@@ -123,6 +123,11 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   showHeader: true,
   title: "",
+  stats: () => ({
+    kept: 0,
+    reviewed: 0,
+    rejected: 0,
+  }),
 });
 
 const emit = defineEmits(["committed"]);

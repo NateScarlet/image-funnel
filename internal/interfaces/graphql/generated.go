@@ -128,6 +128,8 @@ type ComplexityRoot struct {
 		CanUndo      func(childComplexity int) int
 		CreatedAt    func(childComplexity int) int
 		CurrentImage func(childComplexity int) int
+		CurrentIndex func(childComplexity int) int
+		CurrentSize  func(childComplexity int) int
 		Directory    func(childComplexity int) int
 		Filter       func(childComplexity int) int
 		ID           func(childComplexity int) int
@@ -139,7 +141,6 @@ type ComplexityRoot struct {
 	SessionStats struct {
 		IsCompleted func(childComplexity int) int
 		Kept        func(childComplexity int) int
-		Processed   func(childComplexity int) int
 		Rejected    func(childComplexity int) int
 		Remaining   func(childComplexity int) int
 		Reviewed    func(childComplexity int) int
@@ -526,6 +527,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.CurrentImage(childComplexity), true
+	case "Session.currentIndex":
+		if e.complexity.Session.CurrentIndex == nil {
+			break
+		}
+
+		return e.complexity.Session.CurrentIndex(childComplexity), true
+	case "Session.currentSize":
+		if e.complexity.Session.CurrentSize == nil {
+			break
+		}
+
+		return e.complexity.Session.CurrentSize(childComplexity), true
 	case "Session.directory":
 		if e.complexity.Session.Directory == nil {
 			break
@@ -575,12 +588,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SessionStats.Kept(childComplexity), true
-	case "SessionStats.processed":
-		if e.complexity.SessionStats.Processed == nil {
-			break
-		}
-
-		return e.complexity.SessionStats.Processed(childComplexity), true
 	case "SessionStats.rejected":
 		if e.complexity.SessionStats.Rejected == nil {
 			break
@@ -854,7 +861,6 @@ input ImageFiltersInput
 `, BuiltIn: false},
 	{Name: "../../../graph/types/session-stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int!
-  processed: Int!
   kept: Int!
   reviewed: Int!
   rejected: Int!
@@ -872,6 +878,8 @@ input ImageFiltersInput
   updatedAt: String!
   canCommit: Boolean!
   canUndo: Boolean!
+  currentIndex: Int!
+  currentSize: Int!
   currentImage: Image
 }
 `, BuiltIn: false},
@@ -1305,6 +1313,10 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -1385,6 +1397,10 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -2046,6 +2062,10 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -2528,6 +2548,10 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -2860,8 +2884,6 @@ func (ec *executionContext) fieldContext_Session_stats(_ context.Context, field 
 			switch field.Name {
 			case "total":
 				return ec.fieldContext_SessionStats_total(ctx, field)
-			case "processed":
-				return ec.fieldContext_SessionStats_processed(ctx, field)
 			case "kept":
 				return ec.fieldContext_SessionStats_kept(ctx, field)
 			case "reviewed":
@@ -2995,6 +3017,64 @@ func (ec *executionContext) fieldContext_Session_canUndo(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Session_currentIndex(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_currentIndex,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentIndex, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_currentIndex(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Session_currentSize(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_currentSize,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentSize, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_currentSize(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Session_currentImage(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3057,35 +3137,6 @@ func (ec *executionContext) _SessionStats_total(ctx context.Context, field graph
 }
 
 func (ec *executionContext) fieldContext_SessionStats_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStats",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStats_processed(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStats_processed,
-		func(ctx context.Context) (any, error) {
-			return obj.Processed, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStats_processed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionStats",
 		Field:      field,
@@ -3286,6 +3337,10 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -3348,6 +3403,10 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -3428,6 +3487,10 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_canCommit(ctx, field)
 			case "canUndo":
 				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			}
@@ -6099,6 +6162,16 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "currentIndex":
+			out.Values[i] = ec._Session_currentIndex(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "currentSize":
+			out.Values[i] = ec._Session_currentSize(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "currentImage":
 			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
 		default:
@@ -6137,11 +6210,6 @@ func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.Selection
 			out.Values[i] = graphql.MarshalString("SessionStats")
 		case "total":
 			out.Values[i] = ec._SessionStats_total(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "processed":
-			out.Values[i] = ec._SessionStats_processed(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

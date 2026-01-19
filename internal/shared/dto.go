@@ -41,13 +41,14 @@ type SessionDTO struct {
 	UpdatedAt    time.Time
 	CanCommit    bool
 	CanUndo      bool
+	CurrentIndex int
+	CurrentSize  int
 	CurrentImage *ImageDTO
 }
 
 // StatsDTO 会话统计数据
 type StatsDTO struct {
 	Total       int
-	Processed   int
 	Kept        int
 	Reviewed    int
 	Rejected    int

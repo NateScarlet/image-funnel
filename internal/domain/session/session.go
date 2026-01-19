@@ -41,7 +41,6 @@ func (a *WriteActions) RejectRating() int {
 
 type Stats struct {
 	total       int
-	processed   int
 	kept        int
 	reviewed    int
 	rejected    int
@@ -52,10 +51,6 @@ type Stats struct {
 
 func (s *Stats) Total() int {
 	return s.total
-}
-
-func (s *Stats) Processed() int {
-	return s.processed
 }
 
 func (s *Stats) Kept() int {
@@ -199,6 +194,12 @@ func (s *Session) CurrentIndex() int {
 	return s.currentIdx
 }
 
+func (s *Session) CurrentSize() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.queue)
+}
+
 // UpdateTargetKeep 更新会话的目标保留数量
 func (s *Session) UpdateTargetKeep(targetKeep int) error {
 	s.mu.Lock()
@@ -276,7 +277,6 @@ func (s *Session) Stats() *Stats {
 func (s *Session) stats() *Stats {
 	var stats Stats
 	stats.total = len(s.queue)
-	stats.processed = s.currentIdx
 	stats.remaining = len(s.queue) - s.currentIdx
 	stats.targetKeep = s.targetKeep
 
@@ -329,12 +329,7 @@ func (s *Session) CanCommit() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	stats := s.Stats()
-	if stats.processed > 0 {
-		return true
-	}
-
-	return len(s.actions) > len(s.queue)
+	return s.currentIdx > 0 || len(s.roundHistory) > 0
 }
 
 // CanUndo 判断会话是否可以执行撤销操作
