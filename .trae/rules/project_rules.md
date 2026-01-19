@@ -69,11 +69,18 @@
 
 ```
 image-funnel/
-|-- scripts/             # 构建脚本
+├── scripts/             # 脚本
+│   ├── build.ps1        # 构建脚本，用于构建整个项目
+│   └── generate-graphql.ps1 # 更新前后端的 GraphQL 相关代码
 ├── frontend/            # 前端项目
 ├── graph/               # GraphQL schema
 ├── internal/            # 后端业务逻辑
-└── data.local/          # 图片目录（默认）
+│   ├── interfaces/      # 接口层
+│   ├── domain/          # 业务逻辑层
+│   ├── application/     # 应用层，应该是业务层的简单封装
+│   ├── infrastructure/  # 基础设施层，如数据库、文件系统等，按科技划分子包
+│   └── shared/          # 共享的无逻辑基础结构和接口，所有层都可直接导入这里的包，并且这个包不导入任何层的代码
+└── data.local/          # 开发测试使用的根目录，包含一些测试图片
 ```
 
 ## 注意事项
