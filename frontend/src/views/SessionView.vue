@@ -23,7 +23,7 @@
         <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
         <p class="text-slate-400 mb-4">找不到指定的筛选会话</p>
         <button
-          class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap"
+          class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
           @click="router.push('/')"
         >
           <svg class="w-5 h-5" viewBox="0 0 24 24">
