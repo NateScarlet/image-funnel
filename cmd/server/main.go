@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -42,12 +44,11 @@ const defaultPort = "34898"
 
 var version = "dev"
 
-func generateRandomSecretKey() string {
+func mustGenerateRandomSecretKey() string {
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
 	if err != nil {
-		log.Printf("Warning: Failed to generate random secret key, using fallback")
-		return "fallback-secret-key-change-in-production"
+		panic(err)
 	}
 	return base64.StdEncoding.EncodeToString(key)
 }
@@ -76,8 +77,8 @@ func main() {
 
 	secretKey := os.Getenv("IMAGE_FUNNEL_SECRET_KEY")
 	if secretKey == "" {
-		secretKey = generateRandomSecretKey()
-		logger.Info("Generated random secret key for this session")
+		secretKey = mustGenerateRandomSecretKey()
+		logger.Info("generated random secret key for this session")
 	}
 
 	signer := urlconv.NewSigner(secretKey, absRootDir)
@@ -129,21 +130,19 @@ func main() {
 
 	execPath, err := os.Executable()
 	if err != nil {
-		log.Printf("Warning: Failed to get executable path: %v", err)
+		logger.Warn("get executable path", zap.Error(err))
 		execPath = "."
 	}
 	execDir := filepath.Dir(execPath)
 
 	if isProduction {
 		frontendDir = filepath.Join(execDir, "dist")
-		log.Printf("Running in production mode (version: %s), serving frontend from: %s", version, frontendDir)
 	} else {
 		frontendDir = filepath.Join("frontend", "dist")
-		log.Printf("Running in development mode (version: %s), serving frontend from: %s", version, frontendDir)
 	}
 
 	if _, err := os.Stat(frontendDir); os.IsNotExist(err) {
-		log.Printf("Warning: Frontend directory not found at %s", frontendDir)
+		logger.Warn("frontend directory not found", zap.String("path", frontendDir))
 	}
 
 	r := mux.NewRouter()
@@ -201,8 +200,12 @@ func main() {
 		}
 
 		processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
+		if errors.Is(err, context.Canceled) {
+			http.Error(w, "request canceled", http.StatusRequestTimeout)
+			return
+		}
 		if err != nil {
-			log.Printf("Image processing failed: %v", err)
+			logger.Error("process image", zap.Error(err))
 			http.ServeFile(w, r, absPath)
 			return
 		}
@@ -212,10 +215,13 @@ func main() {
 
 	addStaticRoutes(r, frontendDir)
 
-	log.Printf("🚀 Server ready at http://localhost:%s", port)
-	log.Printf("📁 Root directory: %s", absRootDir)
-	log.Printf("🏷️  Version: %s", version)
-	log.Fatal(http.ListenAndServe(":"+port, r))
+	logger.Info("starting server",
+		zap.String("port", port),
+		zap.String("rootDir", absRootDir),
+		zap.String("version", version),
+		zap.String("frontendDir", frontendDir),
+	)
+	logger.Fatal("start server", zap.Error(http.ListenAndServe(":"+port, r)))
 }
 
 func negotiateFormat(r *http.Request, formats ...string) string {
