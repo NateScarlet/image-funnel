@@ -2,89 +2,14 @@
   <div
     class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden"
   >
-    <header
-      class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0"
-    >
-      <div class="max-w-7xl mx-auto flex items-center justify-between">
-        <div class="flex-1 min-w-0 mr-4">
-          <div class="text-xs md:text-sm text-slate-400 truncate">
-            {{ session?.directory || "加载中..." }}
-          </div>
-          <div class="text-sm md:text-lg font-semibold truncate">
-            {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
-            <span class="text-green-400 ml-2"
-              >保留: {{ stats?.kept || 0 }} /
-              {{ session?.targetKeep || 0 }}</span
-            >
-          </div>
-        </div>
-
-        <button
-          class="md:hidden p-2 rounded-lg hover:bg-slate-700 transition-colors"
-          @click="showMenu = true"
-        >
-          <svg
-            class="w-6 h-6"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path :d="mdiMenu" fill="currentColor" />
-          </svg>
-        </button>
-
-        <div class="hidden md:flex items-center gap-4">
-          <button
-            :disabled="!session?.canUndo || undoing"
-            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="undo"
-          >
-            <svg
-              v-if="undoing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiUndo" fill="currentColor" />
-            </svg>
-            <span>撤销</span>
-          </button>
-
-          <button
-            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="showUpdateSessionModal = true"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCogOutline" fill="currentColor" />
-            </svg>
-            修改预设
-          </button>
-
-          <button
-            class="px-4 py-2 rounded-lg font-medium transition-colors bg-red-600 hover:bg-red-700 flex items-center gap-2 whitespace-nowrap"
-            @click="confirmAbandon"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCloseCircleOutline" fill="currentColor" />
-            </svg>
-            放弃
-          </button>
-
-          <button
-            :disabled="!session?.canCommit"
-            class="px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-            @click="showCommitModal = true"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCheck" fill="currentColor" />
-            </svg>
-            提交
-          </button>
-        </div>
-      </div>
-    </header>
+    <SessionHeader
+      :session="session"
+      :stats="stats"
+      :undoing="undoing"
+      @show-menu="showMenu = true"
+      @undo="undo"
+      @abandon="showMenu = true"
+    />
 
     <main
       class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
@@ -106,24 +31,12 @@
         </button>
       </div>
 
-      <div v-else-if="isCompleted" class="max-w-md w-full mx-auto">
-        <div class="text-center mb-8">
-          <div class="text-6xl mb-4">🎉</div>
-          <h2 class="text-3xl font-bold mb-2 text-white">筛选完成！</h2>
-          <p class="text-slate-400">已处理目录中的所有图片</p>
-        </div>
-
-        <div
-          class="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 shadow-xl backdrop-blur-sm"
-        >
-          <CommitForm
-            :session-id="sessionId"
-            :stats="stats"
-            title=""
-            @committed="onCommitted"
-          />
-        </div>
-      </div>
+      <CompletedView
+        v-else-if="isCompleted"
+        :session-id="sessionId"
+        :stats="stats"
+        @committed="onCommitted"
+      />
 
       <div v-else-if="!currentImage" class="text-center text-slate-400">
         没有更多图片
@@ -152,26 +65,10 @@
             </template>
           </ImageViewer>
 
-          <!-- 滑动方向提示 -->
-          <Teleport :to="rendererEl">
-            <div
-              v-if="swipeDirection"
-              class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200"
-              :class="{
-                'bg-red-600/30': swipeDirection === 'DOWN',
-                'bg-yellow-600/30': swipeDirection === 'UP',
-                'bg-green-600/30': swipeDirection === 'LEFT',
-                'bg-slate-600/30': swipeDirection === 'RIGHT',
-              }"
-            >
-              <div class="text-6xl font-bold text-white drop-shadow-lg">
-                <span v-if="swipeDirection === 'DOWN'">↓ 排除</span>
-                <span v-else-if="swipeDirection === 'UP'">↑ 稍后再看</span>
-                <span v-else-if="swipeDirection === 'RIGHT'">← 撤销</span>
-                <span v-else-if="swipeDirection === 'LEFT'">→ 保留</span>
-              </div>
-            </div>
-          </Teleport>
+          <SwipeDirectionIndicator
+            :direction="swipeDirection"
+            :renderer-el="rendererEl"
+          />
         </div>
 
         <!-- 预加载下一张图片 -->
@@ -188,61 +85,7 @@
           {{ currentImage?.filename || "" }}
         </div>
 
-        <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
-          <button
-            :disabled="marking"
-            class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('REJECT')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
-              <path :d="mdiDeleteOutline" fill="currentColor" />
-            </svg>
-            <span>{{ marking ? "处理中..." : "排除" }}</span>
-          </button>
-
-          <button
-            :disabled="marking"
-            class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('PENDING')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
-              <path :d="mdiClockOutline" fill="currentColor" />
-            </svg>
-            <span>{{ marking ? "处理中..." : "稍后再看" }}</span>
-          </button>
-
-          <button
-            :disabled="marking"
-            class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap"
-            @click="markImage('KEEP')"
-          >
-            <svg
-              v-if="marking"
-              class="w-6 h-6 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
-              <path :d="mdiHeartOutline" fill="currentColor" />
-            </svg>
-            <span>{{ marking ? "处理中..." : "保留" }}</span>
-          </button>
-        </div>
+        <SessionActions :marking="marking" @mark="markImage" />
       </div>
     </main>
 
@@ -252,104 +95,14 @@
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
-    <div
-      v-if="showMenu"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      @click.self="showMenu = false"
-    >
-      <div class="bg-slate-800 rounded-lg p-6 w-full max-w-sm">
-        <div class="mb-6">
-          <h3 class="text-lg font-bold mb-2">会话信息</h3>
-          <div class="text-sm text-slate-400 mb-1">筛选条件</div>
-          <div class="text-base">
-            {{ session?.filter?.rating?.join(", ") || "无" }}
-          </div>
-        </div>
-
-        <div class="space-y-3">
-          <button
-            :disabled="!canUndo"
-            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="
-              undo();
-              showMenu = false;
-            "
-          >
-            <svg
-              v-if="undoing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiUndo" fill="currentColor" />
-            </svg>
-            <span> 撤销</span>
-          </button>
-
-          <button
-            class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="
-              showUpdateSessionModal = true;
-              showMenu = false;
-            "
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCogOutline" fill="currentColor" />
-            </svg>
-            修改预设
-          </button>
-
-          <button
-            :disabled="!session?.canCommit"
-            class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="
-              showCommitModal = true;
-              showMenu = false;
-            "
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCheck" fill="currentColor" />
-            </svg>
-            提交
-          </button>
-
-          <button
-            class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="confirmAbandon"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCloseCircleOutline" fill="currentColor" />
-            </svg>
-            放弃
-          </button>
-        </div>
-
-        <button
-          class="mt-4 w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
-          @click="showMenu = false"
-        >
-          关闭
-        </button>
-      </div>
-    </div>
-
-    <CommitModal
-      v-if="showCommitModal"
+    <SessionMenu
+      v-model:show="showMenu"
+      :session="session"
+      :can-undo="canUndo"
+      :undoing="undoing"
       :session-id="sessionId"
-      @close="showCommitModal = false"
-      @committed="onCommitted"
-    />
-
-    <UpdateSessionModal
-      v-if="showUpdateSessionModal"
-      :target-keep="session?.targetKeep"
-      :filter="{ rating: session?.filter?.rating || [] }"
-      :kept="stats?.kept || 0"
-      :session-id="sessionId"
-      @close="showUpdateSessionModal = false"
-      @updated="showUpdateSessionModal = false"
+      :stats="stats"
+      @abandoned="onAbandoned"
     />
   </div>
 </template>
@@ -365,24 +118,15 @@ import {
   UndoDocument,
   ImageAction,
 } from "../graphql/generated";
-import CommitModal from "../components/CommitModal.vue";
-import CommitForm from "../components/CommitForm.vue";
 import ImageViewer from "../components/ImageViewer.vue";
-import UpdateSessionModal from "../components/UpdateSessionModal.vue";
+import SessionHeader from "../components/SessionHeader.vue";
+import SessionActions from "../components/SessionActions.vue";
+import SessionMenu from "../components/SessionMenu.vue";
+import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
+import CompletedView from "../components/CompletedView.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
-import {
-  mdiMenu,
-  mdiUndo,
-  mdiCloseCircleOutline,
-  mdiCheck,
-  mdiHome,
-  mdiDeleteOutline,
-  mdiClockOutline,
-  mdiHeartOutline,
-  mdiLoading,
-  mdiCogOutline,
-} from "@mdi/js";
+import { mdiHome } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import { usePresets } from "../composables/usePresets";
 
@@ -395,9 +139,7 @@ const sessionId = route.params.id as string;
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
-const showCommitModal = ref<boolean>(false);
 const showMenu = ref<boolean>(false);
-const showUpdateSessionModal = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
 
@@ -483,20 +225,16 @@ async function undo() {
   }
 }
 
-function confirmAbandon() {
-  showMenu.value = false;
-  if (confirm("确定要放弃当前会话吗？所有未提交的更改将会丢失。")) {
-    router.push("/");
-  }
+function onAbandoned() {
+  router.push("/");
 }
 
 function onCommitted() {
-  showCommitModal.value = false;
   router.push("/");
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (showCommitModal.value || showMenu.value) return;
+  if (showMenu.value) return;
 
   switch (e.key) {
     case "ArrowDown":
@@ -556,7 +294,7 @@ function handleTouchEnd(e: TouchEvent) {
 }
 
 function handleGesture() {
-  if (showCommitModal.value || showMenu.value) return;
+  if (showMenu.value) return;
   if (!swipeDirection.value) return;
 
   const minSwipeDistance = 50;
