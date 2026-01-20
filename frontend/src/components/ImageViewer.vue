@@ -43,7 +43,9 @@
           />
         </svg>
       </button>
-      <span class="min-w-12 text-center hidden md:block"
+      <span
+        class="min-w-12 text-center hidden md:block cursor-pointer"
+        @click="zoomAsPercent = 100"
         >{{ zoomAsPercent }}%</span
       >
       <button
