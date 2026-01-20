@@ -74,12 +74,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		return nil
 	})
 
-	if err != nil {
-		log.Printf("Failed to process image atomically: %v", err)
-		return srcPath, nil
-	}
-
-	return cachePath, nil
+	return cachePath, err
 }
 
 var _ appimage.Processor = (*Processor)(nil)
