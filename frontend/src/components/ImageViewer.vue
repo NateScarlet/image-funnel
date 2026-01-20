@@ -16,12 +16,13 @@
           :alt="image.filename"
           :data-image-id="image.id"
           class="object-contain w-full h-full"
+          @loadstart="onLoadStart"
           @load="updateLoaded"
           @error="updateLoaded"
         />
       </div>
       <!-- 加载提示 -->
-      <template v-if="!loaded">
+      <template v-if="isSlowLoading">
         <div
           class="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm opacity-25"
         >
@@ -166,6 +167,22 @@ const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 const imgEl = useTemplateRef("imgEl");
 const loadedId = ref("");
 const loaded = computed(() => loadedId.value === image.id);
+const loadStartAt = ref(Date.now());
+const currentTime = ref(Date.now());
+function updateCurrentTime() {
+  currentTime.value = Date.now();
+}
+const slowLoadingTimeoutMs = 100;
+const isSlowLoading = computed(
+  () =>
+    !loaded.value &&
+    currentTime.value - loadStartAt.value > slowLoadingTimeoutMs,
+);
+function onLoadStart() {
+  loadStartAt.value = Date.now();
+  updateCurrentTime();
+  setTimeout(updateCurrentTime, slowLoadingTimeoutMs + 1);
+}
 function updateLoaded() {
   const el = imgEl.value;
   if (el?.complete) {
