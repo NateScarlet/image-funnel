@@ -8,7 +8,9 @@
       :undoing="undoing"
       @show-menu="showMenu = true"
       @undo="undo"
-      @abandon="showMenu = true"
+      @show-update-session-modal="showUpdateSessionModal = true"
+      @abandon="confirmAbandon"
+      @show-commit-modal="showCommitModal = true"
     />
 
     <main
@@ -103,6 +105,25 @@
       :session-id="sessionId"
       :stats="stats"
       @abandoned="onAbandoned"
+      @show-commit-modal="showCommitModal = true"
+      @show-update-session-modal="showUpdateSessionModal = true"
+    />
+
+    <CommitModal
+      v-if="showCommitModal"
+      :session-id="sessionId"
+      @close="showCommitModal = false"
+      @committed="onCommitted"
+    />
+
+    <UpdateSessionModal
+      v-if="showUpdateSessionModal"
+      :target-keep="session?.targetKeep"
+      :filter="{ rating: session?.filter?.rating || [] }"
+      :kept="stats?.kept || 0"
+      :session-id="sessionId"
+      @close="showUpdateSessionModal = false"
+      @updated="showUpdateSessionModal = false"
     />
   </div>
 </template>
@@ -124,6 +145,8 @@ import SessionActions from "../components/SessionActions.vue";
 import SessionMenu from "../components/SessionMenu.vue";
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
+import CommitModal from "../components/CommitModal.vue";
+import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
 import { mdiHome } from "@mdi/js";
@@ -140,6 +163,8 @@ const sessionId = route.params.id as string;
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 const showMenu = ref<boolean>(false);
+const showUpdateSessionModal = ref<boolean>(false);
+const showCommitModal = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
 
@@ -231,6 +256,12 @@ function onAbandoned() {
 
 function onCommitted() {
   router.push("/");
+}
+
+function confirmAbandon() {
+  if (confirm("确定要放弃当前会话吗？所有未提交的更改将会丢失。")) {
+    router.push("/");
+  }
 }
 
 function handleKeyDown(e: KeyboardEvent) {

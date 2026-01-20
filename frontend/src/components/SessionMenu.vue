@@ -35,7 +35,7 @@
 
           <button
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="showUpdateSessionModal = true"
+            @click="emit('showUpdateSessionModal')"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCogOutline" fill="currentColor" />
@@ -46,7 +46,7 @@
           <button
             :disabled="!session?.canCommit"
             class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="showCommitModal = true"
+            @click="emit('showCommitModal')"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCheck" fill="currentColor" />
@@ -73,28 +73,11 @@
         </button>
       </div>
     </div>
-
-    <CommitModal
-      v-if="showCommitModal"
-      :session-id="sessionId"
-      @close="showCommitModal = false"
-      @committed="onCommitted"
-    />
-
-    <UpdateSessionModal
-      v-if="showUpdateSessionModal"
-      :target-keep="session?.targetKeep"
-      :filter="{ rating: session?.filter?.rating || [] }"
-      :kept="stats?.kept || 0"
-      :session-id="sessionId"
-      @close="showUpdateSessionModal = false"
-      @updated="showUpdateSessionModal = false"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import {
   mdiUndo,
@@ -105,8 +88,6 @@ import {
 } from "@mdi/js";
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument } from "../graphql/generated";
-import CommitModal from "./CommitModal.vue";
-import UpdateSessionModal from "./UpdateSessionModal.vue";
 
 interface SessionFilter {
   rating?: number[] | null;
@@ -129,7 +110,7 @@ interface Props {
 
 interface Emits {
   (e: "update:show", value: boolean): void;
-  (e: "abandoned"): void;
+  (e: "abandoned" | "showCommitModal" | "showUpdateSessionModal"): void;
 }
 
 const props = defineProps<Props>();
@@ -141,9 +122,6 @@ const show = computed({
 });
 
 const router = useRouter();
-
-const showCommitModal = ref(false);
-const showUpdateSessionModal = ref(false);
 
 async function handleUndo() {
   await mutate(UndoDocument, {
@@ -158,11 +136,5 @@ function handleAbandon() {
     emit("abandoned");
     router.push("/");
   }
-}
-
-function onCommitted() {
-  showCommitModal.value = false;
-  show.value = false;
-  router.push("/");
 }
 </script>
