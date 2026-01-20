@@ -11,12 +11,35 @@
       <!-- zoom -->
       <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
         <img
-          :key="image.id"
+          ref="imgEl"
           :src="src"
           :alt="image.filename"
+          :data-image-id="image.id"
           class="object-contain w-full h-full"
+          @load="updateLoaded"
+          @error="updateLoaded"
         />
       </div>
+      <!-- 加载提示 -->
+      <template v-if="!loaded">
+        <div
+          class="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm opacity-25"
+        >
+          <svg
+            class="w-12 h-12 animate-spin text-blue-400"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+      </template>
     </div>
 
     <!-- 图片尺寸和缩放操作 -->
@@ -102,12 +125,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, useTemplateRef } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
 import useElementFullscreen from "../composables/useElementFullscreen";
-import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
+import { mdiFullscreen, mdiFullscreenExit, mdiLoading } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import { getImageUrlByZoom } from "@/utils/image";
 
@@ -139,6 +162,16 @@ const {
 } = zoom;
 
 const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
+
+const imgEl = useTemplateRef("imgEl");
+const loadedId = ref("");
+const loaded = computed(() => loadedId.value === image.id);
+function updateLoaded() {
+  const el = imgEl.value;
+  if (el?.complete) {
+    loadedId.value = el.dataset.imageId || "";
+  }
+}
 
 useGrabScroll(() => {
   if (!zoom.fitContainer.value) {
