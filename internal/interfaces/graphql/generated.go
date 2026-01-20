@@ -42,6 +42,7 @@ type Config struct {
 
 type ResolverRoot interface {
 	Directory() DirectoryResolver
+	Image() ImageResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Session() SessionResolver
@@ -86,7 +87,7 @@ type ComplexityRoot struct {
 		ID            func(childComplexity int) int
 		ModTime       func(childComplexity int) int
 		Size          func(childComplexity int) int
-		URL           func(childComplexity int) int
+		URL           func(childComplexity int, width *int, quality *int) int
 		XMPExists     func(childComplexity int) int
 	}
 
@@ -173,6 +174,9 @@ type DirectoryResolver interface {
 	LatestImageURL(ctx context.Context, obj *shared.DirectoryDTO) (*string, error)
 	RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
+}
+type ImageResolver interface {
+	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
@@ -365,7 +369,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.complexity.Image.URL(childComplexity), true
+		args, err := ec.field_Image_url_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Image.URL(childComplexity, args["width"].(*int), args["quality"].(*int)), true
 	case "Image.xmpExists":
 		if e.complexity.Image.XMPExists == nil {
 			break
@@ -850,7 +859,7 @@ input ImageFiltersInput
   id: ID!
   filename: String!
   size: Int!
-  url: URI!
+  url(width: Int, quality: Int): URI! @goField(forceResolver: true)
   modTime: Time!
   currentRating: Int
   xmpExists: Boolean!
@@ -1011,6 +1020,22 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "width", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["width"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "quality", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["quality"] = arg1
+	return args, nil
+}
 
 func (ec *executionContext) field_Mutation_commitChanges_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
@@ -1894,7 +1919,8 @@ func (ec *executionContext) _Image_url(ctx context.Context, field graphql.Collec
 		field,
 		ec.fieldContext_Image_url,
 		func(ctx context.Context) (any, error) {
-			return obj.URL, nil
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int), fc.Args["quality"].(*int))
 		},
 		nil,
 		ec.marshalNURI2string,
@@ -1903,15 +1929,26 @@ func (ec *executionContext) _Image_url(ctx context.Context, field graphql.Collec
 	)
 }
 
-func (ec *executionContext) fieldContext_Image_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Image_url(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Image",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type URI does not have child fields")
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Image_url_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -5710,34 +5747,65 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 		case "id":
 			out.Values[i] = ec._Image_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "filename":
 			out.Values[i] = ec._Image_filename(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "size":
 			out.Values[i] = ec._Image_size(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "url":
-			out.Values[i] = ec._Image_url(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Image_url(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "modTime":
 			out.Values[i] = ec._Image_modTime(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "currentRating":
 			out.Values[i] = ec._Image_currentRating(ctx, field, obj)
 		case "xmpExists":
 			out.Values[i] = ec._Image_xmpExists(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))

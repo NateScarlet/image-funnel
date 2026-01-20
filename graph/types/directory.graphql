@@ -5,6 +5,7 @@ type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
   root: Boolean!
   imageCount: Int!
   subdirectoryCount: Int!
+  # TODO: 用 latestImage 替换
   latestImageModTime: Time!
   latestImagePath: String
   latestImageUrl: URI

@@ -1,21 +1,26 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"main/internal/application"
 	"main/internal/application/directory"
 	appsession "main/internal/application/session"
 	"main/internal/domain/session"
+	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/localfs"
+	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/infrastructure/xmpsidecar"
 	"main/internal/interfaces/graphql"
@@ -72,6 +77,14 @@ func main() {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 
+	// Initialize Image Cache and Processor
+	cacheDir := filepath.Join(os.TempDir(), "image-funnel-cache")
+	// Cleanup every 1 hour, remove files older than 24 hours
+	imageCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
+	imageCache.StartAutoClean(context.Background())
+	magickProcessor := magick.NewProcessor(imageCache)
+	imageProcessor := concurrency.NewSingleFlightImageProcessor(magickProcessor)
+
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)
 	directoryHandler := directory.NewHandler(dirScanner)
 
@@ -118,21 +131,54 @@ func main() {
 	})
 
 	r.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
-		relativePath := r.URL.Query().Get("path")
-		timestamp := r.URL.Query().Get("t")
-		signature := r.URL.Query().Get("sig")
+		query := r.URL.Query()
+		relativePath := query.Get("path")
+		timestamp := query.Get("t")
+		size := query.Get("s")
+		signature := query.Get("sig")
+		widthStr := query.Get("w")
+		qualityStr := query.Get("q")
+		raw := query.Has("raw")
 
-		if relativePath == "" || timestamp == "" || signature == "" {
+		if relativePath == "" || timestamp == "" || size == "" || signature == "" {
 			http.Error(w, "missing required parameters", http.StatusBadRequest)
 			return
 		}
-		valid, err := signer.ValidateRequest(relativePath, timestamp, signature)
-		if err != nil || !valid {
-			http.Error(w, "invalid signature", http.StatusForbidden)
+
+		err := signer.ValidateRequestFromValues(query)
+		if err != nil {
+			http.Error(w, "invalid signature: "+err.Error(), http.StatusForbidden)
 			return
 		}
+
 		absPath := filepath.Join(absRootDir, relativePath)
-		http.ServeFile(w, r, absPath)
+		if raw {
+			http.ServeFile(w, r, absPath)
+			return
+		}
+
+		width := 0
+		if widthStr != "" {
+			if w, err := strconv.Atoi(widthStr); err == nil {
+				width = w
+			}
+		}
+
+		quality := 0
+		if qualityStr != "" {
+			if q, err := strconv.Atoi(qualityStr); err == nil {
+				quality = q
+			}
+		}
+
+		processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
+		if err != nil {
+			log.Printf("Image processing failed: %v", err)
+			http.ServeFile(w, r, absPath)
+			return
+		}
+
+		http.ServeFile(w, r, processedPath)
 	})
 
 	addStaticRoutes(r, frontendDir)

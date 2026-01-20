@@ -7,6 +7,7 @@ package graphql
 
 import (
 	"context"
+	"main/internal/application/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
@@ -16,7 +17,7 @@ func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *shared.Dire
 	if obj.LatestImagePath == "" {
 		return nil, nil
 	}
-	url, err := r.signer.GenerateSignedURL(obj.LatestImagePath)
+	url, err := r.signer.GenerateSignedURL(obj.LatestImagePath, image.WithWidth(256), image.WithQuality(50))
 	if err != nil {
 		return nil, err
 	}

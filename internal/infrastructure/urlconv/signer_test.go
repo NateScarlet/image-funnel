@@ -23,6 +23,7 @@ func TestGenerateSignedURL(t *testing.T) {
 	assert.Contains(t, signedURL, "image?")
 	assert.Contains(t, signedURL, "path=")
 	assert.Contains(t, signedURL, "t=")
+	assert.Contains(t, signedURL, "s=")
 	assert.Contains(t, signedURL, "sig=")
 }
 
@@ -36,7 +37,7 @@ func TestValidateRequest(t *testing.T) {
 	_, err = signer.GenerateSignedURL(tempFile)
 	require.NoError(t, err)
 
-	valid, err := signer.ValidateRequest("test.jpg", "123", "test")
+	valid, err := signer.ValidateRequest("test.jpg", "123", "4", "test", "", "")
 	require.Error(t, err)
 	assert.False(t, valid)
 }

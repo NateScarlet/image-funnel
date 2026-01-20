@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"main/internal/application/session"
+	"main/internal/application/image"
 )
 
 type Signer struct {
@@ -24,7 +24,7 @@ func NewSigner(secretKey, rootDir string) *Signer {
 	}
 }
 
-func (s *Signer) GenerateSignedURL(path string) (string, error) {
+func (s *Signer) GenerateSignedURL(path string, opts ...image.SignOption) (string, error) {
 	relativePath, err := s.toRelativePath(path)
 	if err != nil {
 		return "", err
@@ -37,19 +37,27 @@ func (s *Signer) GenerateSignedURL(path string) (string, error) {
 	}
 
 	timestamp := fileInfo.ModTime().Unix()
-
-	message := fmt.Sprintf("%s|%d", relativePath, timestamp)
-
-	mac := hmac.New(sha256.New, s.secretKey)
-	mac.Write([]byte(message))
-	signature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	size := fileInfo.Size()
 
 	params := url.Values{}
-	params.Add("path", relativePath)
-	params.Add("t", fmt.Sprintf("%d", timestamp))
-	params.Add("sig", signature)
+	for _, opt := range opts {
+		opt(params)
+	}
+
+	params.Set("path", relativePath)
+	params.Set("t", fmt.Sprintf("%d", timestamp))
+	params.Set("s", fmt.Sprintf("%d", size))
+
+	signature := s.calculateSignature(relativePath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
+	params.Set("sig", signature)
 
 	return fmt.Sprintf("image?%s", params.Encode()), nil
+}
+
+func (s *Signer) calculateSignature(path, timestamp, size, w, q string) string {
+	mac := hmac.New(sha256.New, s.secretKey)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", path, timestamp, size, w, q)
+	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func (s *Signer) toRelativePath(absPath string) (string, error) {
@@ -80,44 +88,27 @@ func (s *Signer) ValidateSignedURL(urlStr string) (string, error) {
 	}
 
 	params := parsedURL.Query()
+	path := params.Get("path")
+	return path, s.ValidateRequestFromValues(params)
+}
 
+func (s *Signer) ValidateRequestFromValues(params url.Values) error {
 	path := params.Get("path")
 	timestampStr := params.Get("t")
+	sizeStr := params.Get("s")
 	signature := params.Get("sig")
+	w := params.Get("w")
+	q := params.Get("q")
 
-	if path == "" || timestampStr == "" || signature == "" {
-		return "", fmt.Errorf("missing required parameters")
+	if path == "" || timestampStr == "" || sizeStr == "" || signature == "" {
+		return fmt.Errorf("missing required parameters")
 	}
 
-	message := fmt.Sprintf("%s|%s", path, timestampStr)
-
-	mac := hmac.New(sha256.New, s.secretKey)
-	mac.Write([]byte(message))
-	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q)
 
 	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
-		return "", fmt.Errorf("invalid signature")
+		return fmt.Errorf("invalid signature")
 	}
 
-	return path, nil
+	return nil
 }
-
-func (s *Signer) ValidateRequest(path, timestamp, signature string) (bool, error) {
-	if path == "" || timestamp == "" || signature == "" {
-		return false, fmt.Errorf("missing required parameters")
-	}
-
-	message := fmt.Sprintf("%s|%s", path, timestamp)
-
-	mac := hmac.New(sha256.New, s.secretKey)
-	mac.Write([]byte(message))
-	expectedSignature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-
-	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
-		return false, fmt.Errorf("invalid signature")
-	}
-
-	return true, nil
-}
-
-var _ session.URLSigner = (*Signer)(nil)

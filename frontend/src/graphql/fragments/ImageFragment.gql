@@ -2,5 +2,8 @@ fragment ImageFragment on Image {
   id
   filename
   url
+  url_800: url(width: 800, quality: 60)
+  url_1600: url(width: 1600, quality: 70)
+  url_2400: url(width: 2400, quality: 80)
   modTime
 }

@@ -136,6 +136,7 @@
           <ImageViewer
             v-if="currentImage"
             :src="currentImage.url"
+            :srcset="currentImageSrcset"
             :alt="currentImage.filename"
           >
             <template #info="{ isFullscreen }">
@@ -439,6 +440,12 @@ const session = computed(() => sessionData.value?.session);
 const stats = computed(() => sessionData.value?.session?.stats);
 const currentImage = computed(() => sessionData.value?.session?.currentImage);
 const nextImage = computed(() => sessionData.value?.session?.nextImage);
+
+const currentImageSrcset = computed(() => {
+  if (!currentImage.value) return undefined;
+  // TODO: 在 ImageViewer 中基于缩放比例自动选择，而不是完全按照页面大小
+  return `${currentImage.value.url_2400} 2400w, ${currentImage.value.url_1600} 1600w, ${currentImage.value.url_800} 800w, ${currentImage.value.url} 9999w`;
+});
 
 const isCompleted = computed(() => {
   return stats.value?.isCompleted || false;

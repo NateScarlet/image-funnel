@@ -10,13 +10,21 @@
     >
       <!-- zoom -->
       <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
-        <img
-          ref="imageRef"
-          :key="src"
-          :src="src"
-          :alt="alt"
-          class="object-contain w-full h-full"
-        />
+        <picture>
+          <source
+            v-if="srcset"
+            :srcset="srcset"
+            sizes="100vw"
+            type="image/webp"
+          />
+          <img
+            ref="imageRef"
+            :key="src"
+            :src="src"
+            :alt="alt"
+            class="object-contain w-full h-full"
+          />
+        </picture>
       </div>
     </div>
 
@@ -101,12 +109,14 @@ import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
 
 interface Props {
   src: string;
+  srcset?: string;
   alt?: string;
   naturalWidth?: number;
   naturalHeight?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  srcset: "",
   alt: "",
   naturalWidth: undefined,
   naturalHeight: undefined,
