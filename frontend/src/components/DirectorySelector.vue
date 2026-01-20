@@ -120,12 +120,17 @@ const showCompletedDirectoriesStorage = useStorage<boolean>(
 );
 const showCompletedDirectories = showCompletedDirectoriesStorage.model;
 
+const statsByID = computed(
+  () =>
+    new Map(
+      directoryItemRefs.value?.map(
+        (i) => [i.stats?.directory?.id, i.stats?.directory?.stats] as const,
+      ) || [],
+    ),
+);
 const items = computed(() => {
   return props.directories.map((dir) => {
-    const dirItem = directoryItemRefs.value?.find(
-      (item) => item.$props.directory.id === dir.id,
-    );
-    const stats = dirItem?.stats;
+    const stats = statsByID.value.get(dir.id);
     let keepCount = undefined;
     if (stats && stats.ratingCounts) {
       keepCount = stats.ratingCounts.reduce(
@@ -160,21 +165,10 @@ const visibleItems = computed(() => {
 
   return sortBy(dirs, [
     (item) => {
-      const dirItem = directoryItemRefs.value?.find(
-        (ref) => ref.$props.directory.id === item.key,
-      );
-      const stats = dirItem?.stats;
-      const hasStats = stats !== undefined && stats !== null;
-      return !hasStats;
+      return !item.stats;
     },
     (item) => item.stats?.imageCount === 0,
-    (item) => {
-      const dirItem = directoryItemRefs.value?.find(
-        (ref) => ref.$props.directory.id === item.key,
-      );
-      const stats = dirItem?.stats;
-      return stats?.latestImage?.modTime || "";
-    },
+    (item) => item.stats?.latestImage?.modTime || "",
   ]);
 });
 
