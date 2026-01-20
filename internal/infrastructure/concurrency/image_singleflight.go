@@ -38,4 +38,8 @@ func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string
 	return result.(string), nil
 }
 
+func (p *SingleFlightImageProcessor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMeta, error) {
+	return p.next.Meta(ctx, srcPath)
+}
+
 var _ appimage.Processor = (*SingleFlightImageProcessor)(nil)

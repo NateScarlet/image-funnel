@@ -27,6 +27,8 @@ type ImageDTO struct {
 	Path          string
 	ModTime       time.Time
 	CurrentRating int
+	Width         int
+	Height        int
 	XMPExists     bool
 }
 

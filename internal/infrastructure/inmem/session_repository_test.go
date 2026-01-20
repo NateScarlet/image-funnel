@@ -22,7 +22,7 @@ func TestNewSessionRepository(t *testing.T) {
 func TestSave(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil)
+	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess := session.NewSession(scalar.ToID("test-id"), "test-dir", &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)
@@ -34,7 +34,7 @@ func TestSave(t *testing.T) {
 func TestFindByID(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil)
+	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess := session.NewSession(scalar.ToID("test-id"), "test-dir", &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)
@@ -54,10 +54,10 @@ func TestFindByID_NotFound(t *testing.T) {
 func TestFindAll(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img1 := image.NewImage(scalar.ToID("test-id-1"), "test1.jpg", "/test/test1.jpg", 1000, time.Now(), nil)
+	img1 := image.NewImage(scalar.ToID("test-id-1"), "test1.jpg", "/test/test1.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess1 := session.NewSession(scalar.ToID("test-id-1"), "test-dir-1", &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img1})
 
-	img2 := image.NewImage(scalar.ToID("test-id-2"), "test2.jpg", "/test/test2.jpg", 1000, time.Now(), nil)
+	img2 := image.NewImage(scalar.ToID("test-id-2"), "test2.jpg", "/test/test2.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess2 := session.NewSession(scalar.ToID("test-id-2"), "test-dir-2", &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img2})
 
 	err := repo.Save(sess1)
@@ -73,7 +73,7 @@ func TestFindAll(t *testing.T) {
 func TestDelete(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil)
+	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess := session.NewSession(scalar.ToID("test-id"), "test-dir", &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
 	err := repo.Save(sess)
 	require.NoError(t, err)
@@ -84,4 +84,3 @@ func TestDelete(t *testing.T) {
 	_, err = repo.FindByID(sess.ID())
 	require.Error(t, err)
 }
-

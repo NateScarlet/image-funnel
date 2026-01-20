@@ -4,6 +4,8 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   size: Int!
   url(width: Int, quality: Int): URI!
   modTime: Time!
+  width: Int!
+  height: Int!
   currentRating: Int
   xmpExists: Boolean!
 }

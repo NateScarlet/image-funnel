@@ -81,6 +81,8 @@ func createTestImagesWithRatings(ratings []int) []*Image {
 			1000,
 			time.Now(),
 			xmpData,
+			1920,
+			1080,
 		)
 	}
 	return images

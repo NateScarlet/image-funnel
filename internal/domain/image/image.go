@@ -15,9 +15,11 @@ type Image struct {
 	size     int64
 	modTime  time.Time
 	xmpData  *metadata.XMPData
+	width    int
+	height   int
 }
 
-func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData) *Image {
+func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
 		id:       id,
 		filename: filename,
@@ -25,10 +27,12 @@ func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time
 		size:     size,
 		modTime:  modTime,
 		xmpData:  xmpData,
+		width:    width,
+		height:   height,
 	}
 }
 
-func NewImageFromPath(filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData) *Image {
+func NewImageFromPath(filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
 		id:       newID(path, modTime),
 		filename: filename,
@@ -36,6 +40,8 @@ func NewImageFromPath(filename, path string, size int64, modTime time.Time, xmpD
 		size:     size,
 		modTime:  modTime,
 		xmpData:  xmpData,
+		width:    width,
+		height:   height,
 	}
 }
 
@@ -72,6 +78,14 @@ func (i *Image) XMPData() *metadata.XMPData {
 
 func (i *Image) XMPExists() bool {
 	return i.xmpData != nil
+}
+
+func (i *Image) Width() int {
+	return i.width
+}
+
+func (i *Image) Height() int {
+	return i.height
 }
 
 func newID(path string, modTime time.Time) scalar.ID {

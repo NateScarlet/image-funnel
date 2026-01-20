@@ -1,37 +1,41 @@
 package localfs
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
-	"main/internal/domain/image"
+	domainimage "main/internal/domain/image"
 	"main/internal/domain/metadata"
 )
 
 type Scanner struct {
-	rootDir string
-	xmpRepo metadata.Repository
+	rootDir   string
+	xmpRepo   metadata.Repository
+	processor appimage.Processor
 }
 
-func NewScanner(rootDir string, xmpRepo metadata.Repository) *Scanner {
+func NewScanner(rootDir string, xmpRepo metadata.Repository, processor appimage.Processor) *Scanner {
 	return &Scanner{
-		rootDir: rootDir,
-		xmpRepo: xmpRepo,
+		rootDir:   rootDir,
+		xmpRepo:   xmpRepo,
+		processor: processor,
 	}
 }
 
-func (s *Scanner) Scan(dirPath string) ([]*image.Image, error) {
+func (s *Scanner) Scan(dirPath string) ([]*domainimage.Image, error) {
 	absPath := filepath.Join(s.rootDir, dirPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
 	}
 
-	var images []*image.Image
+	var images []*domainimage.Image
 
 	for _, entry := range entries {
 		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
@@ -56,12 +60,22 @@ func (s *Scanner) Scan(dirPath string) ([]*image.Image, error) {
 			}
 		}
 
-		img := image.NewImageFromPath(
+		width, height := 0, 0
+		if s.processor != nil {
+			meta, err := s.processor.Meta(context.Background(), path)
+			if err == nil {
+				width, height = meta.Width, meta.Height
+			}
+		}
+
+		img := domainimage.NewImageFromPath(
 			entry.Name(),
 			path,
 			info.Size(),
 			info.ModTime(),
 			xmpData,
+			width,
+			height,
 		)
 
 		images = append(images, img)

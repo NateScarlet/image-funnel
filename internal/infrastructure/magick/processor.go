@@ -79,4 +79,23 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	return cachePath, err
 }
 
+func (p *Processor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMeta, error) {
+	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", srcPath)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get image metadata: %w", err)
+	}
+
+	var width, height int
+	_, err = fmt.Sscanf(string(output), "%d %d", &width, &height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse image dimensions: %w", err)
+	}
+
+	return &appimage.ImageMeta{
+		Width:  width,
+		Height: height,
+	}, nil
+}
+
 var _ appimage.Processor = (*Processor)(nil)

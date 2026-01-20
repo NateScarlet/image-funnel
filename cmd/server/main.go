@@ -72,10 +72,6 @@ func main() {
 
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
-	dirScanner := localfs.NewScanner(absRootDir, metadataRepo)
-	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
-	eventBus := ebus.NewEventBus(sessionTopic)
 
 	// Initialize Image Cache and Processor
 	cacheDir := filepath.Join(os.TempDir(), "image-funnel-cache")
@@ -84,6 +80,11 @@ func main() {
 	imageCache.StartAutoClean(context.Background())
 	magickProcessor := magick.NewProcessor(imageCache)
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(magickProcessor)
+
+	dirScanner := localfs.NewScanner(absRootDir, metadataRepo, imageProcessor)
+	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
+	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
+	eventBus := ebus.NewEventBus(sessionTopic)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)
 	directoryHandler := directory.NewHandler(dirScanner)

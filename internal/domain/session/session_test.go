@@ -398,6 +398,8 @@ func createTestImages(count int) []*image.Image {
 			1000,
 			time.Now(),
 			nil,
+			1920,
+			1080,
 		)
 	}
 	return images
@@ -414,6 +416,8 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 			1000,
 			time.Now(),
 			xmpData,
+			1920,
+			1080,
 		)
 	}
 	return images

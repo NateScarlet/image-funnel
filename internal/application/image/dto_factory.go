@@ -23,6 +23,8 @@ func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 		Path:          img.Path(),
 		ModTime:       img.ModTime(),
 		CurrentRating: img.Rating(),
+		Width:         img.Width(),
+		Height:        img.Height(),
 		XMPExists:     img.XMPExists(),
 	}, nil
 }

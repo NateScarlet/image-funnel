@@ -14,13 +14,12 @@ import (
 // URL is the resolver for the url field.
 func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error) {
 	var opts []image.SignOption
-	if width != nil {
+	if width != nil && *width < obj.Width {
 		opts = append(opts, image.WithWidth(*width))
 	}
 	if quality != nil {
 		opts = append(opts, image.WithQuality(*quality))
 	}
-
 	return r.signer.GenerateSignedURL(obj.Path, opts...)
 }
 

@@ -84,10 +84,12 @@ type ComplexityRoot struct {
 	Image struct {
 		CurrentRating func(childComplexity int) int
 		Filename      func(childComplexity int) int
+		Height        func(childComplexity int) int
 		ID            func(childComplexity int) int
 		ModTime       func(childComplexity int) int
 		Size          func(childComplexity int) int
 		URL           func(childComplexity int, width *int, quality *int) int
+		Width         func(childComplexity int) int
 		XMPExists     func(childComplexity int) int
 	}
 
@@ -346,6 +348,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.Filename(childComplexity), true
+	case "Image.height":
+		if e.complexity.Image.Height == nil {
+			break
+		}
+
+		return e.complexity.Image.Height(childComplexity), true
 	case "Image.id":
 		if e.complexity.Image.ID == nil {
 			break
@@ -375,6 +383,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.URL(childComplexity, args["width"].(*int), args["quality"].(*int)), true
+	case "Image.width":
+		if e.complexity.Image.Width == nil {
+			break
+		}
+
+		return e.complexity.Image.Width(childComplexity), true
 	case "Image.xmpExists":
 		if e.complexity.Image.XMPExists == nil {
 			break
@@ -862,6 +876,8 @@ input ImageFiltersInput
   size: Int!
   url(width: Int, quality: Int): URI!
   modTime: Time!
+  width: Int!
+  height: Int!
   currentRating: Int
   xmpExists: Boolean!
 }
@@ -1978,6 +1994,64 @@ func (ec *executionContext) fieldContext_Image_modTime(_ context.Context, field 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Image_width(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_width,
+		func(ctx context.Context) (any, error) {
+			return obj.Width, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_width(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Image_height(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_height,
+		func(ctx context.Context) (any, error) {
+			return obj.Height, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_height(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3163,6 +3237,10 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_url(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
 			case "currentRating":
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
@@ -3208,6 +3286,10 @@ func (ec *executionContext) fieldContext_Session_nextImage(_ context.Context, fi
 				return ec.fieldContext_Image_url(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
 			case "currentRating":
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
@@ -5798,6 +5880,16 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "modTime":
 			out.Values[i] = ec._Image_modTime(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "width":
+			out.Values[i] = ec._Image_width(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "height":
+			out.Values[i] = ec._Image_height(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

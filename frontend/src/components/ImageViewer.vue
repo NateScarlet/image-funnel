@@ -10,27 +10,18 @@
     >
       <!-- zoom -->
       <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
-        <picture>
-          <source
-            v-if="srcset"
-            :srcset="srcset"
-            sizes="100vw"
-            type="image/webp"
-          />
-          <img
-            ref="imageRef"
-            :key="src"
-            :src="src"
-            :alt="alt"
-            class="object-contain w-full h-full"
-          />
-        </picture>
+        <img
+          :key="image.id"
+          :src="src"
+          :alt="image.filename"
+          class="object-contain w-full h-full"
+        />
       </div>
     </div>
 
     <!-- 图片尺寸和缩放操作 -->
     <div
-      v-if="imageSize"
+      v-if="image.width && image.height"
       class="flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
       <button
@@ -76,7 +67,7 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <span class="min-w-16 hidden md:block"
-        >{{ imageSize.width }} × {{ imageSize.height }}</span
+        >{{ image.width }} × {{ image.height }}</span
       >
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
@@ -103,27 +94,15 @@ import { ref, computed } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
-import useAsyncTask from "../composables/useAsyncTask";
 import useElementFullscreen from "../composables/useElementFullscreen";
 import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
+import type { ImageFragmentFragment } from "@/graphql/generated";
 
-interface Props {
-  src: string;
-  srcset?: string;
-  alt?: string;
-  naturalWidth?: number;
-  naturalHeight?: number;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  srcset: "",
-  alt: "",
-  naturalWidth: undefined,
-  naturalHeight: undefined,
-});
+const { image } = defineProps<{
+  image: ImageFragmentFragment;
+}>();
 
 const containerRef = ref<HTMLElement>();
-const imageRef = ref<HTMLImageElement>();
 const rootEl = ref<HTMLElement>();
 
 const { toggleFullscreen, isFullscreen } = useElementFullscreen(rootEl);
@@ -132,42 +111,10 @@ function handleToggleFullscreen() {
   toggleFullscreen();
 }
 
-const { result: size, restart: updateSize } = useAsyncTask({
-  args: () => {
-    const img = imageRef.value;
-    if (img) {
-      return [props.src, img];
-    }
-  },
-  task: async (_, img) => {
-    if (img.naturalWidth === 0 && img.naturalHeight === 0) {
-      await img.decode();
-    }
-    return {
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-    };
-  },
-});
-
-useEventListeners(imageRef, (ctx) => {
-  ctx.on("load", () => {
-    updateSize();
-  });
-});
-
-const imageSize = computed(() => {
-  if (props.naturalWidth && props.naturalHeight) {
-    return { width: props.naturalWidth, height: props.naturalHeight };
-  }
-  return size.value;
-});
-
 const zoom = useImageZoom({
   container: containerRef,
-  size: imageSize,
+  size: image,
 });
-
 const {
   containerAttrs,
   zoomAsPercent,
@@ -176,6 +123,28 @@ const {
   zoomOut,
   zoomAttrs,
 } = zoom;
+
+const src = computed(() => {
+  const zoomLevel = zoom.zoom.value;
+  const targetWidth = Math.ceil(image.width * zoomLevel);
+
+  if (targetWidth <= 256) {
+    return image.url256;
+  }
+  if (targetWidth <= 512) {
+    return image.url512;
+  }
+  if (targetWidth <= 1024) {
+    return image.url1024;
+  }
+  if (targetWidth <= 2048) {
+    return image.url2048;
+  }
+  if (targetWidth <= 4096) {
+    return image.url4096;
+  }
+  return image.url;
+});
 
 useGrabScroll(() => {
   if (!zoom.fitContainer.value) {
