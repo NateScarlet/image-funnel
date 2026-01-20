@@ -99,7 +99,6 @@ const loadingCount = ref(0);
 const creatingSession = ref(false);
 const selectedPresetId = ref(lastSelectedPresetId.value || "");
 const selectedDirectoryId = ref<string>("");
-const targetKeep = ref<number>(10);
 
 const { data: metaData } = useQuery(GetMetaDocument, {
   loadingCount,
@@ -125,6 +124,14 @@ const filterRating = computed({
     (filterRatingBuffer.value ?? selectedPreset.value?.filter.rating) || [],
   set: (value) => {
     filterRatingBuffer.value = value;
+  },
+});
+
+const targetKeepBuffer = ref<number>();
+const targetKeep = computed({
+  get: () => targetKeepBuffer.value ?? selectedPreset.value?.targetKeep ?? 10,
+  set: (value) => {
+    targetKeepBuffer.value = value;
   },
 });
 
