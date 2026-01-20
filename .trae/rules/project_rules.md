@@ -29,6 +29,7 @@ image-funnel/
 - 长段关联的代码　用 vscode的 region comment （例如　`// #region {分组名称}` `// #endregion` ）包裹
 - 不要手动修改生成的代码，而是用对应的脚本重新生成
 - **frontend:** 修改前端代码后，使用 `pnpm check` 检查
+- **backend:** 给应用层命令添加日志，duration 字段记录耗时，日志消息使用小写字母开头，并遵循“句子片段”的风格，而不是完整的英文句子，不重复其他字段的内容，长耗时操作前后的日志使用 will / did 前缀区分
 - **powershell:** 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建
 - **go:** 用 errors 包处理错误，避免直接比较

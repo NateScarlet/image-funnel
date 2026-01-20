@@ -30,6 +30,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 const defaultPort = "34898"
@@ -47,6 +48,12 @@ func generateRandomSecretKey() string {
 }
 
 func main() {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Sync()
+
 	port := os.Getenv("IMAGE_FUNNEL_PORT")
 	if port == "" {
 		port = defaultPort
@@ -65,7 +72,7 @@ func main() {
 	secretKey := os.Getenv("IMAGE_FUNNEL_SECRET_KEY")
 	if secretKey == "" {
 		secretKey = generateRandomSecretKey()
-		log.Printf("Generated random secret key for this session")
+		logger.Info("Generated random secret key for this session")
 	}
 
 	signer := urlconv.NewSigner(secretKey, absRootDir)
@@ -87,7 +94,7 @@ func main() {
 	eventBus := ebus.NewEventBus(sessionTopic)
 
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
-	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)
+	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
 	directoryHandler := directory.NewHandler(dirScanner, imageDTOFactory)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)

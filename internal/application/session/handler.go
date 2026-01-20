@@ -9,6 +9,9 @@ import (
 	"main/internal/domain/session"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 type Handler struct {
@@ -16,18 +19,21 @@ type Handler struct {
 	eventBus       EventBus
 	urlSigner      appimage.URLSigner
 	dtoFactory     *SessionDTOFactory
+	logger         *zap.Logger
 }
 
 func NewHandler(
 	sessionService *session.Service,
 	eventBus EventBus,
 	urlSigner appimage.URLSigner,
+	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
 		sessionService: sessionService,
 		eventBus:       eventBus,
 		urlSigner:      urlSigner,
 		dtoFactory:     NewSessionDTOFactory(urlSigner),
+		logger:         logger,
 	}
 }
 
@@ -37,7 +43,29 @@ func (h *Handler) CreateSession(
 	directoryId scalar.ID,
 	filter *shared.ImageFilters,
 	target_keep int,
-) error {
+) (err error) {
+	h.logger.Info("will create session",
+		zap.Stringer("id", id),
+		zap.Stringer("directoryId", directoryId),
+		zap.Int("targetKeep", target_keep),
+	)
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("did create session",
+				zap.Stringer("id", id),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("did create session",
+				zap.Stringer("id", id),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	directory, err := directory.DecodeID(directoryId)
 	if err != nil {
 		return err
@@ -62,7 +90,28 @@ func (h *Handler) MarkImage(
 	sessionID scalar.ID,
 	imageID scalar.ID,
 	action shared.ImageAction,
-) error {
+) (err error) {
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("mark image",
+				zap.Stringer("sessionID", sessionID),
+				zap.Stringer("imageID", imageID),
+				zap.Stringer("action", action),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("mark image",
+				zap.Stringer("sessionID", sessionID),
+				zap.Stringer("imageID", imageID),
+				zap.Stringer("action", action),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	sess, err := h.sessionService.MarkImage(sessionID, imageID, action)
 	if err != nil {
 		return fmt.Errorf("failed to mark image: %w", err)
@@ -77,7 +126,27 @@ func (h *Handler) MarkImage(
 	return nil
 }
 
-func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) error {
+func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
+	h.logger.Info("undo",
+		zap.Stringer("sessionID", sessionID),
+	)
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("undo",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("undo",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	sess, err := h.sessionService.Undo(sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to undo: %w", err)
@@ -98,14 +167,39 @@ func (h *Handler) Commit(
 	keepRating int,
 	pendingRating int,
 	rejectRating int,
-) (int, []error) {
+) (success int, errors []error) {
+	h.logger.Info("will commit session",
+		zap.Stringer("sessionID", sessionID),
+		zap.Int("keepRating", keepRating),
+		zap.Int("pendingRating", pendingRating),
+		zap.Int("rejectRating", rejectRating),
+	)
+	startTime := time.Now()
+
+	defer func() {
+		if len(errors) > 0 {
+			h.logger.Warn("did commit session",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Int("success", success),
+				zap.Int("errorCount", len(errors)),
+			)
+		} else {
+			h.logger.Info("did commit session",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Int("success", success),
+			)
+		}
+	}()
+
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return 0, []error{fmt.Errorf("session not found: %w", err)}
 	}
 
 	writeActions := session.NewWriteActions(keepRating, pendingRating, rejectRating)
-	success, errors := h.sessionService.Commit(sess, writeActions)
+	success, errors = h.sessionService.Commit(sess, writeActions)
 
 	sessionDTO, err := h.dtoFactory.New(sess)
 	if err != nil {
@@ -160,7 +254,27 @@ func (h *Handler) UpdateSession(
 	sessionID scalar.ID,
 	targetKeep *int,
 	filter *shared.ImageFilters,
-) error {
+) (err error) {
+	h.logger.Info("will update session",
+		zap.Stringer("sessionID", sessionID),
+	)
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("did update session",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("did update session",
+				zap.Stringer("sessionID", sessionID),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	var options []session.UpdateOption
 
 	if targetKeep != nil {
