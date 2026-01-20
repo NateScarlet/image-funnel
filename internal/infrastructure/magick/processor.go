@@ -1,6 +1,7 @@
 package magick
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -65,10 +66,11 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		cmd := exec.CommandContext(ctx, "magick", args...)
 		cmd.Stdout = f // Write directly to the temp file
 		// Capture stderr for debugging
-		cmd.Stderr = os.Stderr
+		var b = new(bytes.Buffer)
+		cmd.Stderr = b
 
 		if err := cmd.Run(); err != nil {
-			log.Printf("ImageMagick error: %v, args: %v", err, args)
+			log.Printf("ImageMagick error: %v, args: %v: stderr: %q", err, args, b.String())
 			return err
 		}
 		return nil
