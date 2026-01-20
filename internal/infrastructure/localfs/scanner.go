@@ -15,6 +15,7 @@ import (
 	domainimage "main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/iterator"
+	"main/internal/util"
 )
 
 type Scanner struct {
@@ -96,7 +97,7 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
 	return func(yield func(*directory.DirectoryInfo, error) bool) {
 		if relPath != "" {
-			if err := s.validateDirectoryPath(relPath); err != nil {
+			if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
 				yield(nil, err)
 				return
 			}
@@ -125,7 +126,7 @@ func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.Directory
 }
 
 func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
-	if err := s.validateDirectoryPath(relPath); err != nil {
+	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
 		return nil, err
 	}
 
@@ -198,22 +199,6 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 	}
 
 	return directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
-}
-
-func (s *Scanner) validateDirectoryPath(relPath string) error {
-	relPath = filepath.Clean(relPath)
-	absPath := filepath.Join(s.rootDir, relPath)
-	if !strings.HasPrefix(absPath, s.rootDir) {
-		return fmt.Errorf("path escapes root directory")
-	}
-	relPath2, err := filepath.Rel(s.rootDir, absPath)
-	if err != nil {
-		return fmt.Errorf("invalid path: %w", err)
-	}
-	if relPath2 != relPath {
-		return fmt.Errorf("not a relative path: %s", relPath2)
-	}
-	return nil
 }
 
 func (s *Scanner) isSupportedImage(filename string) bool {

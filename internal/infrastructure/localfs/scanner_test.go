@@ -74,93 +74,6 @@ func TestAnalyzeDirectory(t *testing.T) {
 	assert.Equal(t, 1, stats.RatingCounts()[0])
 }
 
-func TestValidateDirectoryPath(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	for _, tc := range []string{
-		".",
-		"subdir",
-		"subdir/subdir",
-		"subdir/..subdir",
-		"subdir/subdir..",
-		"subdir/sub..dir",
-	} {
-		t.Run(tc, func(t *testing.T) {
-			err := scanner.validateDirectoryPath(tc)
-			require.NoError(t, err)
-		})
-	}
-}
-
-func TestValidateDirectoryPath_Invalid(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	err := scanner.validateDirectoryPath("../test")
-	assert.Error(t, err)
-}
-
-func TestValidateDirectoryPath_Absolute(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	err := scanner.validateDirectoryPath("/absolute/path")
-	assert.Error(t, err)
-}
-
-func TestValidateDirectoryPath_WithDriveLetter(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	err := scanner.validateDirectoryPath("C:\\Windows\\System32")
-	assert.Error(t, err)
-}
-
-func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	testCases := []string{
-		"../escape",
-		"../../escape",
-		"./../escape",
-		"subdir/../../escape",
-		"..\\escape",
-		"..\\..\\escape",
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc, func(t *testing.T) {
-			err := scanner.validateDirectoryPath(tc)
-			assert.Error(t, err, "path traversal should be rejected: %s", tc)
-		})
-	}
-}
-
-func TestAnalyzeDirectory_PathTraversal(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	_, err := scanner.AnalyzeDirectory(context.Background(), "../escape")
-	assert.Error(t, err)
-}
-
-func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	_, err := scanner.AnalyzeDirectory(context.Background(), "/absolute/path")
-	assert.Error(t, err)
-}
-
-func TestScanDirectories_PathTraversal(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	_, err := collectDirInfosWithError(scanner.ScanDirectories("../escape"))
-	assert.Error(t, err)
-}
-
-func TestScanDirectories_AbsolutePath(t *testing.T) {
-	scanner := newTestScanner(t)
-
-	_, err := collectDirInfosWithError(scanner.ScanDirectories("/absolute/path"))
-	assert.Error(t, err)
-}
-
 func collectImages(seq iter.Seq2[*domainimage.Image, error]) []*domainimage.Image {
 	var images []*domainimage.Image
 	for img, err := range seq {
@@ -181,15 +94,4 @@ func collectDirInfos(seq iter.Seq2[*directory.DirectoryInfo, error]) []*director
 		dirs = append(dirs, dir)
 	}
 	return dirs
-}
-
-func collectDirInfosWithError(seq iter.Seq2[*directory.DirectoryInfo, error]) ([]*directory.DirectoryInfo, error) {
-	var dirs []*directory.DirectoryInfo
-	for dir, err := range seq {
-		if err != nil {
-			return nil, err
-		}
-		dirs = append(dirs, dir)
-	}
-	return dirs, nil
 }
