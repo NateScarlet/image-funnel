@@ -126,9 +126,9 @@ const items = computed(() => {
       (item) => item.$props.directory.id === dir.id,
     );
     const stats = dirItem?.stats;
-    let matchedCount = 0;
+    let keepCount = undefined;
     if (stats && stats.ratingCounts) {
-      matchedCount = stats.ratingCounts.reduce(
+      keepCount = stats.ratingCounts.reduce(
         (sum, rc) =>
           sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
         0,
@@ -138,7 +138,7 @@ const items = computed(() => {
       key: dir.id,
       dir,
       stats,
-      matchedCount,
+      keepCount,
     };
   });
 });
@@ -147,8 +147,8 @@ const completedCount = computed(() => {
   return items.value.filter(isCompleted).length;
 });
 
-function isCompleted(item: { matchedCount: number }) {
-  return item.matchedCount <= props.targetKeep;
+function isCompleted(item: { keepCount?: number }) {
+  return item.keepCount !== undefined && item.keepCount <= props.targetKeep;
 }
 
 const visibleItems = computed(() => {
