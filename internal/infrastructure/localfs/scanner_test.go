@@ -1,6 +1,7 @@
 package localfs
 
 import (
+	"context"
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
@@ -64,13 +65,13 @@ func TestAnalyzeDirectory(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	imageCount, subdirectoryCount, latestImage, ratingCounts, err := scanner.AnalyzeDirectory(".")
+	stats, err := scanner.AnalyzeDirectory(context.Background(), ".")
 	require.NoError(t, err)
-	assert.Equal(t, 1, imageCount)
-	assert.Equal(t, 0, subdirectoryCount)
-	assert.NotNil(t, latestImage)
-	assert.Equal(t, testFile, latestImage.Path())
-	assert.Equal(t, 1, ratingCounts[0])
+	assert.Equal(t, 1, stats.ImageCount())
+	assert.Equal(t, 0, stats.SubdirectoryCount())
+	assert.NotNil(t, stats.LatestImage())
+	assert.Equal(t, testFile, stats.LatestImage().Path())
+	assert.Equal(t, 1, stats.RatingCounts()[0])
 }
 
 func TestValidateDirectoryPath(t *testing.T) {
@@ -124,14 +125,14 @@ func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
 func TestAnalyzeDirectory_PathTraversal(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	_, _, _, _, err := scanner.AnalyzeDirectory("../escape")
+	_, err := scanner.AnalyzeDirectory(context.Background(), "../escape")
 	assert.Error(t, err)
 }
 
 func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	_, _, _, _, err := scanner.AnalyzeDirectory("/absolute/path")
+	_, err := scanner.AnalyzeDirectory(context.Background(), "/absolute/path")
 	assert.Error(t, err)
 }
 
