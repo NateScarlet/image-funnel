@@ -23,3 +23,5 @@ description: "创建新组件，包括组件结构、TypeScript 类型定义、C
 - 使用 `computed` 派生数据，避免重复计算
 - 避免使用 `watch`，尽量使用 `computed`
 - 使用 `useEventListeners` 来管理事件监听，避免手动处理
+- 必填参数不得超过 3 个，超过 3 个参数时考虑使用对象参数
+- id 类参数不要作为字符串传递，而是定义 `{someObject:{id: string}}` 类型，方便外部传入和后续扩展
