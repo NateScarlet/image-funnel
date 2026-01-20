@@ -109,9 +109,8 @@ type Session struct {
 // 当需要撤销到上一轮时，使用此快照恢复状态
 
 type RoundSnapshot struct {
-	queue      []*image.Image
-	currentIdx int
-	undoStack  []UndoEntry
+	queue     []*image.Image
+	undoStack []UndoEntry
 }
 
 // NewSession 创建一个新的图片筛选会话
@@ -262,15 +261,9 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 
 	// 保存当前状态到历史记录
 	if len(s.queue) > 0 {
-		// 保存当前索引时，如果已经处理完所有图片，则保存最后一张图片的索引
-		saveIdx := s.currentIdx
-		if saveIdx >= len(s.queue) && len(s.queue) > 0 {
-			saveIdx = len(s.queue) - 1
-		}
 		s.roundHistory = append(s.roundHistory, RoundSnapshot{
-			queue:      s.queue,
-			currentIdx: saveIdx,
-			undoStack:  s.undoStack,
+			queue:     s.queue,
+			undoStack: s.undoStack,
 		})
 	}
 
@@ -453,7 +446,7 @@ func (s *Session) Undo() error {
 		s.roundHistory = s.roundHistory[:len(s.roundHistory)-1]
 		s.currentRound--
 		s.queue = lastRound.queue
-		s.currentIdx = lastRound.currentIdx
+		s.currentIdx = len(s.queue) - 1 // 指向最后一张图片
 		s.undoStack = lastRound.undoStack
 		s.updatedAt = time.Now()
 		return nil
