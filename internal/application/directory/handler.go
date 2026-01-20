@@ -31,10 +31,6 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 		return nil, err
 	}
 
-	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
-		return nil, err
-	}
-
 	var parentID scalar.ID
 	if path != "." {
 		parentPath := filepath.Dir(path)
@@ -58,11 +54,6 @@ func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.Dir
 	if err != nil {
 		return nil, err
 	}
-
-	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
-		return nil, err
-	}
-
 	stats, err := h.scanner.AnalyzeDirectory(ctx, path)
 	if err != nil {
 		return nil, err
@@ -74,10 +65,6 @@ func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.Dir
 func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
 	path, err := directory.DecodeID(parentID)
 	if err != nil {
-		return nil, err
-	}
-
-	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
 		return nil, err
 	}
 
