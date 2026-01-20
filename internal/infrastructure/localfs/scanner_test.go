@@ -77,28 +77,28 @@ func TestAnalyzeDirectory(t *testing.T) {
 func TestValidateDirectoryPath(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	err := scanner.ValidateDirectoryPath(".")
+	err := scanner.validateDirectoryPath(".")
 	require.NoError(t, err)
 }
 
 func TestValidateDirectoryPath_Invalid(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	err := scanner.ValidateDirectoryPath("../test")
+	err := scanner.validateDirectoryPath("../test")
 	assert.Error(t, err)
 }
 
 func TestValidateDirectoryPath_Absolute(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	err := scanner.ValidateDirectoryPath("/absolute/path")
+	err := scanner.validateDirectoryPath("/absolute/path")
 	assert.Error(t, err)
 }
 
 func TestValidateDirectoryPath_WithDriveLetter(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	err := scanner.ValidateDirectoryPath("C:\\Windows\\System32")
+	err := scanner.validateDirectoryPath("C:\\Windows\\System32")
 	assert.Error(t, err)
 }
 
@@ -116,7 +116,7 @@ func TestValidateDirectoryPath_PathTraversal(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			err := scanner.ValidateDirectoryPath(tc)
+			err := scanner.validateDirectoryPath(tc)
 			assert.Error(t, err, "path traversal should be rejected: %s", tc)
 		})
 	}

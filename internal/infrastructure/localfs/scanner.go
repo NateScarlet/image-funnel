@@ -61,15 +61,14 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 				path := filepath.Join(absPath, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
-					return true
+					return yield(nil, err)
 				}
 
 				var xmpData *metadata.XMPData
-				if s.xmpExists(path) {
-					xmpData, err = s.xmpRepo.Read(path)
-					if err != nil {
-						xmpData = nil
-					}
+
+				xmpData, err = s.xmpRepo.Read(path)
+				if err != nil {
+					return yield(nil, err)
 				}
 
 				width, height := 0, 0
@@ -80,7 +79,7 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 					}
 				}
 
-				img := domainimage.NewImageFromPath(
+				return yield(domainimage.NewImageFromPath(
 					entry.Name(),
 					path,
 					info.Size(),
@@ -88,9 +87,7 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 					xmpData,
 					width,
 					height,
-				)
-
-				return yield(img, nil)
+				), nil)
 			},
 		)
 	}
@@ -99,7 +96,7 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
 	return func(yield func(*directory.DirectoryInfo, error) bool) {
 		if relPath != "" {
-			if err := s.ValidateDirectoryPath(relPath); err != nil {
+			if err := s.validateDirectoryPath(relPath); err != nil {
 				yield(nil, err)
 				return
 			}
@@ -128,7 +125,7 @@ func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.Directory
 }
 
 func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
-	if err := s.ValidateDirectoryPath(relPath); err != nil {
+	if err := s.validateDirectoryPath(relPath); err != nil {
 		return nil, err
 	}
 
@@ -170,11 +167,10 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 		imagePath := filepath.Join(absPath, entry.Name())
 
 		var xmpData *metadata.XMPData
-		if s.xmpExists(imagePath) {
-			xmpData, err = s.xmpRepo.Read(imagePath)
-			if err != nil {
-				xmpData = nil
-			}
+
+		xmpData, err = s.xmpRepo.Read(imagePath)
+		if err != nil {
+			xmpData = nil
 		}
 
 		width, height := 0, 0
@@ -198,25 +194,13 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 		if latestImage == nil || info.ModTime().After(latestImage.ModTime()) {
 			latestImage = img
 		}
-
-		if s.xmpExists(imagePath) {
-			xmpData, err := s.xmpRepo.Read(imagePath)
-			if err == nil {
-				ratingCounts[xmpData.Rating()]++
-			} else {
-				ratingCounts[0]++
-			}
-		} else {
-			ratingCounts[0]++
-		}
+		ratingCounts[img.Rating()]++
 	}
 
-	stats := directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts)
-
-	return stats, nil
+	return directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
 }
 
-func (s *Scanner) ValidateDirectoryPath(relPath string) error {
+func (s *Scanner) validateDirectoryPath(relPath string) error {
 	if relPath == "" {
 		relPath = "."
 	}
@@ -252,11 +236,6 @@ func (s *Scanner) ValidateDirectoryPath(relPath string) error {
 	}
 
 	return nil
-}
-
-func (s *Scanner) xmpExists(imagePath string) bool {
-	_, err := os.Stat(imagePath + ".xmp")
-	return err == nil
 }
 
 func (s *Scanner) isSupportedImage(filename string) bool {
