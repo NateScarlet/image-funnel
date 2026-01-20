@@ -16,12 +16,11 @@ func NewImageDTOFactory(urlSigner URLSigner) *ImageDTOFactory {
 }
 
 func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
-	url, _ := f.urlSigner.GenerateSignedURL(img.Path())
 	return &shared.ImageDTO{
 		ID:            img.ID(),
 		Filename:      img.Filename(),
 		Size:          img.Size(),
-		URL:           url,
+		Path:          img.Path(),
 		ModTime:       img.ModTime(),
 		CurrentRating: img.Rating(),
 		XMPExists:     img.XMPExists(),

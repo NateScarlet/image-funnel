@@ -21,7 +21,7 @@ func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *in
 		opts = append(opts, image.WithQuality(*quality))
 	}
 
-	return r.signer.GenerateSignedURL(obj.Filename, opts...)
+	return r.signer.GenerateSignedURL(obj.Path, opts...)
 }
 
 // Image returns ImageResolver implementation.

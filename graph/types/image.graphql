@@ -2,7 +2,7 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
   filename: String!
   size: Int!
-  url(width: Int, quality: Int): URI! @goField(forceResolver: true)
+  url(width: Int, quality: Int): URI!
   modTime: Time!
   currentRating: Int
   xmpExists: Boolean!

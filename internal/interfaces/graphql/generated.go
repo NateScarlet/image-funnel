@@ -838,6 +838,7 @@ directive @goField(
   root: Boolean!
   imageCount: Int!
   subdirectoryCount: Int!
+  # TODO: 用 latestImage 替换
   latestImageModTime: Time!
   latestImagePath: String
   latestImageUrl: URI
@@ -859,7 +860,7 @@ input ImageFiltersInput
   id: ID!
   filename: String!
   size: Int!
-  url(width: Int, quality: Int): URI! @goField(forceResolver: true)
+  url(width: Int, quality: Int): URI!
   modTime: Time!
   currentRating: Int
   xmpExists: Boolean!

@@ -24,7 +24,7 @@ type ImageDTO struct {
 	ID            scalar.ID
 	Filename      string
 	Size          int64
-	URL           string
+	Path          string
 	ModTime       time.Time
 	CurrentRating int
 	XMPExists     bool
