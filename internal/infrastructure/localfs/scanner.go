@@ -144,6 +144,10 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 	ratingCounts := make(map[int]int)
 
 	for _, entry := range entries {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		if strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
