@@ -1,14 +1,8 @@
-query GetDirectories($id: ID, $includeStats: Boolean = true) {
+query GetDirectories($id: ID) {
   directory(id: $id) {
     ...Directory
-    stats @include(if: $includeStats) {
-      ...DirectoryStats
-    }
     directories {
       ...Directory
-      stats @include(if: $includeStats) {
-        ...DirectoryStats
-      }
     }
   }
 }

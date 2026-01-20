@@ -1,0 +1,8 @@
+query GetDirectoryStats($id: ID!) {
+  directory(id: $id) {
+    ...Directory
+    stats {
+      ...DirectoryStats
+    }
+  }
+}
