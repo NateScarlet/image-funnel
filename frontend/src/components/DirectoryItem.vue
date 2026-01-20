@@ -35,6 +35,19 @@
             class="px-2 py-0.5 text-xs bg-slate-700 rounded"
             >{{ localStats.subdirectoryCount }}子目录</span
           >
+          <span
+            v-if="isTargetMet"
+            class="px-2 py-0.5 text-xs bg-emerald-600/80 text-emerald-100 rounded flex items-center gap-1"
+          >
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            已达标
+          </span>
         </h3>
         <div class="text-xs text-slate-300 space-y-1">
           <div v-if="localStats">
@@ -89,6 +102,7 @@ import type {
 interface Props {
   directory: DirectoryFragment;
   filterRating: number[];
+  targetKeep: number;
 }
 
 const props = defineProps<Props>();
@@ -108,6 +122,17 @@ const { data: statsData } = useQuery(GetDirectoryStatsDocument, {
 const localStats = computed(() => statsData.value?.directory?.stats);
 const loading = computed(() => loadingCount.value > 0);
 const selected = computed(() => selectedId.value === props.directory.id);
+
+const isTargetMet = computed(() => {
+  const stats = localStats.value;
+  if (!stats || !stats.ratingCounts) {
+    return false;
+  }
+  const matchedCount = stats.ratingCounts
+    .filter((rc) => props.filterRating.includes(rc.rating))
+    .reduce((sum, rc) => sum + rc.count, 0);
+  return matchedCount <= props.targetKeep;
+});
 
 function sortedRatingCounts(
   ratingCounts: RatingCountFragment[],
