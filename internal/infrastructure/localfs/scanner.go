@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
@@ -106,7 +105,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, e
 
 		subRelPath := filepath.Join(relPath, entry.Name())
 
-		imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
+		imageCount, subdirectoryCount, latestImage, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
 		if err != nil {
 			continue
 		}
@@ -119,8 +118,7 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, e
 			subRelPath,
 			imageCount,
 			subdirectoryCount,
-			latestModTime,
-			latestImagePath,
+			latestImage,
 			ratingCounts,
 		)
 
@@ -130,21 +128,20 @@ func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, e
 	return directories, nil
 }
 
-func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, time.Time, string, map[int]int, error) {
+func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, *domainimage.Image, map[int]int, error) {
 	if err := s.ValidateDirectoryPath(relPath); err != nil {
-		return 0, 0, time.Time{}, "", nil, err
+		return 0, 0, nil, nil, err
 	}
 
 	absPath := filepath.Join(s.rootDir, relPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		return 0, 0, time.Time{}, "", nil, err
+		return 0, 0, nil, nil, err
 	}
 
 	imageCount := 0
 	subdirectoryCount := 0
-	var latestModTime time.Time
-	var latestImagePath string
+	var latestImage *domainimage.Image
 	ratingCounts := make(map[int]int)
 
 	for _, entry := range entries {
@@ -168,9 +165,35 @@ func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, time.Time, string,
 		}
 
 		imagePath := filepath.Join(absPath, entry.Name())
-		if info.ModTime().After(latestModTime) {
-			latestModTime = info.ModTime()
-			latestImagePath = imagePath
+
+		var xmpData *metadata.XMPData
+		if s.xmpExists(imagePath) {
+			xmpData, err = s.xmpRepo.Read(imagePath)
+			if err != nil {
+				xmpData = nil
+			}
+		}
+
+		width, height := 0, 0
+		if s.processor != nil {
+			meta, err := s.processor.Meta(context.Background(), imagePath)
+			if err == nil {
+				width, height = meta.Width, meta.Height
+			}
+		}
+
+		img := domainimage.NewImageFromPath(
+			entry.Name(),
+			imagePath,
+			info.Size(),
+			info.ModTime(),
+			xmpData,
+			width,
+			height,
+		)
+
+		if latestImage == nil || info.ModTime().After(latestImage.ModTime()) {
+			latestImage = img
 		}
 
 		if s.xmpExists(imagePath) {
@@ -185,7 +208,7 @@ func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, time.Time, string,
 		}
 	}
 
-	return imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, nil
+	return imageCount, subdirectoryCount, latestImage, ratingCounts, nil
 }
 
 func (s *Scanner) ValidateDirectoryPath(relPath string) error {

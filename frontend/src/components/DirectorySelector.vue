@@ -41,12 +41,12 @@
       >
         <div class="flex items-start gap-3">
           <div
-            v-if="currentDirectory.latestImagePath"
+            v-if="currentDirectory.latestImage"
             class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
           >
             <img
-              v-if="currentDirectory.latestImageUrl"
-              :src="currentDirectory.latestImageUrl"
+              v-if="getImageUrl(currentDirectory.latestImage)"
+              :src="getImageUrl(currentDirectory.latestImage)"
               :alt="currentDirectory.path"
               class="w-full h-full object-cover"
             />
@@ -56,8 +56,8 @@
               {{ currentDirectory.root ? rootPath : currentDirectory.path }}
             </h3>
             <div class="text-xs text-slate-300 space-y-1">
-              <div v-if="currentDirectory.latestImageModTime">
-                {{ formatDate(currentDirectory.latestImageModTime) }}
+              <div v-if="currentDirectory.latestImage?.modTime">
+                {{ formatDate(currentDirectory.latestImage.modTime) }}
               </div>
               <div
                 v-if="
@@ -131,12 +131,12 @@
         >
           <div class="flex items-start gap-3">
             <div
-              v-if="dir.latestImagePath"
+              v-if="dir.latestImage"
               class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
             >
               <img
-                v-if="dir.latestImageUrl"
-                :src="dir.latestImageUrl"
+                v-if="getImageUrl(dir.latestImage)"
+                :src="getImageUrl(dir.latestImage)"
                 :alt="dir.path"
                 class="w-full h-full object-cover"
               />
@@ -153,8 +153,8 @@
                 >
               </h3>
               <div class="text-xs text-slate-300 space-y-1">
-                <div v-if="dir.latestImageModTime">
-                  {{ formatDate(dir.latestImageModTime) }}
+                <div v-if="dir.latestImage?.modTime">
+                  {{ formatDate(dir.latestImage.modTime) }}
                 </div>
                 <div
                   v-if="dir.ratingCounts && dir.ratingCounts.length > 0"
@@ -191,6 +191,22 @@ interface RatingCount {
   count: number;
 }
 
+interface Image {
+  id: string;
+  filename: string;
+  url: string;
+  url256: string;
+  url512: string;
+  url1024: string;
+  url2048: string;
+  url4096: string;
+  modTime: string;
+  width: number;
+  height: number;
+  currentRating: number | null;
+  xmpExists: boolean;
+}
+
 interface Directory {
   id: string;
   parentId: string | null;
@@ -198,9 +214,7 @@ interface Directory {
   root: boolean;
   imageCount: number;
   subdirectoryCount: number;
-  latestImageModTime: string;
-  latestImagePath: string | null;
-  latestImageUrl: string | null;
+  latestImage: Image | null;
   ratingCounts: RatingCount[];
 }
 
@@ -232,8 +246,8 @@ const filteredDirectories = computed(() => {
     })
     .sort((a, b) => {
       // 按照最新图片修改日期从旧到新排序（最老的在前面）
-      const timeA = a.latestImageModTime || "";
-      const timeB = b.latestImageModTime || "";
+      const timeA = a.latestImage?.modTime || "";
+      const timeB = b.latestImage?.modTime || "";
       if (timeA < timeB) return -1;
       if (timeA > timeB) return 1;
       return 0;
@@ -264,5 +278,11 @@ function selectDirectory(id: string) {
 
 function goToParent() {
   emit("go-to-parent");
+}
+
+function getImageUrl(image: Image | null | undefined): string | undefined {
+  if (!image) return undefined;
+  // 使用 GraphQL 生成的 url256 字段
+  return image.url256 || image.url;
 }
 </script>

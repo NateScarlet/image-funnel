@@ -34,7 +34,7 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.Direc
 		return nil, err
 	}
 
-	imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts, err := h.scanner.AnalyzeDirectory(path)
+	imageCount, subdirectoryCount, latestImage, ratingCounts, err := h.scanner.AnalyzeDirectory(path)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.Direc
 		}
 	}
 
-	dirInfo := directory.NewDirectoryInfo(path, imageCount, subdirectoryCount, latestModTime, latestImagePath, ratingCounts)
+	dirInfo := directory.NewDirectoryInfo(path, imageCount, subdirectoryCount, latestImage, ratingCounts)
 	return h.dtoFactory.New(dirInfo, parentID, path == ".")
 }
 

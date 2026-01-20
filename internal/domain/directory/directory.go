@@ -1,29 +1,27 @@
 package directory
 
 import (
+	"main/internal/domain/image"
 	"main/internal/scalar"
-	"time"
 )
 
 type DirectoryInfo struct {
-	id                 scalar.ID
-	path               string
-	imageCount         int
-	subdirectoryCount  int
-	latestImageModTime time.Time
-	latestImagePath    string
-	ratingCounts       map[int]int
+	id                scalar.ID
+	path              string
+	imageCount        int
+	subdirectoryCount int
+	latestImage       *image.Image
+	ratingCounts      map[int]int
 }
 
-func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImageModTime time.Time, latestImagePath string, ratingCounts map[int]int) *DirectoryInfo {
+func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImage *image.Image, ratingCounts map[int]int) *DirectoryInfo {
 	return &DirectoryInfo{
-		id:                 EncodeID(path),
-		path:               path,
-		imageCount:         imageCount,
-		subdirectoryCount:  subdirectoryCount,
-		latestImageModTime: latestImageModTime,
-		latestImagePath:    latestImagePath,
-		ratingCounts:       ratingCounts,
+		id:                EncodeID(path),
+		path:              path,
+		imageCount:        imageCount,
+		subdirectoryCount: subdirectoryCount,
+		latestImage:       latestImage,
+		ratingCounts:      ratingCounts,
 	}
 }
 
@@ -43,12 +41,8 @@ func (d *DirectoryInfo) SubdirectoryCount() int {
 	return d.subdirectoryCount
 }
 
-func (d *DirectoryInfo) LatestImageModTime() time.Time {
-	return d.latestImageModTime
-}
-
-func (d *DirectoryInfo) LatestImagePath() string {
-	return d.latestImagePath
+func (d *DirectoryInfo) LatestImage() *image.Image {
+	return d.latestImage
 }
 
 func (d *DirectoryInfo) RatingCounts() map[int]int {

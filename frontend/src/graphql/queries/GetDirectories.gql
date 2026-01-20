@@ -1,3 +1,5 @@
+# import ./fragments/ImageFragment.gql
+
 query GetDirectories($id: ID) {
   directory(id: $id) {
     id
@@ -6,9 +8,11 @@ query GetDirectories($id: ID) {
     root
     imageCount
     subdirectoryCount
-    latestImageModTime
-    latestImagePath
-    latestImageUrl
+    latestImage {
+      ...ImageFragment
+      currentRating
+      xmpExists
+    }
     ratingCounts {
       rating
       count
@@ -20,9 +24,11 @@ query GetDirectories($id: ID) {
       root
       imageCount
       subdirectoryCount
-      latestImageModTime
-      latestImagePath
-      latestImageUrl
+      latestImage {
+        ...ImageFragment
+        currentRating
+        xmpExists
+      }
       ratingCounts {
         rating
         count

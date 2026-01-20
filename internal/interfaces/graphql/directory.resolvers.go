@@ -7,22 +7,9 @@ package graphql
 
 import (
 	"context"
-	"main/internal/application/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
-
-// LatestImageURL is the resolver for the latestImageUrl field.
-func (r *directoryResolver) LatestImageURL(ctx context.Context, obj *shared.DirectoryDTO) (*string, error) {
-	if obj.LatestImagePath == "" {
-		return nil, nil
-	}
-	url, err := r.signer.GenerateSignedURL(obj.LatestImagePath, image.WithWidth(256), image.WithQuality(50))
-	if err != nil {
-		return nil, err
-	}
-	return &url, nil
-}
 
 // RatingCounts is the resolver for the ratingCounts field.
 func (r *directoryResolver) RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error) {

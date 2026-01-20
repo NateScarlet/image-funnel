@@ -68,17 +68,15 @@ type ComplexityRoot struct {
 	}
 
 	Directory struct {
-		Directories        func(childComplexity int) int
-		ID                 func(childComplexity int) int
-		ImageCount         func(childComplexity int) int
-		LatestImageModTime func(childComplexity int) int
-		LatestImagePath    func(childComplexity int) int
-		LatestImageURL     func(childComplexity int) int
-		ParentID           func(childComplexity int) int
-		Path               func(childComplexity int) int
-		RatingCounts       func(childComplexity int) int
-		Root               func(childComplexity int) int
-		SubdirectoryCount  func(childComplexity int) int
+		Directories       func(childComplexity int) int
+		ID                func(childComplexity int) int
+		ImageCount        func(childComplexity int) int
+		LatestImage       func(childComplexity int) int
+		ParentID          func(childComplexity int) int
+		Path              func(childComplexity int) int
+		RatingCounts      func(childComplexity int) int
+		Root              func(childComplexity int) int
+		SubdirectoryCount func(childComplexity int) int
 	}
 
 	Image struct {
@@ -173,7 +171,6 @@ type ComplexityRoot struct {
 }
 
 type DirectoryResolver interface {
-	LatestImageURL(ctx context.Context, obj *shared.DirectoryDTO) (*string, error)
 	RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 }
@@ -287,24 +284,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.ImageCount(childComplexity), true
-	case "Directory.latestImageModTime":
-		if e.complexity.Directory.LatestImageModTime == nil {
+	case "Directory.latestImage":
+		if e.complexity.Directory.LatestImage == nil {
 			break
 		}
 
-		return e.complexity.Directory.LatestImageModTime(childComplexity), true
-	case "Directory.latestImagePath":
-		if e.complexity.Directory.LatestImagePath == nil {
-			break
-		}
-
-		return e.complexity.Directory.LatestImagePath(childComplexity), true
-	case "Directory.latestImageUrl":
-		if e.complexity.Directory.LatestImageURL == nil {
-			break
-		}
-
-		return e.complexity.Directory.LatestImageURL(childComplexity), true
+		return e.complexity.Directory.LatestImage(childComplexity), true
 	case "Directory.parentId":
 		if e.complexity.Directory.ParentID == nil {
 			break
@@ -852,10 +837,7 @@ directive @goField(
   root: Boolean!
   imageCount: Int!
   subdirectoryCount: Int!
-  # TODO: 用 latestImage 替换
-  latestImageModTime: Time!
-  latestImagePath: String
-  latestImageUrl: URI
+  latestImage: Image
   ratingCounts: [RatingCount!]!
   directories: [Directory!]! @goField(forceResolver: true)
 }
@@ -1667,88 +1649,50 @@ func (ec *executionContext) fieldContext_Directory_subdirectoryCount(_ context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_latestImageModTime(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_latestImage(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Directory_latestImageModTime,
+		ec.fieldContext_Directory_latestImage,
 		func(ctx context.Context) (any, error) {
-			return obj.LatestImageModTime, nil
+			return obj.LatestImage, nil
 		},
 		nil,
-		ec.marshalNTime2timeᚐTime,
+		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_Directory_latestImageModTime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Directory_latestImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Directory",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Time does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Directory_latestImagePath(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Directory_latestImagePath,
-		func(ctx context.Context) (any, error) {
-			return obj.LatestImagePath, nil
-		},
-		nil,
-		ec.marshalOString2string,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Directory_latestImagePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Directory",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Directory_latestImageUrl(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Directory_latestImageUrl,
-		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Directory().LatestImageURL(ctx, obj)
-		},
-		nil,
-		ec.marshalOURI2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Directory_latestImageUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Directory",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type URI does not have child fields")
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
 	}
 	return fc, nil
@@ -1825,12 +1769,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_imageCount(ctx, field)
 			case "subdirectoryCount":
 				return ec.fieldContext_Directory_subdirectoryCount(ctx, field)
-			case "latestImageModTime":
-				return ec.fieldContext_Directory_latestImageModTime(ctx, field)
-			case "latestImagePath":
-				return ec.fieldContext_Directory_latestImagePath(ctx, field)
-			case "latestImageUrl":
-				return ec.fieldContext_Directory_latestImageUrl(ctx, field)
+			case "latestImage":
+				return ec.fieldContext_Directory_latestImage(ctx, field)
 			case "ratingCounts":
 				return ec.fieldContext_Directory_ratingCounts(ctx, field)
 			case "directories":
@@ -2603,12 +2543,8 @@ func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, fi
 				return ec.fieldContext_Directory_imageCount(ctx, field)
 			case "subdirectoryCount":
 				return ec.fieldContext_Directory_subdirectoryCount(ctx, field)
-			case "latestImageModTime":
-				return ec.fieldContext_Directory_latestImageModTime(ctx, field)
-			case "latestImagePath":
-				return ec.fieldContext_Directory_latestImagePath(ctx, field)
-			case "latestImageUrl":
-				return ec.fieldContext_Directory_latestImageUrl(ctx, field)
+			case "latestImage":
+				return ec.fieldContext_Directory_latestImage(ctx, field)
 			case "ratingCounts":
 				return ec.fieldContext_Directory_ratingCounts(ctx, field)
 			case "directories":
@@ -5681,46 +5617,8 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "latestImageModTime":
-			out.Values[i] = ec._Directory_latestImageModTime(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "latestImagePath":
-			out.Values[i] = ec._Directory_latestImagePath(ctx, field, obj)
-		case "latestImageUrl":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Directory_latestImageUrl(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "latestImage":
+			out.Values[i] = ec._Directory_latestImage(ctx, field, obj)
 		case "ratingCounts":
 			field := field
 
@@ -7801,18 +7699,6 @@ func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessio
 	return ec._Session(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOString2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalString(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOString2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalString(v)
-	return res
-}
-
 func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
 	if v == nil {
 		return nil, nil
@@ -7858,24 +7744,6 @@ func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v an
 }
 
 func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalString(*v)
-	return res
-}
-
-func (ec *executionContext) unmarshalOURI2ᚖstring(ctx context.Context, v any) (*string, error) {
-	if v == nil {
-		return nil, nil
-	}
-	res, err := graphql.UnmarshalString(v)
-	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOURI2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
