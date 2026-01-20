@@ -16,13 +16,18 @@ type ImageCache struct {
 	maxAge          time.Duration
 }
 
-func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration) *ImageCache {
+func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration) (*ImageCache, func()) {
 	os.MkdirAll(rootDir, 0755)
-	return &ImageCache{
+	cache := &ImageCache{
 		rootDir:         rootDir,
 		cleanupInterval: cleanupInterval,
 		maxAge:          maxAge,
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cache.startAutoClean(ctx)
+
+	return cache, cancel
 }
 
 func (c *ImageCache) GetPath(key string) string {
@@ -41,7 +46,7 @@ func (c *ImageCache) Exists(key string) bool {
 	return !info.IsDir()
 }
 
-func (c *ImageCache) StartAutoClean(ctx context.Context) {
+func (c *ImageCache) startAutoClean(ctx context.Context) {
 	ticker := time.NewTicker(c.cleanupInterval)
 	go func() {
 		defer ticker.Stop()

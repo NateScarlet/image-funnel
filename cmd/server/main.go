@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"log"
@@ -76,8 +75,8 @@ func main() {
 	// Initialize Image Cache and Processor
 	cacheDir := filepath.Join(os.TempDir(), "image-funnel-cache")
 	// Cleanup every 1 hour, remove files older than 24 hours
-	imageCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
-	imageCache.StartAutoClean(context.Background())
+	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
+	defer cleanupCache()
 	magickProcessor := magick.NewProcessor(imageCache)
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(magickProcessor)
 
