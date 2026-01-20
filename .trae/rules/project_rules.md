@@ -32,6 +32,7 @@ image-funnel/
 - **powershell:** 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建
 - **go:** 用 errors 包处理错误，避免直接比较
+- **go:** 不要给查询方法添加 Get 前缀，直接用大写名称。比如不要 `GetSession()`，而应该直接 `Session()`
 - **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
 - **ts:** 直接使用 @/graphql/generated 生成的 GraphQL 类型，避免手动定义
 - **vue:**　用声明式的方式代替命令式的维护（例如，用 computed 代替 watch 来维护状态）
