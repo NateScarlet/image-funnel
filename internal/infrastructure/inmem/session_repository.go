@@ -25,7 +25,7 @@ func (r *SessionRepository) Save(sess *session.Session) error {
 	return nil
 }
 
-func (r *SessionRepository) FindByID(id scalar.ID) (*session.Session, error) {
+func (r *SessionRepository) Get(id scalar.ID) (*session.Session, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	sess, exists := r.sessions[id]

@@ -51,7 +51,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 	success := 0
 
 	for _, img := range session.Images() {
-		action := session.GetAction(img.ID())
+		action := session.Action(img.ID())
 
 		var rating int
 		switch action {
@@ -85,7 +85,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 // Update 更新会话配置
 // 使用 Options 模式支持灵活的更新选项
 func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error) {
-	sess, err := s.sessionRepo.FindByID(id)
+	sess, err := s.sessionRepo.Get(id)
 	if err != nil {
 		return nil, err
 	}
@@ -148,12 +148,12 @@ func (s *Service) Create(id scalar.ID, directory string, filter *shared.ImageFil
 
 // Get 根据 ID 获取会话
 func (s *Service) Get(id scalar.ID) (*Session, error) {
-	return s.sessionRepo.FindByID(id)
+	return s.sessionRepo.Get(id)
 }
 
 // MarkImage 标记图片并保存
 func (s *Service) MarkImage(sessionID scalar.ID, imageID scalar.ID, action shared.ImageAction) (*Session, error) {
-	sess, err := s.sessionRepo.FindByID(sessionID)
+	sess, err := s.sessionRepo.Get(sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *Service) MarkImage(sessionID scalar.ID, imageID scalar.ID, action share
 
 // Undo 撤销操作并保存
 func (s *Service) Undo(sessionID scalar.ID) (*Session, error) {
-	sess, err := s.sessionRepo.FindByID(sessionID)
+	sess, err := s.sessionRepo.Get(sessionID)
 	if err != nil {
 		return nil, err
 	}

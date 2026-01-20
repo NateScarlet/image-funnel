@@ -24,7 +24,7 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input CreateSessio
 		return nil, err
 	}
 
-	sess, err := r.app.GetSession(ctx, sessionID)
+	sess, err := r.app.Session(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

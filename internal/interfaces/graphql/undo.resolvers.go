@@ -16,7 +16,7 @@ func (r *mutationResolver) Undo(ctx context.Context, input UndoInput) (*UndoPayl
 		return nil, err
 	}
 
-	sess, err := r.app.GetSession(ctx, input.SessionID)
+	sess, err := r.app.Session(ctx, input.SessionID)
 	if err != nil {
 		return nil, err
 	}

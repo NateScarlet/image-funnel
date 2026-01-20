@@ -460,7 +460,7 @@ func (s *Session) Images() []*image.Image {
 	return s.roundHistory[0].queue
 }
 
-func (s *Session) GetAction(imageID scalar.ID) shared.ImageAction {
+func (s *Session) Action(imageID scalar.ID) shared.ImageAction {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if action, exists := s.actions[imageID]; exists {

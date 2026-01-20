@@ -100,7 +100,7 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, session.CurrentIndex(), "CurrentIndex should be 1")
-	assert.Equal(t, shared.ImageActionKeep, session.GetAction(session.queue[0].ID()), "Action should be KEEP")
+	assert.Equal(t, shared.ImageActionKeep, session.Action(session.queue[0].ID()), "Action should be KEEP")
 	assert.True(t, session.CanUndo(), "CanUndo should be true")
 }
 
@@ -112,7 +112,7 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[2].ID()), "Action should be PENDING")
+	assert.Equal(t, shared.ImageActionPending, session.Action(session.queue[2].ID()), "Action should be PENDING")
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
@@ -283,7 +283,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 
 	for _, img := range session.queue {
 		if keptImageIDs[img.ID()] {
-			assert.Equal(t, shared.ImageActionKeep, session.GetAction(img.ID()), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), session.GetAction(img.ID()))
+			assert.Equal(t, shared.ImageActionKeep, session.Action(img.ID()), "Image %s was marked as KEEP in first round, but action is %s in second round", img.ID(), session.Action(img.ID()))
 		}
 	}
 }
@@ -301,7 +301,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING")
+	assert.Equal(t, shared.ImageActionPending, session.Action(session.queue[0].ID()), "Action should be restored to PENDING")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
@@ -463,7 +463,7 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	err = session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
+	assert.Equal(t, shared.ImageActionPending, session.Action(session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
@@ -534,5 +534,5 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after undo")
-	assert.Equal(t, shared.ImageActionPending, session.GetAction(session.queue[9].ID()), "Last image action should be restored to PENDING")
+	assert.Equal(t, shared.ImageActionPending, session.Action(session.queue[9].ID()), "Last image action should be restored to PENDING")
 }

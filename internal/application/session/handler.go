@@ -210,7 +210,7 @@ func (h *Handler) Commit(
 	return success, errors
 }
 
-func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*shared.SessionDTO, error) {
+func (h *Handler) Session(ctx context.Context, sessionID scalar.ID) (*shared.SessionDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func (h *Handler) GetSession(ctx context.Context, sessionID scalar.ID) (*shared.
 	return h.dtoFactory.New(sess)
 }
 
-func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*shared.ImageDTO, error) {
+func (h *Handler) CurrentImage(ctx context.Context, sessionID scalar.ID) (*shared.ImageDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func (h *Handler) GetCurrentImage(ctx context.Context, sessionID scalar.ID) (*sh
 	return imageDTOFactory.New(img)
 }
 
-func (h *Handler) GetSessionStats(ctx context.Context, sessionID scalar.ID) (*shared.StatsDTO, error) {
+func (h *Handler) SessionStats(ctx context.Context, sessionID scalar.ID) (*shared.StatsDTO, error) {
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
 		return nil, err

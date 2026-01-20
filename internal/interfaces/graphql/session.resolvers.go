@@ -15,7 +15,7 @@ import (
 
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error) {
-	sess, err := r.app.GetSession(ctx, id)
+	sess, err := r.app.Session(ctx, id)
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
 			return nil, nil

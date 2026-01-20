@@ -21,7 +21,7 @@ func NewHandler(scanner directory.Scanner, imageDTOFactory *appimage.ImageDTOFac
 	}
 }
 
-func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.DirectoryDTO, error) {
+func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.DirectoryDTO, error) {
 	if id.String() == "" {
 		id = directory.EncodeID(".")
 	}
@@ -49,7 +49,7 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.Direc
 	return h.dtoFactory.New(dirInfo, parentID, path == "."), nil
 }
 
-func (h *Handler) GetDirectoryStats(ctx context.Context, id scalar.ID) (*shared.DirectoryStatsDTO, error) {
+func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.DirectoryStatsDTO, error) {
 	if id.String() == "" {
 		id = directory.EncodeID(".")
 	}
@@ -71,7 +71,7 @@ func (h *Handler) GetDirectoryStats(ctx context.Context, id scalar.ID) (*shared.
 	return h.dtoFactory.NewDirectoryStatsDTO(stats)
 }
 
-func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
+func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
 	path, err := directory.DecodeID(parentID)
 	if err != nil {
 		return nil, err

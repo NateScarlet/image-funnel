@@ -27,11 +27,11 @@ func TestSave(t *testing.T) {
 	err := repo.Save(sess)
 	require.NoError(t, err)
 
-	_, err = repo.FindByID(sess.ID())
+	_, err = repo.Get(sess.ID())
 	require.NoError(t, err)
 }
 
-func TestFindByID(t *testing.T) {
+func TestGet(t *testing.T) {
 	repo := NewSessionRepository()
 
 	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
@@ -39,15 +39,15 @@ func TestFindByID(t *testing.T) {
 	err := repo.Save(sess)
 	require.NoError(t, err)
 
-	found, err := repo.FindByID(sess.ID())
+	found, err := repo.Get(sess.ID())
 	require.NoError(t, err)
 	assert.Equal(t, sess.ID(), found.ID())
 }
 
-func TestFindByID_NotFound(t *testing.T) {
+func TestGet_NotFound(t *testing.T) {
 	repo := NewSessionRepository()
 
-	_, err := repo.FindByID(scalar.ToID("non-existent-id"))
+	_, err := repo.Get(scalar.ToID("non-existent-id"))
 	require.Error(t, err)
 }
 
@@ -81,6 +81,6 @@ func TestDelete(t *testing.T) {
 	err = repo.Delete(sess.ID())
 	require.NoError(t, err)
 
-	_, err = repo.FindByID(sess.ID())
+	_, err = repo.Get(sess.ID())
 	require.Error(t, err)
 }

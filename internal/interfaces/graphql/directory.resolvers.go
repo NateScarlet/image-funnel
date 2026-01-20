@@ -13,20 +13,20 @@ import (
 
 // Stats is the resolver for the stats field.
 func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error) {
-	return r.app.GetDirectoryStats(ctx, obj.ID)
+	return r.app.DirectoryStats(ctx, obj.ID)
 }
 
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error) {
-	return r.app.GetDirectories(ctx, obj.ID)
+	return r.app.Directories(ctx, obj.ID)
 }
 
 // Directory is the resolver for the directory field.
 func (r *queryResolver) Directory(ctx context.Context, id *scalar.ID) (*shared.DirectoryDTO, error) {
 	if id == nil {
-		return r.app.GetDirectory(ctx, scalar.ID{})
+		return r.app.Directory(ctx, scalar.ID{})
 	}
-	return r.app.GetDirectory(ctx, *id)
+	return r.app.Directory(ctx, *id)
 }
 
 // Directory returns DirectoryResolver implementation.
