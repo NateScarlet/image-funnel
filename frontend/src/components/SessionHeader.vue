@@ -3,6 +3,15 @@
     class="bg-slate-800 border-b border-slate-700 p-2 md:p-4 flex-shrink-0"
   >
     <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div
+        class="cursor-pointer p-1 hover:bg-slate-700 rounded-lg transition-colors mr-2"
+        @click="goHome"
+      >
+        <svg class="w-6 h-6" viewBox="0 0 24 24">
+          <path :d="mdiHome" fill="currentColor" />
+        </svg>
+      </div>
+
       <div class="flex-1 min-w-0 mr-4">
         <div class="text-xs md:text-sm text-slate-400 truncate">
           {{ session?.directory || "加载中..." }}
@@ -70,7 +79,21 @@
 </template>
 
 <script setup lang="ts">
-import { mdiMenu, mdiUndo, mdiCheck, mdiLoading, mdiCogOutline } from "@mdi/js";
+import { useRouter } from "vue-router";
+import {
+  mdiMenu,
+  mdiUndo,
+  mdiCheck,
+  mdiLoading,
+  mdiCogOutline,
+  mdiHome,
+} from "@mdi/js";
+
+const router = useRouter();
+
+function goHome() {
+  router.push("/");
+}
 
 interface SessionStats {
   kept: number;
