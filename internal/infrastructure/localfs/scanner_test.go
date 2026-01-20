@@ -77,8 +77,19 @@ func TestAnalyzeDirectory(t *testing.T) {
 func TestValidateDirectoryPath(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	err := scanner.validateDirectoryPath(".")
-	require.NoError(t, err)
+	for _, tc := range []string{
+		".",
+		"subdir",
+		"subdir/subdir",
+		"subdir/..subdir",
+		"subdir/subdir..",
+		"subdir/sub..dir",
+	} {
+		t.Run(tc, func(t *testing.T) {
+			err := scanner.validateDirectoryPath(tc)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestValidateDirectoryPath_Invalid(t *testing.T) {

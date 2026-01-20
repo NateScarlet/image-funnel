@@ -201,40 +201,18 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 }
 
 func (s *Scanner) validateDirectoryPath(relPath string) error {
-	if relPath == "" {
-		relPath = "."
-	}
-
-	if strings.Contains(relPath, "..") {
-		return fmt.Errorf("invalid path: contains parent directory reference")
-	}
-
-	if strings.Contains(relPath, ":") {
-		return fmt.Errorf("invalid path: contains drive letter")
-	}
-
-	if filepath.IsAbs(relPath) {
-		return fmt.Errorf("invalid path: absolute path not allowed")
-	}
-
+	relPath = filepath.Clean(relPath)
 	absPath := filepath.Join(s.rootDir, relPath)
-	cleanAbsPath := filepath.Clean(absPath)
-	cleanRootDir := filepath.Clean(s.rootDir)
-
-	relFromRoot, err := filepath.Rel(cleanRootDir, cleanAbsPath)
+	if !strings.HasPrefix(absPath, s.rootDir) {
+		return fmt.Errorf("path escapes root directory")
+	}
+	relPath2, err := filepath.Rel(s.rootDir, absPath)
 	if err != nil {
 		return fmt.Errorf("invalid path: %w", err)
 	}
-
-	if strings.HasPrefix(relFromRoot, "..") {
-		return fmt.Errorf("invalid path: escapes root directory")
+	if relPath2 != relPath {
+		return fmt.Errorf("not a relative path: %s", relPath2)
 	}
-
-	_, err = os.Stat(cleanAbsPath)
-	if err != nil {
-		return fmt.Errorf("directory does not exist: %w", err)
-	}
-
 	return nil
 }
 
