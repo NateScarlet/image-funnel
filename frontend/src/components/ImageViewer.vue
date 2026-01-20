@@ -113,7 +113,7 @@ function handleToggleFullscreen() {
 
 const zoom = useImageZoom({
   container: containerRef,
-  size: image,
+  size: () => image,
 });
 const {
   containerAttrs,
