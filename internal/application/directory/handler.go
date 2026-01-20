@@ -2,6 +2,7 @@ package directory
 
 import (
 	"context"
+	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -13,10 +14,10 @@ type Handler struct {
 	dtoFactory *DirectoryDTOFactory
 }
 
-func NewHandler(scanner directory.Scanner) *Handler {
+func NewHandler(scanner directory.Scanner, imageDTOFactory *appimage.ImageDTOFactory) *Handler {
 	return &Handler{
 		scanner:    scanner,
-		dtoFactory: NewDirectoryDTOFactory(),
+		dtoFactory: NewDirectoryDTOFactory(imageDTOFactory),
 	}
 }
 
@@ -34,11 +35,6 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.Direc
 		return nil, err
 	}
 
-	imageCount, subdirectoryCount, latestImage, ratingCounts, err := h.scanner.AnalyzeDirectory(path)
-	if err != nil {
-		return nil, err
-	}
-
 	var parentID scalar.ID
 	if path != "." {
 		parentPath := filepath.Dir(path)
@@ -49,8 +45,30 @@ func (h *Handler) GetDirectory(ctx context.Context, id scalar.ID) (*shared.Direc
 		}
 	}
 
-	dirInfo := directory.NewDirectoryInfo(path, imageCount, subdirectoryCount, latestImage, ratingCounts)
-	return h.dtoFactory.New(dirInfo, parentID, path == ".")
+	dirInfo := directory.NewDirectoryInfo(path)
+	return h.dtoFactory.New(dirInfo, parentID, path == "."), nil
+}
+
+func (h *Handler) GetDirectoryStats(ctx context.Context, id scalar.ID) (*shared.DirectoryStatsDTO, error) {
+	if id.String() == "" {
+		id = directory.EncodeID(".")
+	}
+
+	path, err := directory.DecodeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = h.scanner.ValidateDirectoryPath(path); err != nil {
+		return nil, err
+	}
+
+	stats, err := h.scanner.AnalyzeDirectory(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+
+	return h.dtoFactory.NewDirectoryStatsDTO(stats)
 }
 
 func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
@@ -68,10 +86,7 @@ func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*sh
 		if err != nil {
 			return nil, err
 		}
-		dirDTO, err := h.dtoFactory.New(dir, parentID, false)
-		if err != nil {
-			return nil, err
-		}
+		dirDTO := h.dtoFactory.New(dir, parentID, false)
 		result = append(result, dirDTO)
 	}
 

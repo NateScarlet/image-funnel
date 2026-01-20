@@ -5,23 +5,47 @@ import (
 	"main/internal/scalar"
 )
 
-type DirectoryInfo struct {
-	id                scalar.ID
-	path              string
+type DirectoryStats struct {
 	imageCount        int
 	subdirectoryCount int
 	latestImage       *image.Image
 	ratingCounts      map[int]int
 }
 
-func NewDirectoryInfo(path string, imageCount, subdirectoryCount int, latestImage *image.Image, ratingCounts map[int]int) *DirectoryInfo {
-	return &DirectoryInfo{
-		id:                EncodeID(path),
-		path:              path,
+func NewDirectoryStats(imageCount, subdirectoryCount int, latestImage *image.Image, ratingCounts map[int]int) *DirectoryStats {
+	return &DirectoryStats{
 		imageCount:        imageCount,
 		subdirectoryCount: subdirectoryCount,
 		latestImage:       latestImage,
 		ratingCounts:      ratingCounts,
+	}
+}
+
+func (s *DirectoryStats) ImageCount() int {
+	return s.imageCount
+}
+
+func (s *DirectoryStats) SubdirectoryCount() int {
+	return s.subdirectoryCount
+}
+
+func (s *DirectoryStats) LatestImage() *image.Image {
+	return s.latestImage
+}
+
+func (s *DirectoryStats) RatingCounts() map[int]int {
+	return s.ratingCounts
+}
+
+type DirectoryInfo struct {
+	id   scalar.ID
+	path string
+}
+
+func NewDirectoryInfo(path string) *DirectoryInfo {
+	return &DirectoryInfo{
+		id:   EncodeID(path),
+		path: path,
 	}
 }
 
@@ -31,20 +55,4 @@ func (d *DirectoryInfo) ID() scalar.ID {
 
 func (d *DirectoryInfo) Path() string {
 	return d.path
-}
-
-func (d *DirectoryInfo) ImageCount() int {
-	return d.imageCount
-}
-
-func (d *DirectoryInfo) SubdirectoryCount() int {
-	return d.subdirectoryCount
-}
-
-func (d *DirectoryInfo) LatestImage() *image.Image {
-	return d.latestImage
-}
-
-func (d *DirectoryInfo) RatingCounts() map[int]int {
-	return d.ratingCounts
 }

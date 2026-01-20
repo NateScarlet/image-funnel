@@ -8,10 +8,14 @@ import (
 
 // DirectoryDTO 目录数据传输对象
 type DirectoryDTO struct {
-	ID                scalar.ID
-	ParentID          scalar.ID
-	Path              string
-	Root              bool
+	ID       scalar.ID
+	ParentID scalar.ID
+	Path     string
+	Root     bool
+}
+
+// DirectoryStatsDTO 目录统计数据传输对象
+type DirectoryStatsDTO struct {
 	ImageCount        int
 	SubdirectoryCount int
 	LatestImage       *ImageDTO

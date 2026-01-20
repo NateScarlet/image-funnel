@@ -1,6 +1,7 @@
 package directory
 
 import (
+	"context"
 	"iter"
 
 	"main/internal/domain/image"
@@ -9,6 +10,6 @@ import (
 type Scanner interface {
 	Scan(relPath string) iter.Seq2[*image.Image, error]
 	ScanDirectories(relPath string) iter.Seq2[*DirectoryInfo, error]
-	AnalyzeDirectory(relPath string) (int, int, *image.Image, map[int]int, error)
+	AnalyzeDirectory(ctx context.Context, relPath string) (*DirectoryStats, error)
 	ValidateDirectoryPath(relPath string) error
 }

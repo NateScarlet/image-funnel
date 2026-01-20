@@ -11,16 +11,9 @@ import (
 	"main/internal/shared"
 )
 
-// RatingCounts is the resolver for the ratingCounts field.
-func (r *directoryResolver) RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error) {
-	var result []*RatingCount
-	for rating, count := range obj.RatingCounts {
-		result = append(result, &RatingCount{
-			Rating: rating,
-			Count:  count,
-		})
-	}
-	return result, nil
+// Stats is the resolver for the stats field.
+func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error) {
+	return r.app.GetDirectoryStats(ctx, obj.ID)
 }
 
 // Directories is the resolver for the directories field.

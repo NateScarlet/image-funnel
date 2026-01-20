@@ -3,9 +3,6 @@ type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
   parentId: ID
   path: String!
   root: Boolean!
-  imageCount: Int!
-  subdirectoryCount: Int!
-  latestImage: Image
-  ratingCounts: [RatingCount!]!
+  stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)
 }

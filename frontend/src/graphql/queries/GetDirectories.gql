@@ -1,27 +1,12 @@
 # import ./fragments/ImageFragment.gql
 
-query GetDirectories($id: ID) {
+query GetDirectories($id: ID, $includeStats: Boolean = true) {
   directory(id: $id) {
     id
     parentId
     path
     root
-    imageCount
-    subdirectoryCount
-    latestImage {
-      ...ImageFragment
-      currentRating
-      xmpExists
-    }
-    ratingCounts {
-      rating
-      count
-    }
-    directories {
-      id
-      parentId
-      path
-      root
+    stats @include(if: $includeStats) {
       imageCount
       subdirectoryCount
       latestImage {
@@ -32,6 +17,25 @@ query GetDirectories($id: ID) {
       ratingCounts {
         rating
         count
+      }
+    }
+    directories {
+      id
+      parentId
+      path
+      root
+      stats @include(if: $includeStats) {
+        imageCount
+        subdirectoryCount
+        latestImage {
+          ...ImageFragment
+          currentRating
+          xmpExists
+        }
+        ratingCounts {
+          rating
+          count
+        }
       }
     }
   }

@@ -1,0 +1,6 @@
+type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+  imageCount: Int!
+  subdirectoryCount: Int!
+  latestImage: Image
+  ratingCounts: [RatingCount!]!
+}

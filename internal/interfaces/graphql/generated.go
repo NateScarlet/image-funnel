@@ -42,6 +42,7 @@ type Config struct {
 
 type ResolverRoot interface {
 	Directory() DirectoryResolver
+	DirectoryStats() DirectoryStatsResolver
 	Image() ImageResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
@@ -68,14 +69,18 @@ type ComplexityRoot struct {
 	}
 
 	Directory struct {
-		Directories       func(childComplexity int) int
-		ID                func(childComplexity int) int
+		Directories func(childComplexity int) int
+		ID          func(childComplexity int) int
+		ParentID    func(childComplexity int) int
+		Path        func(childComplexity int) int
+		Root        func(childComplexity int) int
+		Stats       func(childComplexity int) int
+	}
+
+	DirectoryStats struct {
 		ImageCount        func(childComplexity int) int
 		LatestImage       func(childComplexity int) int
-		ParentID          func(childComplexity int) int
-		Path              func(childComplexity int) int
 		RatingCounts      func(childComplexity int) int
-		Root              func(childComplexity int) int
 		SubdirectoryCount func(childComplexity int) int
 	}
 
@@ -171,8 +176,11 @@ type ComplexityRoot struct {
 }
 
 type DirectoryResolver interface {
-	RatingCounts(ctx context.Context, obj *shared.DirectoryDTO) ([]*RatingCount, error)
+	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
+}
+type DirectoryStatsResolver interface {
+	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
 }
 type ImageResolver interface {
 	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
@@ -278,18 +286,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.ID(childComplexity), true
-	case "Directory.imageCount":
-		if e.complexity.Directory.ImageCount == nil {
-			break
-		}
-
-		return e.complexity.Directory.ImageCount(childComplexity), true
-	case "Directory.latestImage":
-		if e.complexity.Directory.LatestImage == nil {
-			break
-		}
-
-		return e.complexity.Directory.LatestImage(childComplexity), true
 	case "Directory.parentId":
 		if e.complexity.Directory.ParentID == nil {
 			break
@@ -302,24 +298,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.Path(childComplexity), true
-	case "Directory.ratingCounts":
-		if e.complexity.Directory.RatingCounts == nil {
-			break
-		}
-
-		return e.complexity.Directory.RatingCounts(childComplexity), true
 	case "Directory.root":
 		if e.complexity.Directory.Root == nil {
 			break
 		}
 
 		return e.complexity.Directory.Root(childComplexity), true
-	case "Directory.subdirectoryCount":
-		if e.complexity.Directory.SubdirectoryCount == nil {
+	case "Directory.stats":
+		if e.complexity.Directory.Stats == nil {
 			break
 		}
 
-		return e.complexity.Directory.SubdirectoryCount(childComplexity), true
+		return e.complexity.Directory.Stats(childComplexity), true
+
+	case "DirectoryStats.imageCount":
+		if e.complexity.DirectoryStats.ImageCount == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStats.ImageCount(childComplexity), true
+	case "DirectoryStats.latestImage":
+		if e.complexity.DirectoryStats.LatestImage == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStats.LatestImage(childComplexity), true
+	case "DirectoryStats.ratingCounts":
+		if e.complexity.DirectoryStats.RatingCounts == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStats.RatingCounts(childComplexity), true
+	case "DirectoryStats.subdirectoryCount":
+		if e.complexity.DirectoryStats.SubdirectoryCount == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStats.SubdirectoryCount(childComplexity), true
 
 	case "Image.currentRating":
 		if e.complexity.Image.CurrentRating == nil {
@@ -830,15 +845,19 @@ directive @goField(
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 `, BuiltIn: false},
+	{Name: "../../../graph/types/directory-stats.graphql", Input: `type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+  imageCount: Int!
+  subdirectoryCount: Int!
+  latestImage: Image
+  ratingCounts: [RatingCount!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
   path: String!
   root: Boolean!
-  imageCount: Int!
-  subdirectoryCount: Int!
-  latestImage: Image
-  ratingCounts: [RatingCount!]!
+  stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)
 }
 `, BuiltIn: false},
@@ -1591,130 +1610,23 @@ func (ec *executionContext) fieldContext_Directory_root(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_imageCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_stats(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Directory_imageCount,
+		ec.fieldContext_Directory_stats,
 		func(ctx context.Context) (any, error) {
-			return obj.ImageCount, nil
+			return ec.resolvers.Directory().Stats(ctx, obj)
 		},
 		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Directory_imageCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Directory",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Directory_subdirectoryCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Directory_subdirectoryCount,
-		func(ctx context.Context) (any, error) {
-			return obj.SubdirectoryCount, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Directory_subdirectoryCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Directory",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Directory_latestImage(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Directory_latestImage,
-		func(ctx context.Context) (any, error) {
-			return obj.LatestImage, nil
-		},
-		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		ec.marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_Directory_latestImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Directory",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Image_id(ctx, field)
-			case "filename":
-				return ec.fieldContext_Image_filename(ctx, field)
-			case "size":
-				return ec.fieldContext_Image_size(ctx, field)
-			case "url":
-				return ec.fieldContext_Image_url(ctx, field)
-			case "modTime":
-				return ec.fieldContext_Image_modTime(ctx, field)
-			case "width":
-				return ec.fieldContext_Image_width(ctx, field)
-			case "height":
-				return ec.fieldContext_Image_height(ctx, field)
-			case "currentRating":
-				return ec.fieldContext_Image_currentRating(ctx, field)
-			case "xmpExists":
-				return ec.fieldContext_Image_xmpExists(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Directory_ratingCounts(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Directory_ratingCounts,
-		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Directory().RatingCounts(ctx, obj)
-		},
-		nil,
-		ec.marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Directory_ratingCounts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Directory_stats(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Directory",
 		Field:      field,
@@ -1722,12 +1634,16 @@ func (ec *executionContext) fieldContext_Directory_ratingCounts(_ context.Contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "rating":
-				return ec.fieldContext_RatingCount_rating(ctx, field)
-			case "count":
-				return ec.fieldContext_RatingCount_count(ctx, field)
+			case "imageCount":
+				return ec.fieldContext_DirectoryStats_imageCount(ctx, field)
+			case "subdirectoryCount":
+				return ec.fieldContext_DirectoryStats_subdirectoryCount(ctx, field)
+			case "latestImage":
+				return ec.fieldContext_DirectoryStats_latestImage(ctx, field)
+			case "ratingCounts":
+				return ec.fieldContext_DirectoryStats_ratingCounts(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type RatingCount", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type DirectoryStats", field.Name)
 		},
 	}
 	return fc, nil
@@ -1765,18 +1681,154 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
-			case "imageCount":
-				return ec.fieldContext_Directory_imageCount(ctx, field)
-			case "subdirectoryCount":
-				return ec.fieldContext_Directory_subdirectoryCount(ctx, field)
-			case "latestImage":
-				return ec.fieldContext_Directory_latestImage(ctx, field)
-			case "ratingCounts":
-				return ec.fieldContext_Directory_ratingCounts(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStats_imageCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStats_imageCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ImageCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStats_imageCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStats_subdirectoryCount(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStats_subdirectoryCount,
+		func(ctx context.Context) (any, error) {
+			return obj.SubdirectoryCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStats_subdirectoryCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStats_latestImage(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStats_latestImage,
+		func(ctx context.Context) (any, error) {
+			return obj.LatestImage, nil
+		},
+		nil,
+		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStats_latestImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStats_ratingCounts(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStats_ratingCounts,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.DirectoryStats().RatingCounts(ctx, obj)
+		},
+		nil,
+		ec.marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStats_ratingCounts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStats",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "rating":
+				return ec.fieldContext_RatingCount_rating(ctx, field)
+			case "count":
+				return ec.fieldContext_RatingCount_count(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RatingCount", field.Name)
 		},
 	}
 	return fc, nil
@@ -2539,14 +2591,8 @@ func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, fi
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
-			case "imageCount":
-				return ec.fieldContext_Directory_imageCount(ctx, field)
-			case "subdirectoryCount":
-				return ec.fieldContext_Directory_subdirectoryCount(ctx, field)
-			case "latestImage":
-				return ec.fieldContext_Directory_latestImage(ctx, field)
-			case "ratingCounts":
-				return ec.fieldContext_Directory_ratingCounts(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
 			}
@@ -5607,31 +5653,16 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "imageCount":
-			out.Values[i] = ec._Directory_imageCount(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "subdirectoryCount":
-			out.Values[i] = ec._Directory_subdirectoryCount(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "latestImage":
-			out.Values[i] = ec._Directory_latestImage(ctx, field, obj)
-		case "ratingCounts":
+		case "stats":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Directory_ratingCounts(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
+				res = ec._Directory_stats(ctx, field, obj)
 				return res
 			}
 
@@ -5665,6 +5696,88 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._Directory_directories(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var directoryStatsImplementors = []string{"DirectoryStats"}
+
+func (ec *executionContext) _DirectoryStats(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStatsDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directoryStatsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectoryStats")
+		case "imageCount":
+			out.Values[i] = ec._DirectoryStats_imageCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "subdirectoryCount":
+			out.Values[i] = ec._DirectoryStats_subdirectoryCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "latestImage":
+			out.Values[i] = ec._DirectoryStats_latestImage(ctx, field, obj)
+		case "ratingCounts":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._DirectoryStats_ratingCounts(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -7583,6 +7696,13 @@ func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋsharedᚐDire
 		return graphql.Null
 	}
 	return ec._Directory(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStatsDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectoryStats(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {

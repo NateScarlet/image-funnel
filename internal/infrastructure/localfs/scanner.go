@@ -112,54 +112,30 @@ func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.Directory
 			return
 		}
 
-		ctx := context.Background()
-		limit := runtime.NumCPU()
+		for _, entry := range entries {
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
 
-		iterator.ParallelConcatMapTo2(
-			ctx,
-			limit,
-			slices.Values(entries),
-			yield,
-		)(
-			func(ctx context.Context, yield func(*directory.DirectoryInfo, error) bool, entry os.DirEntry) bool {
-				if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-					return true
-				}
+			subRelPath := filepath.Join(relPath, entry.Name())
+			dirInfo := directory.NewDirectoryInfo(subRelPath)
 
-				subRelPath := filepath.Join(relPath, entry.Name())
-
-				imageCount, subdirectoryCount, latestImage, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
-				if err != nil {
-					return true
-				}
-
-				if imageCount == 0 && subdirectoryCount == 0 {
-					return true
-				}
-
-				dirInfo := directory.NewDirectoryInfo(
-					subRelPath,
-					imageCount,
-					subdirectoryCount,
-					latestImage,
-					ratingCounts,
-				)
-
-				return yield(dirInfo, nil)
-			},
-		)
+			if !yield(dirInfo, nil) {
+				break
+			}
+		}
 	}
 }
 
-func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, *domainimage.Image, map[int]int, error) {
+func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
 	if err := s.ValidateDirectoryPath(relPath); err != nil {
-		return 0, 0, nil, nil, err
+		return nil, err
 	}
 
 	absPath := filepath.Join(s.rootDir, relPath)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
-		return 0, 0, nil, nil, err
+		return nil, err
 	}
 
 	imageCount := 0
@@ -199,7 +175,7 @@ func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, *domainimage.Image
 
 		width, height := 0, 0
 		if s.processor != nil {
-			meta, err := s.processor.Meta(context.Background(), imagePath)
+			meta, err := s.processor.Meta(ctx, imagePath)
 			if err == nil {
 				width, height = meta.Width, meta.Height
 			}
@@ -231,7 +207,9 @@ func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, *domainimage.Image
 		}
 	}
 
-	return imageCount, subdirectoryCount, latestImage, ratingCounts, nil
+	stats := directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts)
+
+	return stats, nil
 }
 
 func (s *Scanner) ValidateDirectoryPath(relPath string) error {

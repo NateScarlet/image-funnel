@@ -1,41 +1,49 @@
 package directory
 
 import (
+	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
 
-type DirectoryDTOFactory struct{}
-
-func NewDirectoryDTOFactory() *DirectoryDTOFactory {
-	return &DirectoryDTOFactory{}
+type DirectoryDTOFactory struct {
+	imageDTOFactory *appimage.ImageDTOFactory
 }
 
-func (f *DirectoryDTOFactory) New(dirInfo *directory.DirectoryInfo, parentID scalar.ID, isRoot bool) (*shared.DirectoryDTO, error) {
+func NewDirectoryDTOFactory(imageDTOFactory *appimage.ImageDTOFactory) *DirectoryDTOFactory {
+	return &DirectoryDTOFactory{
+		imageDTOFactory: imageDTOFactory,
+	}
+}
+
+func (f *DirectoryDTOFactory) New(dirInfo *directory.DirectoryInfo, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
+	return &shared.DirectoryDTO{
+		ID:       dirInfo.ID(),
+		ParentID: parentID,
+		Path:     dirInfo.Path(),
+		Root:     isRoot,
+	}
+}
+
+func (f *DirectoryDTOFactory) NewDirectoryStatsDTO(stats *directory.DirectoryStats) (*shared.DirectoryStatsDTO, error) {
+	if stats == nil {
+		return nil, nil
+	}
+
 	var latestImageDTO *shared.ImageDTO
-	if latestImage := dirInfo.LatestImage(); latestImage != nil {
-		latestImageDTO = &shared.ImageDTO{
-			ID:            latestImage.ID(),
-			Filename:      latestImage.Filename(),
-			Size:          latestImage.Size(),
-			Path:          latestImage.Path(),
-			ModTime:       latestImage.ModTime(),
-			CurrentRating: latestImage.Rating(),
-			Width:         latestImage.Width(),
-			Height:        latestImage.Height(),
-			XMPExists:     latestImage.XMPExists(),
+	if latestImage := stats.LatestImage(); latestImage != nil {
+		var err error
+		latestImageDTO, err = f.imageDTOFactory.New(latestImage)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return &shared.DirectoryDTO{
-		ID:                dirInfo.ID(),
-		ParentID:          parentID,
-		Path:              dirInfo.Path(),
-		Root:              isRoot,
-		ImageCount:        dirInfo.ImageCount(),
-		SubdirectoryCount: dirInfo.SubdirectoryCount(),
+	return &shared.DirectoryStatsDTO{
+		ImageCount:        stats.ImageCount(),
+		SubdirectoryCount: stats.SubdirectoryCount(),
 		LatestImage:       latestImageDTO,
-		RatingCounts:      dirInfo.RatingCounts(),
+		RatingCounts:      stats.RatingCounts(),
 	}, nil
 }

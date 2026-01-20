@@ -13,6 +13,7 @@ import (
 
 	"main/internal/application"
 	"main/internal/application/directory"
+	appimage "main/internal/application/image"
 	appsession "main/internal/application/session"
 	"main/internal/domain/session"
 	"main/internal/infrastructure/concurrency"
@@ -85,8 +86,9 @@ func main() {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
 	eventBus := ebus.NewEventBus(sessionTopic)
 
+	imageDTOFactory := appimage.NewImageDTOFactory(signer)
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer)
-	directoryHandler := directory.NewHandler(dirScanner)
+	directoryHandler := directory.NewHandler(dirScanner, imageDTOFactory)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)
 

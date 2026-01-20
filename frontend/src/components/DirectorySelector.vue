@@ -28,8 +28,9 @@
 
       <div
         v-if="
-          currentDirectory?.root ||
-          (currentDirectory && currentDirectory.imageCount > 0)
+          currentDirectory &&
+          (currentDirectory.root ||
+            (currentDirectory.stats && currentDirectory.stats.imageCount > 0))
         "
         class="mb-4 p-4 bg-slate-600 rounded-lg border-2 cursor-pointer transition-all"
         :class="[
@@ -41,12 +42,12 @@
       >
         <div class="flex items-start gap-3">
           <div
-            v-if="currentDirectory.latestImage"
+            v-if="currentDirectory.stats?.latestImage"
             class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
           >
             <img
-              v-if="getImageUrl(currentDirectory.latestImage)"
-              :src="getImageUrl(currentDirectory.latestImage)"
+              v-if="getImageUrl(currentDirectory.stats.latestImage)"
+              :src="getImageUrl(currentDirectory.stats.latestImage)"
               :alt="currentDirectory.path"
               class="w-full h-full object-cover"
             />
@@ -56,19 +57,19 @@
               {{ currentDirectory.root ? rootPath : currentDirectory.path }}
             </h3>
             <div class="text-xs text-slate-300 space-y-1">
-              <div v-if="currentDirectory.latestImage?.modTime">
-                {{ formatDate(currentDirectory.latestImage.modTime) }}
+              <div v-if="currentDirectory.stats?.latestImage?.modTime">
+                {{ formatDate(currentDirectory.stats.latestImage.modTime) }}
               </div>
               <div
                 v-if="
-                  currentDirectory.ratingCounts &&
-                  currentDirectory.ratingCounts.length > 0
+                  currentDirectory.stats?.ratingCounts &&
+                  currentDirectory.stats.ratingCounts.length > 0
                 "
                 class="flex flex-wrap gap-2 mt-2"
               >
                 <div
                   v-for="rc in sortedRatingCounts(
-                    currentDirectory.ratingCounts,
+                    currentDirectory.stats.ratingCounts,
                   )"
                   :key="rc.rating"
                   class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
@@ -86,7 +87,11 @@
       </div>
 
       <div
-        v-else-if="currentDirectory && currentDirectory.imageCount === 0"
+        v-else-if="
+          currentDirectory &&
+          currentDirectory.stats &&
+          currentDirectory.stats.imageCount === 0
+        "
         class="text-center text-slate-400 py-4 mb-4 bg-slate-600 rounded-lg"
       >
         当前目录下没有图片
@@ -131,12 +136,12 @@
         >
           <div class="flex items-start gap-3">
             <div
-              v-if="dir.latestImage"
+              v-if="dir.stats?.latestImage"
               class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
             >
               <img
-                v-if="getImageUrl(dir.latestImage)"
-                :src="getImageUrl(dir.latestImage)"
+                v-if="getImageUrl(dir.stats.latestImage)"
+                :src="getImageUrl(dir.stats.latestImage)"
                 :alt="dir.path"
                 class="w-full h-full object-cover"
               />
@@ -147,21 +152,26 @@
               >
                 {{ getDirectoryName(dir.path) }}
                 <span
-                  v-if="dir.subdirectoryCount > 0"
+                  v-if="
+                    dir.stats?.subdirectoryCount &&
+                    dir.stats.subdirectoryCount > 0
+                  "
                   class="px-2 py-0.5 text-xs bg-slate-700 rounded"
-                  >{{ dir.subdirectoryCount }}子目录</span
+                  >{{ dir.stats.subdirectoryCount }}子目录</span
                 >
               </h3>
               <div class="text-xs text-slate-300 space-y-1">
-                <div v-if="dir.latestImage?.modTime">
-                  {{ formatDate(dir.latestImage.modTime) }}
+                <div v-if="dir.stats?.latestImage?.modTime">
+                  {{ formatDate(dir.stats.latestImage.modTime) }}
                 </div>
                 <div
-                  v-if="dir.ratingCounts && dir.ratingCounts.length > 0"
+                  v-if="
+                    dir.stats?.ratingCounts && dir.stats.ratingCounts.length > 0
+                  "
                   class="flex flex-wrap gap-2 mt-2"
                 >
                   <div
-                    v-for="rc in sortedRatingCounts(dir.ratingCounts)"
+                    v-for="rc in sortedRatingCounts(dir.stats.ratingCounts)"
                     :key="rc.rating"
                     class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
                   >
@@ -207,15 +217,19 @@ interface Image {
   xmpExists: boolean;
 }
 
+interface DirectoryStats {
+  imageCount: number;
+  subdirectoryCount: number;
+  latestImage: Image | null;
+  ratingCounts: RatingCount[];
+}
+
 interface Directory {
   id: string;
   parentId: string | null;
   path: string;
   root: boolean;
-  imageCount: number;
-  subdirectoryCount: number;
-  latestImage: Image | null;
-  ratingCounts: RatingCount[];
+  stats?: DirectoryStats | null;
 }
 
 interface Props {
@@ -238,7 +252,7 @@ const emit = defineEmits<{
 const filteredDirectories = computed(() => {
   return props.directories
     .filter((dir) => {
-      if (dir.subdirectoryCount > 0) {
+      if (dir.stats?.subdirectoryCount && dir.stats.subdirectoryCount > 0) {
         return true;
       }
       const matchedCount = getMatchedImageCount(dir);
@@ -246,8 +260,8 @@ const filteredDirectories = computed(() => {
     })
     .sort((a, b) => {
       // 按照最新图片修改日期从旧到新排序（最老的在前面）
-      const timeA = a.latestImage?.modTime || "";
-      const timeB = b.latestImage?.modTime || "";
+      const timeA = a.stats?.latestImage?.modTime || "";
+      const timeB = b.stats?.latestImage?.modTime || "";
       if (timeA < timeB) return -1;
       if (timeA > timeB) return 1;
       return 0;
@@ -255,10 +269,10 @@ const filteredDirectories = computed(() => {
 });
 
 function getMatchedImageCount(dir: Directory): number {
-  if (!dir.ratingCounts || props.filterRating.length === 0) {
+  if (!dir.stats?.ratingCounts || props.filterRating.length === 0) {
     return 0;
   }
-  return dir.ratingCounts
+  return dir.stats.ratingCounts
     .filter((rc) => props.filterRating.includes(rc.rating))
     .reduce((sum, rc) => sum + rc.count, 0);
 }
