@@ -248,6 +248,29 @@ func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*shared.Sessio
 	return h.eventBus.SubscribeSession(ctx)
 }
 
+func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int) ([]*shared.ImageDTO, error) {
+	sess, err := h.sessionService.Get(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	images := sess.NextImages(count)
+	if len(images) == 0 {
+		return nil, nil
+	}
+
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	result := make([]*shared.ImageDTO, 0, len(images))
+	for _, img := range images {
+		dto, err := imageDTOFactory.New(img)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, dto)
+	}
+	return result, nil
+}
+
 // UpdateSession 更新会话配置
 func (h *Handler) UpdateSession(
 	ctx context.Context,

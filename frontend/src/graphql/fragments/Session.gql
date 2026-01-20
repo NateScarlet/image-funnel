@@ -17,7 +17,7 @@ fragment Session on Session {
   currentImage {
     ...Image
   }
-  nextImage {
+  nextImages(count: 10) {
     ...Image
   }
 }

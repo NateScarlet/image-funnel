@@ -197,6 +197,27 @@ func (s *Session) NextImage() *image.Image {
 	return nil
 }
 
+func (s *Session) NextImages(count int) []*image.Image {
+	if count == 0 {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if count < 0 {
+		// 返回所有
+		return s.queue[s.currentIdx+1:]
+	}
+	start := s.currentIdx + 1
+	if start >= len(s.queue) {
+		return nil
+	}
+	end := start + count
+	if end > len(s.queue) {
+		end = len(s.queue)
+	}
+	return s.queue[start:end]
+}
+
 func (s *Session) CurrentIndex() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

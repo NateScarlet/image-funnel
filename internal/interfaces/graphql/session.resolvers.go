@@ -35,6 +35,15 @@ func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *shared.SessionDTO)
 	return obj.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
+// NextImages is the resolver for the nextImages field.
+func (r *sessionResolver) NextImages(ctx context.Context, obj *shared.SessionDTO, count *int) ([]*shared.ImageDTO, error) {
+	if count == nil {
+		count = new(int)
+		*count = -1
+	}
+	return r.app.NextImages(ctx, obj.ID, *count)
+}
+
 // SessionUpdated is the resolver for the sessionUpdated field.
 func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error) {
 	ch := make(chan *shared.SessionDTO, 10)

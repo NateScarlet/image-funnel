@@ -51,7 +51,7 @@
           <ImageViewer
             v-if="currentImage"
             :image="currentImage"
-            :next-image="session?.nextImage ?? undefined"
+            :next-images="session?.nextImages ?? []"
           >
             <template #info="{ isFullscreen }">
               <span class="lg:min-w-24 hidden md:block">

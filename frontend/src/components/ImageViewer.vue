@@ -90,7 +90,13 @@
     </div>
 
     <Teleport to="head">
-      <link v-if="prefetchUrl" rel="prefetch" as="image" :href="prefetchUrl" />
+      <link
+        v-for="img in nextImages"
+        :key="img.id"
+        rel="prefetch"
+        as="image"
+        :href="getImageUrlByZoom(img, zoom.zoom.value)"
+      />
     </Teleport>
   </div>
 </template>
@@ -105,9 +111,9 @@ import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import { getImageUrlByZoom } from "@/utils/image";
 
-const { image, nextImage = undefined } = defineProps<{
+const { image, nextImages = [] } = defineProps<{
   image: ImageFragment;
-  nextImage?: ImageFragment;
+  nextImages?: ImageFragment[];
 }>();
 
 const containerRef = ref<HTMLElement>();
@@ -133,11 +139,6 @@ const {
 } = zoom;
 
 const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
-
-const prefetchUrl = computed(() => {
-  if (!nextImage) return undefined;
-  return getImageUrlByZoom(nextImage, zoom.zoom.value);
-});
 
 useGrabScroll(() => {
   if (!zoom.fitContainer.value) {

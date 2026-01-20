@@ -139,7 +139,7 @@ type ComplexityRoot struct {
 		Directory    func(childComplexity int) int
 		Filter       func(childComplexity int) int
 		ID           func(childComplexity int) int
-		NextImage    func(childComplexity int) int
+		NextImages   func(childComplexity int, count *int) int
 		Stats        func(childComplexity int) int
 		TargetKeep   func(childComplexity int) int
 		UpdatedAt    func(childComplexity int) int
@@ -200,6 +200,8 @@ type QueryResolver interface {
 type SessionResolver interface {
 	CreatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 	UpdatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
+
+	NextImages(ctx context.Context, obj *shared.SessionDTO, count *int) ([]*shared.ImageDTO, error)
 }
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error)
@@ -581,12 +583,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.ID(childComplexity), true
-	case "Session.nextImage":
-		if e.complexity.Session.NextImage == nil {
+	case "Session.nextImages":
+		if e.complexity.Session.NextImages == nil {
 			break
 		}
 
-		return e.complexity.Session.NextImage(childComplexity), true
+		args, err := ec.field_Session_nextImages_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Session.NextImages(childComplexity, args["count"].(*int)), true
 	case "Session.stats":
 		if e.complexity.Session.Stats == nil {
 			break
@@ -915,7 +922,7 @@ input ImageFiltersInput
   currentIndex: Int!
   currentSize: Int!
   currentImage: Image
-  nextImage: Image
+  nextImages(count: Int = 10): [Image!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
@@ -1140,6 +1147,17 @@ func (ec *executionContext) field_Query_session_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Session_nextImages_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "count", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["count"] = arg0
 	return args, nil
 }
 
@@ -1370,8 +1388,8 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -1456,8 +1474,8 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2184,8 +2202,8 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2662,8 +2680,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3234,28 +3252,29 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Session_nextImage(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Session_nextImages(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Session_nextImage,
+		ec.fieldContext_Session_nextImages,
 		func(ctx context.Context) (any, error) {
-			return obj.NextImage, nil
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Session().NextImages(ctx, obj, fc.Args["count"].(*int))
 		},
 		nil,
-		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		ec.marshalNImage2ᚕᚖmainᚋinternalᚋsharedᚐImageDTOᚄ,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Session_nextImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Session_nextImages(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Session",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -3279,6 +3298,17 @@ func (ec *executionContext) fieldContext_Session_nextImage(_ context.Context, fi
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Session_nextImages_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -3506,8 +3536,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3574,8 +3604,8 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3660,8 +3690,8 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentSize(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
-			case "nextImage":
-				return ec.fieldContext_Session_nextImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -6413,8 +6443,42 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "currentImage":
 			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
-		case "nextImage":
-			out.Values[i] = ec._Session_nextImage(ctx, field, obj)
+		case "nextImages":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Session_nextImages(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7101,6 +7165,60 @@ func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx conte
 
 func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNImage2ᚕᚖmainᚋinternalᚋsharedᚐImageDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.ImageDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Image(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
