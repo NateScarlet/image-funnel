@@ -9,7 +9,6 @@
       @show-menu="showMenu = true"
       @undo="undo"
       @show-update-session-modal="showUpdateSessionModal = true"
-      @abandon="confirmAbandon"
       @show-commit-modal="showCommitModal = true"
     />
 
@@ -98,7 +97,6 @@
       :undoing="undoing"
       :session-id="sessionId"
       :stats="stats"
-      @abandoned="onAbandoned"
       @show-commit-modal="showCommitModal = true"
       @show-update-session-modal="showUpdateSessionModal = true"
     />
@@ -243,18 +241,8 @@ async function undo() {
   }
 }
 
-function onAbandoned() {
-  router.push("/");
-}
-
 function onCommitted() {
   router.push("/");
-}
-
-function confirmAbandon() {
-  if (confirm("确定要放弃当前会话吗？所有未提交的更改将会丢失。")) {
-    router.push("/");
-  }
 }
 
 function handleKeyDown(e: KeyboardEvent) {

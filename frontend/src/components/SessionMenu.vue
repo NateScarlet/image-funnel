@@ -53,16 +53,6 @@
             </svg>
             提交
           </button>
-
-          <button
-            class="w-full py-3 px-4 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="handleAbandon"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiCloseCircleOutline" fill="currentColor" />
-            </svg>
-            放弃
-          </button>
         </div>
 
         <button
@@ -78,14 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
-import {
-  mdiUndo,
-  mdiCloseCircleOutline,
-  mdiCheck,
-  mdiLoading,
-  mdiCogOutline,
-} from "@mdi/js";
+import { mdiUndo, mdiCheck, mdiLoading, mdiCogOutline } from "@mdi/js";
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument } from "../graphql/generated";
 
@@ -121,20 +104,10 @@ const show = computed({
   set: (value: boolean) => emit("update:show", value),
 });
 
-const router = useRouter();
-
 async function handleUndo() {
   await mutate(UndoDocument, {
     variables: { input: { sessionId: props.sessionId } },
   });
   show.value = false;
-}
-
-function handleAbandon() {
-  show.value = false;
-  if (confirm("确定要放弃当前会话吗？所有未提交的更改将会丢失。")) {
-    emit("abandoned");
-    router.push("/");
-  }
 }
 </script>
