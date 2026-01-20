@@ -167,6 +167,7 @@ const visibleItems = computed(() => {
       const hasStats = stats !== undefined && stats !== null;
       return !hasStats;
     },
+    (item) => item.stats?.imageCount === 0,
     (item) => {
       const dirItem = directoryItemRefs.value?.find(
         (ref) => ref.$props.directory.id === item.key,

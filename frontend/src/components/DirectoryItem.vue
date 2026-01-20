@@ -125,7 +125,7 @@ const selected = computed(() => selectedId.value === props.directory.id);
 
 const isTargetMet = computed(() => {
   const stats = localStats.value;
-  if (!stats || !stats.ratingCounts || stats.ratingCounts.length === 0) {
+  if (!stats || !stats.ratingCounts || stats.imageCount === 0) {
     return false;
   }
   const matchedCount = stats.ratingCounts
