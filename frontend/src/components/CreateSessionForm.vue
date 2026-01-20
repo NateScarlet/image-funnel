@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { mdiLoading } from "@mdi/js";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
@@ -99,7 +99,6 @@ const loadingCount = ref(0);
 const creatingSession = ref(false);
 const selectedPresetId = ref(lastSelectedPresetId.value || "");
 const selectedDirectoryId = ref<string>("");
-const filterRating = ref<number[]>([]);
 const targetKeep = ref<number>(10);
 
 const { data: metaData } = useQuery(GetMetaDocument, {
@@ -120,26 +119,14 @@ const selectedPreset = computed(() => {
   return getPreset(selectedPresetId.value || "");
 });
 
-watch(
-  () => selectedPreset.value,
-  (preset) => {
-    if (preset) {
-      filterRating.value = [...preset.filter.rating];
-      targetKeep.value = preset.targetKeep;
-    }
+const filterRatingBuffer = ref<readonly number[]>();
+const filterRating = computed({
+  get: () =>
+    (filterRatingBuffer.value ?? selectedPreset.value?.filter.rating) || [],
+  set: (value) => {
+    filterRatingBuffer.value = value;
   },
-  { immediate: true },
-);
-
-watch(
-  presets,
-  (newPresets) => {
-    if (newPresets.length > 0 && !selectedPresetId.value) {
-      selectedPresetId.value = newPresets[0].id;
-    }
-  },
-  { immediate: true },
-);
+});
 
 const canCreate = computed(() => {
   return (filterRating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;
@@ -163,7 +150,7 @@ async function handleCreate() {
       variables: {
         input: {
           filter: {
-            rating: filterRating.value,
+            rating: filterRating.value.slice(),
           },
           targetKeep: targetKeep.value,
           directoryId: selectedDirectoryId.value,

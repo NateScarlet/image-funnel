@@ -2,21 +2,23 @@
   <div>
     <div class="flex items-center justify-between mb-4">
       <label class="block text-sm font-medium text-slate-300"> 选择目录 </label>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <span class="text-sm text-slate-400"
-          >显示已达标目录（{{ completedCount }}）</span
-        >
-        <div class="relative">
-          <input
-            v-model="showCompletedDirectories"
-            type="checkbox"
-            class="sr-only peer"
-          />
-          <div
-            class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
-          ></div>
-        </div>
-      </label>
+      <template v-if="completedCount">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <span class="text-sm text-slate-400"
+            >显示已达标目录（{{ completedCount }}）</span
+          >
+          <div class="relative">
+            <input
+              v-model="showCompletedDirectories"
+              type="checkbox"
+              class="sr-only peer"
+            />
+            <div
+              class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
+            ></div>
+          </div>
+        </label>
+      </template>
     </div>
     <div class="bg-slate-700 rounded-lg p-4">
       <div v-if="!currentDirectory?.root" class="mb-4">
@@ -55,14 +57,15 @@
         v-if="visibleItems.length > 0"
         class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
       >
-        <DirectoryItem
-          v-for="item in visibleItems"
-          :key="item.key"
-          v-model="selectedId"
-          :directory="item.dir"
-          :filter-rating="filterRating"
-          :target-keep="targetKeep"
-        />
+        <template v-for="item in visibleItems" :key="item.key">
+          <DirectoryItem
+            ref="directoryItemRefs"
+            v-model="selectedId"
+            :directory="item.dir"
+            :filter-rating="filterRating"
+            :target-keep="targetKeep"
+          />
+        </template>
       </div>
 
       <div v-else-if="loading" class="space-y-4">
@@ -94,7 +97,7 @@ interface Props {
   currentDirectory: DirectoryFragment | null | undefined;
   directories: DirectoryFragment[];
   loading: boolean;
-  filterRating: number[];
+  filterRating: readonly number[];
   targetKeep: number;
   rootPath: string;
 }
@@ -125,28 +128,34 @@ const items = computed(() => {
     const stats = dirItem?.stats;
     let matchedCount = 0;
     if (stats && stats.ratingCounts) {
-      matchedCount = stats.ratingCounts
-        .filter((rc) => props.filterRating.includes(rc.rating))
-        .reduce((sum, rc) => sum + rc.count, 0);
+      matchedCount = stats.ratingCounts.reduce(
+        (sum, rc) =>
+          sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
+        0,
+      );
     }
     return {
       key: dir.id,
       dir,
+      stats,
       matchedCount,
     };
   });
 });
 
 const completedCount = computed(() => {
-  return items.value.filter((item) => item.matchedCount <= props.targetKeep)
-    .length;
+  return items.value.filter(isCompleted).length;
 });
+
+function isCompleted(item: { matchedCount: number }) {
+  return item.matchedCount <= props.targetKeep;
+}
 
 const visibleItems = computed(() => {
   let dirs = items.value;
 
-  if (showCompletedDirectories.value) {
-    dirs = dirs.filter((item) => item.matchedCount <= props.targetKeep);
+  if (!showCompletedDirectories.value) {
+    dirs = dirs.filter((item) => !isCompleted(item));
   }
 
   return sortBy(dirs, [

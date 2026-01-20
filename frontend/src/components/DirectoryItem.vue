@@ -101,7 +101,7 @@ import type {
 
 interface Props {
   directory: DirectoryFragment;
-  filterRating: number[];
+  filterRating: readonly number[];
   targetKeep: number;
 }
 

@@ -27,7 +27,6 @@ import { STAR_CONFIGS, type StarConfig } from "../utils/starConfig";
 import RatingIcon from "./RatingIcon.vue";
 
 interface Props {
-  modelValue: number | number[];
   mode?: "single" | "multi";
   disabled?: boolean;
   label?: string;
@@ -39,18 +38,16 @@ const props = withDefaults(defineProps<Props>(), {
   label: "",
 });
 
-const emit = defineEmits<{
-  "update:modelValue": [value: number | number[]];
-}>();
+const model = defineModel<number | readonly number[]>();
 
 const stars: StarConfig[] = STAR_CONFIGS;
 const hoveredStar = ref<number | null>(null);
 
 function isSelected(value: number): boolean {
   if (props.mode === "single") {
-    return props.modelValue === value;
+    return model.value === value;
   } else {
-    return Array.isArray(props.modelValue) && props.modelValue.includes(value);
+    return Array.isArray(model.value) && model.value.includes(value);
   }
 }
 
@@ -58,11 +55,9 @@ function toggleStar(value: number) {
   if (props.disabled) return;
 
   if (props.mode === "single") {
-    emit("update:modelValue", value);
+    model.value = value;
   } else {
-    const current = Array.isArray(props.modelValue)
-      ? [...props.modelValue]
-      : [];
+    const current = Array.isArray(model.value) ? [...model.value] : [];
     const index = current.indexOf(value);
 
     if (index === -1) {
@@ -71,7 +66,7 @@ function toggleStar(value: number) {
       current.splice(index, 1);
     }
 
-    emit("update:modelValue", current);
+    model.value = current;
   }
 }
 </script>
