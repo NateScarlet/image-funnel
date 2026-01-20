@@ -25,9 +25,7 @@
     <div v-if="selectedPreset" class="bg-slate-700 rounded-lg p-4">
       <h3 class="font-medium mb-4">筛选条件</h3>
       <div class="mb-4">
-        <label class="block text-sm text-slate-400 mb-2"
-          >队列评分（多选）</label
-        >
+        <label class="block text-sm text-slate-400 mb-2">评分（多选）</label>
         <StarSelector v-model="filterRating" mode="multi" />
       </div>
     </div>
