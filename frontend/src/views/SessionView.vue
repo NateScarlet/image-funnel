@@ -48,7 +48,11 @@
         <div
           class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
         >
-          <ImageViewer v-if="currentImage" :image="currentImage">
+          <ImageViewer
+            v-if="currentImage"
+            :image="currentImage"
+            :next-image="session?.nextImage ?? undefined"
+          >
             <template #info="{ isFullscreen }">
               <span class="lg:min-w-24 hidden md:block">
                 {{ formatDate(currentImage.modTime) }}

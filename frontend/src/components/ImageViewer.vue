@@ -88,6 +88,10 @@
         </svg>
       </button>
     </div>
+
+    <Teleport to="head">
+      <link v-if="prefetchUrl" rel="prefetch" as="image" :href="prefetchUrl" />
+    </Teleport>
   </div>
 </template>
 
@@ -99,9 +103,11 @@ import useEventListeners from "../composables/useEventListeners";
 import useElementFullscreen from "../composables/useElementFullscreen";
 import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
+import { getImageUrlByZoom } from "@/utils/image";
 
-const { image } = defineProps<{
+const { image, nextImage = undefined } = defineProps<{
   image: ImageFragment;
+  nextImage?: ImageFragment;
 }>();
 
 const containerRef = ref<HTMLElement>();
@@ -126,26 +132,11 @@ const {
   zoomAttrs,
 } = zoom;
 
-const src = computed(() => {
-  const zoomLevel = zoom.zoom.value;
-  const targetWidth = Math.ceil(image.width * zoomLevel);
+const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 
-  if (targetWidth <= 256) {
-    return image.url256;
-  }
-  if (targetWidth <= 512) {
-    return image.url512;
-  }
-  if (targetWidth <= 1024) {
-    return image.url1024;
-  }
-  if (targetWidth <= 2048) {
-    return image.url2048;
-  }
-  if (targetWidth <= 4096) {
-    return image.url4096;
-  }
-  return image.url;
+const prefetchUrl = computed(() => {
+  if (!nextImage) return undefined;
+  return getImageUrlByZoom(nextImage, zoom.zoom.value);
 });
 
 useGrabScroll(() => {
