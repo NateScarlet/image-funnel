@@ -54,11 +54,12 @@
       />
 
       <div
-        v-if="visibleItems.length > 0"
+        v-if="items.length > 0"
         class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
       >
-        <template v-for="item in visibleItems" :key="item.key">
+        <template v-for="item in items" :key="item.key">
           <DirectoryItem
+            v-show="showCompletedDirectories || !item.isCompleted"
             ref="directoryItemRefs"
             v-model="selectedId"
             :directory="item.dir"
@@ -113,12 +114,11 @@ const directoryItemRefs =
 
 const selectedId = defineModel<string>();
 
-const showCompletedDirectoriesStorage = useStorage<boolean>(
+const { model: showCompletedDirectories } = useStorage<boolean>(
   localStorage,
   "showCompletedDirectories@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
   () => false,
 );
-const showCompletedDirectories = showCompletedDirectoriesStorage.model;
 
 const statsByID = computed(
   () =>
@@ -128,48 +128,39 @@ const statsByID = computed(
       ) || [],
     ),
 );
+
 const items = computed(() => {
-  return props.directories.map((dir) => {
-    const stats = statsByID.value.get(dir.id);
-    let keepCount = undefined;
-    if (stats && stats.ratingCounts) {
-      keepCount = stats.ratingCounts.reduce(
-        (sum, rc) =>
-          sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
-        0,
-      );
-    }
-    return {
-      key: dir.id,
-      dir,
-      stats,
-      keepCount,
-    };
-  });
+  return sortBy(
+    props.directories.map((dir) => {
+      const stats = statsByID.value.get(dir.id);
+      const keepCount =
+        stats?.ratingCounts.reduce(
+          (sum, rc) =>
+            sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
+          0,
+        ) ?? 0;
+
+      const isCompleted =
+        stats?.subdirectoryCount === 0 && keepCount <= props.targetKeep;
+      return {
+        key: dir.id,
+        dir,
+        stats,
+        isCompleted,
+      };
+    }),
+    [
+      (item) => {
+        return !item.stats;
+      },
+      (item) => item.stats?.imageCount === 0,
+      (item) => item.stats?.latestImage?.modTime || "",
+    ],
+  );
 });
 
 const completedCount = computed(() => {
-  return items.value.filter(isCompleted).length;
-});
-
-function isCompleted(item: { keepCount?: number }) {
-  return item.keepCount !== undefined && item.keepCount <= props.targetKeep;
-}
-
-const visibleItems = computed(() => {
-  let dirs = items.value;
-
-  if (!showCompletedDirectories.value) {
-    dirs = dirs.filter((item) => !isCompleted(item));
-  }
-
-  return sortBy(dirs, [
-    (item) => {
-      return !item.stats;
-    },
-    (item) => item.stats?.imageCount === 0,
-    (item) => item.stats?.latestImage?.modTime || "",
-  ]);
+  return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);
 });
 
 function goToParent() {

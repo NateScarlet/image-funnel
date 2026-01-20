@@ -41,7 +41,13 @@
       <div class="flex-1 min-w-0">
         <h3 class="font-semibold text-lg mb-1 flex items-center gap-2">
           <span class="flex-1 break-all">
-            {{ directory.root ? rootPath : directory.path }}
+            {{
+              directory.root
+                ? rootPath
+                : selected
+                  ? directory.path
+                  : directory.path.split(/[\\/]/).pop()
+            }}
           </span>
           <span
             v-if="
