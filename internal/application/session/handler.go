@@ -127,11 +127,7 @@ func (h *Handler) MarkImage(
 }
 
 func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
-	h.logger.Info("undo",
-		zap.Stringer("sessionID", sessionID),
-	)
 	startTime := time.Now()
-
 	defer func() {
 		if err != nil {
 			h.logger.Error("undo",
