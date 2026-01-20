@@ -54,7 +54,14 @@ func mustGenerateRandomSecretKey() string {
 }
 
 func main() {
-	logger, err := zap.NewProduction()
+	var logger *zap.Logger
+	var err error
+
+	if version != "dev" {
+		logger, err = zap.NewProduction()
+	} else {
+		logger, err = zap.NewDevelopment()
+	}
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
