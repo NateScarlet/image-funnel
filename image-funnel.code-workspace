@@ -24,6 +24,7 @@
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
           "IMAGE_FUNNEL_PORT": "8000",
+          "IMAGE_FUNNEL_SECRET_KEY": "insecure_development_key_919fdbdadd3d",
         },
       },
     ],
