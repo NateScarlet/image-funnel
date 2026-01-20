@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 
@@ -70,8 +69,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		cmd.Stderr = b
 
 		if err := cmd.Run(); err != nil {
-			log.Printf("ImageMagick error: %v, args: %v: stderr: %q", err, args, b.String())
-			return err
+			return fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, b.String())
 		}
 		return nil
 	})
