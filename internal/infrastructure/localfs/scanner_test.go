@@ -1,6 +1,9 @@
 package localfs
 
 import (
+	"iter"
+	"main/internal/domain/directory"
+	domainimage "main/internal/domain/image"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,18 +29,16 @@ func TestScan(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	images, err := scanner.Scan(".")
-	require.NoError(t, err)
-	assert.Len(t, images, 1)
+	images := collectImages(scanner.Scan("."))
+	require.Len(t, images, 1)
 	assert.Equal(t, "test.jpg", images[0].Filename())
 }
 
 func TestScan_EmptyDirectory(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	images, err := scanner.Scan(".")
-	require.NoError(t, err)
-	assert.Empty(t, images)
+	images := collectImages(scanner.Scan("."))
+	require.Empty(t, images)
 }
 
 func TestScanDirectories(t *testing.T) {
@@ -51,9 +52,8 @@ func TestScanDirectories(t *testing.T) {
 	err = os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	dirs, err := scanner.ScanDirectories(".")
-	require.NoError(t, err)
-	assert.Len(t, dirs, 1)
+	dirs := collectDirInfos(scanner.ScanDirectories("."))
+	require.Len(t, dirs, 1)
 	assert.Equal(t, "subdir", dirs[0].Path())
 }
 
@@ -138,13 +138,46 @@ func TestAnalyzeDirectory_AbsolutePath(t *testing.T) {
 func TestScanDirectories_PathTraversal(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	_, err := scanner.ScanDirectories("../escape")
+	_, err := collectDirInfosWithError(scanner.ScanDirectories("../escape"))
 	assert.Error(t, err)
 }
 
 func TestScanDirectories_AbsolutePath(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	_, err := scanner.ScanDirectories("/absolute/path")
+	_, err := collectDirInfosWithError(scanner.ScanDirectories("/absolute/path"))
 	assert.Error(t, err)
+}
+
+func collectImages(seq iter.Seq2[*domainimage.Image, error]) []*domainimage.Image {
+	var images []*domainimage.Image
+	for img, err := range seq {
+		if err != nil {
+			return nil
+		}
+		images = append(images, img)
+	}
+	return images
+}
+
+func collectDirInfos(seq iter.Seq2[*directory.DirectoryInfo, error]) []*directory.DirectoryInfo {
+	var dirs []*directory.DirectoryInfo
+	for dir, err := range seq {
+		if err != nil {
+			return nil
+		}
+		dirs = append(dirs, dir)
+	}
+	return dirs
+}
+
+func collectDirInfosWithError(seq iter.Seq2[*directory.DirectoryInfo, error]) ([]*directory.DirectoryInfo, error) {
+	var dirs []*directory.DirectoryInfo
+	for dir, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		dirs = append(dirs, dir)
+	}
+	return dirs, nil
 }

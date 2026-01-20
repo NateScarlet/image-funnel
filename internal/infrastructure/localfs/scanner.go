@@ -3,14 +3,18 @@ package localfs
 import (
 	"context"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 
 	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
 	"main/internal/domain/metadata"
+	"main/internal/iterator"
 )
 
 type Scanner struct {
@@ -27,105 +31,124 @@ func NewScanner(rootDir string, xmpRepo metadata.Repository, processor appimage.
 	}
 }
 
-func (s *Scanner) Scan(dirPath string) ([]*domainimage.Image, error) {
-	absPath := filepath.Join(s.rootDir, dirPath)
-	entries, err := os.ReadDir(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	var images []*domainimage.Image
-
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-
-		if !s.isSupportedImage(entry.Name()) {
-			continue
-		}
-
-		path := filepath.Join(absPath, entry.Name())
-		info, err := entry.Info()
+func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
+	return func(yield func(*domainimage.Image, error) bool) {
+		absPath := filepath.Join(s.rootDir, relPath)
+		entries, err := os.ReadDir(absPath)
 		if err != nil {
-			continue
+			yield(nil, fmt.Errorf("failed to read directory: %w", err))
+			return
 		}
 
-		var xmpData *metadata.XMPData
-		if s.xmpExists(path) {
-			xmpData, err = s.xmpRepo.Read(path)
-			if err != nil {
-				xmpData = nil
-			}
-		}
+		ctx := context.Background()
+		limit := runtime.NumCPU()
 
-		width, height := 0, 0
-		if s.processor != nil {
-			meta, err := s.processor.Meta(context.Background(), path)
-			if err == nil {
-				width, height = meta.Width, meta.Height
-			}
-		}
+		iterator.ParallelConcatMapTo2(
+			ctx,
+			limit,
+			slices.Values(entries),
+			yield,
+		)(
+			func(ctx context.Context, yield func(*domainimage.Image, error) bool, entry os.DirEntry) bool {
+				if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+					return true
+				}
 
-		img := domainimage.NewImageFromPath(
-			entry.Name(),
-			path,
-			info.Size(),
-			info.ModTime(),
-			xmpData,
-			width,
-			height,
+				if !s.isSupportedImage(entry.Name()) {
+					return true
+				}
+
+				path := filepath.Join(absPath, entry.Name())
+				info, err := entry.Info()
+				if err != nil {
+					return true
+				}
+
+				var xmpData *metadata.XMPData
+				if s.xmpExists(path) {
+					xmpData, err = s.xmpRepo.Read(path)
+					if err != nil {
+						xmpData = nil
+					}
+				}
+
+				width, height := 0, 0
+				if s.processor != nil {
+					meta, err := s.processor.Meta(ctx, path)
+					if err == nil {
+						width, height = meta.Width, meta.Height
+					}
+				}
+
+				img := domainimage.NewImageFromPath(
+					entry.Name(),
+					path,
+					info.Size(),
+					info.ModTime(),
+					xmpData,
+					width,
+					height,
+				)
+
+				return yield(img, nil)
+			},
 		)
-
-		images = append(images, img)
 	}
-
-	return images, nil
 }
 
-func (s *Scanner) ScanDirectories(relPath string) ([]*directory.DirectoryInfo, error) {
-	if relPath != "" {
-		if err := s.ValidateDirectoryPath(relPath); err != nil {
-			return nil, err
-		}
-	}
-
-	absPath := filepath.Join(s.rootDir, relPath)
-	entries, err := os.ReadDir(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	var directories []*directory.DirectoryInfo
-
-	for _, entry := range entries {
-		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
+func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
+	return func(yield func(*directory.DirectoryInfo, error) bool) {
+		if relPath != "" {
+			if err := s.ValidateDirectoryPath(relPath); err != nil {
+				yield(nil, err)
+				return
+			}
 		}
 
-		subRelPath := filepath.Join(relPath, entry.Name())
-
-		imageCount, subdirectoryCount, latestImage, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
+		absPath := filepath.Join(s.rootDir, relPath)
+		entries, err := os.ReadDir(absPath)
 		if err != nil {
-			continue
+			yield(nil, fmt.Errorf("failed to read directory: %w", err))
+			return
 		}
 
-		if imageCount == 0 && subdirectoryCount == 0 {
-			continue
-		}
+		ctx := context.Background()
+		limit := runtime.NumCPU()
 
-		dirInfo := directory.NewDirectoryInfo(
-			subRelPath,
-			imageCount,
-			subdirectoryCount,
-			latestImage,
-			ratingCounts,
+		iterator.ParallelConcatMapTo2(
+			ctx,
+			limit,
+			slices.Values(entries),
+			yield,
+		)(
+			func(ctx context.Context, yield func(*directory.DirectoryInfo, error) bool, entry os.DirEntry) bool {
+				if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+					return true
+				}
+
+				subRelPath := filepath.Join(relPath, entry.Name())
+
+				imageCount, subdirectoryCount, latestImage, ratingCounts, err := s.AnalyzeDirectory(subRelPath)
+				if err != nil {
+					return true
+				}
+
+				if imageCount == 0 && subdirectoryCount == 0 {
+					return true
+				}
+
+				dirInfo := directory.NewDirectoryInfo(
+					subRelPath,
+					imageCount,
+					subdirectoryCount,
+					latestImage,
+					ratingCounts,
+				)
+
+				return yield(dirInfo, nil)
+			},
 		)
-
-		directories = append(directories, dirInfo)
 	}
-
-	return directories, nil
 }
 
 func (s *Scanner) AnalyzeDirectory(relPath string) (int, int, *domainimage.Image, map[int]int, error) {

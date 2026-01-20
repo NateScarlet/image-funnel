@@ -63,18 +63,16 @@ func (h *Handler) GetDirectories(ctx context.Context, parentID scalar.ID) ([]*sh
 		return nil, err
 	}
 
-	dirs, err := h.scanner.ScanDirectories(path)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]*shared.DirectoryDTO, len(dirs))
-	for i, dir := range dirs {
+	var result []*shared.DirectoryDTO
+	for dir, err := range h.scanner.ScanDirectories(path) {
+		if err != nil {
+			return nil, err
+		}
 		dirDTO, err := h.dtoFactory.New(dir, parentID, false)
 		if err != nil {
 			return nil, err
 		}
-		result[i] = dirDTO
+		result = append(result, dirDTO)
 	}
 
 	return result, nil

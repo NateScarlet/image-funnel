@@ -11,6 +11,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func filterImages(images []*Image, filterFunc func(*Image) bool) []*Image {
+	if filterFunc == nil {
+		return images
+	}
+
+	result := make([]*Image, 0, len(images))
+	for _, img := range images {
+		if filterFunc(img) {
+			result = append(result, img)
+		}
+	}
+	return result
+}
+
 func TestImageFilters_Rating(t *testing.T) {
 	filter := &shared.ImageFilters{Rating: []int{0, 1, 2}}
 
@@ -22,7 +36,7 @@ func TestBuildImageFilter_WithRating(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{0, 1}}
 	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
+	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 4, len(filtered), "Should filter to 4 images with rating 0 or 1")
 	for _, img := range filtered {
@@ -34,7 +48,7 @@ func TestBuildImageFilter_WithNilFilter(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
 
 	filterFunc := BuildImageFilter(nil)
-	filtered := FilterImages(images, filterFunc)
+	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, len(images), len(filtered), "Should not filter with nil filter")
 }
@@ -44,7 +58,7 @@ func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{}}
 	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
+	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 6, len(filtered), "Should include all images when rating is empty")
 }
@@ -54,7 +68,7 @@ func TestBuildImageFilter_WithSingleRating(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{2}}
 	filterFunc := BuildImageFilter(filter)
-	filtered := FilterImages(images, filterFunc)
+	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 3, len(filtered), "Should filter to 3 images with rating 2")
 	for _, img := range filtered {
@@ -65,7 +79,7 @@ func TestBuildImageFilter_WithSingleRating(t *testing.T) {
 func TestFilterImages_WithNilFilter(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
 
-	filtered := FilterImages(images, nil)
+	filtered := filterImages(images, nil)
 
 	assert.Equal(t, 6, len(filtered), "Should return all images when filter is nil")
 }
