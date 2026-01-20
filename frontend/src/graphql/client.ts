@@ -1,8 +1,11 @@
 import {
   ApolloClient,
+  ApolloLink,
   InMemoryCache,
   createHttpLink,
+  split,
 } from "@apollo/client/core";
+import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
 import type { GraphQLFormattedError } from "graphql";
 import useNotification from "../composables/useNotification";
@@ -22,9 +25,40 @@ export interface OperationContext {
   };
 }
 
+function containsUpload(v: unknown): boolean {
+  if (v == null) {
+    return false;
+  }
+  if (v instanceof File || v instanceof Blob) {
+    return true;
+  }
+  if (typeof v === "object") {
+    return Object.values(v).some(containsUpload);
+  }
+  return false;
+}
+
 const httpLink = createHttpLink({
   uri: "graphql",
 });
+
+const batchHttpLink = new BatchHttpLink({
+  uri: "graphql",
+  batchMax: 1024,
+  batchInterval: 10,
+  batchDebounce: true,
+});
+
+const httpOrBatchLink = split(
+  ({ variables, getContext }) => {
+    return (
+      (getContext() as OperationContext).transport === "http" ||
+      containsUpload(variables)
+    );
+  },
+  httpLink,
+  batchHttpLink,
+);
 
 const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
   const knownMessages = new Set();
@@ -80,7 +114,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 });
 
 export const apolloClient = new ApolloClient({
-  link: errorLink.concat(httpLink),
+  link: ApolloLink.from([errorLink, httpOrBatchLink]),
   cache: new InMemoryCache(),
   defaultOptions: {
     watchQuery: {

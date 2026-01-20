@@ -29,7 +29,11 @@ import (
 	"main/internal/shared"
 
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/NateScarlet/gqlgen-batching/pkg/batching"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
@@ -103,7 +107,21 @@ func main() {
 
 	resolver := graphql.NewResolver(appRoot, absRootDir, signer, version)
 
-	srv := handler.NewDefaultServer(graphql.NewExecutableSchema(graphql.Config{Resolvers: resolver}))
+	srv := handler.New(graphql.NewExecutableSchema(graphql.Config{Resolvers: resolver}))
+
+	srv.AddTransport(transport.Websocket{
+		KeepAlivePingInterval: 10 * time.Second,
+	})
+	srv.AddTransport(transport.Options{})
+	srv.AddTransport(transport.GET{})
+	srv.AddTransport(batching.POST{})
+	srv.AddTransport(transport.POST{})
+	srv.AddTransport(transport.MultipartForm{})
+	srv.Use(extension.Introspection{})
+	srv.Use(extension.AutomaticPersistedQuery{
+		Cache: lru.New[string](100),
+	})
+
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
 	var frontendDir string
