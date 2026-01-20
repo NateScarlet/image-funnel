@@ -96,10 +96,10 @@ import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
 import useElementFullscreen from "../composables/useElementFullscreen";
 import { mdiFullscreen, mdiFullscreenExit } from "@mdi/js";
-import type { ImageFragmentFragment } from "@/graphql/generated";
+import type { ImageFragment } from "@/graphql/generated";
 
 const { image } = defineProps<{
-  image: ImageFragmentFragment;
+  image: ImageFragment;
 }>();
 
 const containerRef = ref<HTMLElement>();

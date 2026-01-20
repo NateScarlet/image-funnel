@@ -1,4 +1,4 @@
-fragment StatsFragment on SessionStats {
+fragment SessionStats on SessionStats {
   total
   kept
   reviewed

@@ -1,7 +1,7 @@
 mutation UpdateSession($input: UpdateSessionInput!) {
   updateSession(input: $input) {
     session {
-      ...SessionFragment
+      ...Session
     }
     clientMutationId
   }

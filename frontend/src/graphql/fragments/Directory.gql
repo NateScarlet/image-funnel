@@ -1,0 +1,6 @@
+fragment Directory on Directory {
+  id
+  parentId
+  path
+  root
+}

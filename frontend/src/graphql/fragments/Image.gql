@@ -1,4 +1,4 @@
-fragment ImageFragment on Image {
+fragment Image on Image {
   id
   filename
   url

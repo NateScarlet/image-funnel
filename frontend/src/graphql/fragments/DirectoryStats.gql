@@ -1,0 +1,12 @@
+fragment DirectoryStats on DirectoryStats {
+  imageCount
+  subdirectoryCount
+  latestImage {
+    ...Image
+    currentRating
+    xmpExists
+  }
+  ratingCounts {
+    ...RatingCount
+  }
+}

@@ -1,0 +1,4 @@
+fragment RatingCount on RatingCount {
+  rating
+  count
+}

@@ -195,41 +195,15 @@
 import { computed } from "vue";
 import RatingIcon from "./RatingIcon.vue";
 import { formatDate } from "../utils/date";
+import type {
+  DirectoryFragment,
+  DirectoryStatsFragment,
+  RatingCountFragment,
+  ImageFragment,
+} from "../graphql/generated";
 
-interface RatingCount {
-  rating: number;
-  count: number;
-}
-
-interface Image {
-  id: string;
-  filename: string;
-  url: string;
-  url256: string;
-  url512: string;
-  url1024: string;
-  url2048: string;
-  url4096: string;
-  modTime: string;
-  width: number;
-  height: number;
-  currentRating: number | null;
-  xmpExists: boolean;
-}
-
-interface DirectoryStats {
-  imageCount: number;
-  subdirectoryCount: number;
-  latestImage: Image | null;
-  ratingCounts: RatingCount[];
-}
-
-interface Directory {
-  id: string;
-  parentId: string | null;
-  path: string;
-  root: boolean;
-  stats?: DirectoryStats | null;
+interface Directory extends DirectoryFragment {
+  stats?: DirectoryStatsFragment | null;
 }
 
 interface Props {
@@ -277,7 +251,9 @@ function getMatchedImageCount(dir: Directory): number {
     .reduce((sum, rc) => sum + rc.count, 0);
 }
 
-function sortedRatingCounts(ratingCounts: RatingCount[]): RatingCount[] {
+function sortedRatingCounts(
+  ratingCounts: RatingCountFragment[],
+): RatingCountFragment[] {
   return [...ratingCounts].sort((a, b) => a.rating - b.rating);
 }
 
@@ -294,7 +270,9 @@ function goToParent() {
   emit("go-to-parent");
 }
 
-function getImageUrl(image: Image | null | undefined): string | undefined {
+function getImageUrl(
+  image: ImageFragment | null | undefined,
+): string | undefined {
   if (!image) return undefined;
   // 使用 GraphQL 生成的 url256 字段
   return image.url256 || image.url;

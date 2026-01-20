@@ -1,7 +1,4 @@
-#import './StatsFragment.gql'
-#import './ImageFragment.gql'
-
-fragment SessionFragment on Session {
+fragment Session on Session {
   id
   directory
   filter {
@@ -9,7 +6,7 @@ fragment SessionFragment on Session {
   }
   targetKeep
   stats {
-    ...StatsFragment
+    ...SessionStats
   }
   createdAt
   updatedAt
@@ -18,9 +15,9 @@ fragment SessionFragment on Session {
   currentIndex
   currentSize
   currentImage {
-    ...ImageFragment
+    ...Image
   }
   nextImage {
-    ...ImageFragment
+    ...Image
   }
 }

@@ -1,8 +1,0 @@
-fragment DetailedImageFragment on Image {
-  id
-  filename
-  size
-  url
-  currentRating
-  xmpExists
-}
