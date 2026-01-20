@@ -20,6 +20,7 @@
     "@vue/apollo-composable": "^4.2.2",
     "@vue/composition-api": "^1.7.2",
     "core-js": "^3.47.0",
+    "crypto-hash": "^4.0.1",
     "es-toolkit": "^1.44.0",
     "graphql": "^16.8.0",
     "graphql-tag": "^2.12.6",

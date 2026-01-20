@@ -7,7 +7,9 @@ import {
 } from "@apollo/client/core";
 import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
+import { createPersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
+import { sha256 } from "crypto-hash";
 import useNotification from "../composables/useNotification";
 
 export interface OperationContext {
@@ -49,6 +51,11 @@ const batchHttpLink = new BatchHttpLink({
   batchDebounce: true,
 });
 
+const persistedQueryLink = createPersistedQueryLink({
+  sha256,
+  useGETForHashedQueries: false,
+});
+
 const httpOrBatchLink = split(
   ({ variables, getContext }) => {
     return (
@@ -56,8 +63,8 @@ const httpOrBatchLink = split(
       containsUpload(variables)
     );
   },
-  httpLink,
-  batchHttpLink,
+  persistedQueryLink.concat(httpLink),
+  persistedQueryLink.concat(batchHttpLink),
 );
 
 const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
