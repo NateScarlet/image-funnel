@@ -21,6 +21,7 @@ import (
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
+	"main/internal/infrastructure/stdimage"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/infrastructure/xmpsidecar"
 	"main/internal/interfaces/graphql"
@@ -86,7 +87,8 @@ func main() {
 	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
 	defer cleanupCache()
 	magickProcessor := magick.NewProcessor(imageCache)
-	imageProcessor := concurrency.NewSingleFlightImageProcessor(magickProcessor)
+	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)
+	imageProcessor := concurrency.NewSingleFlightImageProcessor(hybridProcessor)
 
 	dirScanner := localfs.NewScanner(absRootDir, metadataRepo, imageProcessor)
 	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
