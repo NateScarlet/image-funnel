@@ -1,7 +1,6 @@
 import {
   ApolloClient,
   ApolloLink,
-  InMemoryCache,
   createHttpLink,
   split,
 } from "@apollo/client/core";
@@ -11,6 +10,7 @@ import { onError } from "@apollo/client/link/error";
 import { createPersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
 import { sha256 } from "crypto-hash";
+import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
 
 export interface OperationContext {
@@ -132,7 +132,11 @@ const errorLink = onError(({ error, operation }) => {
 
 export const apolloClient = new ApolloClient({
   link: ApolloLink.from([errorLink, httpOrBatchLink]),
-  cache: new InMemoryCache(),
+  cache: new PersistentCache(
+    "apollo-cache-persist",
+    1024 * 1024, // 1MB
+    1000, // 1秒防抖
+  ),
   defaultOptions: {
     watchQuery: {
       fetchPolicy: "cache-and-network",
