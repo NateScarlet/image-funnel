@@ -36,7 +36,7 @@ image-funnel/
 - **go:** 用 errors 包处理错误，避免直接比较
 - **go:** 不要给查询方法添加 Get 前缀，直接用大写名称。比如不要 `GetSession()`，而应该直接 `Session()`
 - **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
-- **js:** 使用 es-toolkit，代替 lodash 等工具库
+- **js:** 使用 es-toolkit　代替 lodash （它假设现代浏览器，不提供已经被浏览器原生支持的功能）
 - **ts:** 直接使用 @/graphql/generated 生成的 GraphQL 类型，避免手动定义
 - **vue:**　用声明式的方式代替命令式的维护（例如，用 computed 代替 watch 来维护状态）
 - **graphql:** 用 fragment 来避免重复定义查询字段，命名不带后缀 Fragment（可以和类型名相同，生成的类型会自带 Fragment 后缀）
