@@ -213,6 +213,15 @@ function getTouchDistance(touches: TouchList): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+function getTouchCenter(touches: TouchList) {
+  return {
+    clientX: (touches[0].clientX + touches[1].clientX) / 2,
+    clientY: (touches[0].clientY + touches[1].clientY) / 2,
+  };
+}
+
+let initialAnchorImage: { x: number; y: number } | undefined;
+
 useEventListeners(containerRef, ({ on }) => {
   on(
     "touchstart",
@@ -224,6 +233,15 @@ useEventListeners(containerRef, ({ on }) => {
         e.stopPropagation();
         initialPinchDistance = getTouchDistance(touchEvent.touches);
         initialZoom = zoom.zoom.value;
+
+        // Set anchor based on initial finger position
+        const center = getTouchCenter(touchEvent.touches);
+        const anchor = zoom.anchorFromClientPosition(center);
+        if (anchor) {
+          zoom.scrollAnchor.value = anchor;
+          initialAnchorImage = anchor.image;
+        }
+        zoom.isTransitionEnabled.value = false;
       }
     },
     { passive: false },
@@ -240,6 +258,16 @@ useEventListeners(containerRef, ({ on }) => {
         if (initialPinchDistance > 0) {
           const scale = currentDistance / initialPinchDistance;
           zoom.zoom.value = Math.max(0.1, Math.min(10, initialZoom * scale));
+
+          // Update anchor to track finger movement (panning while zooming)
+          const center = getTouchCenter(touchEvent.touches);
+          const currentAnchor = zoom.anchorFromClientPosition(center);
+          if (currentAnchor && initialAnchorImage) {
+            zoom.scrollAnchor.value = {
+              viewport: currentAnchor.viewport,
+              image: initialAnchorImage,
+            };
+          }
         }
       }
     },
@@ -250,6 +278,9 @@ useEventListeners(containerRef, ({ on }) => {
     const touchEvent = e as TouchEvent;
     if (touchEvent.touches.length < 2) {
       initialPinchDistance = 0;
+      zoom.isTransitionEnabled.value = true;
+      zoom.scrollAnchor.value = undefined;
+      initialAnchorImage = undefined;
     }
   });
 });

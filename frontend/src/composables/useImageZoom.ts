@@ -27,7 +27,9 @@ export default function useImageZoom({
 }) {
   const { contentBoxWidth, contentBoxHeight } = useElementSize(container);
   const fitContainerBuffer = ref<boolean>();
+
   const zoomBuffer = ref<number>();
+  const isTransitionEnabled = ref(true);
 
   // 缩放后保持滚动位置不变
   const scrollAnchor = ref<{
@@ -218,7 +220,7 @@ export default function useImageZoom({
               width: `${zoomAsPercentModel.value}%`,
               height: `${zoomAsPercentModel.value}%`,
             }),
-        transitionProperty: "width,height",
+        transitionProperty: isTransitionEnabled.value ? "width,height" : "none",
         transitionDuration: "0.3s",
         transitionTimingFunction: "ease-in-out",
       } as StyleValue,
@@ -265,5 +267,8 @@ export default function useImageZoom({
     contentBoxWidth,
     toggleZoom,
     containerAttrs,
+    isTransitionEnabled,
+    scrollAnchor,
+    anchorFromClientPosition,
   };
 }
