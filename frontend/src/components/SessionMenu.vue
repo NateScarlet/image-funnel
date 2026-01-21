@@ -35,7 +35,10 @@
 
           <button
             class="w-full py-3 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="emit('showUpdateSessionModal')"
+            @click="
+              emit('showUpdateSessionModal');
+              show = false;
+            "
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCogOutline" fill="currentColor" />
