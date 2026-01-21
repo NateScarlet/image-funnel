@@ -446,10 +446,8 @@ func (s *Session) Undo() error {
 		s.roundHistory = s.roundHistory[:len(s.roundHistory)-1]
 		s.currentRound--
 		s.queue = lastRound.queue
-		s.currentIdx = len(s.queue) - 1 // 指向最后一张图片
 		s.undoStack = lastRound.undoStack
-		s.updatedAt = time.Now()
-		return nil
+		s.currentIdx = len(s.queue)
 	}
 
 	// 普通撤销

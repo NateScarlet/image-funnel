@@ -536,3 +536,44 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after undo")
 	assert.Equal(t, shared.ImageActionPending, session.Action(session.queue[9].ID()), "Last image action should be restored to PENDING")
 }
+
+func TestUndo_CrossRoundToBeginning(t *testing.T) {
+	// 创建一个只有 2 张图片的会话，目标保留 1 张
+	session := setupTestSession(t, 2, 1)
+
+	img0ID := session.queue[0].ID()
+	img1ID := session.queue[1].ID()
+
+	// 1. 标记第一张 (idx 0 -> 1)
+	err := session.MarkImage(img0ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	// 2. 标记第二张 (idx 1 -> 2) -> 触发下一轮 (idx 0)
+	err = session.MarkImage(img1ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, session.currentRound)
+
+	// 3. 执行第一次撤销：回到第一轮且当前选中最后一张 (img1)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, 0, session.currentRound)
+	assert.Equal(t, 1, session.currentIdx)
+	assert.Equal(t, shared.ImageActionPending, session.Action(img1ID))
+
+	// 4. 执行第二次撤销：撤销 img0 的标记 (idx 1 -> 0)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, 0, session.currentIdx)
+	assert.Equal(t, shared.ImageActionPending, session.Action(img0ID))
+
+	// 5. 执行第三次撤销：预期返回错误，且不会 panic
+	err = session.Undo()
+	assert.Equal(t, ErrNothingToUndo, err)
+	assert.Equal(t, 0, session.currentIdx)
+
+	// 验证之后依然可以正常操作
+	err = session.MarkImage(img0ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+	assert.Equal(t, 1, session.currentIdx)
+}
