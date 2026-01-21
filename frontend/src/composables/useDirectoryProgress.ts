@@ -6,7 +6,11 @@ function getStorageKey(parentId: string): string {
 
 function recordDirectoryOrder(parentId: string, directoryIds: string[]): void {
   const key = getStorageKey(parentId);
-  localStorage.setItem(key, JSON.stringify(directoryIds));
+  if (directoryIds.length === 0) {
+    localStorage.removeItem(key);
+  } else {
+    localStorage.setItem(key, JSON.stringify(directoryIds));
+  }
 }
 
 function getNextDirectory(
