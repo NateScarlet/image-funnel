@@ -33,6 +33,9 @@ export default function useDirectoryStats() {
     const { data } = useQuery(GetDirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
+      context: {
+        transport: "http",
+      },
     });
 
     // 自动同步到全局缓存
