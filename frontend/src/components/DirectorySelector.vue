@@ -172,11 +172,11 @@ watch(
       })
       .map((item) => item.dir.id);
 
-    if (props.currentDirectory?.id) {
+    if (props.currentDirectory) {
       recordDirectoryOrder(props.currentDirectory.id, navigableDirectoryIds);
     }
   },
-  { deep: true },
+  { immediate: true },
 );
 
 function goToParent() {
