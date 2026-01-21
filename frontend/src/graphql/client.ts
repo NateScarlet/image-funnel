@@ -1,17 +1,13 @@
-import {
-  ApolloClient,
-  ApolloLink,
-  createHttpLink,
-  split,
-} from "@apollo/client/core";
+import { ApolloClient, ApolloLink } from "@apollo/client/core";
 import { CombinedGraphQLErrors } from "@apollo/client/errors";
 import { BatchHttpLink } from "@apollo/client/link/batch-http";
-import { onError } from "@apollo/client/link/error";
-import { createPersistedQueryLink } from "@apollo/client/link/persisted-queries";
+import { ErrorLink } from "@apollo/client/link/error";
+import { PersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
 import { sha256 } from "crypto-hash";
 import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
+import { HttpLink } from "@apollo/client";
 
 export interface OperationContext {
   anonymous?: boolean;
@@ -41,7 +37,7 @@ function containsUpload(v: unknown): boolean {
   return false;
 }
 
-const httpLink = createHttpLink({
+const httpLink = new HttpLink({
   uri: "graphql",
 });
 
@@ -52,12 +48,11 @@ const batchHttpLink = new BatchHttpLink({
   batchDebounce: true,
 });
 
-const persistedQueryLink = createPersistedQueryLink({
+const persistedQueryLink = new PersistedQueryLink({
   sha256,
-  useGETForHashedQueries: false,
 });
 
-const httpOrBatchLink = split(
+const httpOrBatchLink = ApolloLink.split(
   ({ variables, getContext }) => {
     return (
       (getContext() as OperationContext).transport === "http" ||
@@ -68,7 +63,7 @@ const httpOrBatchLink = split(
   persistedQueryLink.concat(batchHttpLink),
 );
 
-const errorLink = onError(({ error, operation }) => {
+const errorLink = new ErrorLink(({ error, operation }) => {
   const knownMessages = new Set();
   const errorOnce = (msg: string) => {
     if (knownMessages.has(msg)) {
