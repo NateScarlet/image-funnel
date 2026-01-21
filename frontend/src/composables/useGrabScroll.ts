@@ -40,6 +40,7 @@ export default function useGrabScroll(
     stack.use(
       createEventListeners(el, ({ on }) => {
         on("pointerdown", (e) => {
+          if (!e.isPrimary) return;
           e.preventDefault();
           isGrabbing = true;
           render();

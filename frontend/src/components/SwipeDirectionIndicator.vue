@@ -2,7 +2,7 @@
   <Teleport :to="rendererEl">
     <div
       v-if="direction"
-      class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200"
+      class="absolute inset-x-0 bottom-0 h-1/2 flex items-center justify-center pointer-events-none transition-opacity duration-200"
       :class="{
         'bg-red-600/30': direction === 'DOWN',
         'bg-yellow-600/30': direction === 'UP',

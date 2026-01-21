@@ -6,7 +6,7 @@
     <div
       ref="containerRef"
       class="flex-auto w-full h-64 overflow-auto flex items-center [scrollbar-gutter:stable]"
-      v-bind="containerAttrs"
+      v-bind="!locked ? containerAttrs : {}"
     >
       <!-- zoom -->
       <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
@@ -137,9 +137,14 @@ import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 
-const { image, nextImages = [] } = defineProps<{
+const {
+  image,
+  nextImages = [],
+  locked = false,
+} = defineProps<{
   image: ImageFragment;
   nextImages?: ImageFragment[];
+  locked?: boolean;
 }>();
 
 const containerRef = ref<HTMLElement>();
@@ -166,6 +171,14 @@ const {
 
 const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 
+const activeContainer = computed(() => (locked ? null : containerRef.value));
+
+useGrabScroll(() => {
+  if (!zoom.fitContainer.value) {
+    return activeContainer.value;
+  }
+});
+
 const imgEl = useTemplateRef("imgEl");
 const loadedId = ref("");
 const loaded = computed(() => loadedId.value === image.id);
@@ -190,12 +203,6 @@ function updateLoaded() {
   }
 }
 
-useGrabScroll(() => {
-  if (!zoom.fitContainer.value) {
-    return containerRef.value;
-  }
-});
-
 let initialPinchDistance = 0;
 let initialZoom = 1;
 
@@ -210,9 +217,11 @@ useEventListeners(containerRef, ({ on }) => {
   on(
     "touchstart",
     (e: Event) => {
+      if (locked) return;
       const touchEvent = e as TouchEvent;
       if (touchEvent.touches.length === 2) {
         e.preventDefault();
+        e.stopPropagation();
         initialPinchDistance = getTouchDistance(touchEvent.touches);
         initialZoom = zoom.zoom.value;
       }
@@ -226,6 +235,7 @@ useEventListeners(containerRef, ({ on }) => {
       const touchEvent = e as TouchEvent;
       if (touchEvent.touches.length === 2) {
         e.preventDefault();
+        e.stopPropagation();
         const currentDistance = getTouchDistance(touchEvent.touches);
         if (initialPinchDistance > 0) {
           const scale = currentDistance / initialPinchDistance;

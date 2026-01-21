@@ -10,7 +10,23 @@
       @undo="undo"
       @show-update-session-modal="showUpdateSessionModal = true"
       @show-commit-modal="showCommitModal = true"
-    />
+    >
+      <template #extra>
+        <button
+          class="p-2 mr-2 rounded-lg hover:bg-slate-700 transition-colors"
+          :title="isImageLocked ? '解锁图片位置' : '锁定图片位置'"
+          @click="isImageLocked = !isImageLocked"
+        >
+          <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <path
+              :d="isImageLocked ? mdiLock : mdiLockOpenVariant"
+              fill="currentColor"
+              :class="isImageLocked ? 'text-red-400' : 'text-slate-400'"
+            />
+          </svg>
+        </button>
+      </template>
+    </SessionHeader>
 
     <main
       class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
@@ -50,6 +66,7 @@
             v-if="currentImage"
             :image="currentImage"
             :next-images="session?.nextImages ?? []"
+            :locked="isImageLocked"
           >
             <template #info="{ isFullscreen }">
               <span class="lg:min-w-24 hidden md:block">
@@ -69,10 +86,14 @@
             </template>
           </ImageViewer>
 
-          <SwipeDirectionIndicator
-            :direction="swipeDirection"
-            :renderer-el="rendererEl"
-          />
+          <div
+            class="absolute bottom-0 left-0 right-0 h-1/2 pointer-events-none overflow-hidden"
+          >
+            <SwipeDirectionIndicator
+              :direction="swipeDirection"
+              :renderer-el="rendererEl"
+            />
+          </div>
         </div>
 
         <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
@@ -86,7 +107,7 @@
     <footer
       class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0"
     >
-      ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
+      (下半屏单指滑动) ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
     <SessionMenu
@@ -139,7 +160,7 @@ import CommitModal from "../components/CommitModal.vue";
 import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
-import { mdiHome } from "@mdi/js";
+import { mdiHome, mdiLock, mdiLockOpenVariant } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import { usePresets } from "../composables/usePresets";
 
@@ -150,6 +171,8 @@ usePresets();
 const { id: sessionId } = defineProps<{
   id: string;
 }>();
+
+const isImageLocked = ref(false);
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
@@ -165,19 +188,20 @@ const touchEndX = ref<number>(0);
 const touchEndY = ref<number>(0);
 const isSingleTouch = ref<boolean>(true);
 
+const SWIPE_THRESHOLD = 50;
+
 const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   if (!isSingleTouch.value) return null;
 
   const deltaX = touchEndX.value - touchStartX.value;
   const deltaY = touchEndY.value - touchStartY.value;
-  const minSwipeDistance = 30;
 
   if (Math.abs(deltaX) > Math.abs(deltaY)) {
-    if (Math.abs(deltaX) > minSwipeDistance) {
+    if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
       return deltaX > 0 ? "RIGHT" : "LEFT";
     }
   } else {
-    if (Math.abs(deltaY) > minSwipeDistance) {
+    if (Math.abs(deltaY) > SWIPE_THRESHOLD) {
       return deltaY > 0 ? "DOWN" : "UP";
     }
   }
@@ -259,24 +283,34 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
+const isBottomHalf = (y: number) => y > window.innerHeight / 2;
+
 function handleTouchStart(e: TouchEvent) {
-  isSingleTouch.value = e.touches.length === 1;
-  touchStartX.value = e.changedTouches[0].screenX;
-  touchStartY.value = e.changedTouches[0].screenY;
+  const touch = e.changedTouches[0];
+  if (e.touches.length !== 1 || !isBottomHalf(touch.clientY)) {
+    isSingleTouch.value = false;
+    return;
+  }
+
+  isSingleTouch.value = true;
+  touchStartX.value = touch.screenX;
+  touchStartY.value = touch.screenY;
   touchEndX.value = touchStartX.value;
   touchEndY.value = touchStartY.value;
 
-  if (isSingleTouch.value) {
-    const target = e.target as HTMLElement;
-    const isButton = target.closest("button, a, input, select, textarea");
-    if (!isButton) {
-      e.preventDefault();
-    }
+  const target = e.target as HTMLElement;
+  const isButton = target.closest("button, a, input, select, textarea");
+  if (!isButton) {
+    e.preventDefault();
   }
 }
 
 function handleTouchMove(e: TouchEvent) {
-  isSingleTouch.value = e.touches.length === 1;
+  if (!isSingleTouch.value || e.touches.length !== 1) {
+    isSingleTouch.value = false;
+    return;
+  }
+
   touchEndX.value = e.changedTouches[0].screenX;
   touchEndY.value = e.changedTouches[0].screenY;
 
@@ -303,17 +337,6 @@ function handleTouchEnd(e: TouchEvent) {
 function handleGesture() {
   if (showMenu.value) return;
   if (!swipeDirection.value) return;
-
-  const minSwipeDistance = 50;
-  const deltaX = touchEndX.value - touchStartX.value;
-  const deltaY = touchEndY.value - touchStartY.value;
-
-  if (
-    Math.abs(deltaX) < minSwipeDistance &&
-    Math.abs(deltaY) < minSwipeDistance
-  ) {
-    return;
-  }
 
   switch (swipeDirection.value) {
     case "UP":

@@ -24,6 +24,8 @@
         </div>
       </div>
 
+      <slot name="extra" />
+
       <button
         class="md:hidden p-2 rounded-lg hover:bg-slate-700 transition-colors"
         @click="$emit('showMenu')"
