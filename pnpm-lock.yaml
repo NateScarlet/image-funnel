@@ -6,7 +6,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.0.1
 
   frontend:
     dependencies:
@@ -22,15 +26,15 @@ importers:
       '@mdi/js':
         specifier: ^7.4.47
         version: 7.4.47
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@vue/apollo-composable':
         specifier: ^4.2.2
         version: 4.2.2(@apollo/client@4.1.2(graphql-ws@6.0.6(graphql@16.12.0)(ws@7.4.5))(graphql@16.12.0)(rxjs@7.8.2)(subscriptions-transport-ws@0.9.19(graphql@16.12.0)))(@vue/composition-api@1.7.2(vue@3.5.27(typescript@5.9.3)))(graphql@16.12.0)(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))
       core-js:
         specifier: ^3.47.0
         version: 3.47.0
-      crypto-hash:
-        specifier: ^4.0.1
-        version: 4.0.1
       es-toolkit:
         specifier: ^1.44.0
         version: 1.44.0
@@ -1207,6 +1211,10 @@ packages:
   '@microsoft/fetch-event-source@2.0.1':
     resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
+  '@noble/hashes@2.0.1':
+    resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
+    engines: {node: '>= 20.19.0'}
+
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -1814,10 +1822,6 @@ packages:
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
-
-  crypto-hash@4.0.1:
-    resolution: {integrity: sha512-4u4yl+8C+75Xedf1uMA0J/TTYAqJ54XdyBc1RV3UjCkU2wQjFMsB5ScjRDh3oo21zAwSprcVEDolaGDT8z5G6g==}
-    engines: {node: '>=20'}
 
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
@@ -4719,6 +4723,8 @@ snapshots:
 
   '@microsoft/fetch-event-source@2.0.1': {}
 
+  '@noble/hashes@2.0.1': {}
+
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -5382,8 +5388,6 @@ snapshots:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
-
-  crypto-hash@4.0.1: {}
 
   cssesc@3.0.0: {}
 

@@ -4,10 +4,11 @@ import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { ErrorLink } from "@apollo/client/link/error";
 import { PersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
-import { sha256 } from "crypto-hash";
+
 import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
 import { HttpLink } from "@apollo/client";
+import sha256Hash from "@/utils/sha256Hash";
 
 export interface OperationContext {
   anonymous?: boolean;
@@ -49,7 +50,7 @@ const batchHttpLink = new BatchHttpLink({
 });
 
 const persistedQueryLink = new PersistedQueryLink({
-  sha256,
+  sha256: sha256Hash,
 });
 
 const httpOrBatchLink = ApolloLink.split(

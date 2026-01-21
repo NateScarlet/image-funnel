@@ -10,5 +10,8 @@
     "check": "pnpm --filter image-funnel-frontend check",
     "lint": "pnpm --filter image-funnel-frontend lint",
     "lint:fix": "pnpm --filter image-funnel-frontend lint:fix"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1"
   }
 }
