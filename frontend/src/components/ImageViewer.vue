@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef, shallowRef, watchEffect } from "vue";
+import { ref, computed, useTemplateRef, shallowRef } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
@@ -178,9 +178,7 @@ const isSlowLoading = computed(
     lastLoading.value.image.id === image.id &&
     currentTime.value.sub(lastLoading.value.startAt) > slowLoadingTimeoutMs,
 );
-watchEffect(() => {
-  console.log({ id: image.id, isSlowLoading: isSlowLoading.value });
-});
+
 function onLoadStart() {
   lastLoading.value = { image, startAt: Time.now() };
 }
