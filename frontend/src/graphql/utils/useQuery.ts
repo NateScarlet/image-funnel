@@ -103,10 +103,13 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     return stack;
   }
   if (variables) {
+    let queryStack: DisposableStack | undefined;
+
+    stack.defer(() => queryStack?.dispose());
     stack.defer(
       watch(
         variables,
-        (n, o, onCleanup) => {
+        (n, o) => {
           if (isEqual(n, o)) {
             // not recreate query if variable not changed
             return;
@@ -115,8 +118,8 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
             resultModel.value = undefined;
             return;
           }
-          const stack = run(n);
-          onCleanup(() => stack.dispose());
+          queryStack?.dispose();
+          queryStack = run(n);
         },
         { immediate: true },
       ),
