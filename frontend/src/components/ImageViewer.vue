@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef, shallowRef } from "vue";
+import { ref, computed, useTemplateRef, shallowRef, watch } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
@@ -200,8 +200,17 @@ const isSlowLoading = computed(
     currentTime.value.sub(lastLoading.value.startAt) > slowLoadingTimeoutMs,
 );
 
+watch(
+  () => image.id,
+  () => {
+    lastLoading.value = { image, startAt: Time.now() };
+  },
+);
+
 function onLoadStart() {
-  lastLoading.value = { image, startAt: Time.now() };
+  if (lastLoading.value.image.id !== image.id) {
+    lastLoading.value = { image, startAt: Time.now() };
+  }
 }
 refreshOn(() => lastLoading.value.startAt.add(slowLoadingTimeoutMs + 1));
 function updateLoaded() {
