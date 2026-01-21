@@ -16,7 +16,7 @@ import (
 const (
 	XMPNamespace     = "http://ns.adobe.com/xap/1.0/"
 	RDFNamespace     = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-	ImageFunnelNS    = "http://ns.imagefunnel.internal/1.0/"
+	ImageFunnelNS    = "https://github.com/NateScarlet/image-funnel/ns/1.0/"
 	MicrosoftPhotoNS = "http://ns.microsoft.com/photo/1.0/"
 )
 
