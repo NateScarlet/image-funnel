@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from "vue";
+import { ref, computed, useTemplateRef, shallowRef, watchEffect } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
@@ -134,6 +134,8 @@ import useElementFullscreen from "../composables/useElementFullscreen";
 import { mdiFullscreen, mdiFullscreenExit, mdiLoading } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import { getImageUrlByZoom } from "@/utils/image";
+import useCurrentTime from "@/composables/useCurrentTime";
+import Time from "@/utils/Time";
 
 const { image, nextImages = [] } = defineProps<{
   image: ImageFragment;
@@ -167,22 +169,22 @@ const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 const imgEl = useTemplateRef("imgEl");
 const loadedId = ref("");
 const loaded = computed(() => loadedId.value === image.id);
-const loadStartAt = ref(Date.now());
-const currentTime = ref(Date.now());
-function updateCurrentTime() {
-  currentTime.value = Date.now();
-}
+const lastLoading = shallowRef({ image, startAt: Time.now() });
+const { currentTime, refreshOn } = useCurrentTime();
 const slowLoadingTimeoutMs = 100;
 const isSlowLoading = computed(
   () =>
     !loaded.value &&
-    currentTime.value - loadStartAt.value > slowLoadingTimeoutMs,
+    lastLoading.value.image.id === image.id &&
+    currentTime.value.sub(lastLoading.value.startAt) > slowLoadingTimeoutMs,
 );
+watchEffect(() => {
+  console.log({ id: image.id, isSlowLoading: isSlowLoading.value });
+});
 function onLoadStart() {
-  loadStartAt.value = Date.now();
-  updateCurrentTime();
-  setTimeout(updateCurrentTime, slowLoadingTimeoutMs + 1);
+  lastLoading.value = { image, startAt: Time.now() };
 }
+refreshOn(() => lastLoading.value.startAt.add(slowLoadingTimeoutMs + 1));
 function updateLoaded() {
   const el = imgEl.value;
   if (el?.complete) {
