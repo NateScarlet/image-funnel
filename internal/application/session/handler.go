@@ -65,7 +65,7 @@ func (h *Handler) CreateSession(
 		}
 	}()
 
-	sess, err := h.sessionService.Create(id, directoryId, filter, target_keep)
+	sess, err := h.sessionService.Create(ctx, id, directoryId, filter, target_keep)
 	if err != nil {
 		return fmt.Errorf("failed to initialize session: %w", err)
 	}
@@ -298,7 +298,7 @@ func (h *Handler) UpdateSession(
 		options = append(options, session.WithFilter(filter))
 	}
 
-	sess, err := h.sessionService.Update(sessionID, options...)
+	sess, err := h.sessionService.Update(ctx, sessionID, options...)
 	if err != nil {
 		return fmt.Errorf("failed to update session: %w", err)
 	}

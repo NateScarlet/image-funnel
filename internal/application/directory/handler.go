@@ -69,7 +69,7 @@ func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*share
 	}
 
 	var result []*shared.DirectoryDTO
-	for dir, err := range h.scanner.ScanDirectories(path) {
+	for dir, err := range h.scanner.ScanDirectories(ctx, path) {
 		if err != nil {
 			return nil, err
 		}

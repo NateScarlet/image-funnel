@@ -30,7 +30,7 @@ func TestScan(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	images := collectImages(scanner.Scan("."))
+	images := collectImages(scanner.Scan(context.Background(), "."))
 	require.Len(t, images, 1)
 	assert.Equal(t, "test.jpg", images[0].Filename())
 }
@@ -38,7 +38,7 @@ func TestScan(t *testing.T) {
 func TestScan_EmptyDirectory(t *testing.T) {
 	scanner := newTestScanner(t)
 
-	images := collectImages(scanner.Scan("."))
+	images := collectImages(scanner.Scan(context.Background(), "."))
 	require.Empty(t, images)
 }
 
@@ -53,7 +53,7 @@ func TestScanDirectories(t *testing.T) {
 	err = os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	dirs := collectDirInfos(scanner.ScanDirectories("."))
+	dirs := collectDirInfos(scanner.ScanDirectories(context.Background(), "."))
 	require.Len(t, dirs, 1)
 	assert.Equal(t, "subdir", dirs[0].Path())
 }

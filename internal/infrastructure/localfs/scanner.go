@@ -32,7 +32,7 @@ func NewScanner(rootDir string, xmpRepo metadata.Repository, processor appimage.
 	}
 }
 
-func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
+func (s *Scanner) Scan(ctx context.Context, relPath string) iter.Seq2[*domainimage.Image, error] {
 	return func(yield func(*domainimage.Image, error) bool) {
 		absPath := filepath.Join(s.rootDir, relPath)
 		entries, err := os.ReadDir(absPath)
@@ -41,7 +41,6 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 			return
 		}
 
-		ctx := context.Background()
 		limit := runtime.NumCPU()
 
 		iterator.ParallelConcatMapTo2(
@@ -94,7 +93,7 @@ func (s *Scanner) Scan(relPath string) iter.Seq2[*domainimage.Image, error] {
 	}
 }
 
-func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
+func (s *Scanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
 	return func(yield func(*directory.DirectoryInfo, error) bool) {
 		if relPath != "" {
 			if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
@@ -111,6 +110,10 @@ func (s *Scanner) ScanDirectories(relPath string) iter.Seq2[*directory.Directory
 		}
 
 		for _, entry := range entries {
+			if ctx.Err() != nil {
+				yield(nil, ctx.Err())
+				return
+			}
 			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 				continue
 			}

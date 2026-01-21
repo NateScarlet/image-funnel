@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
@@ -84,7 +85,7 @@ func (s *Service) Commit(session *Session, writeActions *WriteActions) (int, []e
 
 // Update 更新会话配置
 // 使用 Options 模式支持灵活的更新选项
-func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error) {
+func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOption) (*Session, error) {
 	sess, err := s.sessionRepo.Get(id)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 
 		filterFunc := image.BuildImageFilter(opts.filter)
 		var filteredImages []*image.Image
-		for img, err := range s.dirScanner.Scan(directory) {
+		for img, err := range s.dirScanner.Scan(ctx, directory) {
 			if err != nil {
 				return nil, err
 			}
@@ -132,7 +133,7 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 
 // Create 初始化一个新的会话
 // 扫描目录、应用过滤器并创建会话
-func (s *Service) Create(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int) (*Session, error) {
+func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int) (*Session, error) {
 	directory, err := directory.DecodeID(directoryID)
 	if err != nil {
 		return nil, err
@@ -140,7 +141,7 @@ func (s *Service) Create(id scalar.ID, directoryID scalar.ID, filter *shared.Ima
 
 	filterFunc := image.BuildImageFilter(filter)
 	var filteredImages []*image.Image
-	for img, err := range s.dirScanner.Scan(directory) {
+	for img, err := range s.dirScanner.Scan(ctx, directory) {
 		if err != nil {
 			return nil, err
 		}
