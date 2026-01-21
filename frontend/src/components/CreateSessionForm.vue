@@ -95,7 +95,6 @@ const { presets, getPreset, lastSelectedPresetId } = usePresets();
 
 const loadingCount = ref(0);
 const creatingSession = ref(false);
-const selectedPresetId = ref(lastSelectedPresetId.value || "");
 const selectedDirectoryId = ref<string>("");
 
 const { data: metaData } = useQuery(GetMetaDocument, {
@@ -112,6 +111,20 @@ const currentDirectory = computed(() => directoriesData.value?.directory);
 const directories = computed(() => currentDirectory.value?.directories || []);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 
+const selectedPresetIdBuffer = ref<string>();
+const selectedPresetId = computed({
+  get() {
+    return (
+      selectedPresetIdBuffer.value ??
+      lastSelectedPresetId.value ??
+      presets.value[0].id
+    );
+  },
+  set(v) {
+    selectedPresetIdBuffer.value = v;
+    lastSelectedPresetId.value = v;
+  },
+});
 const selectedPreset = computed(() => {
   return getPreset(selectedPresetId.value || "");
 });
