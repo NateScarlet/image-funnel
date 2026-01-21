@@ -22,70 +22,27 @@
       <div
         class="p-4 rounded-lg transition-all border-2 bg-slate-600 border-slate-500"
       >
-        <div class="flex items-start gap-3">
-          <div class="flex-shrink-0 rounded overflow-hidden">
-            <img
-              v-if="nextDirectoryStats?.latestImage"
-              :src="nextDirectoryStats.latestImage.url256"
-              :alt="nextDirectoryPath"
-              class="w-20 bg-slate-700 object-cover"
-            />
-            <div
-              v-else
-              class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
-            >
-              <div class="w-full h-full animate-pulse bg-slate-600"></div>
-            </div>
-          </div>
-          <div class="flex-1 min-w-0">
-            <h3 class="font-semibold text-lg mb-1">
-              <span class="flex-1 break-all">{{ nextDirectoryPath }}</span>
-            </h3>
-            <div class="text-xs text-slate-300 space-y-1">
-              <div v-if="nextDirectoryStats">
-                <div v-if="nextDirectoryStats.latestImage?.modTime">
-                  {{ formatDate(nextDirectoryStats.latestImage.modTime) }}
-                </div>
-                <div
-                  v-if="nextDirectoryStats.ratingCounts.length > 0"
-                  class="flex flex-wrap gap-2 mt-2"
-                >
-                  <div
-                    v-for="rc in sortedRatingCounts(
-                      nextDirectoryStats.ratingCounts,
-                    )"
-                    :key="rc.rating"
-                    class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
-                  >
-                    <RatingIcon :rating="rc.rating" />
-                    <span class="text-xs">{{ rc.count }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DirectoryDisplay
+          v-if="nextDirectoryId"
+          :directory="{ id: nextDirectoryId }"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
   GetSessionDocument,
   CreateSessionDocument,
-  GetDirectoryStatsDocument,
 } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
-import RatingIcon from "./RatingIcon.vue";
-import { formatDate } from "../utils/date";
-import { sortBy } from "es-toolkit";
-import type { RatingCountFragment } from "../graphql/generated";
+import DirectoryDisplay from "./DirectoryDisplay.vue";
 
 interface SessionStats {
   kept: number;
@@ -116,26 +73,6 @@ const nextDirectoryId = computed(() => {
     session.value.directory.id,
   );
 });
-
-const loadingCount = ref(0);
-const { data: nextDirectoryData } = useQuery(GetDirectoryStatsDocument, {
-  variables: () =>
-    nextDirectoryId.value ? { id: nextDirectoryId.value } : undefined,
-  loadingCount,
-});
-
-const nextDirectoryStats = computed(
-  () => nextDirectoryData.value?.directory?.stats,
-);
-const nextDirectoryPath = computed(
-  () => nextDirectoryData.value?.directory?.path ?? "",
-);
-
-function sortedRatingCounts(
-  ratingCounts: RatingCountFragment[],
-): RatingCountFragment[] {
-  return sortBy(ratingCounts, [(rc) => rc.rating]);
-}
 
 async function handleCommitted() {
   if (!session.value) {
