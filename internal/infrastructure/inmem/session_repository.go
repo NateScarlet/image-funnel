@@ -17,8 +17,9 @@ const (
 )
 
 type SessionRepository struct {
-	sessions map[scalar.ID]*session.Session
-	mu       sync.RWMutex
+	sessions        map[scalar.ID]*session.Session
+	mu              sync.RWMutex
+	nextCleanupTime time.Time
 }
 
 func NewSessionRepository() *SessionRepository {
@@ -67,17 +68,35 @@ func (r *SessionRepository) Delete(id scalar.ID) error {
 // cleanup 清理长时间未更新的会话
 // 注意：此方法必须在持有写锁的情况下调用
 func (r *SessionRepository) cleanup() {
-	total := len(r.sessions)
-	if total <= minRetainedSessions {
+	now := time.Now()
+	// 优化：如果还没到下一次清理时间，直接返回
+	if now.Before(r.nextCleanupTime) {
 		return
 	}
 
-	threshold := time.Now().Add(-maxSessionIdleTime)
+	total := len(r.sessions)
+	if total <= minRetainedSessions {
+		// 如果未达到最小保留数，无需清理
+		// 下一次清理至少要等到有新的会话加入，或者现有会话过期（虽然不会被删除）
+		// 但为了简单，这里不设置具体时间，等待下次 Save 触发判断即可
+		// 或者可以设置一个较长的间隔，防止在此期间频繁调用（虽然目前只在 Save 调用）
+		return
+	}
+
+	threshold := now.Add(-maxSessionIdleTime)
 
 	var expired []*session.Session
+	var oldestActiveTime time.Time
+
 	for _, s := range r.sessions {
-		if !s.UpdatedAt().After(threshold) {
+		updatedAt := s.UpdatedAt()
+		if !updatedAt.After(threshold) {
 			expired = append(expired, s)
+		} else {
+			// 记录活跃会话中最早的更新时间，它将是下一个可能过期的会话
+			if oldestActiveTime.IsZero() || updatedAt.Before(oldestActiveTime) {
+				oldestActiveTime = updatedAt
+			}
 		}
 	}
 
@@ -85,11 +104,23 @@ func (r *SessionRepository) cleanup() {
 	sort.Slice(expired, func(i, j int) bool {
 		return expired[i].UpdatedAt().After(expired[j].UpdatedAt())
 	})
+
 	// 只要总数超标且还有过期会话，就从最老的开始删
 	for len(r.sessions) > minRetainedSessions && len(expired) > 0 {
 		var oldest = expired[len(expired)-1]
 		expired = expired[:len(expired)-1]
 		delete(r.sessions, oldest.ID())
+	}
+
+	// 计算下一次清理时间
+	// 如果还有剩余的会话（包括保留的过期会话和活跃会话）
+	// 下一次清理时间应该是：最老的活跃会话变成过期的时间
+	if !oldestActiveTime.IsZero() {
+		r.nextCleanupTime = oldestActiveTime.Add(maxSessionIdleTime)
+	} else {
+		// 如果没有活跃会话了（全是保留的过期会话），则暂时不需要因为时间原因清理
+		// 重置为一个较远的未来，直到有新会话进来更新状态
+		r.nextCleanupTime = time.Time{}
 	}
 }
 
