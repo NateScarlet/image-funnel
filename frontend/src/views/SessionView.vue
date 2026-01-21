@@ -120,7 +120,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
@@ -144,11 +144,12 @@ import useFullscreenRendererElement from "@/composables/useFullscreenRendererEle
 import { usePresets } from "../composables/usePresets";
 
 const rendererEl = useFullscreenRendererElement();
-const route = useRoute();
 const router = useRouter();
 usePresets();
 
-const sessionId = route.params.id as string;
+const { id: sessionId } = defineProps<{
+  id: string;
+}>();
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);

@@ -22,10 +22,7 @@
       <div
         class="p-4 rounded-lg transition-all border-2 bg-slate-600 border-slate-500"
       >
-        <DirectoryDisplay
-          v-if="nextDirectoryId"
-          :directory="{ id: nextDirectoryId }"
-        />
+        <DirectoryDisplay :directory="{ id: nextDirectoryId }" />
       </div>
     </div>
   </div>
@@ -80,11 +77,8 @@ async function handleCommitted() {
     return;
   }
 
-  const { directory, filter, targetKeep } = session.value;
-  const nextDirectoryIdValue = getNextDirectory(
-    directory.parentId ?? "",
-    directory.id,
-  );
+  const { filter, targetKeep } = session.value;
+  const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
     const { data } = await mutate(CreateSessionDocument, {
