@@ -398,6 +398,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	s.undoStack = append(s.undoStack, UndoEntry{
 		imageID: imageID,
 		action:  s.actions[imageID],
+		index:   s.currentIdx,
 	})
 
 	s.actions[imageID] = action
@@ -456,7 +457,7 @@ func (s *Session) Undo() error {
 
 	s.actions[lastEntry.imageID] = lastEntry.action
 
-	s.currentIdx--
+	s.currentIdx = lastEntry.index
 	s.updatedAt = time.Now()
 	return nil
 }
@@ -489,10 +490,10 @@ func (s *Session) SetAction(imageID scalar.ID, action shared.ImageAction) {
 
 // UndoEntry 表示一个可撤销的操作条目，用于存储图片操作的历史状态
 // 当执行撤销操作时，使用此条目恢复图片的原始操作状态
-
 type UndoEntry struct {
 	imageID scalar.ID
 	action  shared.ImageAction
+	index   int
 }
 
 var (

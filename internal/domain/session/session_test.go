@@ -577,3 +577,52 @@ func TestUndo_CrossRoundToBeginning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, session.currentIdx)
 }
+
+func TestUndo_ShouldRestoreIndex_WhenRemarking(t *testing.T) {
+	// 验证当对同一张图片进行多次操作后撤销，索引能够正确恢复
+	// 用于防止 "index out of range" panic (当盲目递减 currentIdx 时可能发生)
+	session := setupTestSession(t, 2, 1)
+	img0ID := session.queue[0].ID()
+
+	// 1. 标记第一张 idx: 0 -> 1
+	err := session.MarkImage(img0ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+	assert.Equal(t, 1, session.currentIdx)
+
+	// 2. 再次标记同一张图片 (模拟用户回退或者跳转后重新标记)
+	// 在 MarkImage 内部，如果发现 ID 不同，会重置 currentIdx。但这里 ID 相同 (虽然在实际逻辑中 MarkImage 主要是处理当前 currentIdx 指向的图片，
+	// 或者通过便利查找图片。如果 currentIdx 已经指向下一张了，再次传入 img0ID，MarkImage 会先查找这一张图片，把 currentIdx 设为 0，然后处理完 ++ 变为 1)
+	err = session.MarkImage(img0ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+	assert.Equal(t, 1, session.currentIdx)
+	assert.Equal(t, 2, len(session.undoStack))
+
+	// 3. 撤销第二次标记
+	// 应该恢复到第二次标记前的状态 (currentIdx 应为 0，因为第二次标记前它被找到了并设为了 0)
+	// 注意：MarkImage 逻辑：
+	//    currentIdx = 1 (指向 img1)
+	//    传入 img0ID
+	//    检查 queue[1].ID != img0ID
+	//    查找 img0ID -> found at index 0. currentIdx = 0.
+	//    record undo (index=0)
+	//    Mark...
+	//    currentIdx++ -> 1
+	// 所以第一次撤销应该恢复 index=0
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, 0, session.currentIdx)
+	assert.Equal(t, 1, len(session.undoStack))
+
+	// 4. 撤销第一次标记
+	// 恢复到 index=0
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, 0, session.currentIdx)
+
+	// 验证没有变成负数
+	assert.True(t, session.currentIdx >= 0, "currentIdx should not be negative")
+
+	// 验证可以继续操作
+	err = session.MarkImage(img0ID, shared.ImageActionKeep)
+	require.NoError(t, err)
+}
