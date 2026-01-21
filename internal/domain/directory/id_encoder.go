@@ -1,18 +1,16 @@
 package directory
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 
 	"main/internal/scalar"
 )
 
-const idPrefix = "data:text/x.dir,"
+const idPrefix = "dir:"
 
 func EncodeID(path string) scalar.ID {
-	encoded := base64.URLEncoding.EncodeToString([]byte(path))
-	return scalar.ToID(idPrefix + encoded)
+	return scalar.ToID(idPrefix + path)
 }
 
 func DecodeID(id scalar.ID) (string, error) {
@@ -24,11 +22,5 @@ func DecodeID(id scalar.ID) (string, error) {
 		return "", fmt.Errorf("invalid directory ID format")
 	}
 
-	encoded := strings.TrimPrefix(idStr, idPrefix)
-	decoded, err := base64.URLEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode directory ID: %w", err)
-	}
-
-	return string(decoded), nil
+	return strings.TrimPrefix(idStr, idPrefix), nil
 }

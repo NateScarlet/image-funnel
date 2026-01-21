@@ -21,7 +21,7 @@ func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
 
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id scalar.ID) (Node, error) {
-	if strings.HasPrefix(id.String(), "data:text/x.dir,") {
+	if strings.HasPrefix(id.String(), "dir:") {
 		return r.app.Directory(ctx, id)
 	}
 	return nil, nil
