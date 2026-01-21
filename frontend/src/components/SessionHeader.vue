@@ -14,7 +14,7 @@
 
       <div class="flex-1 min-w-0 mr-4">
         <div class="text-xs md:text-sm text-slate-400 truncate">
-          {{ session?.directory || "加载中..." }}
+          {{ session?.directory?.path || "加载中..." }}
         </div>
         <div class="text-sm md:text-lg font-semibold truncate">
           {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
@@ -100,7 +100,9 @@ interface SessionStats {
 }
 
 interface Session {
-  directory?: string;
+  directory?: {
+    path?: string;
+  };
   currentIndex?: number;
   currentSize?: number;
   targetKeep?: number;

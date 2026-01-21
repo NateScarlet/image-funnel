@@ -47,7 +47,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 
 	return &shared.SessionDTO{
 		ID:           sess.ID(),
-		Directory:    sess.Directory(),
+		DirectoryID:  sess.DirectoryID(),
 		Filter:       sess.Filter(),
 		TargetKeep:   sess.TargetKeep(),
 		Stats:        stats,

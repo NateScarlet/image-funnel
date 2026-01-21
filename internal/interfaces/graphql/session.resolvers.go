@@ -25,6 +25,11 @@ func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*shared.Sess
 	return sess, nil
 }
 
+// Directory is the resolver for the directory field.
+func (r *sessionResolver) Directory(ctx context.Context, obj *shared.SessionDTO) (*shared.DirectoryDTO, error) {
+	return r.app.Directory(ctx, obj.DirectoryID)
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *sessionResolver) CreatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error) {
 	return obj.CreatedAt.Format("2006-01-02T15:04:05Z07:00"), nil

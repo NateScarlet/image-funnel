@@ -102,9 +102,14 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 	}
 
 	if opts.filter != nil {
+		directory, err := directory.DecodeID(sess.DirectoryID())
+		if err != nil {
+			return nil, err
+		}
+
 		filterFunc := image.BuildImageFilter(opts.filter)
 		var filteredImages []*image.Image
-		for img, err := range s.dirScanner.Scan(sess.Directory()) {
+		for img, err := range s.dirScanner.Scan(directory) {
 			if err != nil {
 				return nil, err
 			}
@@ -127,7 +132,12 @@ func (s *Service) Update(id scalar.ID, options ...UpdateOption) (*Session, error
 
 // Create 初始化一个新的会话
 // 扫描目录、应用过滤器并创建会话
-func (s *Service) Create(id scalar.ID, directory string, filter *shared.ImageFilters, targetKeep int) (*Session, error) {
+func (s *Service) Create(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int) (*Session, error) {
+	directory, err := directory.DecodeID(directoryID)
+	if err != nil {
+		return nil, err
+	}
+
 	filterFunc := image.BuildImageFilter(filter)
 	var filteredImages []*image.Image
 	for img, err := range s.dirScanner.Scan(directory) {
@@ -139,7 +149,7 @@ func (s *Service) Create(id scalar.ID, directory string, filter *shared.ImageFil
 		}
 	}
 
-	sess := NewSession(id, directory, filter, targetKeep, filteredImages)
+	sess := NewSession(id, directoryID, filter, targetKeep, filteredImages)
 	if err := s.sessionRepo.Save(sess); err != nil {
 		return nil, err
 	}

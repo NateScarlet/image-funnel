@@ -1,6 +1,6 @@
 type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
-  directory: String!
+  directory: Directory!
   filter: ImageFilters!
   targetKeep: Int!
   stats: SessionStats!

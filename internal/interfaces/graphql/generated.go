@@ -198,6 +198,8 @@ type QueryResolver interface {
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
 }
 type SessionResolver interface {
+	Directory(ctx context.Context, obj *shared.SessionDTO) (*shared.DirectoryDTO, error)
+
 	CreatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 	UpdatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 
@@ -911,7 +913,7 @@ input ImageFiltersInput
 `, BuiltIn: false},
 	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
-  directory: String!
+  directory: Directory!
   filter: ImageFilters!
   targetKeep: Int!
   stats: SessionStats!
@@ -922,7 +924,7 @@ input ImageFiltersInput
   currentIndex: Int!
   currentSize: Int!
   currentImage: Image
-  nextImages(count: Int = 10): [Image!]!
+  nextImages(count: Int): [Image!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
@@ -2902,10 +2904,10 @@ func (ec *executionContext) _Session_directory(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_Session_directory,
 		func(ctx context.Context) (any, error) {
-			return obj.Directory, nil
+			return ec.resolvers.Session().Directory(ctx, obj)
 		},
 		nil,
-		ec.marshalNString2string,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
 		true,
 		true,
 	)
@@ -2915,10 +2917,24 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "Session",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
 	}
 	return fc, nil
@@ -6330,10 +6346,41 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "directory":
-			out.Values[i] = ec._Session_directory(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Session_directory(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "filter":
 			out.Values[i] = ec._Session_filter(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -7101,6 +7148,10 @@ func (ec *executionContext) marshalNCreateSessionPayload2ᚖmainᚋinternalᚋin
 		return graphql.Null
 	}
 	return ec._CreateSessionPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDirectory2mainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirectoryDTO) graphql.Marshaler {
+	return ec._Directory(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNDirectory2ᚕᚖmainᚋinternalᚋsharedᚐDirectoryDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.DirectoryDTO) graphql.Marshaler {

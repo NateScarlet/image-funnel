@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"iter"
 	appimage "main/internal/application/image"
-	"main/internal/domain/directory"
 	"main/internal/domain/session"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -66,12 +65,7 @@ func (h *Handler) CreateSession(
 		}
 	}()
 
-	directory, err := directory.DecodeID(directoryId)
-	if err != nil {
-		return err
-	}
-
-	sess, err := h.sessionService.Create(id, directory, filter, target_keep)
+	sess, err := h.sessionService.Create(id, directoryId, filter, target_keep)
 	if err != nil {
 		return fmt.Errorf("failed to initialize session: %w", err)
 	}

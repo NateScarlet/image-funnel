@@ -38,7 +38,7 @@ type ImageDTO struct {
 // SessionDTO 会话数据传输对象
 type SessionDTO struct {
 	ID           scalar.ID
-	Directory    string
+	DirectoryID  scalar.ID
 	Filter       *ImageFilters
 	TargetKeep   int
 	Stats        *StatsDTO

@@ -25,8 +25,8 @@ func TestPublishSession(t *testing.T) {
 	bus := NewEventBus(topic)
 
 	dto := &shared.SessionDTO{
-		ID:        scalar.ToID("test-id"),
-		Directory: "test-dir",
+		ID:          scalar.ToID("test-id"),
+		DirectoryID: scalar.ToID("test-dir"),
 		Stats: &shared.StatsDTO{
 			Total:       10,
 			Kept:        0,
@@ -48,8 +48,8 @@ func TestSubscribeSession(t *testing.T) {
 	bus := NewEventBus(topic)
 
 	dto := &shared.SessionDTO{
-		ID:        scalar.ToID("test-id"),
-		Directory: "test-dir",
+		ID:          scalar.ToID("test-id"),
+		DirectoryID: scalar.ToID("test-dir"),
 		Stats: &shared.StatsDTO{
 			Total:       10,
 			Kept:        0,

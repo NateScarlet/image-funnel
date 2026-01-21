@@ -1,6 +1,8 @@
 fragment Session on Session {
   id
-  directory
+  directory {
+    ...Directory
+  }
   filter {
     rating
   }

@@ -87,12 +87,12 @@ func (s *Stats) IsCompleted() bool {
 // 5. 提交会话结果，将评分写入 XMP Sidecar 文件
 
 type Session struct {
-	id         scalar.ID            // 会话唯一标识符
-	directory  string               // 处理的图片目录路径
-	filter     *shared.ImageFilters // 图片过滤器，用于筛选特定类型的图片
-	targetKeep int                  // 目标保留图片数量
-	createdAt  time.Time            // 会话创建时间
-	updatedAt  time.Time            // 会话最后更新时间
+	id          scalar.ID            // 会话唯一标识符
+	directoryID scalar.ID            // 目录 ID
+	filter      *shared.ImageFilters // 图片过滤器，用于筛选特定类型的图片
+	targetKeep  int                  // 目标保留图片数量
+	createdAt   time.Time            // 会话创建时间
+	updatedAt   time.Time            // 会话最后更新时间
 
 	queue      []*image.Image                   // 当前待处理的图片队列
 	currentIdx int                              // 当前处理的图片在队列中的索引
@@ -117,18 +117,18 @@ type RoundSnapshot struct {
 //
 // 参数：
 // - id: 会话唯一标识符
-// - directory: 处理的图片目录路径
+// - directoryID: 目录 ID
 // - filter: 图片过滤器
 // - targetKeep: 目标保留图片数量
 // - images: 待处理的图片集合
-func NewSession(id scalar.ID, directory string, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
+func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	for _, img := range images {
 		actions[img.ID()] = shared.ImageActionPending
 	}
 	return &Session{
 		id:           id,
-		directory:    directory,
+		directoryID:  directoryID,
 		filter:       filter,
 		targetKeep:   targetKeep,
 		createdAt:    time.Now(),
@@ -148,10 +148,10 @@ func (s *Session) ID() scalar.ID {
 	return s.id
 }
 
-func (s *Session) Directory() string {
+func (s *Session) DirectoryID() scalar.ID {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.directory
+	return s.directoryID
 }
 
 func (s *Session) Filter() *shared.ImageFilters {

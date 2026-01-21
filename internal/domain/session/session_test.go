@@ -17,10 +17,10 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 	filter := &shared.ImageFilters{Rating: []int{0, 1, 2}}
 	images := createTestImages(10)
 
-	session := NewSession(scalar.ToID("test-id"), "/test", filter, 5, images)
+	session := NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, 5, images)
 
 	assert.NotEmpty(t, session.ID(), "Session ID should not be empty")
-	assert.Equal(t, "/test", session.Directory(), "Directory should match")
+	assert.Equal(t, scalar.ToID("test-dir-id"), session.DirectoryID(), "DirectoryID should match")
 	assert.Equal(t, filter, session.Filter(), "Filter should match")
 	assert.Equal(t, 5, session.TargetKeep(), "TargetKeep should match")
 	assert.False(t, session.Stats().IsCompleted(), "IsCompleted should be false initially")
@@ -427,7 +427,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 func setupTestSession(t *testing.T, imageCount int, targetKeep int) *Session {
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(imageCount)
-	session := NewSession(scalar.ToID("test-id"), "/test", filter, targetKeep, images)
+	session := NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images)
 	return session
 }
 
