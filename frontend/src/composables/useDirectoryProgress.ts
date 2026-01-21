@@ -1,4 +1,4 @@
-const STORAGE_KEY_PREFIX = "directoryOrder_";
+const STORAGE_KEY_PREFIX = "directoryOrder@122b3b541739-";
 
 function getStorageKey(parentId: string): string {
   return `${STORAGE_KEY_PREFIX}${parentId}`;
