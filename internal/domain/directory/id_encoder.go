@@ -11,9 +11,6 @@ import (
 const idPrefix = "data:text/x.dir,"
 
 func EncodeID(path string) scalar.ID {
-	if path == "." {
-		return scalar.ID{}
-	}
 	encoded := base64.URLEncoding.EncodeToString([]byte(path))
 	return scalar.ToID(idPrefix + encoded)
 }
@@ -21,7 +18,7 @@ func EncodeID(path string) scalar.ID {
 func DecodeID(id scalar.ID) (string, error) {
 	idStr := id.String()
 	if idStr == "" {
-		return ".", nil
+		return "", fmt.Errorf("id must not be empty")
 	}
 	if !strings.HasPrefix(idStr, idPrefix) {
 		return "", fmt.Errorf("invalid directory ID format")

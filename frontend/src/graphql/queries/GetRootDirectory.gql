@@ -1,0 +1,8 @@
+query GetRootDirectory {
+  rootDirectory {
+    ...Directory
+    directories {
+      ...Directory
+    }
+  }
+}

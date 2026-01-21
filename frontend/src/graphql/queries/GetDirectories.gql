@@ -1,8 +1,10 @@
-query GetDirectories($id: ID) {
-  directory(id: $id) {
-    ...Directory
-    directories {
+query GetDirectories($id: ID!) {
+  node(id: $id) {
+    ... on Directory {
       ...Directory
+      directories {
+        ...Directory
+      }
     }
   }
 }

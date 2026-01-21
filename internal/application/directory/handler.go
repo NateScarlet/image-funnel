@@ -22,10 +22,6 @@ func NewHandler(scanner directory.Scanner, imageDTOFactory *appimage.ImageDTOFac
 }
 
 func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.DirectoryDTO, error) {
-	if id.String() == "" {
-		id = directory.EncodeID(".")
-	}
-
 	path, err := directory.DecodeID(id)
 	if err != nil {
 		return nil, err
@@ -46,10 +42,6 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 }
 
 func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.DirectoryStatsDTO, error) {
-	if id.String() == "" {
-		id = directory.EncodeID(".")
-	}
-
 	path, err := directory.DecodeID(id)
 	if err != nil {
 		return nil, err

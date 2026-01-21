@@ -79,9 +79,13 @@ const loadingCount = ref(0);
 const { useStats } = useDirectoryStats();
 const data = useStats(props.directory.id, loadingCount);
 
-const localStats = computed(() => data.value?.directory?.stats);
+const directoryData = computed(() => {
+  const node = data.value?.node;
+  return node?.__typename === "Directory" ? node : undefined;
+});
+const localStats = computed(() => directoryData.value?.stats);
 const loading = computed(() => loadingCount.value > 0);
-const directoryPath = computed(() => data.value?.directory?.path ?? "");
+const directoryPath = computed(() => directoryData.value?.path ?? "");
 
 function sortedRatingCounts(
   ratingCounts: RatingCountFragment[],

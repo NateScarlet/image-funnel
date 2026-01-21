@@ -81,6 +81,7 @@ import {
   CreateSessionDocument,
   GetDirectoriesDocument,
   GetMetaDocument,
+  GetRootDirectoryDocument,
 } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import StarSelector from "./StarSelector.vue";
@@ -101,13 +102,27 @@ const { data: metaData } = useQuery(GetMetaDocument, {
   loadingCount,
 });
 
+const { data: rootData } = useQuery(GetRootDirectoryDocument, {
+  variables: () => (selectedDirectoryId.value === "" ? {} : undefined),
+  loadingCount,
+});
+
 const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
-  variables: () => ({ id: selectedDirectoryId.value }),
+  variables: () =>
+    selectedDirectoryId.value !== ""
+      ? { id: selectedDirectoryId.value }
+      : undefined,
   loadingCount,
 });
 
 const loading = computed(() => loadingCount.value > 0);
-const currentDirectory = computed(() => directoriesData.value?.directory);
+const currentDirectory = computed(() => {
+  if (selectedDirectoryId.value === "") {
+    return rootData.value?.rootDirectory;
+  }
+  const node = directoriesData.value?.node;
+  return node?.__typename === "Directory" ? node : undefined;
+});
 const directories = computed(() => currentDirectory.value?.directories || []);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 

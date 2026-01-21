@@ -37,10 +37,10 @@ export default function useDirectoryStats() {
 
     // 自动同步到全局缓存
     watch(
-      () => data.value?.directory,
-      (directory) => {
-        if (directory?.id) {
-          statsCache.set(directory.id, directory.stats ?? null);
+      () => data.value?.node,
+      (node) => {
+        if (node?.__typename === "Directory") {
+          statsCache.set(node.id, node.stats ?? null);
         }
       },
       { immediate: true },

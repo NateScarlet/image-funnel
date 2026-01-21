@@ -8,6 +8,9 @@ import (
 	"main/internal/shared"
 )
 
+type Node interface {
+}
+
 type CommitChangesInput struct {
 	SessionID        scalar.ID            `json:"sessionId"`
 	WriteActions     *shared.WriteActions `json:"writeActions"`

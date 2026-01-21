@@ -1,8 +1,10 @@
 query GetDirectoryStats($id: ID!) {
-  directory(id: $id) {
-    ...Directory
-    stats {
-      ...DirectoryStats
+  node(id: $id) {
+    ... on Directory {
+      ...Directory
+      stats {
+        ...DirectoryStats
+      }
     }
   }
 }

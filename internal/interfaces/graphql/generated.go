@@ -119,9 +119,10 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Directory func(childComplexity int, id *scalar.ID) int
-		Meta      func(childComplexity int) int
-		Session   func(childComplexity int, id scalar.ID) int
+		Meta          func(childComplexity int) int
+		Node          func(childComplexity int, id scalar.ID) int
+		RootDirectory func(childComplexity int) int
+		Session       func(childComplexity int, id scalar.ID) int
 	}
 
 	RatingCount struct {
@@ -194,7 +195,8 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Meta(ctx context.Context) (*Meta, error)
-	Directory(ctx context.Context, id *scalar.ID) (*shared.DirectoryDTO, error)
+	Node(ctx context.Context, id scalar.ID) (Node, error)
+	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
 }
 type SessionResolver interface {
@@ -489,23 +491,29 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Mutation.UpdateSession(childComplexity, args["input"].(UpdateSessionInput)), true
 
-	case "Query.directory":
-		if e.complexity.Query.Directory == nil {
-			break
-		}
-
-		args, err := ec.field_Query_directory_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.Directory(childComplexity, args["id"].(*scalar.ID)), true
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
 			break
 		}
 
 		return e.complexity.Query.Meta(childComplexity), true
+	case "Query.node":
+		if e.complexity.Query.Node == nil {
+			break
+		}
+
+		args, err := ec.field_Query_node_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Node(childComplexity, args["id"].(scalar.ID)), true
+	case "Query.rootDirectory":
+		if e.complexity.Query.RootDirectory == nil {
+			break
+		}
+
+		return e.complexity.Query.RootDirectory(childComplexity), true
 	case "Query.session":
 		if e.complexity.Query.Session == nil {
 			break
@@ -861,7 +869,7 @@ directive @goField(
   ratingCounts: [RatingCount!]!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/directory.graphql", Input: `type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
+	{Name: "../../../graph/types/directory.graphql", Input: `type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
   path: String!
@@ -895,6 +903,10 @@ input ImageFiltersInput
 	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
   rootPath: String!
   version: String!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/node.graphql", Input: `interface Node {
+  id: ID!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/rating-count.graphql", Input: `type RatingCount {
@@ -941,10 +953,11 @@ input ImageFiltersInput
 `, BuiltIn: false},
 	{Name: "../../../graph/queries/base.graphql", Input: `type Query {
   meta: Meta!
+  node(id: ID!): Node
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/queries/directory.graphql", Input: `extend type Query {
-  directory(id: ID): Directory
+	{Name: "../../../graph/queries/root-directory.graphql", Input: `extend type Query {
+  rootDirectory: Directory!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/queries/session.graphql", Input: `extend type Query {
@@ -1130,10 +1143,10 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_directory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_node_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
 	if err != nil {
 		return nil, err
 	}
@@ -2578,24 +2591,64 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_directory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_node(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_directory,
+		ec.fieldContext_Query_node,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Directory(ctx, fc.Args["id"].(*scalar.ID))
+			return ec.resolvers.Query().Node(ctx, fc.Args["id"].(scalar.ID))
 		},
 		nil,
-		ec.marshalODirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		ec.marshalONode2mainᚋinternalᚋinterfacesᚋgraphqlᚐNode,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_node(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("FieldContext.Child cannot be called on type INTERFACE")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_node_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_rootDirectory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_rootDirectory,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().RootDirectory(ctx)
+		},
+		nil,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -2618,17 +2671,6 @@ func (ec *executionContext) fieldContext_Query_directory(ctx context.Context, fi
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_directory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -5568,6 +5610,26 @@ func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context,
 
 // region    ************************** interface.gotpl ***************************
 
+func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj Node) graphql.Marshaler {
+	switch obj := (obj).(type) {
+	case nil:
+		return graphql.Null
+	case shared.DirectoryDTO:
+		return ec._Directory(ctx, sel, &obj)
+	case *shared.DirectoryDTO:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Directory(ctx, sel, obj)
+	default:
+		if typedObj, ok := obj.(graphql.Marshaler); ok {
+			return typedObj
+		} else {
+			panic(fmt.Errorf("unexpected type %T; non-generated variants of Node must implement graphql.Marshaler", obj))
+		}
+	}
+}
+
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
@@ -5671,7 +5733,7 @@ func (ec *executionContext) _CreateSessionPayload(ctx context.Context, sel ast.S
 	return out
 }
 
-var directoryImplementors = []string{"Directory"}
+var directoryImplementors = []string{"Directory", "Node"}
 
 func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, directoryImplementors)
@@ -6216,7 +6278,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "directory":
+		case "node":
 			field := field
 
 			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
@@ -6225,7 +6287,29 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_directory(ctx, field)
+				res = ec._Query_node(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "rootDirectory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_rootDirectory(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -7860,13 +7944,6 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalODirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryDTO) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._Directory(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStatsDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -7881,22 +7958,6 @@ func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx conte
 }
 
 func (ec *executionContext) marshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
-	return v
-}
-
-func (ec *executionContext) unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
-	if v == nil {
-		return nil, nil
-	}
-	var res = new(scalar.ID)
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v *scalar.ID) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
 	return v
 }
 
@@ -7979,6 +8040,13 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) marshalONode2mainᚋinternalᚋinterfacesᚋgraphqlᚐNode(ctx context.Context, sel ast.SelectionSet, v Node) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Node(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.SessionDTO) graphql.Marshaler {

@@ -1,3 +1,4 @@
 type Query {
   meta: Meta!
+  node(id: ID!): Node
 }

@@ -1,4 +1,4 @@
-type Directory @goModel(model: "main/internal/shared.DirectoryDTO") {
+type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
   path: String!

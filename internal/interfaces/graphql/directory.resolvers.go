@@ -7,7 +7,6 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
 	"main/internal/shared"
 )
 
@@ -19,14 +18,6 @@ func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO)
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error) {
 	return r.app.Directories(ctx, obj.ID)
-}
-
-// Directory is the resolver for the directory field.
-func (r *queryResolver) Directory(ctx context.Context, id *scalar.ID) (*shared.DirectoryDTO, error) {
-	if id == nil {
-		return r.app.Directory(ctx, scalar.ID{})
-	}
-	return r.app.Directory(ctx, *id)
 }
 
 // Directory returns DirectoryResolver implementation.
