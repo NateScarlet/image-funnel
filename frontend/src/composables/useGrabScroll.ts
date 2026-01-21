@@ -18,6 +18,9 @@ function posOf(e: PointerEvent) {
 
 export default function useGrabScroll(
   el: MaybeRefOrGetter<HTMLElement | null | undefined>,
+  options?: {
+    beforeStart?: (e: PointerEvent) => boolean;
+  },
 ): Disposable {
   function setup(stack: DisposableStack, el: HTMLElement) {
     const oldCursor = el.style.cursor;
@@ -41,6 +44,7 @@ export default function useGrabScroll(
       createEventListeners(el, ({ on }) => {
         on("pointerdown", (e) => {
           if (!e.isPrimary) return;
+          if (options?.beforeStart && !options.beforeStart(e)) return;
           e.preventDefault();
           isGrabbing = true;
           render();

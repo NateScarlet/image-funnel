@@ -141,10 +141,12 @@ const {
   image,
   nextImages = [],
   locked = false,
+  allowPan,
 } = defineProps<{
   image: ImageFragment;
   nextImages?: ImageFragment[];
   locked?: boolean;
+  allowPan?: (e: PointerEvent) => boolean;
 }>();
 
 const containerRef = ref<HTMLElement>();
@@ -173,11 +175,16 @@ const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 
 const activeContainer = computed(() => (locked ? null : containerRef.value));
 
-useGrabScroll(() => {
-  if (!zoom.fitContainer.value) {
-    return activeContainer.value;
-  }
-});
+useGrabScroll(
+  () => {
+    if (!zoom.fitContainer.value) {
+      return activeContainer.value;
+    }
+  },
+  {
+    beforeStart: allowPan,
+  },
+);
 
 const imgEl = useTemplateRef("imgEl");
 const loadedId = ref("");

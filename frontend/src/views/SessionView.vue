@@ -67,6 +67,7 @@
             :image="currentImage"
             :next-images="session?.nextImages ?? []"
             :locked="isImageLocked"
+            :allow-pan="handleAllowPan"
           >
             <template #info="{ isFullscreen }">
               <span class="lg:min-w-24 hidden md:block">
@@ -284,6 +285,13 @@ function handleKeyDown(e: KeyboardEvent) {
 }
 
 const isBottomHalf = (y: number) => y > window.innerHeight / 2;
+
+function handleAllowPan(e: PointerEvent) {
+  if (e.pointerType === "touch" && isBottomHalf(e.clientY)) {
+    return false;
+  }
+  return true;
+}
 
 function handleTouchStart(e: TouchEvent) {
   const touch = e.changedTouches[0];
