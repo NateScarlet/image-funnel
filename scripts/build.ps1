@@ -44,7 +44,18 @@ if ($Frontend) {
     Write-Host "构建前端项目..."
     Push-Location $FRONTEND_DIR
     pnpm install
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ 前端依赖安装失败"
+        Pop-Location
+        exit 1
+    }
+
     pnpm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ 前端构建失败"
+        Pop-Location
+        exit 1
+    }
     Pop-Location
 
     # 复制前端构建文件
