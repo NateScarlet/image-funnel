@@ -1,9 +1,7 @@
 import type {
-  ApolloQueryResult,
   ObservableQuery,
   OperationVariables,
   TypedDocumentNode,
-  WatchQueryOptions,
 } from "@apollo/client/core";
 import { NetworkStatus } from "@apollo/client/core";
 import type { Ref } from "vue";
@@ -11,8 +9,9 @@ import { computed, shallowRef, watch } from "vue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
 import { isEqual } from "es-toolkit";
+import type { ApolloClient } from "@apollo/client";
 
-function isLoading(v: ApolloQueryResult<unknown> | undefined): boolean {
+function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
   return (
     v == null ||
     v.loading ||
@@ -30,7 +29,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     context?: OperationContext;
     loadingCount?: Ref<number>;
   } & Pick<
-    WatchQueryOptions<TVariables>,
+    ApolloClient.WatchQueryOptions<TData, TVariables>,
     "fetchPolicy" | "nextFetchPolicy" | "errorPolicy" | "pollInterval"
   > = {},
 ): {
@@ -44,12 +43,12 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     apolloClient.watchQuery({
       ...options,
       query: document,
-      variables: options.variables?.(),
+      variables: options.variables?.() as TVariables,
       notifyOnNetworkStatusChange: true,
     }),
     (i) => i.stopPolling(),
   );
-  const resultBuffer = shallowRef<{ v?: ApolloQueryResult<TData> }>();
+  const resultBuffer = shallowRef<{ v?: ObservableQuery.Result<TData> }>();
   const resultModel = computed({
     get() {
       return resultBuffer.value?.v;
@@ -81,7 +80,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     );
   }
   function read() {
-    resultModel.value = query.getCurrentResult(true);
+    resultModel.value = query.getCurrentResult();
   }
   function run(variables?: TVariables) {
     const stack = new DisposableStack();
@@ -95,7 +94,6 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
       }
       stack.adopt(
         query.subscribe({
-          start: read,
           next: read,
           error: () => undefined,
         }),
@@ -127,7 +125,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     stack.use(run());
   }
   return {
-    data: computed(() => resultModel.value?.data),
+    data: computed(() => resultModel.value?.data) as Ref<TData | undefined>,
     query,
     [Symbol.dispose]: () => stack.dispose(),
   };

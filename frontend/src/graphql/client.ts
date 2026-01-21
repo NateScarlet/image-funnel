@@ -5,6 +5,7 @@ import {
   createHttpLink,
   split,
 } from "@apollo/client/core";
+import { CombinedGraphQLErrors } from "@apollo/client/errors";
 import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { onError } from "@apollo/client/link/error";
 import { createPersistedQueryLink } from "@apollo/client/link/persisted-queries";
@@ -67,7 +68,7 @@ const httpOrBatchLink = split(
   persistedQueryLink.concat(batchHttpLink),
 );
 
-const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
+const errorLink = onError(({ error, operation }) => {
   const knownMessages = new Set();
   const errorOnce = (msg: string) => {
     if (knownMessages.has(msg)) {
@@ -80,6 +81,15 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
   const context = operation.getContext() as OperationContext;
   const suppressError = context.suppressError;
+
+  let graphQLErrors: readonly GraphQLFormattedError[] | undefined;
+  let networkError: Error | undefined;
+
+  if (CombinedGraphQLErrors.is(error)) {
+    graphQLErrors = error.errors;
+  } else {
+    networkError = error;
+  }
 
   if (graphQLErrors) {
     let shouldSuppress = false;

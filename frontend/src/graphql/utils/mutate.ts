@@ -2,8 +2,8 @@ import type {
   MutationFetchPolicy,
   OperationVariables,
   TypedDocumentNode,
-  FetchResult,
   ErrorPolicy,
+  ApolloClient,
 } from "@apollo/client/core";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
@@ -16,9 +16,10 @@ export default function mutate<TData, TVariables extends OperationVariables>(
     fetchPolicy?: MutationFetchPolicy;
     errorPolicy?: ErrorPolicy;
   } = {},
-): Promise<FetchResult<TData>> {
-  return apolloClient.mutate({
+): Promise<ApolloClient.MutateResult<TData>> {
+  return apolloClient.mutate<TData, TVariables>({
     ...options,
     mutation: document,
-  });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
 }
