@@ -5,6 +5,25 @@ $BUILD_DIR = Join-Path $ROOT_DIR "build/latest"
 $BINARY = Join-Path $BUILD_DIR "image-funnel.exe"
 # #endregion
 
+# #region 密钥生成
+$BASE_BUILD_DIR = Join-Path $ROOT_DIR "build"
+$SECRET_FILE = Join-Path $BASE_BUILD_DIR ".secret"
+
+if (-not (Test-Path $BASE_BUILD_DIR)) {
+    New-Item -ItemType Directory -Path $BASE_BUILD_DIR -Force | Out-Null
+}
+
+if (-not (Test-Path $SECRET_FILE)) {
+    Write-Host "生成新的应用密钥..." -ForegroundColor Cyan
+    $bytes = New-Object Byte[] 32
+    $null = [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $secretString = [Convert]::ToBase64String($bytes)
+    $secretString | Out-File -FilePath $SECRET_FILE -Encoding utf8 -NoNewline
+}
+
+$env:IMAGE_FUNNEL_SECRET_KEY = Get-Content $SECRET_FILE -Raw
+# #endregion
+
 # #region 自动构建检查
 $needsBuild = $false
 
