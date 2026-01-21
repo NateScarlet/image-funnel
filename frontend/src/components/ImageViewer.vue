@@ -5,7 +5,8 @@
   >
     <div
       ref="containerRef"
-      class="flex-auto w-full h-64 overflow-auto flex items-center [scrollbar-gutter:stable]"
+      class="flex-auto w-full h-64 flex items-center [scrollbar-gutter:stable] overflow-auto"
+      :class="{ 'pointer-events-none': locked }"
       v-bind="!locked ? containerAttrs : {}"
     >
       <!-- zoom -->
