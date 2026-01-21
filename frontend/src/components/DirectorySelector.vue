@@ -88,10 +88,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue";
+import { computed, useTemplateRef, watch } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import useStorage from "../composables/useStorage";
+import useDirectoryProgress from "../composables/useDirectoryProgress";
 import type { DirectoryFragment } from "../graphql/generated";
 
 interface Props {
@@ -119,6 +120,8 @@ const { model: showCompletedDirectories } = useStorage<boolean>(
   "showCompletedDirectories@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
   () => false,
 );
+
+const { recordDirectoryOrder } = useDirectoryProgress();
 
 const statsByID = computed(
   () =>
@@ -162,6 +165,28 @@ const items = computed(() => {
 const completedCount = computed(() => {
   return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);
 });
+
+watch(
+  items,
+  (newItems) => {
+    const navigableDirectoryIds = newItems
+      .filter((item) => {
+        const keepCount =
+          item.stats?.ratingCounts.reduce(
+            (sum, rc) =>
+              sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
+            0,
+          ) ?? 0;
+        return keepCount > props.targetKeep;
+      })
+      .map((item) => item.dir.id);
+    recordDirectoryOrder(
+      props.currentDirectory?.id ?? "",
+      navigableDirectoryIds,
+    );
+  },
+  { deep: true },
+);
 
 function goToParent() {
   emit("go-to-parent");

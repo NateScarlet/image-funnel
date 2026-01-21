@@ -13,14 +13,23 @@
         :session-id="sessionId"
         :stats="stats"
         title=""
-        @committed="$emit('committed')"
+        @committed="handleCommitted"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRouter } from "vue-router";
+import useQuery from "../graphql/utils/useQuery";
+import mutate from "../graphql/utils/mutate";
+import {
+  GetSessionDocument,
+  CreateSessionDocument,
+} from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
+import useDirectoryProgress from "../composables/useDirectoryProgress";
 
 interface SessionStats {
   kept: number;
@@ -33,8 +42,47 @@ interface Props {
   stats?: SessionStats;
 }
 
-type Emits = (e: "committed") => void;
+const props = defineProps<Props>();
 
-defineProps<Props>();
-defineEmits<Emits>();
+const router = useRouter();
+const { getNextDirectory } = useDirectoryProgress();
+
+const { data: sessionData } = useQuery(GetSessionDocument, {
+  variables: () => ({ id: props.sessionId }),
+});
+
+const session = computed(() => sessionData.value?.session);
+
+async function handleCommitted() {
+  if (!session.value) {
+    router.push("/");
+    return;
+  }
+
+  const { directory, filter, targetKeep } = session.value;
+  const nextDirectoryId = getNextDirectory(
+    directory.parentId ?? "",
+    directory.id,
+  );
+
+  if (nextDirectoryId) {
+    const { data } = await mutate(CreateSessionDocument, {
+      variables: {
+        input: {
+          filter: {
+            rating: filter.rating ?? [],
+          },
+          targetKeep,
+          directoryId: nextDirectoryId,
+        },
+      },
+    });
+
+    if (data?.createSession) {
+      router.push(`/session/${data.createSession.session.id}`);
+    }
+  } else {
+    router.push("/");
+  }
+}
 </script>

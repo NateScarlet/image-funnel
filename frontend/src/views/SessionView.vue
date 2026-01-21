@@ -36,7 +36,6 @@
         v-else-if="isCompleted"
         :session-id="sessionId"
         :stats="stats"
-        @committed="onCommitted"
       />
 
       <div v-else-if="!currentImage" class="text-center text-slate-400">
@@ -105,7 +104,6 @@
       v-if="showCommitModal"
       :session-id="sessionId"
       @close="showCommitModal = false"
-      @committed="onCommitted"
     />
 
     <UpdateSessionModal
@@ -239,10 +237,6 @@ async function undo() {
   } finally {
     undoing.value = false;
   }
-}
-
-function onCommitted() {
-  router.push("/");
 }
 
 function handleKeyDown(e: KeyboardEvent) {
