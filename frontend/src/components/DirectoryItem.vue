@@ -9,7 +9,6 @@
     @click="select"
   >
     <DirectoryDisplay
-      ref="displayRef"
       :directory="{ id: directory.id }"
       :filter-rating="filterRating"
     >
@@ -39,12 +38,9 @@
           }}
         </span>
         <span
-          v-if="
-            displayStats?.subdirectoryCount &&
-            displayStats.subdirectoryCount > 0
-          "
+          v-if="stats?.subdirectoryCount && stats.subdirectoryCount > 0"
           class="flex-none px-2 py-0.5 text-xs bg-slate-700 rounded"
-          >{{ displayStats.subdirectoryCount }}子目录</span
+          >{{ stats.subdirectoryCount }}子目录</span
         >
       </template>
     </DirectoryDisplay>
@@ -52,11 +48,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue";
+import { computed } from "vue";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import useQuery from "../graphql/utils/useQuery";
 import { GetMetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
+import useDirectoryStats from "@/composables/useDirectoryStats";
 
 interface Props {
   directory: DirectoryFragment;
@@ -66,24 +63,23 @@ interface Props {
 
 const props = defineProps<Props>();
 
+const { getCachedStats } = useDirectoryStats();
+
 const selectedId = defineModel<string>();
 
 const { data: metaData } = useQuery(GetMetaDocument);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 
-const displayRef =
-  useTemplateRef<InstanceType<typeof DirectoryDisplay>>("displayRef");
-
-const displayStats = computed(() => displayRef.value?.stats?.directory?.stats);
+const stats = computed(() => getCachedStats(props.directory.id));
 
 const selected = computed(() => selectedId.value === props.directory.id);
 
 const isTargetMet = computed(() => {
-  const stats = displayRef.value?.stats?.directory?.stats;
-  if (!stats || !stats.ratingCounts || stats.imageCount === 0) {
+  const statsV = stats.value;
+  if (!statsV || !statsV.ratingCounts || statsV.imageCount === 0) {
     return false;
   }
-  const matchedCount = stats.ratingCounts
+  const matchedCount = statsV.ratingCounts
     .filter((rc: { rating: number; count: number }) =>
       props.filterRating.includes(rc.rating),
     )
@@ -97,8 +93,4 @@ const isTargetMet = computed(() => {
 function select() {
   selectedId.value = props.directory.id;
 }
-
-defineExpose({
-  stats: computed(() => displayRef.value?.stats),
-});
 </script>

@@ -57,9 +57,8 @@ import { computed, ref } from "vue";
 import { sortBy } from "es-toolkit";
 import RatingIcon from "./RatingIcon.vue";
 import { formatDate } from "../utils/date";
-import useQuery from "../graphql/utils/useQuery";
-import { GetDirectoryStatsDocument } from "../graphql/generated";
 import type { RatingCountFragment } from "../graphql/generated";
+import useDirectoryStats from "../composables/useDirectoryStats";
 
 interface Directory {
   id: string;
@@ -76,22 +75,17 @@ const props = withDefaults(defineProps<Props>(), {
 
 const loadingCount = ref(0);
 
-const { data: statsData } = useQuery(GetDirectoryStatsDocument, {
-  variables: () => ({ id: props.directory.id }),
-  loadingCount,
-});
+// 使用 useStats 自动查询和缓存
+const { useStats } = useDirectoryStats();
+const data = useStats(props.directory.id, loadingCount);
 
-const localStats = computed(() => statsData.value?.directory?.stats);
+const localStats = computed(() => data.value?.directory?.stats);
 const loading = computed(() => loadingCount.value > 0);
-const directoryPath = computed(() => statsData.value?.directory?.path ?? "");
+const directoryPath = computed(() => data.value?.directory?.path ?? "");
 
 function sortedRatingCounts(
   ratingCounts: RatingCountFragment[],
 ): RatingCountFragment[] {
   return sortBy(ratingCounts, [(rc) => rc.rating]);
 }
-
-defineExpose({
-  stats: statsData,
-});
 </script>

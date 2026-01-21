@@ -60,7 +60,6 @@
         <template v-for="item in items" :key="item.key">
           <DirectoryItem
             v-show="showCompletedDirectories || !item.isCompleted"
-            ref="directoryItemRefs"
             v-model="selectedId"
             :directory="item.dir"
             :filter-rating="filterRating"
@@ -88,11 +87,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef, watch } from "vue";
+import { computed, watch } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import useStorage from "../composables/useStorage";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
+import useDirectoryStats from "../composables/useDirectoryStats";
 import type { DirectoryFragment } from "../graphql/generated";
 
 interface Props {
@@ -110,9 +110,6 @@ const emit = defineEmits<{
   "go-to-parent": [];
 }>();
 
-const directoryItemRefs =
-  useTemplateRef<InstanceType<typeof DirectoryItem>[]>("directoryItemRefs");
-
 const selectedId = defineModel<string>();
 
 const { model: showCompletedDirectories } = useStorage<boolean>(
@@ -123,22 +120,16 @@ const { model: showCompletedDirectories } = useStorage<boolean>(
 
 const { recordDirectoryOrder } = useDirectoryProgress();
 
-const statsByID = computed(
-  () =>
-    new Map(
-      directoryItemRefs.value?.map(
-        (i) => [i.stats?.directory?.id, i.stats?.directory?.stats] as const,
-      ) || [],
-    ),
-);
+// 从缓存中获取统计信息
+const { getCachedStats } = useDirectoryStats();
 
 const items = computed(() => {
   return sortBy(
     props.directories.map((dir) => {
-      const stats = statsByID.value.get(dir.id);
+      const stats = getCachedStats(dir.id);
       const keepCount =
         stats?.ratingCounts.reduce(
-          (sum, rc) =>
+          (sum: number, rc: { rating: number; count: number }) =>
             sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
           0,
         ) ?? 0;
@@ -173,17 +164,17 @@ watch(
       .filter((item) => {
         const keepCount =
           item.stats?.ratingCounts.reduce(
-            (sum, rc) =>
+            (sum: number, rc: { rating: number; count: number }) =>
               sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
             0,
           ) ?? 0;
         return keepCount > props.targetKeep;
       })
       .map((item) => item.dir.id);
-    recordDirectoryOrder(
-      props.currentDirectory?.id ?? "",
-      navigableDirectoryIds,
-    );
+
+    if (props.currentDirectory?.id) {
+      recordDirectoryOrder(props.currentDirectory.id, navigableDirectoryIds);
+    }
   },
   { deep: true },
 );
