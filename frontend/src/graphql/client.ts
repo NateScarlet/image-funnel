@@ -4,6 +4,9 @@ import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { ErrorLink } from "@apollo/client/link/error";
 import { PersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
+import { createClient } from "graphql-ws";
+import { GraphQLWsLink } from "@apollo/client/link/subscriptions";
+import { getMainDefinition } from "@apollo/client/utilities";
 
 import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
@@ -54,6 +57,15 @@ const persistedQueryLink = new PersistedQueryLink({
   sha256: sha256Hash,
 });
 
+const wsUrl = new URL("graphql", document.baseURI);
+wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+const wsLink = new GraphQLWsLink(
+  createClient({
+    url: wsUrl.toString(),
+  }),
+);
+
 const httpOrBatchLink = ApolloLink.split(
   ({ variables, getContext }) => {
     return (
@@ -63,6 +75,21 @@ const httpOrBatchLink = ApolloLink.split(
   },
   persistedQueryLink.concat(httpLink),
   persistedQueryLink.concat(batchHttpLink),
+);
+
+const link = ApolloLink.split(
+  ({ query, getContext }) => {
+    if ((getContext() as OperationContext).transport === "ws") {
+      return true;
+    }
+    const definition = getMainDefinition(query);
+    return (
+      definition.kind === "OperationDefinition" &&
+      definition.operation === "subscription"
+    );
+  },
+  wsLink,
+  httpOrBatchLink,
 );
 
 const errorLink = new ErrorLink(({ error, operation }) => {
@@ -127,7 +154,7 @@ const errorLink = new ErrorLink(({ error, operation }) => {
 });
 
 export const apolloClient = new ApolloClient({
-  link: ApolloLink.from([errorLink, httpOrBatchLink]),
+  link: ApolloLink.from([errorLink, link]),
   cache: new PersistentCache(
     "apollo-cache-persist",
     1024 * 1024, // 1MB

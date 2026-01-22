@@ -147,10 +147,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
-  GetSessionDocument,
   MarkImageDocument,
   UndoDocument,
   ImageAction,
@@ -213,14 +211,14 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   return null;
 });
 
-const { data: sessionData } = useQuery(GetSessionDocument, {
-  variables: () => ({ id: sessionId }),
-  loadingCount,
-});
+import useSession from "../composables/useSession";
 
-const session = computed(() => sessionData.value?.session);
-const stats = computed(() => sessionData.value?.session?.stats);
-const currentImage = computed(() => sessionData.value?.session?.currentImage);
+// ... (keep other imports)
+
+const { session } = useSession(sessionId, { loadingCount });
+
+const stats = computed(() => session.value?.stats);
+const currentImage = computed(() => session.value?.currentImage);
 
 const isCompleted = computed(() => {
   return stats.value?.isCompleted || false;

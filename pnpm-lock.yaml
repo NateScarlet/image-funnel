@@ -44,6 +44,9 @@ importers:
       graphql-tag:
         specifier: ^2.12.6
         version: 2.12.6(graphql@16.12.0)
+      graphql-ws:
+        specifier: ^6.0.6
+        version: 6.0.6(graphql@16.12.0)(ws@7.4.5)
       vue:
         specifier: ^3.5.27
         version: 3.5.27(typescript@5.9.3)
@@ -5951,7 +5954,6 @@ snapshots:
       graphql: 16.12.0
     optionalDependencies:
       ws: 7.4.5
-    optional: true
 
   graphql-ws@6.0.6(graphql@16.12.0)(ws@8.19.0):
     dependencies:
