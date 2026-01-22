@@ -862,13 +862,6 @@ directive @goField(
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 `, BuiltIn: false},
-	{Name: "../../../graph/types/directory-stats.graphql", Input: `type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
-  imageCount: Int!
-  subdirectoryCount: Int!
-  latestImage: Image
-  ratingCounts: [RatingCount!]!
-}
-`, BuiltIn: false},
 	{Name: "../../../graph/types/directory.graphql", Input: `type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
@@ -878,14 +871,11 @@ directive @goField(
   directories: [Directory!]! @goField(forceResolver: true)
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/image-filters.graphql", Input: `type ImageFilters
-  @goModel(model: "main/internal/shared.ImageFilters") {
-  rating: [Int!]
-}
-
-input ImageFiltersInput
-  @goModel(model: "main/internal/shared.ImageFilters") {
-  rating: [Int!]!
+	{Name: "../../../graph/types/directory_stats.graphql", Input: `type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+  imageCount: Int!
+  subdirectoryCount: Int!
+  latestImage: Image
+  ratingCounts: [RatingCount!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/shared.ImageDTO") {
@@ -900,6 +890,16 @@ input ImageFiltersInput
   xmpExists: Boolean!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/types/image_filters.graphql", Input: `type ImageFilters
+  @goModel(model: "main/internal/shared.ImageFilters") {
+  rating: [Int!]
+}
+
+input ImageFiltersInput
+  @goModel(model: "main/internal/shared.ImageFilters") {
+  rating: [Int!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
   rootPath: String!
   version: String!
@@ -909,18 +909,9 @@ input ImageFiltersInput
   id: ID!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/rating-count.graphql", Input: `type RatingCount {
+	{Name: "../../../graph/types/rating_count.graphql", Input: `type RatingCount {
   rating: Int!
   count: Int!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/session-stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
-  total: Int!
-  kept: Int!
-  reviewed: Int!
-  rejected: Int!
-  remaining: Int!
-  isCompleted: Boolean!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/shared.SessionDTO") {
@@ -939,13 +930,22 @@ input ImageFiltersInput
   nextImages(count: Int): [Image!]!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/types/write-actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
+	{Name: "../../../graph/types/session_stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
+  total: Int!
+  kept: Int!
+  reviewed: Int!
+  rejected: Int!
+  remaining: Int!
+  isCompleted: Boolean!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/write_actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
   pendingRating: Int!
   rejectRating: Int!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/enums/image-action.graphql", Input: `enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
+	{Name: "../../../graph/enums/image_action.graphql", Input: `enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   KEEP
   PENDING
   REJECT
@@ -956,7 +956,7 @@ input ImageFiltersInput
   node(id: ID!): Node
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/queries/root-directory.graphql", Input: `extend type Query {
+	{Name: "../../../graph/queries/root_directory.graphql", Input: `extend type Query {
   rootDirectory: Directory!
 }
 `, BuiltIn: false},

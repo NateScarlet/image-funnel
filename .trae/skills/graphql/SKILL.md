@@ -79,7 +79,7 @@ GraphQL 相关文件分为两个目录：
 - 每个 enum 单独一个文件，放在 `graph/enums/` 目录
 - Query 使用 `extend type Query` 形式定义，除了 `base.graphql` 中的 meta
 - Subscription 使用 `extend type Subscription` 形式定义
-- 文件命名使用 kebab-case（如 `image-filters.graphql`）
+- 文件命名使用 snake_case（如 `image_filters.graphql`）
 
 ## 常见任务
 
