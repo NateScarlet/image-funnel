@@ -156,7 +156,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		SessionUpdated func(childComplexity int, sessionID scalar.ID) int
+		SessionUpdated func(childComplexity int, id scalar.ID) int
 	}
 
 	UndoPayload struct {
@@ -208,7 +208,7 @@ type SessionResolver interface {
 	NextImages(ctx context.Context, obj *shared.SessionDTO, count *int) ([]*shared.ImageDTO, error)
 }
 type SubscriptionResolver interface {
-	SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error)
+	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
 }
 
 type executableSchema struct {
@@ -670,7 +670,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Subscription.SessionUpdated(childComplexity, args["sessionId"].(scalar.ID)), true
+		return e.complexity.Subscription.SessionUpdated(childComplexity, args["id"].(scalar.ID)), true
 
 	case "UndoPayload.clientMutationId":
 		if e.complexity.UndoPayload.ClientMutationID == nil {
@@ -968,7 +968,7 @@ input ImageFiltersInput
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
-  sessionUpdated(sessionId: ID!): Session!
+  sessionUpdated(id: ID!): Session!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/commit_changes.graphql", Input: `input CommitChangesInput {
@@ -1182,11 +1182,11 @@ func (ec *executionContext) field_Session_nextImages_args(ctx context.Context, r
 func (ec *executionContext) field_Subscription_sessionUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
 	if err != nil {
 		return nil, err
 	}
-	args["sessionId"] = arg0
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -3556,7 +3556,7 @@ func (ec *executionContext) _Subscription_sessionUpdated(ctx context.Context, fi
 		ec.fieldContext_Subscription_sessionUpdated,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Subscription().SessionUpdated(ctx, fc.Args["sessionId"].(scalar.ID))
+			return ec.resolvers.Subscription().SessionUpdated(ctx, fc.Args["id"].(scalar.ID))
 		},
 		nil,
 		ec.marshalNSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,

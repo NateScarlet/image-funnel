@@ -16,7 +16,7 @@ export default function useSession(
   });
 
   useSubscription(SessionUpdatedDocument, {
-    variables: () => ({ sessionId: toValue(id) }),
+    variables: () => ({ id: toValue(id) }),
   });
 
   const session = computed(() => data.value?.session);

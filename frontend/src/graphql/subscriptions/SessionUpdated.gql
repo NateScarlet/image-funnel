@@ -1,5 +1,5 @@
-subscription SessionUpdated($sessionId: ID!) {
-  sessionUpdated(sessionId: $sessionId) {
+subscription SessionUpdated($id: ID!) {
+  sessionUpdated(id: $id) {
     ...Session
   }
 }
