@@ -28,7 +28,7 @@ func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string
 	key := fmt.Sprintf("%s|%d|%d", srcPath, width, quality)
 
 	result, err, _ := p.group.Do(key, func() (interface{}, error) {
-		return p.next.Process(ctx, srcPath, width, quality)
+		return p.next.Process(context.Background(), srcPath, width, quality)
 	})
 
 	if err != nil {

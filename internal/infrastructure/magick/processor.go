@@ -69,6 +69,10 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		cmd.Stderr = b
 
 		if err := cmd.Run(); err != nil {
+			// If the context was canceled, return that error specifically so the caller knows it wasn't a process failure.
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, b.String())
 		}
 		return nil
