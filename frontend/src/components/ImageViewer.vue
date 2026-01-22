@@ -141,7 +141,7 @@ const {
   image,
   nextImages = [],
   locked = false,
-  allowPan,
+  allowPan = () => true,
 } = defineProps<{
   image: ImageFragment;
   nextImages?: ImageFragment[];
