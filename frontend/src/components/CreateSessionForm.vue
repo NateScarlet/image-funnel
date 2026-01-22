@@ -96,30 +96,36 @@ const { presets, getPreset, lastSelectedPresetId } = usePresets();
 
 const loadingCount = ref(0);
 const creatingSession = ref(false);
-const selectedDirectoryId = ref<string>("");
 
 const { data: metaData } = useQuery(GetMetaDocument, {
   loadingCount,
 });
 
 const { data: rootData } = useQuery(GetRootDirectoryDocument, {
-  variables: () => (selectedDirectoryId.value === "" ? {} : undefined),
   loadingCount,
 });
 
+const selectedDirectoryIdBuffer = ref<string>();
+const selectedDirectoryId = computed({
+  get() {
+    return (
+      selectedDirectoryIdBuffer.value ?? rootData.value?.rootDirectory.id ?? ""
+    );
+  },
+  set(v) {
+    selectedDirectoryIdBuffer.value = v;
+  },
+});
+
 const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
-  variables: () =>
-    selectedDirectoryId.value !== ""
-      ? { id: selectedDirectoryId.value }
-      : undefined,
+  variables: () => ({
+    id: selectedDirectoryId.value,
+  }),
   loadingCount,
 });
 
 const loading = computed(() => loadingCount.value > 0);
 const currentDirectory = computed(() => {
-  if (selectedDirectoryId.value === "") {
-    return rootData.value?.rootDirectory;
-  }
   const node = directoriesData.value?.node;
   return node?.__typename === "Directory" ? node : undefined;
 });
