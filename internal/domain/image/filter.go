@@ -4,6 +4,7 @@ import (
 	"main/internal/shared"
 )
 
+// TODO: refactor to filter builder
 func BuildImageFilter(filter *shared.ImageFilters) func(*Image) bool {
 	if filter == nil || len(filter.Rating) == 0 {
 		return func(img *Image) bool {

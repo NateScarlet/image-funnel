@@ -31,8 +31,9 @@ func NewHandler(
 		sessionService: sessionService,
 		eventBus:       eventBus,
 		urlSigner:      urlSigner,
-		dtoFactory:     NewSessionDTOFactory(urlSigner),
-		logger:         logger,
+		// TODO: 应该注入而不是创建
+		dtoFactory: NewSessionDTOFactory(urlSigner),
+		logger:     logger,
 	}
 }
 
@@ -65,18 +66,7 @@ func (h *Handler) CreateSession(
 		}
 	}()
 
-	sess, err := h.sessionService.Create(ctx, id, directoryId, filter, target_keep)
-	if err != nil {
-		return fmt.Errorf("failed to initialize session: %w", err)
-	}
-
-	sessionDTO, err := h.dtoFactory.New(sess)
-	if err != nil {
-		return fmt.Errorf("failed to create session DTO: %w", err)
-	}
-	h.eventBus.PublishSession(ctx, sessionDTO)
-
-	return nil
+	return h.sessionService.Create(ctx, id, directoryId, filter, target_keep)
 }
 
 func (h *Handler) MarkImage(
@@ -106,18 +96,7 @@ func (h *Handler) MarkImage(
 		}
 	}()
 
-	sess, err := h.sessionService.MarkImage(sessionID, imageID, action)
-	if err != nil {
-		return fmt.Errorf("failed to mark image: %w", err)
-	}
-
-	sessionDTO, err := h.dtoFactory.New(sess)
-	if err != nil {
-		return fmt.Errorf("failed to create session DTO: %w", err)
-	}
-	h.eventBus.PublishSession(ctx, sessionDTO)
-
-	return nil
+	return h.sessionService.MarkImage(ctx, sessionID, imageID, action)
 }
 
 func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
@@ -137,18 +116,7 @@ func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
 		}
 	}()
 
-	sess, err := h.sessionService.Undo(sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to undo: %w", err)
-	}
-
-	sessionDTO, err := h.dtoFactory.New(sess)
-	if err != nil {
-		return fmt.Errorf("failed to create session DTO: %w", err)
-	}
-	h.eventBus.PublishSession(ctx, sessionDTO)
-
-	return nil
+	return h.sessionService.Undo(ctx, sessionID)
 }
 
 func (h *Handler) Commit(
@@ -189,15 +157,7 @@ func (h *Handler) Commit(
 	}
 
 	writeActions := session.NewWriteActions(keepRating, pendingRating, rejectRating)
-	success, errors = h.sessionService.Commit(sess, writeActions)
-
-	sessionDTO, err := h.dtoFactory.New(sess)
-	if err != nil {
-		return success, append(errors, fmt.Errorf("failed to create session DTO: %w", err))
-	}
-	h.eventBus.PublishSession(ctx, sessionDTO)
-
-	return success, errors
+	return h.sessionService.Commit(ctx, sess, writeActions)
 }
 
 func (h *Handler) Session(ctx context.Context, sessionID scalar.ID) (*shared.SessionDTO, error) {
@@ -298,16 +258,5 @@ func (h *Handler) UpdateSession(
 		options = append(options, session.WithFilter(filter))
 	}
 
-	sess, err := h.sessionService.Update(ctx, sessionID, options...)
-	if err != nil {
-		return fmt.Errorf("failed to update session: %w", err)
-	}
-
-	sessionDTO, err := h.dtoFactory.New(sess)
-	if err != nil {
-		return fmt.Errorf("failed to create session DTO: %w", err)
-	}
-	h.eventBus.PublishSession(ctx, sessionDTO)
-
-	return nil
+	return h.sessionService.Update(ctx, sessionID, options...)
 }

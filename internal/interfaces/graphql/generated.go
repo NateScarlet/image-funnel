@@ -156,7 +156,8 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		SessionUpdated func(childComplexity int, id scalar.ID) int
+		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
+		SessionUpdated   func(childComplexity int, id scalar.ID) int
 	}
 
 	UndoPayload struct {
@@ -209,6 +210,7 @@ type SessionResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
+	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
 }
 
 type executableSchema struct {
@@ -660,6 +662,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.SessionStats.Total(childComplexity), true
 
+	case "Subscription.directoryChanged":
+		if e.complexity.Subscription.DirectoryChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_directoryChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.DirectoryChanged(childComplexity, args["filterBy"].(*shared.DirectoryFilters)), true
 	case "Subscription.sessionUpdated":
 		if e.complexity.Subscription.SessionUpdated == nil {
 			break
@@ -727,6 +740,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCommitChangesInput,
 		ec.unmarshalInputCreateSessionInput,
+		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputUndoInput,
@@ -967,6 +981,18 @@ input ImageFiltersInput
   session(id: ID!): Session
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/directory_changed.graphql", Input: `extend type Subscription {
+  directoryChanged(filterBy: DirectoryFilters): Directory!
+}
+
+input DirectoryFilters
+  @goModel(model: "main/internal/shared.DirectoryFilters") {
+  """
+  目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录
+  """
+  id: [ID!]
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
   sessionUpdated(id: ID!): Session!
 }
@@ -1176,6 +1202,17 @@ func (ec *executionContext) field_Session_nextImages_args(ctx context.Context, r
 		return nil, err
 	}
 	args["count"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_directoryChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalODirectoryFilters2ᚖmainᚋinternalᚋsharedᚐDirectoryFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
 	return args, nil
 }
 
@@ -3617,6 +3654,61 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_directoryChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_directoryChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().DirectoryChanged(ctx, fc.Args["filterBy"].(*shared.DirectoryFilters))
+		},
+		nil,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_directoryChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UndoPayload_session(ctx context.Context, field graphql.CollectedField, obj *UndoPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5411,6 +5503,33 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, obj any) (shared.DirectoryFilters, error) {
+	var it shared.DirectoryFilters
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (shared.ImageFilters, error) {
 	var it shared.ImageFilters
 	asMap := map[string]any{}
@@ -6715,6 +6834,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionUpdated":
 		return ec._Subscription_sessionUpdated(ctx, fields[0])
+	case "directoryChanged":
+		return ec._Subscription_directoryChanged(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -7947,6 +8068,14 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) unmarshalODirectoryFilters2ᚖmainᚋinternalᚋsharedᚐDirectoryFilters(ctx context.Context, v any) (*shared.DirectoryFilters, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputDirectoryFilters(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStatsDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -7962,6 +8091,42 @@ func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx conte
 
 func (ec *executionContext) marshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, v any) ([]scalar.ID, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]scalar.ID, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []scalar.ID) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2mainᚋinternalᚋscalarᚐID(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageDTO) graphql.Marshaler {

@@ -2,6 +2,8 @@ package image
 
 import (
 	"context"
+
+	"main/internal/shared"
 )
 
 type Processor interface {
@@ -9,10 +11,5 @@ type Processor interface {
 	// If width and quality are 0, it returns the original path.
 	Process(ctx context.Context, srcPath string, width, quality int) (string, error)
 
-	Meta(ctx context.Context, srcPath string) (*ImageMeta, error)
-}
-
-type ImageMeta struct {
-	Width  int
-	Height int
+	Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error)
 }

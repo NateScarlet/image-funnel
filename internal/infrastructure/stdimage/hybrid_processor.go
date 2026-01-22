@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	appimage "main/internal/application/image"
+	"main/internal/shared"
 
 	_ "golang.org/x/image/webp"
 )
@@ -30,7 +31,7 @@ func (p *HybridProcessor) Process(ctx context.Context, srcPath string, width, qu
 	return p.fallback.Process(ctx, srcPath, width, quality)
 }
 
-func (p *HybridProcessor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMeta, error) {
+func (p *HybridProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
 	ext := strings.ToLower(filepath.Ext(srcPath))
 
 	switch ext {
@@ -41,7 +42,7 @@ func (p *HybridProcessor) Meta(ctx context.Context, srcPath string) (*appimage.I
 	}
 }
 
-func (p *HybridProcessor) getImageMeta(srcPath string) (*appimage.ImageMeta, error) {
+func (p *HybridProcessor) getImageMeta(srcPath string) (*shared.ImageMeta, error) {
 	file, err := os.Open(srcPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image: %w", err)
@@ -53,7 +54,7 @@ func (p *HybridProcessor) getImageMeta(srcPath string) (*appimage.ImageMeta, err
 		return nil, fmt.Errorf("failed to decode image config: %w", err)
 	}
 
-	return &appimage.ImageMeta{
+	return &shared.ImageMeta{
 		Width:  config.Width,
 		Height: config.Height,
 	}, nil

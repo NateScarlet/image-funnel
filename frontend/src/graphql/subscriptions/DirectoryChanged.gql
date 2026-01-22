@@ -1,0 +1,5 @@
+subscription DirectoryChanged($id: [ID!]) {
+  directoryChanged(filterBy: { id: $id }) {
+    id
+  }
+}

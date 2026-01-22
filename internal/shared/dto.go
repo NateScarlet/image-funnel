@@ -6,6 +6,19 @@ import (
 	"main/internal/scalar"
 )
 
+// FileChangedEvent 文件变更事件 - 应用层事件，包含目录ID
+type FileChangedEvent struct {
+	DirectoryID scalar.ID // 变更文件所在的目录ID
+	RelPath     string    // 文件路径
+	Action      FileAction
+	OccurredAt  time.Time
+}
+
+// DirectoryFilters 目录查询过滤器
+type DirectoryFilters struct {
+	ID []scalar.ID // 目录ID列表，空表示所有目录
+}
+
 // DirectoryDTO 目录数据传输对象
 type DirectoryDTO struct {
 	ID       scalar.ID
@@ -67,4 +80,10 @@ type WriteActions struct {
 	KeepRating    int
 	PendingRating int
 	RejectRating  int
+}
+
+// ImageMeta 图片元数据
+type ImageMeta struct {
+	Width  int
+	Height int
 }

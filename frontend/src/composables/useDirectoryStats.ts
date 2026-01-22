@@ -5,8 +5,13 @@ import {
   toValue,
   type Ref,
 } from "vue";
+import { debounce } from "es-toolkit";
 import useQuery from "../graphql/utils/useQuery";
-import { GetDirectoryStatsDocument } from "../graphql/generated";
+import useSubscription from "../graphql/utils/useSubscription";
+import {
+  GetDirectoryStatsDocument,
+  DirectoryChangedDocument,
+} from "../graphql/generated";
 import type { DirectoryStatsFragment } from "../graphql/generated";
 
 // 全局统计信息缓存
@@ -30,11 +35,28 @@ export default function useDirectoryStats() {
     loadingCount?: Ref<number>,
   ) {
     // 执行 GraphQL 查询
-    const { data } = useQuery(GetDirectoryStatsDocument, {
+    const { data, query } = useQuery(GetDirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
       context: {
         transport: "http",
+      },
+    });
+
+    // 防抖的 refetch 函数
+    const debouncedRefetch = debounce(() => {
+      query.refetch();
+    }, 1000);
+
+    // 订阅目录变化
+    useSubscription(DirectoryChangedDocument, {
+      variables: () => ({ id: [toValue(directoryId)] }),
+      onNext: (result) => {
+        const changedId = result.data?.directoryChanged.id;
+        // 当收到当前目录的变更通知时，重新获取数据
+        if (changedId === toValue(directoryId)) {
+          debouncedRefetch();
+        }
       },
     });
 

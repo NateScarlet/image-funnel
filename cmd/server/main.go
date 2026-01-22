@@ -15,9 +15,11 @@ import (
 
 	"main/internal/apperror"
 	"main/internal/application"
-	"main/internal/application/directory"
+	appdirectory "main/internal/application/directory"
 	appimage "main/internal/application/image"
 	appsession "main/internal/application/session"
+	domdirectory "main/internal/domain/directory"
+	"main/internal/domain/image"
 	"main/internal/domain/session"
 	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
@@ -105,14 +107,28 @@ func main() {
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(hybridProcessor)
 
-	dirScanner := localfs.NewScanner(absRootDir, metadataRepo, imageProcessor)
-	sessionService := session.NewService(sessionRepo, metadataRepo, dirScanner)
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionDTO]()
-	eventBus := ebus.NewEventBus(sessionTopic)
+	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
+	dirRepo := inmem.NewDirectoryRepository(absRootDir)
+	dirScanner := localfs.NewScanner(absRootDir, imageFactory, dirRepo)
+
+	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.Session]()
+	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
+	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, appsession.NewSessionDTOFactory(signer))
+
+	fileWatcher := localfs.NewWatcher(logger)
+	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, absRootDir, dirRepo, logger)
+	defer dirServiceCleanup()
+
+	// Watch root dir
+	// Service will start watching rootDir automatically
+
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic)
+	defer sessionCleanup()
 
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
+
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
-	directoryHandler := directory.NewHandler(dirScanner, imageDTOFactory)
+	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)
 

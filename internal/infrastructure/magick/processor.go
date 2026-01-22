@@ -10,6 +10,7 @@ import (
 	"os/exec"
 
 	appimage "main/internal/application/image"
+	"main/internal/shared"
 	"main/internal/util"
 )
 
@@ -81,7 +82,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	return cachePath, err
 }
 
-func (p *Processor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMeta, error) {
+func (p *Processor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
 	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", srcPath)
 	output, err := cmd.Output()
 	if err != nil {
@@ -94,7 +95,7 @@ func (p *Processor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMe
 		return nil, fmt.Errorf("failed to parse image dimensions: %w", err)
 	}
 
-	return &appimage.ImageMeta{
+	return &shared.ImageMeta{
 		Width:  width,
 		Height: height,
 	}, nil

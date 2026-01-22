@@ -1,0 +1,11 @@
+extend type Subscription {
+  directoryChanged(filterBy: DirectoryFilters): Directory!
+}
+
+input DirectoryFilters
+  @goModel(model: "main/internal/shared.DirectoryFilters") {
+  """
+  目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录
+  """
+  id: [ID!]
+}

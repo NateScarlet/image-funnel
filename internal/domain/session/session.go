@@ -1,6 +1,7 @@
 package session
 
 import (
+	"iter"
 	"main/internal/apperror"
 	"main/internal/domain/image"
 	"main/internal/scalar"
@@ -96,6 +97,7 @@ type Session struct {
 	updatedAt   time.Time            // 会话最后更新时间
 
 	queue      []*image.Image                   // 当前待处理的图片队列
+	images     map[scalar.ID]*image.Image       // 会话中所有历史图片
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []UndoEntry                      // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
@@ -124,8 +126,10 @@ type RoundSnapshot struct {
 // - images: 待处理的图片集合
 func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
+	imagesMap := make(map[scalar.ID]*image.Image)
 	for _, img := range images {
 		actions[img.ID()] = shared.ImageActionPending
+		imagesMap[img.ID()] = img
 	}
 	return &Session{
 		id:           id,
@@ -135,6 +139,7 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),
 		queue:        images,
+		images:       imagesMap,
 		currentIdx:   0,
 		undoStack:    make([]UndoEntry, 0),
 		actions:      actions,
@@ -317,29 +322,20 @@ func (s *Session) stats() *Stats {
 		}
 	}
 
-	stats.rejected += len(s.actions) - len(s.queue)
+	// 计算被 "丢弃" 的图片数量（即曾经有过操作记录，但在当前队列中不存在的图片）
+	// 这通常发生在 session 重新组织（NextRound）时，未保留的图片被移出队列
+	// 或者 AddImage 添加的新图片尚未有操作记录（不计入丢弃）
+
+	// 使用 images map 记录了会话中所有历史图片
+	// queue 记录了当前待处理（Pending + Kept）的图片
+	// 因此，rejected (丢弃/排除) = 总数 - 当前队列长度
+	stats.rejected += len(s.images) - len(s.queue)
 
 	// 计算isCompleted字段
-	if stats.remaining > 0 {
-		// 还有剩余图片，会话未完成
-		stats.isCompleted = false
-	} else {
-		// 没有剩余图片，根据处理结果判断
-		if stats.kept > 0 || stats.reviewed > 0 {
-			// 计算新队列长度（保留和稍后再看的图片）
-			newQueueLength := stats.kept + stats.reviewed
-			if newQueueLength <= stats.targetKeep {
-				// 新队列长度小于等于目标保留数量，会话完成
-				stats.isCompleted = true
-			} else {
-				// 新队列长度大于目标保留数量，会开启新一轮筛选，会话未完成
-				stats.isCompleted = false
-			}
-		} else {
-			// 所有图片都被标记为排除，会话完成
-			stats.isCompleted = true
-		}
-	}
+	// 会话完成条件：
+	// 1. 所有图片都已处理 (remaining == 0)
+	// 2. 且保留和稍后再看的图片数量不超过目标保留数量 (否则需要开启新一轮)
+	stats.isCompleted = stats.remaining == 0 && (stats.kept+stats.reviewed <= stats.targetKeep)
 
 	return &stats
 }
@@ -433,7 +429,31 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	return nil
 }
 
+// addFilteredImage 添加新图片到会话
+// 如果图片符合过滤器且不在队列中，则添加
+func (s *Session) addFilteredImage(img *image.Image) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 检查是否已经在队列中
+	if _, existing := s.images[img.ID()]; existing {
+		return nil
+	}
+
+	s.queue = append(s.queue, img)
+	s.images[img.ID()] = img
+	// 注意：不设置 s.actions[img.ID()]，因为 actions 仅存储用户显式操作
+	// 默认状态为 Pending 由 Action() 方法处理
+	s.updatedAt = time.Now()
+
+	// 如果会话已完成，添加新图片后可能变为未完成
+	// stats() 会自动计算
+
+	return nil
+}
+
 // Undo 撤销上一次图片标记操作，恢复到之前的状态
+
 func (s *Session) Undo() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -463,30 +483,19 @@ func (s *Session) Undo() error {
 	return nil
 }
 
-func (s *Session) Images() []*image.Image {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if len(s.roundHistory) == 0 {
-		// 当前是第一轮，队列就是所有图片
-		return s.queue
-	}
-	// 返回第一轮的图片队列
-	return s.roundHistory[0].queue
-}
+func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
+	return func(yield func(*image.Image, shared.ImageAction) bool) {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
 
-func (s *Session) Action(imageID scalar.ID) shared.ImageAction {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if action, exists := s.actions[imageID]; exists {
-		return action
+		for _, img := range s.images {
+			if action, ok := s.actions[img.ID()]; ok {
+				if !yield(img, action) {
+					return
+				}
+			}
+		}
 	}
-	return shared.ImageActionPending
-}
-
-func (s *Session) SetAction(imageID scalar.ID, action shared.ImageAction) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.actions[imageID] = action
 }
 
 // UndoEntry 表示一个可撤销的操作条目，用于存储图片操作的历史状态

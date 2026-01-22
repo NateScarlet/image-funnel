@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
+	"main/internal/infrastructure/inmem"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,10 @@ import (
 )
 
 func newTestScanner(t *testing.T) *Scanner {
-	return NewScanner(t.TempDir(), newMockMetadataRepository(), nil)
+	factory := domainimage.NewFactory(newMockMetadataRepository(), nil)
+	rootDir := t.TempDir()
+	dirRepo := inmem.NewDirectoryRepository(rootDir)
+	return NewScanner(rootDir, factory, dirRepo)
 }
 
 func TestNewScanner(t *testing.T) {
@@ -85,8 +89,8 @@ func collectImages(seq iter.Seq2[*domainimage.Image, error]) []*domainimage.Imag
 	return images
 }
 
-func collectDirInfos(seq iter.Seq2[*directory.DirectoryInfo, error]) []*directory.DirectoryInfo {
-	var dirs []*directory.DirectoryInfo
+func collectDirInfos(seq iter.Seq2[*directory.Directory, error]) []*directory.Directory {
+	var dirs []*directory.Directory
 	for dir, err := range seq {
 		if err != nil {
 			return nil

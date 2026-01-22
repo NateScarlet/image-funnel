@@ -10,25 +10,23 @@ import (
 	"slices"
 	"strings"
 
-	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
-	"main/internal/domain/metadata"
 	"main/internal/iterator"
 	"main/internal/util"
 )
 
 type Scanner struct {
-	rootDir   string
-	xmpRepo   metadata.Repository
-	processor appimage.Processor
+	rootDir      string
+	imageFactory *domainimage.Factory
+	dirRepo      directory.Repository
 }
 
-func NewScanner(rootDir string, xmpRepo metadata.Repository, processor appimage.Processor) *Scanner {
+func NewScanner(rootDir string, imageFactory *domainimage.Factory, dirRepo directory.Repository) *Scanner {
 	return &Scanner{
-		rootDir:   rootDir,
-		xmpRepo:   xmpRepo,
-		processor: processor,
+		rootDir:      rootDir,
+		imageFactory: imageFactory,
+		dirRepo:      dirRepo,
 	}
 }
 
@@ -54,47 +52,28 @@ func (s *Scanner) Scan(ctx context.Context, relPath string) iter.Seq2[*domainima
 					return true
 				}
 
-				if !s.isSupportedImage(entry.Name()) {
-					return true
-				}
-
-				path := filepath.Join(absPath, entry.Name())
+				absFilePath := filepath.Join(absPath, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
 					return yield(nil, err)
 				}
 
-				var xmpData *metadata.XMPData
-
-				xmpData, err = s.xmpRepo.Read(path)
+				img, err := s.imageFactory.CreateFromInfo(ctx, info, absFilePath)
 				if err != nil {
 					return yield(nil, err)
 				}
-
-				width, height := 0, 0
-				if s.processor != nil {
-					meta, err := s.processor.Meta(ctx, path)
-					if err == nil {
-						width, height = meta.Width, meta.Height
-					}
+				if img == nil {
+					return true // Not supported or skipped
 				}
 
-				return yield(domainimage.NewImageFromPath(
-					entry.Name(),
-					path,
-					info.Size(),
-					info.ModTime(),
-					xmpData,
-					width,
-					height,
-				), nil)
+				return yield(img, nil)
 			},
 		)
 	}
 }
 
-func (s *Scanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.DirectoryInfo, error] {
-	return func(yield func(*directory.DirectoryInfo, error) bool) {
+func (s *Scanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+	return func(yield func(*directory.Directory, error) bool) {
 		if relPath != "" {
 			if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
 				yield(nil, err)
@@ -119,7 +98,13 @@ func (s *Scanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2
 			}
 
 			subRelPath := filepath.Join(relPath, entry.Name())
-			dirInfo := directory.NewDirectoryInfo(subRelPath)
+			dirInfo, err := s.dirRepo.GetByPath(ctx, subRelPath)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
 
 			if !yield(dirInfo, nil) {
 				break
@@ -158,43 +143,22 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 			continue
 		}
 
-		if !s.isSupportedImage(entry.Name()) {
-			continue
-		}
+		// Optimization: Check extension before full create to skip unsupported files early?
+		// Factory handles it, but check here saves an os.Stat?
+		// We already have DirEntry info, so CreateFromInfo is efficient.
 
-		imageCount++
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
 
 		imagePath := filepath.Join(absPath, entry.Name())
-
-		var xmpData *metadata.XMPData
-
-		xmpData, err = s.xmpRepo.Read(imagePath)
-		if err != nil {
-			xmpData = nil
+		img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath)
+		if err != nil || img == nil {
+			continue
 		}
 
-		width, height := 0, 0
-		if s.processor != nil {
-			meta, err := s.processor.Meta(ctx, imagePath)
-			if err == nil {
-				width, height = meta.Width, meta.Height
-			}
-		}
-
-		img := domainimage.NewImageFromPath(
-			entry.Name(),
-			imagePath,
-			info.Size(),
-			info.ModTime(),
-			xmpData,
-			width,
-			height,
-		)
-
+		imageCount++
 		if latestImage == nil || info.ModTime().After(latestImage.ModTime()) {
 			latestImage = img
 		}
@@ -204,9 +168,8 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 	return directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
 }
 
-func (s *Scanner) isSupportedImage(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".avif"
+func (s *Scanner) LookupImage(ctx context.Context, relPath string) (*domainimage.Image, error) {
+	return s.imageFactory.Create(ctx, relPath, s.rootDir)
 }
 
 var _ directory.Scanner = (*Scanner)(nil)

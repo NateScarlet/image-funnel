@@ -14,3 +14,15 @@ var (
 )
 
 type ImageAction = enum.Enum[ImageActionMeta]
+
+type FileActionMeta struct{}
+
+var fileAction = enum.New[FileActionMeta]()
+var (
+	FileActionCreate = fileAction.Define("CREATE")
+	FileActionWrite  = fileAction.Define("WRITE")
+	FileActionRemove = fileAction.Define("REMOVE")
+	FileActionRename = fileAction.Define("RENAME")
+)
+
+type FileAction = enum.Enum[FileActionMeta]

@@ -37,22 +37,24 @@ func (s *DirectoryStats) RatingCounts() map[int]int {
 	return s.ratingCounts
 }
 
-type DirectoryInfo struct {
+type Directory struct {
 	id   scalar.ID
 	path string
 }
 
-func NewDirectoryInfo(path string) *DirectoryInfo {
-	return &DirectoryInfo{
-		id:   EncodeID(path),
+// FromRepository 从仓库创建目录
+// 不要用作构建函数
+func FromRepository(id scalar.ID, path string) *Directory {
+	return &Directory{
+		id:   id,
 		path: path,
 	}
 }
 
-func (d *DirectoryInfo) ID() scalar.ID {
+func (d *Directory) ID() scalar.ID {
 	return d.id
 }
 
-func (d *DirectoryInfo) Path() string {
+func (d *Directory) Path() string {
 	return d.path
 }

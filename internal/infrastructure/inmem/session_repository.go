@@ -1,6 +1,8 @@
 package inmem
 
 import (
+	"iter"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ const (
 
 type SessionRepository struct {
 	sessions        map[scalar.ID]*session.Session
+	dirIndex        map[scalar.ID][]scalar.ID
 	mu              sync.RWMutex
 	nextCleanupTime time.Time
 }
@@ -26,13 +29,28 @@ type SessionRepository struct {
 func NewSessionRepository() *SessionRepository {
 	return &SessionRepository{
 		sessions: make(map[scalar.ID]*session.Session),
+		dirIndex: make(map[scalar.ID][]scalar.ID),
 	}
 }
 
 func (r *SessionRepository) Save(sess *session.Session) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Check if update or new
+	_, exists := r.sessions[sess.ID()]
 	r.sessions[sess.ID()] = sess
+
+	// Update directory index if new
+	if !exists {
+		dirID := sess.DirectoryID()
+		// Simple append, assuming no duplicates because we check 'exists' in sessions
+		r.dirIndex[dirID] = append(r.dirIndex[dirID], sess.ID())
+	} else {
+		// If directory ID could change, we would need to handle that, but typically it doesn't.
+		// If it did, we'd need to remove from old and add to new.
+		// For now assuming DirectoryID is immutable for a session as per domain logic usually.
+	}
 
 	// 触发清理机制
 	r.cleanup()
@@ -59,10 +77,41 @@ func (r *SessionRepository) FindAll() ([]*session.Session, error) {
 	return result, nil
 }
 
+func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[*session.Session, error] {
+	return func(yield func(*session.Session, error) bool) {
+		r.mu.RLock()
+		var s []*session.Session // 复制避免迭代过程中保存导致死锁
+		for _, i := range r.dirIndex[directoryID] {
+			s = append(s, r.sessions[i])
+		}
+		r.mu.RUnlock()
+
+		for _, sess := range s {
+			if !yield(sess, nil) {
+				return
+			}
+		}
+	}
+}
+
 func (r *SessionRepository) Delete(id scalar.ID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.sessions, id)
+
+	if sess, ok := r.sessions[id]; ok {
+		dirID := sess.DirectoryID()
+		if ids, ok := r.dirIndex[dirID]; ok {
+			newIDs := slices.DeleteFunc(ids, func(e scalar.ID) bool {
+				return e == id
+			})
+			if len(newIDs) == 0 {
+				delete(r.dirIndex, dirID)
+			} else {
+				r.dirIndex[dirID] = newIDs
+			}
+		}
+		delete(r.sessions, id)
+	}
 	return nil
 }
 

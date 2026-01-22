@@ -7,6 +7,7 @@ import (
 )
 
 type EventBus interface {
-	PublishSession(ctx context.Context, sessionDTO *shared.SessionDTO)
+	PublishFileChanged(ctx context.Context, event *shared.FileChangedEvent)
+	SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error]
 	SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error]
 }

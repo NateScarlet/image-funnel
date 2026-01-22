@@ -17,7 +17,7 @@ func NewDirectoryDTOFactory(imageDTOFactory *appimage.ImageDTOFactory) *Director
 	}
 }
 
-func (f *DirectoryDTOFactory) New(dirInfo *directory.DirectoryInfo, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
+func (f *DirectoryDTOFactory) New(dirInfo *directory.Directory, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
 	return &shared.DirectoryDTO{
 		ID:       dirInfo.ID(),
 		ParentID: parentID,

@@ -1,7 +1,11 @@
 package directory
 
+import (
+	"context"
+	"main/internal/scalar"
+)
+
 type Repository interface {
-	Save(dir *DirectoryInfo) error
-	FindByPath(path string) (*DirectoryInfo, error)
-	FindAll() ([]*DirectoryInfo, error)
+	Get(ctx context.Context, id scalar.ID) (*Directory, error)
+	GetByPath(ctx context.Context, path string) (*Directory, error)
 }

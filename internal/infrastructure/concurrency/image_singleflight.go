@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	appimage "main/internal/application/image"
+	"main/internal/shared"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -38,7 +39,7 @@ func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string
 	return result.(string), nil
 }
 
-func (p *SingleFlightImageProcessor) Meta(ctx context.Context, srcPath string) (*appimage.ImageMeta, error) {
+func (p *SingleFlightImageProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
 	return p.next.Meta(ctx, srcPath)
 }
 

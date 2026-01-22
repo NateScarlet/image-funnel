@@ -30,6 +30,7 @@ image-funnel/
 - 代码逻辑块之间添加对理解上下文有帮助的注释，使用中文，避免简单翻译代码本身
 - 长段关联的代码　用 vscode的 region comment （例如　`// #region {分组名称}` `// #endregion` ）包裹
 - 不要手动修改生成的代码，而是用对应的脚本重新生成
+- 优先使用 `scripts/build.ps1`，避免直接运行底层命名
 - **frontend:** 修改后，使用 `pnpm check` 检查
 - **backend:** 修改后，使用 `go test --timeout 30s` 检查
 - **backend:** 用 zap 给应用层命令添加日志，duration 字段记录耗时，日志消息使用小写字母开头，并遵循“句子片段”的风格，而不是完整的英文句子，不重复其他字段的内容（success/failed是在重复日志级别字段），长耗时操作前后的日志使用 will / did 前缀区分
@@ -39,6 +40,9 @@ image-funnel/
 - **go:** 使用 `var _` 编译时检查确保接口实现正确
 - **go:** 不要给查询方法添加 Get 前缀，直接用大写名称。比如不要 `GetSession()`，而应该直接 `Session()`
 - **go:** 使用 `main/internal/apperror` 包返回业务错误
+- **go:** 枚举放在 `internal/shared/enums.go`
+- **go:** 使用 `iter.Seq` `iter.Seq2[T, error]` 模式，减少数组分配
+- **go:** 构建函数使用 `New` 前缀，如果需要清理，将清理函数作为第二个返回值返回
 - **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
 - **js:** 使用 es-toolkit　代替 lodash （它假设现代浏览器，不提供已经被浏览器原生支持的功能）
 - **ts:** 直接使用 @/graphql/generated 生成的 GraphQL 类型，避免手动定义
