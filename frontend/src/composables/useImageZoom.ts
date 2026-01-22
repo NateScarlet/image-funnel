@@ -224,6 +224,7 @@ export default function useImageZoom({
         transitionProperty: toValue(allowTransition) ? "width,height" : "none",
         transitionDuration: "0.3s",
         transitionTimingFunction: "ease-in-out",
+        willChange: toValue(allowTransition) ? "width,height" : "auto",
       } as StyleValue,
     };
   });
