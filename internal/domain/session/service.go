@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
@@ -9,6 +10,8 @@ import (
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"os"
+	"path/filepath"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,6 +29,7 @@ type Service struct {
 	eventBus     EventBus
 	logger       *zap.Logger
 	sessionSaved pubsub.Topic[*Session]
+	rootDir      string
 }
 
 func NewService(
@@ -35,6 +39,7 @@ func NewService(
 	eventBus EventBus,
 	logger *zap.Logger,
 	sessionSaved pubsub.Topic[*Session],
+	rootDir string,
 ) (*Service, func()) {
 	s := &Service{
 		sessionRepo:  sessionRepo,
@@ -43,6 +48,7 @@ func NewService(
 		eventBus:     eventBus,
 		logger:       logger,
 		sessionSaved: sessionSaved,
+		rootDir:      rootDir,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -61,25 +67,24 @@ func (s *Service) subscribeFileChanges(ctx context.Context) {
 			s.logger.Error("failed to receive file changed event", zap.Error(err))
 			continue
 		}
-		if e.Action == shared.FileActionCreate {
-			if err := s.handleFileCreate(ctx, e); err != nil {
-				s.logger.Error("failed to handle file create",
-					zap.String("relPath", e.RelPath),
-					zap.Stringer("directoryID", e.DirectoryID),
-					zap.Error(err))
-			}
+		if err := s.handleFileChange(ctx, e); err != nil {
+			s.logger.Error("failed to handle file changed event",
+				zap.Stringer("action", e.Action),
+				zap.String("relPath", e.RelPath),
+				zap.Stringer("directoryID", e.DirectoryID),
+				zap.Error(err))
 		}
 	}
 }
 
-func (s *Service) handleFileCreate(ctx context.Context, e *shared.FileChangedEvent) error {
-	// 先获取图片，避免每个会话重复获取
-	img, err := s.dirScanner.LookupImage(ctx, e.RelPath)
-	if err != nil {
-		return err
-	}
-	if img == nil {
-		return nil
+func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEvent) error {
+	var img *image.Image
+	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite {
+		var err error
+		img, err = s.dirScanner.LookupImage(ctx, e.RelPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	for sess, err := range s.sessionRepo.FindByDirectory(e.DirectoryID) {
@@ -87,25 +92,25 @@ func (s *Service) handleFileCreate(ctx context.Context, e *shared.FileChangedEve
 			return err
 		}
 
-		filterFunc := image.BuildImageFilter(sess.Filter())
-		if !filterFunc(img) {
-			continue
+		changed := false
+		if img != nil {
+			// 创建或更新
+			filterFunc := image.BuildImageFilter(sess.Filter())
+			changed = sess.UpdateImageByPath(img, filterFunc(img))
+		} else {
+			// 删除，或未获取到图片的创建/更新（按删除处理）
+			changed = sess.RemoveImageByPath(filepath.Join(s.rootDir, e.RelPath))
 		}
 
-		if err := sess.addFilteredImage(img); err != nil {
-			s.logger.Warn("failed to add image to session",
-				zap.Stringer("sessionID", sess.ID()),
-				zap.String("imagePath", e.RelPath),
-				zap.Error(err))
-			continue
+		if changed {
+			if err := s.sessionRepo.Save(sess); err != nil {
+				s.logger.Error("failed to save session",
+					zap.Stringer("sessionID", sess.ID()),
+					zap.Error(err))
+				continue
+			}
+			s.sessionSaved.Publish(ctx, sess)
 		}
-		if err := s.sessionRepo.Save(sess); err != nil {
-			s.logger.Error("failed to save session",
-				zap.Stringer("sessionID", sess.ID()),
-				zap.Error(err))
-			continue
-		}
-		s.sessionSaved.Publish(ctx, sess)
 	}
 
 	return nil
@@ -136,7 +141,7 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 }
 
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *WriteActions) (int, []error) {
-	var errors []error
+	var errs []error
 	success := 0
 
 	for img, action := range session.Actions() {
@@ -153,21 +158,29 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *Wr
 			continue
 		}
 
+		if _, err := os.Stat(img.Path()); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			errs = append(errs, err)
+			continue
+		}
+
 		xmpData := metadata.NewXMPData(rating, action.String(), time.Now())
 
 		if err := s.metadataRepo.Write(img.Path(), xmpData); err != nil {
-			errors = append(errors, err)
+			errs = append(errs, err)
 			continue
 		}
 		success++
 	}
 	if err := s.sessionRepo.Save(session); err != nil {
-		errors = append(errors, err)
+		errs = append(errs, err)
 	}
 
 	s.sessionSaved.Publish(ctx, session)
 
-	return success, errors
+	return success, errs
 }
 
 // Update 更新会话配置

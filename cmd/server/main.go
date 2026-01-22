@@ -122,7 +122,7 @@ func main() {
 	// Watch root dir
 	// Service will start watching rootDir automatically
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic, absRootDir)
 	defer sessionCleanup()
 
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
