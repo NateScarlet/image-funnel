@@ -161,6 +161,7 @@ function handleToggleFullscreen() {
 const zoom = useImageZoom({
   container: containerRef,
   size: () => image,
+  allowTransition: () => loaded.value,
 });
 const {
   containerAttrs,
@@ -257,7 +258,6 @@ useEventListeners(containerRef, ({ on }) => {
           zoom.scrollAnchor.value = anchor;
           initialAnchorImage = anchor.image;
         }
-        zoom.isTransitionEnabled.value = false;
       }
     },
     { passive: false },
@@ -294,7 +294,6 @@ useEventListeners(containerRef, ({ on }) => {
     const touchEvent = e as TouchEvent;
     if (touchEvent.touches.length < 2) {
       initialPinchDistance = 0;
-      zoom.isTransitionEnabled.value = true;
       zoom.scrollAnchor.value = undefined;
       initialAnchorImage = undefined;
     }

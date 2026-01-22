@@ -13,6 +13,7 @@ export default function useImageZoom({
     return 10 ** Math.round(Math.log10(v) - 1);
   },
   renderer = container,
+  allowTransition = true,
 }: {
   /** 滚动容器 */
   container: MaybeRefOrGetter<HTMLElement | null | undefined>;
@@ -24,12 +25,12 @@ export default function useImageZoom({
   fallbackZoomOutStep?: (current: number) => number;
   /** 实际渲染图片的元素，应该图片本身一样大（可以滚动），默认为 container */
   renderer?: MaybeRefOrGetter<HTMLElement | null | undefined>;
+  allowTransition?: MaybeRefOrGetter<boolean>;
 }) {
   const { contentBoxWidth, contentBoxHeight } = useElementSize(container);
   const fitContainerBuffer = ref<boolean>();
 
   const zoomBuffer = ref<number>();
-  const isTransitionEnabled = ref(true);
 
   // 缩放后保持滚动位置不变
   const scrollAnchor = ref<{
@@ -220,7 +221,7 @@ export default function useImageZoom({
               width: `${zoomAsPercentModel.value}%`,
               height: `${zoomAsPercentModel.value}%`,
             }),
-        transitionProperty: isTransitionEnabled.value ? "width,height" : "none",
+        transitionProperty: toValue(allowTransition) ? "width,height" : "none",
         transitionDuration: "0.3s",
         transitionTimingFunction: "ease-in-out",
       } as StyleValue,
@@ -267,7 +268,6 @@ export default function useImageZoom({
     contentBoxWidth,
     toggleZoom,
     containerAttrs,
-    isTransitionEnabled,
     scrollAnchor,
     anchorFromClientPosition,
   };
