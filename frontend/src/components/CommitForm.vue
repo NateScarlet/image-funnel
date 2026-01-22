@@ -29,15 +29,21 @@
       <h3 class="font-medium mb-4">写入操作设置</h3>
       <div class="space-y-4">
         <div>
-          <label class="block text-sm text-primary-400 mb-2">保留图片评分</label>
+          <label class="block text-sm text-primary-400 mb-2"
+            >保留图片评分</label
+          >
           <StarSelector v-model="writeActions.keepRating" mode="single" />
         </div>
         <div>
-          <label class="block text-sm text-primary-400 mb-2">稍后图片评分</label>
+          <label class="block text-sm text-primary-400 mb-2"
+            >稍后图片评分</label
+          >
           <StarSelector v-model="writeActions.pendingRating" mode="single" />
         </div>
         <div>
-          <label class="block text-sm text-primary-400 mb-2">排除图片评分</label>
+          <label class="block text-sm text-primary-400 mb-2"
+            >排除图片评分</label
+          >
           <StarSelector v-model="writeActions.rejectRating" mode="single" />
         </div>
       </div>

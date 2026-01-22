@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   schema: [
     "../graph/scalars.graphql",
     "../graph/directives.graphql",

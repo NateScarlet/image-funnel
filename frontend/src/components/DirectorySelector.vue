@@ -1,7 +1,9 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
-      <label class="block text-sm font-medium text-primary-300"> 选择目录 </label>
+      <label class="block text-sm font-medium text-primary-300">
+        选择目录
+      </label>
       <template v-if="completedCount">
         <label class="flex items-center gap-2 cursor-pointer">
           <span class="text-sm text-primary-400"
