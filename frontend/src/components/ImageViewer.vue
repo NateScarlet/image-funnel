@@ -242,17 +242,16 @@ let initialAnchorImage: { x: number; y: number } | undefined;
 useEventListeners(containerRef, ({ on }) => {
   on(
     "touchstart",
-    (e: Event) => {
+    (e) => {
       if (locked) return;
-      const touchEvent = e as TouchEvent;
-      if (touchEvent.touches.length === 2) {
+      if (e.touches.length === 2) {
         e.preventDefault();
         e.stopPropagation();
-        initialPinchDistance = getTouchDistance(touchEvent.touches);
+        initialPinchDistance = getTouchDistance(e.touches);
         initialZoom = zoom.zoom.value;
 
         // Set anchor based on initial finger position
-        const center = getTouchCenter(touchEvent.touches);
+        const center = getTouchCenter(e.touches);
         const anchor = zoom.anchorFromClientPosition(center);
         if (anchor) {
           zoom.scrollAnchor.value = anchor;
@@ -265,18 +264,17 @@ useEventListeners(containerRef, ({ on }) => {
 
   on(
     "touchmove",
-    (e: Event) => {
-      const touchEvent = e as TouchEvent;
-      if (touchEvent.touches.length === 2) {
+    (e) => {
+      if (e.touches.length === 2) {
         e.preventDefault();
         e.stopPropagation();
-        const currentDistance = getTouchDistance(touchEvent.touches);
+        const currentDistance = getTouchDistance(e.touches);
         if (initialPinchDistance > 0) {
           const scale = currentDistance / initialPinchDistance;
           zoom.zoom.value = Math.max(0.1, Math.min(10, initialZoom * scale));
 
           // Update anchor to track finger movement (panning while zooming)
-          const center = getTouchCenter(touchEvent.touches);
+          const center = getTouchCenter(e.touches);
           const currentAnchor = zoom.anchorFromClientPosition(center);
           if (currentAnchor && initialAnchorImage) {
             zoom.scrollAnchor.value = {
@@ -290,9 +288,8 @@ useEventListeners(containerRef, ({ on }) => {
     { passive: false },
   );
 
-  on("touchend", (e: Event) => {
-    const touchEvent = e as TouchEvent;
-    if (touchEvent.touches.length < 2) {
+  on("touchend", (e) => {
+    if (e.touches.length < 2) {
       initialPinchDistance = 0;
       zoom.scrollAnchor.value = undefined;
       initialAnchorImage = undefined;
