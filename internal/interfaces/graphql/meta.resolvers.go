@@ -7,8 +7,6 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
-	"strings"
 )
 
 // Meta is the resolver for the meta field.
@@ -18,16 +16,3 @@ func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
 		Version:  r.version,
 	}, nil
 }
-
-// Node is the resolver for the node field.
-func (r *queryResolver) Node(ctx context.Context, id scalar.ID) (Node, error) {
-	if strings.HasPrefix(id.String(), "dir:") {
-		return r.app.Directory(ctx, id)
-	}
-	return nil, nil
-}
-
-// Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-type queryResolver struct{ *Resolver }
