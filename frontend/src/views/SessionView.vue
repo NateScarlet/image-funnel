@@ -110,7 +110,7 @@
     </main>
 
     <footer
-      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 flex-shrink-0 hidden [@media(min-height:512px)]:block"
+      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0 hidden [@media(min-height:512px)]:block"
     >
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
