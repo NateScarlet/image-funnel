@@ -3,11 +3,11 @@
     <div class="text-center mb-8">
       <div class="text-6xl mb-4">🎉</div>
       <h2 class="text-3xl font-bold mb-2 text-white">筛选完成！</h2>
-      <p class="text-slate-400">已处理目录中的所有图片</p>
+      <p class="text-primary-400">已处理目录中的所有图片</p>
     </div>
 
     <div
-      class="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 shadow-xl backdrop-blur-sm"
+      class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
     >
       <CommitForm
         :session-id="sessionId"
@@ -18,9 +18,9 @@
     </div>
 
     <div v-if="nextDirectoryId" class="mt-6">
-      <p class="text-sm text-slate-400 mb-3">下一个目录</p>
+      <p class="text-sm text-primary-400 mb-3">下一个目录</p>
       <div
-        class="p-4 rounded-lg transition-all border-2 bg-slate-600 border-slate-500"
+        class="p-4 rounded-lg transition-all border-2 bg-primary-600 border-primary-500"
       >
         <DirectoryDisplay :directory="{ id: nextDirectoryId }" />
       </div>

@@ -17,7 +17,7 @@
         />
       </button>
     </div>
-    <div v-if="label" class="text-sm text-slate-400 mt-1">{{ label }}</div>
+    <div v-if="label" class="text-sm text-primary-400 mt-1">{{ label }}</div>
   </div>
 </template>
 

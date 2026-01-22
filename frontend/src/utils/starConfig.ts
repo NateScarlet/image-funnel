@@ -11,7 +11,7 @@ export interface StarConfig {
 export const STAR_CONFIGS: StarConfig[] = [
   {
     value: 0,
-    colorClass: "text-slate-500",
+    colorClass: "text-primary-500",
     label: "未评分",
     filledIcon: mdiStar,
     outlineIcon: mdiStarOutline,
@@ -55,5 +55,5 @@ export const STAR_CONFIGS: StarConfig[] = [
 
 export function getStarColorClass(rating: number): string {
   const config = STAR_CONFIGS.find((s) => s.value === rating);
-  return config?.colorClass || "text-slate-500";
+  return config?.colorClass || "text-primary-500";
 }

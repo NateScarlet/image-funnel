@@ -3,21 +3,21 @@
     class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     @click.self="$emit('close')"
   >
-    <div class="bg-slate-800 rounded-lg p-6 w-full max-w-md">
+    <div class="bg-primary-800 rounded-lg p-6 w-full max-w-md">
       <div class="mb-4">
         <h2 class="text-xl font-bold">修改筛选配置</h2>
-        <p class="text-slate-400 text-sm mt-1">调整目标保留数量和筛选条件</p>
+        <p class="text-primary-400 text-sm mt-1">调整目标保留数量和筛选条件</p>
       </div>
 
       <div class="space-y-4">
         <!-- 预设选择 -->
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-2">
+          <label class="block text-sm font-medium text-primary-300 mb-2">
             选择预设
           </label>
           <select
             v-model="selectedPresetId"
-            class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
+            class="w-full bg-primary-700 border border-primary-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
           >
             <option value="custom">自定义</option>
             <option
@@ -32,9 +32,9 @@
 
         <!-- 目标保留数量 -->
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-2">
+          <label class="block text-sm font-medium text-primary-300 mb-2">
             目标保留数量
-            <span class="text-slate-400 ml-2 text-xs"
+            <span class="text-primary-400 ml-2 text-xs"
               >({{ kept }} / {{ targetKeep }})</span
             >
           </label>
@@ -42,14 +42,14 @@
             v-model.number="targetKeep"
             type="number"
             min="1"
-            class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:border-transparent"
+            class="w-full bg-primary-700 border border-primary-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:border-transparent"
             placeholder="输入要保留的图片数量"
           />
         </div>
 
         <!-- 筛选条件 -->
         <div>
-          <label class="block text-sm font-medium text-slate-300 mb-2">
+          <label class="block text-sm font-medium text-primary-300 mb-2">
             筛选条件
           </label>
           <StarSelector v-model="rating" mode="multi" />
@@ -58,7 +58,7 @@
 
       <div class="mt-6 flex justify-end gap-3">
         <button
-          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
+          class="px-4 py-2 bg-primary-700 hover:bg-primary-600 rounded-lg text-sm transition-colors"
           @click="$emit('close')"
         >
           取消

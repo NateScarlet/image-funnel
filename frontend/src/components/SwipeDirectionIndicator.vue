@@ -7,7 +7,7 @@
         'bg-red-600/30': direction === 'DOWN',
         'bg-yellow-600/30': direction === 'UP',
         'bg-green-600/30': direction === 'LEFT',
-        'bg-slate-600/30': direction === 'RIGHT',
+        'bg-primary-600/30': direction === 'RIGHT',
       }"
     >
       <div class="text-6xl font-bold text-white drop-shadow-lg">

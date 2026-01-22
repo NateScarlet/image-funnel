@@ -1,10 +1,10 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
-      <label class="block text-sm font-medium text-slate-300"> 选择目录 </label>
+      <label class="block text-sm font-medium text-primary-300"> 选择目录 </label>
       <template v-if="completedCount">
         <label class="flex items-center gap-2 cursor-pointer">
-          <span class="text-sm text-slate-400"
+          <span class="text-sm text-primary-400"
             >显示已达标目录（{{ completedCount }}）</span
           >
           <div class="relative">
@@ -14,13 +14,13 @@
               class="sr-only peer"
             />
             <div
-              class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
+              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
             ></div>
           </div>
         </label>
       </template>
     </div>
-    <div class="bg-slate-700 rounded-lg p-4">
+    <div class="bg-primary-700 rounded-lg p-4">
       <div v-if="!currentDirectory?.root" class="mb-4">
         <button
           class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
@@ -69,16 +69,16 @@
       </div>
 
       <div v-else-if="loading" class="space-y-4">
-        <div class="bg-slate-700 rounded-lg p-4">
+        <div class="bg-primary-700 rounded-lg p-4">
           <div class="animate-pulse">
-            <div class="h-4 bg-slate-600 rounded mb-2 w-3/4"></div>
-            <div class="h-3 bg-slate-600 rounded w-1/2"></div>
+            <div class="h-4 bg-primary-600 rounded mb-2 w-3/4"></div>
+            <div class="h-3 bg-primary-600 rounded w-1/2"></div>
           </div>
         </div>
-        <div class="bg-slate-700 rounded-lg p-4">
+        <div class="bg-primary-700 rounded-lg p-4">
           <div class="animate-pulse">
-            <div class="h-4 bg-slate-600 rounded mb-2 w-3/4"></div>
-            <div class="h-3 bg-slate-600 rounded w-1/2"></div>
+            <div class="h-4 bg-primary-600 rounded mb-2 w-3/4"></div>
+            <div class="h-3 bg-primary-600 rounded w-1/2"></div>
           </div>
         </div>
       </div>

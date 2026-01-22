@@ -1,10 +1,10 @@
 <template>
   <div
     :class="[
-      'p-4 rounded-lg cursor-pointer transition-all border-2 bg-slate-600',
+      'p-4 rounded-lg cursor-pointer transition-all border-2 bg-primary-600',
       selected
         ? ' border-secondary-500 shadow-lg shadow-secondary-500/30'
-        : ' border-slate-500 hover:border-slate-400 hover:bg-slate-550',
+        : ' border-primary-500 hover:border-primary-400 hover:bg-primary-550',
     ]"
     @click="select"
   >
@@ -39,7 +39,7 @@
         </span>
         <span
           v-if="stats?.subdirectoryCount && stats.subdirectoryCount > 0"
-          class="flex-none px-2 py-0.5 text-xs bg-slate-700 rounded"
+          class="flex-none px-2 py-0.5 text-xs bg-primary-700 rounded"
           >{{ stats.subdirectoryCount }}子目录</span
         >
       </template>

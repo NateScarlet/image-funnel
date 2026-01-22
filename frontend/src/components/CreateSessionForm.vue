@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <div>
-      <label class="block text-sm font-medium text-slate-300 mb-4">
+      <label class="block text-sm font-medium text-primary-300 mb-4">
         选择评分预设
       </label>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -12,7 +12,7 @@
             'p-4 rounded-lg cursor-pointer transition-all border-2',
             selectedPresetId === preset.id
               ? 'bg-secondary-600 border-secondary-500 shadow-lg shadow-secondary-500/30'
-              : 'bg-slate-700 border-slate-600 hover:border-slate-500 hover:bg-slate-650',
+              : 'bg-primary-700 border-primary-600 hover:border-primary-500 hover:bg-primary-650',
           ]"
           @click="selectedPresetId = preset.id"
         >
@@ -22,16 +22,16 @@
       </div>
     </div>
 
-    <div v-if="selectedPreset" class="bg-slate-700 rounded-lg p-4">
+    <div v-if="selectedPreset" class="bg-primary-700 rounded-lg p-4">
       <h3 class="font-medium mb-4">筛选条件</h3>
       <div class="mb-4">
-        <label class="block text-sm text-slate-400 mb-2">评分（多选）</label>
+        <label class="block text-sm text-primary-400 mb-2">评分（多选）</label>
         <StarSelector v-model="filterRating" mode="multi" />
       </div>
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-slate-300 mb-2">
+      <label class="block text-sm font-medium text-primary-300 mb-2">
         保留目标数量
       </label>
       <input
@@ -39,7 +39,7 @@
         type="number"
         min="1"
         max="100"
-        class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+        class="w-full px-4 py-2 bg-primary-700 border border-primary-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary-500 text-white"
       />
     </div>
 
@@ -56,7 +56,7 @@
 
     <button
       :disabled="!canCreate || creatingSession"
-      class="w-full py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+      class="w-full py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
       @click="handleCreate"
     >
       <svg

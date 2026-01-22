@@ -1,7 +1,7 @@
 <template>
   <div
     ref="rootEl"
-    class="relative w-full h-full flex flex-col bg-slate-800 rounded-lg overflow-hidden"
+    class="relative w-full h-full flex flex-col bg-primary-800 rounded-lg overflow-hidden"
   >
     <div
       ref="containerRef"
@@ -25,10 +25,10 @@
       <!-- 加载提示 -->
       <template v-if="isSlowLoading">
         <div
-          class="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm opacity-25"
+          class="absolute inset-0 flex items-center justify-center bg-primary-900/80 backdrop-blur-sm opacity-25"
         >
           <svg
-            class="w-12 h-12 animate-spin text-blue-400"
+            class="w-12 h-12 animate-spin text-secondary-400"
             viewBox="0 0 24 24"
             fill="none"
           >

@@ -5,13 +5,13 @@
         v-if="localStats?.latestImage"
         :src="localStats.latestImage.url256"
         :alt="directoryPath"
-        class="w-20 bg-slate-700 object-cover"
+        class="w-20 bg-primary-700 object-cover"
       />
       <div
         v-else-if="loading"
-        class="w-20 h-20 flex-shrink-0 bg-slate-700 rounded overflow-hidden"
+        class="w-20 h-20 flex-shrink-0 bg-primary-700 rounded overflow-hidden"
       >
-        <div class="w-full h-full animate-pulse bg-slate-600"></div>
+        <div class="w-full h-full animate-pulse bg-primary-600"></div>
       </div>
       <slot name="badge"></slot>
     </div>
@@ -21,7 +21,7 @@
           <span class="flex-1 break-all">{{ directoryPath }}</span>
         </slot>
       </h3>
-      <div class="text-xs text-slate-300 space-y-1">
+      <div class="text-xs text-primary-300 space-y-1">
         <div v-if="localStats">
           <div v-if="localStats.latestImage?.modTime">
             {{ formatDate(localStats.latestImage.modTime) }}
@@ -33,7 +33,7 @@
             <div
               v-for="rc in sortedRatingCounts(localStats.ratingCounts)"
               :key="rc.rating"
-              class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700/50"
+              class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50"
             >
               <RatingIcon
                 :rating="rc.rating"
@@ -44,8 +44,8 @@
           </div>
         </div>
         <div v-else-if="loading" class="space-y-2">
-          <div class="h-3 bg-slate-600 rounded w-3/4 animate-pulse"></div>
-          <div class="h-3 bg-slate-600 rounded w-1/2 animate-pulse"></div>
+          <div class="h-3 bg-primary-600 rounded w-3/4 animate-pulse"></div>
+          <div class="h-3 bg-primary-600 rounded w-1/2 animate-pulse"></div>
         </div>
       </div>
     </div>

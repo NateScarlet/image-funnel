@@ -1,6 +1,6 @@
 <template>
   <div
-    class="h-screen bg-slate-900 text-slate-100 flex flex-col overflow-hidden"
+    class="h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden"
   >
     <SessionHeader
       :session="session"
@@ -13,8 +13,8 @@
     >
       <template #extra>
         <button
-          class="p-2 mr-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center"
-          :class="isImageLocked ? 'text-secondary-400' : 'text-slate-400'"
+          class="p-2 mr-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+          :class="isImageLocked ? 'text-secondary-400' : 'text-primary-400'"
           @click="isImageLocked = !isImageLocked"
         >
           <svg class="w-6 h-6" viewBox="0 0 24 24">
@@ -33,12 +33,12 @@
     <main
       class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
     >
-      <div v-if="loading" class="text-center text-slate-400">加载中...</div>
+      <div v-if="loading" class="text-center text-primary-400">加载中...</div>
 
       <div v-else-if="!session" class="text-center">
         <div class="text-4xl mb-4">🔍</div>
         <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
-        <p class="text-slate-400 mb-4">找不到指定的筛选会话</p>
+        <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
         <button
           class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
           @click="router.push('/')"
@@ -56,13 +56,13 @@
         :stats="stats"
       />
 
-      <div v-else-if="!currentImage" class="text-center text-slate-400">
+      <div v-else-if="!currentImage" class="text-center text-primary-400">
         没有更多图片
       </div>
 
       <div v-else class="w-full flex flex-col items-center h-full min-h-0">
         <div
-          class="relative w-full flex-1 bg-slate-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
+          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
         >
           <ImageViewer
             v-if="currentImage"
@@ -100,7 +100,7 @@
         </div>
 
         <div
-          class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4 hidden [@media(min-height:512px)]:block"
+          class="text-center text-xs md:text-sm text-primary-400 mb-2 md:mb-4 hidden [@media(min-height:512px)]:block"
         >
           {{ currentImage?.filename || "" }}
         </div>
@@ -110,7 +110,7 @@
     </main>
 
     <footer
-      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0 hidden [@media(min-height:512px)]:block"
+      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 flex-shrink-0 hidden [@media(min-height:512px)]:block"
     >
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
