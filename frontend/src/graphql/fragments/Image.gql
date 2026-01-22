@@ -2,11 +2,11 @@ fragment Image on Image {
   id
   filename
   url
-  url256: url(width: 256, quality: 50)
-  url512: url(width: 512, quality: 60)
-  url1024: url(width: 1024, quality: 70)
-  url2048: url(width: 2048, quality: 80)
-  url4096: url(width: 4096, quality: 90)
+  url256: url(width: 256, quality: 70)
+  url512: url(width: 512, quality: 75)
+  url1024: url(width: 1024, quality: 80)
+  url2048: url(width: 2048, quality: 90)
+  url4096: url(width: 4096, quality: 100)
   modTime
   width
   height
