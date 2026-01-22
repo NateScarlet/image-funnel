@@ -38,6 +38,7 @@ image-funnel/
 - **go:** 用 errors 包处理错误，避免直接比较
 - **go:** 使用 `var _` 编译时检查确保接口实现正确
 - **go:** 不要给查询方法添加 Get 前缀，直接用大写名称。比如不要 `GetSession()`，而应该直接 `Session()`
+- **go:** 使用 `main/internal/apperror` 包返回业务错误
 - **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
 - **js:** 使用 es-toolkit　代替 lodash （它假设现代浏览器，不提供已经被浏览器原生支持的功能）
 - **ts:** 直接使用 @/graphql/generated 生成的 GraphQL 类型，避免手动定义
