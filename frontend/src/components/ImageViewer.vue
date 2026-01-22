@@ -5,7 +5,7 @@
   >
     <div
       ref="containerRef"
-      class="flex-auto w-full h-64 flex items-center [scrollbar-gutter:stable] overflow-auto"
+      class="flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
       :class="{ 'pointer-events-none': locked }"
       v-bind="!locked ? containerAttrs : {}"
     >
@@ -69,7 +69,8 @@
         </svg>
       </button>
       <span
-        class="min-w-12 text-center hidden md:block cursor-pointer"
+        class="min-w-12 text-center cursor-pointer"
+        :class="isFullscreen ? 'hidden md:block' : ''"
         @click="zoomAsPercent = 100"
         >{{ zoomAsPercent }}%</span
       >
@@ -93,18 +94,16 @@
         </svg>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
-      <span class="min-w-16 hidden md:block"
-        >{{ image.width }} × {{ image.height }}</span
-      >
+      <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
       <div
         class="w-px h-4 bg-white/30 mx-1"
-        :class="isFullscreen ? '' : 'hidden md:block'"
+        :class="isFullscreen ? 'hidden md:block' : ''"
       ></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
-        :class="isFullscreen ? '' : 'hidden md:block'"
+        :class="isFullscreen ? 'hidden md:block' : ''"
         :title="isFullscreen ? '退出全屏' : '全屏'"
         @click="handleToggleFullscreen"
       >

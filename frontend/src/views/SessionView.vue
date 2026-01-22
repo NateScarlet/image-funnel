@@ -13,17 +13,19 @@
     >
       <template #extra>
         <button
-          class="p-2 mr-2 rounded-lg hover:bg-slate-700 transition-colors"
-          :title="isImageLocked ? '解锁图片位置' : '锁定图片位置'"
+          class="p-2 mr-2 rounded-lg hover:bg-slate-700 transition-colors flex items-center"
+          :class="isImageLocked ? 'text-secondary-400' : 'text-slate-400'"
           @click="isImageLocked = !isImageLocked"
         >
           <svg class="w-6 h-6" viewBox="0 0 24 24">
             <path
               :d="isImageLocked ? mdiLock : mdiLockOpenVariant"
               fill="currentColor"
-              :class="isImageLocked ? 'text-red-400' : 'text-slate-400'"
             />
           </svg>
+          <span class="hidden md:inline">
+            {{ isImageLocked ? "解锁图片位置" : "锁定图片位置" }}
+          </span>
         </button>
       </template>
     </SessionHeader>
@@ -97,7 +99,9 @@
           </div>
         </div>
 
-        <div class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4">
+        <div
+          class="text-center text-xs md:text-sm text-slate-400 mb-2 md:mb-4 hidden [@media(min-height:512px)]:block"
+        >
           {{ currentImage?.filename || "" }}
         </div>
 
@@ -106,9 +110,9 @@
     </main>
 
     <footer
-      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0"
+      class="bg-slate-800 border-t border-slate-700 p-2 text-center text-xs text-slate-400 flex-shrink-0 hidden [@media(min-height:512px)]:block"
     >
-      (下半屏单指滑动) ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
+      ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
     <SessionMenu

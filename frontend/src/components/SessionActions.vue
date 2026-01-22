@@ -1,5 +1,7 @@
 <template>
-  <div class="hidden md:flex gap-4 w-full max-w-md mb-4">
+  <div
+    class="hidden [@media(min-height:768px)]:flex gap-4 w-full max-w-md mb-4"
+  >
     <button
       :disabled="marking"
       class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
