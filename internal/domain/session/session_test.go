@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"main/internal/apperror"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
@@ -120,7 +121,7 @@ func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
 
 	err := session.MarkImage(scalar.ToID("invalid-id"), shared.ImageActionKeep)
 	assert.Error(t, err, "Should return error for invalid image ID")
-	assert.Equal(t, ErrSessionNotFound, err, "Error should be ErrSessionNotFound")
+	assert.True(t, apperror.IsNotFound(err), "Error should be not found error")
 }
 
 func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
@@ -380,12 +381,6 @@ func TestStats_Getters(t *testing.T) {
 	assert.Equal(t, 2, stats.Reviewed(), "Reviewed should match")
 	assert.Equal(t, 1, stats.Rejected(), "Rejected should match")
 	assert.Equal(t, 5, stats.Remaining(), "Remaining should match")
-}
-
-func TestSessionError_Error(t *testing.T) {
-	err := &SessionError{message: "test error"}
-
-	assert.Equal(t, "test error", err.Error(), "Error message should match")
 }
 
 func createTestImages(count int) []*image.Image {

@@ -9,6 +9,7 @@ import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
 import { HttpLink } from "@apollo/client";
 import sha256Hash from "@/utils/sha256Hash";
+import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
 
 export interface OperationContext {
   anonymous?: boolean;
@@ -96,17 +97,16 @@ const errorLink = new ErrorLink(({ error, operation }) => {
     }
 
     if (!shouldSuppress) {
-      const errorMessages = graphQLErrors
-        .map((err: GraphQLFormattedError) => err.message)
-        .join("; ");
-
       if (import.meta.env.DEV) {
         console.error({
           operation,
           graphQLErrors,
         });
       }
-      errorOnce(errorMessages);
+
+      graphQLErrors.forEach((i) => {
+        errorOnce(getGraphqlErrorMessage(i));
+      });
     }
   }
 

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"main/internal/apperror"
 	"main/internal/domain/session"
 	"main/internal/scalar"
 )
@@ -43,7 +44,7 @@ func (r *SessionRepository) Get(id scalar.ID) (*session.Session, error) {
 	defer r.mu.RUnlock()
 	sess, exists := r.sessions[id]
 	if !exists {
-		return nil, session.ErrSessionNotFound
+		return nil, apperror.NewErrDocumentNotFound(id)
 	}
 	return sess, nil
 }

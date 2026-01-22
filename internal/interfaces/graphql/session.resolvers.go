@@ -7,22 +7,14 @@ package graphql
 
 import (
 	"context"
-	"errors"
-	"main/internal/domain/session"
+	"main/internal/apperror"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
 
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error) {
-	sess, err := r.app.Session(ctx, id)
-	if err != nil {
-		if errors.Is(err, session.ErrSessionNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return sess, nil
+	return apperror.IgnoreNotFound(r.app.Session(ctx, id))
 }
 
 // Directory is the resolver for the directory field.

@@ -13,26 +13,21 @@ import (
 
 // SessionUpdated is the resolver for the sessionUpdated field.
 func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error) {
-	ch := make(chan *shared.SessionDTO, 10)
-
-	go func() {
-		defer close(ch)
-
+	return SubscriptionFromSeq(ctx, func(yield func(*shared.SessionDTO, error) bool) {
 		for dto, err := range r.app.SubscribeSession(ctx) {
 			if err != nil {
-				return
+				if !yield(nil, err) {
+					return
+				}
+				continue
 			}
 			if dto.ID == sessionID {
-				select {
-				case ch <- dto:
-				case <-ctx.Done():
+				if !yield(dto, nil) {
 					return
 				}
 			}
 		}
-	}()
-
-	return ch, nil
+	})
 }
 
 // Subscription returns SubscriptionResolver implementation.

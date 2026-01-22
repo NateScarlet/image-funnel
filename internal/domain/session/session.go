@@ -1,6 +1,7 @@
 package session
 
 import (
+	"main/internal/apperror"
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -391,7 +392,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 			}
 		}
 		if !found {
-			return ErrSessionNotFound
+			return apperror.NewErrDocumentNotFound(imageID)
 		}
 	}
 
@@ -497,16 +498,6 @@ type UndoEntry struct {
 }
 
 var (
-	ErrSessionNotActive = &SessionError{message: "session is not active"}
-	ErrNoMoreImages     = &SessionError{message: "no more images"}
-	ErrSessionNotFound  = &SessionError{message: "session not found"}
-	ErrNothingToUndo    = &SessionError{message: "nothing to undo"}
+	ErrNoMoreImages  = apperror.New("INVALID_OPERATION", "no more images", "没有更多图片")
+	ErrNothingToUndo = apperror.New("INVALID_OPERATION", "nothing to undo", "没有可以撤销的操作")
 )
-
-type SessionError struct {
-	message string
-}
-
-func (e *SessionError) Error() string {
-	return e.message
-}

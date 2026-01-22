@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/apperror"
 	"main/internal/application"
 	"main/internal/application/directory"
 	appimage "main/internal/application/image"
@@ -29,6 +30,8 @@ import (
 	"main/internal/interfaces/graphql"
 	"main/internal/pubsub"
 	"main/internal/shared"
+
+	gql "github.com/99designs/gqlgen/graphql"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -128,6 +131,27 @@ func main() {
 	srv.Use(extension.Introspection{})
 	srv.Use(extension.AutomaticPersistedQuery{
 		Cache: lru.New[string](100),
+	})
+	srv.SetRecoverFunc(func(ctx context.Context, e any) error {
+		logger.Error(
+			"internal server error",
+			zap.Any("error", e),
+			zap.String("path", gql.GetPath(ctx).String()),
+			zap.Stack("stack"),
+		)
+		return apperror.New(
+			"INTERNAL_SERVER_ERROR",
+			"internal server error",
+			"服务器内部错误",
+		)
+	})
+	srv.SetErrorPresenter(graphql.ErrorPresenter)
+	srv.AroundFields(func(ctx context.Context, next gql.Resolver) (res interface{}, err error) {
+		res, err = next(ctx)
+		for i := range apperror.ExpandJoinError(err) {
+			gql.AddError(ctx, i)
+		}
+		return res, nil
 	})
 
 	gui := playground.Handler("GraphQL Playground", "/graphql")
