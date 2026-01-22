@@ -5,7 +5,7 @@
     <button
       :disabled="marking"
       class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-      @click="$emit('mark', 'REJECT')"
+      @click="$emit('mark', ImageAction.REJECT)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
         <path :d="mdiLoading" fill="currentColor" />
@@ -19,7 +19,7 @@
     <button
       :disabled="marking"
       class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-      @click="$emit('mark', 'PENDING')"
+      @click="$emit('mark', ImageAction.PENDING)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
         <path :d="mdiLoading" fill="currentColor" />
@@ -33,7 +33,7 @@
     <button
       :disabled="marking"
       class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-      @click="$emit('mark', 'KEEP')"
+      @click="$emit('mark', ImageAction.KEEP)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
         <path :d="mdiLoading" fill="currentColor" />
@@ -47,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+import { ImageAction } from "@/graphql/generated";
 import {
   mdiDeleteOutline,
   mdiClockOutline,
@@ -58,7 +59,7 @@ interface Props {
   marking: boolean;
 }
 
-type Emits = (e: "mark", action: "REJECT" | "PENDING" | "KEEP") => void;
+type Emits = (e: "mark", action: ImageAction) => void;
 
 defineProps<Props>();
 defineEmits<Emits>();

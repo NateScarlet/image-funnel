@@ -34,9 +34,9 @@ export type CreateSessionInput = {
 };
 
 export enum ImageAction {
-  Keep = 'KEEP',
-  Pending = 'PENDING',
-  Reject = 'REJECT'
+  KEEP = 'KEEP',
+  PENDING = 'PENDING',
+  REJECT = 'REJECT'
 }
 
 export type ImageFiltersInput = {

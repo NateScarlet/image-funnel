@@ -34,6 +34,9 @@ export default defineConfig({
       ],
       config: {
         defaultScalarType: "unknown",
+        namingConvention: {
+          enumValues: "keep",
+        },
         scalars: {
           Time: "string",
           Upload: "File",

@@ -235,7 +235,7 @@ onMounted(() => {
   });
 });
 
-async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
+async function markImage(action: ImageAction) {
   if (!currentImage.value) return;
 
   marking.value = true;
@@ -246,7 +246,7 @@ async function markImage(action: "REJECT" | "PENDING" | "KEEP") {
         input: {
           sessionId,
           imageId: currentImage.value.id,
-          action: action as ImageAction,
+          action,
         },
       },
     });
@@ -274,13 +274,13 @@ function handleKeyDown(e: KeyboardEvent) {
 
   switch (e.key) {
     case "ArrowDown":
-      markImage("REJECT");
+      markImage(ImageAction.REJECT);
       break;
     case "ArrowUp":
-      markImage("PENDING");
+      markImage(ImageAction.PENDING);
       break;
     case "ArrowRight":
-      markImage("KEEP");
+      markImage(ImageAction.KEEP);
       break;
     case "ArrowLeft":
       undo();
@@ -352,13 +352,13 @@ function handleGesture() {
 
   switch (swipeDirection.value) {
     case "UP":
-      markImage("PENDING");
+      markImage(ImageAction.PENDING);
       break;
     case "DOWN":
-      markImage("REJECT");
+      markImage(ImageAction.REJECT);
       break;
     case "LEFT":
-      markImage("KEEP");
+      markImage(ImageAction.KEEP);
       break;
     case "RIGHT":
       undo();
