@@ -49,35 +49,7 @@ func (r *sessionResolver) NextImages(ctx context.Context, obj *shared.SessionDTO
 	return r.app.NextImages(ctx, obj.ID, *count)
 }
 
-// SessionUpdated is the resolver for the sessionUpdated field.
-func (r *subscriptionResolver) SessionUpdated(ctx context.Context, sessionID scalar.ID) (<-chan *shared.SessionDTO, error) {
-	ch := make(chan *shared.SessionDTO, 10)
-
-	go func() {
-		defer close(ch)
-
-		for dto, err := range r.app.SubscribeSession(ctx) {
-			if err != nil {
-				return
-			}
-			if dto.ID == sessionID {
-				select {
-				case ch <- dto:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-	}()
-
-	return ch, nil
-}
-
 // Session returns SessionResolver implementation.
 func (r *Resolver) Session() SessionResolver { return &sessionResolver{r} }
 
-// Subscription returns SubscriptionResolver implementation.
-func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionResolver{r} }
-
 type sessionResolver struct{ *Resolver }
-type subscriptionResolver struct{ *Resolver }

@@ -967,7 +967,7 @@ input ImageFiltersInput
   session(id: ID!): Session
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/subscriptions/session.graphql", Input: `type Subscription {
+	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
   sessionUpdated(sessionId: ID!): Session!
 }
 `, BuiltIn: false},
