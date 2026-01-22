@@ -53,11 +53,9 @@ GraphQL 相关文件分为两个目录：
 
 ## Schema 文件组织规则
 
-- 每个 type 单独一个文件，放在 `graph/types/` 目录
-- 每个 enum 单独一个文件，放在 `graph/enums/` 目录
-- Query 使用 `extend type Query` 形式定义，除了 `base.graphql` 中的 meta
-- Subscription 使用 `extend type Subscription` 形式定义
+- 每个文件围绕一个字段/类型，放在对应的子目录中
 - 文件命名和其中主要的字段或类型相同，使用 snake_case（如 `image_filters.graphql`）
+- 使用 `extend type` 形式定义根对象上的额外字段（除了第一个字段）
 
 ## 常见任务
 
