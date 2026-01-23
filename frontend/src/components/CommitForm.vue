@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4">
+  <form class="space-y-4" action="javascript:void(0)" @submit="commit">
     <div v-if="showHeader" class="mb-4">
       <h2 v-if="title" class="text-xl font-bold mb-4">{{ title }}</h2>
       <p class="text-primary-300 mb-2">
@@ -78,7 +78,7 @@
           v-if="!commitResult"
           :disabled="committing"
           class="flex-1 px-4 py-3 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
-          @click="commit"
+          type="submit"
         >
           <svg
             v-if="committing"
@@ -98,7 +98,7 @@
         </button>
       </slot>
     </div>
-  </div>
+  </form>
 </template>
 
 <script setup lang="ts">
