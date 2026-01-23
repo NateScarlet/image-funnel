@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@10.28.1 --activate
 WORKDIR /app
 
 # 复制依赖定义文件
