@@ -12,24 +12,26 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 
 ## 快速开始
 
-### 安装
+### 使用 Docker (推荐)
 
-通过 Release 页面下载最新版本的可执行文件或者使用 `./scripts/build.ps1` 脚本构建。
+这是最简单的安装方式，包含了环境所需的所有依赖（如 ImageMagick）。
 
-### 配置
+1. 获取 `deployments/compose.yml`。
+2. 运行 `docker compose up -d`。
+3. 访问 `http://localhost:34898`。
 
-设置环境变量或使用命令行参数
+### 配置说明
 
-- `IMAGE_FUNNEL_ROOT_DIR`: 项目根目录，默认值为当前目录
-- `IMAGE_FUNNEL_PORT`: 服务器端口，默认值为 8080
-- `IMAGE_FUNNEL_HOST`: 服务器主机，默认值为 localhost
+可以通过环境变量调整应用行为：
+
+- `IMAGE_FUNNEL_ROOT_DIR`: 待筛选图片的根目录。
+- `IMAGE_FUNNEL_PORT`: 服务器监听端口。
+- `IMAGE_FUNNEL_SECRET_KEY`: 用于签名 URL 的密钥。若不提供，将尝试自动生成或使用随机密钥。
 
 ## 使用指南
 
-1. 在浏览器中打开 `http://localhost:3000`
-2. 输入包含 AI 生成图片的目录路径
-3. 选择评分预设（草稿阶段/细化阶段）
-4. 设置保留目标数量
-5. 开始筛选：
-   - 点击按钮或使用快捷键操作
-6. 完成后提交更改，XMP 文件将写入评分
+1. 在浏览器中打开 `http://localhost:34898`
+2. 选择或输入包含图片的目录
+3. 开始筛选：
+   - 使用鼠标点击、屏幕滑动或快捷键进行决策。
+   - 决策结果会保存在当前会话中，并在完成后一键提交持久化到 XMP Sidecar 文件。

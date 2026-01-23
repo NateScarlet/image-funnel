@@ -1,0 +1,34 @@
+# Git
+.git
+.github
+
+# IDE
+.vscode
+.idea
+*.code-workspace
+.trae
+
+# Build artifacts
+bin/
+dist/
+build/
+*.exe
+*.dll
+*.so
+main_debug
+
+# Node
+node_modules/
+pnpm-debug.log
+
+# Go
+core
+*.test
+*.prof
+
+# Local data
+*.local
+
+# Docker
+Dockerfile
+.dockerignore

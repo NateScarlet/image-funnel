@@ -1,0 +1,16 @@
+services:
+  image-funnel:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/image-funnel:latest
+    # 或者使用本地构建
+    # build:
+    #   context: ..
+    #   dockerfile: Dockerfile
+    ports:
+      - "34898:80"
+    volumes:
+      # /app/workspace 是待筛选图片的根目录
+      - ./images:/app/workspace
+      # /app/data 用于存储应用持久化数据（如密钥）
+      - ./data:/app/data
+    environment:
+    restart: unless-stopped
