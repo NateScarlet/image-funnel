@@ -8,7 +8,12 @@ import SessionView from "./views/SessionView.vue";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", component: HomeView },
-  { path: "/session/:id", component: SessionView, props: true },
+  {
+    name: "session",
+    path: "/session/:id",
+    component: SessionView,
+    props: true,
+  },
 ];
 
 const router = createRouter({

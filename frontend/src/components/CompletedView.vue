@@ -9,11 +9,7 @@
     <div
       class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
     >
-      <CommitForm
-        :session-id="sessionId"
-        title=""
-        @committed="handleCommitted"
-      />
+      <CommitForm :session title="" @committed="handleCommitted" />
     </div>
 
     <div v-if="nextDirectoryId" class="mt-6">
@@ -30,41 +26,31 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
-import { SessionDocument, CreateSessionDocument } from "../graphql/generated";
+import {
+  CreateSessionDocument,
+  type SessionFragment,
+} from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 
-const { sessionId } = defineProps<{
-  sessionId: string;
+const { session } = defineProps<{
+  session: SessionFragment;
 }>();
 
 const router = useRouter();
 const { getNextDirectory } = useDirectoryProgress();
 
-const { data: sessionData } = useQuery(SessionDocument, {
-  variables: () => ({ id: sessionId }),
-});
-
-const session = computed(() => sessionData.value?.session);
-
 const nextDirectoryId = computed(() => {
-  if (!session.value) return undefined;
   return getNextDirectory(
-    session.value.directory.parentId ?? "",
-    session.value.directory.id,
+    session.directory.parentId ?? "",
+    session.directory.id,
   );
 });
 
 async function handleCommitted() {
-  if (!session.value) {
-    router.push("/");
-    return;
-  }
-
-  const { filter, targetKeep } = session.value;
+  const { filter, targetKeep } = session;
   const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
@@ -81,10 +67,15 @@ async function handleCommitted() {
     });
 
     if (data?.createSession) {
-      router.push(`/session/${data.createSession.session.id}`);
+      await router.push({
+        name: "session",
+        params: {
+          id: data.createSession.session.id,
+        },
+      });
     }
   } else {
-    router.push("/");
+    await router.push("/");
   }
 }
 </script>

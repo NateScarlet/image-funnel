@@ -218,10 +218,4 @@ async function commit() {
     committing.value = false;
   }
 }
-
-defineExpose({
-  commit,
-  committing,
-  commitResult,
-});
 </script>

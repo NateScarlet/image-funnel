@@ -5,11 +5,7 @@
   >
     <div class="bg-primary-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
       <template v-if="session">
-        <CommitForm
-          :session="session"
-          title="提交更改"
-          @committed="$emit('committed')"
-        >
+        <CommitForm :session title="提交更改" @committed="$emit('committed')">
           <template #actions="{ committing, commitResult, commit }">
             <button
               :disabled="committing"

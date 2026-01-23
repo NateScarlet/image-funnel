@@ -3,7 +3,7 @@
     class="h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden"
   >
     <SessionHeader
-      :session="session"
+      :session
       :undoing="undoing"
       @show-menu="showMenu = true"
       @show-update-session-modal="showUpdateSessionModal = true"
@@ -48,7 +48,7 @@
         </button>
       </div>
 
-      <CompletedView v-else-if="isCompleted" :session-id="sessionId" />
+      <CompletedView v-else-if="isCompleted" :session />
 
       <div v-else-if="!currentImage" class="text-center text-primary-400">
         没有更多图片
@@ -119,7 +119,7 @@
 
     <SessionMenu
       v-model:show="showMenu"
-      :session="session"
+      :session
       :can-undo="canUndo"
       :undoing="undoing"
       @show-commit-modal="showCommitModal = true"
@@ -128,13 +128,13 @@
 
     <CommitModal
       v-if="showCommitModal"
-      :session="session"
+      :session
       @close="showCommitModal = false"
     />
 
     <UpdateSessionModal
       v-if="showUpdateSessionModal && session"
-      :session="session"
+      :session
       @close="showUpdateSessionModal = false"
       @updated="showUpdateSessionModal = false"
     />
