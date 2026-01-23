@@ -142,6 +142,8 @@ const selectedPresetId = computed({
     );
   },
   set(v) {
+    filterRatingBuffer.value = undefined;
+    targetKeepBuffer.value = undefined;
     selectedPresetIdBuffer.value = v;
     lastSelectedPresetId.value = v;
   },
