@@ -2,16 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"errors"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"main/internal/apperror"
@@ -31,6 +25,7 @@ import (
 	"main/internal/infrastructure/urlconv"
 	"main/internal/infrastructure/xmpsidecar"
 	"main/internal/interfaces/graphql"
+	interfacehttp "main/internal/interfaces/http"
 	"main/internal/pubsub"
 	"main/internal/shared"
 
@@ -42,9 +37,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/NateScarlet/gqlgen-batching/pkg/batching"
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/rs/cors"
 	"go.uber.org/zap"
 )
 
@@ -52,74 +45,24 @@ const defaultPort = "34898"
 
 var version = "dev"
 
-func mustGenerateRandomSecretKey() string {
-	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	if err != nil {
-		panic(err)
-	}
-	return base64.StdEncoding.EncodeToString(key)
-}
-
 func main() {
-	var logger *zap.Logger
-	var err error
+	var (
+		logger *zap.Logger
+		err    error
+	)
 
-	if version != "dev" {
-		logger, err = zap.NewProduction()
-	} else {
-		logger, err = zap.NewDevelopment()
-	}
+	logger, err = initLogger(version)
 	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
+		log.Fatalf("failed to initialize logger: %v", err)
 	}
 	defer logger.Sync()
 
-	port := os.Getenv("IMAGE_FUNNEL_PORT")
-	if port == "" {
-		port = defaultPort
-	}
-
-	rootDir := os.Getenv("IMAGE_FUNNEL_ROOT_DIR")
-	if rootDir == "" {
-		rootDir = "."
-	}
-
-	absRootDir, err := filepath.Abs(rootDir)
+	cfg, err := loadConfig(logger, version)
 	if err != nil {
-		log.Fatalf("Failed to resolve root directory: %v", err)
+		logger.Fatal("failed to load config", zap.Error(err))
 	}
 
-	secretKey := os.Getenv("IMAGE_FUNNEL_SECRET_KEY")
-	if secretKey == "" {
-		secretKey = mustGenerateRandomSecretKey()
-		logger.Info("generated random secret key for this session")
-	}
-	corsHosts := []string{}
-	if v := os.Getenv("IMAGE_FUNNEL_CORS_HOSTS"); v != "" {
-		corsHosts = strings.Split(v, ",")
-	}
-
-	isOriginAllowed := func(origin string, requestHost string) bool {
-		if origin == "" {
-			return true
-		}
-		u, err := url.Parse(origin)
-		if err != nil {
-			return false
-		}
-		if requestHost != "" && strings.EqualFold(u.Host, requestHost) {
-			return true
-		}
-		for _, i := range corsHosts {
-			if i != "" && strings.EqualFold(i, u.Host) {
-				return true
-			}
-		}
-		return false
-	}
-
-	signer := urlconv.NewSigner(secretKey, absRootDir)
+	signer := urlconv.NewSigner(cfg.SecretKey, cfg.AbsRootDir)
 
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
@@ -134,21 +77,18 @@ func main() {
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(hybridProcessor)
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
-	dirRepo := inmem.NewDirectoryRepository(absRootDir)
-	dirScanner := localfs.NewScanner(absRootDir, imageFactory, dirRepo)
+	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
+	dirScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.Session]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, appsession.NewSessionDTOFactory(signer))
 
 	fileWatcher := localfs.NewWatcher(logger)
-	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, absRootDir, dirRepo, logger)
+	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 
-	// Watch root dir
-	// Service will start watching rootDir automatically
-
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic, absRootDir)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir)
 	defer sessionCleanup()
 
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
@@ -158,7 +98,7 @@ func main() {
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler)
 
-	resolver := graphql.NewResolver(appRoot, absRootDir, signer, version)
+	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version)
 
 	srv := handler.New(graphql.NewExecutableSchema(graphql.Config{Resolvers: resolver}))
 
@@ -166,16 +106,7 @@ func main() {
 		KeepAlivePingInterval: 10 * time.Second,
 		Upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				origin := r.Header.Get("Origin")
-				if isOriginAllowed(origin, r.Host) {
-					return true
-				}
-				logger.Warn(
-					"origin not allowed",
-					zap.String("origin", origin),
-					zap.String("host", r.Host),
-				)
-				return false
+				return true // Actual check is done in cors middleware
 			},
 		},
 	})
@@ -213,129 +144,16 @@ func main() {
 
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
-	var frontendDir string
-	isProduction := version != "dev"
-
-	execPath, err := os.Executable()
-	if err != nil {
-		logger.Warn("get executable path", zap.Error(err))
-		execPath = "."
-	}
-	execDir := filepath.Dir(execPath)
-
-	if isProduction {
-		frontendDir = filepath.Join(execDir, "dist")
-	} else {
-		frontendDir = filepath.Join("frontend", "dist")
-	}
-
-	if _, err := os.Stat(frontendDir); os.IsNotExist(err) {
-		logger.Warn("frontend directory not found", zap.String("path", frontendDir))
-	}
-
-	r := mux.NewRouter()
-
-	r.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			f := negotiateFormat(r, "application/json", "text/html")
-			if f == "text/html" {
-				gui.ServeHTTP(w, r)
-				return
-			}
-		}
-		srv.ServeHTTP(w, r)
-	})
-
-	r.HandleFunc("/image", func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query()
-		relativePath := query.Get("path")
-		timestamp := query.Get("t")
-		size := query.Get("s")
-		signature := query.Get("sig")
-		widthStr := query.Get("w")
-		qualityStr := query.Get("q")
-		raw := query.Has("raw")
-
-		if relativePath == "" || timestamp == "" || size == "" || signature == "" {
-			http.Error(w, "missing required parameters", http.StatusBadRequest)
-			return
-		}
-
-		err := signer.ValidateRequestFromValues(query)
-		if err != nil {
-			http.Error(w, "invalid signature: "+err.Error(), http.StatusForbidden)
-			return
-		}
-
-		absPath := filepath.Join(absRootDir, relativePath)
-		if raw {
-			http.ServeFile(w, r, absPath)
-			return
-		}
-
-		width := 0
-		if widthStr != "" {
-			if w, err := strconv.Atoi(widthStr); err == nil {
-				width = w
-			}
-		}
-
-		quality := 0
-		if qualityStr != "" {
-			if q, err := strconv.Atoi(qualityStr); err == nil {
-				quality = q
-			}
-		}
-
-		processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
-		if errors.Is(err, context.Canceled) {
-			http.Error(w, "request canceled", http.StatusRequestTimeout)
-			return
-		}
-		if err != nil {
-			logger.Error("process image", zap.Error(err))
-			http.ServeFile(w, r, absPath)
-			return
-		}
-
-		http.ServeFile(w, r, processedPath)
-	})
-
-	addStaticRoutes(r, frontendDir)
-
-	handler := cors.New(cors.Options{
-		AllowOriginFunc: func(origin string) bool {
-			return isOriginAllowed(origin, "")
-		},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan"},
-		AllowCredentials: true,
-	}).Handler(r)
-
-	logger.Info("starting server",
-		zap.String("port", port),
-		zap.String("rootDir", absRootDir),
-		zap.String("version", version),
-		zap.String("frontendDir", frontendDir),
+	httpServer := interfacehttp.NewServer(
+		logger,
+		signer,
+		imageProcessor,
+		srv,
+		gui,
+		cfg.AbsRootDir,
+		cfg.FrontendDir,
+		cfg.CorsHosts,
 	)
-	logger.Fatal("start server", zap.Error(http.ListenAndServe(":"+port, handler)))
-}
 
-func negotiateFormat(r *http.Request, formats ...string) string {
-	accept := r.Header.Get("Accept")
-	if accept == "" && len(formats) > 0 {
-		return formats[0]
-	}
-
-	for _, format := range formats {
-		if strings.Contains(accept, format) {
-			return format
-		}
-	}
-
-	if len(formats) > 0 {
-		return formats[0]
-	}
-
-	return ""
+	logger.Fatal("start server", zap.Error(httpServer.Serve(":"+cfg.Port)))
 }
