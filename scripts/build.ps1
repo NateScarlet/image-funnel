@@ -43,20 +43,22 @@ if ($Frontend) {
     # 构建前端
     Write-Host "构建前端项目..."
     Push-Location $FRONTEND_DIR
-    pnpm install
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ 前端依赖安装失败"
-        Pop-Location
-        exit 1
-    }
+    try {
+        pnpm install
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ 前端依赖安装失败"
+            exit 1
+        }
 
-    pnpm run build
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ 前端构建失败"
-        Pop-Location
-        exit 1
+        pnpm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ 前端构建失败"
+            exit 1
+        }
     }
-    Pop-Location
+    finally {
+        Pop-Location
+    }
 
     # 复制前端构建文件
     Write-Host "复制前端构建文件..."
@@ -73,22 +75,26 @@ if ($Backend) {
     # 构建后端
     Write-Host "构建后端项目..."
     Push-Location $ROOT_DIR
-    $gitVersion = git describe --tags --always --dirty 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
-        $gitVersion = "dev"
-        Write-Host "无法获取 git 版本号，使用默认值: dev"
-    } else {
-        Write-Host "获取到 git 版本号: $gitVersion"
+    try {
+        $gitVersion = git describe --tags --always --dirty 2>$null
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
+            $gitVersion = "dev"
+            Write-Host "无法获取 git 版本号，使用默认值: dev"
+        }
+        else {
+            Write-Host "获取到 git 版本号: $gitVersion"
+        }
+        $ldflags = "-X main.version=$gitVersion"
+        # 直接使用重定向，不捕获到变量
+        go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Go编译失败"
+            exit 1
+        }
     }
-    $ldflags = "-X main.version=$gitVersion"
-    # 直接使用重定向，不捕获到变量
-    go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ Go编译失败"
+    finally {
         Pop-Location
-        exit 1
     }
-    Pop-Location
 }
 
 # 检查构建结果
