@@ -44,24 +44,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import { mdiCheck, mdiCogOutline } from "@mdi/js";
 import { SessionFragment } from "@/graphql/generated";
 
-const { show: showProp, session } = defineProps<{
-  show: boolean;
+const { session } = defineProps<{
   session?: SessionFragment | null;
   sessionId: string;
   stats?: { kept?: number };
 }>();
 
-const emit = defineEmits<{
-  (e: "update:show", value: boolean): void;
-  (e: "abandoned" | "showCommitModal" | "showUpdateSessionModal"): void;
-}>();
+const emit =
+  defineEmits<
+    (e: "abandoned" | "showCommitModal" | "showUpdateSessionModal") => void
+  >();
 
-const show = computed({
-  get: () => showProp,
-  set: (value: boolean) => emit("update:show", value),
-});
+const show = defineModel<boolean>("show", { required: true });
 </script>
