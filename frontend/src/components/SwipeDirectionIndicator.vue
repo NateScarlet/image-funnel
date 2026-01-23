@@ -23,10 +23,8 @@
 <script setup lang="ts">
 import type { RendererElement } from "vue";
 
-interface Props {
+const { direction, rendererEl } = defineProps<{
   direction: "UP" | "DOWN" | "LEFT" | "RIGHT" | null;
   rendererEl: RendererElement;
-}
-
-defineProps<Props>();
+}>();
 </script>

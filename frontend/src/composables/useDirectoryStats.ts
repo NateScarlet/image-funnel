@@ -77,8 +77,8 @@ export default function useDirectoryStats() {
   /**
    * 获取指定目录的统计信息（仅从缓存读取，不触发查询）
    */
-  function getCachedStats(directoryId: MaybeRefOrGetter<string>) {
-    return statsCache.get(toValue(directoryId)) ?? null;
+  function getCachedStats(directoryId: string) {
+    return statsCache.get(directoryId);
   }
 
   return {

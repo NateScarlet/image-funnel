@@ -97,20 +97,17 @@ import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
 import type { DirectoryFragment } from "../graphql/generated";
 
-interface Props {
-  currentDirectory: DirectoryFragment | null | undefined;
-  directories: DirectoryFragment[];
-  loading: boolean;
-  filterRating: readonly number[];
-  targetKeep: number;
-  rootPath: string;
-}
+const { currentDirectory, directories, loading, filterRating, targetKeep } =
+  defineProps<{
+    currentDirectory: DirectoryFragment | null | undefined;
+    directories: DirectoryFragment[];
+    loading: boolean;
+    filterRating: readonly number[];
+    targetKeep: number;
+    rootPath: string;
+  }>();
 
-const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  "go-to-parent": [];
-}>();
+const emit = defineEmits<(e: "go-to-parent") => void>();
 
 const selectedId = defineModel<string>();
 
@@ -127,17 +124,17 @@ const { getCachedStats } = useDirectoryStats();
 
 const items = computed(() => {
   return sortBy(
-    props.directories.map((dir) => {
+    directories.map((dir) => {
       const stats = getCachedStats(dir.id);
       const keepCount =
         stats?.ratingCounts.reduce(
           (sum: number, rc: { rating: number; count: number }) =>
-            sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
+            sum + (filterRating.includes(rc.rating) ? rc.count : 0),
           0,
         ) ?? 0;
 
       const isCompleted =
-        stats?.subdirectoryCount === 0 && keepCount <= props.targetKeep;
+        stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
       return {
         key: dir.id,
         dir,
@@ -167,15 +164,15 @@ watch(
         const keepCount =
           item.stats?.ratingCounts.reduce(
             (sum: number, rc: { rating: number; count: number }) =>
-              sum + (props.filterRating.includes(rc.rating) ? rc.count : 0),
+              sum + (filterRating.includes(rc.rating) ? rc.count : 0),
             0,
           ) ?? 0;
-        return keepCount > props.targetKeep;
+        return keepCount > targetKeep;
       })
       .map((item) => item.dir.id);
 
-    if (props.currentDirectory) {
-      recordDirectoryOrder(props.currentDirectory.id, navigableDirectoryIds);
+    if (currentDirectory) {
+      recordDirectoryOrder(currentDirectory.id, navigableDirectoryIds);
     }
   },
   { immediate: true },

@@ -105,19 +105,17 @@ function goHome() {
   router.push("/");
 }
 
-interface Props {
+const { session, stats, undoing } = defineProps<{
   session: SessionFragment | null | undefined;
   stats: SessionStatsFragment | null | undefined;
   undoing: boolean;
-}
-
-const { session } = defineProps<Props>();
-defineEmits<{
-  showMenu: [];
-  undo: [];
-  showUpdateSessionModal: [];
-  showCommitModal: [];
 }>();
+
+defineEmits<
+  (
+    e: "showMenu" | "undo" | "showUpdateSessionModal" | "showCommitModal",
+  ) => void
+>();
 
 const { data } = useQuery(MetaDocument);
 const displayName = computed(() => {

@@ -64,20 +64,16 @@ interface Directory {
   id: string;
 }
 
-interface Props {
+const { directory, filterRating = [] } = defineProps<{
   directory: Directory;
   filterRating?: readonly number[];
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  filterRating: () => [],
-});
+}>();
 
 const loadingCount = ref(0);
 
 // 使用 useStats 自动查询和缓存
 const { useStats } = useDirectoryStats();
-const data = useStats(props.directory.id, loadingCount);
+const data = useStats(() => directory.id, loadingCount);
 
 const directoryData = computed(() => {
   const node = data.value?.node;

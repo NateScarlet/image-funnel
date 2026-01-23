@@ -115,7 +115,16 @@ import { usePresets } from "../composables/usePresets";
 import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
 
-interface Props {
+const {
+  sessionId,
+  stats = {
+    kept: 0,
+    reviewed: 0,
+    rejected: 0,
+  },
+  showHeader = true,
+  title = "",
+} = defineProps<{
   sessionId: string;
   stats?: {
     kept: number;
@@ -124,19 +133,9 @@ interface Props {
   };
   showHeader?: boolean;
   title?: string;
-}
+}>();
 
-const props = withDefaults(defineProps<Props>(), {
-  showHeader: true,
-  title: "",
-  stats: () => ({
-    kept: 0,
-    reviewed: 0,
-    rejected: 0,
-  }),
-});
-
-const emit = defineEmits(["committed"]);
+const emit = defineEmits<(e: "committed") => void>();
 
 const { getPreset, lastSelectedPresetId } = usePresets();
 
@@ -206,7 +205,7 @@ async function commit() {
     const { data } = await mutate(CommitChangesDocument, {
       variables: {
         input: {
-          sessionId: props.sessionId,
+          sessionId: sessionId,
           writeActions: writeActions.value,
         },
       },

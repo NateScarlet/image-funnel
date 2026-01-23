@@ -55,13 +55,11 @@ import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 
-interface Props {
+const { directory, filterRating, targetKeep } = defineProps<{
   directory: DirectoryFragment;
   filterRating: readonly number[];
   targetKeep: number;
-}
-
-const props = defineProps<Props>();
+}>();
 
 const { getCachedStats } = useDirectoryStats();
 
@@ -70,9 +68,9 @@ const selectedId = defineModel<string>();
 const { data: metaData } = useQuery(MetaDocument);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 
-const stats = computed(() => getCachedStats(props.directory.id));
+const stats = computed(() => getCachedStats(directory.id));
 
-const selected = computed(() => selectedId.value === props.directory.id);
+const selected = computed(() => selectedId.value === directory.id);
 
 const isTargetMet = computed(() => {
   const statsV = stats.value;
@@ -81,16 +79,16 @@ const isTargetMet = computed(() => {
   }
   const matchedCount = statsV.ratingCounts
     .filter((rc: { rating: number; count: number }) =>
-      props.filterRating.includes(rc.rating),
+      filterRating.includes(rc.rating),
     )
     .reduce(
       (sum: number, rc: { rating: number; count: number }) => sum + rc.count,
       0,
     );
-  return matchedCount <= props.targetKeep;
+  return matchedCount <= targetKeep;
 });
 
 function select() {
-  selectedId.value = props.directory.id;
+  selectedId.value = directory.id;
 }
 </script>

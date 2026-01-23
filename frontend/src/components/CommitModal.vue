@@ -53,15 +53,13 @@ import { SessionDocument } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import { mdiLoading } from "@mdi/js";
 
-interface Props {
+const { sessionId } = defineProps<{
   sessionId: string;
-}
-
-const props = defineProps<Props>();
-defineEmits(["close", "committed"]);
+}>();
+defineEmits<(e: "close" | "committed") => void>();
 
 const { data: sessionData } = useQuery(SessionDocument, {
-  variables: () => ({ id: props.sessionId }),
+  variables: () => ({ id: sessionId }),
 });
 
 const stats = computed(() => sessionData.value?.session?.stats);

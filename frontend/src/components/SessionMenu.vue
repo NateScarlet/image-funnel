@@ -48,23 +48,20 @@ import { computed } from "vue";
 import { mdiCheck, mdiCogOutline } from "@mdi/js";
 import { SessionFragment } from "@/graphql/generated";
 
-interface Props {
+const { show: showProp, session } = defineProps<{
   show: boolean;
   session?: SessionFragment | null;
   sessionId: string;
   stats?: { kept?: number };
-}
+}>();
 
-interface Emits {
+const emit = defineEmits<{
   (e: "update:show", value: boolean): void;
   (e: "abandoned" | "showCommitModal" | "showUpdateSessionModal"): void;
-}
-
-const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
+}>();
 
 const show = computed({
-  get: () => props.show,
+  get: () => showProp,
   set: (value: boolean) => emit("update:show", value),
 });
 </script>

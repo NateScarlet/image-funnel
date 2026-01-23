@@ -53,12 +53,8 @@ import {
   mdiLoading,
 } from "@mdi/js";
 
-interface Props {
+const { marking } = defineProps<{
   marking: boolean;
-}
-
-type Emits = (e: "mark", action: ImageAction) => void;
-
-defineProps<Props>();
-defineEmits<Emits>();
+}>();
+defineEmits<(e: "mark", action: ImageAction) => void>();
 </script>

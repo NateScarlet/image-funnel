@@ -44,18 +44,16 @@ interface SessionStats {
   rejected: number;
 }
 
-interface Props {
+const { sessionId, stats } = defineProps<{
   sessionId: string;
   stats?: SessionStats;
-}
-
-const props = defineProps<Props>();
+}>();
 
 const router = useRouter();
 const { getNextDirectory } = useDirectoryProgress();
 
 const { data: sessionData } = useQuery(SessionDocument, {
-  variables: () => ({ id: props.sessionId }),
+  variables: () => ({ id: sessionId }),
 });
 
 const session = computed(() => sessionData.value?.session);
