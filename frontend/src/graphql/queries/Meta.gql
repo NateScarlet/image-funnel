@@ -1,4 +1,4 @@
-query GetMeta {
+query Meta {
   meta {
     rootPath
     version

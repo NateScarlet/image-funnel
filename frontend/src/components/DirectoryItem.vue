@@ -51,7 +51,7 @@
 import { computed } from "vue";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import useQuery from "../graphql/utils/useQuery";
-import { GetMetaDocument } from "../graphql/generated";
+import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 
@@ -67,7 +67,7 @@ const { getCachedStats } = useDirectoryStats();
 
 const selectedId = defineModel<string>();
 
-const { data: metaData } = useQuery(GetMetaDocument);
+const { data: metaData } = useQuery(MetaDocument);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
 
 const stats = computed(() => getCachedStats(props.directory.id));

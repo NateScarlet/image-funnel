@@ -1,4 +1,4 @@
-query GetSession($id: ID!) {
+query Session($id: ID!) {
   session(id: $id) {
     ...Session
   }

@@ -7,7 +7,15 @@ import graphql from "@graphql-eslint/eslint-plugin";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig(
-  { ignores: ["dist/**", "node_modules/**", "*.config.cjs", "*.config.mts", "codegen.ts"] },
+  {
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "*.config.cjs",
+      "*.config.mts",
+      "codegen.ts",
+    ],
+  },
   {
     extends: [
       js.configs.recommended,
@@ -40,14 +48,13 @@ export default defineConfig(
   },
   {
     files: ["**/*.gql", "**/*.graphql"],
+    extends: [graphql.configs["flat/operations-recommended"]],
     plugins: {
+      // @ts-ignore-next-line 类型过时，实际能用
       "@graphql-eslint": graphql,
     },
     languageOptions: {
       parser: graphql.parser,
-    },
-    rules: {
-      ...graphql.configs["flat/schema-recommended"].rules,
     },
   },
   prettier,

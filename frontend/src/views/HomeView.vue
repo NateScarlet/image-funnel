@@ -26,12 +26,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import useQuery from "../graphql/utils/useQuery";
-import { GetMetaDocument } from "../graphql/generated";
+import { MetaDocument } from "../graphql/generated";
 import CreateSessionForm from "../components/CreateSessionForm.vue";
 
 const loadingCount = ref(0);
 
-const { data: metaData } = useQuery(GetMetaDocument, {
+const { data: metaData } = useQuery(MetaDocument, {
   loadingCount,
 });
 

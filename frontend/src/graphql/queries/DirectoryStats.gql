@@ -1,9 +1,9 @@
-query GetDirectories($id: ID!) {
+query DirectoryStats($id: ID!) {
   node(id: $id) {
     ... on Directory {
       ...Directory
-      directories {
-        ...Directory
+      stats {
+        ...DirectoryStats
       }
     }
   }

@@ -9,7 +9,7 @@ import { debounce } from "es-toolkit";
 import useQuery from "../graphql/utils/useQuery";
 import useSubscription from "../graphql/utils/useSubscription";
 import {
-  GetDirectoryStatsDocument,
+  DirectoryStatsDocument,
   DirectoryChangedDocument,
 } from "../graphql/generated";
 import type { DirectoryStatsFragment } from "../graphql/generated";
@@ -35,7 +35,7 @@ export default function useDirectoryStats() {
     loadingCount?: Ref<number>,
   ) {
     // 执行 GraphQL 查询
-    const { data, query } = useQuery(GetDirectoryStatsDocument, {
+    const { data, query } = useQuery(DirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
       context: {

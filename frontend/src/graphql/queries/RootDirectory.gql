@@ -1,4 +1,4 @@
-query GetRootDirectory {
+query RootDirectory {
   rootDirectory {
     ...Directory
     directories {

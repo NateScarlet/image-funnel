@@ -79,9 +79,9 @@ import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
   CreateSessionDocument,
-  GetDirectoriesDocument,
-  GetMetaDocument,
-  GetRootDirectoryDocument,
+  DirectoriesDocument,
+  MetaDocument,
+  RootDirectoryDocument,
 } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import StarSelector from "./StarSelector.vue";
@@ -97,11 +97,11 @@ const { presets, getPreset, lastSelectedPresetId } = usePresets();
 const loadingCount = ref(0);
 const creatingSession = ref(false);
 
-const { data: metaData } = useQuery(GetMetaDocument, {
+const { data: metaData } = useQuery(MetaDocument, {
   loadingCount,
 });
 
-const { data: rootData } = useQuery(GetRootDirectoryDocument, {
+const { data: rootData } = useQuery(RootDirectoryDocument, {
   loadingCount,
 });
 
@@ -117,7 +117,7 @@ const selectedDirectoryId = computed({
   },
 });
 
-const { data: directoriesData } = useQuery(GetDirectoriesDocument, {
+const { data: directoriesData } = useQuery(DirectoriesDocument, {
   variables: () => ({
     id: selectedDirectoryId.value,
   }),

@@ -1,16 +1,13 @@
 import { computed, type Ref, toValue, type MaybeRefOrGetter } from "vue";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
-import {
-  GetSessionDocument,
-  SessionUpdatedDocument,
-} from "@/graphql/generated";
+import { SessionDocument, SessionUpdatedDocument } from "@/graphql/generated";
 
 export default function useSession(
   id: MaybeRefOrGetter<string>,
   options: { loadingCount?: Ref<number> } = {},
 ) {
-  const { data } = useQuery(GetSessionDocument, {
+  const { data } = useQuery(SessionDocument, {
     variables: () => ({ id: toValue(id) }),
     loadingCount: options.loadingCount,
   });

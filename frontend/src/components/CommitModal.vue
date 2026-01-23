@@ -49,7 +49,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import useQuery from "../graphql/utils/useQuery";
-import { GetSessionDocument } from "../graphql/generated";
+import { SessionDocument } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import { mdiLoading } from "@mdi/js";
 
@@ -60,7 +60,7 @@ interface Props {
 const props = defineProps<Props>();
 defineEmits(["close", "committed"]);
 
-const { data: sessionData } = useQuery(GetSessionDocument, {
+const { data: sessionData } = useQuery(SessionDocument, {
   variables: () => ({ id: props.sessionId }),
 });
 

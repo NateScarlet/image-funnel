@@ -33,10 +33,7 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
-import {
-  GetSessionDocument,
-  CreateSessionDocument,
-} from "../graphql/generated";
+import { SessionDocument, CreateSessionDocument } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
@@ -57,7 +54,7 @@ const props = defineProps<Props>();
 const router = useRouter();
 const { getNextDirectory } = useDirectoryProgress();
 
-const { data: sessionData } = useQuery(GetSessionDocument, {
+const { data: sessionData } = useQuery(SessionDocument, {
   variables: () => ({ id: props.sessionId }),
 });
 
