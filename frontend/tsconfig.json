@@ -1,13 +1,14 @@
 {
   "compilerOptions": {
     "module": "ESNext",
-    "target": "ES2019",
-    "moduleResolution": "node",
+    "target": "ESNext",
+    "moduleResolution": "Bundler",
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "allowJs": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["node"]
   },
-  "include": ["*.ts", "*.cjs", "scripts/*.ts"]
+  "include": ["*.ts", "*.mts", "*.cjs", "scripts/*.ts"]
 }
