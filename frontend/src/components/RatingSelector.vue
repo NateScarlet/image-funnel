@@ -24,7 +24,7 @@ const model = defineModel<number | readonly number[]>();
 
 const arrayModel = computed({
   get() {
-    return Array.isArray(model.value) ? model.value : [];
+    return Array.isArray(model.value) ? model.value : [model.value];
   },
   set(value) {
     if (Array.isArray(model.value)) {
@@ -49,7 +49,7 @@ function toggleStar(value: number, force?: boolean) {
   }
   const arr = [...arrayModel.value];
   if (want) {
-    arr.push(value);
+    arr.unshift(value);
   } else {
     arr.splice(arr.indexOf(value), 1);
   }
