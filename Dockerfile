@@ -42,7 +42,11 @@ ARG VERSION=dev
 
 # 构建二进制文件
 # CGO_ENABLED=0 确保静态链接
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build \
+ENV GOOS=${TARGETOS} \
+    GOARCH=${TARGETARCH} \
+    CGO_ENABLED=0
+RUN go test ./... && \
+    go build \
     -ldflags "-X main.version=${VERSION} -s -w" \
     -o image-funnel ./cmd/server
 
