@@ -24,7 +24,11 @@ function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
 
 export default function useQuery<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
-  options: {
+  {
+    variables,
+    loadingCount,
+    ...options
+  }: {
     variables?: MaybeRefOrGetter<TVariables | undefined>;
     context?: OperationContext;
     loadingCount?: Ref<number>;
@@ -36,14 +40,13 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   data: Ref<TData | undefined>;
   query: ObservableQuery<TData, TVariables>;
 } & Disposable {
-  const { loadingCount, variables } = options;
   const stack = new DisposableStack();
   import.meta.hot?.dispose(() => stack.dispose());
   const query = stack.adopt(
     apolloClient.watchQuery({
       ...options,
       query: document,
-      variables: toValue(options.variables) as TVariables,
+      variables: toValue(variables) as TVariables,
       notifyOnNetworkStatusChange: true,
     }),
     (i) => i.stopPolling(),
@@ -80,9 +83,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     );
   }
   async function run(stack: DisposableStack, variables?: TVariables) {
-    if (stack.disposed) {
-      return;
-    }
+    resultModel.value = query.getCurrentResult();
     if (variables) {
       await query.setVariables(variables);
     }
@@ -93,24 +94,22 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     stack.adopt(
       query.subscribe({
         next: (data) => {
-          if (stack.disposed) {
-            return;
+          if (!stack.disposed) {
+            resultModel.value = data;
           }
-          resultModel.value = data;
         },
-        error: () => undefined,
       }),
       (i) => i.unsubscribe(),
     );
   }
   if (variables) {
     let queryStack: DisposableStack | undefined;
-
     stack.defer(() => queryStack?.dispose());
     stack.defer(
       watch(
-        variables,
+        () => toValue(variables),
         (n, o) => {
+          console.log({ n, o });
           if (isEqual(n, o)) {
             // not recreate query if variable not changed
             return;
@@ -120,9 +119,8 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
             return;
           }
           queryStack?.dispose();
-          const stack = new DisposableStack();
-          run(stack);
-          queryStack = stack;
+          queryStack = new DisposableStack();
+          run(queryStack, n);
         },
         { immediate: true },
       ),
