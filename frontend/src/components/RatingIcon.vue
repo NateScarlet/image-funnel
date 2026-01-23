@@ -24,14 +24,10 @@
 import { STAR_CONFIGS } from "../utils/starConfig";
 import { getStarColorClass } from "../utils/starConfig";
 
-interface Props {
+const { filled = false, rating } = defineProps<{
   rating: number;
   filled?: boolean;
-}
+}>();
 
-const props = withDefaults(defineProps<Props>(), {
-  filled: false,
-});
-
-const starConfig = STAR_CONFIGS.find((s) => s.value === props.rating);
+const starConfig = STAR_CONFIGS.find((s) => s.value === rating);
 </script>

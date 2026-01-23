@@ -3,7 +3,6 @@
     <label
       v-for="item in items"
       :key="item.key"
-      v-bind="item.labelAttrs"
       class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 cursor-pointer"
     >
       <RatingIcon v-bind="item.iconAttrs" />
@@ -13,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, HTMLAttributes, InputHTMLAttributes, ref } from "vue";
+import { computed, InputHTMLAttributes } from "vue";
 import { STAR_CONFIGS } from "../utils/starConfig";
 import RatingIcon from "./RatingIcon.vue";
 
@@ -22,8 +21,6 @@ const { readonly = false } = defineProps<{
 }>();
 
 const model = defineModel<number | readonly number[]>();
-
-const hoveredStar = ref<number | null>(null);
 
 const arrayModel = computed({
   get() {
@@ -62,18 +59,13 @@ function toggleStar(value: number, force?: boolean) {
 const items = computed(() => {
   return STAR_CONFIGS.map((star) => {
     const selected = isSelected(star.value);
-    const hovered = hoveredStar.value === star.value;
 
     return {
       key: star.value,
       selected,
-      labelAttrs: {
-        onMouseenter: () => (hoveredStar.value = star.value),
-        onMouseleave: () => (hoveredStar.value = null),
-      } satisfies HTMLAttributes,
       iconAttrs: {
         rating: star.value,
-        filled: selected || (!readonly && hovered),
+        filled: selected,
       } satisfies InstanceType<typeof RatingIcon>["$props"],
       inputAttrs: {
         type: "checkbox",
