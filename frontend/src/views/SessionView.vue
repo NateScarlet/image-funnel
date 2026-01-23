@@ -207,7 +207,7 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   return null;
 });
 
-const { session } = useSession(sessionId, { loadingCount });
+const { session } = useSession(() => sessionId, { loadingCount });
 
 const currentImage = computed(() => session.value?.currentImage);
 
