@@ -24,7 +24,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["@apollo/client", "graphql-tag"],
+    include: ["@apollo/client"],
   },
   assetsInclude: ["**/*.gql"],
 });
