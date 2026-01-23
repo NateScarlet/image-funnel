@@ -48,16 +48,16 @@ func (s *Signer) GenerateSignedURL(path string, opts ...image.SignOption) (strin
 	params.Set("t", fmt.Sprintf("%d", timestamp))
 	params.Set("s", fmt.Sprintf("%d", size))
 
-	signature := s.calculateSignature(relativePath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
-	params.Set("sig", signature)
+	signatureBytes := s.calculateSignature(relativePath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
+	params.Set("sig", base64.URLEncoding.EncodeToString(signatureBytes))
 
 	return fmt.Sprintf("image?%s", params.Encode()), nil
 }
 
-func (s *Signer) calculateSignature(path, timestamp, size, w, q string) string {
+func (s *Signer) calculateSignature(path, timestamp, size, w, q string) []byte {
 	mac := hmac.New(sha256.New, s.secretKey)
 	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", path, timestamp, size, w, q)
-	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	return mac.Sum(nil)
 }
 
 func (s *Signer) toRelativePath(absPath string) (string, error) {
@@ -105,8 +105,12 @@ func (s *Signer) ValidateRequestFromValues(params url.Values) error {
 	}
 
 	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q)
+	gotSignature, err := base64.URLEncoding.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("invalid signature encoding")
+	}
 
-	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
+	if !hmac.Equal(expectedSignature, gotSignature) {
 		return fmt.Errorf("invalid signature")
 	}
 
