@@ -23,6 +23,14 @@ func handleImage(
 	absRootDir string,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 为不支持 Cache-Control: immutable 的浏览器(Chrome) 提供 304 响应
+		// 缓存条目时会规范要求按 URL 隔离，所以 ETag 不需全局唯一，不考虑错误客户端
+		const etag = `"immutable"`
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
 		query := r.URL.Query()
 		relativePath := query.Get("path")
 		timestamp := query.Get("t")
@@ -74,6 +82,8 @@ func handleImage(
 			return
 		}
 
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("ETag", etag)
 		http.ServeFile(w, r, processedPath)
 	}
 }
