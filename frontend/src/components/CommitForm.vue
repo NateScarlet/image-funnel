@@ -29,21 +29,15 @@
       <h3 class="font-medium mb-4">写入操作设置</h3>
       <div class="space-y-4">
         <div>
-          <label class="block text-sm text-primary-400 mb-2"
-            >保留图片评分</label
-          >
+          <span class="block text-sm text-primary-400 mb-2">保留图片评分</span>
           <RatingSelector v-model="keepRating" />
         </div>
         <div>
-          <label class="block text-sm text-primary-400 mb-2"
-            >稍后图片评分</label
-          >
+          <span class="block text-sm text-primary-400 mb-2">稍后图片评分</span>
           <RatingSelector v-model="pendingRating" />
         </div>
         <div>
-          <label class="block text-sm text-primary-400 mb-2"
-            >排除图片评分</label
-          >
+          <span class="block text-sm text-primary-400 mb-2">排除图片评分</span>
           <RatingSelector v-model="rejectRating" />
         </div>
       </div>
@@ -147,56 +141,45 @@ const commitResult = ref<{
   errors: string[];
 } | null>(null);
 
-const writeActionsBuffer = ref<{
-  keepRating?: number;
-  pendingRating?: number;
-  rejectRating?: number;
-}>({});
-
 const selectedPreset = computed(() => {
-  return lastSelectedPresetId.value
-    ? getPreset(lastSelectedPresetId.value)
-    : undefined;
+  return getPreset(lastSelectedPresetId.value);
 });
 
 // #region Rating Computeds
 // 为每一个评分字段创建单独的计算属性，以便 v-model 正确工作
+const keepRatingBuffer = ref<number>();
 const keepRating = computed({
   get: () =>
-    writeActionsBuffer.value.keepRating ??
+    keepRatingBuffer.value ??
     selectedPreset.value?.writeActions.keepRating ??
-    4,
-  set: (v: number | readonly number[]) => {
-    writeActionsBuffer.value.keepRating = Array.isArray(v) ? v[0] : v;
+    0,
+  set: (v: number) => {
+    keepRatingBuffer.value = v;
   },
 });
 
+const pendingRatingBuffer = ref<number>();
 const pendingRating = computed({
   get: () =>
-    writeActionsBuffer.value.pendingRating ??
+    pendingRatingBuffer.value ??
     selectedPreset.value?.writeActions.pendingRating ??
     0,
-  set: (v: number | readonly number[]) => {
-    writeActionsBuffer.value.pendingRating = Array.isArray(v) ? v[0] : v;
+  set: (v: number) => {
+    pendingRatingBuffer.value = v;
   },
 });
 
+const rejectRatingBuffer = ref<number>();
 const rejectRating = computed({
   get: () =>
-    writeActionsBuffer.value.rejectRating ??
+    rejectRatingBuffer.value ??
     selectedPreset.value?.writeActions.rejectRating ??
-    2,
-  set: (v: number | readonly number[]) => {
-    writeActionsBuffer.value.rejectRating = Array.isArray(v) ? v[0] : v;
+    0,
+  set: (v: number) => {
+    rejectRatingBuffer.value = v;
   },
 });
 // #endregion
-
-const writeActions = computed(() => ({
-  keepRating: keepRating.value,
-  pendingRating: pendingRating.value,
-  rejectRating: rejectRating.value,
-}));
 
 async function commit() {
   committing.value = true;
@@ -206,7 +189,11 @@ async function commit() {
       variables: {
         input: {
           sessionId: sessionId,
-          writeActions: writeActions.value,
+          writeActions: {
+            keepRating: keepRating.value,
+            pendingRating: pendingRating.value,
+            rejectRating: rejectRating.value,
+          },
         },
       },
     });

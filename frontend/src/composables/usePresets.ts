@@ -60,6 +60,7 @@ const presets = presetsStorage.model;
 const lastSelectedPresetIdStorage = useStorage<string>(
   localStorage,
   "lastPreset@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
+  () => "",
 );
 const lastSelectedPresetId = lastSelectedPresetIdStorage.model;
 
