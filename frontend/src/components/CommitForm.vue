@@ -32,19 +32,19 @@
           <label class="block text-sm text-primary-400 mb-2"
             >保留图片评分</label
           >
-          <RatingSelector v-model="writeActions.keepRating" mode="single" />
+          <RatingSelector v-model="writeActions.keepRating" />
         </div>
         <div>
           <label class="block text-sm text-primary-400 mb-2"
             >稍后图片评分</label
           >
-          <RatingSelector v-model="writeActions.pendingRating" mode="single" />
+          <RatingSelector v-model="writeActions.pendingRating" />
         </div>
         <div>
           <label class="block text-sm text-primary-400 mb-2"
             >排除图片评分</label
           >
-          <RatingSelector v-model="writeActions.rejectRating" mode="single" />
+          <RatingSelector v-model="writeActions.rejectRating" />
         </div>
       </div>
     </div>

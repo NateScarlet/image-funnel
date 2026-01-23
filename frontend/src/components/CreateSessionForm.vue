@@ -26,7 +26,7 @@
       <h3 class="font-medium mb-4">筛选条件</h3>
       <div class="mb-4">
         <label class="block text-sm text-primary-400 mb-2">评分（多选）</label>
-        <RatingSelector v-model="filterRating" mode="multi" />
+        <RatingSelector v-model="filterRating" />
       </div>
     </div>
 
@@ -153,7 +153,7 @@ const selectedPreset = computed(() => {
 const filterRatingBuffer = ref<readonly number[]>();
 const filterRating = computed({
   get: () =>
-    (filterRatingBuffer.value ?? selectedPreset.value?.filter.rating) || [],
+    filterRatingBuffer.value ?? selectedPreset.value?.filter.rating ?? [],
   set: (value) => {
     filterRatingBuffer.value = value;
   },

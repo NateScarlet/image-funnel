@@ -1,72 +1,92 @@
 <template>
-  <div class="star-selector">
-    <div class="flex items-center gap-1">
-      <button
-        v-for="star in stars"
-        :key="star.value"
-        type="button"
-        class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 active:scale-95"
-        :disabled="disabled"
-        @click="toggleStar(star.value)"
-        @mouseenter="hoveredStar = star.value"
-        @mouseleave="hoveredStar = null"
-      >
-        <RatingIcon
-          :rating="star.value"
-          :filled="isSelected(star.value) || hoveredStar === star.value"
-        />
-      </button>
-    </div>
-    <div v-if="label" class="text-sm text-primary-400 mt-1">{{ label }}</div>
+  <div class="flex items-center gap-1">
+    <label
+      v-for="item in items"
+      :key="item.key"
+      v-bind="item.labelAttrs"
+      class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 cursor-pointer"
+    >
+      <RatingIcon v-bind="item.iconAttrs" />
+      <input class="hidden" v-bind="item.inputAttrs" />
+    </label>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { STAR_CONFIGS, type StarConfig } from "../utils/starConfig";
+import { computed, HTMLAttributes, InputHTMLAttributes, ref } from "vue";
+import { STAR_CONFIGS } from "../utils/starConfig";
 import RatingIcon from "./RatingIcon.vue";
 
-interface Props {
-  mode?: "single" | "multi";
-  disabled?: boolean;
-  label?: string;
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  mode: "single",
-  disabled: false,
-  label: "",
-});
+const { readonly = false } = defineProps<{
+  readonly?: boolean;
+}>();
 
 const model = defineModel<number | readonly number[]>();
 
-const stars: StarConfig[] = STAR_CONFIGS;
 const hoveredStar = ref<number | null>(null);
 
-function isSelected(value: number): boolean {
-  if (props.mode === "single") {
-    return model.value === value;
-  } else {
-    return Array.isArray(model.value) && model.value.includes(value);
-  }
-}
-
-function toggleStar(value: number) {
-  if (props.disabled) return;
-
-  if (props.mode === "single") {
-    model.value = value;
-  } else {
-    const current = Array.isArray(model.value) ? [...model.value] : [];
-    const index = current.indexOf(value);
-
-    if (index === -1) {
-      current.push(value);
+const arrayModel = computed({
+  get() {
+    return Array.isArray(model.value) ? model.value : [];
+  },
+  set(value) {
+    if (Array.isArray(model.value)) {
+      model.value = value;
     } else {
-      current.splice(index, 1);
+      model.value = value[0] ?? 0;
     }
+  },
+});
 
-    model.value = current;
-  }
+function isSelected(value: number): boolean {
+  return arrayModel.value.includes(value);
 }
+
+function toggleStar(value: number, force?: boolean) {
+  if (readonly) return;
+
+  const current = isSelected(value);
+  const want = force ?? !current;
+  if (current === want) {
+    return;
+  }
+  const arr = [...arrayModel.value];
+  if (want) {
+    arr.push(value);
+  } else {
+    arr.splice(arr.indexOf(value), 1);
+  }
+  arrayModel.value = arr;
+}
+
+const items = computed(() => {
+  return STAR_CONFIGS.map((star) => {
+    const selected = isSelected(star.value);
+    const hovered = hoveredStar.value === star.value;
+
+    return {
+      key: star.value,
+      selected,
+      labelAttrs: {
+        onMouseenter: () => (hoveredStar.value = star.value),
+        onMouseleave: () => (hoveredStar.value = null),
+      } satisfies HTMLAttributes,
+      iconAttrs: {
+        rating: star.value,
+        filled: selected || (!readonly && hovered),
+      } satisfies InstanceType<typeof RatingIcon>["$props"],
+      inputAttrs: {
+        type: "checkbox",
+        disabled: readonly,
+        checked: selected,
+        onChange: (e) => {
+          if (e.target instanceof HTMLInputElement) {
+            // 完全基于 UI 状态，保证符合用户预期
+            toggleStar(star.value, e.target.checked);
+          }
+        },
+      } satisfies InputHTMLAttributes,
+    };
+  });
+});
 </script>

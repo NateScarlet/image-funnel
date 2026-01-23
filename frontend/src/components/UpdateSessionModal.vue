@@ -52,7 +52,7 @@
           <label class="block text-sm font-medium text-primary-300 mb-2">
             筛选条件
           </label>
-          <RatingSelector v-model="rating" mode="multi" />
+          <RatingSelector v-model="rating" />
         </div>
       </div>
 
