@@ -52,38 +52,41 @@ func handleImage(
 		}
 
 		absPath := filepath.Join(absRootDir, relativePath)
-		if raw {
-			http.ServeFile(w, r, absPath)
-			return
-		}
+		targetPath := absPath
+		shouldSetHeaders := raw
 
-		width := 0
-		if widthStr != "" {
-			if w, err := strconv.Atoi(widthStr); err == nil {
-				width = w
+		if !raw {
+			width := 0
+			if widthStr != "" {
+				if w, err := strconv.Atoi(widthStr); err == nil {
+					width = w
+				}
+			}
+
+			quality := 0
+			if qualityStr != "" {
+				if q, err := strconv.Atoi(qualityStr); err == nil {
+					quality = q
+				}
+			}
+
+			processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
+			if errors.Is(err, context.Canceled) {
+				http.Error(w, "request canceled", http.StatusRequestTimeout)
+				return
+			}
+			if err != nil {
+				logger.Error("process image", zap.Error(err))
+			} else {
+				targetPath = processedPath
+				shouldSetHeaders = true
 			}
 		}
 
-		quality := 0
-		if qualityStr != "" {
-			if q, err := strconv.Atoi(qualityStr); err == nil {
-				quality = q
-			}
+		if shouldSetHeaders {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Header().Set("ETag", etag)
 		}
-
-		processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
-		if errors.Is(err, context.Canceled) {
-			http.Error(w, "request canceled", http.StatusRequestTimeout)
-			return
-		}
-		if err != nil {
-			logger.Error("process image", zap.Error(err))
-			http.ServeFile(w, r, absPath)
-			return
-		}
-
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		w.Header().Set("ETag", etag)
-		http.ServeFile(w, r, processedPath)
+		http.ServeFile(w, r, targetPath)
 	}
 }
