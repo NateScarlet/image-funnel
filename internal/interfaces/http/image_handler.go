@@ -33,17 +33,9 @@ func handleImage(
 
 		query := r.URL.Query()
 		relativePath := query.Get("path")
-		timestamp := query.Get("t")
-		size := query.Get("s")
-		signature := query.Get("sig")
 		widthStr := query.Get("w")
 		qualityStr := query.Get("q")
 		raw := query.Has("raw")
-
-		if relativePath == "" || timestamp == "" || size == "" || signature == "" {
-			http.Error(w, "missing required parameters", http.StatusBadRequest)
-			return
-		}
 
 		err := signer.ValidateRequestFromValues(query)
 		if err != nil {
