@@ -86,15 +86,28 @@
               </template>
             </template>
           </ImageViewer>
-
-          <div
-            class="absolute bottom-0 left-0 right-0 h-1/2 pointer-events-none overflow-hidden"
-          >
-            <SwipeDirectionIndicator
-              :direction="swipeDirection"
-              :renderer-el="rendererEl"
-            />
-          </div>
+          <Teleport :to="rendererEl">
+            <div
+              ref="swipeEl"
+              class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none"
+            >
+              <Transition
+                enter-active-class="transition duration-100 ease-out"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+              >
+                <SwipeDirectionIndicator
+                  v-if="swipeDirection"
+                  class="h-full w-full"
+                  :direction="swipeDirection"
+                  :renderer-el="rendererEl"
+                />
+              </Transition>
+            </div>
+          </Teleport>
         </div>
 
         <div
@@ -112,7 +125,8 @@
     </main>
 
     <footer
-      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0 hidden [@media(min-height:512px)]:block"
+      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0"
+      :class="didUseGesture ? 'hidden' : ''"
     >
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
@@ -142,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import mutate from "../graphql/utils/mutate";
 import {
@@ -181,16 +195,18 @@ const showCommitModal = ref<boolean>(false);
 const undoing = ref(false);
 const marking = ref(false);
 
+// TODO: refactor to touchStart touchEnd
+// TODO: 移除多余的类型标注
 const touchStartX = ref<number>(0);
 const touchStartY = ref<number>(0);
 const touchEndX = ref<number>(0);
 const touchEndY = ref<number>(0);
-const isSingleTouch = ref<boolean>(true);
+const swiping = ref<boolean>(false);
 
 const SWIPE_THRESHOLD = 50;
 
 const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
-  if (!isSingleTouch.value) return null;
+  if (!swiping.value) return null;
 
   const deltaX = touchEndX.value - touchStartX.value;
   const deltaY = touchEndY.value - touchStartY.value;
@@ -215,13 +231,78 @@ const isCompleted = computed(() => {
   return session.value?.stats.isCompleted || false;
 });
 
-onMounted(() => {
-  useEventListeners(window, ({ on }) => {
-    on("keydown", handleKeyDown);
-    on("touchstart", handleTouchStart, { passive: false });
-    on("touchmove", handleTouchMove, { passive: false });
-    on("touchend", handleTouchEnd, { passive: true });
+const swipeEl = useTemplateRef("swipeEl");
+useEventListeners(window, ({ on }) => {
+  on("keydown", (e) => {
+    if (showMenu.value) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        markImage(ImageAction.REJECT);
+        break;
+      case "ArrowUp":
+        markImage(ImageAction.PENDING);
+        break;
+      case "ArrowRight":
+        markImage(ImageAction.KEEP);
+        break;
+      case "ArrowLeft":
+        undo();
+        break;
+    }
   });
+  on(
+    "touchstart",
+    (e) => {
+      const touch = e.changedTouches[0];
+      if (e.touches.length !== 1 || !insideSwipeArea(touch)) {
+        // 只支持单指操作
+        return;
+      }
+      if (
+        document
+          .elementsFromPoint(touch.clientX, touch.clientY)
+          .some((el) => el.hasAttribute("data-no-gesture"))
+      ) {
+        // 避免干扰交互区域
+        return;
+      }
+
+      e.preventDefault();
+      swiping.value = true;
+      touchStartX.value = touch.clientX;
+      touchStartY.value = touch.clientY;
+      touchEndX.value = touchStartX.value;
+      touchEndY.value = touchStartY.value;
+    },
+    { passive: false },
+  );
+  on(
+    "touchmove",
+    (e) => {
+      if (!swiping.value) {
+        return;
+      }
+      e.preventDefault();
+      touchEndX.value = e.changedTouches[0].clientX;
+      touchEndY.value = e.changedTouches[0].clientY;
+    },
+    { passive: false },
+  );
+  on(
+    "touchend",
+    (e) => {
+      if (!swiping.value) {
+        return;
+      }
+      e.preventDefault();
+      touchEndX.value = e.changedTouches[0].clientX;
+      touchEndY.value = e.changedTouches[0].clientY;
+      handleGesture();
+      swiping.value = false;
+    },
+    { passive: false },
+  );
 });
 
 async function markImage(action: ImageAction) {
@@ -258,87 +339,30 @@ async function undo() {
   }
 }
 
-function handleKeyDown(e: KeyboardEvent) {
-  if (showMenu.value) return;
-
-  switch (e.key) {
-    case "ArrowDown":
-      markImage(ImageAction.REJECT);
-      break;
-    case "ArrowUp":
-      markImage(ImageAction.PENDING);
-      break;
-    case "ArrowRight":
-      markImage(ImageAction.KEEP);
-      break;
-    case "ArrowLeft":
-      undo();
-      break;
+function insideSwipeArea(e: { clientX: number; clientY: number }) {
+  const el = swipeEl.value;
+  if (!el) {
+    return false;
   }
+  const rect = el.getBoundingClientRect();
+  return (
+    e.clientX >= rect.left &&
+    e.clientX <= rect.right &&
+    e.clientY >= rect.top &&
+    e.clientY <= rect.bottom
+  );
 }
 
-const isBottomHalf = (y: number) => y > window.innerHeight / 2;
-
 function handleAllowPan(e: PointerEvent) {
-  if (e.pointerType === "touch" && isBottomHalf(e.clientY)) {
+  if (e.pointerType === "touch" && insideSwipeArea(e)) {
     return false;
   }
   return true;
 }
 
-function handleTouchStart(e: TouchEvent) {
-  const touch = e.changedTouches[0];
-  if (e.touches.length !== 1 || !isBottomHalf(touch.clientY)) {
-    isSingleTouch.value = false;
-    return;
-  }
-
-  isSingleTouch.value = true;
-  touchStartX.value = touch.screenX;
-  touchStartY.value = touch.screenY;
-  touchEndX.value = touchStartX.value;
-  touchEndY.value = touchStartY.value;
-
-  const target = e.target as HTMLElement;
-  const isButton = target.closest("button, a, input, select, textarea");
-  if (!isButton) {
-    e.preventDefault();
-  }
-}
-
-function handleTouchMove(e: TouchEvent) {
-  if (!isSingleTouch.value || e.touches.length !== 1) {
-    isSingleTouch.value = false;
-    return;
-  }
-
-  touchEndX.value = e.changedTouches[0].screenX;
-  touchEndY.value = e.changedTouches[0].screenY;
-
-  const deltaX = touchEndX.value - touchStartX.value;
-  const deltaY = touchEndY.value - touchStartY.value;
-
-  if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
-    e.preventDefault();
-  }
-}
-
-function handleTouchEnd(e: TouchEvent) {
-  touchEndX.value = e.changedTouches[0].screenX;
-  touchEndY.value = e.changedTouches[0].screenY;
-  handleGesture();
-
-  // 重置触摸坐标，清除滑动方向
-  setTimeout(() => {
-    touchEndX.value = touchStartX.value;
-    touchEndY.value = touchStartY.value;
-  }, 100);
-}
-
+const didUseGesture = ref(false);
 function handleGesture() {
-  if (showMenu.value) return;
-  if (!swipeDirection.value) return;
-
+  console.log(swipeDirection.value);
   switch (swipeDirection.value) {
     case "UP":
       markImage(ImageAction.PENDING);
@@ -352,6 +376,9 @@ function handleGesture() {
     case "RIGHT":
       undo();
       break;
+    default:
+      return;
   }
+  didUseGesture.value = true;
 }
 </script>

@@ -47,6 +47,7 @@
     <!-- 图片尺寸和缩放操作 -->
     <div
       v-if="image.width && image.height"
+      data-no-gesture
       class="flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
       <button

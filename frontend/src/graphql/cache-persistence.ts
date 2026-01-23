@@ -27,18 +27,12 @@ export class PersistentCache extends InMemoryCache {
       }
 
       if (cachedData.length > this.maxSize) {
-        if (import.meta.env.DEV) {
-          console.log("[PersistentCache] 缓存超过最大限制，已清除");
-        }
         localStorage.removeItem(this.storageKey);
         return;
       }
 
       const parsed = JSON.parse(cachedData);
       super.restore(parsed);
-      if (import.meta.env.DEV) {
-        console.log("[PersistentCache] 已从 localStorage 恢复缓存");
-      }
     } catch (error) {
       console.error("恢复缓存失败:", error);
       localStorage.removeItem(this.storageKey);
@@ -56,16 +50,10 @@ export class PersistentCache extends InMemoryCache {
         const serialized = JSON.stringify(data);
 
         if (serialized.length > this.maxSize) {
-          if (import.meta.env.DEV) {
-            console.log("[PersistentCache] 缓存超过最大限制，跳过保存");
-          }
           return;
         }
 
         localStorage.setItem(this.storageKey, serialized);
-        if (import.meta.env.DEV) {
-          console.log("[PersistentCache] 已保存缓存到 localStorage");
-        }
       } catch (error) {
         console.error("保存缓存失败:", error);
       }

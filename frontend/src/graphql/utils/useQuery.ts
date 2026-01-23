@@ -109,7 +109,6 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
       watch(
         () => toValue(variables),
         (n, o) => {
-          console.log({ n, o });
           if (isEqual(n, o)) {
             // not recreate query if variable not changed
             return;
