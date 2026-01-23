@@ -60,9 +60,12 @@
         没有更多图片
       </div>
 
-      <div v-else class="w-full flex flex-col items-center h-full min-h-0">
+      <div
+        v-else
+        class="w-full flex flex-col items-center h-full min-h-0 md:space-y-2"
+      >
         <div
-          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden mb-2 md:mb-4 min-h-0"
+          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden min-h-0"
         >
           <ImageViewer
             v-if="currentImage"
@@ -100,12 +103,16 @@
         </div>
 
         <div
-          class="text-center text-xs md:text-sm text-primary-400 mb-2 md:mb-4 hidden [@media(min-height:512px)]:block"
+          class="text-center text-xs md:text-sm text-primary-400 hidden md:block"
         >
           {{ currentImage?.filename || "" }}
         </div>
 
-        <SessionActions :marking="marking" @mark="markImage" />
+        <SessionActions
+          class="hidden md:flex gap-4 w-full max-w-md mb-4"
+          :marking="marking"
+          @mark="markImage"
+        />
       </div>
     </main>
 

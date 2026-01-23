@@ -1,10 +1,8 @@
 <template>
-  <div
-    class="hidden [@media(min-height:768px)]:flex gap-4 w-full max-w-md mb-4"
-  >
+  <div>
     <button
       :disabled="marking"
-      class="btn-action flex-1 py-4 px-6 bg-red-600 hover:bg-red-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+      class="btn-action flex-1 p-2 bg-red-600 hover:bg-red-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.REJECT)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
@@ -18,7 +16,7 @@
 
     <button
       :disabled="marking"
-      class="btn-action flex-1 py-4 px-6 bg-yellow-600 hover:bg-yellow-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+      class="btn-action flex-1 p-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.PENDING)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
@@ -32,7 +30,7 @@
 
     <button
       :disabled="marking"
-      class="btn-action flex-1 py-4 px-6 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
+      class="btn-action flex-1 p-2 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.KEEP)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
