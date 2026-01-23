@@ -16,9 +16,10 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 
 这是最简单的安装方式，包含了环境所需的所有依赖（如 ImageMagick）。
 
-1. 获取 `deployments/compose.yml`。
-2. 运行 `docker compose up -d`。
-3. 访问 `http://localhost:34898`。
+1. 获取 [deployments/compose.yml](deployments/compose.yml)。
+2. 将图片放到 ./images 下，或修改 /app/workspace 的挂载。
+3. 运行 `docker compose up -d`。
+4. 访问 `http://localhost:34898`。
 
 ### 配置说明
 
