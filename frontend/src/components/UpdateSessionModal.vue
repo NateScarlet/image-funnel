@@ -49,9 +49,9 @@
 
         <!-- 筛选条件 -->
         <div>
-          <label class="block text-sm font-medium text-primary-300 mb-2">
+          <span class="block text-sm font-medium text-primary-300 mb-2">
             筛选条件
-          </label>
+          </span>
           <RatingSelector v-model="rating" />
         </div>
       </div>
