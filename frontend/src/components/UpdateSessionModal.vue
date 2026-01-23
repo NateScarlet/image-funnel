@@ -19,7 +19,7 @@
             v-model="selectedPresetId"
             class="w-full bg-primary-700 border border-primary-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-secondary-500 focus:border-transparent"
           >
-            <option value="custom">自定义</option>
+            <option value="">自定义</option>
             <option
               v-for="preset in presets"
               :key="preset.id"
@@ -35,7 +35,7 @@
           <label class="block text-sm font-medium text-primary-300 mb-2">
             目标保留数量
             <span class="text-primary-400 ml-2 text-xs"
-              >({{ kept }} / {{ targetKeep }})</span
+              >({{ session.stats?.kept ?? 0 }} / {{ targetKeep }})</span
             >
           </label>
           <input
@@ -76,75 +76,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
+import type { SessionFragment } from "../graphql/generated";
 import mutate from "../graphql/utils/mutate";
 import { UpdateSessionDocument } from "../graphql/generated";
-import { usePresets } from "../composables/usePresets";
+import { useSessionConfig } from "../composables/useSessionConfig";
 import RatingSelector from "./RatingSelector.vue";
 
 interface Props {
   visible?: boolean;
-  targetKeep?: number;
-  filter?: {
-    rating: number[];
-  };
-  kept?: number;
-  sessionId: string;
+  session: SessionFragment;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<(e: "close" | "updated") => void>();
 
-const { presets, getPreset, lastSelectedPresetId } = usePresets();
-
-const selectedPresetIdBuffer = ref<string>();
-const selectedPresetId = computed({
-  get() {
-    if (targetKeepBuffer.value != null || ratingBuffer.value != null) {
-      return "custom";
-    }
-    return (
-      selectedPresetIdBuffer.value || lastSelectedPresetId.value || "custom"
-    );
-  },
-  set(v) {
-    targetKeepBuffer.value = undefined;
-    ratingBuffer.value = undefined;
-    selectedPresetIdBuffer.value = v;
-    lastSelectedPresetId.value = v;
-  },
-});
-const selectedPreset = computed(() => {
-  return getPreset(selectedPresetId.value);
-});
-
-// 缓冲变量，用于存储用户主动修改的值
-const targetKeepBuffer = ref<number>();
-const ratingBuffer = ref<number[]>();
-
-// 目标保留数量的computed属性
-const targetKeep = computed({
-  get: () =>
-    targetKeepBuffer.value ??
-    selectedPreset.value?.targetKeep ??
-    props.targetKeep,
-  set: (value: number) => {
-    targetKeepBuffer.value = value;
-  },
-});
-
-// 筛选条件的rating属性
-const rating = computed({
-  get: () =>
-    ratingBuffer.value ??
-    selectedPreset.value?.filter.rating ??
-    props.filter?.rating ??
-    [],
-  set: (value: number[]) => {
-    ratingBuffer.value = value;
-  },
-});
+const { presets, selectedPresetId, targetKeep, rating } = useSessionConfig(
+  () => props.session,
+);
 
 // 触发更新事件
 const updating = ref<boolean>(false);
@@ -159,7 +109,7 @@ async function update() {
     await mutate(UpdateSessionDocument, {
       variables: {
         input: {
-          sessionId: props.sessionId,
+          sessionId: props.session.id,
           targetKeep: targetKeep.value,
           filter: {
             rating: rating.value,
@@ -167,10 +117,6 @@ async function update() {
         },
       },
     });
-
-    if (selectedPresetId.value !== "custom") {
-      lastSelectedPresetId.value = selectedPresetId.value;
-    }
 
     emit("updated");
     emit("close");

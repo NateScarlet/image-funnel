@@ -22,7 +22,7 @@
       </div>
     </div>
 
-    <div v-if="selectedPreset" class="bg-primary-700 rounded-lg p-4">
+    <div class="bg-primary-700 rounded-lg p-4">
       <h3 class="font-medium mb-4">筛选条件</h3>
       <div class="mb-4">
         <label class="block text-sm text-primary-400 mb-2">评分（多选）</label>
@@ -83,16 +83,22 @@ import {
   MetaDocument,
   RootDirectoryDocument,
 } from "../graphql/generated";
-import { usePresets } from "../composables/usePresets";
 import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
+import { useSessionConfig } from "../composables/useSessionConfig";
 
 type Emits = (e: "created") => void;
 
 const emit = defineEmits<Emits>();
 
 const router = useRouter();
-const { presets, getPreset, lastSelectedPresetId } = usePresets();
+
+const {
+  presets,
+  selectedPresetId,
+  targetKeep,
+  rating: filterRating,
+} = useSessionConfig();
 
 const loadingCount = ref(0);
 const creatingSession = ref(false);
@@ -131,43 +137,6 @@ const currentDirectory = computed(() => {
 });
 const directories = computed(() => currentDirectory.value?.directories || []);
 const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
-
-const selectedPresetIdBuffer = ref<string>();
-const selectedPresetId = computed({
-  get() {
-    return (
-      selectedPresetIdBuffer.value ??
-      lastSelectedPresetId.value ??
-      presets.value[0].id
-    );
-  },
-  set(v) {
-    filterRatingBuffer.value = undefined;
-    targetKeepBuffer.value = undefined;
-    selectedPresetIdBuffer.value = v;
-    lastSelectedPresetId.value = v;
-  },
-});
-const selectedPreset = computed(() => {
-  return getPreset(selectedPresetId.value || "");
-});
-
-const filterRatingBuffer = ref<readonly number[]>();
-const filterRating = computed({
-  get: () =>
-    filterRatingBuffer.value ?? selectedPreset.value?.filter.rating ?? [],
-  set: (value) => {
-    filterRatingBuffer.value = value;
-  },
-});
-
-const targetKeepBuffer = ref<number>();
-const targetKeep = computed({
-  get: () => targetKeepBuffer.value ?? selectedPreset.value?.targetKeep ?? 10,
-  set: (value) => {
-    targetKeepBuffer.value = value;
-  },
-});
 
 const canCreate = computed(() => {
   return (filterRating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;

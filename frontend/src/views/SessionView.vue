@@ -139,11 +139,8 @@
     />
 
     <UpdateSessionModal
-      v-if="showUpdateSessionModal"
-      :target-keep="session?.targetKeep"
-      :filter="{ rating: session?.filter?.rating || [] }"
-      :kept="stats?.kept || 0"
-      :session-id="sessionId"
+      v-if="showUpdateSessionModal && session"
+      :session="session"
       @close="showUpdateSessionModal = false"
       @updated="showUpdateSessionModal = false"
     />
