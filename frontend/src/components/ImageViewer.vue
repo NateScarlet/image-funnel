@@ -1,7 +1,7 @@
 <template>
   <div
     ref="rootEl"
-    class="relative w-full h-full flex flex-col bg-primary-800 rounded-lg overflow-hidden"
+    class="relative w-full h-full flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate"
   >
     <div
       ref="containerRef"
