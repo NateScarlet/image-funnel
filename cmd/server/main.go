@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -42,6 +43,8 @@ import (
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/NateScarlet/gqlgen-batching/pkg/batching"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
+	"github.com/rs/cors"
 	"go.uber.org/zap"
 )
 
@@ -92,6 +95,29 @@ func main() {
 		secretKey = mustGenerateRandomSecretKey()
 		logger.Info("generated random secret key for this session")
 	}
+	corsHosts := []string{}
+	if v := os.Getenv("IMAGE_FUNNEL_CORS_HOSTS"); v != "" {
+		corsHosts = strings.Split(v, ",")
+	}
+
+	isOriginAllowed := func(origin string, requestHost string) bool {
+		if origin == "" {
+			return true
+		}
+		u, err := url.Parse(origin)
+		if err != nil {
+			return false
+		}
+		if requestHost != "" && strings.EqualFold(u.Host, requestHost) {
+			return true
+		}
+		for _, i := range corsHosts {
+			if i != "" && strings.EqualFold(i, u.Host) {
+				return true
+			}
+		}
+		return false
+	}
 
 	signer := urlconv.NewSigner(secretKey, absRootDir)
 
@@ -138,7 +164,22 @@ func main() {
 
 	srv.AddTransport(transport.Websocket{
 		KeepAlivePingInterval: 10 * time.Second,
+		Upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				if isOriginAllowed(origin, r.Host) {
+					return true
+				}
+				logger.Warn(
+					"origin not allowed",
+					zap.String("origin", origin),
+					zap.String("host", r.Host),
+				)
+				return false
+			},
+		},
 	})
+
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(batching.POST{})
@@ -262,13 +303,22 @@ func main() {
 
 	addStaticRoutes(r, frontendDir)
 
+	handler := cors.New(cors.Options{
+		AllowOriginFunc: func(origin string) bool {
+			return isOriginAllowed(origin, "")
+		},
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan"},
+		AllowCredentials: true,
+	}).Handler(r)
+
 	logger.Info("starting server",
 		zap.String("port", port),
 		zap.String("rootDir", absRootDir),
 		zap.String("version", version),
 		zap.String("frontendDir", frontendDir),
 	)
-	logger.Fatal("start server", zap.Error(http.ListenAndServe(":"+port, r)))
+	logger.Fatal("start server", zap.Error(http.ListenAndServe(":"+port, handler)))
 }
 
 func negotiateFormat(r *http.Request, formats ...string) string {
