@@ -1,6 +1,7 @@
 package util
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,9 +66,14 @@ func TestEnsurePathInRoot(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "path traversal with backslash",
+			name:    "path traversal with backslash (windows only)",
 			path:    "..\\escape",
-			wantErr: true,
+			wantErr: runtime.GOOS == "windows",
+		},
+		{
+			name:    "backslash as filename",
+			path:    "back\\slash",
+			wantErr: false,
 		},
 		{
 			name:    "normal path looks like escape",
@@ -75,9 +81,9 @@ func TestEnsurePathInRoot(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "path traversal with double backslash",
+			name:    "path traversal with double backslash (windows only)",
 			path:    "..\\..\\escape",
-			wantErr: true,
+			wantErr: runtime.GOOS == "windows",
 		},
 		{
 			name:    "absolute path",
@@ -85,9 +91,14 @@ func TestEnsurePathInRoot(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "absolute path with drive letter",
+			name:    "absolute path with drive letter (windows only)",
 			path:    "C:\\Windows\\System32",
-			wantErr: true,
+			wantErr: runtime.GOOS == "windows",
+		},
+		{
+			name:    "drive letter as filename (non-windows)",
+			path:    "C:filename",
+			wantErr: runtime.GOOS == "windows", // 在 Windows 上这是带盘符的绝对/卷相关路径
 		},
 	}
 
