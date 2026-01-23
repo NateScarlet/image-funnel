@@ -52,7 +52,7 @@
           <label class="block text-sm font-medium text-primary-300 mb-2">
             筛选条件
           </label>
-          <StarSelector v-model="rating" mode="multi" />
+          <RatingSelector v-model="rating" mode="multi" />
         </div>
       </div>
 
@@ -80,7 +80,7 @@ import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
 import { UpdateSessionDocument } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
-import StarSelector from "./StarSelector.vue";
+import RatingSelector from "./RatingSelector.vue";
 
 interface Props {
   visible?: boolean;

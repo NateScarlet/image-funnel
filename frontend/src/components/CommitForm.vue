@@ -32,19 +32,19 @@
           <label class="block text-sm text-primary-400 mb-2"
             >保留图片评分</label
           >
-          <StarSelector v-model="writeActions.keepRating" mode="single" />
+          <RatingSelector v-model="writeActions.keepRating" mode="single" />
         </div>
         <div>
           <label class="block text-sm text-primary-400 mb-2"
             >稍后图片评分</label
           >
-          <StarSelector v-model="writeActions.pendingRating" mode="single" />
+          <RatingSelector v-model="writeActions.pendingRating" mode="single" />
         </div>
         <div>
           <label class="block text-sm text-primary-400 mb-2"
             >排除图片评分</label
           >
-          <StarSelector v-model="writeActions.rejectRating" mode="single" />
+          <RatingSelector v-model="writeActions.rejectRating" mode="single" />
         </div>
       </div>
     </div>
@@ -112,7 +112,7 @@ import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
 import { CommitChangesDocument } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
-import StarSelector from "./StarSelector.vue";
+import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
 
 interface Props {

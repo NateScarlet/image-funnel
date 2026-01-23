@@ -26,7 +26,7 @@
       <h3 class="font-medium mb-4">筛选条件</h3>
       <div class="mb-4">
         <label class="block text-sm text-primary-400 mb-2">评分（多选）</label>
-        <StarSelector v-model="filterRating" mode="multi" />
+        <RatingSelector v-model="filterRating" mode="multi" />
       </div>
     </div>
 
@@ -84,7 +84,7 @@ import {
   RootDirectoryDocument,
 } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
-import StarSelector from "./StarSelector.vue";
+import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 
 type Emits = (e: "created") => void;
