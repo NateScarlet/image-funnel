@@ -4,7 +4,6 @@
   >
     <SessionHeader
       :session="session"
-      :stats="stats"
       :undoing="undoing"
       @show-menu="showMenu = true"
       @show-update-session-modal="showUpdateSessionModal = true"
@@ -49,11 +48,7 @@
         </button>
       </div>
 
-      <CompletedView
-        v-else-if="isCompleted"
-        :session-id="sessionId"
-        :stats="stats"
-      />
+      <CompletedView v-else-if="isCompleted" :session-id="sessionId" />
 
       <div v-else-if="!currentImage" class="text-center text-primary-400">
         没有更多图片
@@ -85,7 +80,8 @@
                 </span>
                 <div class="w-px h-4 bg-white/30 mx-1"></div>
                 <span class="lg:min-w-24 text-green-400">
-                  保留: {{ stats?.kept || 0 }} / {{ session?.targetKeep || 0 }}
+                  保留: {{ session?.stats.kept || 0 }} /
+                  {{ session?.targetKeep || 0 }}
                 </span>
               </template>
             </template>
@@ -168,6 +164,7 @@ import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
 import { mdiHome, mdiLock, mdiLockOpenVariant } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
+import useSession from "../composables/useSession";
 
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
@@ -212,17 +209,12 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   return null;
 });
 
-import useSession from "../composables/useSession";
-
-// ... (keep other imports)
-
 const { session } = useSession(sessionId, { loadingCount });
 
-const stats = computed(() => session.value?.stats);
 const currentImage = computed(() => session.value?.currentImage);
 
 const isCompleted = computed(() => {
-  return stats.value?.isCompleted || false;
+  return session.value?.stats.isCompleted || false;
 });
 
 onMounted(() => {

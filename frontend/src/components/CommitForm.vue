@@ -4,22 +4,30 @@
       <h2 v-if="title" class="text-xl font-bold mb-4">{{ title }}</h2>
       <p class="text-primary-300 mb-2">
         将
-        {{ stats.kept + stats.reviewed + stats.rejected }}
+        {{
+          (session?.stats.kept ?? 0) +
+          (session?.stats.reviewed ?? 0) +
+          (session?.stats.rejected ?? 0)
+        }}
         个操作写入 XMP 文件
       </p>
       <div class="grid grid-cols-3 gap-2 text-sm">
         <div class="bg-green-900 bg-opacity-30 rounded p-2 text-center">
-          <div class="text-green-400 font-bold">{{ stats?.kept || 0 }}</div>
+          <div class="text-green-400 font-bold">
+            {{ session?.stats.kept || 0 }}
+          </div>
           <div class="text-primary-400">保留</div>
         </div>
         <div class="bg-yellow-900 bg-opacity-30 rounded p-2 text-center">
           <div class="text-yellow-400 font-bold">
-            {{ stats?.reviewed || 0 }}
+            {{ session?.stats.reviewed || 0 }}
           </div>
           <div class="text-primary-400">稍后</div>
         </div>
         <div class="bg-red-900 bg-opacity-30 rounded p-2 text-center">
-          <div class="text-red-400 font-bold">{{ stats?.rejected || 0 }}</div>
+          <div class="text-red-400 font-bold">
+            {{ session?.stats.rejected || 0 }}
+          </div>
           <div class="text-primary-400">排除</div>
         </div>
       </div>
@@ -108,28 +116,20 @@ import { CommitChangesDocument } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
+import useSession from "@/composables/useSession";
 
 const {
   sessionId,
-  stats = {
-    kept: 0,
-    reviewed: 0,
-    rejected: 0,
-  },
   showHeader = true,
   title = "",
 } = defineProps<{
   sessionId: string;
-  stats?: {
-    kept: number;
-    reviewed: number;
-    rejected: number;
-  };
   showHeader?: boolean;
   title?: string;
 }>();
 
 const emit = defineEmits<(e: "committed") => void>();
+const { session } = useSession(sessionId);
 
 const { getPreset, lastSelectedPresetId } = usePresets();
 

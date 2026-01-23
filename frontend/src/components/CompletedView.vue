@@ -11,7 +11,6 @@
     >
       <CommitForm
         :session-id="sessionId"
-        :stats="stats"
         title=""
         @committed="handleCommitted"
       />
@@ -38,15 +37,8 @@ import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 
-interface SessionStats {
-  kept: number;
-  reviewed: number;
-  rejected: number;
-}
-
-const { sessionId, stats } = defineProps<{
+const { sessionId } = defineProps<{
   sessionId: string;
-  stats?: SessionStats;
 }>();
 
 const router = useRouter();

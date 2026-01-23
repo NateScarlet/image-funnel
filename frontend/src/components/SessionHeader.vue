@@ -19,7 +19,8 @@
         <div class="text-sm md:text-lg font-semibold truncate">
           {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
           <span class="text-green-400 ml-2"
-            >保留: {{ stats?.kept || 0 }} / {{ session?.targetKeep || 0 }}</span
+            >保留: {{ session?.stats.kept || 0 }} /
+            {{ session?.targetKeep || 0 }}</span
           >
         </div>
       </div>
@@ -93,11 +94,7 @@ import {
 import { computed } from "vue";
 import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
-import {
-  MetaDocument,
-  SessionFragment,
-  SessionStatsFragment,
-} from "@/graphql/generated";
+import { MetaDocument, SessionFragment } from "@/graphql/generated";
 
 const router = useRouter();
 
@@ -105,9 +102,8 @@ function goHome() {
   router.push("/");
 }
 
-const { session, stats, undoing } = defineProps<{
+const { session, undoing } = defineProps<{
   session: SessionFragment | null | undefined;
-  stats: SessionStatsFragment | null | undefined;
   undoing: boolean;
 }>();
 
