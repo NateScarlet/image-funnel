@@ -70,6 +70,11 @@ func TestEnsurePathInRoot(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "normal path looks like escape",
+			path:    "..not_escape",
+			wantErr: false,
+		},
+		{
 			name:    "path traversal with double backslash",
 			path:    "..\\..\\escape",
 			wantErr: true,
