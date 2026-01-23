@@ -112,25 +112,25 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
-import { CommitChangesDocument } from "../graphql/generated";
+import {
+  CommitChangesDocument,
+  type SessionFragment,
+} from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
-import useSession from "@/composables/useSession";
 
 const {
-  sessionId,
+  session,
   showHeader = true,
   title = "",
 } = defineProps<{
-  sessionId: string;
+  session: SessionFragment;
   showHeader?: boolean;
   title?: string;
 }>();
 
 const emit = defineEmits<(e: "committed") => void>();
-const { session } = useSession(sessionId);
-
 const { getPreset, lastSelectedPresetId } = usePresets();
 
 const committing = ref(false);
@@ -188,7 +188,7 @@ async function commit() {
     const { data } = await mutate(CommitChangesDocument, {
       variables: {
         input: {
-          sessionId: sessionId,
+          sessionId: session.id,
           writeActions: {
             keepRating: keepRating.value,
             pendingRating: pendingRating.value,

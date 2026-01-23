@@ -48,9 +48,7 @@ import { mdiCheck, mdiCogOutline } from "@mdi/js";
 import { SessionFragment } from "@/graphql/generated";
 
 const { session } = defineProps<{
-  session?: SessionFragment | null;
-  sessionId: string;
-  stats?: { kept?: number };
+  session: SessionFragment | null | undefined;
 }>();
 
 const emit =

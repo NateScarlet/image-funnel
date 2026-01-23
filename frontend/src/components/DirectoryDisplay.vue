@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-start gap-3">
-    <div class="flex-shrink-0 rounded overflow-hidden relative">
+    <div class="shrink-0 rounded overflow-hidden relative">
       <img
         v-if="localStats?.latestImage"
         :src="localStats.latestImage.url256"
@@ -9,7 +9,7 @@
       />
       <div
         v-else-if="loading"
-        class="w-20 h-20 flex-shrink-0 bg-primary-700 rounded overflow-hidden"
+        class="w-20 h-20 shrink-0 bg-primary-700 rounded overflow-hidden"
       >
         <div class="w-full h-full animate-pulse bg-primary-600"></div>
       </div>

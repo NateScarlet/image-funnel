@@ -122,15 +122,13 @@
       :session="session"
       :can-undo="canUndo"
       :undoing="undoing"
-      :session-id="sessionId"
-      :stats="stats"
       @show-commit-modal="showCommitModal = true"
       @show-update-session-modal="showUpdateSessionModal = true"
     />
 
     <CommitModal
       v-if="showCommitModal"
-      :session-id="sessionId"
+      :session="session"
       @close="showCommitModal = false"
     />
 

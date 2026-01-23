@@ -1,6 +1,6 @@
 <template>
   <header
-    class="bg-primary-800 border-b border-primary-700 p-2 md:p-4 flex-shrink-0"
+    class="bg-primary-800 border-b border-primary-700 p-2 md:p-4 shrink-0"
   >
     <div class="max-w-7xl mx-auto flex items-center justify-between">
       <div

@@ -10,7 +10,7 @@
         ]"
         @click="remove(notification.id)"
       >
-        <div class="flex-shrink-0">
+        <div class="shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -23,7 +23,7 @@
           <div class="text-sm font-medium">{{ notification.message }}</div>
         </div>
         <button
-          class="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           @click.stop="remove(notification.id)"
         >
           <svg
