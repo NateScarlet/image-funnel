@@ -4,8 +4,8 @@ import type {
   TypedDocumentNode,
 } from "@apollo/client/core";
 import { NetworkStatus } from "@apollo/client/core";
-import type { Ref } from "vue";
-import { computed, shallowRef, watch } from "vue";
+import type { MaybeRefOrGetter, Ref } from "vue";
+import { computed, shallowRef, toValue, watch } from "vue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
 import { isEqual } from "es-toolkit";
@@ -25,7 +25,7 @@ function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
 export default function useQuery<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
   options: {
-    variables?: () => TVariables | undefined;
+    variables?: MaybeRefOrGetter<TVariables | undefined>;
     context?: OperationContext;
     loadingCount?: Ref<number>;
   } & Pick<
@@ -43,7 +43,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     apolloClient.watchQuery({
       ...options,
       query: document,
-      variables: options.variables?.() as TVariables,
+      variables: toValue(options.variables) as TVariables,
       notifyOnNetworkStatusChange: true,
     }),
     (i) => i.stopPolling(),
@@ -61,7 +61,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     stack.defer(
       watch(
         () => {
-          if (variables && variables() == null) {
+          if (variables != null && toValue(variables) == null) {
             // skipping
             return false;
           }
@@ -79,28 +79,29 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
       ),
     );
   }
-  function read() {
+  async function run(stack: DisposableStack, variables?: TVariables) {
+    if (stack.disposed) {
+      return;
+    }
+    if (variables) {
+      await query.setVariables(variables);
+    }
+    if (stack.disposed) {
+      return;
+    }
     resultModel.value = query.getCurrentResult();
-  }
-  function run(variables?: TVariables) {
-    const stack = new DisposableStack();
-    (async () => {
-      read();
-      if (variables) {
-        await query.setVariables(variables);
-      }
-      if (stack.disposed) {
-        return;
-      }
-      stack.adopt(
-        query.subscribe({
-          next: read,
-          error: () => undefined,
-        }),
-        (i) => i.unsubscribe(),
-      );
-    })();
-    return stack;
+    stack.adopt(
+      query.subscribe({
+        next: (data) => {
+          if (stack.disposed) {
+            return;
+          }
+          resultModel.value = data;
+        },
+        error: () => undefined,
+      }),
+      (i) => i.unsubscribe(),
+    );
   }
   if (variables) {
     let queryStack: DisposableStack | undefined;
@@ -119,13 +120,15 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
             return;
           }
           queryStack?.dispose();
-          queryStack = run(n);
+          const stack = new DisposableStack();
+          run(stack);
+          queryStack = stack;
         },
         { immediate: true },
       ),
     );
   } else {
-    stack.use(run());
+    run(stack);
   }
   return {
     data: computed(() => resultModel.value?.data) as Ref<TData | undefined>,
