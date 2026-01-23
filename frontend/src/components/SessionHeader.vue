@@ -14,7 +14,7 @@
 
       <div class="flex-1 min-w-0 mr-4">
         <div class="text-xs md:text-sm text-primary-400 truncate">
-          {{ session?.directory?.path || "加载中..." }}
+          {{ displayName }}
         </div>
         <div class="text-sm md:text-lg font-semibold truncate">
           {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
@@ -90,6 +90,14 @@ import {
   mdiCogOutline,
   mdiHome,
 } from "@mdi/js";
+import { computed } from "vue";
+import basename from "@/utils/basename";
+import useQuery from "@/graphql/utils/useQuery";
+import {
+  MetaDocument,
+  SessionFragment,
+  SessionStatsFragment,
+} from "@/graphql/generated";
 
 const router = useRouter();
 
@@ -97,32 +105,25 @@ function goHome() {
   router.push("/");
 }
 
-interface SessionStats {
-  kept: number;
-}
-
-interface Session {
-  directory?: {
-    path?: string;
-  };
-  currentIndex?: number;
-  currentSize?: number;
-  targetKeep?: number;
-  canUndo?: boolean;
-  canCommit?: boolean;
-}
-
 interface Props {
-  session?: Session | null;
-  stats?: SessionStats;
+  session: SessionFragment | null | undefined;
+  stats: SessionStatsFragment | null | undefined;
   undoing: boolean;
 }
 
-defineProps<Props>();
+const { session } = defineProps<Props>();
 defineEmits<{
   showMenu: [];
   undo: [];
   showUpdateSessionModal: [];
   showCommitModal: [];
 }>();
+
+const { data } = useQuery(MetaDocument);
+const displayName = computed(() => {
+  if (session?.directory?.root) {
+    return data.value?.meta.rootPath ?? "/";
+  }
+  return basename(session?.directory?.path ?? "");
+});
 </script>

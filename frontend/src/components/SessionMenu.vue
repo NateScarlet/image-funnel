@@ -6,33 +6,7 @@
       @click.self="show = false"
     >
       <div class="bg-primary-800 rounded-lg p-6 w-full max-w-sm">
-        <div class="mb-6">
-          <h3 class="text-lg font-bold mb-2">会话信息</h3>
-          <div class="text-sm text-primary-400 mb-1">筛选条件</div>
-          <div class="text-base">
-            {{ session?.filter?.rating?.join(", ") || "无" }}
-          </div>
-        </div>
-
         <div class="space-y-3">
-          <button
-            :disabled="!canUndo"
-            class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="handleUndo"
-          >
-            <svg
-              v-if="undoing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiUndo" fill="currentColor" />
-            </svg>
-            <span> 撤销</span>
-          </button>
-
           <button
             class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
@@ -71,25 +45,12 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { mdiUndo, mdiCheck, mdiLoading, mdiCogOutline } from "@mdi/js";
-import mutate from "../graphql/utils/mutate";
-import { UndoDocument } from "../graphql/generated";
-
-interface SessionFilter {
-  rating?: number[] | null;
-}
-
-interface Session {
-  filter?: SessionFilter;
-  canCommit?: boolean;
-  targetKeep?: number;
-}
+import { mdiCheck, mdiCogOutline } from "@mdi/js";
+import { SessionFragment } from "@/graphql/generated";
 
 interface Props {
   show: boolean;
-  session?: Session | null;
-  canUndo?: boolean;
-  undoing: boolean;
+  session?: SessionFragment | null;
   sessionId: string;
   stats?: { kept?: number };
 }
@@ -106,11 +67,4 @@ const show = computed({
   get: () => props.show,
   set: (value: boolean) => emit("update:show", value),
 });
-
-async function handleUndo() {
-  await mutate(UndoDocument, {
-    variables: { input: { sessionId: props.sessionId } },
-  });
-  show.value = false;
-}
 </script>

@@ -7,7 +7,6 @@
       :stats="stats"
       :undoing="undoing"
       @show-menu="showMenu = true"
-      @undo="undo"
       @show-update-session-modal="showUpdateSessionModal = true"
       @show-commit-modal="showCommitModal = true"
     >
@@ -172,11 +171,9 @@ import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
 import { mdiHome, mdiLock, mdiLockOpenVariant } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
-import { usePresets } from "../composables/usePresets";
 
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
-usePresets();
 
 const { id: sessionId } = defineProps<{
   id: string;
