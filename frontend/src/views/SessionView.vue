@@ -60,7 +60,7 @@
         <Teleport :to="rendererEl">
           <div
             ref="swipeEl"
-            class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none"
+            class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none z-20"
           >
             <Transition
               enter-active-class="transition duration-100 ease-out"

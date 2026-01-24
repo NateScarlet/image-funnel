@@ -1,12 +1,18 @@
 <template>
   <div
     ref="rootEl"
-    class="flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate contain-layout"
+    class="flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate contain-layout h-14"
   >
     <div
       ref="containerRef"
       class="flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
-      :class="{ 'pointer-events-none': locked }"
+      :class="[
+        locked ? 'pointer-events-none' : '',
+        // 修复火狐全屏时竖屏高度计算错误
+        isFullscreen
+          ? 'portrait:order-1 portrait:max-h-[calc(100dvh-var(--spacing)*14)]'
+          : '',
+      ]"
       v-bind="!locked ? containerAttrs : {}"
     >
       <!-- zoom -->
@@ -52,7 +58,6 @@
         </template>
       </Transition>
     </div>
-
     <!-- 图片尺寸和缩放操作 -->
     <div
       data-no-gesture
@@ -112,7 +117,6 @@
       ></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
-        :class="isFullscreen ? 'hidden md:block' : ''"
         :title="isFullscreen ? '退出全屏' : '全屏'"
         @click="handleToggleFullscreen"
       >
