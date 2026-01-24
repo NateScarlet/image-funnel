@@ -7,8 +7,10 @@
     <div class="bg-primary-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
       <template v-if="session">
         <CommitForm :session title="提交更改" @committed="$emit('committed')">
-          <template #actions="{ committing, commitResult, commit }">
+          <template #actions="{ committing, commitResult }">
             <button
+              v-if="!commitResult"
+              type="button"
               :disabled="committing"
               class="flex-1 px-4 py-2 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg transition-colors"
               @click="$emit('close')"
@@ -19,7 +21,7 @@
               v-if="!commitResult"
               :disabled="committing"
               class="flex-2 px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
-              @click="commit"
+              type="submit"
             >
               <svg
                 v-if="committing"
@@ -33,6 +35,7 @@
             <button
               v-else
               class="flex-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-bold"
+              type="button"
               @click="$emit('committed')"
             >
               完成

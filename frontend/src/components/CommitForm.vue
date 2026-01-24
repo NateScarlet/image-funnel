@@ -1,5 +1,5 @@
 <template>
-  <form class="space-y-4" action="javascript:void(0)" @submit="commit">
+  <form class="space-y-4" @submit.prevent="commit">
     <div v-if="showHeader" class="mb-4">
       <h2 v-if="title" class="text-xl font-bold mb-4">{{ title }}</h2>
       <p class="text-primary-300 mb-2">
