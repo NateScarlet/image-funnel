@@ -692,3 +692,29 @@ func TestUndo_AfterUpdateAndNextRound(t *testing.T) {
 	assert.NotNil(t, nextImg)
 	assert.Equal(t, session.queue[2].ID(), nextImg.ID())
 }
+
+func TestActions_ShouldOnlyReturnMarkedImages(t *testing.T) {
+	session := setupTestSession(t, 10, 5)
+
+	// Mark only one image
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	count := 0
+	for range session.Actions() {
+		count++
+	}
+
+	// Should only have 1 action, but currently (bug) allows 10
+	// We want to force it to 1
+	assert.Equal(t, 1, count, "Actions should only return explicitly marked images")
+
+	// Verify the specific action
+	found := false
+	for _, action := range session.Actions() {
+		if action == shared.ImageActionKeep {
+			found = true
+		}
+	}
+	assert.True(t, found, "Should contain the marked action")
+}

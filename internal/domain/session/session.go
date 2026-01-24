@@ -129,7 +129,6 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 	actions := make(map[scalar.ID]shared.ImageAction)
 	imagesMap := make(map[scalar.ID]*image.Image)
 	for _, img := range images {
-		actions[img.ID()] = shared.ImageActionPending
 		imagesMap[img.ID()] = img
 	}
 	return &Session{
@@ -488,7 +487,11 @@ func (s *Session) Undo() error {
 	lastEntry := s.undoStack[len(s.undoStack)-1]
 	s.undoStack = s.undoStack[:len(s.undoStack)-1]
 
-	s.actions[lastEntry.imageID] = lastEntry.action
+	if lastEntry.action.IsZero() {
+		delete(s.actions, lastEntry.imageID)
+	} else {
+		s.actions[lastEntry.imageID] = lastEntry.action
+	}
 
 	s.currentIdx = lastEntry.index
 	s.updatedAt = time.Now()
