@@ -651,3 +651,44 @@ func TestUndo_ShouldRestoreIndex_WhenRemarking(t *testing.T) {
 	err = session.MarkImage(img0ID, shared.ImageActionKeep)
 	require.NoError(t, err)
 }
+
+func TestUndo_AfterUpdateAndNextRound(t *testing.T) {
+	session := setupTestSession(t, 5, 2)
+	assert.Equal(t, 0, session.currentRound)
+
+	// 1. 标记部分已处理 (idx 0 -> 2)
+
+	// 0: Keep
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	// 1: Keep
+	err = session.MarkImage(session.queue[1].ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, session.currentIdx)
+
+	// 2. 模拟 UpdateSession 触发 NextRound (比如过滤器改变)
+	// 触发 NextRound 会将当前状态保存到 roundHistory
+	err = session.NextRound(nil, session.queue) // 模拟重新开启一轮，队列可能变了也可能没变
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, session.currentRound)
+	assert.Equal(t, 0, session.currentIdx)
+	assert.True(t, session.CanUndo())
+
+	// 3. 跨轮撤销
+	// 期望：回到上一轮，且 currentIdx 恢复到 NextRound 之前的状态 (2)，而不是队尾 (5)
+	err = session.Undo()
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, session.currentRound)
+	// BUG 复现期望：这里如果失败了，说明 currentIdx 没有正确恢复
+	// 如果代码中是 s.currentIdx = len(s.queue)，那么这里会是 5
+	assert.Equal(t, 2, session.currentIdx, "CurrentIdx should be restored to 2")
+
+	// 验证可以继续从之前的位置处理
+	nextImg := session.CurrentImage()
+	assert.NotNil(t, nextImg)
+	assert.Equal(t, session.queue[2].ID(), nextImg.ID())
+}

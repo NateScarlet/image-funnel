@@ -112,8 +112,9 @@ type Session struct {
 // 当需要撤销到上一轮时，使用此快照恢复状态
 
 type RoundSnapshot struct {
-	queue     []*image.Image
-	undoStack []UndoEntry
+	queue      []*image.Image
+	undoStack  []UndoEntry
+	currentIdx int
 }
 
 // NewSession 创建一个新的图片筛选会话
@@ -268,8 +269,9 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	// 保存当前状态到历史记录
 	if len(s.queue) > 0 {
 		s.roundHistory = append(s.roundHistory, RoundSnapshot{
-			queue:     s.queue,
-			undoStack: s.undoStack,
+			queue:      s.queue,
+			undoStack:  s.undoStack,
+			currentIdx: s.currentIdx,
 		})
 	}
 
@@ -472,7 +474,14 @@ func (s *Session) Undo() error {
 		s.currentRound--
 		s.queue = lastRound.queue
 		s.undoStack = lastRound.undoStack
-		s.currentIdx = len(s.queue)
+		s.currentIdx = lastRound.currentIdx
+
+		// 如果恢复到了队列末尾（意味着这是正常处理完一轮触发的），
+		// 且 undoStack 不为空，则自动再撤销一步，以提供更好的用户体验（直接撤销导致换轮的那个操作）。
+		// 否则（例如 UpdateSession 导致的换轮，此时还在队列中间），只恢复状态，不撤销操作。
+		if s.currentIdx < len(s.queue) || len(s.undoStack) == 0 {
+			return nil
+		}
 	}
 
 	// 普通撤销
