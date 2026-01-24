@@ -31,84 +31,54 @@
     <main
       class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
     >
-      <div v-if="loading" class="text-center text-primary-400">加载中...</div>
-
-      <div v-else-if="!session" class="text-center">
-        <div class="text-4xl mb-4">🔍</div>
-        <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
-        <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
-        <button
-          class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
-          @click="router.push('/')"
-        >
-          <svg class="w-5 h-5" viewBox="0 0 24 24">
-            <path :d="mdiHome" fill="currentColor" />
-          </svg>
-          返回主页
-        </button>
-      </div>
-
-      <CompletedView v-else-if="isCompleted" :session />
-
-      <div v-else-if="!currentImage" class="text-center text-primary-400">
-        没有更多图片
-      </div>
-
-      <div
-        v-else
-        class="w-full flex flex-col items-center h-full min-h-0 md:space-y-2"
-      >
-        <div
+      <template v-if="currentImage">
+        <ImageViewer
           class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden min-h-0"
+          :image="currentImage"
+          :next-images="session?.nextImages ?? []"
+          :locked="isImageLocked"
+          :allow-pan="handleAllowPan"
         >
-          <ImageViewer
-            v-if="currentImage"
-            :image="currentImage"
-            :next-images="session?.nextImages ?? []"
-            :locked="isImageLocked"
-            :allow-pan="handleAllowPan"
-          >
-            <template #info="{ isFullscreen }">
-              <span class="lg:min-w-24 hidden md:block">
-                {{ formatDate(currentImage.modTime) }}
+          <template #info="{ isFullscreen }">
+            <span class="lg:min-w-24 hidden md:block">
+              {{ formatDate(currentImage.modTime) }}
+            </span>
+            <template v-if="isFullscreen">
+              <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+              <span class="lg:min-w-24">
+                {{ session?.currentIndex || 0 }} /
+                {{ session?.currentSize || 0 }}
               </span>
-              <template v-if="isFullscreen">
-                <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
-                <span class="lg:min-w-24">
-                  {{ session?.currentIndex || 0 }} /
-                  {{ session?.currentSize || 0 }}
-                </span>
-                <div class="w-px h-4 bg-white/30 mx-1"></div>
-                <span class="lg:min-w-24 text-green-400">
-                  保留: {{ session?.stats.kept || 0 }} /
-                  {{ session?.targetKeep || 0 }}
-                </span>
-              </template>
+              <div class="w-px h-4 bg-white/30 mx-1"></div>
+              <span class="lg:min-w-24 text-green-400">
+                保留: {{ session?.stats.kept || 0 }} /
+                {{ session?.targetKeep || 0 }}
+              </span>
             </template>
-          </ImageViewer>
-          <Teleport :to="rendererEl">
-            <div
-              ref="swipeEl"
-              class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none"
+          </template>
+        </ImageViewer>
+        <Teleport :to="rendererEl">
+          <div
+            ref="swipeEl"
+            class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none"
+          >
+            <Transition
+              enter-active-class="transition duration-100 ease-out"
+              enter-from-class="opacity-0"
+              enter-to-class="opacity-100"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100"
+              leave-to-class="opacity-0"
             >
-              <Transition
-                enter-active-class="transition duration-100 ease-out"
-                enter-from-class="opacity-0"
-                enter-to-class="opacity-100"
-                leave-active-class="transition duration-100 ease-in"
-                leave-from-class="opacity-100"
-                leave-to-class="opacity-0"
-              >
-                <SwipeDirectionIndicator
-                  v-if="swipeDirection"
-                  class="h-full w-full"
-                  :direction="swipeDirection"
-                  :renderer-el="rendererEl"
-                />
-              </Transition>
-            </div>
-          </Teleport>
-        </div>
+              <SwipeDirectionIndicator
+                v-if="swipeDirection"
+                class="h-full w-full"
+                :direction="swipeDirection"
+                :renderer-el="rendererEl"
+              />
+            </Transition>
+          </div>
+        </Teleport>
 
         <div
           class="text-center text-xs md:text-sm text-primary-400 hidden md:block"
@@ -121,7 +91,30 @@
           :marking="marking"
           @mark="markImage"
         />
-      </div>
+      </template>
+
+      <template v-else-if="loading">
+        <div v-if="loading" class="text-center text-primary-400">加载中...</div>
+      </template>
+      <template v-else-if="!session">
+        <div class="text-center">
+          <div class="text-4xl mb-4">🔍</div>
+          <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
+          <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
+          <button
+            class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
+            @click="router.push('/')"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiHome" fill="currentColor" />
+            </svg>
+            返回主页
+          </button>
+        </div>
+      </template>
+      <template v-else>
+        <CompletedView :session />
+      </template>
     </main>
 
     <footer
@@ -226,10 +219,6 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 const { session } = useSession(() => sessionId, { loadingCount });
 
 const currentImage = computed(() => session.value?.currentImage);
-
-const isCompleted = computed(() => {
-  return session.value?.stats.isCompleted || false;
-});
 
 const swipeEl = useTemplateRef("swipeEl");
 useEventListeners(window, ({ on }) => {
