@@ -282,6 +282,11 @@ useEventListeners(window, ({ on }) => {
       if (!swiping.value) {
         return;
       }
+      if (e.touches.length > 1) {
+        // 用户想要进行其他操作
+        swiping.value = false;
+        return;
+      }
       e.preventDefault();
       touchEndX.value = e.changedTouches[0].clientX;
       touchEndY.value = e.changedTouches[0].clientY;
