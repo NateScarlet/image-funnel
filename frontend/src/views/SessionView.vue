@@ -125,7 +125,7 @@
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
-    <SessionMenu
+    <SessionHeaderMenu
       v-model:show="showMenu"
       :session
       :can-undo="canUndo"
@@ -161,7 +161,7 @@ import {
 import ImageViewer from "../components/ImageViewer.vue";
 import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
-import SessionMenu from "../components/SessionMenu.vue";
+import SessionHeaderMenu from "../components/SessionHeaderMenu.vue";
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
 import CommitModal from "../components/CommitModal.vue";
