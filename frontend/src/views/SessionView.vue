@@ -8,6 +8,7 @@
       @show-menu="showMenu = true"
       @show-update-session-modal="showUpdateSessionModal = true"
       @show-commit-modal="showCommitModal = true"
+      @undo="undo"
     >
       <template #extra>
         <button
@@ -128,10 +129,10 @@
     <SessionHeaderMenu
       v-model:show="showMenu"
       :session
-      :can-undo="canUndo"
       :undoing="undoing"
       @show-commit-modal="showCommitModal = true"
       @show-update-session-modal="showUpdateSessionModal = true"
+      @undo="undo"
     />
 
     <CommitModal

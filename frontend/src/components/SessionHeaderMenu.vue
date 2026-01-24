@@ -8,6 +8,27 @@
       <div class="bg-primary-800 rounded-lg p-6 w-full max-w-sm">
         <div class="space-y-3">
           <button
+            :disabled="!session?.canUndo || undoing"
+            class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+            @click="
+              emit('undo');
+              show = false;
+            "
+          >
+            <svg
+              v-if="undoing"
+              class="w-5 h-5 animate-spin"
+              viewBox="0 0 24 24"
+            >
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiUndo" fill="currentColor" />
+            </svg>
+            撤销
+          </button>
+
+          <button
             class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
             @click="
               emit('showUpdateSessionModal');
@@ -44,16 +65,19 @@
 </template>
 
 <script setup lang="ts">
-import { mdiCheck, mdiCogOutline } from "@mdi/js";
+import { mdiCheck, mdiCogOutline, mdiUndo, mdiLoading } from "@mdi/js";
 import { SessionFragment } from "@/graphql/generated";
 
-const { session } = defineProps<{
+const { session, undoing } = defineProps<{
   session: SessionFragment | null | undefined;
+  undoing: boolean;
 }>();
 
 const emit =
   defineEmits<
-    (e: "abandoned" | "showCommitModal" | "showUpdateSessionModal") => void
+    (
+      e: "abandoned" | "showCommitModal" | "showUpdateSessionModal" | "undo",
+    ) => void
   >();
 
 const show = defineModel<boolean>("show", { required: true });
