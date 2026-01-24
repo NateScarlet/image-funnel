@@ -44,11 +44,56 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 
 	result := &XMPData{rating: 0}
 	for _, rdf := range doc.FindElements("//RDF/Description") {
-		rating := findElementText(rdf, []string{"xmp:Rating", "Rating", "MicrosoftPhoto:Rating"})
-		if rating != "" {
-			if val, err := strconv.Atoi(rating); err == nil {
-				result.rating = val
+		// 优先读取标准 XMP 评分
+		var ratingVal int
+		foundRating := false
+
+		// 1. 尝试查找 xmp:Rating
+		// 1.1 属性
+		if attr := rdf.SelectAttr("xmp:Rating"); attr != nil {
+			if val, err := strconv.Atoi(attr.Value); err == nil {
+				ratingVal = val
+				foundRating = true
 			}
+		}
+		// 1.2 子元素
+		if !foundRating {
+			for _, child := range rdf.ChildElements() {
+				if child.Tag == "Rating" && (child.Space == XMPNamespace || child.Space == "xmp") {
+					if val, err := strconv.Atoi(child.Text()); err == nil {
+						ratingVal = val
+						foundRating = true
+						break
+					}
+				}
+			}
+		}
+
+		// 2. 如果没找到，尝试查找 MicrosoftPhoto:Rating
+		if !foundRating {
+			// 2.1 属性
+			if attr := rdf.SelectAttr("MicrosoftPhoto:Rating"); attr != nil {
+				if val, err := strconv.Atoi(attr.Value); err == nil {
+					ratingVal = fromMicrosoftRating(val)
+					foundRating = true
+				}
+			}
+			// 2.2 子元素
+			if !foundRating {
+				for _, child := range rdf.ChildElements() {
+					if child.Tag == "Rating" && (child.Space == MicrosoftPhotoNS || child.Space == "MicrosoftPhoto") {
+						if val, err := strconv.Atoi(child.Text()); err == nil {
+							ratingVal = fromMicrosoftRating(val)
+							foundRating = true
+							break
+						}
+					}
+				}
+			}
+		}
+
+		if foundRating {
+			result.rating = ratingVal
 		}
 
 		action := findElementText(rdf, []string{"imagefunnel:Action", "Action"})
@@ -125,7 +170,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 
 	// 更新字段
 	createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating()))
-	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(data.Rating()))
+	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(toMicrosoftRating(data.Rating())))
 	createOrUpdateElement(desc, "imagefunnel:Action", data.Action())
 	createOrUpdateElement(desc, "imagefunnel:Timestamp", data.Timestamp().Format(time.RFC3339))
 
@@ -213,3 +258,43 @@ func writeXMPFile(doc *etree.Document, path string) error {
 }
 
 var _ metadata.Repository = (*Repository)(nil)
+
+func toMicrosoftRating(rating int) int {
+	switch rating {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	case 2:
+		return 25
+	case 3:
+		return 50
+	case 4:
+		return 75
+	case 5:
+		return 100
+	default:
+		// Clamp to valid range
+		if rating < 0 {
+			return 0
+		}
+		return 100
+	}
+}
+
+func fromMicrosoftRating(msRating int) int {
+	switch {
+	case msRating <= 0:
+		return 0
+	case msRating <= 12:
+		return 1
+	case msRating <= 37:
+		return 2
+	case msRating <= 62:
+		return 3
+	case msRating <= 87:
+		return 4
+	default:
+		return 5
+	}
+}
