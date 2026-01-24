@@ -29,11 +29,11 @@
     </SessionHeader>
 
     <main
-      class="flex-1 flex items-center justify-center p-2 md:p-4 overflow-hidden"
+      class="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-hidden"
     >
       <template v-if="currentImage">
         <ImageViewer
-          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden min-h-0"
+          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
           :image="currentImage"
           :next-images="session?.nextImages ?? []"
           :locked="isImageLocked"
@@ -87,6 +87,7 @@
         </div>
 
         <SessionActions
+          v-if="!didUseGesture"
           class="hidden md:flex gap-4 w-full max-w-md mb-4"
           :marking="marking"
           @mark="markImage"

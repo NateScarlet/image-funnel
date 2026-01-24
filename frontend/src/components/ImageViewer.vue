@@ -1,7 +1,7 @@
 <template>
   <div
     ref="rootEl"
-    class="relative w-full h-full flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate"
+    class="flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate contain-layout"
   >
     <div
       ref="containerRef"
@@ -23,30 +23,38 @@
         />
       </div>
       <!-- 加载提示 -->
-      <template v-if="isSlowLoading">
-        <div
-          class="absolute inset-0 flex items-center justify-center bg-primary-900/80 backdrop-blur-sm opacity-25"
-        >
-          <svg
-            class="w-12 h-12 animate-spin text-secondary-400"
-            viewBox="0 0 24 24"
-            fill="none"
+      <Transition
+        enter-active-class="transition duration-100 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition duration-100 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <template v-if="isSlowLoading">
+          <div
+            class="absolute inset-0 flex items-center justify-center bg-primary-900/25 backdrop-blur-sm"
           >
-            <path
-              :d="mdiLoading"
+            <svg
+              class="w-12 h-12 animate-spin text-secondary-400"
+              viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
-              stroke-width="3"
-              stroke-linecap="round"
-            />
-          </svg>
-        </div>
-      </template>
+            >
+              <path
+                :d="mdiLoading"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </svg>
+          </div>
+        </template>
+      </Transition>
     </div>
 
     <!-- 图片尺寸和缩放操作 -->
     <div
-      v-if="image.width && image.height"
       data-no-gesture
       class="flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
