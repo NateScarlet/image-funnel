@@ -113,16 +113,6 @@
         </svg>
       </button>
     </div>
-
-    <Teleport to="head">
-      <link
-        v-for="img in nextImages"
-        :key="img.id"
-        rel="prefetch"
-        as="image"
-        :href="getImageUrlByZoom(img, zoom.zoom.value)"
-      />
-    </Teleport>
   </div>
 </template>
 
@@ -137,6 +127,7 @@ import type { ImageFragment } from "@/graphql/generated";
 import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
+import useAsyncTask from "@/composables/useAsyncTask";
 
 const {
   image,
@@ -176,6 +167,32 @@ const {
 const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 
 const activeContainer = computed(() => (locked ? null : containerRef.value));
+
+// 主动按顺序预加载后续图片
+useAsyncTask({
+  args() {
+    return [
+      [
+        getImageUrlByZoom(image, zoom.zoom.value),
+        ...nextImages.map((img) => getImageUrlByZoom(img, zoom.zoom.value)),
+      ],
+    ];
+  },
+  async task(urls, ctx) {
+    for (const url of urls) {
+      if (ctx.signal().aborted) {
+        return;
+      }
+      const img = new window.Image();
+      img.src = url;
+      try {
+        await img.decode();
+      } catch {
+        // ignore
+      }
+    }
+  },
+});
 
 useGrabScroll(
   () => {
