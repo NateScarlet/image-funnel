@@ -30,7 +30,7 @@
 
       <button
         class="md:hidden p-2 rounded-lg hover:bg-primary-700 transition-colors"
-        @click="$emit('showMenu')"
+        @click="showMenu = true"
       >
         <svg
           class="w-6 h-6"
@@ -79,6 +79,14 @@
         </button>
       </div>
     </div>
+    <SessionHeaderMenu
+      v-model:show="showMenu"
+      :session
+      :undoing="undoing"
+      @show-commit-modal="$emit('showCommitModal')"
+      @show-update-session-modal="$emit('showUpdateSessionModal')"
+      @undo="$emit('undo')"
+    />
   </header>
 </template>
 
@@ -92,10 +100,11 @@ import {
   mdiCogOutline,
   mdiHome,
 } from "@mdi/js";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
+import SessionHeaderMenu from "./SessionHeaderMenu.vue";
 
 const router = useRouter();
 
@@ -109,10 +118,10 @@ const { session, undoing } = defineProps<{
 }>();
 
 defineEmits<
-  (
-    e: "showMenu" | "undo" | "showUpdateSessionModal" | "showCommitModal",
-  ) => void
+  (e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void
 >();
+
+const showMenu = ref(false);
 
 const { data } = useQuery(MetaDocument);
 const displayName = computed(() => {

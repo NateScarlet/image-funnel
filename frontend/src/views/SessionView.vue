@@ -5,7 +5,6 @@
     <SessionHeader
       :session
       :undoing="undoing"
-      @show-menu="showMenu = true"
       @show-update-session-modal="showUpdateSessionModal = true"
       @show-commit-modal="showCommitModal = true"
       @undo="undo"
@@ -126,15 +125,6 @@
       ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
     </footer>
 
-    <SessionHeaderMenu
-      v-model:show="showMenu"
-      :session
-      :undoing="undoing"
-      @show-commit-modal="showCommitModal = true"
-      @show-update-session-modal="showUpdateSessionModal = true"
-      @undo="undo"
-    />
-
     <CommitModal
       v-if="showCommitModal"
       :session
@@ -162,7 +152,7 @@ import {
 import ImageViewer from "../components/ImageViewer.vue";
 import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
-import SessionHeaderMenu from "../components/SessionHeaderMenu.vue";
+
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
 import CommitModal from "../components/CommitModal.vue";
@@ -184,7 +174,7 @@ const isImageLocked = ref(false);
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
-const showMenu = ref<boolean>(false);
+
 const showUpdateSessionModal = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
 const undoing = ref(false);
@@ -225,8 +215,6 @@ const currentImage = computed(() => session.value?.currentImage);
 const swipeEl = useTemplateRef("swipeEl");
 useEventListeners(window, ({ on }) => {
   on("keydown", (e) => {
-    if (showMenu.value) return;
-
     switch (e.key) {
       case "ArrowDown":
         markImage(ImageAction.REJECT);
