@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-1">
+  <div class="flex items-center gap-1" role="input">
     <label
       v-for="item in items"
       :key="item.key"

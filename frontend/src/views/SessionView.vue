@@ -262,7 +262,15 @@ useEventListeners(window, ({ on }) => {
       if (
         document
           .elementsFromPoint(touch.clientX, touch.clientY)
-          .some((el) => el.hasAttribute("data-no-gesture"))
+          .some(
+            (el) =>
+              el.hasAttribute("data-no-gesture") ||
+              el.role == "input" ||
+              el.tagName == "BUTTON" ||
+              el.tagName == "INPUT" ||
+              el.tagName == "TEXTAREA" ||
+              el.tagName == "SELECT",
+          )
       ) {
         // 避免干扰交互区域
         return;
