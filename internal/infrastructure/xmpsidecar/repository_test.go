@@ -81,7 +81,7 @@ func TestWrite_UpdateExistingWithoutNamespace(t *testing.T) {
 	xmpPath := tempFile + ".xmp"
 	defer os.Remove(xmpPath)
 
-	// 创建一个没有 imagefunnel 命名空间的 XMP
+	// 创建一个没有 ImageFunnel 命名空间的 XMP
 	initialXMP := `<?xml version="1.0" encoding="UTF-8"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

@@ -96,12 +96,12 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 			result.rating = ratingVal
 		}
 
-		action := findElementText(rdf, []string{"imagefunnel:Action", "Action"})
+		action := findElementText(rdf, []string{"ImageFunnel:Action", "Action"})
 		if action != "" {
 			result.action = action
 		}
 
-		timestamp := findElementText(rdf, []string{"imagefunnel:Timestamp", "Timestamp"})
+		timestamp := findElementText(rdf, []string{"ImageFunnel:Timestamp", "Timestamp"})
 		if timestamp != "" {
 			if val, err := time.Parse(time.RFC3339, timestamp); err == nil {
 				result.timestamp = val
@@ -154,7 +154,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 
 	// 移除 rdf:RDF 上的其他命名空间（如果存在），以符合“仅在 Description 上定义”的要求
 	rdf.RemoveAttr("xmlns:xmp")
-	rdf.RemoveAttr("xmlns:imagefunnel")
+	rdf.RemoveAttr("xmlns:ImageFunnel")
 	rdf.RemoveAttr("xmlns:MicrosoftPhoto")
 
 	// 查找或创建 Description (rdf:about="")
@@ -172,14 +172,14 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 
 	// 确保命名空间定义在 rdf:Description 上
 	ensureNamespace(desc, "xmp", XMPNamespace)
-	ensureNamespace(desc, "imagefunnel", ImageFunnelNS)
+	ensureNamespace(desc, "ImageFunnel", ImageFunnelNS)
 	ensureNamespace(desc, "MicrosoftPhoto", MicrosoftPhotoNS)
 
 	// 更新字段
 	createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating()))
 	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(toMicrosoftRating(data.Rating())))
-	createOrUpdateElement(desc, "imagefunnel:Action", data.Action())
-	createOrUpdateElement(desc, "imagefunnel:Timestamp", data.Timestamp().Format(time.RFC3339))
+	createOrUpdateElement(desc, "ImageFunnel:Action", data.Action())
+	createOrUpdateElement(desc, "ImageFunnel:Timestamp", data.Timestamp().Format(time.RFC3339))
 
 	return writeXMPFile(doc, xmpPath)
 }

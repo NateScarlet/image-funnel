@@ -41,7 +41,7 @@ func TestWrite_NamespacePlacement(t *testing.T) {
 
 	// 2. Verify rdf:RDF does NOT have other namespaces
 	assert.Nil(t, rdf.SelectAttr("xmlns:xmp"), "rdf:RDF should not have xmlns:xmp")
-	assert.Nil(t, rdf.SelectAttr("xmlns:imagefunnel"), "rdf:RDF should not have xmlns:imagefunnel")
+	assert.Nil(t, rdf.SelectAttr("xmlns:ImageFunnel"), "rdf:RDF should not have xmlns:ImageFunnel")
 	assert.Nil(t, rdf.SelectAttr("xmlns:MicrosoftPhoto"), "rdf:RDF should not have xmlns:MicrosoftPhoto")
 
 	// 3. Verify rdf:Description has the other namespaces
@@ -49,6 +49,6 @@ func TestWrite_NamespacePlacement(t *testing.T) {
 	require.NotNil(t, desc, "rdf:Description element not found")
 
 	assert.NotNil(t, desc.SelectAttr("xmlns:xmp"), "rdf:Description should have xmlns:xmp")
-	assert.NotNil(t, desc.SelectAttr("xmlns:imagefunnel"), "rdf:Description should have xmlns:imagefunnel")
+	assert.NotNil(t, desc.SelectAttr("xmlns:ImageFunnel"), "rdf:Description should have xmlns:ImageFunnel")
 	assert.NotNil(t, desc.SelectAttr("xmlns:MicrosoftPhoto"), "rdf:Description should have xmlns:MicrosoftPhoto")
 }
