@@ -1,8 +1,33 @@
 <template>
   <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full">
+    <div
+      v-if="notifications.length > 1"
+      class="flex justify-end items-center gap-2 px-2"
+    >
+      <span
+        v-if="hiddenCount > 0"
+        class="text-xs text-white/80 bg-black/20 px-2 py-1 rounded-full backdrop-blur-sm"
+      >
+        +{{ hiddenCount }}
+      </span>
+      <button
+        v-if="notifications.length > 1"
+        class="text-xs text-white/80 hover:text-white flex items-center gap-1 transition-colors bg-black/20 hover:bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm"
+        @click="clear"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          class="w-4 h-4"
+        >
+          <path :d="mdiBroom" fill="currentColor" />
+        </svg>
+        清除全部
+      </button>
+    </div>
     <TransitionGroup name="notification">
       <div
-        v-for="notification in notifications"
+        v-for="notification in visibleNotifications"
         :key="notification.id"
         :class="[
           'p-4 rounded-lg shadow-lg flex items-start gap-3 cursor-pointer',
@@ -40,6 +65,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import useNotification from "../composables/useNotification";
 import {
   mdiClose,
@@ -47,9 +73,19 @@ import {
   mdiCheckCircleOutline,
   mdiAlertOutline,
   mdiInformationOutline,
+  mdiBroom,
 } from "@mdi/js";
 
-const { notifications, remove } = useNotification();
+const { notifications, remove, clear } = useNotification();
+const MAX_NOTIFICATIONS = 5;
+
+const visibleNotifications = computed(() => {
+  return notifications.value.slice(-MAX_NOTIFICATIONS);
+});
+
+const hiddenCount = computed(() => {
+  return Math.max(0, notifications.value.length - MAX_NOTIFICATIONS);
+});
 
 const iconPaths: Record<string, string> = {
   error: mdiAlertCircleOutline,
