@@ -29,7 +29,12 @@
     </SessionHeader>
 
     <main
-      class="flex-1 flex flex-col items-center justify-center p-2 md:p-4 overflow-hidden"
+      class="flex-1 w-full p-2 md:p-4"
+      :class="
+        currentImage
+          ? 'flex flex-col items-center justify-center overflow-hidden'
+          : 'overflow-y-auto'
+      "
     >
       <template v-if="currentImage">
         <ImageViewer
@@ -94,31 +99,37 @@
         />
       </template>
 
-      <template v-else-if="loading">
-        <div v-if="loading" class="text-center text-primary-400">加载中...</div>
-      </template>
-      <template v-else-if="!session">
-        <div class="text-center">
-          <div class="text-4xl mb-4">🔍</div>
-          <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
-          <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
-          <button
-            class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
-            @click="router.push('/')"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiHome" fill="currentColor" />
-            </svg>
-            返回主页
-          </button>
-        </div>
-      </template>
-      <template v-else>
-        <CompletedView :session />
-      </template>
+      <div
+        v-else
+        class="min-h-full flex flex-col items-center justify-center w-full"
+      >
+        <template v-if="loading">
+          <div class="text-center text-primary-400">加载中...</div>
+        </template>
+        <template v-else-if="!session">
+          <div class="text-center">
+            <div class="text-4xl mb-4">🔍</div>
+            <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
+            <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
+            <button
+              class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
+              @click="router.push('/')"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path :d="mdiHome" fill="currentColor" />
+              </svg>
+              返回主页
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <CompletedView :session />
+        </template>
+      </div>
     </main>
 
     <footer
+      v-if="currentImage"
       class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0"
       :class="didUseGesture ? 'hidden' : ''"
     >

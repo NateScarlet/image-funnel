@@ -36,16 +36,16 @@
     <div v-if="!commitResult" class="bg-primary-700/50 rounded-lg p-4">
       <h3 class="font-medium mb-4">写入操作设置</h3>
       <div class="space-y-4">
-        <div>
-          <span class="block text-sm text-primary-400 mb-2">保留图片评分</span>
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-primary-400">保留图片评分</span>
           <RatingSelector v-model="keepRating" />
         </div>
-        <div>
-          <span class="block text-sm text-primary-400 mb-2">稍后图片评分</span>
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-primary-400">稍后图片评分</span>
           <RatingSelector v-model="pendingRating" />
         </div>
-        <div>
-          <span class="block text-sm text-primary-400 mb-2">排除图片评分</span>
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-primary-400">排除图片评分</span>
           <RatingSelector v-model="rejectRating" />
         </div>
       </div>
