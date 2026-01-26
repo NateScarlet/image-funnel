@@ -83,7 +83,6 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     );
   }
   async function run(stack: DisposableStack, variables?: TVariables) {
-    resultModel.value = query.getCurrentResult();
     if (variables) {
       await query.setVariables(variables);
     }
