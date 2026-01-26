@@ -64,7 +64,7 @@
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path :d="mdiCogOutline" fill="currentColor" />
           </svg>
-          修改预设
+          修改会话
         </button>
 
         <button
