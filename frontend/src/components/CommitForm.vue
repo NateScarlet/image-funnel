@@ -182,6 +182,7 @@ const rejectRating = computed({
 // #endregion
 
 async function commit() {
+  if (committing.value) return;
   committing.value = true;
 
   try {
@@ -218,4 +219,8 @@ async function commit() {
     committing.value = false;
   }
 }
+
+defineExpose({
+  commit,
+});
 </script>

@@ -9,7 +9,12 @@
     <div
       class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
     >
-      <CommitForm :session title="" @committed="handleCommitted" />
+      <CommitForm
+        ref="commitForm"
+        :session
+        title=""
+        @committed="handleCommitted"
+      />
     </div>
 
     <div v-if="nextDirectoryId" class="mt-6">
@@ -24,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import mutate from "../graphql/utils/mutate";
 import {
@@ -47,6 +52,17 @@ const nextDirectoryId = computed(() => {
     session.directory.parentId ?? "",
     session.directory.id,
   );
+});
+
+const commitForm =
+  useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
+
+function submit() {
+  commitForm.value?.commit();
+}
+
+defineExpose({
+  submit,
 });
 
 async function handleCommitted() {

@@ -6,7 +6,7 @@
       :session
       :undoing="undoing"
       @show-update-session-modal="showUpdateSessionModal = true"
-      @show-commit-modal="showCommitModal = true"
+      @show-commit-modal="handleCommit"
       @undo="undo"
     >
     </SessionHeader>
@@ -105,7 +105,7 @@
           </div>
         </template>
         <template v-else>
-          <CompletedView :session />
+          <CompletedView ref="completedView" :session />
         </template>
       </div>
     </main>
@@ -305,6 +305,17 @@ async function markImage(action: ImageAction) {
     });
   } finally {
     marking.value = false;
+  }
+}
+
+const completedView =
+  useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
+
+function handleCommit() {
+  if (!currentImage.value && completedView.value) {
+    completedView.value.submit();
+  } else {
+    showCommitModal.value = true;
   }
 }
 
