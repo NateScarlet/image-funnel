@@ -169,19 +169,25 @@ func TestInMemoryTopic_SubscriberOnlyGetsNewEvents(t *testing.T) {
 		err := topic.Publish(ctx, i)
 		require.NoError(t, err)
 	}
+	// Ensure events are processed
+	time.Sleep(10 * time.Millisecond)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		// Ensure subscriber is ready
 		time.Sleep(100 * time.Millisecond)
 		err := topic.Publish(ctx, 4)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 
 	for val, err := range topic.Subscribe(ctx) {
 		require.NoError(t, err)
 		assert.Equal(t, 4, val)
-		return
+		break
 	}
+	wg.Wait()
 
 }
 
