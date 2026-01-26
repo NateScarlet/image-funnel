@@ -127,6 +127,7 @@ const { data: directoriesData } = useQuery(DirectoriesDocument, {
   variables: () => ({
     id: selectedDirectoryId.value,
   }),
+  fetchPolicy: "no-cache",
   loadingCount,
 });
 
