@@ -10,7 +10,10 @@ import { apolloClient } from "../client";
 
 export default function mutate<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
-  options: {
+  {
+    variables,
+    ...options
+  }: {
     variables?: TVariables | undefined;
     context?: OperationContext;
     fetchPolicy?: MutationFetchPolicy;
@@ -20,6 +23,6 @@ export default function mutate<TData, TVariables extends OperationVariables>(
   return apolloClient.mutate<TData, TVariables>({
     ...options,
     mutation: document,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+    variables: variables as TVariables,
+  });
 }

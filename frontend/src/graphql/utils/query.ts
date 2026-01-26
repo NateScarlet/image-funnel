@@ -10,7 +10,10 @@ import { apolloClient } from "../client";
 
 export default function query<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
-  options: {
+  {
+    variables,
+    ...options
+  }: {
     variables?: TVariables | undefined;
     context?: OperationContext;
     fetchPolicy?: FetchPolicy;
@@ -20,6 +23,6 @@ export default function query<TData, TVariables extends OperationVariables>(
   return apolloClient.query<TData, TVariables>({
     ...options,
     query: document,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+    variables: variables as TVariables,
+  });
 }
