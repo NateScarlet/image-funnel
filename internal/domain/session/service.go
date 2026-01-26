@@ -83,6 +83,9 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		var err error
 		img, err = s.dirScanner.LookupImage(ctx, e.RelPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 	}
