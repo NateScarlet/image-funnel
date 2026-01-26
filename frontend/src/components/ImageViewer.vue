@@ -117,6 +117,16 @@
       ></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+        :title="locked ? '解锁位置' : '锁定位置'"
+        :class="locked ? 'text-secondary-500' : ''"
+        @click="locked = !locked"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path :d="locked ? mdiLock : mdiLockOpenVariant" />
+        </svg>
+      </button>
+      <button
+        class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
         :title="isFullscreen ? '退出全屏' : '全屏'"
         @click="handleToggleFullscreen"
       >
@@ -134,7 +144,13 @@ import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
 import useElementFullscreen from "../composables/useElementFullscreen";
-import { mdiFullscreen, mdiFullscreenExit, mdiLoading } from "@mdi/js";
+import {
+  mdiFullscreen,
+  mdiFullscreenExit,
+  mdiLoading,
+  mdiLock,
+  mdiLockOpenVariant,
+} from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
@@ -144,14 +160,14 @@ import useAsyncTask from "@/composables/useAsyncTask";
 const {
   image,
   nextImages = [],
-  locked = false,
   allowPan = () => true,
 } = defineProps<{
   image: ImageFragment;
   nextImages?: ImageFragment[];
-  locked?: boolean;
   allowPan?: (e: PointerEvent) => boolean;
 }>();
+
+const locked = ref(false);
 
 const containerRef = ref<HTMLElement>();
 const rootEl = ref<HTMLElement>();
@@ -178,7 +194,9 @@ const {
 
 const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
 
-const activeContainer = computed(() => (locked ? null : containerRef.value));
+const activeContainer = computed(() =>
+  locked.value ? null : containerRef.value,
+);
 
 // 主动按顺序预加载后续图片
 useAsyncTask({
@@ -273,7 +291,7 @@ useEventListeners(containerRef, ({ on }) => {
   on(
     "touchstart",
     (e) => {
-      if (locked) return;
+      if (locked.value) return;
       if (e.touches.length === 2) {
         e.preventDefault();
         e.stopPropagation();

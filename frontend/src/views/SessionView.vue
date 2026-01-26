@@ -9,23 +9,6 @@
       @show-commit-modal="showCommitModal = true"
       @undo="undo"
     >
-      <template #extra>
-        <button
-          class="p-2 mr-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center"
-          :class="isImageLocked ? 'text-secondary-400' : 'text-primary-400'"
-          @click="isImageLocked = !isImageLocked"
-        >
-          <svg class="w-6 h-6" viewBox="0 0 24 24">
-            <path
-              :d="isImageLocked ? mdiLock : mdiLockOpenVariant"
-              fill="currentColor"
-            />
-          </svg>
-          <span class="hidden md:inline">
-            {{ isImageLocked ? "解锁图片位置" : "锁定图片位置" }}
-          </span>
-        </button>
-      </template>
     </SessionHeader>
 
     <main
@@ -41,7 +24,6 @@
           class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
           :image="currentImage"
           :next-images="session?.nextImages ?? []"
-          :locked="isImageLocked"
           :allow-pan="handleAllowPan"
         >
           <template #info="{ isFullscreen }">
@@ -170,7 +152,7 @@ import CommitModal from "../components/CommitModal.vue";
 import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
-import { mdiHome, mdiLock, mdiLockOpenVariant } from "@mdi/js";
+import { mdiHome } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 
@@ -180,8 +162,6 @@ const router = useRouter();
 const { id: sessionId } = defineProps<{
   id: string;
 }>();
-
-const isImageLocked = ref(false);
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
