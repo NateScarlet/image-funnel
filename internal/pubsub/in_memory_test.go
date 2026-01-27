@@ -25,8 +25,22 @@ func TestInMemoryTopic(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		var ack = make(chan struct{})
+		var serverReady = make(chan struct{})
 		go func() {
-			time.Sleep(10 * time.Millisecond)
+			// Warmup
+			var ticker = time.NewTicker(time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-serverReady:
+					goto Ready
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					_ = topic.Publish(ctx, -1)
+				}
+			}
+		Ready:
 			for _, i := range seq {
 				var err = topic.Publish(ctx, i)
 				if errors.Is(err, context.Canceled) {
@@ -41,7 +55,15 @@ func TestInMemoryTopic(t *testing.T) {
 			}
 		}()
 		var index int
+		var isReady bool
 		for i, err := range topic.Subscribe(ctx) {
+			if i == -1 {
+				if !isReady {
+					close(serverReady)
+					isReady = true
+				}
+				continue
+			}
 			t.Logf("receive %d", i)
 			<-ack
 			require.NoError(t, err)
@@ -84,8 +106,22 @@ func TestInMemoryTopic(t *testing.T) {
 		const messageCount = 10
 		ctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
+		var serverReady = make(chan struct{})
 		go func() {
-			time.Sleep(10 * time.Millisecond)
+			// Warmup
+			var ticker = time.NewTicker(time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-serverReady:
+					goto Ready
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					_ = topic.Publish(ctx, -1)
+				}
+			}
+		Ready:
 			for i := range messageCount {
 				var err = topic.Publish(ctx, i)
 				require.NoError(t, err)
@@ -97,7 +133,15 @@ func TestInMemoryTopic(t *testing.T) {
 			}
 		}()
 		var receiveCount int
+		var isReady bool
 		for i, err := range topic.Subscribe(ctx) {
+			if i == -1 {
+				if !isReady {
+					close(serverReady)
+					isReady = true
+				}
+				continue
+			}
 			t.Logf("receive %d", i)
 			receiveCount++
 			if i < 4 {
@@ -129,10 +173,18 @@ func TestInMemoryTopic_BasicPublishSubscribe(t *testing.T) {
 
 	// Subscribe
 	result := make(chan string, 1)
+	ready := make(chan struct{})
 	go func() {
 		for val, err := range topic.Subscribe(ctx) {
 			if err != nil {
 				return
+			}
+			if val == "warmup" {
+				select {
+				case ready <- struct{}{}:
+				default:
+				}
+				continue
 			}
 			result <- val
 			return
@@ -140,7 +192,19 @@ func TestInMemoryTopic_BasicPublishSubscribe(t *testing.T) {
 	}()
 
 	// Ensure subscriber is ready
-	time.Sleep(10 * time.Millisecond)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+WarmupLoop:
+	for {
+		select {
+		case <-ready:
+			break WarmupLoop
+		case <-ticker.C:
+			_ = topic.Publish(ctx, "warmup")
+		case <-ctx.Done():
+			t.Fatal("timeout waiting for subscriber")
+		}
+	}
 
 	// Publish and verify
 	err := topic.Publish(ctx, "test")
@@ -165,24 +229,85 @@ func TestInMemoryTopic_SubscriberOnlyGetsNewEvents(t *testing.T) {
 	defer cancel()
 
 	// Publish before any subscribers
+	// Use a temporary subscriber to ensure events are processed
+	flushReady := make(chan struct{})
+	processed := make(chan struct{})
+	flushCtx, flushCancel := context.WithCancel(ctx)
+	go func() {
+		defer flushCancel()
+		for val, _ := range topic.Subscribe(flushCtx) {
+			if val == -1 {
+				select {
+				case flushReady <- struct{}{}:
+				default:
+				}
+				continue
+			}
+			if val == 3 {
+				close(processed)
+				return
+			}
+		}
+	}()
+
+	// Warmup flush subscriber
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+FlushWarmup:
+	for {
+		select {
+		case <-flushReady:
+			break FlushWarmup
+		case <-ticker.C:
+			_ = topic.Publish(ctx, -1)
+		case <-ctx.Done():
+			t.Fatal("timeout waiting for flush subscriber")
+		}
+	}
+
 	for i := 1; i <= 3; i++ {
 		err := topic.Publish(ctx, i)
 		require.NoError(t, err)
 	}
-	// Ensure events are processed
-	time.Sleep(10 * time.Millisecond)
+	// Wait for events to be processed
+	select {
+	case <-processed:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for events processing")
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+	ready := make(chan struct{})
 	go func() {
 		defer wg.Done()
 		// Ensure subscriber is ready
-		time.Sleep(100 * time.Millisecond)
+		var ticker = time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ready:
+				goto Ready
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = topic.Publish(ctx, -1)
+			}
+		}
+	Ready:
 		err := topic.Publish(ctx, 4)
 		assert.NoError(t, err)
 	}()
 
+	var isReady bool
 	for val, err := range topic.Subscribe(ctx) {
+		if val == -1 {
+			if !isReady {
+				close(ready)
+				isReady = true
+			}
+			continue
+		}
 		require.NoError(t, err)
 		assert.Equal(t, 4, val)
 		break
@@ -206,6 +331,7 @@ func TestInMemoryTopic_MultipleSubscribers(t *testing.T) {
 	wg.Add(numSubscribers)
 
 	// Start subscribers
+	ready := make(chan int, numSubscribers)
 	for i := 0; i < numSubscribers; i++ {
 		go func(id int) {
 			defer wg.Done()
@@ -213,6 +339,13 @@ func TestInMemoryTopic_MultipleSubscribers(t *testing.T) {
 			for val, err := range topic.Subscribe(ctx) {
 				if err != nil {
 					return
+				}
+				if val == "warmup" {
+					select {
+					case ready <- id:
+					default:
+					}
+					continue
 				}
 				results <- fmt.Sprintf("sub%d:%s", id, val)
 				count++
@@ -224,14 +357,26 @@ func TestInMemoryTopic_MultipleSubscribers(t *testing.T) {
 	}
 
 	// Ensure subscribers are ready
-	time.Sleep(20 * time.Millisecond)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	readySet := make(map[int]bool)
+
+	for len(readySet) < numSubscribers {
+		select {
+		case id := <-ready:
+			readySet[id] = true
+		case <-ticker.C:
+			_ = topic.Publish(ctx, "warmup")
+		case <-ctx.Done():
+			t.Fatal("timeout waiting for subscribers")
+		}
+	}
 
 	// Publish messages
 	for i := 0; i < numMessages; i++ {
 		msg := fmt.Sprintf("msg%d", i)
 		err := topic.Publish(ctx, msg)
 		require.NoError(t, err)
-		time.Sleep(5 * time.Millisecond) // Space out publishes
 	}
 
 	// Wait for subscribers to process
@@ -265,10 +410,18 @@ func TestInMemoryTopic_CapacityLimitsForSlowSubscriber(t *testing.T) {
 
 	// Slow subscriber
 	slowResults := make(chan int, 10)
+	ready := make(chan struct{})
 	go func() {
 		for val, err := range topic.Subscribe(ctx) {
 			if err != nil {
 				return
+			}
+			if val == -1 {
+				select {
+				case ready <- struct{}{}:
+				default:
+				}
+				continue
 			}
 			slowResults <- val
 			time.Sleep(100 * time.Millisecond) // Slow processing
@@ -276,7 +429,19 @@ func TestInMemoryTopic_CapacityLimitsForSlowSubscriber(t *testing.T) {
 	}()
 
 	// Ensure subscriber is ready
-	time.Sleep(10 * time.Millisecond)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+WarmupLoop:
+	for {
+		select {
+		case <-ready:
+			break WarmupLoop
+		case <-ticker.C:
+			_ = topic.Publish(ctx, -1)
+		case <-ctx.Done():
+			t.Fatal("timeout waiting for subscriber")
+		}
+	}
 
 	// Publish more messages than capacity
 	for i := 1; i <= capacity+2; i++ {
@@ -358,15 +523,33 @@ func BenchmarkPublishWithSingleSubscriber(b *testing.B) {
 	ctx := context.Background()
 
 	// Subscriber goroutine
+	ready := make(chan struct{})
 	go func() {
-		for range topic.Subscribe(ctx) {
+		for i := range topic.Subscribe(ctx) {
+			if i == -1 {
+				select {
+				case ready <- struct{}{}:
+				default:
+				}
+				continue
+			}
 			// simulate consume messages
 			time.Sleep(time.Duration(rand.N(1000)) * time.Millisecond)
 		}
 	}()
 
 	// Wait for subscriber to be ready
-	time.Sleep(10 * time.Millisecond)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+WarmupLoop:
+	for {
+		select {
+		case <-ready:
+			break WarmupLoop
+		case <-ticker.C:
+			_ = topic.Publish(ctx, -1)
+		}
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -384,9 +567,17 @@ func BenchmarkConcurrentPublishSubscribe(b *testing.B) {
 	const numSubscribers = 10_000
 
 	// Start subscribers that just drain messages
+	ready := make(chan struct{}, numSubscribers)
 	for i := 0; i < numSubscribers; i++ {
 		go func() {
-			for range topic.Subscribe(ctx) {
+			for v := range topic.Subscribe(ctx) {
+				if v == -1 {
+					select {
+					case ready <- struct{}{}:
+					default:
+					}
+					continue
+				}
 				// simulate consume messages
 				time.Sleep(time.Duration(rand.N(1000)) * time.Millisecond)
 			}
@@ -394,7 +585,17 @@ func BenchmarkConcurrentPublishSubscribe(b *testing.B) {
 	}
 
 	// Wait for subscribers to be ready
-	time.Sleep(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	var readyCount int
+	for readyCount < numSubscribers {
+		select {
+		case <-ready:
+			readyCount++
+		case <-ticker.C:
+			_ = topic.Publish(ctx, -1)
+		}
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
