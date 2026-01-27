@@ -42,78 +42,49 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 		return nil, fmt.Errorf("failed to parse XMP: %w", err)
 	}
 
-	result := &XMPData{rating: 0}
+	localResult := &XMPData{rating: 0}
 	for _, rdf := range doc.FindElements("//RDF/Description") {
 		// 优先读取标准 XMP 评分
 		var ratingVal int
 		foundRating := false
 
 		// 1. 尝试查找 xmp:Rating
-		// 1.1 属性
-		if attr := rdf.SelectAttr("xmp:Rating"); attr != nil {
-			if val, err := strconv.Atoi(attr.Value); err == nil {
+		if valStr, ok := getValueByNamespace(rdf, XMPNamespace, "Rating"); ok {
+			if val, err := strconv.Atoi(valStr); err == nil {
 				ratingVal = val
 				foundRating = true
-			}
-		}
-		// 1.2 子元素
-		if !foundRating {
-			for _, child := range rdf.ChildElements() {
-				if child.Tag == "Rating" && (child.Space == XMPNamespace || child.Space == "xmp") {
-					if val, err := strconv.Atoi(child.Text()); err == nil {
-						ratingVal = val
-						foundRating = true
-						break
-					}
-				}
 			}
 		}
 
 		// 2. 如果没找到，尝试查找 MicrosoftPhoto:Rating
 		if !foundRating {
-			// 2.1 属性
-			if attr := rdf.SelectAttr("MicrosoftPhoto:Rating"); attr != nil {
-				if val, err := strconv.Atoi(attr.Value); err == nil {
+			if valStr, ok := getValueByNamespace(rdf, MicrosoftPhotoNS, "Rating"); ok {
+				if val, err := strconv.Atoi(valStr); err == nil {
 					ratingVal = fromMicrosoftRating(val)
 					foundRating = true
-				}
-			}
-			// 2.2 子元素
-			if !foundRating {
-				for _, child := range rdf.ChildElements() {
-					if child.Tag == "Rating" && (child.Space == MicrosoftPhotoNS || child.Space == "MicrosoftPhoto") {
-						if val, err := strconv.Atoi(child.Text()); err == nil {
-							ratingVal = fromMicrosoftRating(val)
-							foundRating = true
-							break
-						}
-					}
 				}
 			}
 		}
 
 		if foundRating {
-			result.rating = ratingVal
+			localResult.rating = ratingVal
 		}
 
-		action := findElementText(rdf, []string{"ImageFunnel:Action", "Action"})
-		if action != "" {
-			result.action = action
+		if valStr, ok := getValueByNamespace(rdf, ImageFunnelNS, "Action"); ok {
+			localResult.action = valStr
 		}
 
-		timestamp := findElementText(rdf, []string{"ImageFunnel:Timestamp", "Timestamp"})
-		if timestamp != "" {
-			if val, err := time.Parse(time.RFC3339, timestamp); err == nil {
-				result.timestamp = val
+		if valStr, ok := getValueByNamespace(rdf, ImageFunnelNS, "Timestamp"); ok {
+			if val, err := time.Parse(time.RFC3339, valStr); err == nil {
+				localResult.timestamp = val
 			}
 		}
-
 	}
 
 	return metadata.NewXMPData(
-		result.rating,
-		result.action,
-		result.timestamp,
+		localResult.rating,
+		localResult.action,
+		localResult.timestamp,
 	), nil
 }
 
@@ -183,10 +154,10 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	ensureNamespace(desc, "MicrosoftPhoto", MicrosoftPhotoNS)
 
 	// 更新字段
-	createOrUpdateElement(desc, "xmp:Rating", strconv.Itoa(data.Rating()))
-	createOrUpdateElement(desc, "MicrosoftPhoto:Rating", strconv.Itoa(toMicrosoftRating(data.Rating())))
-	createOrUpdateElement(desc, "ImageFunnel:Action", data.Action())
-	createOrUpdateElement(desc, "ImageFunnel:Timestamp", data.Timestamp().Format(time.RFC3339))
+	setValueByNamespace(desc, XMPNamespace, "xmp", "Rating", strconv.Itoa(data.Rating()))
+	setValueByNamespace(desc, MicrosoftPhotoNS, "MicrosoftPhoto", "Rating", strconv.Itoa(toMicrosoftRating(data.Rating())))
+	setValueByNamespace(desc, ImageFunnelNS, "ImageFunnel", "Action", data.Action())
+	setValueByNamespace(desc, ImageFunnelNS, "ImageFunnel", "Timestamp", data.Timestamp().Format(time.RFC3339))
 
 	return writeXMPFile(doc, xmpPath)
 }
@@ -206,50 +177,108 @@ type XMPData struct {
 	timestamp time.Time
 }
 
-func findElementText(elem *etree.Element, tags []string) string {
-	for _, tag := range tags {
-		parts := strings.Split(tag, ":")
-		if len(parts) == 2 {
-			prefix := parts[0]
-			localName := parts[1]
-			attrKey := prefix + ":" + localName
-			if attr := elem.SelectAttr(attrKey); attr != nil {
-				return attr.Value
-			}
-		}
+func resolveNamespace(elem *etree.Element, prefix string) string {
+	attrKey := "xmlns"
+	if prefix != "" {
+		attrKey = "xmlns:" + prefix
+	}
 
-		if child := elem.FindElement(tag); child != nil {
-			return child.Text()
+	curr := elem
+	for curr != nil {
+		if attr := curr.SelectAttr(attrKey); attr != nil {
+			return attr.Value
 		}
+		curr = curr.Parent()
 	}
 	return ""
 }
 
-func createOrUpdateElement(parent *etree.Element, tag, value string) {
-	parts := strings.Split(tag, ":")
-	var prefix, localName string
+func splitTag(tag string) (string, string) {
+	parts := strings.SplitN(tag, ":", 2)
 	if len(parts) == 2 {
-		prefix = parts[0]
-		localName = parts[1]
+		return parts[0], parts[1]
+	}
+	return "", tag
+}
+
+func getValueByNamespace(elem *etree.Element, nsURL, localName string) (string, bool) {
+	// 1. Check attributes
+	for _, attr := range elem.Attr {
+		prefix := attr.Space
+		local := attr.Key
+		if prefix == "" {
+			p, l := splitTag(attr.Key)
+			if p != "" {
+				prefix = p
+				local = l
+			}
+		}
+
+		var attrNS string
+		if prefix != "" {
+			attrNS = resolveNamespace(elem, prefix)
+		}
+
+		if local == localName && attrNS == nsURL {
+			return attr.Value, true
+		}
 	}
 
-	// 1. 尝试更新现有属性
-	if localName != "" {
-		attrKey := prefix + ":" + localName
-		if attr := parent.SelectAttr(attrKey); attr != nil {
-			attr.Value = value
+	// 2. Check children
+	for _, child := range elem.ChildElements() {
+		if child.Tag == localName {
+			childNS := resolveNamespace(child, child.Space)
+			if childNS == nsURL {
+				return child.Text(), true
+			}
+		}
+	}
+
+	return "", false
+}
+
+func setValueByNamespace(elem *etree.Element, nsURL, preferredPrefix, localName, value string) {
+	// 1. Try to find existing attribute and update it
+	// We iterate to find the attribute that matches key/ns
+	for i, attr := range elem.Attr {
+		prefix := attr.Space
+		local := attr.Key
+		if prefix == "" {
+			p, l := splitTag(attr.Key)
+			if p != "" {
+				prefix = p
+				local = l
+			}
+		}
+
+		var attrNS string
+		if prefix != "" {
+			attrNS = resolveNamespace(elem, prefix)
+		}
+
+		if local == localName && attrNS == nsURL {
+			elem.Attr[i].Value = value
 			return
 		}
 	}
 
-	// 2. 尝试更新现有子元素
-	if child := parent.FindElement(tag); child != nil {
-		child.SetText(value)
-		return
+	// 2. Try to find existing child and update it
+	for _, child := range elem.ChildElements() {
+		if child.Tag == localName {
+			childNS := resolveNamespace(child, child.Space)
+			if childNS == nsURL {
+				child.SetText(value)
+				return
+			}
+		}
 	}
 
-	// 3. 如果都不存在，创建一个新元素
-	child := parent.CreateElement(tag)
+	// 3. Create new child
+	tagName := localName
+	if preferredPrefix != "" {
+		tagName = preferredPrefix + ":" + localName
+	}
+	child := elem.CreateElement(tagName)
 	child.SetText(value)
 }
 

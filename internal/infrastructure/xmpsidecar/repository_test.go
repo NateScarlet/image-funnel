@@ -197,3 +197,56 @@ func TestWrite_XMPTKAttribute(t *testing.T) {
 	require.NotNil(t, xmptk, "x:xmptk attribute missing")
 	assert.Equal(t, "XMP Core 6.0.0", xmptk.Value)
 }
+
+func TestRead_CustomNamespacePrefix(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-custom-ns.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	// Create XMP with custom prefix 'myxmp' mapped to standard XMP namespace
+	// and 'ms' for MicrosoftPhoto
+	content := `<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" 
+        xmlns:myxmp="http://ns.adobe.com/xap/1.0/"
+        xmlns:ms="http://ns.microsoft.com/photo/1.0/"
+        myxmp:Rating="4">
+      <ms:Rating>75</ms:Rating>
+      <myxmp:Label>Red</myxmp:Label>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>`
+	err := os.WriteFile(xmpPath, []byte(content), 0644)
+	require.NoError(t, err)
+
+	data, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	assert.Equal(t, 4, data.Rating()) // Should read 4 from myxmp:Rating="4"
+	// Note: MicrosoftPhoto rating 75 maps to 4 as well, but xmp rating takes precedence or confirms it.
+	// If we comment out myxmp:Rating="4", ms:Rating>75 should give us 4.
+}
+
+func TestRead_CustomNamespacePrefix_ChildElement(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-custom-ns-child.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	content := `<?xml version="1.0" encoding="UTF-8"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" 
+        xmlns:abc="http://ns.adobe.com/xap/1.0/">
+      <abc:Rating>2</abc:Rating>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>`
+	err := os.WriteFile(xmpPath, []byte(content), 0644)
+	require.NoError(t, err)
+
+	data, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	assert.Equal(t, 2, data.Rating())
+}

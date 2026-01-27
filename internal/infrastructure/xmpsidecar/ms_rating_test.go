@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,4 +119,23 @@ func TestMicrosoftPhotoRating(t *testing.T) {
 			assert.Equal(t, strconv.Itoa(m.expectedPercent), msRating, "Failed mapping for %d stars", m.stars)
 		}
 	})
+}
+
+func findElementText(elem *etree.Element, tags []string) string {
+	for _, tag := range tags {
+		parts := strings.Split(tag, ":")
+		if len(parts) == 2 {
+			prefix := parts[0]
+			localName := parts[1]
+			attrKey := prefix + ":" + localName
+			if attr := elem.SelectAttr(attrKey); attr != nil {
+				return attr.Value
+			}
+		}
+
+		if child := elem.FindElement(tag); child != nil {
+			return child.Text()
+		}
+	}
+	return ""
 }
