@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/graphql-hive/graphql-config/refs/heads/master/config-schema.json",
+  "projects": {
+    "frontend": {
+      "schema": ["graph/**/*.graphql"],
+      "documents": ["frontend/src/graphql/**/*.gql"]
+    }
+  }
+}
