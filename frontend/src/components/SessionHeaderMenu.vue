@@ -44,7 +44,10 @@
           <button
             :disabled="!session?.canCommit"
             class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
-            @click="emit('showCommitModal')"
+            @click="
+              emit('showCommitModal');
+              show = false;
+            "
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCheck" fill="currentColor" />

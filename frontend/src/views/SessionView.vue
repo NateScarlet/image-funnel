@@ -122,6 +122,7 @@
       v-if="showCommitModal"
       :session
       @close="showCommitModal = false"
+      @committed="showCommitModal = false"
     />
 
     <UpdateSessionModal
