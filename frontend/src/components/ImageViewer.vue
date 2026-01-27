@@ -108,6 +108,10 @@
         </svg>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+      <template v-if="image.currentRating">
+        <RatingIcon :rating="image.currentRating" filled />
+        <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+      </template>
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
@@ -139,6 +143,7 @@
 </template>
 
 <script setup lang="ts">
+import RatingIcon from "./RatingIcon.vue";
 import { ref, computed, useTemplateRef, shallowRef, watch } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
