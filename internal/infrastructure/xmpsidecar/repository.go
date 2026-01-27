@@ -144,6 +144,13 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	}
 
 	xmpmeta := doc.FindElement("x:xmpmeta")
+	// Ensure x:xmptk attribute
+	if attr := xmpmeta.SelectAttr("x:xmptk"); attr != nil {
+		attr.Value = "XMP Core 6.0.0"
+	} else {
+		xmpmeta.CreateAttr("x:xmptk", "XMP Core 6.0.0")
+	}
+
 	rdf := xmpmeta.FindElement("rdf:RDF")
 	if rdf == nil {
 		rdf = xmpmeta.CreateElement("rdf:RDF")

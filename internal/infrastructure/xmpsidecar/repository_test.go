@@ -9,6 +9,7 @@ import (
 
 	"main/internal/domain/metadata"
 
+	"github.com/beevik/etree"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -169,4 +170,30 @@ func TestWrite_InvalidFileBackup(t *testing.T) {
 	readData, err := repo.Read(tempFile)
 	require.NoError(t, err)
 	assert.Equal(t, 3, readData.Rating())
+}
+
+func TestWrite_XMPTKAttribute(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-xmptk.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	testData := metadata.NewXMPData(3, "keep", time.Now())
+	err := repo.Write(tempFile, testData)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(xmpPath)
+	require.NoError(t, err)
+
+	// 验证 x:xmpmeta 元素包含 x:xmptk="XMP Core 6.0.0"
+	doc := etree.NewDocument()
+	err = doc.ReadFromBytes(content)
+	require.NoError(t, err)
+
+	xmpmeta := doc.FindElement("x:xmpmeta")
+	require.NotNil(t, xmpmeta)
+
+	xmptk := xmpmeta.SelectAttr("x:xmptk")
+	require.NotNil(t, xmptk, "x:xmptk attribute missing")
+	assert.Equal(t, "XMP Core 6.0.0", xmptk.Value)
 }
