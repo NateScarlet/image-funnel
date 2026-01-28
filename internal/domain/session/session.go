@@ -343,9 +343,7 @@ func (s *Session) stats() *Stats {
 	stats.remaining = len(s.queue) - s.currentIdx
 	stats.targetKeep = s.targetKeep
 
-	for i := 0; i < s.currentIdx; i++ {
-		img := s.queue[i]
-		action := s.actions[img.ID()]
+	for _, action := range s.actions {
 		switch action {
 		case shared.ImageActionKeep:
 			stats.kept++
@@ -355,15 +353,6 @@ func (s *Session) stats() *Stats {
 			stats.rejected++
 		}
 	}
-
-	// 计算被 "丢弃" 的图片数量（即曾经有过操作记录，但在当前队列中不存在的图片）
-	// 这通常发生在 session 重新组织（NextRound）时，未保留的图片被移出队列
-	// 或者 AddImage 添加的新图片尚未有操作记录（不计入丢弃）
-
-	// 使用 images map 记录了会话中所有历史图片
-	// queue 记录了当前轮次正在进行的图片（包含已处理和未处理的）
-	// 因此，rejected (丢弃/排除) = 总数 - 当前队列长度
-	stats.rejected += len(s.images) - len(s.queue)
 
 	// 计算isCompleted字段
 	// 会话完成条件：
