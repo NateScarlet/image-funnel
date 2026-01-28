@@ -116,6 +116,7 @@ type RoundSnapshot struct {
 	queue      []*image.Image
 	undoStack  []UndoEntry
 	currentIdx int
+	filter     *shared.ImageFilters
 }
 
 // NewSession 创建一个新的图片筛选会话
@@ -302,6 +303,7 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 			queue:      s.queue,
 			undoStack:  s.undoStack,
 			currentIdx: s.currentIdx,
+			filter:     s.filter,
 		})
 	}
 
@@ -505,6 +507,7 @@ func (s *Session) Undo() error {
 		s.queue = lastRound.queue
 		s.undoStack = lastRound.undoStack
 		s.currentIdx = lastRound.currentIdx
+		s.filter = lastRound.filter
 
 		// 如果恢复到了队列末尾（意味着这是正常处理完一轮触发的），
 		// 且 undoStack 不为空，则自动再撤销一步，以提供更好的用户体验（直接撤销导致换轮的那个操作）。

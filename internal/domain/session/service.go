@@ -147,7 +147,13 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *Wr
 	var errs []error
 	success := 0
 
+	filterFunc := image.BuildImageFilter(session.Filter())
+
 	for img, action := range session.Actions() {
+		if !filterFunc(img) {
+			continue
+		}
+
 		var rating int
 		switch action {
 		case shared.ImageActionKeep:

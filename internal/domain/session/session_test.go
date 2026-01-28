@@ -753,3 +753,27 @@ func TestActions_ShouldOnlyReturnMarkedImages(t *testing.T) {
 	}
 	assert.True(t, found, "Should contain the marked action")
 }
+
+func TestUndo_ShouldRestoreFilter_WhenUndoNextRound(t *testing.T) {
+	session := setupTestSession(t, 10, 5)
+	// Initial filter is Rating: [0] (from setupTestSession)
+	initialFilter := session.Filter()
+
+	// 1. Mark some images to make progress
+	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	// 2. Change filter and NextRound
+	newFilter := &shared.ImageFilters{Rating: []int{5}}
+	// Assuming we found some matching images or empty
+	err = session.NextRound(newFilter, []*image.Image{})
+	require.NoError(t, err)
+
+	assert.Equal(t, newFilter, session.Filter())
+
+	// 3. Undo
+	err = session.Undo()
+	require.NoError(t, err)
+
+	assert.Equal(t, initialFilter, session.Filter(), "Filter should be restored to initial filter")
+}
