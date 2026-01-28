@@ -22,7 +22,7 @@
           <div class="text-yellow-400 font-bold">
             {{ session?.stats.reviewed || 0 }}
           </div>
-          <div class="text-primary-400">稍后</div>
+          <div class="text-primary-400">搁置</div>
         </div>
         <div class="bg-red-900 bg-opacity-30 rounded p-2 text-center">
           <div class="text-red-400 font-bold">
@@ -41,7 +41,7 @@
           <RatingSelector v-model="keepRating" />
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-sm text-primary-400">稍后图片评分</span>
+          <span class="text-sm text-primary-400">搁置图片评分</span>
           <RatingSelector v-model="shelveRating" />
         </div>
         <div class="flex items-center justify-between">
