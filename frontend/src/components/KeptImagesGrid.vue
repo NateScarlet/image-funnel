@@ -39,10 +39,10 @@
 
         <!-- Info Overlay -->
         <div
-          class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none"
+          class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none"
         >
           <div
-            class="transform translate-y-2 group-hover:translate-y-0 transition-transform duration-200 pointer-events-auto"
+            class="transform translate-y-0 [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0 transition-transform duration-200 pointer-events-auto"
           >
             <div
               class="text-white text-sm font-medium truncate mb-1"
