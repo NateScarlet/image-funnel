@@ -29,7 +29,7 @@ func ActionOf(s *Session, id scalar.ID) shared.ImageAction {
 	if action, exists := s.actions[id]; exists {
 		return action
 	}
-	return shared.ImageActionPending
+	return shared.ImageActionShelve
 }
 
 // Helper to replace session.Images() for tests
@@ -80,7 +80,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 
 	// 标记中间3张为 PENDING
 	for i := 3; i < 6; i++ {
-		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionPending)
+		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionShelve)
 		require.NoError(t, err)
 	}
 
@@ -134,11 +134,11 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
 	imageID := session.queue[2].ID()
-	err := session.MarkImage(imageID, shared.ImageActionPending)
+	err := session.MarkImage(imageID, shared.ImageActionShelve)
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, session.queue[2].ID()), "Action should be PENDING")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[2].ID()), "Action should be PENDING")
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
@@ -160,13 +160,13 @@ func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
 		action := shared.ImageActionKeep
 		switch index % 3 {
 		case 0:
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		case 1:
 			action = shared.ImageActionReject
 		}
@@ -177,28 +177,58 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 
 	newRoundStats := session.Stats()
 	assert.Equal(t, 0, session.CurrentIndex(), "New round processed should be 0")
-	assert.Equal(t, 7, newRoundStats.Total(), "New round total should be 7")
-	assert.Equal(t, 7, newRoundStats.Remaining(), "New round remaining should be 7")
+	// Now SHELVE images are also excluded from next round, so queue should only have KEPT images.
+	// 3 images processed: 0(Keep), 1(Shelve), 2(Reject) -> only Keep(1) stays.
+	// But wait, the test marks 0: Pending(Shelve), 1: Reject, 2: Keep
+	// index % 3 case 0: PENDING -> SHELVE.
+	// index % 3 case 1: REJECT
+	// index % 3 case 2: KEEP (default)
+	//
+	// Total 10 images.
+	// 0: SHELVE (excluded)
+	// 1: REJECT (excluded)
+	// 2: KEEP (kept)
+	// 3: SHELVE (excluded)
+	// 4: REJECT (excluded)
+	// 5: KEEP (kept)
+	// 6: SHELVE (excluded)
+	// 7: REJECT (excluded)
+	// 8: KEEP (kept)
+	// 9: SHELVE (excluded)
 
-	expectedQueueLength := 7
+	// So new queue should have 3 images (indices 2, 5, 8).
+
+	assert.Equal(t, 3, newRoundStats.Total(), "New round total should be 3")
+	assert.Equal(t, 3, newRoundStats.Remaining(), "New round remaining should be 3")
+
+	expectedQueueLength := 3
 	assert.Equal(t, expectedQueueLength, len(session.queue), "Queue length should be %d", expectedQueueLength)
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIdx should be 0")
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
 		action := shared.ImageActionKeep
 		if index%2 == 0 {
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		}
 		return action
 	})
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
 
-	expectedQueueLength := 10
+	// Test logic:
+	// index % 2 == 0: PENDING -> SHELVE
+	// index % 2 != 0: KEEP
+	//
+	// Total 10 images.
+	// Evens: SHELVE (excluded) -> 5 images
+	// Odds: KEEP (kept) -> 5 images
+
+	// New queue length should be 5.
+	expectedQueueLength := 5
 	assert.Equal(t, expectedQueueLength, len(session.queue), "Queue length should be %d", expectedQueueLength)
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIdx should be 0")
 }
@@ -284,7 +314,7 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 }
 
 func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	keptImageIDs := make(map[scalar.ID]bool)
 
@@ -292,7 +322,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 		action := shared.ImageActionKeep
 		switch index % 3 {
 		case 0:
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		case 1:
 			action = shared.ImageActionReject
 		}
@@ -305,7 +335,8 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
 
-	expectedQueueLength := 7
+	// Updated expectation: Queue length 3 (indices 2, 5, 8)
+	expectedQueueLength := 3
 	assert.Equal(t, expectedQueueLength, len(session.queue), "Queue length should be %d", expectedQueueLength)
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIdx should be 0")
 
@@ -329,7 +360,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, session.queue[0].ID()), "Action should be restored to PENDING")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[0].ID()), "Action should be restored to PENDING")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
@@ -364,7 +395,7 @@ func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
 		action := shared.ImageActionKeep
 		switch index % 3 {
 		case 0:
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		case 1:
 			action = shared.ImageActionReject
 		}
@@ -391,7 +422,7 @@ func TestWriteActions_Getters(t *testing.T) {
 	actions := NewWriteActions(5, 3, 1)
 
 	assert.Equal(t, 5, actions.KeepRating(), "KeepRating should match")
-	assert.Equal(t, 3, actions.PendingRating(), "PendingRating should match")
+	assert.Equal(t, 3, actions.ShelveRating(), "ShelveRating should match")
 	assert.Equal(t, 1, actions.RejectRating(), "RejectRating should match")
 }
 
@@ -464,13 +495,13 @@ func markImagesInSession(t *testing.T, session *Session, actionFn func(index int
 }
 
 func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
 		action := shared.ImageActionKeep
 		switch index % 3 {
 		case 0:
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		case 1:
 			action = shared.ImageActionReject
 		}
@@ -478,7 +509,10 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	})
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after first round")
-	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
+
+	// Logic same as previous: 0->Shelve, 1->Reject, 2->Keep.
+	// Queue should have 3 images (2, 5, 8)
+	assert.Equal(t, 3, len(session.queue), "Queue should have 3 images for second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 for second round")
 
 	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
@@ -487,18 +521,18 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	err = session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, session.queue[0].ID()), "Action should be restored to PENDING after undo in second round")
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, session.queue[0].ID()), "Action should be restored to KEEP (from previous round) after undo in second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
 func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
 		action := shared.ImageActionKeep
 		switch index % 3 {
 		case 0:
-			action = shared.ImageActionPending
+			action = shared.ImageActionShelve
 		case 1:
 			action = shared.ImageActionReject
 		}
@@ -506,7 +540,8 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 	})
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after first round")
-	assert.Equal(t, 7, len(session.queue), "Queue should have 7 images for second round")
+	// Expected queue length 3
+	assert.Equal(t, 3, len(session.queue), "Queue should have 3 images for second round")
 	assert.Equal(t, 1, session.currentRound, "CurrentRound should be 1")
 
 	err := session.Undo()
@@ -559,7 +594,7 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after undo")
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, session.queue[9].ID()), "Last image action should be restored to PENDING")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[9].ID()), "Last image action should be restored to PENDING")
 }
 
 func TestUndo_CrossRoundToBeginning(t *testing.T) {
@@ -584,13 +619,13 @@ func TestUndo_CrossRoundToBeginning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, session.currentRound)
 	assert.Equal(t, 1, session.currentIdx)
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, img1ID))
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img1ID))
 
 	// 4. 执行第二次撤销：撤销 img0 的标记 (idx 1 -> 0)
 	err = session.Undo()
 	require.NoError(t, err)
 	assert.Equal(t, 0, session.currentIdx)
-	assert.Equal(t, shared.ImageActionPending, ActionOf(session, img0ID))
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0ID))
 
 	// 5. 执行第三次撤销：预期返回错误，且不会 panic
 	err = session.Undo()

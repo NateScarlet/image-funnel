@@ -9,7 +9,7 @@ export interface Preset {
   };
   writeActions: {
     keepRating: number;
-    pendingRating: number;
+    shelveRating: number;
     rejectRating: number;
   };
   targetKeep: number;
@@ -21,11 +21,11 @@ const defaultPresets: Preset[] = [
     name: "草稿阶段筛选",
     description: "从大量生成结果中快速筛选",
     filter: {
-      rating: [0, 4],
+      rating: [0, 3, 4],
     },
     writeActions: {
       keepRating: 4,
-      pendingRating: 0,
+      shelveRating: 3,
       rejectRating: 2,
     },
     targetKeep: 4,
@@ -35,11 +35,11 @@ const defaultPresets: Preset[] = [
     name: "细化阶段筛选",
     description: "从待定图片中精细筛选",
     filter: {
-      rating: [0],
+      rating: [0, 3],
     },
     writeActions: {
       keepRating: 0,
-      pendingRating: 0,
+      shelveRating: 3,
       rejectRating: 1,
     },
     targetKeep: 1,

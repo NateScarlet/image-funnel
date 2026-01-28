@@ -15,16 +15,16 @@ import (
 // 用于将图片操作映射到 XMP 评分系统
 
 type WriteActions struct {
-	keepRating    int
-	pendingRating int
-	rejectRating  int
+	keepRating   int
+	shelveRating int
+	rejectRating int
 }
 
-func NewWriteActions(keepRating, pendingRating, rejectRating int) *WriteActions {
+func NewWriteActions(keepRating, shelveRating, rejectRating int) *WriteActions {
 	return &WriteActions{
-		keepRating:    keepRating,
-		pendingRating: pendingRating,
-		rejectRating:  rejectRating,
+		keepRating:   keepRating,
+		shelveRating: shelveRating,
+		rejectRating: rejectRating,
 	}
 }
 
@@ -32,8 +32,8 @@ func (a *WriteActions) KeepRating() int {
 	return a.keepRating
 }
 
-func (a *WriteActions) PendingRating() int {
-	return a.pendingRating
+func (a *WriteActions) ShelveRating() int {
+	return a.shelveRating
 }
 
 func (a *WriteActions) RejectRating() int {
@@ -84,7 +84,7 @@ func (s *Stats) IsCompleted() bool {
 //
 // 会话流程：
 // 1. 初始化时创建包含所有图片的队列
-// 2. 用户对图片进行评分（保留/稍后再看/排除）
+// 2. 用户对图片进行评分（保留/搁置/排除）
 // 3. 当队列处理完成后，根据评分重新组织队列进行下一轮筛选
 // 4. 直到达到目标保留数量或所有图片都被处理
 // 5. 提交会话结果，将评分写入 XMP Sidecar 文件
@@ -347,7 +347,7 @@ func (s *Session) stats() *Stats {
 		switch action {
 		case shared.ImageActionKeep:
 			stats.kept++
-		case shared.ImageActionPending:
+		case shared.ImageActionShelve:
 			stats.reviewed++
 		case shared.ImageActionReject:
 			stats.rejected++
@@ -366,7 +366,7 @@ func (s *Session) stats() *Stats {
 	// 计算isCompleted字段
 	// 会话完成条件：
 	// 1. 所有图片都已处理 (remaining == 0)
-	// 2. 且保留和稍后再看的图片数量不超过目标保留数量 (否则需要开启新一轮)
+	// 2. 且保留和搁置的图片数量不超过目标保留数量 (否则需要开启新一轮)
 	stats.isCompleted = stats.remaining == 0 && (stats.kept+stats.reviewed <= stats.targetKeep)
 
 	return &stats
@@ -442,7 +442,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]
-				if action == shared.ImageActionPending || action == shared.ImageActionKeep {
+				if action == shared.ImageActionKeep {
 					newQueue = append(newQueue, img)
 				}
 			}

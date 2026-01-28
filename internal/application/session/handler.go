@@ -123,13 +123,13 @@ func (h *Handler) Commit(
 	ctx context.Context,
 	sessionID scalar.ID,
 	keepRating int,
-	pendingRating int,
+	shelveRating int,
 	rejectRating int,
 ) (success int, errors []error) {
 	h.logger.Info("will commit session",
 		zap.Stringer("sessionID", sessionID),
 		zap.Int("keepRating", keepRating),
-		zap.Int("pendingRating", pendingRating),
+		zap.Int("shelveRating", shelveRating),
 		zap.Int("rejectRating", rejectRating),
 	)
 	startTime := time.Now()
@@ -156,7 +156,7 @@ func (h *Handler) Commit(
 		return 0, []error{fmt.Errorf("session not found: %w", err)}
 	}
 
-	writeActions := session.NewWriteActions(keepRating, pendingRating, rejectRating)
+	writeActions := session.NewWriteActions(keepRating, shelveRating, rejectRating)
 	return h.sessionService.Commit(ctx, sess, writeActions)
 }
 

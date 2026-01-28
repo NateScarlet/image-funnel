@@ -1,5 +1,5 @@
 enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   KEEP
-  PENDING
+  SHELVE
   REJECT
 }

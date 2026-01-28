@@ -77,9 +77,9 @@ type StatsDTO struct {
 
 // WriteActions 写入操作配置
 type WriteActions struct {
-	KeepRating    int
-	PendingRating int
-	RejectRating  int
+	KeepRating   int
+	ShelveRating int
+	RejectRating int
 }
 
 // ImageMeta 图片元数据

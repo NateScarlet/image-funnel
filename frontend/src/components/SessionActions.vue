@@ -17,7 +17,7 @@
     <button
       :disabled="marking"
       class="btn-action flex-1 p-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
-      @click="$emit('mark', ImageAction.PENDING)"
+      @click="$emit('mark', ImageAction.SHELVE)"
     >
       <svg v-if="marking" class="w-6 h-6 animate-spin" viewBox="0 0 24 24">
         <path :d="mdiLoading" fill="currentColor" />
@@ -25,7 +25,7 @@
       <svg v-else class="w-6 h-6" viewBox="0 0 24 24">
         <path :d="mdiClockOutline" fill="currentColor" />
       </svg>
-      <span>稍后再看</span>
+      <span>搁置</span>
     </button>
 
     <button

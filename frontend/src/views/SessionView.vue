@@ -115,7 +115,7 @@
       class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0"
       :class="didUseGesture ? 'hidden' : ''"
     >
-      ↓ 排除 | ↑ 稍后再看 | → 保留 | ← 撤销
+      ↓ 排除 | ↑ 搁置 | → 保留 | ← 撤销
     </footer>
 
     <CommitModal
@@ -212,7 +212,7 @@ useEventListeners(window, ({ on }) => {
         markImage(ImageAction.REJECT);
         break;
       case "ArrowUp":
-        markImage(ImageAction.PENDING);
+        markImage(ImageAction.SHELVE);
         break;
       case "ArrowRight":
         markImage(ImageAction.KEEP);
@@ -360,7 +360,7 @@ function handleGesture() {
   console.log(swipeDirection.value);
   switch (swipeDirection.value) {
     case "UP":
-      markImage(ImageAction.PENDING);
+      markImage(ImageAction.SHELVE);
       break;
     case "DOWN":
       markImage(ImageAction.REJECT);

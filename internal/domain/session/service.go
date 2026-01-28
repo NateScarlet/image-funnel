@@ -152,8 +152,8 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *Wr
 		switch action {
 		case shared.ImageActionKeep:
 			rating = writeActions.keepRating
-		case shared.ImageActionPending:
-			rating = writeActions.pendingRating
+		case shared.ImageActionShelve:
+			rating = writeActions.ShelveRating()
 		case shared.ImageActionReject:
 			rating = writeActions.rejectRating
 		}

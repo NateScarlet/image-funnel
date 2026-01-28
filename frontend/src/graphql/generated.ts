@@ -40,8 +40,8 @@ export type DirectoryFilters = {
 
 export enum ImageAction {
   KEEP = 'KEEP',
-  PENDING = 'PENDING',
-  REJECT = 'REJECT'
+  REJECT = 'REJECT',
+  SHELVE = 'SHELVE'
 }
 
 export type ImageFiltersInput = {
@@ -69,8 +69,8 @@ export type UpdateSessionInput = {
 
 export type WriteActionsInput = {
   keepRating: Scalars['Int']['input'];
-  pendingRating: Scalars['Int']['input'];
   rejectRating: Scalars['Int']['input'];
+  shelveRating: Scalars['Int']['input'];
 };
 
 export type DirectoryFragment = { __typename: 'Directory', id: string, parentId: string | null, path: string, root: boolean };

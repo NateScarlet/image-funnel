@@ -125,7 +125,7 @@ func TestWrite_UpdateExistingAttribute(t *testing.T) {
 	err := os.WriteFile(xmpPath, []byte(initialXMP), 0644)
 	require.NoError(t, err)
 
-	testData := metadata.NewXMPData(4, "later", time.Now().Truncate(time.Second))
+	testData := metadata.NewXMPData(4, "shelve", time.Now().Truncate(time.Second))
 	err = repo.Write(tempFile, testData)
 	require.NoError(t, err)
 

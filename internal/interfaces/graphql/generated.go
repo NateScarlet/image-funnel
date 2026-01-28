@@ -172,9 +172,9 @@ type ComplexityRoot struct {
 	}
 
 	WriteActions struct {
-		KeepRating    func(childComplexity int) int
-		PendingRating func(childComplexity int) int
-		RejectRating  func(childComplexity int) int
+		KeepRating   func(childComplexity int) int
+		RejectRating func(childComplexity int) int
+		ShelveRating func(childComplexity int) int
 	}
 }
 
@@ -730,18 +730,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.WriteActions.KeepRating(childComplexity), true
-	case "WriteActions.pendingRating":
-		if e.complexity.WriteActions.PendingRating == nil {
-			break
-		}
-
-		return e.complexity.WriteActions.PendingRating(childComplexity), true
 	case "WriteActions.rejectRating":
 		if e.complexity.WriteActions.RejectRating == nil {
 			break
 		}
 
 		return e.complexity.WriteActions.RejectRating(childComplexity), true
+	case "WriteActions.shelveRating":
+		if e.complexity.WriteActions.ShelveRating == nil {
+			break
+		}
+
+		return e.complexity.WriteActions.ShelveRating(childComplexity), true
 
 	}
 	return 0, false
@@ -969,13 +969,13 @@ input ImageFiltersInput
 `, BuiltIn: false},
 	{Name: "../../../graph/types/write_actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
-  pendingRating: Int!
+  shelveRating: Int!
   rejectRating: Int!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/enums/image_action.graphql", Input: `enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   KEEP
-  PENDING
+  SHELVE
   REJECT
 }
 `, BuiltIn: false},
@@ -1019,7 +1019,7 @@ input DirectoryFilters
 
 input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
-  pendingRating: Int!
+  shelveRating: Int!
   rejectRating: Int!
 }
 
@@ -4015,14 +4015,14 @@ func (ec *executionContext) fieldContext_WriteActions_keepRating(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _WriteActions_pendingRating(ctx context.Context, field graphql.CollectedField, obj *shared.WriteActions) (ret graphql.Marshaler) {
+func (ec *executionContext) _WriteActions_shelveRating(ctx context.Context, field graphql.CollectedField, obj *shared.WriteActions) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_WriteActions_pendingRating,
+		ec.fieldContext_WriteActions_shelveRating,
 		func(ctx context.Context) (any, error) {
-			return obj.PendingRating, nil
+			return obj.ShelveRating, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -4031,7 +4031,7 @@ func (ec *executionContext) _WriteActions_pendingRating(ctx context.Context, fie
 	)
 }
 
-func (ec *executionContext) fieldContext_WriteActions_pendingRating(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_WriteActions_shelveRating(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WriteActions",
 		Field:      field,
@@ -5799,7 +5799,7 @@ func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"keepRating", "pendingRating", "rejectRating"}
+	fieldsInOrder := [...]string{"keepRating", "shelveRating", "rejectRating"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5813,13 +5813,13 @@ func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context,
 				return it, err
 			}
 			it.KeepRating = data
-		case "pendingRating":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pendingRating"))
+		case "shelveRating":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("shelveRating"))
 			data, err := ec.unmarshalNInt2int(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.PendingRating = data
+			it.ShelveRating = data
 		case "rejectRating":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rejectRating"))
 			data, err := ec.unmarshalNInt2int(ctx, v)
@@ -7077,8 +7077,8 @@ func (ec *executionContext) _WriteActions(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "pendingRating":
-			out.Values[i] = ec._WriteActions_pendingRating(ctx, field, obj)
+		case "shelveRating":
+			out.Values[i] = ec._WriteActions_shelveRating(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

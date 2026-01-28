@@ -15,7 +15,7 @@ func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChange
 		ctx,
 		input.SessionID,
 		input.WriteActions.KeepRating,
-		input.WriteActions.PendingRating,
+		input.WriteActions.ShelveRating,
 		input.WriteActions.RejectRating,
 	)
 

@@ -42,7 +42,7 @@
         </div>
         <div class="flex items-center justify-between">
           <span class="text-sm text-primary-400">稍后图片评分</span>
-          <RatingSelector v-model="pendingRating" />
+          <RatingSelector v-model="shelveRating" />
         </div>
         <div class="flex items-center justify-between">
           <span class="text-sm text-primary-400">排除图片评分</span>
@@ -158,14 +158,14 @@ const keepRating = computed({
   },
 });
 
-const pendingRatingBuffer = ref<number>();
-const pendingRating = computed({
+const shelveRatingBuffer = ref<number>();
+const shelveRating = computed({
   get: () =>
-    pendingRatingBuffer.value ??
-    selectedPreset.value?.writeActions.pendingRating ??
+    shelveRatingBuffer.value ??
+    selectedPreset.value?.writeActions.shelveRating ??
     0,
   set: (v: number) => {
-    pendingRatingBuffer.value = v;
+    shelveRatingBuffer.value = v;
   },
 });
 
@@ -192,7 +192,7 @@ async function commit() {
           sessionId: session.id,
           writeActions: {
             keepRating: keepRating.value,
-            pendingRating: pendingRating.value,
+            shelveRating: shelveRating.value,
             rejectRating: rejectRating.value,
           },
         },

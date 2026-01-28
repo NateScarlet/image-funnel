@@ -1,5 +1,5 @@
 type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
-  pendingRating: Int!
+  shelveRating: Int!
   rejectRating: Int!
 }
