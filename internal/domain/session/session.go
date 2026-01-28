@@ -368,8 +368,9 @@ func (s *Session) stats() *Stats {
 	// 计算isCompleted字段
 	// 会话完成条件：
 	// 1. 所有图片都已处理 (remaining == 0)
-	// 2. 且保留和搁置的图片数量不超过目标保留数量 (否则需要开启新一轮)
-	stats.isCompleted = stats.remaining == 0 && (stats.kept+stats.shelved <= stats.targetKeep)
+	// 2. 且保留的图片数量不超过目标保留数量 (否则需要开启新一轮)
+	// 注意：搁置 (Later) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
+	stats.isCompleted = stats.remaining == 0 && (stats.kept <= stats.targetKeep)
 
 	return &stats
 }
@@ -440,7 +441,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	if s.currentIdx >= len(s.queue) {
 		stats := s.stats()
 
-		if stats.shelved > 0 || stats.kept > 0 {
+		if stats.kept > 0 {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]

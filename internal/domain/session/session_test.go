@@ -388,7 +388,7 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 }
 
 func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
-	session := setupTestSession(t, 10, 5)
+	session := setupTestSession(t, 10, 2)
 
 	// 完成第一轮筛选，进入第二轮
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
