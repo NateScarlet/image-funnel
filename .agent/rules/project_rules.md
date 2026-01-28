@@ -50,4 +50,6 @@ image-funnel/
 - **vue:**　用 vue 的 `useTemplateRef`（类型自动推导） 或 `@/composables/useTemplateRefs`（支持响应式数组） 获取引用
 - **graphql:** 用 fragment 来避免重复定义查询字段，命名不带后缀 Fragment（可以和类型名相同，生成的类型会自带 Fragment 后缀）
 - 确保所有公共 API 都有文档注释
-- 使用 context 包传递请求上下文
+- **go:** 使用 context 包传递请求上下文
+- **vue:** 不要用文本提示加载状态用样式和动画来实现加载提示，避免加载导致界面抖动
+- **go:** 新增功能的同时，添加对应的单元测试

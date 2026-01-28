@@ -221,6 +221,29 @@ func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int
 	return result, nil
 }
 
+func (h *Handler) KeptImages(ctx context.Context, sessionID scalar.ID, limit, offset int) ([]*shared.ImageDTO, error) {
+	sess, err := h.sessionService.Get(sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	images := sess.KeptImages(limit, offset)
+	if len(images) == 0 {
+		return nil, nil
+	}
+
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	result := make([]*shared.ImageDTO, 0, len(images))
+	for _, img := range images {
+		dto, err := imageDTOFactory.New(img)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, dto)
+	}
+	return result, nil
+}
+
 // UpdateSession 更新会话配置
 func (h *Handler) UpdateSession(
 	ctx context.Context,

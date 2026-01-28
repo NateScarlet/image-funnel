@@ -1,29 +1,38 @@
 <template>
-  <div class="max-w-md w-full mx-auto">
-    <div class="text-center mb-8">
-      <div class="text-6xl mb-4">🎉</div>
-      <h2 class="text-3xl font-bold mb-2 text-white">筛选完成！</h2>
-      <p class="text-primary-400">已处理目录中的所有图片</p>
-    </div>
-
-    <div
-      class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
-    >
-      <CommitForm
-        ref="commitForm"
-        :session
-        title=""
-        @committed="handleCommitted"
-      />
-    </div>
-
-    <div v-if="nextDirectoryId" class="mt-6">
-      <p class="text-sm text-primary-400 mb-3">下一个目录</p>
-      <div
-        class="p-4 rounded-lg transition-all border-2 bg-primary-600 border-primary-500"
-      >
-        <DirectoryDisplay :directory="{ id: nextDirectoryId }" />
+  <div class="w-full flex flex-col items-center">
+    <div class="max-w-md w-full mx-auto">
+      <div class="text-center mb-8">
+        <div class="text-6xl mb-4">🎉</div>
+        <h2 class="text-3xl font-bold mb-2 text-white">筛选完成！</h2>
+        <p class="text-primary-400">已处理目录中的所有图片</p>
       </div>
+
+      <div
+        class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
+      >
+        <CommitForm
+          ref="commitForm"
+          :session
+          title=""
+          @committed="handleCommitted"
+        />
+      </div>
+
+      <div v-if="nextDirectoryId" class="mt-6">
+        <p class="text-sm text-primary-400 mb-3">下一个目录</p>
+        <div
+          class="p-4 rounded-lg transition-all border-2 bg-primary-600 border-primary-500"
+        >
+          <DirectoryDisplay :directory="{ id: nextDirectoryId }" />
+        </div>
+      </div>
+    </div>
+
+    <div v-if="session.stats.kept > 0" class="w-full max-w-6xl px-4 mt-8">
+      <KeptImagesGrid
+        :session-id="session.id"
+        :total-kept="session.stats.kept"
+      />
     </div>
   </div>
 </template>
@@ -39,6 +48,7 @@ import {
 import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
+import KeptImagesGrid from "./KeptImagesGrid.vue";
 
 const { session } = defineProps<{
   session: SessionFragment;

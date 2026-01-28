@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"sort"
 	"sync"
 	"time"
 )
@@ -221,6 +222,36 @@ func (s *Session) NextImages(count int) []*image.Image {
 		end = len(s.queue)
 	}
 	return s.queue[start:end]
+}
+
+func (s *Session) KeptImages(limit, offset int) []*image.Image {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var kept []*image.Image
+	for id, img := range s.images {
+		if s.actions[id] == shared.ImageActionKeep {
+			kept = append(kept, img)
+		}
+	}
+
+	// 按文件名排序，确保分页确定性
+	sort.Slice(kept, func(i, j int) bool {
+		return kept[i].Filename() < kept[j].Filename()
+	})
+
+	if offset >= len(kept) {
+		return nil
+	}
+
+	end := offset + limit
+	if limit < 0 {
+		end = len(kept)
+	} else if end > len(kept) {
+		end = len(kept)
+	}
+
+	return kept[offset:end]
 }
 
 func (s *Session) CurrentIndex() int {

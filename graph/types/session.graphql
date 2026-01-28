@@ -12,4 +12,5 @@ type Session @goModel(model: "main/internal/shared.SessionDTO") {
   currentSize: Int!
   currentImage: Image
   nextImages(count: Int): [Image!]!
+  keptImages(limit: Int, offset: Int): [Image!]!
 }

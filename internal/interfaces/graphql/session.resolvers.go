@@ -41,6 +41,19 @@ func (r *sessionResolver) NextImages(ctx context.Context, obj *shared.SessionDTO
 	return r.app.NextImages(ctx, obj.ID, *count)
 }
 
+// KeptImages is the resolver for the keptImages field.
+func (r *sessionResolver) KeptImages(ctx context.Context, obj *shared.SessionDTO, limit *int, offset *int) ([]*shared.ImageDTO, error) {
+	l := -1
+	o := 0
+	if limit != nil {
+		l = *limit
+	}
+	if offset != nil {
+		o = *offset
+	}
+	return r.app.KeptImages(ctx, obj.ID, l, o)
+}
+
 // Session returns SessionResolver implementation.
 func (r *Resolver) Session() SessionResolver { return &sessionResolver{r} }
 

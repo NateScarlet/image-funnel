@@ -1,0 +1,8 @@
+query KeptImages($sessionId: ID!, $limit: Int, $offset: Int) {
+  session(id: $sessionId) {
+    id
+    keptImages(limit: $limit, offset: $offset) {
+      ...Image
+    }
+  }
+}
