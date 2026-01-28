@@ -11,41 +11,42 @@
         }}
         个操作写入 XMP 文件
       </p>
-      <div class="grid grid-cols-3 gap-2 text-sm">
-        <div class="bg-green-900 bg-opacity-30 rounded p-2 text-center">
-          <div class="text-green-400 font-bold">
-            {{ session?.stats.kept || 0 }}
-          </div>
-          <div class="text-primary-400">保留</div>
-        </div>
-        <div class="bg-yellow-900 bg-opacity-30 rounded p-2 text-center">
-          <div class="text-yellow-400 font-bold">
-            {{ session?.stats.reviewed || 0 }}
-          </div>
-          <div class="text-primary-400">搁置</div>
-        </div>
-        <div class="bg-red-900 bg-opacity-30 rounded p-2 text-center">
-          <div class="text-red-400 font-bold">
-            {{ session?.stats.rejected || 0 }}
-          </div>
-          <div class="text-primary-400">排除</div>
-        </div>
-      </div>
     </div>
 
     <div v-if="!commitResult" class="bg-primary-700/50 rounded-lg p-4">
       <h3 class="font-medium mb-4">写入操作设置</h3>
       <div class="space-y-4">
         <div class="flex items-center justify-between">
-          <span class="text-sm text-primary-400">保留图片评分</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-green-400">保留</span>
+            <span
+              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
+            >
+              {{ session?.stats.kept || 0 }} 张
+            </span>
+          </div>
           <RatingSelector v-model="keepRating" />
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-sm text-primary-400">搁置图片评分</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-yellow-400">搁置</span>
+            <span
+              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
+            >
+              {{ session?.stats.reviewed || 0 }} 张
+            </span>
+          </div>
           <RatingSelector v-model="shelveRating" />
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-sm text-primary-400">排除图片评分</span>
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-bold text-red-400">排除</span>
+            <span
+              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
+            >
+              {{ session?.stats.rejected || 0 }} 张
+            </span>
+          </div>
           <RatingSelector v-model="rejectRating" />
         </div>
       </div>
