@@ -6,7 +6,7 @@
         将
         {{
           (session?.stats.kept ?? 0) +
-          (session?.stats.reviewed ?? 0) +
+          (session?.stats.shelved ?? 0) +
           (session?.stats.rejected ?? 0)
         }}
         个操作写入 XMP 文件
@@ -33,7 +33,7 @@
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
-              {{ session?.stats.reviewed || 0 }} 张
+              {{ session?.stats.shelved || 0 }} 张
             </span>
           </div>
           <RatingSelector v-model="shelveRating" />

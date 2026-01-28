@@ -72,7 +72,7 @@ func (f *StatsDTOFactory) New(stats *session.Stats) (*shared.StatsDTO, error) {
 	return &shared.StatsDTO{
 		Total:       stats.Total(),
 		Kept:        stats.Kept(),
-		Reviewed:    stats.Reviewed(),
+		Shelved:     stats.Shelved(),
 		Rejected:    stats.Rejected(),
 		Remaining:   stats.Remaining(),
 		IsCompleted: stats.IsCompleted(),

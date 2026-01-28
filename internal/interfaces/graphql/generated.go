@@ -152,7 +152,7 @@ type ComplexityRoot struct {
 		Kept        func(childComplexity int) int
 		Rejected    func(childComplexity int) int
 		Remaining   func(childComplexity int) int
-		Reviewed    func(childComplexity int) int
+		Shelved     func(childComplexity int) int
 		Total       func(childComplexity int) int
 	}
 
@@ -662,12 +662,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SessionStats.Remaining(childComplexity), true
-	case "SessionStats.reviewed":
-		if e.complexity.SessionStats.Reviewed == nil {
+	case "SessionStats.shelved":
+		if e.complexity.SessionStats.Shelved == nil {
 			break
 		}
 
-		return e.complexity.SessionStats.Reviewed(childComplexity), true
+		return e.complexity.SessionStats.Shelved(childComplexity), true
 	case "SessionStats.total":
 		if e.complexity.SessionStats.Total == nil {
 			break
@@ -961,7 +961,7 @@ input ImageFiltersInput
 	{Name: "../../../graph/types/session_stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int!
   kept: Int!
-  reviewed: Int!
+  shelved: Int!
   rejected: Int!
   remaining: Int!
   isCompleted: Boolean!
@@ -3150,8 +3150,8 @@ func (ec *executionContext) fieldContext_Session_stats(_ context.Context, field 
 				return ec.fieldContext_SessionStats_total(ctx, field)
 			case "kept":
 				return ec.fieldContext_SessionStats_kept(ctx, field)
-			case "reviewed":
-				return ec.fieldContext_SessionStats_reviewed(ctx, field)
+			case "shelved":
+				return ec.fieldContext_SessionStats_shelved(ctx, field)
 			case "rejected":
 				return ec.fieldContext_SessionStats_rejected(ctx, field)
 			case "remaining":
@@ -3568,14 +3568,14 @@ func (ec *executionContext) fieldContext_SessionStats_kept(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStats_reviewed(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _SessionStats_shelved(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SessionStats_reviewed,
+		ec.fieldContext_SessionStats_shelved,
 		func(ctx context.Context) (any, error) {
-			return obj.Reviewed, nil
+			return obj.Shelved, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3584,7 +3584,7 @@ func (ec *executionContext) _SessionStats_reviewed(ctx context.Context, field gr
 	)
 }
 
-func (ec *executionContext) fieldContext_SessionStats_reviewed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SessionStats_shelved(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionStats",
 		Field:      field,
@@ -6917,8 +6917,8 @@ func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "reviewed":
-			out.Values[i] = ec._SessionStats_reviewed(ctx, field, obj)
+		case "shelved":
+			out.Values[i] = ec._SessionStats_shelved(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

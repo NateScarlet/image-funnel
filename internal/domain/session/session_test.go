@@ -64,7 +64,7 @@ func TestStats_InitialState(t *testing.T) {
 	assert.Equal(t, 10, stats.Total(), "Total should be 10")
 	assert.Equal(t, 0, session.CurrentIndex(), "Processed should be 0")
 	assert.Equal(t, 0, stats.Kept(), "Kept should be 0")
-	assert.Equal(t, 0, stats.Reviewed(), "Reviewed should be 0")
+	assert.Equal(t, 0, stats.Shelved(), "Shelved should be 0")
 	assert.Equal(t, 0, stats.Rejected(), "Rejected should be 0")
 	assert.Equal(t, 10, stats.Remaining(), "Remaining should be 10")
 }
@@ -95,7 +95,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 	assert.Equal(t, 10, stats.Total(), "Total should be 10")
 	assert.Equal(t, 9, session.CurrentIndex(), "Processed should be 9")
 	assert.Equal(t, 3, stats.Kept(), "Kept should be 3")
-	assert.Equal(t, 3, stats.Reviewed(), "Reviewed should be 3")
+	assert.Equal(t, 3, stats.Shelved(), "Shelved should be 3")
 	assert.Equal(t, 3, stats.Rejected(), "Rejected should be 3")
 	assert.Equal(t, 1, stats.Remaining(), "Remaining should be 1")
 }
@@ -430,14 +430,14 @@ func TestStats_Getters(t *testing.T) {
 	stats := &Stats{
 		total:     10,
 		kept:      2,
-		reviewed:  2,
+		shelved:   2,
 		rejected:  1,
 		remaining: 5,
 	}
 
 	assert.Equal(t, 10, stats.Total(), "Total should match")
 	assert.Equal(t, 2, stats.Kept(), "Kept should match")
-	assert.Equal(t, 2, stats.Reviewed(), "Reviewed should match")
+	assert.Equal(t, 2, stats.Shelved(), "Shelved should match")
 	assert.Equal(t, 1, stats.Rejected(), "Rejected should match")
 	assert.Equal(t, 5, stats.Remaining(), "Remaining should match")
 }

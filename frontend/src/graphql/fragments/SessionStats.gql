@@ -1,7 +1,7 @@
 fragment SessionStats on SessionStats {
   total
   kept
-  reviewed
+  shelved
   rejected
   remaining
   isCompleted

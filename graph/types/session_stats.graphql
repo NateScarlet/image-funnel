@@ -1,7 +1,7 @@
 type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int!
   kept: Int!
-  reviewed: Int!
+  shelved: Int!
   rejected: Int!
   remaining: Int!
   isCompleted: Boolean!

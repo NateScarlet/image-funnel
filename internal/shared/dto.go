@@ -69,7 +69,7 @@ type SessionDTO struct {
 type StatsDTO struct {
 	Total       int
 	Kept        int
-	Reviewed    int
+	Shelved     int
 	Rejected    int
 	Remaining   int
 	IsCompleted bool

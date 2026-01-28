@@ -45,7 +45,7 @@ func (a *WriteActions) RejectRating() int {
 type Stats struct {
 	total       int
 	kept        int
-	reviewed    int
+	shelved     int
 	rejected    int
 	remaining   int
 	targetKeep  int
@@ -60,8 +60,8 @@ func (s *Stats) Kept() int {
 	return s.kept
 }
 
-func (s *Stats) Reviewed() int {
-	return s.reviewed
+func (s *Stats) Shelved() int {
+	return s.shelved
 }
 
 func (s *Stats) Rejected() int {
@@ -350,7 +350,7 @@ func (s *Session) stats() *Stats {
 		case shared.ImageActionKeep:
 			stats.kept++
 		case shared.ImageActionShelve:
-			stats.reviewed++
+			stats.shelved++
 		case shared.ImageActionReject:
 			stats.rejected++
 		}
@@ -369,7 +369,7 @@ func (s *Session) stats() *Stats {
 	// 会话完成条件：
 	// 1. 所有图片都已处理 (remaining == 0)
 	// 2. 且保留和搁置的图片数量不超过目标保留数量 (否则需要开启新一轮)
-	stats.isCompleted = stats.remaining == 0 && (stats.kept+stats.reviewed <= stats.targetKeep)
+	stats.isCompleted = stats.remaining == 0 && (stats.kept+stats.shelved <= stats.targetKeep)
 
 	return &stats
 }
@@ -440,7 +440,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	if s.currentIdx >= len(s.queue) {
 		stats := s.stats()
 
-		if stats.reviewed > 0 || stats.kept > 0 {
+		if stats.shelved > 0 || stats.kept > 0 {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]
