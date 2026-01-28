@@ -5,6 +5,16 @@
         <div class="text-6xl mb-4">🎉</div>
         <h2 class="text-3xl font-bold mb-2 text-white">筛选完成！</h2>
         <p class="text-primary-400">已处理目录中的所有图片</p>
+        <button
+          v-if="session.canUndo"
+          class="mt-4 px-4 py-2 text-primary-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex items-center justify-center gap-2 mx-auto"
+          @click="$emit('undo')"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="mdiUndo" />
+          </svg>
+          撤销上一张
+        </button>
       </div>
 
       <div
@@ -49,10 +59,13 @@ import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
+import { mdiUndo } from "@mdi/js";
 
 const { session } = defineProps<{
   session: SessionFragment;
 }>();
+
+defineEmits<(e: "undo") => void>();
 
 const router = useRouter();
 const { getNextDirectory } = useDirectoryProgress();

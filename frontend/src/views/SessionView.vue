@@ -19,8 +19,9 @@
           : 'overflow-y-auto'
       "
     >
-      <template v-if="currentImage">
+      <KeepAlive>
         <ImageViewer
+          v-if="currentImage"
           class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
           :image="currentImage"
           :next-images="session?.nextImages ?? []"
@@ -44,6 +45,9 @@
             </template>
           </template>
         </ImageViewer>
+      </KeepAlive>
+
+      <template v-if="currentImage">
         <Teleport :to="rendererEl">
           <div
             ref="swipeEl"
@@ -105,7 +109,7 @@
           </div>
         </template>
         <template v-else>
-          <CompletedView ref="completedView" :session />
+          <CompletedView ref="completedView" :session @undo="undo" />
         </template>
       </div>
     </main>
