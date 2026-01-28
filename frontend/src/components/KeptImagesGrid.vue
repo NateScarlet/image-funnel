@@ -28,21 +28,21 @@
       <div
         v-for="image in images"
         :key="image.id"
-        class="group relative aspect-square bg-primary-800 rounded-lg overflow-hidden border border-primary-700/50 hover:border-primary-500 transition-colors"
+        class="group relative bg-primary-800 rounded-lg overflow-hidden border border-primary-700/50 hover:border-primary-500 transition-colors [@media(hover:hover)]:aspect-square"
       >
         <img
           :src="image.url256"
           :alt="image.filename"
           loading="lazy"
-          class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          class="w-full object-cover transition-transform duration-500 group-hover:scale-105 aspect-square [@media(hover:hover)]:h-full"
         />
 
         <!-- Info Overlay -->
         <div
-          class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none"
+          class="flex flex-col justify-end p-3 transition-opacity duration-200 opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:inset-0 [@media(hover:hover)]:bg-gradient-to-t [@media(hover:hover)]:from-black/90 [@media(hover:hover)]:via-black/40 [@media(hover:hover)]:to-transparent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:pointer-events-none"
         >
           <div
-            class="transform translate-y-0 [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0 transition-transform duration-200 pointer-events-auto"
+            class="transform translate-y-0 transition-transform duration-200 pointer-events-auto [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0"
           >
             <div
               class="text-white text-sm font-medium truncate mb-1"
