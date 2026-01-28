@@ -32,7 +32,7 @@ func TestSession_KeptImages(t *testing.T) {
 	require.NoError(t, session.MarkImage(scalar.ToID("3"), shared.ImageActionKeep)) // c.jpg
 	// Reject b.jpg
 	require.NoError(t, session.MarkImage(scalar.ToID("1"), shared.ImageActionReject)) // b.jpg
-	// d.jpg is Pending
+	// d.jpg is Shelved
 
 	// 3. Verify KeptImages returns only kept images, sorted by filename
 	kept = session.KeptImages(10, 0)

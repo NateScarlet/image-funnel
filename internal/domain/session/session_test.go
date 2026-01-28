@@ -21,15 +21,12 @@ func ActionOf(s *Session, id scalar.ID) shared.ImageAction {
 	// Since tests are in same package, we can access private fields if needed,
 	// or use Actions() iterator.
 	// But Actions() only returns explicit actions.
-	// We want to simulate the old Action() behavior: explicit or Pending.
+	// We want to return the actual status (zero value = Pending/Unprocessed)
 
 	// Access s.actions directly since we are in package session_test -> package session
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if action, exists := s.actions[id]; exists {
-		return action
-	}
-	return shared.ImageActionShelve
+	return s.actions[id]
 }
 
 // Helper to replace session.Images() for tests
@@ -78,7 +75,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// 标记中间3张为 PENDING
+	// 标记中间3张为 SHELVE
 	for i := 3; i < 6; i++ {
 		err := session.MarkImage(session.queue[i].ID(), shared.ImageActionShelve)
 		require.NoError(t, err)
@@ -138,7 +135,7 @@ func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[2].ID()), "Action should be PENDING")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[2].ID()), "Action should be SHELVE")
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
@@ -179,8 +176,8 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 	assert.Equal(t, 0, session.CurrentIndex(), "New round processed should be 0")
 	// Now SHELVE images are also excluded from next round, so queue should only have KEPT images.
 	// 3 images processed: 0(Keep), 1(Shelve), 2(Reject) -> only Keep(1) stays.
-	// But wait, the test marks 0: Pending(Shelve), 1: Reject, 2: Keep
-	// index % 3 case 0: PENDING -> SHELVE.
+	// But wait, the test marks 0: Shelve, 1: Reject, 2: Keep
+	// index % 3 case 0: SHELVE.
 	// index % 3 case 1: REJECT
 	// index % 3 case 2: KEEP (default)
 	//
@@ -220,7 +217,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
 
 	// Test logic:
-	// index % 2 == 0: PENDING -> SHELVE
+	// index % 2 == 0: SHELVE
 	// index % 2 != 0: KEEP
 	//
 	// Total 10 images.
@@ -360,7 +357,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[0].ID()), "Action should be restored to PENDING")
+	assert.True(t, ActionOf(session, session.queue[0].ID()).IsZero(), "Action should be restored to zero (Pending)")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
@@ -594,7 +591,7 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after undo")
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.queue[9].ID()), "Last image action should be restored to PENDING")
+	assert.True(t, ActionOf(session, session.queue[9].ID()).IsZero(), "Last image action should be restored to zero (Pending)")
 }
 
 func TestUndo_CrossRoundToBeginning(t *testing.T) {
@@ -619,13 +616,13 @@ func TestUndo_CrossRoundToBeginning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, session.currentRound)
 	assert.Equal(t, 1, session.currentIdx)
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img1ID))
+	assert.True(t, ActionOf(session, img1ID).IsZero())
 
 	// 4. 执行第二次撤销：撤销 img0 的标记 (idx 1 -> 0)
 	err = session.Undo()
 	require.NoError(t, err)
 	assert.Equal(t, 0, session.currentIdx)
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0ID))
+	assert.True(t, ActionOf(session, img0ID).IsZero())
 
 	// 5. 执行第三次撤销：预期返回错误，且不会 panic
 	err = session.Undo()

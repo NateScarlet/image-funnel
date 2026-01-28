@@ -361,7 +361,7 @@ func (s *Session) stats() *Stats {
 	// 或者 AddImage 添加的新图片尚未有操作记录（不计入丢弃）
 
 	// 使用 images map 记录了会话中所有历史图片
-	// queue 记录了当前待处理（Pending + Kept）的图片
+	// queue 记录了当前轮次正在进行的图片（包含已处理和未处理的）
 	// 因此，rejected (丢弃/排除) = 总数 - 当前队列长度
 	stats.rejected += len(s.images) - len(s.queue)
 
@@ -369,7 +369,7 @@ func (s *Session) stats() *Stats {
 	// 会话完成条件：
 	// 1. 所有图片都已处理 (remaining == 0)
 	// 2. 且保留的图片数量不超过目标保留数量 (否则需要开启新一轮)
-	// 注意：搁置 (Later) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
+	// 注意：搁置 (Shelve) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
 	stats.isCompleted = stats.remaining == 0 && (stats.kept <= stats.targetKeep)
 
 	return &stats
@@ -481,7 +481,7 @@ func (s *Session) addFilteredImageLocked(img *image.Image) error {
 	s.queue = append(s.queue, img)
 	s.images[img.ID()] = img
 	// 注意：不设置 s.actions[img.ID()]，因为 actions 仅存储用户显式操作
-	// 默认状态为 Pending 由 Action() 方法处理
+	// 默认无操作记录，表示尚未处理
 	s.updatedAt = time.Now()
 
 	// 如果会话已完成，添加新图片后可能变为未完成

@@ -11,7 +11,7 @@ func TestMarkImage_WithShelvedAndKept_ShouldCompleteIfKeptBelowTarget(t *testing
 	// 目标保留 5 张
 	session := setupTestSession(t, 10, 5)
 
-	// 标记：2 张保留，8 张搁置 (Later)
+	// 标记：2 张保留，8 张搁置 (Shelve)
 	// 期望：因为 2 <= 5，且搁置视为不再处理，所以会话应该完成，而不是开启新一轮
 	markImagesInSession(t, session, func(index int) shared.ImageAction {
 		if index < 2 {
