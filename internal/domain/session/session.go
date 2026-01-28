@@ -100,24 +100,16 @@ type Session struct {
 	queue      []*image.Image                   // 当前待处理的图片队列
 	images     map[scalar.ID]*image.Image       // 会话中所有历史图片
 	currentIdx int                              // 当前处理的图片在队列中的索引
-	undoStack  []UndoEntry                      // 撤销操作栈
+	undoStack  []func()                         // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
 
-	roundHistory []RoundSnapshot // 轮次历史记录
-	currentRound int             // 当前筛选轮次
+	// roundHistory removed in favor of unified undoStack
+	currentRound int // 当前筛选轮次
 
 	mu sync.RWMutex // 读写互斥锁，用于并发安全访问
 }
 
-// RoundSnapshot 表示一轮筛选的快照，用于存储筛选轮次的状态
-// 当需要撤销到上一轮时，使用此快照恢复状态
-
-type RoundSnapshot struct {
-	queue      []*image.Image
-	undoStack  []UndoEntry
-	currentIdx int
-	filter     *shared.ImageFilters
-}
+// RoundSnapshot removed
 
 // NewSession 创建一个新的图片筛选会话
 //
@@ -143,9 +135,8 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 		queue:        images,
 		images:       imagesMap,
 		currentIdx:   0,
-		undoStack:    make([]UndoEntry, 0),
+		undoStack:    make([]func(), 0),
 		actions:      actions,
-		roundHistory: make([]RoundSnapshot, 0),
 		currentRound: 0,
 	}
 }
@@ -298,14 +289,29 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	// 直接执行逻辑，不获取锁
 
 	// 保存当前状态到历史记录
-	if len(s.queue) > 0 {
-		s.roundHistory = append(s.roundHistory, RoundSnapshot{
-			queue:      s.queue,
-			undoStack:  s.undoStack,
-			currentIdx: s.currentIdx,
-			filter:     s.filter,
-		})
-	}
+	// 保存当前状态到撤销栈，以便撤销换轮操作
+	prevQueue := s.queue
+	prevFilter := s.filter
+	prevRound := s.currentRound
+	prevIdx := s.currentIdx
+
+	s.undoStack = append(s.undoStack, func() {
+		s.queue = prevQueue
+		s.filter = prevFilter
+		s.currentRound = prevRound
+		s.currentIdx = prevIdx
+		s.updatedAt = time.Now()
+
+		// 检查是否刚刚恢复到了某一轮的末尾 (currentIdx >= len)
+		// 这意味着上一轮已经完成，用户可能希望继续撤销导致完成的那个操作，
+		// 以便直接回到上一轮的最后一张图片进行修改。
+		// 如果不这样做，用户会面对一个“已完成”的界面，必须再次操作才能看到图片。
+		if s.currentIdx >= len(s.queue) && len(s.undoStack) > 0 {
+			nextFunc := s.undoStack[len(s.undoStack)-1]
+			s.undoStack = s.undoStack[:len(s.undoStack)-1]
+			nextFunc()
+		}
+	})
 
 	// 开启新一轮
 	s.currentRound++
@@ -314,7 +320,7 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	}
 	s.queue = filteredImages
 	s.currentIdx = 0
-	s.undoStack = make([]UndoEntry, 0)
+	// 注意：不清除 undoStack，保持撤销历史连续性
 	s.updatedAt = time.Now()
 
 	return nil
@@ -373,7 +379,7 @@ func (s *Session) CanCommit() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.currentIdx > 0 || len(s.roundHistory) > 0
+	return s.currentIdx > 0 || s.currentRound > 0
 }
 
 // CanUndo 判断会话是否可以执行撤销操作
@@ -384,7 +390,7 @@ func (s *Session) CanCommit() bool {
 func (s *Session) CanUndo() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.undoStack) > 0 || len(s.roundHistory) > 0
+	return len(s.undoStack) > 0
 }
 
 // MarkImage 标记指定图片的操作状态，并更新会话状态
@@ -416,10 +422,42 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 		}
 	}
 
-	s.undoStack = append(s.undoStack, UndoEntry{
-		imageID: imageID,
-		action:  s.actions[imageID],
-		index:   s.currentIdx,
+	// 记录撤销操作
+	prevAction, hasPrevAction := s.actions[imageID]
+	// Capture path to be robust against ID changes (file modifications)
+	imagePath := currentImage.Path()
+
+	s.undoStack = append(s.undoStack, func() {
+		// Find current ID by Path (O(N))
+		var currentID scalar.ID
+		var exists bool
+		for id, img := range s.images {
+			if img.Path() == imagePath {
+				currentID = id
+				exists = true
+				break
+			}
+		}
+
+		if !exists {
+			return
+		}
+
+		// 恢复操作状态
+		if !hasPrevAction {
+			delete(s.actions, currentID)
+		} else {
+			s.actions[currentID] = prevAction
+		}
+
+		// 恢复当前索引
+		for i, img := range s.queue {
+			if img.ID() == currentID {
+				s.currentIdx = i
+				break
+			}
+		}
+		s.updatedAt = time.Now()
 	})
 
 	s.actions[imageID] = action
@@ -486,39 +524,14 @@ func (s *Session) Undo() error {
 	defer s.mu.Unlock()
 
 	if len(s.undoStack) == 0 {
-		// 跨轮次撤销
-		if len(s.roundHistory) == 0 {
-			return ErrNothingToUndo
-		}
-
-		lastRound := s.roundHistory[len(s.roundHistory)-1]
-		s.roundHistory = s.roundHistory[:len(s.roundHistory)-1]
-		s.currentRound--
-		s.queue = lastRound.queue
-		s.undoStack = lastRound.undoStack
-		s.currentIdx = lastRound.currentIdx
-		s.filter = lastRound.filter
-
-		// 如果恢复到了队列末尾（意味着这是正常处理完一轮触发的），
-		// 且 undoStack 不为空，则自动再撤销一步，以提供更好的用户体验（直接撤销导致换轮的那个操作）。
-		// 否则（例如 UpdateSession 导致的换轮，此时还在队列中间），只恢复状态，不撤销操作。
-		if s.currentIdx < len(s.queue) || len(s.undoStack) == 0 {
-			return nil
-		}
+		return ErrNothingToUndo
 	}
 
-	// 普通撤销
-	lastEntry := s.undoStack[len(s.undoStack)-1]
+	// 执行撤销函数
+	lastFunc := s.undoStack[len(s.undoStack)-1]
 	s.undoStack = s.undoStack[:len(s.undoStack)-1]
+	lastFunc()
 
-	if lastEntry.action.IsZero() {
-		delete(s.actions, lastEntry.imageID)
-	} else {
-		s.actions[lastEntry.imageID] = lastEntry.action
-	}
-
-	s.currentIdx = lastEntry.index
-	s.updatedAt = time.Now()
 	return nil
 }
 
@@ -571,12 +584,7 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 				s.actions[img.ID()] = action
 				delete(s.actions, oldID)
 			}
-			// 更新撤销栈中的图片 ID
-			for i := range s.undoStack {
-				if s.undoStack[i].imageID == oldID {
-					s.undoStack[i].imageID = img.ID()
-				}
-			}
+			// ID change handling for undo stack is implicitly handled by using Path in the closure
 		}
 	}
 
@@ -625,19 +633,11 @@ func (s *Session) removeImageByPathLocked(path string) bool {
 			s.currentIdx--
 		}
 
-		// 修正撤销栈
-		newUndoStack := make([]UndoEntry, 0, len(s.undoStack))
-		for _, entry := range s.undoStack {
-			if entry.imageID == targetID {
-				continue
-			}
-			// 如果移除的是当前索引之前的图片，需要调整撤销栈中的索引
-			if entry.index > targetIndex {
-				entry.index--
-			}
-			newUndoStack = append(newUndoStack, entry)
-		}
-		s.undoStack = newUndoStack
+		// 修正撤销栈：
+		// 由于 switch to []func(), 无法更新闭包中的索引。
+		// 但新的撤销实现通过 ID 查找 currentIdx，不受索引偏移影响。
+		// 唯一的问题是如果引用了已删除的图片 (targetID)，Undo 时应忽略。
+		// 新的 Undo 实现会检查 image 是否存在。
 	}
 
 	s.updatedAt = time.Now()
@@ -661,13 +661,7 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 	}
 }
 
-// UndoEntry 表示一个可撤销的操作条目，用于存储图片操作的历史状态
-// 当执行撤销操作时，使用此条目恢复图片的原始操作状态
-type UndoEntry struct {
-	imageID scalar.ID
-	action  shared.ImageAction
-	index   int
-}
+// UndoEntry has been replaced by func() closures
 
 var (
 	ErrNoMoreImages  = apperror.New("INVALID_OPERATION", "no more images", "没有更多图片")
