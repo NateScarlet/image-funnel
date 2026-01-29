@@ -774,3 +774,60 @@ func TestUndo_ShouldRestoreFilter_WhenUndoNextRound(t *testing.T) {
 
 	assert.Equal(t, initialFilter, session.Filter(), "Filter should be restored to initial filter")
 }
+
+func TestSession_MarkImage_OrderIndependence_And_Undo(t *testing.T) {
+	// 场景：乱序标记和重复标记，验证撤销栈的鲁棒性
+	// 确保 A -> B -> A(改) -> B(重复) 这样的序列能被正确一级级撤销
+	session := setupTestSession(t, 5, 5)
+	img0 := session.queue[0]
+	// img1 := session.queue[1] // unused
+	img2 := session.queue[2]
+
+	// 1. 正常顺序标记 Img0 -> Keep
+	err := session.MarkImage(img0.ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img0.ID()))
+	assert.Equal(t, 1, session.CurrentIndex())
+
+	// 2. 跳跃标记 Img2 -> Reject (跳过 Img1)
+	err = session.MarkImage(img2.ID(), shared.ImageActionReject)
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionReject, ActionOf(session, img2.ID()))
+	assert.Equal(t, 3, session.CurrentIndex()) // Index should move to 2+1=3
+
+	// 3. 回头修改 Img0 -> Shelve (修改已有状态)
+	err = session.MarkImage(img0.ID(), shared.ImageActionShelve)
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0.ID()))
+	assert.Equal(t, 1, session.CurrentIndex()) // Back to 0+1=1
+
+	// 4. 重复标记 Img0 -> Shelve (幂等操作，但会推入撤销栈)
+	err = session.MarkImage(img0.ID(), shared.ImageActionShelve)
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0.ID()))
+
+	// --- 开始撤销验证 ---
+
+	// 撤销 4 (重复标记)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0.ID())) // 状态应该还是 Shelve
+	// 关键检查：Undo 应该只撤销最近的一次“无操作”，把状态回滚到“第3步结束”时的样子
+
+	// 撤销 3 (修改 Img0: Keep -> Shelve)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img0.ID()))   // 应该变回 Keep
+	assert.Equal(t, shared.ImageActionReject, ActionOf(session, img2.ID())) // Img2 应该保持 Reject
+
+	// 撤销 2 (跳跃标记 Img2)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.True(t, ActionOf(session, img2.ID()).IsZero())                 // Img2 变回 Pending
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img0.ID())) // Img0 依然是 Keep
+
+	// 撤销 1 (初始标记 Img0)
+	err = session.Undo()
+	require.NoError(t, err)
+	assert.True(t, ActionOf(session, img0.ID()).IsZero()) // Img0 变回 Pending
+}
