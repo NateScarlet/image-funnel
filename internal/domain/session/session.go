@@ -424,39 +424,17 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 
 	// 记录撤销操作
 	prevAction, hasPrevAction := s.actions[imageID]
-	// Capture path to be robust against ID changes (file modifications)
-	imagePath := currentImage.Path()
-
+	var previousIndex = s.currentIdx
 	s.undoStack = append(s.undoStack, func() {
-		// Find current ID by Path (O(N))
-		var currentID scalar.ID
-		var exists bool
-		for id, img := range s.images {
-			if img.Path() == imagePath {
-				currentID = id
-				exists = true
-				break
-			}
-		}
-
-		if !exists {
-			return
-		}
-
 		// 恢复操作状态
 		if !hasPrevAction {
-			delete(s.actions, currentID)
+			delete(s.actions, imageID)
 		} else {
-			s.actions[currentID] = prevAction
+			s.actions[imageID] = prevAction
 		}
 
 		// 恢复当前索引
-		for i, img := range s.queue {
-			if img.ID() == currentID {
-				s.currentIdx = i
-				break
-			}
-		}
+		s.currentIdx = previousIndex
 		s.updatedAt = time.Now()
 	})
 
