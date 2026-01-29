@@ -35,7 +35,7 @@ const defaultPresets: Preset[] = [
     name: "细化阶段筛选",
     description: "从待定图片中精细筛选",
     filter: {
-      rating: [0, 3],
+      rating: [0],
     },
     writeActions: {
       keepRating: 0,

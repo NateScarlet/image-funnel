@@ -55,6 +55,7 @@ export function useSessionConfig(
       0,
     set: (v) => {
       targetKeepBuffer.value = v;
+      ratingBuffer.value = rating.value; // 自定义时，固定当前值
     },
   });
 
@@ -67,6 +68,7 @@ export function useSessionConfig(
       [],
     set: (v) => {
       ratingBuffer.value = v;
+      targetKeepBuffer.value = targetKeep.value; // 自定义时，固定当前值
     },
   });
 
