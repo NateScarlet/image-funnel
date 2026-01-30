@@ -14,7 +14,7 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 
 ### Windows 便携版
 
-无需安装任何依赖，解压即用。
+会自动检测安装所需依赖（ImageMagick），解压即用。
 
 1. 下载最新版：[image-funnel-windows-x64.zip](https://github.com/NateScarlet/image-funnel/releases/latest/download/image-funnel-windows-x64.zip)
 2. 解压到任意目录
