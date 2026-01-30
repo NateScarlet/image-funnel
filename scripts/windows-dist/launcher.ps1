@@ -57,16 +57,26 @@ if (Check-Command "magick") {
                $binPath = $subFolders[0].FullName
            }
         } else {
-            $url = "https://download.imagemagick.org/ImageMagick/download/binaries/ImageMagick-portable-Q16-x64.zip" 
-            $zipPath = Join-Path $PSScriptRoot "magick.zip"
-            
+
             try {
-                Write-Host "⬇️ Downloading ImageMagick Portable from $url..."
-                Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+                # Fixed version as per requirement
+                $url = "https://imagemagick.org/archive/binaries/ImageMagick-7.1.2-13-portable-Q16-x64.7z"
+                $archivePath = Join-Path $PSScriptRoot "magick.7z"
+                
+                Write-Host "⬇️ Downloading ImageMagick Portable (7.1.2-13)..."
+                Invoke-WebRequest -Uri $url -OutFile $archivePath -UseBasicParsing
                 
                 Write-Host "📦 Extracting..."
-                Expand-Archive -Path $zipPath -DestinationPath $magickDir -Force
-                Remove-Item $zipPath -ErrorAction SilentlyContinue
+                New-Item -ItemType Directory -Path $magickDir -Force | Out-Null
+                
+                # Use bundled tar (Windows 10/11) to extract 7z
+                tar -xf "$archivePath" -C "$magickDir"
+                
+                if ($LASTEXITCODE -ne 0) {
+                     throw "Extraction failed (tar exit code $LASTEXITCODE). Ensure you are on Windows 10 (1803)+ or Windows 11."
+                }
+
+                Remove-Item $archivePath -ErrorAction SilentlyContinue
                 
                 # Check for subfolder again after extraction
                 $subFolders = Get-ChildItem $magickDir -Directory
@@ -76,7 +86,7 @@ if (Check-Command "magick") {
                 
                 Write-Host "✅ Portable version prepared." -ForegroundColor Green
             } catch {
-                Write-Host "❌ Failed to download portable version." -ForegroundColor Red
+                Write-Host "❌ Failed to download portable version: $_" -ForegroundColor Red
                 Write-Host "Original images will be served instead of compressed ones." -ForegroundColor Yellow
             }
         }
