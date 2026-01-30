@@ -875,7 +875,9 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 var sources = []*ast.Source{
 	{Name: "../../../graph/scalars.graphql", Input: `scalar Time
 scalar URI
-scalar Upload`, BuiltIn: false},
+scalar Upload
+scalar Duration
+`, BuiltIn: false},
 	{Name: "../../../graph/directives.graphql", Input: `directive @goModel(
   model: String
   models: [String!]
@@ -1056,6 +1058,7 @@ type Mutation {
   sessionId: ID!
   imageId: ID!
   action: ImageAction!
+  duration: Duration
   clientMutationId: String
 }
 
@@ -5669,7 +5672,7 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "imageId", "action", "clientMutationId"}
+	fieldsInOrder := [...]string{"sessionId", "imageId", "action", "duration", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -5697,6 +5700,13 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 				return it, err
 			}
 			it.Action = data
+		case "duration":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("duration"))
+			data, err := ec.unmarshalODuration2ᚖmainᚋinternalᚋscalarᚐDuration(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Duration = data
 		case "clientMutationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -8222,6 +8232,22 @@ func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋshared�
 		return graphql.Null
 	}
 	return ec._DirectoryStats(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalODuration2ᚖmainᚋinternalᚋscalarᚐDuration(ctx context.Context, v any) (*scalar.Duration, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(scalar.Duration)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODuration2ᚖmainᚋinternalᚋscalarᚐDuration(ctx context.Context, sel ast.SelectionSet, v *scalar.Duration) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {

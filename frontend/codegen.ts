@@ -39,6 +39,7 @@ export default defineConfig({
         },
         scalars: {
           Time: "string",
+          Duration: "string",
           Upload: "File",
           URI: "string",
         },

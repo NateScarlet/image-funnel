@@ -7,7 +7,7 @@ export type TimeSource =
 
 export default class Time {
   constructor(
-    private readonly unix: number,
+    private readonly unix: number, // 如果用 ref 包裹导致类型错误，应该使用 shallowRef
     private readonly monotonic?: number,
   ) {}
 

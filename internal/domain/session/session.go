@@ -102,6 +102,7 @@ type Session struct {
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []func()                         // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
+	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
 	// roundHistory removed in favor of unified undoStack
 	currentRound int // 当前筛选轮次
@@ -137,6 +138,7 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 		currentIdx:   0,
 		undoStack:    make([]func(), 0),
 		actions:      actions,
+		durations:    make(map[scalar.ID]scalar.Duration),
 		currentRound: 0,
 	}
 }
@@ -398,9 +400,12 @@ func (s *Session) CanUndo() bool {
 // 参数：
 // - imageID: 要标记的图片 ID
 // - action: 要应用的操作状态
-func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error {
+// - options: 可选参数，如操作耗时
+func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	opts := shared.NewMarkImageOptions(options...)
 
 	if s.currentIdx >= len(s.queue) {
 		return ErrNoMoreImages
@@ -432,6 +437,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 		} else {
 			s.actions[imageID] = prevAction
 		}
+		// 注意：不恢复耗时 (durations)，因为我们需要记录用户在图片上花费的总时长（包括撤销重做的过程）
 
 		// 恢复当前索引
 		s.currentIdx = previousIndex
@@ -439,6 +445,10 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 	})
 
 	s.actions[imageID] = action
+	// 累加耗时
+	if !opts.Duration().IsZero() {
+		s.durations[imageID] = s.durations[imageID].Add(opts.Duration())
+	}
 	s.updatedAt = time.Now()
 
 	s.currentIdx++
@@ -457,6 +467,12 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction) error 
 
 			if len(newQueue) > 0 {
 				if len(newQueue) > s.targetKeep {
+					// 按照操作耗时排序，耗时短的排在前面
+					// 如果耗时相同，保持原有的相对顺序（sort.SliceStable）
+					sort.SliceStable(newQueue, func(i, j int) bool {
+						return s.durations[newQueue[i].ID()].Nanoseconds() < s.durations[newQueue[j].ID()].Nanoseconds()
+					})
+
 					// 开启新一轮
 					if err := s.nextRound(nil, newQueue); err != nil {
 						return err

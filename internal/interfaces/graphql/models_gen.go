@@ -42,6 +42,7 @@ type MarkImageInput struct {
 	SessionID        scalar.ID                         `json:"sessionId"`
 	ImageID          scalar.ID                         `json:"imageId"`
 	Action           enum.Enum[shared.ImageActionMeta] `json:"action"`
+	Duration         *scalar.Duration                  `json:"duration,omitempty"`
 	ClientMutationID *string                           `json:"clientMutationId,omitempty"`
 }
 

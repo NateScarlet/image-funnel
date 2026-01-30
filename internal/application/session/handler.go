@@ -74,6 +74,7 @@ func (h *Handler) MarkImage(
 	sessionID scalar.ID,
 	imageID scalar.ID,
 	action shared.ImageAction,
+	options ...shared.MarkImageOption,
 ) (err error) {
 	startTime := time.Now()
 
@@ -96,7 +97,7 @@ func (h *Handler) MarkImage(
 		}
 	}()
 
-	return h.sessionService.MarkImage(ctx, sessionID, imageID, action)
+	return h.sessionService.MarkImage(ctx, sessionID, imageID, action, options...)
 }
 
 func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {

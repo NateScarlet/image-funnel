@@ -274,13 +274,13 @@ func (s *Service) Get(id scalar.ID) (*Session, error) {
 }
 
 // MarkImage 标记图片并保存
-func (s *Service) MarkImage(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, action shared.ImageAction) error {
+func (s *Service) MarkImage(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
 	sess, err := s.sessionRepo.Get(sessionID)
 	if err != nil {
 		return err
 	}
 
-	if err := sess.MarkImage(imageID, action); err != nil {
+	if err := sess.MarkImage(imageID, action, options...); err != nil {
 		return err
 	}
 

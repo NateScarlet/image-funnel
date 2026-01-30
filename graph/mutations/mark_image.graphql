@@ -2,6 +2,7 @@ input MarkImageInput {
   sessionId: ID!
   imageId: ID!
   action: ImageAction!
+  duration: Duration
   clientMutationId: String
 }
 

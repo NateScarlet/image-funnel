@@ -7,15 +7,23 @@ package graphql
 
 import (
 	"context"
+	"main/internal/shared"
 )
 
 // MarkImage is the resolver for the markImage field.
 func (r *mutationResolver) MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error) {
+	// Extract optional duration
+	var options []shared.MarkImageOption
+	if input.Duration != nil {
+		options = append(options, shared.WithDuration(*input.Duration))
+	}
+
 	err := r.app.MarkImage(
 		ctx,
 		input.SessionID,
 		input.ImageID,
 		input.Action,
+		options...,
 	)
 	if err != nil {
 		return nil, err

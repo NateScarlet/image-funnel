@@ -15,6 +15,7 @@ export type Scalars = {
   Boolean: { input: boolean; output: boolean; }
   Int: { input: number; output: number; }
   Float: { input: number; output: number; }
+  Duration: { input: string; output: string; }
   Time: { input: string; output: string; }
   URI: { input: string; output: string; }
   Upload: { input: File; output: File; }
@@ -51,6 +52,7 @@ export type ImageFiltersInput = {
 export type MarkImageInput = {
   action: ImageAction;
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  duration?: InputMaybe<Scalars['Duration']['input']>;
   imageId: Scalars['ID']['input'];
   sessionId: Scalars['ID']['input'];
 };

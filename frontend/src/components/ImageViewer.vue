@@ -162,6 +162,11 @@ import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
 
+const emit =
+  defineEmits<
+    (e: "image-loaded", payload: { id: string; time: Time }) => void
+  >();
+
 const {
   image,
   nextImages = [],
@@ -270,6 +275,7 @@ function updateLoaded() {
   const el = imgEl.value;
   if (el?.complete) {
     loadedId.value = el.dataset.imageId || "";
+    emit("image-loaded", { id: loadedId.value, time: Time.now() });
   }
 }
 

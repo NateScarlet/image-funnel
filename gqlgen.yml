@@ -24,6 +24,9 @@ models:
     model: github.com/99designs/gqlgen/graphql.Upload
   ID:
     model: main/internal/scalar.ID
+  Duration:
+    model: main/internal/scalar.Duration
 omit_interface_checks: true
-omit_getters: true
+omit_getters:
+  true
   # 对于 shared 包下的类型，使用 @goModel 指令进行定义，避免本文件无限增长

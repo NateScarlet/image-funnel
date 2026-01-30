@@ -26,6 +26,7 @@
           :image="currentImage"
           :next-images="session?.nextImages ?? []"
           :allow-pan="handleAllowPan"
+          @image-loaded="(e) => (lastImageLoadedEvent = e)"
         >
           <template #info="{ isFullscreen }">
             <span class="lg:min-w-24 hidden md:block">
@@ -139,14 +140,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from "vue";
+import { ref, shallowRef, computed, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import mutate from "../graphql/utils/mutate";
-import {
-  MarkImageDocument,
-  UndoDocument,
-  ImageAction,
-} from "../graphql/generated";
+import { UndoDocument, ImageAction } from "../graphql/generated";
 import ImageViewer from "../components/ImageViewer.vue";
 import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
@@ -160,6 +157,8 @@ import { formatDate } from "../utils/date";
 import { mdiHome } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
+import useMarkImage from "@/composables/useMarkImage";
+import Time from "@/utils/Time";
 
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
@@ -174,7 +173,6 @@ const loading = computed(() => loadingCount.value > 0);
 const showUpdateSessionModal = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
 const undoing = ref(false);
-const marking = ref(false);
 
 // TODO: refactor to touchStart touchEnd
 // TODO: 移除多余的类型标注
@@ -206,7 +204,7 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 
 const { session } = useSession(() => sessionId, { loadingCount });
 
-const currentImage = computed(() => session.value?.currentImage);
+const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
 const swipeEl = useTemplateRef("swipeEl");
 useEventListeners(window, ({ on }) => {
@@ -293,25 +291,17 @@ useEventListeners(window, ({ on }) => {
   );
 });
 
-async function markImage(action: ImageAction) {
-  if (!currentImage.value) return;
-
-  marking.value = true;
-
-  try {
-    await mutate(MarkImageDocument, {
-      variables: {
-        input: {
-          sessionId,
-          imageId: currentImage.value.id,
-          action,
-        },
-      },
-    });
-  } finally {
-    marking.value = false;
+const lastImageLoadedEvent = shallowRef<{ id: string; time: Time }>();
+const imageLoadedAt = computed(() => {
+  const event = lastImageLoadedEvent.value;
+  if (event && event.id === currentImage.value?.id) {
+    return event.time;
   }
-}
+  return undefined;
+});
+const { marking, mark } = useMarkImage(sessionId, currentImage, imageLoadedAt);
+
+const markImage = mark;
 
 const completedView =
   useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
