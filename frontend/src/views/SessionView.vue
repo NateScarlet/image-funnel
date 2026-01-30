@@ -163,9 +163,11 @@ import Time from "@/utils/Time";
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
 
-const { id: sessionId } = defineProps<{
+const props = defineProps<{
   id: string;
 }>();
+
+const sessionId = computed(() => props.id);
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
@@ -202,7 +204,7 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
   return null;
 });
 
-const { session } = useSession(() => sessionId, { loadingCount });
+const { session } = useSession(sessionId, { loadingCount });
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
@@ -321,7 +323,7 @@ async function undo() {
 
   try {
     await mutate(UndoDocument, {
-      variables: { input: { sessionId } },
+      variables: { input: { sessionId: sessionId.value } },
     });
   } finally {
     undoing.value = false;

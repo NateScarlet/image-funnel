@@ -17,7 +17,7 @@ import {
 import Duration from "@/utils/Duration";
 
 export default function useMarkImage(
-  sessionId: string,
+  sessionId: MaybeRefOrGetter<string>,
   currentImage: Ref<ImageFragment | undefined>,
   imageLoadedAt: MaybeRefOrGetter<Time | undefined>,
 ) {
@@ -61,7 +61,7 @@ export default function useMarkImage(
       await mutate(MarkImageDocument, {
         variables: {
           input: {
-            sessionId,
+            sessionId: toValue(sessionId),
             imageId: currentImage.value.id,
             action,
             duration: duration.toISOString(),
