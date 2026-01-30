@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/NateScarlet/image-funnel/compare/v1.0.0...v1.0.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* update broken ImageMagick download URL in launcher script ([328827e](https://github.com/NateScarlet/image-funnel/commit/328827e7fc121def7f34a5d2048bb53f92c7a88f))
+
 ## 1.0.0 (2026-01-30)
 
 
