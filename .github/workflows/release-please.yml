@@ -1,0 +1,79 @@
+name: release-please
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+  build:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - release-please
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        id: setup-node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Build Frontend
+        run: |
+          pnpm install
+          pnpm run build
+
+      - name: Build Backend (Windows)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          VERSION=${{ needs.release-please.outputs.tag_name }}
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then VERSION="dev"; fi
+          echo "Building version: $VERSION"
+          go build -ldflags "-X main.version=$VERSION" -o image-funnel.exe ./cmd/server
+
+      - name: Package Windows Release
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
+        run: |
+          mkdir -p release/dist
+          cp -r frontend/dist/* release/dist/
+          cp image-funnel.exe release/
+          cp scripts/windows-dist/* release/
+
+          cd release
+          zip -r ../image-funnel-windows-x64.zip .
+          cd ..
+
+      - name: Release
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{needs.release-please.outputs.tag_name}}
+          fail_on_unmatched_files: true
+          files: |
+            image-funnel-windows-x64.zip
