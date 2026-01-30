@@ -28,7 +28,7 @@ func TestInMemoryTopic(t *testing.T) {
 		var serverReady = make(chan struct{})
 		go func() {
 			// Warmup
-			var ticker = time.NewTicker(time.Millisecond)
+			var ticker = time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
 			for {
 				select {
@@ -109,7 +109,7 @@ func TestInMemoryTopic(t *testing.T) {
 		var serverReady = make(chan struct{})
 		go func() {
 			// Warmup
-			var ticker = time.NewTicker(time.Millisecond)
+			var ticker = time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
 			for {
 				select {
@@ -192,7 +192,7 @@ func TestInMemoryTopic_BasicPublishSubscribe(t *testing.T) {
 	}()
 
 	// Ensure subscriber is ready
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 WarmupLoop:
 	for {
@@ -251,7 +251,7 @@ func TestInMemoryTopic_SubscriberOnlyGetsNewEvents(t *testing.T) {
 	}()
 
 	// Warmup flush subscriber
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 FlushWarmup:
 	for {
@@ -282,7 +282,7 @@ FlushWarmup:
 	go func() {
 		defer wg.Done()
 		// Ensure subscriber is ready
-		var ticker = time.NewTicker(time.Millisecond)
+		var ticker = time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
@@ -357,7 +357,7 @@ func TestInMemoryTopic_MultipleSubscribers(t *testing.T) {
 	}
 
 	// Ensure subscribers are ready
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	readySet := make(map[int]bool)
 
@@ -429,7 +429,7 @@ func TestInMemoryTopic_CapacityLimitsForSlowSubscriber(t *testing.T) {
 	}()
 
 	// Ensure subscriber is ready
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 WarmupLoop:
 	for {
@@ -539,7 +539,7 @@ func BenchmarkPublishWithSingleSubscriber(b *testing.B) {
 	}()
 
 	// Wait for subscriber to be ready
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 WarmupLoop:
 	for {
@@ -585,7 +585,7 @@ func BenchmarkConcurrentPublishSubscribe(b *testing.B) {
 	}
 
 	// Wait for subscribers to be ready
-	ticker := time.NewTicker(time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	var readyCount int
 	for readyCount < numSubscribers {
