@@ -3,6 +3,7 @@
     ref="rootEl"
     class="flex flex-col bg-primary-800 rounded-lg overflow-hidden isolate contain-layout h-14"
   >
+    <slot name="progress"></slot>
     <div
       ref="containerRef"
       class="flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"

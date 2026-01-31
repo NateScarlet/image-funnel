@@ -28,6 +28,17 @@
           :allow-pan="handleAllowPan"
           @image-loaded="(e) => (lastImageLoadedEvent = e)"
         >
+          <template #progress>
+            <div v-if="session" class="h-1 bg-black/20 pointer-events-none">
+              <div
+                class="h-full transition-all duration-300 ease-out"
+                :class="progressClass"
+                :style="{
+                  width: `${Math.min(100, Math.max(0, progress))}%`,
+                }"
+              ></div>
+            </div>
+          </template>
           <template #info="{ isFullscreen }">
             <span class="lg:min-w-24 hidden md:block">
               {{ formatDate(currentImage.modTime) }}
@@ -205,6 +216,24 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 });
 
 const { session } = useSession(sessionId, { loadingCount });
+
+const progress = computed(() => {
+  if (!session.value || session.value.currentSize === 0) return 0;
+  return (session.value.currentIndex / session.value.currentSize) * 100;
+});
+
+const progressClass = computed(() => {
+  const kept = session.value?.stats.kept || 0;
+  const target = session.value?.targetKeep || 0;
+
+  if (kept === 0) {
+    return "bg-primary-500";
+  }
+  if (kept <= target) {
+    return "bg-success-500";
+  }
+  return "bg-secondary-500";
+});
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
