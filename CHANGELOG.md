@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/NateScarlet/image-funnel/compare/v1.0.1...v1.1.0) (2026-01-31)
+
+
+### Features
+
+* 优化下一轮图片排序逻辑避免连续重复 ([657c287](https://github.com/NateScarlet/image-funnel/commit/657c287bebd927d504704de78bc221be183fee0f))
+* 在图片查看器中添加会话进度条 ([f9e2a02](https://github.com/NateScarlet/image-funnel/commit/f9e2a02da57c2317d68af4a7d66b6ffceb1f19f3))
+
+
+### Bug Fixes
+
+* 修复 SessionView 中 sessionId 响应式丢失问题 ([57cce71](https://github.com/NateScarlet/image-funnel/commit/57cce71f016b0794c5aba6529ed94f59f032ed3c))
+
 ## [1.0.1](https://github.com/NateScarlet/image-funnel/compare/v1.0.0...v1.0.1) (2026-01-30)
 
 
