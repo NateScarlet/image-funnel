@@ -473,6 +473,12 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 						return s.durations[newQueue[i].ID()].Nanoseconds() < s.durations[newQueue[j].ID()].Nanoseconds()
 					})
 
+					// 避免连续出现同一张图片
+					// 如果排序后的第一张是上一轮最后一张，则将它放到第二张
+					if len(newQueue) > 1 && newQueue[0].ID() == currentImage.ID() {
+						newQueue[0], newQueue[1] = newQueue[1], newQueue[0]
+					}
+
 					// 开启新一轮
 					if err := s.nextRound(nil, newQueue); err != nil {
 						return err
