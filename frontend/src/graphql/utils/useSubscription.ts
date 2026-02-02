@@ -6,7 +6,7 @@ import type {
   FetchPolicy,
   ErrorPolicy,
 } from "@apollo/client/core";
-import { getCurrentInstance, onUnmounted, watch, type WatchSource } from "vue";
+import { onScopeDispose, watch, type WatchSource } from "vue";
 import { apolloClient, OperationContext } from "../client";
 import { ApolloLink } from "@apollo/client";
 import { ApolloClient } from "@apollo/client";
@@ -27,11 +27,7 @@ export default function useSubscription<
   } = {},
 ): Disposable {
   const stack = new DisposableStack();
-  if (getCurrentInstance()) {
-    onUnmounted(() => {
-      stack.dispose();
-    });
-  }
+  onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
 
   function run(variables?: TVariables) {

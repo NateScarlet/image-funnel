@@ -5,7 +5,7 @@ import type {
 } from "@apollo/client/core";
 import { NetworkStatus } from "@apollo/client/core";
 import type { MaybeRefOrGetter, Ref } from "vue";
-import { computed, shallowRef, toValue, watch } from "vue";
+import { computed, onScopeDispose, shallowRef, toValue, watch } from "vue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
 import { isEqual } from "es-toolkit";
@@ -41,6 +41,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   query: ObservableQuery<TData, TVariables>;
 } & Disposable {
   const stack = new DisposableStack();
+  onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
   const query = stack.adopt(
     apolloClient.watchQuery({
