@@ -52,7 +52,7 @@
             </div>
 
             <a
-              :href="image.url"
+              :href="`${image.url}&raw=1`"
               download
               class="flex items-center justify-center gap-2 w-full py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-xs text-white rounded transition-colors backdrop-blur-sm"
               @click.stop
