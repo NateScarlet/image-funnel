@@ -59,30 +59,30 @@
         </ImageViewer>
       </KeepAlive>
 
-      <template v-if="currentImage">
-        <Teleport :to="rendererEl">
-          <div
-            ref="swipeEl"
-            class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none z-20"
+      <Teleport v-if="session" :to="rendererEl">
+        <div
+          ref="swipeEl"
+          class="fixed bottom-0 left-0 right-0 top-1/2 overflow-hidden pointer-events-none z-20"
+        >
+          <Transition
+            enter-active-class="transition duration-100 ease-out"
+            enter-from-class="opacity-0"
+            enter-to-class="opacity-100"
+            leave-active-class="transition duration-100 ease-in"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
           >
-            <Transition
-              enter-active-class="transition duration-100 ease-out"
-              enter-from-class="opacity-0"
-              enter-to-class="opacity-100"
-              leave-active-class="transition duration-100 ease-in"
-              leave-from-class="opacity-100"
-              leave-to-class="opacity-0"
-            >
-              <SwipeDirectionIndicator
-                v-if="swipeDirection"
-                class="h-full w-full"
-                :direction="swipeDirection"
-                :renderer-el="rendererEl"
-              />
-            </Transition>
-          </div>
-        </Teleport>
+            <SwipeDirectionIndicator
+              v-if="swipeDirection"
+              class="h-full w-full"
+              :direction="swipeDirection"
+              :renderer-el="rendererEl"
+            />
+          </Transition>
+        </div>
+      </Teleport>
 
+      <template v-if="currentImage">
         <div
           class="text-center text-xs md:text-sm text-primary-400 hidden md:block"
         >
@@ -207,7 +207,7 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
     if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
       return deltaX > 0 ? "RIGHT" : "LEFT";
     }
-  } else {
+  } else if (currentImage.value) {
     if (Math.abs(deltaY) > SWIPE_THRESHOLD) {
       return deltaY > 0 ? "DOWN" : "UP";
     }
@@ -300,9 +300,20 @@ useEventListeners(window, ({ on }) => {
         swiping.value = false;
         return;
       }
-      e.preventDefault();
-      touchEndX.value = e.changedTouches[0].clientX;
-      touchEndY.value = e.changedTouches[0].clientY;
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX.value;
+      const deltaY = touch.clientY - touchStartY.value;
+
+      // 如果有当前图片，阻止默认行为（滚动）
+      // 如果没有当前图片（完成状态），只在水平滑动时阻止默认行为，允许垂直滚动
+      if (currentImage.value) {
+        if (e.cancelable) e.preventDefault();
+      } else if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (e.cancelable) e.preventDefault();
+      }
+
+      touchEndX.value = touch.clientX;
+      touchEndY.value = touch.clientY;
     },
     { passive: false },
   );
@@ -312,7 +323,10 @@ useEventListeners(window, ({ on }) => {
       if (!swiping.value) {
         return;
       }
-      e.preventDefault();
+      // 在完成状态下不允许默认行为可能影响点击，但在 touchend 这里主要是为了处理手势
+      // 这里的 preventDefault 主要是为了防止触发鼠标事件模拟
+      if (e.cancelable) e.preventDefault();
+
       touchEndX.value = e.changedTouches[0].clientX;
       touchEndY.value = e.changedTouches[0].clientY;
       handleGesture();
@@ -320,6 +334,9 @@ useEventListeners(window, ({ on }) => {
     },
     { passive: false },
   );
+  on("touchcancel", () => {
+    swiping.value = false;
+  });
 });
 
 const lastImageLoadedEvent = shallowRef<{ id: string; time: Time }>();
@@ -382,7 +399,6 @@ function handleAllowPan(e: PointerEvent) {
 
 const didUseGesture = ref(false);
 function handleGesture() {
-  console.log(swipeDirection.value);
   switch (swipeDirection.value) {
     case "UP":
       markImage(ImageAction.SHELVE);
