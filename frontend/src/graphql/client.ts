@@ -13,6 +13,7 @@ import useNotification from "../composables/useNotification";
 import { HttpLink } from "@apollo/client";
 import sha256Hash from "@/utils/sha256Hash";
 import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
+import isAbortError from "@/utils/isAbortError";
 
 export interface OperationContext {
   anonymous?: boolean;
@@ -145,7 +146,7 @@ const errorLink = new ErrorLink(({ error, operation }) => {
       shouldSuppress = true;
     }
 
-    if (!shouldSuppress) {
+    if (!shouldSuppress && !isAbortError(networkError)) {
       errorOnce(
         `网络错误: ${networkError instanceof Error ? networkError.message : "Unknown error"}`,
       );
