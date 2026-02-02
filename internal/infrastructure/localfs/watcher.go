@@ -2,9 +2,12 @@ package localfs
 
 import (
 	"context"
+	"io/fs"
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/shared"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,14 +40,32 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 		}
 		defer fsWatcher.Close()
 
-		// 添加监控路径
-		if err := fsWatcher.Add(dir); err != nil {
-			w.logger.Error("failed to add watch path", zap.String("dir", dir), zap.Error(err))
+		// 递归添加监控路径
+		err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				// 如果是根目录无法访问，返回错误
+				if path == dir {
+					return err
+				}
+				// 子目录无法访问，记录警告但不中断
+				w.logger.Warn("failed to walk directory", zap.String("path", path), zap.Error(err))
+				return filepath.SkipDir
+			}
+			if d.IsDir() {
+				if err := fsWatcher.Add(path); err != nil {
+					w.logger.Warn("failed to add watch path", zap.String("path", path), zap.Error(err))
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			w.logger.Error("failed to setup recursive watcher", zap.String("dir", dir), zap.Error(err))
 			yield(nil, err)
 			return
 		}
 
-		w.logger.Info("started watching directory", zap.String("dir", dir))
+		w.logger.Info("started watching directory recursively", zap.String("dir", dir))
 
 		// 监听事件
 		for {
@@ -56,7 +77,8 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 				if !ok {
 					return
 				}
-				fileChange, ok := w.handleEvent(fsEvent)
+
+				fileChange, ok := w.handleEvent(fsWatcher, fsEvent)
 				if ok {
 					if !yield(fileChange, nil) {
 						return
@@ -76,7 +98,32 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 }
 
 // handleEvent 处理文件系统事件，转换为领域对象
-func (w *Watcher) handleEvent(fsEvent fsnotify.Event) (*directory.FileChange, bool) {
+func (w *Watcher) handleEvent(fsWatcher *fsnotify.Watcher, fsEvent fsnotify.Event) (*directory.FileChange, bool) {
+	// 自动监控新建的子目录或重命名的目录
+	if fsEvent.Op&fsnotify.Create == fsnotify.Create || fsEvent.Op&fsnotify.Rename == fsnotify.Rename {
+		info, err := os.Stat(fsEvent.Name)
+		if err != nil {
+			// 文件可能在创建后立即被删除或不可访问，仅记录调试日志
+			w.logger.Debug("failed to stat created file", zap.String("path", fsEvent.Name), zap.Error(err))
+		} else if info.IsDir() {
+			w.logger.Info("watching new directory", zap.String("dir", fsEvent.Name))
+			err := filepath.WalkDir(fsEvent.Name, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					w.logger.Warn("failed to walk new directory", zap.String("path", path), zap.Error(err))
+					return filepath.SkipDir
+				}
+				if d.IsDir() {
+					if err := fsWatcher.Add(path); err != nil {
+						w.logger.Warn("failed to add watch path", zap.String("path", path), zap.Error(err))
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				w.logger.Error("failed to walk new directory structure", zap.String("dir", fsEvent.Name), zap.Error(err))
+			}
+		}
+	}
 	// 忽略临时文件
 	if strings.HasSuffix(fsEvent.Name, ".tmp") {
 		return nil, false
