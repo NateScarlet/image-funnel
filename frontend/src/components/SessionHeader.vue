@@ -109,13 +109,20 @@ import SessionHeaderMenu from "./SessionHeaderMenu.vue";
 const router = useRouter();
 
 function goHome() {
-  router.push("/");
+  const dir = props.session?.directory?.id;
+  router.push({
+    path: "/",
+    query: dir ? { dir } : undefined,
+  });
 }
 
-const { session, undoing } = defineProps<{
+const props = defineProps<{
   session: SessionFragment | null | undefined;
   undoing: boolean;
 }>();
+
+const session = computed(() => props.session);
+const undoing = computed(() => props.undoing);
 
 defineEmits<
   (e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void
@@ -125,9 +132,9 @@ const showMenu = ref(false);
 
 const { data } = useQuery(MetaDocument);
 const displayName = computed(() => {
-  if (session?.directory?.root) {
+  if (session.value?.directory?.root) {
     return data.value?.meta.rootPath ?? "/";
   }
-  return basename(session?.directory?.path ?? "");
+  return basename(session.value?.directory?.path ?? "");
 });
 </script>

@@ -86,6 +86,7 @@ import {
 import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";
+import useRouteQuery from "../composables/useRouteQuery";
 
 type Emits = (e: "created") => void;
 
@@ -111,15 +112,15 @@ const { data: rootData } = useQuery(RootDirectoryDocument, {
   loadingCount,
 });
 
-const selectedDirectoryIdBuffer = ref<string>();
+const dirQuery = useRouteQuery("dir");
+
 const selectedDirectoryId = computed({
   get() {
-    return (
-      selectedDirectoryIdBuffer.value ?? rootData.value?.rootDirectory.id ?? ""
-    );
+    return dirQuery.value[0] ?? rootData.value?.rootDirectory.id ?? "";
   },
   set(v) {
-    selectedDirectoryIdBuffer.value = v;
+    if (v === selectedDirectoryId.value) return;
+    dirQuery.value = v ? [v] : [];
   },
 });
 
