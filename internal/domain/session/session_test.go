@@ -831,3 +831,59 @@ func TestSession_MarkImage_OrderIndependence_And_Undo(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ActionOf(session, img0.ID()).IsZero()) // Img0 变回 Pending
 }
+
+func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
+	// 1. Init Session with one image
+	imgA := image.NewImage(
+		scalar.ToID("img-a"),
+		"test.jpg",
+		"/test/test-a.jpg",
+		1000,
+		time.Now(),
+		nil,
+		1920,
+		1080,
+	)
+
+	filter := &shared.ImageFilters{}
+	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{imgA})
+
+	// Check initial state
+	assert.Equal(t, 1, len(ImagesOf(session)), "Initial s.images should have 1 image")
+
+	// 2. Simulate external removal
+	session.RemoveImageByPath(imgA.Path())
+
+	assert.Equal(t, 0, len(ImagesOf(session)), "s.images should be empty after removal")
+
+	// 3. Simulate Update causing NextRound
+	imgAFresh := image.NewImage(
+		scalar.ToID("img-a"),
+		"test.jpg",
+		"/test/test-a.jpg",
+		1000,
+		time.Now(),
+		nil,
+		1920,
+		1080,
+	)
+
+	err := session.NextRound(filter, []*image.Image{imgAFresh})
+	require.NoError(t, err)
+
+	// Check queue has image
+	assert.Equal(t, 1, len(session.queue), "Queue should have 1 image after NextRound")
+
+	// 4. CRITICAL CHECK: check if s.images has the image
+	assert.Equal(t, 1, len(ImagesOf(session)), "s.images should have 1 image after NextRound re-introduction")
+
+	// 5. If we mark the image, does it appear in Actions()?
+	err = session.MarkImage(imgAFresh.ID(), shared.ImageActionKeep)
+	require.NoError(t, err)
+
+	count := 0
+	for range session.Actions() {
+		count++
+	}
+	assert.Equal(t, 1, count, "Actions() should return the marked action")
+}

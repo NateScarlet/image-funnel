@@ -321,6 +321,13 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 		s.filter = filter
 	}
 	s.queue = filteredImages
+	// 确保所有在队列中的图片都在 images 映射中
+	// 这对于 Service.Update 触发的 NextRound 特别重要，因为它引入了新的图片对象
+	// 如果不这样做，Commit() 遍历 s.images 时会遗漏这些图片，导致标记操作无法写入
+	for _, img := range filteredImages {
+		s.images[img.ID()] = img
+	}
+
 	s.currentIdx = 0
 	// 注意：不清除 undoStack，保持撤销历史连续性
 	s.updatedAt = time.Now()
