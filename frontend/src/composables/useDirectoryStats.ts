@@ -39,7 +39,7 @@ export default function useDirectoryStats() {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
       context: {
-        transport: "http",
+        transport: "ws",
       },
     });
 
