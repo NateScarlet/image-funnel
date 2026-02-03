@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0](https://github.com/NateScarlet/image-funnel/compare/v1.1.0...v1.2.0) (2026-02-02)
+
+
+### Features
+
+* support undo gesture in completed session view ([baeac7b](https://github.com/NateScarlet/image-funnel/commit/baeac7b42fbb67ee294db13faf318f14036f25b4))
+* use raw image url for downloads ([5fd78e0](https://github.com/NateScarlet/image-funnel/commit/5fd78e0e604643f2d37f10fc94f579fe3b9fe583))
+* 首页目录选中状态同步 URL 参数，优化会话页返回逻辑 ([5b9cd48](https://github.com/NateScarlet/image-funnel/commit/5b9cd481ecd037b3dbcd487f43dd1b39226b0cb8))
+
+
+### Bug Fixes
+
+* should dispose graphql query on scope dispose ([5a1d4e7](https://github.com/NateScarlet/image-funnel/commit/5a1d4e7765d4f17e69fdf71b2a58165dd02fbd75))
+* 子目录下新生成文件不触发界面更新 ([5efb558](https://github.com/NateScarlet/image-funnel/commit/5efb558e37b476efa91c60ae45c727ef28b3ae03))
+
 ## [1.1.0](https://github.com/NateScarlet/image-funnel/compare/v1.0.1...v1.1.0) (2026-01-31)
 
 
