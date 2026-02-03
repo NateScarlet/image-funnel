@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/NateScarlet/image-funnel/compare/v1.2.0...v1.2.1) (2026-02-03)
+
+
+### Bug Fixes
+
+* **session:** 过滤条件更新后新图片未被正确写入 ([44bbf0c](https://github.com/NateScarlet/image-funnel/commit/44bbf0cd062ae98bd5b8e6719e3e7e4df5682b0c))
+
 ## [1.2.0](https://github.com/NateScarlet/image-funnel/compare/v1.1.0...v1.2.0) (2026-02-02)
 
 
