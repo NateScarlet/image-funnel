@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
+        with:
+          token: ${{ secrets.REPO_GITHUB_TOKEN }}
   build:
     runs-on: ubuntu-latest
     if: always()
@@ -77,3 +79,4 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             image-funnel-windows-x64.zip
+          token: ${{ secrets.REPO_GITHUB_TOKEN }}
