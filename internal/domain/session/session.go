@@ -297,6 +297,24 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	prevRound := s.currentRound
 	prevIdx := s.currentIdx
 
+	// 按照操作耗时排序，耗时短的排在前面
+	// 如果耗时相同，保持原有的相对顺序（sort.SliceStable）
+	sort.SliceStable(filteredImages, func(i, j int) bool {
+		return s.durations[filteredImages[i].ID()].Nanoseconds() < s.durations[filteredImages[j].ID()].Nanoseconds()
+	})
+
+	// 避免连续出现同一张图片
+	// 如果排序后的第一张是上一轮正在看或最后看的那一张，则将它放到第二张
+	var lastImage *image.Image
+	if prevIdx < len(prevQueue) {
+		lastImage = prevQueue[prevIdx]
+	} else if len(prevQueue) > 0 {
+		lastImage = prevQueue[len(prevQueue)-1]
+	}
+	if lastImage != nil && len(filteredImages) > 1 && filteredImages[0].ID() == lastImage.ID() {
+		filteredImages[0], filteredImages[1] = filteredImages[1], filteredImages[0]
+	}
+
 	s.undoStack = append(s.undoStack, func() {
 		s.queue = prevQueue
 		s.filter = prevFilter
@@ -463,7 +481,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	if s.currentIdx >= len(s.queue) {
 		stats := s.stats()
 
-		if stats.kept > 0 {
+		if stats.kept > s.targetKeep {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]
@@ -472,25 +490,9 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 				}
 			}
 
-			if len(newQueue) > 0 {
-				if len(newQueue) > s.targetKeep {
-					// 按照操作耗时排序，耗时短的排在前面
-					// 如果耗时相同，保持原有的相对顺序（sort.SliceStable）
-					sort.SliceStable(newQueue, func(i, j int) bool {
-						return s.durations[newQueue[i].ID()].Nanoseconds() < s.durations[newQueue[j].ID()].Nanoseconds()
-					})
-
-					// 避免连续出现同一张图片
-					// 如果排序后的第一张是上一轮最后一张，则将它放到第二张
-					if len(newQueue) > 1 && newQueue[0].ID() == currentImage.ID() {
-						newQueue[0], newQueue[1] = newQueue[1], newQueue[0]
-					}
-
-					// 开启新一轮
-					if err := s.nextRound(nil, newQueue); err != nil {
-						return err
-					}
-				}
+			// 开启新一轮
+			if err := s.nextRound(nil, newQueue); err != nil {
+				return err
 			}
 		}
 	}
