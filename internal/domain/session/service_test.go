@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
-	"iter"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/pubsub"
@@ -18,69 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Fakes
-
-type FakeMetadataRepo struct {
-	Data map[string]*metadata.XMPData
-}
-
-func NewFakeMetadataRepo() *FakeMetadataRepo {
-	return &FakeMetadataRepo{
-		Data: make(map[string]*metadata.XMPData),
-	}
-}
-
-func (f *FakeMetadataRepo) Write(path string, data *metadata.XMPData) error {
-	f.Data[path] = data
-	return nil
-}
-
-func (f *FakeMetadataRepo) Read(path string) (*metadata.XMPData, error) {
-	if d, ok := f.Data[path]; ok {
-		return d, nil
-	}
-	return nil, nil
-}
-
-type FakeSessionRepo struct {
-	Sessions map[scalar.ID]*Session
-}
-
-func NewFakeSessionRepo() *FakeSessionRepo {
-	return &FakeSessionRepo{
-		Sessions: make(map[scalar.ID]*Session),
-	}
-}
-
-func (f *FakeSessionRepo) Save(s *Session) error {
-	f.Sessions[s.ID()] = s
-	return nil
-}
-
-func (f *FakeSessionRepo) Get(id scalar.ID) (*Session, error) {
-	if s, ok := f.Sessions[id]; ok {
-		return s, nil
-	}
-	return nil, errors.New("not found")
-}
-
-func (f *FakeSessionRepo) FindByDirectory(directoryID scalar.ID) iter.Seq2[*Session, error] {
-	return func(yield func(*Session, error) bool) {
-		for _, s := range f.Sessions {
-			if s.DirectoryID() == directoryID {
-				if !yield(s, nil) {
-					return
-				}
-			}
-		}
-	}
-}
-
-type FakeEventBus struct{}
-
-func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
-	return func(yield func(*shared.FileChangedEvent, error) bool) {}
-}
+// Fakes used in TestService_Commit_ShouldOnlyWriteMatchingImages are now in testutil_test.go
 
 // Test Service.Commit
 func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
