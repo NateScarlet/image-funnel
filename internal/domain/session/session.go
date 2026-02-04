@@ -28,18 +28,6 @@ func NewWriteActions(keepRating, shelveRating, rejectRating int) *WriteActions {
 	}
 }
 
-func (a *WriteActions) KeepRating() int {
-	return a.keepRating
-}
-
-func (a *WriteActions) ShelveRating() int {
-	return a.shelveRating
-}
-
-func (a *WriteActions) RejectRating() int {
-	return a.rejectRating
-}
-
 // Stats 表示会话的统计信息，用于跟踪筛选进度和结果
 
 type Stats struct {
@@ -48,7 +36,6 @@ type Stats struct {
 	shelved     int
 	rejected    int
 	remaining   int
-	targetKeep  int
 	isCompleted bool
 }
 
@@ -70,10 +57,6 @@ func (s *Stats) Rejected() int {
 
 func (s *Stats) Remaining() int {
 	return s.remaining
-}
-
-func (s *Stats) TargetKeep() int {
-	return s.targetKeep
 }
 
 func (s *Stats) IsCompleted() bool {
@@ -104,13 +87,10 @@ type Session struct {
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
 	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
-	// roundHistory removed in favor of unified undoStack
 	currentRound int // 当前筛选轮次
 
 	mu sync.RWMutex // 读写互斥锁，用于并发安全访问
 }
-
-// RoundSnapshot removed
 
 // NewSession 创建一个新的图片筛选会话
 //
@@ -271,16 +251,6 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 	return nil
 }
 
-// setFilter 更新会话的图片过滤器
-func (s *Session) setFilter(filter *shared.ImageFilters) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.filter = filter
-	s.updatedAt = time.Now()
-	return nil
-}
-
 // nextRound 开启新一轮筛选
 // 参数：
 // - filter: 图片过滤器
@@ -374,7 +344,6 @@ func (s *Session) stats() *Stats {
 	var stats Stats
 	stats.total = len(s.queue)
 	stats.remaining = len(s.queue) - s.currentIdx
-	stats.targetKeep = s.targetKeep
 
 	for _, action := range s.actions {
 		switch action {
@@ -392,7 +361,7 @@ func (s *Session) stats() *Stats {
 	// 1. 所有图片都已处理 (remaining == 0)
 	// 2. 且保留的图片数量不超过目标保留数量 (否则需要开启新一轮)
 	// 注意：搁置 (Shelve) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
-	stats.isCompleted = stats.remaining == 0 && (stats.kept <= stats.targetKeep)
+	stats.isCompleted = stats.remaining == 0 && (stats.kept <= s.targetKeep)
 
 	return &stats
 }
@@ -498,14 +467,6 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	}
 
 	return nil
-}
-
-// addFilteredImage 添加新图片到会话
-// 如果图片符合过滤器且不在队列中，则添加
-func (s *Session) addFilteredImage(img *image.Image) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.addFilteredImageLocked(img)
 }
 
 func (s *Session) addFilteredImageLocked(img *image.Image) error {
@@ -669,8 +630,6 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 		}
 	}
 }
-
-// UndoEntry has been replaced by func() closures
 
 var (
 	ErrNoMoreImages  = apperror.New("INVALID_OPERATION", "no more images", "没有更多图片")

@@ -2,7 +2,6 @@ package inmem
 
 import (
 	"iter"
-	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -67,16 +66,6 @@ func (r *SessionRepository) Get(id scalar.ID) (*session.Session, error) {
 	return sess, nil
 }
 
-func (r *SessionRepository) FindAll() ([]*session.Session, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	result := make([]*session.Session, 0, len(r.sessions))
-	for _, sess := range r.sessions {
-		result = append(result, sess)
-	}
-	return result, nil
-}
-
 func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[*session.Session, error] {
 	return func(yield func(*session.Session, error) bool) {
 		r.mu.RLock()
@@ -92,27 +81,6 @@ func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[*se
 			}
 		}
 	}
-}
-
-func (r *SessionRepository) Delete(id scalar.ID) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if sess, ok := r.sessions[id]; ok {
-		dirID := sess.DirectoryID()
-		if ids, ok := r.dirIndex[dirID]; ok {
-			newIDs := slices.DeleteFunc(ids, func(e scalar.ID) bool {
-				return e == id
-			})
-			if len(newIDs) == 0 {
-				delete(r.dirIndex, dirID)
-			} else {
-				r.dirIndex[dirID] = newIDs
-			}
-		}
-		delete(r.sessions, id)
-	}
-	return nil
 }
 
 // cleanup 清理长时间未更新的会话

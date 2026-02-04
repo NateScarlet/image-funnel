@@ -415,12 +415,12 @@ func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
 	assert.Equal(t, 9, session.CurrentIndex(), "CurrentIndex should be restored to last processed index (9) after cross-round undo")
 }
 
-func TestWriteActions_Getters(t *testing.T) {
+func TestWriteActions_Fields(t *testing.T) {
 	actions := NewWriteActions(5, 3, 1)
 
-	assert.Equal(t, 5, actions.KeepRating(), "KeepRating should match")
-	assert.Equal(t, 3, actions.ShelveRating(), "ShelveRating should match")
-	assert.Equal(t, 1, actions.RejectRating(), "RejectRating should match")
+	assert.Equal(t, 5, actions.keepRating, "keepRating should match")
+	assert.Equal(t, 3, actions.shelveRating, "shelveRating should match")
+	assert.Equal(t, 1, actions.rejectRating, "rejectRating should match")
 }
 
 func TestStats_Getters(t *testing.T) {

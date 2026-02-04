@@ -76,19 +76,6 @@ func (f *FakeSessionRepo) FindByDirectory(directoryID scalar.ID) iter.Seq2[*Sess
 	}
 }
 
-func (f *FakeSessionRepo) FindAll() ([]*Session, error) {
-	var list []*Session
-	for _, s := range f.Sessions {
-		list = append(list, s)
-	}
-	return list, nil
-}
-
-func (f *FakeSessionRepo) Delete(id scalar.ID) error {
-	delete(f.Sessions, id)
-	return nil
-}
-
 type FakeEventBus struct{}
 
 func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
