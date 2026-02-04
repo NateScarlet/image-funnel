@@ -256,11 +256,7 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 // - filter: 图片过滤器
 // - filteredImages: 新的筛选后图片队列
 func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
-	// 检查是否已经获取了锁
-	// 由于 MarkImage 函数已经获取了锁，这里需要避免重复获取
-	// 直接执行逻辑，不获取锁
 
-	// 保存当前状态到历史记录
 	// 保存当前状态到撤销栈，以便撤销换轮操作
 	prevQueue := s.queue
 	prevFilter := s.filter
@@ -317,7 +313,6 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	}
 
 	s.currentIdx = 0
-	// 注意：不清除 undoStack，保持撤销历史连续性
 	s.updatedAt = time.Now()
 
 	return nil
@@ -477,12 +472,7 @@ func (s *Session) addFilteredImageLocked(img *image.Image) error {
 
 	s.queue = append(s.queue, img)
 	s.images[img.ID()] = img
-	// 注意：不设置 s.actions[img.ID()]，因为 actions 仅存储用户显式操作
-	// 默认无操作记录，表示尚未处理
 	s.updatedAt = time.Now()
-
-	// 如果会话已完成，添加新图片后可能变为未完成
-	// stats() 会自动计算
 
 	return nil
 }
@@ -531,7 +521,6 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 	// 如果原本不在会话中
 	if oldID.IsZero() && oldIndex == -1 {
 		if matchesFilter {
-			// 如果匹配过滤器，执行添加逻辑
 			s.addFilteredImageLocked(img)
 			return true
 		}
@@ -554,7 +543,6 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 				s.actions[img.ID()] = action
 				delete(s.actions, oldID)
 			}
-			// ID change handling for undo stack is implicitly handled by using Path in the closure
 		}
 	}
 
@@ -603,11 +591,6 @@ func (s *Session) removeImageByPathLocked(path string) bool {
 			s.currentIdx--
 		}
 
-		// 修正撤销栈：
-		// 由于 switch to []func(), 无法更新闭包中的索引。
-		// 但新的撤销实现通过 ID 查找 currentIdx，不受索引偏移影响。
-		// 唯一的问题是如果引用了已删除的图片 (targetID)，Undo 时应忽略。
-		// 新的 Undo 实现会检查 image 是否存在。
 	}
 
 	s.updatedAt = time.Now()
