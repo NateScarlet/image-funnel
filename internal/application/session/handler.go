@@ -157,7 +157,11 @@ func (h *Handler) Commit(
 		return 0, []error{fmt.Errorf("session not found: %w", err)}
 	}
 
-	writeActions := session.NewWriteActions(keepRating, shelveRating, rejectRating)
+	writeActions := &shared.WriteActions{
+		KeepRating:   keepRating,
+		ShelveRating: shelveRating,
+		RejectRating: rejectRating,
+	}
 	return h.sessionService.Commit(ctx, sess, writeActions)
 }
 

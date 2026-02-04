@@ -143,7 +143,7 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 	}
 }
 
-func (s *Service) Commit(ctx context.Context, session *Session, writeActions *WriteActions) (int, []error) {
+func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, []error) {
 	var errs []error
 	success := 0
 
@@ -157,11 +157,11 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *Wr
 		var rating int
 		switch action {
 		case shared.ImageActionKeep:
-			rating = writeActions.keepRating
+			rating = writeActions.KeepRating
 		case shared.ImageActionShelve:
-			rating = writeActions.shelveRating
+			rating = writeActions.ShelveRating
 		case shared.ImageActionReject:
-			rating = writeActions.rejectRating
+			rating = writeActions.RejectRating
 		}
 		if rating == img.Rating() {
 			continue

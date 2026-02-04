@@ -39,14 +39,6 @@ func TestStats_InitialState(t *testing.T) {
 	assert.Equal(t, 10, stats.Remaining, "Remaining should be 10")
 }
 
-func TestWriteActions_Fields(t *testing.T) {
-	actions := NewWriteActions(5, 3, 1)
-
-	assert.Equal(t, 5, actions.keepRating, "keepRating should match")
-	assert.Equal(t, 3, actions.shelveRating, "shelveRating should match")
-	assert.Equal(t, 1, actions.rejectRating, "rejectRating should match")
-}
-
 func TestActions_ShouldOnlyReturnMarkedImages(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 

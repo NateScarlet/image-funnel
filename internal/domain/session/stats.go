@@ -4,22 +4,6 @@ import (
 	"main/internal/shared"
 )
 
-// WriteActions 定义了不同操作对应的评分值
-// 用于将图片操作映射到 XMP 评分系统
-type WriteActions struct {
-	keepRating   int
-	shelveRating int
-	rejectRating int
-}
-
-func NewWriteActions(keepRating, shelveRating, rejectRating int) *WriteActions {
-	return &WriteActions{
-		keepRating:   keepRating,
-		shelveRating: shelveRating,
-		rejectRating: rejectRating,
-	}
-}
-
 func (s *Session) Stats() *shared.StatsDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

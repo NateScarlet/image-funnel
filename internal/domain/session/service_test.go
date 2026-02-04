@@ -73,7 +73,11 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	sess.actions[img3.ID()] = shared.ImageActionReject
 	sess.mu.Unlock()
 
-	writeActions := NewWriteActions(5, 0, -1)
+	writeActions := &shared.WriteActions{
+		KeepRating:   5,
+		ShelveRating: 0,
+		RejectRating: -1,
+	}
 
 	// Execute Commit
 	success, errs := svc.Commit(context.Background(), sess, writeActions)
