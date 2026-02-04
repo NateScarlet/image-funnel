@@ -21,8 +21,8 @@ func TestMarkImage_WithShelvedAndKept_ShouldCompleteIfKeptBelowTarget(t *testing
 	})
 
 	stats := session.Stats()
-	assert.Equal(t, 0, stats.Remaining(), "All images should be processed")
-	assert.Equal(t, 2, stats.Kept(), "Should have 2 kept images")
-	assert.Equal(t, 8, stats.Shelved(), "Should have 8 shelved images")
-	assert.True(t, stats.IsCompleted(), "Session should be completed because shelved images are ignored")
+	assert.Equal(t, 0, stats.Remaining, "All images should be processed")
+	assert.Equal(t, 2, stats.Kept, "Should have 2 kept images")
+	assert.Equal(t, 8, stats.Shelved, "Should have 8 shelved images")
+	assert.True(t, stats.IsCompleted, "Session should be completed because shelved images are ignored")
 }

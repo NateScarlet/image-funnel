@@ -256,7 +256,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	if s.currentIdx >= len(s.queue) {
 		stats := s.stats()
 
-		if stats.kept > s.targetKeep {
+		if stats.Kept > s.targetKeep {
 			var newQueue []*image.Image
 			for _, img := range s.queue {
 				action := s.actions[img.ID()]

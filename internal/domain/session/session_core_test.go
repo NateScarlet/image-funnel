@@ -19,7 +19,7 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 	assert.Equal(t, scalar.ToID("test-dir-id"), session.DirectoryID(), "DirectoryID should match")
 	assert.Equal(t, filter, session.Filter(), "Filter should match")
 	assert.Equal(t, 5, session.TargetKeep(), "TargetKeep should match")
-	assert.False(t, session.Stats().IsCompleted(), "IsCompleted should be false initially")
+	assert.False(t, session.Stats().IsCompleted, "IsCompleted should be false initially")
 	assert.Equal(t, 10, len(ImagesOf(session)), "Images count should match")
 	assert.Equal(t, 10, len(session.queue), "Queue count should match")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
@@ -31,28 +31,12 @@ func TestStats_InitialState(t *testing.T) {
 
 	stats := session.Stats()
 
-	assert.Equal(t, 10, stats.Total(), "Total should be 10")
+	assert.Equal(t, 10, stats.Total, "Total should be 10")
 	assert.Equal(t, 0, session.CurrentIndex(), "Processed should be 0")
-	assert.Equal(t, 0, stats.Kept(), "Kept should be 0")
-	assert.Equal(t, 0, stats.Shelved(), "Shelved should be 0")
-	assert.Equal(t, 0, stats.Rejected(), "Rejected should be 0")
-	assert.Equal(t, 10, stats.Remaining(), "Remaining should be 10")
-}
-
-func TestStats_Getters(t *testing.T) {
-	stats := &Stats{
-		total:     10,
-		kept:      2,
-		shelved:   2,
-		rejected:  1,
-		remaining: 5,
-	}
-
-	assert.Equal(t, 10, stats.Total(), "Total should match")
-	assert.Equal(t, 2, stats.Kept(), "Kept should match")
-	assert.Equal(t, 2, stats.Shelved(), "Shelved should match")
-	assert.Equal(t, 1, stats.Rejected(), "Rejected should match")
-	assert.Equal(t, 5, stats.Remaining(), "Remaining should match")
+	assert.Equal(t, 0, stats.Kept, "Kept should be 0")
+	assert.Equal(t, 0, stats.Shelved, "Shelved should be 0")
+	assert.Equal(t, 0, stats.Rejected, "Rejected should be 0")
+	assert.Equal(t, 10, stats.Remaining, "Remaining should be 10")
 }
 
 func TestWriteActions_Fields(t *testing.T) {

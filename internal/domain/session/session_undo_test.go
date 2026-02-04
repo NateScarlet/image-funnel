@@ -41,12 +41,12 @@ func TestUndo_ShouldRestoreActiveStatus(t *testing.T) {
 		return shared.ImageActionReject
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "IsCompleted should be true")
+	assert.True(t, session.Stats().IsCompleted, "IsCompleted should be true")
 
 	err := session.Undo()
 	require.NoError(t, err)
 
-	assert.False(t, session.Stats().IsCompleted(), "IsCompleted should be false after undo")
+	assert.False(t, session.Stats().IsCompleted, "IsCompleted should be false after undo")
 }
 
 func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
@@ -63,13 +63,13 @@ func TestCanUndo_AfterRoundCompletion_ShouldAllowCrossRoundUndo(t *testing.T) {
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed for second round")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed for second round")
 	assert.True(t, session.CanUndo(), "CanUndo should return true after round completion for cross-round undo")
 
 	err := session.Undo()
 	require.NoError(t, err)
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after cross-round undo")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed after cross-round undo")
 	assert.Equal(t, 10, len(session.queue), "Queue length should be restored to original 10")
 	assert.Equal(t, 9, session.CurrentIndex(), "CurrentIndex should be restored to last processed index (9) after cross-round undo")
 }
@@ -88,7 +88,7 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after first round")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed after first round")
 	assert.Equal(t, 3, len(session.queue), "Queue should have 3 images for second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 for second round")
 
@@ -116,7 +116,7 @@ func TestUndo_ShouldRestoreToPreviousRoundWhenUndoStackEmpty(t *testing.T) {
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after first round")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed after first round")
 	assert.Equal(t, 3, len(session.queue), "Queue should have 3 images for second round")
 	assert.Equal(t, 1, session.currentRound, "CurrentRound should be 1")
 
@@ -135,12 +135,12 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 		return shared.ImageActionReject
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "Session should be completed")
+	assert.True(t, session.Stats().IsCompleted, "Session should be completed")
 
 	err := session.Undo()
 	require.NoError(t, err)
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed after undo")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed after undo")
 	assert.True(t, ActionOf(session, session.queue[9].ID()).IsZero(), "Last image action should be restored to zero (Pending)")
 }
 

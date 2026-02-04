@@ -81,11 +81,11 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionReject)
 	require.NoError(t, err)
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after rejecting one image in first round")
 
 	stats := session.Stats()
-	assert.Equal(t, 1, stats.Rejected(), "Expected 1 rejected image")
+	assert.Equal(t, 1, stats.Rejected, "Expected 1 rejected image")
 }
 
 func TestCanUndo_InitialState_ShouldReturnFalse(t *testing.T) {

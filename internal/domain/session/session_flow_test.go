@@ -18,7 +18,7 @@ func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
 		return shared.ImageActionReject
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "IsCompleted should be true")
+	assert.True(t, session.Stats().IsCompleted, "IsCompleted should be true")
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
@@ -35,11 +35,11 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed")
 
 	newRoundStats := session.Stats()
 	assert.Equal(t, 0, session.CurrentIndex(), "New round processed should be 0")
-	assert.Equal(t, 3, newRoundStats.Total(), "New round total should be 3")
+	assert.Equal(t, 3, newRoundStats.Total, "New round total should be 3")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIdx should be 0")
 }
 
@@ -54,7 +54,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed")
 	assert.Equal(t, 5, len(session.queue), "Queue length should be 5")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIdx should be 0")
 }
@@ -70,11 +70,11 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 		return action
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "Session should be completed when new queue length equals target")
+	assert.True(t, session.Stats().IsCompleted, "Session should be completed when new queue length equals target")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with kept images")
 
 	stats := session.Stats()
-	assert.Equal(t, 5, stats.Rejected(), "Expected 5 rejected images")
+	assert.Equal(t, 5, stats.Rejected, "Expected 5 rejected images")
 }
 
 func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
@@ -84,7 +84,7 @@ func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 		return shared.ImageActionReject
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "Session should be completed when all images are rejected")
+	assert.True(t, session.Stats().IsCompleted, "Session should be completed when all images are rejected")
 	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with rejected images")
 }
 
@@ -107,7 +107,7 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 		return action
 	})
 
-	assert.False(t, session.Stats().IsCompleted(), "Session should not be completed")
+	assert.False(t, session.Stats().IsCompleted, "Session should not be completed")
 	assert.Equal(t, 3, len(session.queue), "Queue length should be 3")
 
 	for _, img := range session.queue {
@@ -128,7 +128,7 @@ func TestMarkImage_KeptLessOrEqualTarget_ShouldComplete(t *testing.T) {
 		return action
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "Session should be completed when kept <= target")
+	assert.True(t, session.Stats().IsCompleted, "Session should be completed when kept <= target")
 }
 
 func TestSession_ShouldCompleteWhenKeepTargetReached(t *testing.T) {
@@ -142,7 +142,7 @@ func TestSession_ShouldCompleteWhenKeepTargetReached(t *testing.T) {
 		return action
 	})
 
-	assert.True(t, session.Stats().IsCompleted(), "Session should be completed when kept == target")
+	assert.True(t, session.Stats().IsCompleted, "Session should be completed when kept == target")
 }
 
 func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {

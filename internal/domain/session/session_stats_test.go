@@ -31,10 +31,10 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 
 	stats := session.Stats()
 
-	assert.Equal(t, 10, stats.Total(), "Total should be 10")
+	assert.Equal(t, 10, stats.Total, "Total should be 10")
 	assert.Equal(t, 9, session.CurrentIndex(), "Processed should be 9")
-	assert.Equal(t, 3, stats.Kept(), "Kept should be 3")
-	assert.Equal(t, 3, stats.Shelved(), "Shelved should be 3")
-	assert.Equal(t, 3, stats.Rejected(), "Rejected should be 3")
-	assert.Equal(t, 1, stats.Remaining(), "Remaining should be 1")
+	assert.Equal(t, 3, stats.Kept, "Kept should be 3")
+	assert.Equal(t, 3, stats.Shelved, "Shelved should be 3")
+	assert.Equal(t, 3, stats.Rejected, "Rejected should be 3")
+	assert.Equal(t, 1, stats.Remaining, "Remaining should be 1")
 }

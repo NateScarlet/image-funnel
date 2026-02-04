@@ -191,8 +191,7 @@ func (h *Handler) SessionStats(ctx context.Context, sessionID scalar.ID) (*share
 		return nil, err
 	}
 
-	statsDTOFactory := NewStatsDTOFactory()
-	return statsDTOFactory.New(sess.Stats())
+	return sess.Stats(), nil
 }
 
 func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error] {
