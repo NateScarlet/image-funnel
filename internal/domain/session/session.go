@@ -168,15 +168,6 @@ func (s *Session) CurrentImage() *image.Image {
 	return nil
 }
 
-func (s *Session) NextImage() *image.Image {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.currentIdx+1 < len(s.queue) {
-		return s.queue[s.currentIdx+1]
-	}
-	return nil
-}
-
 func (s *Session) NextImages(count int) []*image.Image {
 	if count == 0 {
 		return nil
