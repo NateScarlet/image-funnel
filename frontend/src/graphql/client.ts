@@ -13,6 +13,7 @@ import sha256Hash from "@/utils/sha256Hash";
 import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
 import isAbortError from "@/utils/isAbortError";
 import OperationContext from "./OperationContext";
+export type { OperationContext };
 import WebSocketLink from "./WebsocketLink";
 
 function containsUpload(v: unknown): boolean {
@@ -140,13 +141,16 @@ const errorLink = new ErrorLink(({ error, operation }) => {
   }
 });
 
+const persistentCache = new PersistentCache(
+  "apollo-cache-persist",
+  1000, // 1秒防抖
+);
+
+await persistentCache.load();
+
 export const apolloClient = new ApolloClient({
   link: ApolloLink.from([errorLink, persistedQueryLink, link]),
-  cache: new PersistentCache(
-    "apollo-cache-persist",
-    1024 * 1024, // 1MB
-    1000, // 1秒防抖
-  ),
+  cache: persistentCache,
   defaultOptions: {
     watchQuery: {
       fetchPolicy: "cache-and-network",

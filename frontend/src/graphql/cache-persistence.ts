@@ -1,61 +1,52 @@
 import { InMemoryCache, type NormalizedCacheObject } from "@apollo/client/core";
+import { get, set } from "idb-keyval";
 
 /**
  * 带持久化功能的 InMemoryCache
- * 自动将缓存数据保存到 localStorage
+ * 使用 IndexedDB (idb-keyval) 进行异步存储，支持结构化克隆算法，无需 JSON 序列化
  */
 export class PersistentCache extends InMemoryCache {
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private storageKey: string,
-    private maxSize: number,
     private debounceMs: number,
   ) {
     super();
-    // 恢复缓存
-    this.restoreFromStorage();
   }
 
   // #region 持久化相关方法
 
-  private restoreFromStorage(): void {
+  /**
+   * 异步恢复缓存数据
+   * 应在应用启动时调用
+   */
+  async load(): Promise<void> {
     try {
-      const cachedData = localStorage.getItem(this.storageKey);
-      if (!cachedData) {
-        return;
+      const data = await get<NormalizedCacheObject>(this.storageKey);
+      if (data) {
+        super.restore(data);
       }
-
-      if (cachedData.length > this.maxSize) {
-        localStorage.removeItem(this.storageKey);
-        return;
-      }
-
-      const parsed = JSON.parse(cachedData);
-      super.restore(parsed);
     } catch (error) {
       console.error("恢复缓存失败:", error);
-      localStorage.removeItem(this.storageKey);
     }
   }
 
-  private saveToStorage(): void {
+  private save(): void {
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
     }
 
     this.saveTimeout = setTimeout(() => {
       try {
+        // extract() 获取的是普通 JS 对象，IndexedDB 可以直接存储
         const data = super.extract();
-        const serialized = JSON.stringify(data);
-
-        if (serialized.length > this.maxSize) {
-          return;
-        }
-
-        localStorage.setItem(this.storageKey, serialized);
+        // 这是一个异步操作，不需要等待它完成
+        set(this.storageKey, data).catch((error) => {
+          console.error("保存缓存失败:", error);
+        });
       } catch (error) {
-        console.error("保存缓存失败:", error);
+        console.error("提取缓存数据失败:", error);
       }
     }, this.debounceMs);
   }
@@ -66,33 +57,33 @@ export class PersistentCache extends InMemoryCache {
 
   override write(options: unknown) {
     const result = super.write(options as never);
-    this.saveToStorage();
+    this.save();
     return result;
   }
 
   override evict(options: unknown): boolean {
     const result = super.evict(options as never);
     if (result) {
-      this.saveToStorage();
+      this.save();
     }
     return result;
   }
 
   override restore(data: NormalizedCacheObject): this {
     super.restore(data);
-    this.saveToStorage();
+    this.save();
     return this;
   }
 
   override reset(options?: unknown): Promise<void> {
     const result = super.reset(options as never);
-    this.saveToStorage();
+    this.save();
     return result;
   }
 
   override removeOptimistic(id: string): void {
     super.removeOptimistic(id);
-    this.saveToStorage();
+    this.save();
   }
 
   override performTransaction(
@@ -100,7 +91,7 @@ export class PersistentCache extends InMemoryCache {
     optimisticId?: unknown,
   ): void {
     super.performTransaction(transaction as never, optimisticId as never);
-    this.saveToStorage();
+    this.save();
   }
 
   override recordOptimisticTransaction(
@@ -108,19 +99,19 @@ export class PersistentCache extends InMemoryCache {
     optimisticId: string,
   ): void {
     super.recordOptimisticTransaction(transaction as never, optimisticId);
-    this.saveToStorage();
+    this.save();
   }
 
   override gc(): string[] {
     const result = super.gc();
-    this.saveToStorage();
+    this.save();
     return result;
   }
 
   override modify(options: unknown): boolean {
     const result = super.modify(options as never);
     if (result) {
-      this.saveToStorage();
+      this.save();
     }
     return result;
   }
