@@ -55,11 +55,20 @@
         :target-keep="targetKeep"
       />
 
+      <div v-if="items.length > 5" class="mb-4">
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="w-full bg-primary-800 text-primary-100 border border-primary-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-secondary-500 placeholder-primary-500 transition-colors"
+          placeholder="搜索目录..."
+        />
+      </div>
+
       <div
         v-if="items.length > 0"
         class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
       >
-        <template v-for="item in items" :key="item.key">
+        <template v-for="item in filteredItems" :key="item.key">
           <DirectoryItem
             v-show="showCompletedDirectories || !item.isCompleted"
             v-model="selectedId"
@@ -89,12 +98,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import useStorage from "../composables/useStorage";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
+import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import type { DirectoryFragment } from "../graphql/generated";
 
 const { currentDirectory, directories, loading, filterRating, targetKeep } =
@@ -152,12 +162,22 @@ const items = computed(() => {
   );
 });
 
+const searchQuery = ref("");
+
+const filteredItems = computed(() => {
+  const matcher = new ExactSearchMatcher(searchQuery.value);
+  return items.value.filter((item) => {
+    const name = item.dir.path.split(/[\\/]/).pop() ?? "";
+    return matcher.match(name);
+  });
+});
+
 const completedCount = computed(() => {
   return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);
 });
 
 watch(
-  items,
+  filteredItems,
   (newItems) => {
     const navigableDirectoryIds = newItems
       .filter((item) => {
