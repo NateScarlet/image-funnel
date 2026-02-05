@@ -151,6 +151,7 @@ await persistentCache.load();
 export const apolloClient = new ApolloClient({
   link: ApolloLink.from([errorLink, persistedQueryLink, link]),
   cache: persistentCache,
+  assumeImmutableResults: true,
   defaultOptions: {
     watchQuery: {
       fetchPolicy: "cache-and-network",
