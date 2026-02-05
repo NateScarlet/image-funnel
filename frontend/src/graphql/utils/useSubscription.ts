@@ -5,12 +5,13 @@ import type {
   TypedDocumentNode,
   FetchPolicy,
   ErrorPolicy,
+  ApolloLink,
+  ApolloClient,
 } from "@apollo/client/core";
 import { onScopeDispose, watch, type WatchSource } from "vue";
-import { apolloClient, OperationContext } from "../client";
-import { ApolloLink } from "@apollo/client";
-import { ApolloClient } from "@apollo/client";
 import { debounce, isEqual } from "es-toolkit/compat";
+import type { OperationContext } from "../client";
+import { apolloClient } from "../client";
 
 export default function useSubscription<
   TData,

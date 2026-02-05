@@ -2,14 +2,14 @@ import type {
   ObservableQuery,
   OperationVariables,
   TypedDocumentNode,
+  ApolloClient,
 } from "@apollo/client/core";
 import { NetworkStatus } from "@apollo/client/core";
 import type { MaybeRefOrGetter, Ref } from "vue";
 import { computed, onScopeDispose, shallowRef, toValue, watch } from "vue";
+import { isEqual } from "es-toolkit";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
-import { isEqual } from "es-toolkit";
-import type { ApolloClient } from "@apollo/client";
 
 function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
   return (
