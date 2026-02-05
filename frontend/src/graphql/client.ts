@@ -4,8 +4,6 @@ import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { ErrorLink } from "@apollo/client/link/error";
 import { PersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
-import { createClient } from "graphql-ws";
-import { GraphQLWsLink } from "@apollo/client/link/subscriptions";
 import { getMainDefinition } from "@apollo/client/utilities";
 
 import { PersistentCache } from "./cache-persistence";
@@ -14,20 +12,8 @@ import { HttpLink } from "@apollo/client";
 import sha256Hash from "@/utils/sha256Hash";
 import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
 import isAbortError from "@/utils/isAbortError";
-
-export interface OperationContext {
-  fetchOptions?: RequestInit;
-  transport?: "http" | "batch-http" | `batch-http:${string}` | "ws";
-  suppressError?:
-    | boolean
-    | ((ctx: { graphQLErrors?: readonly GraphQLFormattedError[] }) => boolean);
-
-  // https://github.com/apollographql/apollo-client/blob/770cb7293d421ccad0abc1a43797c1f761d9aecf/src/link/persisted-queries/index.ts#L238
-  http?: {
-    includeQuery?: boolean;
-    includeExtensions?: boolean;
-  };
-}
+import OperationContext from "./OperationContext";
+import WebSocketLink from "./WebsocketLink";
 
 function containsUpload(v: unknown): boolean {
   if (v == null) {
@@ -63,11 +49,9 @@ const persistedQueryLink = new PersistedQueryLink({
 const wsUrl = new URL("graphql", document.baseURI);
 wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-const wsLink = new GraphQLWsLink(
-  createClient({
-    url: wsUrl.toString(),
-  }),
-);
+const wsLink = new WebSocketLink({
+  url: wsUrl.toString(),
+});
 
 const httpOrBatchLink = ApolloLink.split(
   ({ variables, getContext }) => {
@@ -76,8 +60,8 @@ const httpOrBatchLink = ApolloLink.split(
       containsUpload(variables)
     );
   },
-  persistedQueryLink.concat(httpLink),
-  persistedQueryLink.concat(batchHttpLink),
+  httpLink,
+  batchHttpLink,
 );
 
 const link = ApolloLink.split(
@@ -157,7 +141,7 @@ const errorLink = new ErrorLink(({ error, operation }) => {
 });
 
 export const apolloClient = new ApolloClient({
-  link: ApolloLink.from([errorLink, link]),
+  link: ApolloLink.from([errorLink, persistedQueryLink, link]),
   cache: new PersistentCache(
     "apollo-cache-persist",
     1024 * 1024, // 1MB
