@@ -1,6 +1,7 @@
 package session
 
 import (
+	"main/internal/domain/image"
 	"main/internal/shared"
 )
 
@@ -18,14 +19,21 @@ func (s *Session) stats() *shared.StatsDTO {
 	stats.Total = len(s.queue)
 	stats.Remaining = len(s.queue) - s.currentIdx
 
-	for _, action := range s.actions {
-		switch action {
-		case shared.ImageActionKeep:
-			stats.Kept++
-		case shared.ImageActionShelve:
-			stats.Shelved++
-		case shared.ImageActionReject:
-			stats.Rejected++
+	filterFunc := image.BuildImageFilter(s.filter)
+
+	for id, action := range s.actions {
+		// 确保只计算符合当前过滤条件的图片
+		// 如果图片因为过滤条件改变而不再可见，它不应该计入当前的保留/搁置等统计
+		// 这样可以避免用户因“看不见但已保留”的图片而无法完成会话
+		if img, ok := s.images[id]; ok && filterFunc(img) {
+			switch action {
+			case shared.ImageActionKeep:
+				stats.Kept++
+			case shared.ImageActionShelve:
+				stats.Shelved++
+			case shared.ImageActionReject:
+				stats.Rejected++
+			}
 		}
 	}
 
