@@ -16,7 +16,6 @@ import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
 import isAbortError from "@/utils/isAbortError";
 
 export interface OperationContext {
-  anonymous?: boolean;
   fetchOptions?: RequestInit;
   transport?: "http" | "batch-http" | `batch-http:${string}` | "ws";
   suppressError?:
@@ -53,12 +52,7 @@ const batchHttpLink = new BatchHttpLink({
   batchInterval: 10,
   batchKey: (operation) => {
     const ctx = operation.getContext() as OperationContext;
-    const key = ctx.transport || "batch-http";
-    // Batch 请求会共用 HTTP 请求，如果存在影响 Header 的字段（如 anonymous），必须拆分 Batch
-    if (ctx.anonymous) {
-      return `anonymous:${key}`;
-    }
-    return key;
+    return ctx.transport || "batch-http";
   },
 });
 
