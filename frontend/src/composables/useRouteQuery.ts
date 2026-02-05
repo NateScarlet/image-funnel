@@ -6,6 +6,7 @@ import { debounce } from "es-toolkit";
 import toArray from "@/utils/toArray";
 import equalArray from "@/utils/equalArray";
 import isNonNull from "@/utils/isNonNull";
+import toStableValue from "@/utils/toStableValue";
 
 let buffer: Record<string, string[]> = {};
 let pushHistory = false;
@@ -48,15 +49,17 @@ export default function useRouteQuery(
   const route = useRoute();
 
   const router = useRouter();
+  let lastValue: string[] | undefined;
   const values = computed({
     get() {
       const ret = toArray(route.query[name]).filter(isNonNull);
       if (ret.length === 0) {
         return defaultValue;
       }
-      return ret;
+      lastValue = toStableValue(ret, lastValue);
+      return lastValue;
     },
-    set(v: string[]) {
+    set(v) {
       if (equalArray(values.value, v)) {
         return;
       }

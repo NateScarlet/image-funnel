@@ -12,8 +12,12 @@ import {
   DirectoryStatsDocument,
   DirectoryChangedDocument,
 } from "../graphql/generated";
-import type { DirectoryStatsFragment } from "../graphql/generated";
+import type {
+  DirectoryStatsFragment,
+  DirectoryStatsQuery,
+} from "../graphql/generated";
 import { apolloClient } from "../graphql/client";
+import toStableValue from "@/utils/toStableValue";
 
 /**
  * 目录统计信息的 composable
@@ -91,7 +95,10 @@ export default function useDirectoryStats() {
           .subscribe((result) => {
             statsCache.set(
               directoryId,
-              (result.data?.node?.stats as DirectoryStatsFragment) || undefined,
+              toStableValue(
+                (result.data as DirectoryStatsQuery)?.node?.stats || undefined,
+                statsCache.get(directoryId),
+              ),
             );
           }),
         (i) => i.unsubscribe(),

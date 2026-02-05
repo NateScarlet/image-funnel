@@ -1,4 +1,5 @@
 import { computed, shallowRef, type Ref } from "vue";
+import toStableValue from "@/utils/toStableValue";
 import useEventListeners from "./useEventListeners";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -57,9 +58,11 @@ function useStorage<T>(
     });
   });
   reload();
+  let lastValue: T | undefined;
   const model = computed({
     get() {
-      return buffer.value ?? defaultValue?.();
+      lastValue = toStableValue(buffer.value ?? defaultValue?.(), lastValue);
+      return lastValue;
     },
     set(v) {
       buffer.value = v;
