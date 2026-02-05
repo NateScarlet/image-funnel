@@ -1,10 +1,4 @@
-import {
-  watch,
-  shallowReactive,
-  type MaybeRefOrGetter,
-  toValue,
-  type Ref,
-} from "vue";
+import { type MaybeRefOrGetter, toValue, type Ref } from "vue";
 import { debounce } from "es-toolkit";
 import useQuery from "../graphql/utils/useQuery";
 import useSubscription from "../graphql/utils/useSubscription";
@@ -13,11 +7,7 @@ import {
   DirectoryChangedDocument,
 } from "../graphql/generated";
 import type { DirectoryStatsFragment } from "../graphql/generated";
-
-// 全局统计信息缓存
-const statsCache = shallowReactive(
-  new Map<string, DirectoryStatsFragment | null>(),
-);
+import { apolloClient } from "@/graphql/client";
 
 /**
  * 目录统计信息的 composable
@@ -39,7 +29,7 @@ export default function useDirectoryStats() {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
       context: {
-        transport: "ws",
+        transport: "http",
       },
     });
 
@@ -60,25 +50,22 @@ export default function useDirectoryStats() {
       },
     });
 
-    // 自动同步到全局缓存
-    watch(
-      () => data.value?.node,
-      (node) => {
-        if (node?.__typename === "Directory") {
-          statsCache.set(node.id, node.stats ?? null);
-        }
-      },
-      { immediate: true },
-    );
-
     return data;
   }
 
   /**
    * 获取指定目录的统计信息（仅从缓存读取，不触发查询）
    */
-  function getCachedStats(directoryId: string) {
-    return statsCache.get(directoryId);
+  function getCachedStats(
+    directoryId: string,
+  ): DirectoryStatsFragment | undefined {
+    const query = apolloClient.readQuery({
+      query: DirectoryStatsDocument,
+      variables: {
+        id: directoryId,
+      },
+    });
+    return query?.node?.stats || undefined;
   }
 
   return {
