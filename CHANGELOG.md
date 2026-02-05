@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.0](https://github.com/NateScarlet/image-funnel/compare/v1.2.1...v1.3.0) (2026-02-05)
+
+
+### Features
+
+* add confirmation dialog when submitting with 0 kept images in CompletedView ([99825ea](https://github.com/NateScarlet/image-funnel/commit/99825eadb49554eab6306c3aa951cc2405e1f447))
+* **frontend:** read directory stats from persisted cache ([b13e176](https://github.com/NateScarlet/image-funnel/commit/b13e1768f0ce00f9ec9cb9e47f90fd4eee55b850))
+* lazy load directory cover image ([914e3ff](https://github.com/NateScarlet/image-funnel/commit/914e3ffba9f8ec4295d44804ab374f95a99b3a1c))
+* support directory search in DirectorySelector ([c8f339c](https://github.com/NateScarlet/image-funnel/commit/c8f339cca5707abf7d3c8ee6f70fd98181c2d3ed))
+* 增加目录列表加载提示 ([8584696](https://github.com/NateScarlet/image-funnel/commit/858469656491f611635f2faf00b742d95cf40109))
+
+
+### Bug Fixes
+
+* **session:** 更新筛选条件导致保留的图片不再符合条件后无法完成会话 ([54627ad](https://github.com/NateScarlet/image-funnel/commit/54627ad5eebc6565a876de949734f315538c345d))
+* 禁用页面缩放以避免手势冲突 ([5038cf5](https://github.com/NateScarlet/image-funnel/commit/5038cf5e44b2b86bbf74548caf77d0403a2d52bb))
+
+
+### Performance Improvements
+
+* configure batch http group key ([3934b52](https://github.com/NateScarlet/image-funnel/commit/3934b522190c6ab04cfbbf3e86e18b5a9feef4e2))
+* use persisted query with websocket message ([ae4861b](https://github.com/NateScarlet/image-funnel/commit/ae4861b059d8deca127d2d5d0225259eb8b199eb))
+* 优化引用稳定性，避免 UI 不必要的重绘 ([3a3e1ca](https://github.com/NateScarlet/image-funnel/commit/3a3e1ca55b772aa9ff1aed7e7c82c09f8f838651))
+* 将 Apollo Client 缓存持久化迁移到 IndexedDB ([26ea9cc](https://github.com/NateScarlet/image-funnel/commit/26ea9cc5ef1d4d7431c60baec234361c2515d83c))
+
 ## [1.2.1](https://github.com/NateScarlet/image-funnel/compare/v1.2.0...v1.2.1) (2026-02-03)
 
 
