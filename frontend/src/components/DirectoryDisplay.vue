@@ -2,8 +2,8 @@
   <div class="flex items-start gap-3">
     <div class="shrink-0 rounded overflow-hidden relative">
       <img
-        v-if="localStats?.latestImage"
-        :src="localStats.latestImage.url256"
+        v-if="stats?.latestImage"
+        :src="stats.latestImage.url256"
         :alt="directoryPath"
         loading="lazy"
         class="w-20 bg-primary-700 object-cover"
@@ -14,6 +14,33 @@
       >
         <div class="w-full h-full animate-pulse bg-primary-600"></div>
       </div>
+      <!-- 加载提示：当显示缓存数据的同时正在后台更新时显示 -->
+      <div
+        v-if="loading && stats"
+        class="absolute right-0 top-0 z-10 rounded-bl bg-black/30 p-1 text-white backdrop-blur-[1px]"
+        title="正在刷新..."
+      >
+        <svg
+          class="h-3 w-3 animate-spin"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          ></path>
+        </svg>
+      </div>
       <slot name="badge"></slot>
     </div>
     <div class="flex-1 min-w-0">
@@ -23,16 +50,16 @@
         </slot>
       </h3>
       <div class="text-xs text-primary-300 space-y-1">
-        <div v-if="localStats">
-          <div v-if="localStats.latestImage?.modTime">
-            {{ formatDate(localStats.latestImage.modTime) }}
+        <div v-if="stats">
+          <div v-if="stats.latestImage?.modTime">
+            {{ formatDate(stats.latestImage.modTime) }}
           </div>
           <div
-            v-if="localStats.ratingCounts.length > 0"
+            v-if="stats.ratingCounts.length > 0"
             class="flex flex-wrap gap-2 mt-2"
           >
             <div
-              v-for="rc in sortedRatingCounts(localStats.ratingCounts)"
+              v-for="rc in sortedRatingCounts(stats.ratingCounts)"
               :key="rc.rating"
               class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50"
             >
@@ -80,7 +107,7 @@ const directoryData = computed(() => {
   const node = data.value?.node;
   return node?.__typename === "Directory" ? node : undefined;
 });
-const localStats = computed(() => directoryData.value?.stats);
+const stats = computed(() => directoryData.value?.stats);
 const loading = computed(() => loadingCount.value > 0);
 const directoryPath = computed(() => directoryData.value?.path ?? "");
 
