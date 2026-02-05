@@ -49,7 +49,7 @@ const httpLink = new HttpLink({
 
 const batchHttpLink = new BatchHttpLink({
   uri: "graphql",
-  batchMax: 1024,
+  batchMax: 64,
   batchInterval: 10,
   batchKey: (operation) => {
     const ctx = operation.getContext() as OperationContext;
@@ -60,7 +60,6 @@ const batchHttpLink = new BatchHttpLink({
     }
     return key;
   },
-  batchDebounce: true,
 });
 
 const persistedQueryLink = new PersistedQueryLink({
