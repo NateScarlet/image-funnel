@@ -1,4 +1,10 @@
-import { type MaybeRefOrGetter, toValue, type Ref } from "vue";
+import {
+  type MaybeRefOrGetter,
+  toValue,
+  type Ref,
+  onScopeDispose,
+  shallowReactive,
+} from "vue";
 import { debounce } from "es-toolkit";
 import useQuery from "../graphql/utils/useQuery";
 import useSubscription from "../graphql/utils/useSubscription";
@@ -7,7 +13,7 @@ import {
   DirectoryChangedDocument,
 } from "../graphql/generated";
 import type { DirectoryStatsFragment } from "../graphql/generated";
-import { apolloClient } from "@/graphql/client";
+import { apolloClient } from "../graphql/client";
 
 /**
  * 目录统计信息的 composable
@@ -53,19 +59,46 @@ export default function useDirectoryStats() {
     return data;
   }
 
+  const stack = new DisposableStack();
+  onScopeDispose(() => stack.dispose());
+
+  const statsCache = shallowReactive(
+    new Map<string, DirectoryStatsFragment | undefined>(),
+  );
+
   /**
    * 获取指定目录的统计信息（仅从缓存读取，不触发查询）
    */
   function getCachedStats(
     directoryId: string,
   ): DirectoryStatsFragment | undefined {
-    const query = apolloClient.readQuery({
-      query: DirectoryStatsDocument,
-      variables: {
-        id: directoryId,
-      },
-    });
-    return query?.node?.stats || undefined;
+    if (!statsCache.has(directoryId)) {
+      // 初始化缓存
+      const initial = apolloClient.readQuery({
+        query: DirectoryStatsDocument,
+        variables: { id: directoryId },
+      })?.node?.stats;
+      statsCache.set(directoryId, initial || undefined);
+
+      // 建立订阅
+      stack.adopt(
+        apolloClient
+          .watchQuery({
+            query: DirectoryStatsDocument,
+            variables: { id: directoryId },
+            fetchPolicy: "cache-only",
+          })
+          .subscribe((result) => {
+            statsCache.set(
+              directoryId,
+              (result.data?.node?.stats as DirectoryStatsFragment) || undefined,
+            );
+          }),
+        (i) => i.unsubscribe(),
+      );
+    }
+
+    return statsCache.get(directoryId);
   }
 
   return {
