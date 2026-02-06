@@ -321,7 +321,7 @@ useEventListeners(containerRef, ({ on }) => {
       if (e.touches.length === 2) {
         isPinching.value = true;
         e.preventDefault();
-        e.stopPropagation();
+
         initialPinchDistance = getTouchDistance(e.touches);
         initialZoom = zoom.zoom.value;
 
@@ -342,7 +342,7 @@ useEventListeners(containerRef, ({ on }) => {
     (e) => {
       if (e.touches.length === 2) {
         e.preventDefault();
-        e.stopPropagation();
+
         const currentDistance = getTouchDistance(e.touches);
         if (initialPinchDistance > 0) {
           const scale = currentDistance / initialPinchDistance;
