@@ -220,18 +220,30 @@ useAsyncTask({
     ];
   },
   async task(urls, ctx) {
-    for (const url of urls) {
-      if (ctx.signal().aborted) {
-        return;
+    const concurrency = 3;
+    const queue = [...urls];
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const url = queue.shift();
+        if (!url) {
+          break;
+        }
+        if (ctx.signal().aborted) {
+          return;
+        }
+
+        const img = new window.Image();
+        img.src = url;
+        try {
+          await img.decode();
+        } catch {
+          // ignore
+        }
       }
-      const img = new window.Image();
-      img.src = url;
-      try {
-        await img.decode();
-      } catch {
-        // ignore
-      }
-    }
+    };
+
+    await Promise.all(Array.from({ length: concurrency }, worker));
   },
 });
 
