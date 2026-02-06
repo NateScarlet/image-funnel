@@ -58,11 +58,9 @@ function useStorage<T>(
     });
   });
   reload();
-  let lastValue: T | undefined;
-  const model = computed({
-    get() {
-      lastValue = toStableValue(buffer.value ?? defaultValue?.(), lastValue);
-      return lastValue;
+  const model = computed<T | undefined>({
+    get(oldValue) {
+      return toStableValue(buffer.value ?? defaultValue?.(), oldValue);
     },
     set(v) {
       buffer.value = v;

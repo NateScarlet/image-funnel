@@ -1,9 +1,10 @@
 import { isEqual } from "es-toolkit";
-import { MaybeRefOrGetter, toValue } from "vue";
+import type { MaybeRefOrGetter } from "vue";
+import { toValue } from "vue";
 
 export default function toStableValue<T>(
   getter: MaybeRefOrGetter<T>,
-  oldValue: T | undefined,
+  oldValue: NoInfer<T | undefined>,
 ): T {
   const newValue = toValue(getter);
   if (isEqual(newValue, oldValue)) {

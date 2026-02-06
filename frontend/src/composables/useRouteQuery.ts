@@ -49,15 +49,15 @@ export default function useRouteQuery(
   const route = useRoute();
 
   const router = useRouter();
-  let lastValue: string[] | undefined;
-  const values = computed({
-    get() {
-      const ret = toArray(route.query[name]).filter(isNonNull);
-      if (ret.length === 0) {
-        return defaultValue;
-      }
-      lastValue = toStableValue(ret, lastValue);
-      return lastValue;
+  const values = computed<string[]>({
+    get(oldValue) {
+      return toStableValue(() => {
+        const ret = toArray(route.query[name]).filter(isNonNull);
+        if (ret.length === 0) {
+          return defaultValue;
+        }
+        return ret;
+      }, oldValue);
     },
     set(v) {
       if (equalArray(values.value, v)) {

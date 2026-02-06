@@ -8,8 +8,9 @@ import type {
   ApolloLink,
   ApolloClient,
 } from "@apollo/client/core";
-import { onScopeDispose, watch, type WatchSource } from "vue";
-import { debounce, isEqual } from "es-toolkit/compat";
+import { computed, onScopeDispose, watch, type WatchSource } from "vue";
+import { debounce } from "es-toolkit/compat";
+import toStableValue from "@/utils/toStableValue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
 
@@ -31,8 +32,7 @@ export default function useSubscription<
   onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
 
-  function run(variables?: TVariables) {
-    const stack = new DisposableStack();
+  function run(stack: DisposableStack, variables?: TVariables) {
     const ob = apolloClient.subscribe({
       ...options,
       query: document,
@@ -56,7 +56,6 @@ export default function useSubscription<
       }),
       (i) => i.unsubscribe(),
     );
-    return stack;
   }
   if (options.variables) {
     let current: DisposableStack | undefined;
@@ -66,7 +65,8 @@ export default function useSubscription<
       debounce(
         (v: TVariables) => {
           const previous = current;
-          current = run(v);
+          current = new DisposableStack();
+          run(current, v);
           if (previous) {
             // 启动后再停止之前的订阅，确保无缝衔接
             setTimeout(() => {
@@ -79,25 +79,25 @@ export default function useSubscription<
       ),
       (i) => i.cancel(),
     );
+    const stableVariables = computed<TVariables | undefined>((oldValue) =>
+      toStableValue(options.variables, oldValue),
+    );
     stack.defer(
       watch(
-        options.variables,
-        (v, oldValue) => {
+        stableVariables,
+        (v) => {
           if (v == null) {
             current?.dispose();
             current = undefined;
             return;
           }
-          if (isEqual(v, oldValue)) {
-            return;
-          }
           setVariables(v);
         },
-        { flush: "post", immediate: true },
+        { immediate: true },
       ),
     );
   } else {
-    stack.use(run());
+    run(stack);
   }
 
   return stack;

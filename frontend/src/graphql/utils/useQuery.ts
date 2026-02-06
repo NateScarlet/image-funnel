@@ -7,10 +7,9 @@ import type {
 import { NetworkStatus } from "@apollo/client/core";
 import type { MaybeRefOrGetter, Ref } from "vue";
 import { computed, onScopeDispose, shallowRef, toValue, watch } from "vue";
-import { isEqual } from "es-toolkit";
+import toStableValue from "@/utils/toStableValue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
-import toStableValue from "@/utils/toStableValue";
 
 function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
   return (
@@ -104,23 +103,20 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     );
   }
   if (variables) {
-    let queryStack: DisposableStack | undefined;
-    stack.defer(() => queryStack?.dispose());
+    const stableVariables = computed<TVariables | undefined>((oldValue) =>
+      toStableValue(variables, oldValue),
+    );
     stack.defer(
       watch(
-        () => toValue(variables),
-        (n, o) => {
-          if (isEqual(n, o)) {
-            // not recreate query if variable not changed
-            return;
-          }
+        stableVariables,
+        (n, _, onCleanup) => {
           if (n == null) {
             resultModel.value = undefined;
             return;
           }
-          queryStack?.dispose();
-          queryStack = new DisposableStack();
-          run(queryStack, n);
+          const stack = new DisposableStack();
+          onCleanup(() => stack.dispose());
+          run(stack, n);
         },
         { immediate: true },
       ),
@@ -128,14 +124,10 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   } else {
     run(stack);
   }
-
   return {
-    data: computed((oldValue) => {
-      return toStableValue(
-        resultModel.value?.data as TData | undefined,
-        oldValue,
-      );
-    }),
+    data: computed((oldValue) =>
+      toStableValue(resultModel.value?.data as TData | undefined, oldValue),
+    ),
     query,
     [Symbol.dispose]: () => stack.dispose(),
   };
