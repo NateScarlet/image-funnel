@@ -189,10 +189,12 @@ function handleToggleFullscreen() {
   toggleFullscreen();
 }
 
+const isPinching = ref(false);
+
 const zoom = useImageZoom({
   container: containerRef,
   size: () => image,
-  allowTransition: () => loaded.value,
+  allowTransition: () => loaded.value && !isPinching.value,
 });
 const {
   containerAttrs,
@@ -317,6 +319,7 @@ useEventListeners(containerRef, ({ on }) => {
     (e) => {
       if (locked.value) return;
       if (e.touches.length === 2) {
+        isPinching.value = true;
         e.preventDefault();
         e.stopPropagation();
         initialPinchDistance = getTouchDistance(e.touches);
@@ -362,6 +365,7 @@ useEventListeners(containerRef, ({ on }) => {
 
   on("touchend", (e) => {
     if (e.touches.length < 2) {
+      isPinching.value = false;
       initialPinchDistance = 0;
       zoom.scrollAnchor.value = undefined;
       initialAnchorImage = undefined;
