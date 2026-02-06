@@ -1,6 +1,6 @@
-import { computed, shallowRef, type Ref } from "vue";
-import toStableValue from "@/utils/toStableValue";
+import { shallowRef, type Ref } from "vue";
 import useEventListeners from "./useEventListeners";
+import stableComputed from "./stableComputed";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -58,9 +58,9 @@ function useStorage<T>(
     });
   });
   reload();
-  const model = computed<T | undefined>({
-    get(oldValue) {
-      return toStableValue(buffer.value ?? defaultValue?.(), oldValue);
+  const model = stableComputed<T | undefined>({
+    get() {
+      return buffer.value ?? defaultValue?.();
     },
     set(v) {
       buffer.value = v;

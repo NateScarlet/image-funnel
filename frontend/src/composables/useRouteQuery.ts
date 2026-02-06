@@ -1,12 +1,11 @@
 import type { Ref } from "vue";
-import { computed } from "vue";
 import type { Router } from "vue-router";
 import { useRoute, useRouter } from "vue-router";
 import { debounce } from "es-toolkit";
 import toArray from "@/utils/toArray";
 import equalArray from "@/utils/equalArray";
 import isNonNull from "@/utils/isNonNull";
-import toStableValue from "@/utils/toStableValue";
+import stableComputed from "./stableComputed";
 
 let buffer: Record<string, string[]> = {};
 let pushHistory = false;
@@ -49,15 +48,13 @@ export default function useRouteQuery(
   const route = useRoute();
 
   const router = useRouter();
-  const values = computed<string[]>({
-    get(oldValue) {
-      return toStableValue(() => {
-        const ret = toArray(route.query[name]).filter(isNonNull);
-        if (ret.length === 0) {
-          return defaultValue;
-        }
-        return ret;
-      }, oldValue);
+  const values = stableComputed({
+    get() {
+      const ret = toArray(route.query[name]).filter(isNonNull);
+      if (ret.length === 0) {
+        return defaultValue;
+      }
+      return ret;
     },
     set(v) {
       if (equalArray(values.value, v)) {

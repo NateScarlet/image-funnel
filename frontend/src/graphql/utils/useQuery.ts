@@ -10,6 +10,7 @@ import { computed, onScopeDispose, shallowRef, toValue, watch } from "vue";
 import toStableValue from "@/utils/toStableValue";
 import type { OperationContext } from "../client";
 import { apolloClient } from "../client";
+import stableComputed from "@/composables/stableComputed";
 
 function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
   return (
@@ -125,9 +126,7 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
     run(stack);
   }
   return {
-    data: computed((oldValue) =>
-      toStableValue(resultModel.value?.data as TData | undefined, oldValue),
-    ),
+    data: stableComputed(() => resultModel.value?.data as TData | undefined),
     query,
     [Symbol.dispose]: () => stack.dispose(),
   };
