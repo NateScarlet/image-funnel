@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
@@ -145,8 +144,11 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, []error) {
 	var errs []error
-	success := 0
+	var successCount int
+	var updatedImages []*image.Image
 
+	// 1. 遍历并执行写入操作
+	// 注意：这里只收集需要更新的图片，不直接修改 Session，避免死锁（Actions() 持有 RLock）
 	for img, action := range session.Actions() {
 
 		var rating int
@@ -158,15 +160,21 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		case shared.ImageActionReject:
 			rating = writeActions.RejectRating
 		}
-		if rating == img.Rating() {
+
+		// 显式重新加载图片最新状态
+		// LookupImage 内部会检查文件是否存在
+		var currentImg *image.Image
+		if loaded, err := s.dirScanner.LookupImage(ctx, img.Path()); err == nil {
+			currentImg = loaded
+		}
+
+		// 如果无法加载（可能已删除）或 ID 不匹配（说明文件已被外部修改），跳过处理
+		if currentImg == nil || currentImg.ID() != img.ID() {
 			continue
 		}
 
-		if _, err := os.Stat(img.Path()); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			errs = append(errs, err)
+		// 如果当前磁盘状态（即刚刚加载的状态）已经符合目标 Rating，跳过写入
+		if rating == currentImg.Rating() {
 			continue
 		}
 
@@ -176,15 +184,39 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			errs = append(errs, err)
 			continue
 		}
-		success++
+		successCount++
+
+		// 写入成功后，构建新的 Image 对象用于后续更新内存
+		// 强制使用新 Rating，但保留原图其他信息（如 ModTime，等待 FileWatcher 慢慢更新）
+		newImg := image.NewImage(
+			currentImg.ID(),
+			currentImg.Filename(),
+			currentImg.Path(),
+			currentImg.Size(),
+			currentImg.ModTime(),
+			xmpData,
+			currentImg.Width(),
+			currentImg.Height(),
+		)
+		updatedImages = append(updatedImages, newImg)
 	}
+
+	// 2. 批量更新内存状态
+	// 此时 Actions() 的锁已释放，可以安全请求写锁
+	if len(updatedImages) > 0 {
+		for _, img := range updatedImages {
+			// 强制更新内存中的图片状态，忽略过滤器（参数 matchesFilter=true）
+			session.UpdateImageByPath(img, true)
+		}
+	}
+
 	if err := s.sessionRepo.Save(session); err != nil {
 		errs = append(errs, err)
 	}
 
 	s.sessionSaved.Publish(ctx, session)
 
-	return success, errs
+	return successCount, errs
 }
 
 // Update 更新会话配置

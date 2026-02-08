@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -154,6 +157,58 @@ type FakeEventBus struct{}
 
 func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
 	return func(yield func(*shared.FileChangedEvent, error) bool) {}
+}
+
+// FakeScanner is a mock implementation of directory.Scanner
+type FakeScanner struct {
+	MetaRepo *FakeMetadataRepo
+	BaseDir  string
+	Images   map[string]*image.Image // RelPath -> Image
+}
+
+func (s *FakeScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+	return func(yield func(*image.Image, error) bool) {}
+}
+
+func (s *FakeScanner) LookupImage(ctx context.Context, relPath string) (*image.Image, error) {
+	// Normalize path separators if needed, but simplistic match for now
+	if img, ok := s.Images[relPath]; ok {
+		// Update XMP from MetaRepo if available to simulate disk state
+		fullPath := filepath.Join(s.BaseDir, relPath)
+		if xmp, _ := s.MetaRepo.Read(fullPath); xmp != nil {
+			// Create a copy with updated XMP logic if needed,
+			// but strictly speaking LookupImage just reads file.
+			// If we want to simulate "disk has XMP", we should probably
+			// reflect that.
+			// However, for ID consistency, we must return an image that produces the SAME ID
+			// unless the file content/modtime changed.
+			// In our tests, we don't change modtime usually.
+
+			// Currently image.ID() depends on ModTime.
+			// If we want to return the same ID, we must use the same ModTime.
+			return image.NewImage(
+				img.ID(),
+				img.Filename(),
+				img.Path(),
+				img.Size(),
+				img.ModTime(),
+				xmp,
+				img.Width(),
+				img.Height(),
+			), nil
+		}
+		return img, nil
+	}
+	// If not found in our "mock filesystem", return error
+	return nil, os.ErrNotExist
+}
+
+func (s *FakeScanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+	return func(yield func(*directory.Directory, error) bool) {}
+}
+
+func (s *FakeScanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
+	return &directory.DirectoryStats{}, nil
 }
 
 // #endregion
