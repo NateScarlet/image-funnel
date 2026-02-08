@@ -42,7 +42,14 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	topic, cleanup := pubsub.NewInMemoryTopic[*Session]()
 	defer cleanup()
 
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, nil, fakeEventBus, zap.NewNop(), topic, "")
+	fakeScanner := &FakeScanner{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[string]*image.Image),
+	}
+	// Note: We'll populate images AFTER creating them
+
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
 	defer cleanupService()
 
 	// Prepare Session
@@ -52,6 +59,11 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	// img2 has Rating 3, so it does NOT match the filter (Rating 0)
 	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}), 100, 100)
 	img3 := image.NewImage(scalar.ToID("3"), "test3.jpg", file3, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
+
+	// Populate FakeScanner with relative paths (as keys)
+	fakeScanner.Images[filepath.Base(img1.Path())] = img1
+	fakeScanner.Images[filepath.Base(img2.Path())] = img2
+	fakeScanner.Images[filepath.Base(img3.Path())] = img3
 
 	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img3})
 
@@ -102,4 +114,64 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	require.Contains(t, fakeMeta.Data, file3)
 	require.Equal(t, -1, fakeMeta.Data[file3].Rating())
 	require.Equal(t, shared.ImageActionReject.String(), fakeMeta.Data[file3].Action())
+}
+
+func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
+	// Setup
+	tempDir, err := os.MkdirTemp("", "session_test_memory")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	os.WriteFile(file1, []byte("fake"), 0644)
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeSessionRepo := NewFakeSessionRepo()
+	fakeEventBus := &FakeEventBus{}
+	topic, cleanup := pubsub.NewInMemoryTopic[*Session]()
+	defer cleanup()
+
+	fakeScanner := &FakeScanner{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[string]*image.Image),
+	}
+
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
+	defer cleanupService()
+
+	// Initial Image: Rating 0
+	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
+	// Test case: only img1 exists
+	fakeScanner.Images[filepath.Base(img1.Path())] = img1
+
+	filter := &shared.ImageFilters{Rating: []int{0}}
+	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1})
+
+	// Action: Keep (Goal Rating 5)
+	sess.MarkImage(img1.ID(), shared.ImageActionKeep)
+
+	writeActions := &shared.WriteActions{
+		KeepRating:   5,
+		ShelveRating: 0,
+		RejectRating: -1,
+	}
+
+	// 1. First Commit
+	success, errs := svc.Commit(context.Background(), sess, writeActions)
+	require.Empty(t, errs)
+	require.Equal(t, 1, success)
+
+	// Check Disk
+	require.Equal(t, 5, fakeMeta.Data[file1].Rating())
+
+	// Check Memory (This is where the bug is)
+	// After verify that disk is written, the in-memory image should also reflect the new rating
+	// because we want the state to be consistent even before file watcher triggers.
+	sess.mu.RLock()
+	inMemImg := sess.images[img1.ID()]
+	sess.mu.RUnlock()
+
+	// This should fail currently
+	require.Equal(t, 5, inMemImg.Rating(), "In-memory image rating should be updated after commit")
 }
