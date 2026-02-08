@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0](https://github.com/NateScarlet/image-funnel/compare/v1.3.0...v1.4.0) (2026-02-08)
+
+
+### Features
+
+* increase image thumbnail  quality ([1ab5983](https://github.com/NateScarlet/image-funnel/commit/1ab5983df7c93cdef445d1451612b4a9ef215532))
+
+
+### Bug Fixes
+
+* ImageViewer 双指缩放/位移时误触发 SessionView 标记手势 ([3de7c70](https://github.com/NateScarlet/image-funnel/commit/3de7c70c7510b201920474bb7066711e88edff28))
+* 双指缩放后视图跳动 ([792ca1e](https://github.com/NateScarlet/image-funnel/commit/792ca1e3cdaba0143e9cfd296c241dab13e03230))
+* 提交后应立即更新会话状态以防止操作遗漏 ([de8dae0](https://github.com/NateScarlet/image-funnel/commit/de8dae021f188af78eda66664805ee32bdbc9cd2))
+
+
+### Performance Improvements
+
+* 并发预加载加载多张后续图片 ([0a627ed](https://github.com/NateScarlet/image-funnel/commit/0a627ed5f9f2db9fe36baf3c02a95c3be728a7b0))
+
 ## [1.3.0](https://github.com/NateScarlet/image-funnel/compare/v1.2.1...v1.3.0) (2026-02-05)
 
 
