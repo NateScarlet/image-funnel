@@ -15,23 +15,28 @@
 
         <div class="space-y-4">
           <!-- 预设选择 -->
-          <div class="rounded-lg bg-primary-700/50 p-4">
+          <div>
             <label class="mb-2 block text-sm font-medium text-primary-300">
               选择预设
             </label>
-            <select
-              v-model="selectedPresetId"
-              class="w-full rounded-lg border border-primary-600 bg-primary-700 px-4 py-2 text-white focus:border-transparent focus:ring-2 focus:ring-secondary-500"
-            >
-              <option value="">自定义</option>
-              <option
+            <div class="grid grid-cols-2 gap-3">
+              <div
                 v-for="preset in presets"
                 :key="preset.id"
-                :value="preset.id"
+                :class="[
+                  'p-3 rounded-lg cursor-pointer transition-all border-2',
+                  selectedPresetId === preset.id
+                    ? 'bg-secondary-600 border-secondary-500 shadow-md shadow-secondary-500/20'
+                    : 'bg-primary-700 border-primary-600 hover:border-primary-500 hover:bg-primary-650',
+                ]"
+                @click="selectedPresetId = preset.id"
               >
-                {{ preset.name }} - {{ preset.description }}
-              </option>
-            </select>
+                <h3 class="font-semibold text-sm">{{ preset.name }}</h3>
+                <p class="text-xs opacity-70 line-clamp-2">
+                  {{ preset.description }}
+                </p>
+              </div>
+            </div>
           </div>
 
           <!-- 目标保留数量 -->
