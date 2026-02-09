@@ -14,7 +14,7 @@ func (s *Session) CurrentImage() *image.Image {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.currentIdx < len(s.queue) {
-		return s.queue[s.currentIdx]
+		return s.images[s.queue[s.currentIdx]]
 	}
 	return nil
 }
@@ -28,7 +28,12 @@ func (s *Session) NextImages(count int) []*image.Image {
 	defer s.mu.RUnlock()
 	if count < 0 {
 		// 返回所有
-		return s.queue[s.currentIdx+1:]
+		indices := s.queue[s.currentIdx+1:]
+		imgs := make([]*image.Image, len(indices))
+		for i, idx := range indices {
+			imgs[i] = s.images[idx]
+		}
+		return imgs
 	}
 	start := s.currentIdx + 1
 	if start >= len(s.queue) {
@@ -38,7 +43,13 @@ func (s *Session) NextImages(count int) []*image.Image {
 	if end > len(s.queue) {
 		end = len(s.queue)
 	}
-	return s.queue[start:end]
+
+	indices := s.queue[start:end]
+	imgs := make([]*image.Image, len(indices))
+	for i, idx := range indices {
+		imgs[i] = s.images[idx]
+	}
+	return imgs
 }
 
 // KeptImages 返回所有已被标记为保留的图片
@@ -47,8 +58,8 @@ func (s *Session) KeptImages(limit, offset int) []*image.Image {
 	defer s.mu.RUnlock()
 
 	var kept []*image.Image
-	for id, img := range s.images {
-		if s.actions[id] == shared.ImageActionKeep {
+	for _, img := range s.images {
+		if s.actions[img.ID()] == shared.ImageActionKeep {
 			kept = append(kept, img)
 		}
 	}
@@ -119,9 +130,9 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	// 如果排序后的第一张是上一轮正在看或最后看的那一张，则将它放到第二张
 	var lastImage *image.Image
 	if prevIdx < len(prevQueue) {
-		lastImage = prevQueue[prevIdx]
+		lastImage = s.images[prevQueue[prevIdx]]
 	} else if len(prevQueue) > 0 {
-		lastImage = prevQueue[len(prevQueue)-1]
+		lastImage = s.images[prevQueue[len(prevQueue)-1]]
 	}
 	if lastImage != nil && len(filteredImages) > 1 && filteredImages[0].ID() == lastImage.ID() {
 		filteredImages[0], filteredImages[1] = filteredImages[1], filteredImages[0]
@@ -150,13 +161,23 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	if filter != nil {
 		s.filter = filter
 	}
-	s.queue = filteredImages
-	// 确保所有在队列中的图片都在 images 映射中
-	// 这对于 Service.Update 触发的 NextRound 特别重要，因为它引入了新的图片对象
-	// 如果不这样做，Commit() 遍历 s.images 时会遗漏这些图片，导致标记操作无法写入
-	for _, img := range filteredImages {
-		s.images[img.ID()] = img
+
+	// 转换 filteredImages 到 indices 并更新 images
+	newQueue := make([]int, len(filteredImages))
+	for i, img := range filteredImages {
+		if idx, ok := s.indexByID[img.ID()]; ok {
+			s.images[idx] = img // 更新引用
+			newQueue[i] = idx
+		} else {
+			// 新增
+			newIdx := len(s.images)
+			s.images = append(s.images, img)
+			s.indexByID[img.ID()] = newIdx
+			s.indexByPath[img.Path()] = newIdx
+			newQueue[i] = newIdx
+		}
 	}
+	s.queue = newQueue
 
 	s.currentIdx = 0
 	s.updatedAt = time.Now()
@@ -211,12 +232,12 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 		return ErrNoMoreImages
 	}
 
-	currentImage := s.queue[s.currentIdx]
+	currentImage := s.images[s.queue[s.currentIdx]]
 	if currentImage.ID() != imageID {
 		found := false
-		for i, img := range s.queue {
-			if img.ID() == imageID {
-				currentImage = img
+		for i, idx := range s.queue {
+			if s.images[idx].ID() == imageID {
+				currentImage = s.images[idx]
 				s.currentIdx = i
 				found = true
 				break
@@ -258,7 +279,8 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 
 		if stats.Kept > s.targetKeep {
 			var newQueue []*image.Image
-			for _, img := range s.queue {
+			for _, idx := range s.queue {
+				img := s.images[idx]
 				action := s.actions[img.ID()]
 				if action == shared.ImageActionKeep {
 					newQueue = append(newQueue, img)

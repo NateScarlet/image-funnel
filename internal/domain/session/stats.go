@@ -22,10 +22,21 @@ func (s *Session) stats() *shared.StatsDTO {
 	filterFunc := image.BuildImageFilter(s.filter)
 
 	for id, action := range s.actions {
+		// 查找对应的图片对象
+		var img *image.Image
+		if idx, ok := s.indexByID[id]; ok {
+			img = s.images[idx]
+		}
+
+		// 如果找不到图片（不应该发生，除非数据不一致），跳过
+		if img == nil {
+			continue
+		}
+
 		// 确保只计算符合当前过滤条件的图片
 		// 如果图片因为过滤条件改变而不再可见，它不应该计入当前的保留/搁置等统计
 		// 这样可以避免用户因“看不见但已保留”的图片而无法完成会话
-		if img, ok := s.images[id]; ok && filterFunc(img) {
+		if filterFunc(img) {
 			switch action {
 			case shared.ImageActionKeep:
 				stats.Kept++

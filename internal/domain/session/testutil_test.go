@@ -10,7 +10,6 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,7 +32,7 @@ func ActionOf(s *Session, id scalar.ID) shared.ImageAction {
 func ImagesOf(s *Session) []*image.Image {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return slices.Collect(maps.Values(s.images))
+	return slices.Clone(s.images)
 }
 
 // createTestImages creates a slice of dummy images for testing.
@@ -84,8 +83,10 @@ func setupTestSession(_ *testing.T, imageCount int, targetKeep int) *Session {
 // markImagesInSession marks images in the session queue using the provided action function.
 func markImagesInSession(t *testing.T, session *Session, actionFn func(index int) shared.ImageAction) {
 	for i := 0; i < len(session.queue); i++ {
+		imgIdx := session.queue[i]
+		imgID := session.images[imgIdx].ID()
 		action := actionFn(i)
-		err := session.MarkImage(session.queue[i].ID(), action)
+		err := session.MarkImage(imgID, action)
 		require.NoError(t, err)
 	}
 }

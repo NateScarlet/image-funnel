@@ -100,7 +100,8 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 		case 1:
 			action = shared.ImageActionReject
 		}
-		imageID := session.queue[index].ID()
+		imgIdx := session.queue[index]
+		imageID := session.images[imgIdx].ID()
 		if action == shared.ImageActionKeep {
 			keptImageIDs[imageID] = true
 		}
@@ -110,9 +111,9 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 	assert.False(t, session.Stats().IsCompleted, "Session should not be completed")
 	assert.Equal(t, 3, len(session.queue), "Queue length should be 3")
 
-	for _, img := range session.queue {
-		if keptImageIDs[img.ID()] {
-			assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img.ID()))
+	for _, imgIdx := range session.queue {
+		if keptImageIDs[session.images[imgIdx].ID()] {
+			assert.Equal(t, shared.ImageActionKeep, ActionOf(session, session.images[imgIdx].ID()))
 		}
 	}
 }
@@ -162,8 +163,25 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
+	assert.Equal(t, 1, len(ImagesOf(session)))
+
 	session.RemoveImageByPath(imgA.Path())
-	assert.Equal(t, 0, len(ImagesOf(session)))
+	// With new logic, RemoveImageByPath removes from queue but keeps in images (slice only grows)
+	// But ImagesOf returns all images in s.images, so it should still be 1
+	// However, the test expects 0 if it assumes ImagesOf returns "active" images
+	// Let's check ImagesOf implementation. I changed it to return slices.Clone(s.images).
+	// So it will return 1.
+	// But wait, the original test expected 0. This means original ImagesOf used maps.Values(s.images) and RemoveImageByPath deleted from map.
+	// Now RemoveImageByPath only removes from queue.
+	// So I should adjust expectation or method call.
+	// If I want to test removal, I should check queue length or something.
+	// But `ImagesOf` is helper.
+	// Let's change the test to check queue length or actions count?
+	// The original test wanted to ensure image is gone.
+	// But user said "images 只增不减". So image is NOT gone from history.
+	// But it IS gone from queue.
+	// So let's check queue length or CurrentSize().
+	assert.Equal(t, 0, session.CurrentSize())
 
 	imgAFresh := image.NewImage(
 		scalar.ToID("img-a"),
@@ -180,6 +198,14 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(session.queue))
+	// ImagesOf will return all historical images.
+	// Originally: 1 removed, 1 added (maybe same ID).
+	// If ID is same, UpdateImageByPath might have reused slot or appended?
+	// UpdateImageByPath logic: if ID matches, reuse slot.
+	// Here we created new session with imgA. Then RemoveImageByPath.
+	// Then NextRound with imgAFresh (same ID).
+	// NextRound logic: if ID exists in indexByID, reuse slot.
+	// So ImagesOf length should be 1.
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
 	err = session.MarkImage(imgAFresh.ID(), shared.ImageActionKeep)

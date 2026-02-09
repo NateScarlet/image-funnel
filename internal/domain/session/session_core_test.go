@@ -43,7 +43,7 @@ func TestActions_ShouldOnlyReturnMarkedImages(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
 	// Mark only one image
-	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	err := session.MarkImage(session.images[session.queue[0]].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	count := 0

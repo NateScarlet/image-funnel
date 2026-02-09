@@ -20,6 +20,9 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 
 	// Create session
 	sess := NewSession(scalar.ToID("sessSort"), scalar.ToID("dir1"), nil, 1, images)
+	// NewSession internally creates indices.
+	// But in this test, images have IDs "img1", "img2" etc.
+	// MarkImage uses ID lookup.
 
 	// Helper to mark with duration
 	mark := func(id scalar.ID, durationMs int64) {
@@ -45,9 +48,9 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 
 	// Expect order: img2 (1s), img3 (2s), img1 (3s)
 	// Last processed was img3. First in sort is img2. No swap.
-	assert.Equal(t, scalar.ToID("img2"), sess.queue[0].ID())
-	assert.Equal(t, scalar.ToID("img3"), sess.queue[1].ID())
-	assert.Equal(t, scalar.ToID("img1"), sess.queue[2].ID())
+	assert.Equal(t, scalar.ToID("img2"), sess.images[sess.queue[0]].ID())
+	assert.Equal(t, scalar.ToID("img3"), sess.images[sess.queue[1]].ID())
+	assert.Equal(t, scalar.ToID("img1"), sess.images[sess.queue[2]].ID())
 }
 
 func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
@@ -108,7 +111,7 @@ func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
 	require.Equal(t, 1, sess.currentRound)
 	require.Equal(t, 3, len(sess.queue))
 
-	assert.Equal(t, scalar.ToID("img3"), sess.queue[0].ID(), "First image should be img3 (swapped)")
-	assert.Equal(t, scalar.ToID("img2"), sess.queue[1].ID(), "Second image should be img2 (swapped)")
-	assert.Equal(t, scalar.ToID("img1"), sess.queue[2].ID(), "Third image should be img1")
+	assert.Equal(t, scalar.ToID("img3"), sess.images[sess.queue[0]].ID(), "First image should be img3 (swapped)")
+	assert.Equal(t, scalar.ToID("img2"), sess.images[sess.queue[1]].ID(), "Second image should be img2 (swapped)")
+	assert.Equal(t, scalar.ToID("img1"), sess.images[sess.queue[2]].ID(), "Third image should be img1")
 }

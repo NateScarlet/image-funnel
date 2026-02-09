@@ -26,8 +26,11 @@ type Session struct {
 	createdAt   time.Time            // 会话创建时间
 	updatedAt   time.Time            // 会话最后更新时间
 
-	queue      []*image.Image                   // 当前待处理的图片队列
-	images     map[scalar.ID]*image.Image       // 会话中所有历史图片
+	images      []*image.Image    // 会话所有图片集合（只增不减，引用稳定）
+	indexByID   map[scalar.ID]int // ID -> images索引映射
+	indexByPath map[string]int    // Path -> images索引映射（最新版本）
+	queue       []int             // 待处理队列（存储 images 索引）
+
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []func()                         // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
@@ -48,10 +51,16 @@ type Session struct {
 // - images: 待处理的图片集合
 func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
-	imagesMap := make(map[scalar.ID]*image.Image)
-	for _, img := range images {
-		imagesMap[img.ID()] = img
+	indexByID := make(map[scalar.ID]int, len(images))
+	indexByPath := make(map[string]int, len(images))
+	queue := make([]int, len(images))
+
+	for i, img := range images {
+		indexByID[img.ID()] = i
+		indexByPath[img.Path()] = i
+		queue[i] = i
 	}
+
 	return &Session{
 		id:           id,
 		directoryID:  directoryID,
@@ -59,8 +68,10 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 		targetKeep:   targetKeep,
 		createdAt:    time.Now(),
 		updatedAt:    time.Now(),
-		queue:        images,
-		images:       imagesMap,
+		images:       images,
+		indexByID:    indexByID,
+		indexByPath:  indexByPath,
+		queue:        queue,
 		currentIdx:   0,
 		undoStack:    make([]func(), 0),
 		actions:      actions,

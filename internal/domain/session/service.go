@@ -217,10 +217,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 	// 2. 批量更新内存状态
 	// 此时 Actions() 的锁已释放，可以安全请求写锁
 	if len(updatedImages) > 0 {
-		for _, img := range updatedImages {
-			// 强制更新内存中的图片状态，忽略过滤器（参数 matchesFilter=true）
-			session.UpdateImageByPath(img, true)
-		}
+		session.BatchUpdateImages(updatedImages)
 	}
 
 	if err := s.sessionRepo.Save(session); err != nil {

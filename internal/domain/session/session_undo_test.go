@@ -12,7 +12,7 @@ import (
 func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
-	imageID := session.queue[0].ID()
+	imageID := session.images[session.queue[0]].ID()
 	err := session.MarkImage(imageID, shared.ImageActionKeep)
 	require.NoError(t, err)
 
@@ -22,7 +22,7 @@ func TestUndo_ShouldRestorePreviousAction(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0")
-	assert.True(t, ActionOf(session, session.queue[0].ID()).IsZero(), "Action should be restored to zero (Pending)")
+	assert.True(t, ActionOf(session, session.images[session.queue[0]].ID()).IsZero(), "Action should be restored to zero (Pending)")
 	assert.False(t, session.CanUndo(), "CanUndo should be false after undo")
 }
 
@@ -92,13 +92,13 @@ func TestUndo_ShouldRestoreToPreviousRound(t *testing.T) {
 	assert.Equal(t, 3, len(session.queue), "Queue should have 3 images for second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 for second round")
 
-	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	err := session.MarkImage(session.images[session.queue[0]].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	err = session.Undo()
 	require.NoError(t, err)
 
-	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, session.queue[0].ID()), "Action should be restored to KEEP (from previous round) after undo in second round")
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, session.images[session.queue[0]].ID()), "Action should be restored to KEEP (from previous round) after undo in second round")
 	assert.Equal(t, 0, session.CurrentIndex(), "CurrentIndex should be 0 after undo")
 }
 
@@ -141,14 +141,14 @@ func TestUndo_ShouldHandleNoMoreUndoActions(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.False(t, session.Stats().IsCompleted, "Session should not be completed after undo")
-	assert.True(t, ActionOf(session, session.queue[9].ID()).IsZero(), "Last image action should be restored to zero (Pending)")
+	assert.True(t, ActionOf(session, session.images[session.queue[9]].ID()).IsZero(), "Last image action should be restored to zero (Pending)")
 }
 
 func TestUndo_CrossRoundToBeginning(t *testing.T) {
 	session := setupTestSession(t, 2, 1)
 
-	img0ID := session.queue[0].ID()
-	img1ID := session.queue[1].ID()
+	img0ID := session.images[session.queue[0]].ID()
+	img1ID := session.images[session.queue[1]].ID()
 
 	err := session.MarkImage(img0ID, shared.ImageActionKeep)
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestUndo_CrossRoundToBeginning(t *testing.T) {
 
 func TestUndo_ShouldRestoreIndex_WhenRemarking(t *testing.T) {
 	session := setupTestSession(t, 2, 1)
-	img0ID := session.queue[0].ID()
+	img0ID := session.images[session.queue[0]].ID()
 
 	err := session.MarkImage(img0ID, shared.ImageActionKeep)
 	require.NoError(t, err)
@@ -200,15 +200,20 @@ func TestUndo_AfterUpdateAndNextRound(t *testing.T) {
 	session := setupTestSession(t, 5, 2)
 	assert.Equal(t, 0, session.currentRound)
 
-	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	err := session.MarkImage(session.images[session.queue[0]].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
-	err = session.MarkImage(session.queue[1].ID(), shared.ImageActionKeep)
+	err = session.MarkImage(session.images[session.queue[1]].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, session.currentIdx)
 
-	err = session.NextRound(nil, session.queue)
+	// Manually construct image slice from queue indices
+	imgs := make([]*image.Image, len(session.queue))
+	for i, idx := range session.queue {
+		imgs[i] = session.images[idx]
+	}
+	err = session.NextRound(nil, imgs)
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, session.currentRound)
@@ -225,7 +230,7 @@ func TestUndo_ShouldRestoreFilter_WhenUndoNextRound(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 	initialFilter := session.Filter()
 
-	err := session.MarkImage(session.queue[0].ID(), shared.ImageActionKeep)
+	err := session.MarkImage(session.images[session.queue[0]].ID(), shared.ImageActionKeep)
 	require.NoError(t, err)
 
 	newFilter := &shared.ImageFilters{Rating: []int{5}}

@@ -75,7 +75,10 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	// 之后过滤器变更为只显示 rating=0 的图片，导致 img2 变得不可见。
 	// 此时提交应仍然包含 img2 的修改。）
 	sess.mu.Lock()
-	sess.images[img2.ID()] = img2
+	sess.images = append(sess.images, img2)
+	idx := len(sess.images) - 1
+	sess.indexByID[img2.ID()] = idx
+	sess.indexByPath[img2.Path()] = idx
 	sess.actions[img2.ID()] = shared.ImageActionKeep
 	sess.mu.Unlock()
 
@@ -169,7 +172,8 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	// After verify that disk is written, the in-memory image should also reflect the new rating
 	// because we want the state to be consistent even before file watcher triggers.
 	sess.mu.RLock()
-	inMemImg := sess.images[img1.ID()]
+	idx := sess.indexByID[img1.ID()]
+	inMemImg := sess.images[idx]
 	sess.mu.RUnlock()
 
 	// This should fail currently
