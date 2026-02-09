@@ -54,8 +54,8 @@ export function useSessionConfig(
       presets.value[0]?.targetKeep ??
       0,
     set: (v) => {
-      targetKeepBuffer.value = v;
       ratingBuffer.value = rating.value; // 自定义时，固定当前值
+      targetKeepBuffer.value = v;
     },
   });
 
@@ -67,8 +67,8 @@ export function useSessionConfig(
       presets.value[0]?.filter.rating ??
       [],
     set: (v) => {
-      ratingBuffer.value = v;
       targetKeepBuffer.value = targetKeep.value; // 自定义时，固定当前值
+      ratingBuffer.value = v;
     },
   });
 
