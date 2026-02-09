@@ -222,7 +222,7 @@ useAsyncTask({
     ];
   },
   async task(urls, ctx) {
-    const concurrency = 3;
+    const concurrency = 8;
     const queue = [...urls];
 
     const worker = async () => {
