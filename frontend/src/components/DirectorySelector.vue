@@ -58,7 +58,7 @@
       <div v-if="items.length > 5" class="mb-4">
         <input
           v-model="searchQuery"
-          type="text"
+          type="search"
           class="w-full bg-primary-800 text-primary-100 border border-primary-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-secondary-500 placeholder-primary-500 transition-colors"
           placeholder="搜索目录..."
         />
@@ -162,7 +162,17 @@ const items = computed(() => {
   );
 });
 
-const searchQuery = ref("");
+const searchState = ref({ query: "", directoryId: "" });
+
+const searchQuery = computed({
+  get: () =>
+    searchState.value.directoryId === (currentDirectory?.id ?? "")
+      ? searchState.value.query
+      : "",
+  set: (val: string) => {
+    searchState.value = { query: val, directoryId: currentDirectory?.id ?? "" };
+  },
+});
 
 const filteredItems = computed(() => {
   const matcher = new ExactSearchMatcher(searchQuery.value);
