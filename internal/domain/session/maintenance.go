@@ -7,20 +7,20 @@ import (
 
 // #region 维护方法
 
-// UpdateImageByPath 根据路径更新图片信息
-func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
+// UpdateImage 根据路径更新图片信息
+func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// 从 map 中获取索引
 	idx, ok := s.indexByPath[img.Path()]
-	var oldIndex = -1      // 在 queue 中的索引
+	var oldQueueIndex = -1 // 在 queue 中的索引
 	var oldImageIndex = -1 // 在 images 中的索引
 
 	// 在 queue 中查找匹配该路径的图片
 	for i, imgIndex := range s.queue {
 		if s.images[imgIndex].Path() == img.Path() {
-			oldIndex = i
+			oldQueueIndex = i
 			oldImageIndex = imgIndex
 			break
 		}
@@ -34,7 +34,7 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 	// 如果原本不在会话中（既不在 queue 也不在 history）
 	if oldImageIndex == -1 {
 		if matchesFilter {
-			s.addFilteredImageLocked(img)
+			s.unsafeAddFilteredImage(img)
 			return true
 		}
 		return false
@@ -42,7 +42,7 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 
 	// 如果不匹配过滤器，从 queue 中移除
 	if !matchesFilter {
-		return s.removeImageByPathLocked(img.Path())
+		return s.unsafeRemoveImageByPath(img.Path())
 	}
 
 	// 匹配过滤器，执行更新
@@ -67,8 +67,8 @@ func (s *Session) UpdateImageByPath(img *image.Image, matchesFilter bool) bool {
 		}
 
 		// 更新 queue 指向新图片
-		if oldIndex != -1 {
-			s.queue[oldIndex] = newImageIndex
+		if oldQueueIndex != -1 {
+			s.queue[oldQueueIndex] = newImageIndex
 		}
 	}
 
@@ -113,10 +113,10 @@ func (s *Session) BatchUpdateImages(images []*image.Image) {
 func (s *Session) RemoveImageByPath(path string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.removeImageByPathLocked(path)
+	return s.unsafeRemoveImageByPath(path)
 }
 
-func (s *Session) removeImageByPathLocked(path string) bool {
+func (s *Session) unsafeRemoveImageByPath(path string) bool {
 	var targetIndex = -1
 
 	// 查找 queue 中的索引
@@ -143,7 +143,7 @@ func (s *Session) removeImageByPathLocked(path string) bool {
 	return true
 }
 
-func (s *Session) addFilteredImageLocked(img *image.Image) error {
+func (s *Session) unsafeAddFilteredImage(img *image.Image) error {
 	// 检查 ID 是否已存在
 	if idx, ok := s.indexByID[img.ID()]; ok {
 		// 只是更新引用，不添加到队列

@@ -99,7 +99,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		if img != nil {
 			// 创建或更新
 			filterFunc := image.BuildImageFilter(sess.Filter())
-			changed = sess.UpdateImageByPath(img, filterFunc(img))
+			changed = sess.UpdateImage(img, filterFunc(img))
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）
 			changed = sess.RemoveImageByPath(filepath.Join(s.rootDir, e.RelPath))
