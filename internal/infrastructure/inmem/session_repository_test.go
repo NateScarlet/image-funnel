@@ -1,6 +1,7 @@
 package inmem
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -24,29 +25,33 @@ func TestSave(t *testing.T) {
 
 	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess := session.NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
-	err := repo.Save(sess)
+	release, err := repo.Create(sess)
 	require.NoError(t, err)
+	release() // 先释放 Create 的锁
 
-	_, err = repo.Get(sess.ID())
+	_, release2, err := repo.Acquire(context.Background(), sess.ID())
 	require.NoError(t, err)
+	release2()
 }
 
-func TestGet(t *testing.T) {
+func TestAcquire(t *testing.T) {
 	repo := NewSessionRepository()
 
 	img := image.NewImage(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", 1000, time.Now(), nil, 1920, 1080)
 	sess := session.NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
-	err := repo.Save(sess)
+	release1, err := repo.Create(sess)
 	require.NoError(t, err)
+	release1() // 先释放 Create 的锁
 
-	found, err := repo.Get(sess.ID())
+	found, release, err := repo.Acquire(context.Background(), sess.ID())
 	require.NoError(t, err)
 	assert.Equal(t, sess.ID(), found.ID())
+	release()
 }
 
-func TestGet_NotFound(t *testing.T) {
+func TestAcquire_NotFound(t *testing.T) {
 	repo := NewSessionRepository()
 
-	_, err := repo.Get(scalar.ToID("non-existent-id"))
+	_, _, err := repo.Acquire(context.Background(), scalar.ToID("non-existent-id"))
 	require.Error(t, err)
 }

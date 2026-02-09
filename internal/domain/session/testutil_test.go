@@ -23,15 +23,11 @@ import (
 
 // ActionOf returns the actual status of an image in the session (zero value = Pending/Unprocessed).
 func ActionOf(s *Session, id scalar.ID) shared.ImageAction {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.actions[id]
 }
 
 // ImagesOf returns all images currently tracked by the session.
 func ImagesOf(s *Session) []*image.Image {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return slices.Clone(s.images)
 }
 
@@ -129,9 +125,16 @@ func NewFakeSessionRepo() *FakeSessionRepo {
 	}
 }
 
-func (f *FakeSessionRepo) Save(s *Session) error {
+func (f *FakeSessionRepo) Create(s *Session) (func(), error) {
 	f.Sessions[s.ID()] = s
-	return nil
+	return func() {}, nil
+}
+
+func (f *FakeSessionRepo) Acquire(ctx context.Context, id scalar.ID) (*Session, func(), error) {
+	if s, ok := f.Sessions[id]; ok {
+		return s, func() {}, nil
+	}
+	return nil, nil, errors.New("not found")
 }
 
 func (f *FakeSessionRepo) Get(id scalar.ID) (*Session, error) {
@@ -141,11 +144,11 @@ func (f *FakeSessionRepo) Get(id scalar.ID) (*Session, error) {
 	return nil, errors.New("not found")
 }
 
-func (f *FakeSessionRepo) FindByDirectory(directoryID scalar.ID) iter.Seq2[*Session, error] {
-	return func(yield func(*Session, error) bool) {
+func (f *FakeSessionRepo) FindByDirectory(directoryID scalar.ID) iter.Seq2[scalar.ID, error] {
+	return func(yield func(scalar.ID, error) bool) {
 		for _, s := range f.Sessions {
 			if s.DirectoryID() == directoryID {
-				if !yield(s, nil) {
+				if !yield(s.ID(), nil) {
 					return
 				}
 			}

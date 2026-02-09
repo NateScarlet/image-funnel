@@ -5,16 +5,8 @@ import (
 	"main/internal/shared"
 )
 
+// Stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
 func (s *Session) Stats() *shared.StatsDTO {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.stats()
-}
-
-// stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
-//
-// 注意：此方法是内部方法，不进行并发控制，调用者需要自行保证线程安全
-func (s *Session) stats() *shared.StatsDTO {
 	var stats shared.StatsDTO
 	stats.Total = len(s.queue)
 	stats.Remaining = len(s.queue) - s.currentIdx

@@ -91,9 +91,17 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		}
 	}
 
-	for sess, err := range s.sessionRepo.FindByDirectory(e.DirectoryID) {
+	for sessionID, err := range s.sessionRepo.FindByDirectory(e.DirectoryID) {
 		if err != nil {
 			return err
+		}
+
+		sess, release, err := s.sessionRepo.Acquire(ctx, sessionID)
+		if err != nil {
+			s.logger.Error("failed to take ownership of session",
+				zap.Stringer("sessionID", sessionID),
+				zap.Error(err))
+			continue
 		}
 
 		changed := false
@@ -107,14 +115,10 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		}
 
 		if changed {
-			if err := s.sessionRepo.Save(sess); err != nil {
-				s.logger.Error("failed to save session",
-					zap.Stringer("sessionID", sess.ID()),
-					zap.Error(err))
-				continue
-			}
 			s.sessionSaved.Publish(ctx, sess)
 		}
+
+		release()
 	}
 
 	return nil
@@ -147,9 +151,6 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, error) {
 	var errs []error
 	var successCount int
-
-	// 获取写锁，在迭代过程中直接更新
-	session.mu.Lock()
 
 	// 遍历所有有 action 的图片
 	for imgID, action := range session.actions {
@@ -227,13 +228,6 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	session.updatedAt = time.Now()
 
-	// 释放锁，因为 Save 和 Publish 可能需要读取 session 的字段
-	session.mu.Unlock()
-
-	if err := s.sessionRepo.Save(session); err != nil {
-		errs = append(errs, err)
-	}
-
 	s.sessionSaved.Publish(ctx, session)
 
 	return successCount, errors.Join(errs...)
@@ -242,10 +236,11 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 // Update 更新会话配置
 // 使用 Options 模式支持灵活的更新选项
 func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOption) error {
-	sess, err := s.sessionRepo.Get(id)
+	sess, release, err := s.sessionRepo.Acquire(ctx, id)
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	opts := &UpdateOptions{}
 	for _, opt := range options {
@@ -280,10 +275,6 @@ func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOpt
 		}
 	}
 
-	if err := s.sessionRepo.Save(sess); err != nil {
-		return err
-	}
-
 	s.sessionSaved.Publish(ctx, sess)
 	return nil
 }
@@ -308,30 +299,31 @@ func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.I
 	}
 
 	sess := NewSession(id, directoryID, filter, targetKeep, filteredImages)
-	if err := s.sessionRepo.Save(sess); err != nil {
+	release, err := s.sessionRepo.Create(sess)
+	if err != nil {
 		return err
 	}
+	defer release()
+
 	s.sessionSaved.Publish(ctx, sess)
 	return nil
 }
 
-// Get 根据 ID 获取会话
-func (s *Service) Get(id scalar.ID) (*Session, error) {
-	return s.sessionRepo.Get(id)
+// Acquire 获取会话并锁定
+// 调用者必须在处理完成后调用返回的函数释放资源。
+func (s *Service) Acquire(ctx context.Context, id scalar.ID) (*Session, func(), error) {
+	return s.sessionRepo.Acquire(ctx, id)
 }
 
 // MarkImage 标记图片并保存
 func (s *Service) MarkImage(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
-	sess, err := s.sessionRepo.Get(sessionID)
+	sess, release, err := s.sessionRepo.Acquire(ctx, sessionID)
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	if err := sess.MarkImage(imageID, action, options...); err != nil {
-		return err
-	}
-
-	if err := s.sessionRepo.Save(sess); err != nil {
 		return err
 	}
 
@@ -341,16 +333,13 @@ func (s *Service) MarkImage(ctx context.Context, sessionID scalar.ID, imageID sc
 
 // Undo 撤销操作并保存
 func (s *Service) Undo(ctx context.Context, sessionID scalar.ID) error {
-	sess, err := s.sessionRepo.Get(sessionID)
+	sess, release, err := s.sessionRepo.Acquire(ctx, sessionID)
 	if err != nil {
 		return err
 	}
+	defer release()
 
 	if err := sess.Undo(); err != nil {
-		return err
-	}
-
-	if err := s.sessionRepo.Save(sess); err != nil {
 		return err
 	}
 

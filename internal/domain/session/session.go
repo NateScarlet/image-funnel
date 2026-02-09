@@ -6,7 +6,6 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"sync"
 	"time"
 )
 
@@ -37,8 +36,6 @@ type Session struct {
 	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
 	currentRound int // 当前筛选轮次
-
-	mu sync.RWMutex // 读写互斥锁，用于并发安全访问
 }
 
 // NewSession 创建一个新的图片筛选会话
@@ -81,46 +78,31 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 }
 
 func (s *Session) ID() scalar.ID {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.id
 }
 
 func (s *Session) DirectoryID() scalar.ID {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.directoryID
 }
 
 func (s *Session) Filter() *shared.ImageFilters {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.filter
 }
 
 func (s *Session) TargetKeep() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.targetKeep
 }
 
 func (s *Session) CreatedAt() time.Time {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.createdAt
 }
 
 func (s *Session) UpdatedAt() time.Time {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.updatedAt
 }
 
 func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 	return func(yield func(*image.Image, shared.ImageAction) bool) {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-
 		for _, img := range s.images {
 			if action, ok := s.actions[img.ID()]; ok {
 				if !yield(img, action) {

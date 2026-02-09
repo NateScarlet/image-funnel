@@ -1,6 +1,7 @@
 package inmem
 
 import (
+	"context"
 	"iter"
 	"sort"
 	"sync"
@@ -18,8 +19,16 @@ const (
 	maxSessionIdleTime = 24 * time.Hour
 )
 
+// sessionOwnership 表示一个 Session 的所有权控制
+type sessionOwnership struct {
+	session *session.Session
+	// token 信号通道，缓冲为1
+	// 谁拿到信号谁就拥有所有权，用完后放回信号
+	token chan struct{}
+}
+
 type SessionRepository struct {
-	sessions        map[scalar.ID]*session.Session
+	sessions        map[scalar.ID]*sessionOwnership
 	dirIndex        map[scalar.ID][]scalar.ID
 	mu              sync.RWMutex
 	nextCleanupTime time.Time
@@ -27,56 +36,87 @@ type SessionRepository struct {
 
 func NewSessionRepository() *SessionRepository {
 	return &SessionRepository{
-		sessions: make(map[scalar.ID]*session.Session),
+		sessions: make(map[scalar.ID]*sessionOwnership),
 		dirIndex: make(map[scalar.ID][]scalar.ID),
 	}
 }
 
-func (r *SessionRepository) Save(sess *session.Session) error {
+// Acquire 获取 Session 的独占访问权
+// 阻塞直到拿到信号token
+func (r *SessionRepository) Acquire(ctx context.Context, id scalar.ID) (*session.Session, func(), error) {
+	r.mu.RLock()
+	ownership, exists := r.sessions[id]
+	r.mu.RUnlock()
+
+	if !exists {
+		return nil, nil, apperror.NewErrDocumentNotFound(id)
+	}
+
+	// 等待获取 token
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case <-ownership.token:
+		// 拿到 token，获得所有权
+	}
+
+	// 创建释放函数，放回 token
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			ownership.token <- struct{}{}
+		})
+	}
+
+	return ownership.session, release, nil
+}
+
+// Create 创建新 Session 并返回释放函数
+// 调用者在创建后可能需要继续操作，因此持有锁直到调用 release
+func (r *SessionRepository) Create(sess *session.Session) (func(), error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Check if update or new
-	_, exists := r.sessions[sess.ID()]
-	r.sessions[sess.ID()] = sess
-
-	// Update directory index if new
-	if !exists {
-		dirID := sess.DirectoryID()
-		// Simple append, assuming no duplicates because we check 'exists' in sessions
-		r.dirIndex[dirID] = append(r.dirIndex[dirID], sess.ID())
-	} else {
-		// If directory ID could change, we would need to handle that, but typically it doesn't.
-		// If it did, we'd need to remove from old and add to new.
-		// For now assuming DirectoryID is immutable for a session as per domain logic usually.
+	id := sess.ID()
+	if _, exists := r.sessions[id]; exists {
+		return nil, apperror.New("SESSION_ALREADY_EXISTS", "session already exists: "+id.String(), "会话已存在")
 	}
+
+	// 创建新的 ownership，初始化 token（但不放入信号，因为创建者持有）
+	token := make(chan struct{}, 1)
+
+	r.sessions[id] = &sessionOwnership{
+		session: sess,
+		token:   token,
+	}
+
+	// 更新目录索引
+	dirID := sess.DirectoryID()
+	r.dirIndex[dirID] = append(r.dirIndex[dirID], id)
 
 	// 触发清理机制
 	r.cleanup()
-	return nil
-}
 
-func (r *SessionRepository) Get(id scalar.ID) (*session.Session, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	sess, exists := r.sessions[id]
-	if !exists {
-		return nil, apperror.NewErrDocumentNotFound(id)
+	// 返回释放函数
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			token <- struct{}{}
+		})
 	}
-	return sess, nil
+
+	return release, nil
 }
 
-func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[*session.Session, error] {
-	return func(yield func(*session.Session, error) bool) {
+func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[scalar.ID, error] {
+	return func(yield func(scalar.ID, error) bool) {
 		r.mu.RLock()
-		var s []*session.Session // 复制避免迭代过程中保存导致死锁
-		for _, i := range r.dirIndex[directoryID] {
-			s = append(s, r.sessions[i])
-		}
+		ids := make([]scalar.ID, len(r.dirIndex[directoryID]))
+		copy(ids, r.dirIndex[directoryID])
 		r.mu.RUnlock()
 
-		for _, sess := range s {
-			if !yield(sess, nil) {
+		for _, id := range ids {
+			if !yield(id, nil) {
 				return
 			}
 		}
@@ -95,49 +135,67 @@ func (r *SessionRepository) cleanup() {
 	total := len(r.sessions)
 	if total <= minRetainedSessions {
 		// 如果未达到最小保留数，无需清理
-		// 下一次清理至少要等到有新的会话加入，或者现有会话过期（虽然不会被删除）
-		// 但为了简单，这里不设置具体时间，等待下次 Save 触发判断即可
-		// 或者可以设置一个较长的间隔，防止在此期间频繁调用（虽然目前只在 Save 调用）
 		return
 	}
 
 	threshold := now.Add(-maxSessionIdleTime)
 
-	var expired []*session.Session
+	var candidates []*sessionOwnership
 	var oldestActiveTime time.Time
 
-	for _, s := range r.sessions {
-		updatedAt := s.UpdatedAt()
-		if !updatedAt.After(threshold) {
-			expired = append(expired, s)
-		} else {
-			// 记录活跃会话中最早的更新时间，它将是下一个可能过期的会话
-			if oldestActiveTime.IsZero() || updatedAt.Before(oldestActiveTime) {
-				oldestActiveTime = updatedAt
+	for _, ownership := range r.sessions {
+		select {
+		case <-ownership.token:
+			// 成功获取 token，说明当前没有人在使用，可以安全读取 session 状态
+			sess := ownership.session
+			updatedAt := sess.UpdatedAt()
+			if !updatedAt.After(threshold) {
+				// 已过期，加入候选列表（注意：此时我们仍持有其 token）
+				candidates = append(candidates, ownership)
+			} else {
+				// 未过期，放回 token
+				ownership.token <- struct{}{}
+				// 记录活跃会话中最早的更新时间，用于计算下次清理时间
+				if oldestActiveTime.IsZero() || updatedAt.Before(oldestActiveTime) {
+					oldestActiveTime = updatedAt
+				}
 			}
+		default:
+			// 获取失败，说明有人正在使用。
+			// 这种情况下我们不能访问 session.UpdatedAt() 以避免数据竞态。
+			// 既然它正在被使用，它肯定不是目前最老且需要清理的闲置会话。
 		}
 	}
 
-	// 按时间倒序排序（最新的在前），这样 slice 的末尾就是最老的
-	sort.Slice(expired, func(i, j int) bool {
-		return expired[i].UpdatedAt().After(expired[j].UpdatedAt())
+	// 按时间从旧到新排序（最老的在最后，方便使用 slice 操作）
+	// candidates 中的所有会话目前都被本协程锁定，因此访问其 UpdatedAt 是安全的
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].session.UpdatedAt().After(candidates[j].session.UpdatedAt())
 	})
 
-	// 只要总数超标且还有过期会话，就从最老的开始删
-	for len(r.sessions) > minRetainedSessions && len(expired) > 0 {
-		var oldest = expired[len(expired)-1]
-		expired = expired[:len(expired)-1]
-		delete(r.sessions, oldest.ID())
+	// 只要总数超标且还有候选会话，就从最老的开始删
+	for len(r.sessions) > minRetainedSessions && len(candidates) > 0 {
+		var oldest = candidates[len(candidates)-1]
+		candidates = candidates[:len(candidates)-1]
+		delete(r.sessions, oldest.session.ID())
+		// 虽然会话被删除了，但必须放回 token
+		// 这样如果有人刚好在 Acquire 中拿到了该 ownership 引用，他们可以正常结束而不是永久阻塞
+		oldest.token <- struct{}{}
+	}
+
+	// 对于没有被删除的候选会话，必须放回 token
+	for _, ownership := range candidates {
+		updatedAt := ownership.session.UpdatedAt()
+		if oldestActiveTime.IsZero() || updatedAt.Before(oldestActiveTime) {
+			oldestActiveTime = updatedAt
+		}
+		ownership.token <- struct{}{}
 	}
 
 	// 计算下一次清理时间
-	// 如果还有剩余的会话（包括保留的过期会话和活跃会话）
-	// 下一次清理时间应该是：最老的活跃会话变成过期的时间
 	if !oldestActiveTime.IsZero() {
 		r.nextCleanupTime = oldestActiveTime.Add(maxSessionIdleTime)
 	} else {
-		// 如果没有活跃会话了（全是保留的过期会话），则暂时不需要因为时间原因清理
-		// 重置为一个较远的未来，直到有新会话进来更新状态
 		r.nextCleanupTime = time.Time{}
 	}
 }

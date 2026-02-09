@@ -5,16 +5,8 @@ import (
 	"time"
 )
 
-// UpdateImage 根据路径更新图片信息
+// UpdateImage 更新会话中的图片信息
 func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.unsafeUpdateImage(img, matchesFilter)
-}
-
-// unsafeUpdateImage 无锁版本的图片更新逻辑
-// 调用者必须持有写锁
-func (s *Session) unsafeUpdateImage(img *image.Image, matchesFilter bool) bool {
 	// 从 map 中获取索引
 	idx, ok := s.indexByPath[img.Path()]
 	var oldQueueIndex = -1 // 在 queue 中的索引
@@ -37,7 +29,7 @@ func (s *Session) unsafeUpdateImage(img *image.Image, matchesFilter bool) bool {
 	// 如果原本不在会话中（既不在 queue 也不在 history）
 	if oldImageIndex == -1 {
 		if matchesFilter {
-			s.unsafeAddFilteredImage(img)
+			s.addFilteredImage(img)
 			return true
 		}
 		return false
@@ -45,7 +37,7 @@ func (s *Session) unsafeUpdateImage(img *image.Image, matchesFilter bool) bool {
 
 	// 如果不匹配过滤器，从 queue 中移除
 	if !matchesFilter {
-		return s.unsafeRemoveImageByPath(img.Path())
+		return s.RemoveImageByPath(img.Path())
 	}
 
 	// 匹配过滤器，执行更新
@@ -81,12 +73,6 @@ func (s *Session) unsafeUpdateImage(img *image.Image, matchesFilter bool) bool {
 
 // RemoveImageByPath 根据路径从会话中移除图片
 func (s *Session) RemoveImageByPath(path string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.unsafeRemoveImageByPath(path)
-}
-
-func (s *Session) unsafeRemoveImageByPath(path string) bool {
 	var targetIndex = -1
 
 	// 查找 queue 中的索引
@@ -113,7 +99,7 @@ func (s *Session) unsafeRemoveImageByPath(path string) bool {
 	return true
 }
 
-func (s *Session) unsafeAddFilteredImage(img *image.Image) error {
+func (s *Session) addFilteredImage(img *image.Image) error {
 	// 检查 ID 是否已存在
 	if idx, ok := s.indexByID[img.ID()]; ok {
 		// 只是更新引用，不添加到队列

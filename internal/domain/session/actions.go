@@ -11,8 +11,6 @@ import (
 
 // CurrentImage 返回当前正在处理的图片
 func (s *Session) CurrentImage() *image.Image {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if s.currentIdx < len(s.queue) {
 		return s.images[s.queue[s.currentIdx]]
 	}
@@ -24,8 +22,6 @@ func (s *Session) NextImages(count int) []*image.Image {
 	if count == 0 {
 		return nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	if count < 0 {
 		// 返回所有
 		indices := s.queue[s.currentIdx+1:]
@@ -54,8 +50,6 @@ func (s *Session) NextImages(count int) []*image.Image {
 
 // KeptImages 返回所有已被标记为保留的图片
 func (s *Session) KeptImages(limit, offset int) []*image.Image {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
 	var kept []*image.Image
 	for _, img := range s.images {
@@ -85,22 +79,16 @@ func (s *Session) KeptImages(limit, offset int) []*image.Image {
 
 // CurrentIndex 返回当前处理图片的索引
 func (s *Session) CurrentIndex() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.currentIdx
 }
 
 // CurrentSize 返回当前队列的总图片数量
 func (s *Session) CurrentSize() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return len(s.queue)
 }
 
 // UpdateTargetKeep 更新会话的目标保留数量
 func (s *Session) UpdateTargetKeep(targetKeep int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.targetKeep = targetKeep
 	s.updatedAt = time.Now()
@@ -108,11 +96,11 @@ func (s *Session) UpdateTargetKeep(targetKeep int) error {
 	return nil
 }
 
-// nextRound 开启新一轮筛选
+// NextRound 开启新一轮筛选
 // 参数：
 // - filter: 图片过滤器
 // - filteredImages: 新的筛选后图片队列
-func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
+func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
 
 	// 保存当前状态到撤销栈，以便撤销换轮操作
 	prevQueue := s.queue
@@ -185,22 +173,12 @@ func (s *Session) nextRound(filter *shared.ImageFilters, filteredImages []*image
 	return nil
 }
 
-// NextRound 开启新一轮筛选（带锁版本）
-// 用于外部直接调用，会自动获取和释放锁
-func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image.Image) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.nextRound(filter, filteredImages)
-}
-
 // CanCommit 判断会话是否可以提交
 //
 // 提交条件：
 // 1. 至少有一张图片已被处理
 // 2. 或者有图片被从队列中移除
 func (s *Session) CanCommit() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
 	return s.currentIdx > 0 || s.currentRound > 0
 }
@@ -211,8 +189,6 @@ func (s *Session) CanCommit() bool {
 // 1. 撤销栈不为空，或
 // 2. 存在历史轮次（支持跨轮撤销）
 func (s *Session) CanUndo() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return len(s.undoStack) > 0
 }
 
@@ -223,8 +199,6 @@ func (s *Session) CanUndo() bool {
 // - action: 要应用的操作状态
 // - options: 可选参数，如操作耗时
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	opts := shared.NewMarkImageOptions(options...)
 
@@ -275,7 +249,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	s.currentIdx++
 
 	if s.currentIdx >= len(s.queue) {
-		stats := s.stats()
+		stats := s.Stats()
 
 		if stats.Kept > s.targetKeep {
 			var newQueue []*image.Image
@@ -288,7 +262,7 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 			}
 
 			// 开启新一轮
-			if err := s.nextRound(nil, newQueue); err != nil {
+			if err := s.NextRound(nil, newQueue); err != nil {
 				return err
 			}
 		}
@@ -299,8 +273,6 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 
 // Undo 撤销上一次图片标记操作，恢复到之前的状态
 func (s *Session) Undo() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if len(s.undoStack) == 0 {
 		return ErrNothingToUndo

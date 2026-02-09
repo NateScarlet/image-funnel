@@ -152,10 +152,11 @@ func (h *Handler) Commit(
 		}
 	}()
 
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("session not found: %w", err)
 	}
+	defer release()
 
 	writeActions := &shared.WriteActions{
 		KeepRating:   keepRating,
@@ -166,19 +167,21 @@ func (h *Handler) Commit(
 }
 
 func (h *Handler) Session(ctx context.Context, sessionID scalar.ID) (*shared.SessionDTO, error) {
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	return h.dtoFactory.New(sess)
 }
 
 func (h *Handler) CurrentImage(ctx context.Context, sessionID scalar.ID) (*shared.ImageDTO, error) {
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	img := sess.CurrentImage()
 	if img == nil {
@@ -190,10 +193,11 @@ func (h *Handler) CurrentImage(ctx context.Context, sessionID scalar.ID) (*share
 }
 
 func (h *Handler) SessionStats(ctx context.Context, sessionID scalar.ID) (*shared.StatsDTO, error) {
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	return sess.Stats(), nil
 }
@@ -203,10 +207,11 @@ func (h *Handler) SubscribeSession(ctx context.Context) iter.Seq2[*shared.Sessio
 }
 
 func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int) ([]*shared.ImageDTO, error) {
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	images := sess.NextImages(count)
 	if len(images) == 0 {
@@ -226,10 +231,11 @@ func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int
 }
 
 func (h *Handler) KeptImages(ctx context.Context, sessionID scalar.ID, limit, offset int) ([]*shared.ImageDTO, error) {
-	sess, err := h.sessionService.Get(sessionID)
+	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 
 	images := sess.KeptImages(limit, offset)
 	if len(images) == 0 {

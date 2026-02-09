@@ -74,20 +74,16 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	// 但我们需要模拟一种场景：img2 在之前的轮次或过滤器下被标记了 KEEP，
 	// 之后过滤器变更为只显示 rating=0 的图片，导致 img2 变得不可见。
 	// 此时提交应仍然包含 img2 的修改。）
-	sess.mu.Lock()
 	sess.images = append(sess.images, img2)
 	idx := len(sess.images) - 1
 	sess.indexByID[img2.ID()] = idx
 	sess.indexByPath[img2.Path()] = idx
 	sess.actions[img2.ID()] = shared.ImageActionKeep
-	sess.mu.Unlock()
 
 	// 标记 img3 为 REJECT
 	// 注意：虽然使用 sess.MarkImage 更符合业务流程，但测试重点在于 Commit
 	// 对已有操作的处理，所以这里也采用直接修改内部状态的方式来确保测试条件精确。
-	sess.mu.Lock()
 	sess.actions[img3.ID()] = shared.ImageActionReject
-	sess.mu.Unlock()
 
 	writeActions := &shared.WriteActions{
 		KeepRating:   5,
@@ -171,10 +167,8 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	// Check Memory (This is where the bug is)
 	// After verify that disk is written, the in-memory image should also reflect the new rating
 	// because we want the state to be consistent even before file watcher triggers.
-	sess.mu.RLock()
 	idx := sess.indexByID[img1.ID()]
 	inMemImg := sess.images[idx]
-	sess.mu.RUnlock()
 
 	// This should fail currently
 	require.Equal(t, 5, inMemImg.Rating(), "In-memory image rating should be updated after commit")
