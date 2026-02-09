@@ -468,9 +468,9 @@ loop:
 
 	// Check if subscriber got an error on channel
 	select {
-	case v, ok := <-slowResults:
+	case _, ok := <-slowResults:
 		if ok {
-			received = append(received, v)
+			// ignore
 		}
 	default:
 	}

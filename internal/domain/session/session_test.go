@@ -73,7 +73,7 @@ func TestSession_KeptImages(t *testing.T) {
 
 	kept = session.KeptImages(10, 1)
 	require.Len(t, kept, 1)
-	assert.Equal(t, "c.jpg", kept[1-1].Filename())
+	assert.Equal(t, "c.jpg", kept[0].Filename())
 
 	kept = session.KeptImages(1, 1)
 	require.Len(t, kept, 1)

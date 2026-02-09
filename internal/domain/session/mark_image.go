@@ -29,7 +29,6 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 		found := false
 		for i, idx := range s.queue {
 			if s.images[idx].ID() == imageID {
-				currentImage = s.images[idx]
 				s.currentIdx = i
 				found = true
 				break

@@ -5,23 +5,8 @@
 package ring
 
 import (
-	"fmt"
 	"testing"
 )
-
-// For debugging - keep around.
-func dump(r *Ring[any]) {
-	if r == nil {
-		fmt.Println("empty")
-		return
-	}
-	i, n := 0, r.Len()
-	for p := r; i < n; p = p.next {
-		fmt.Printf("%4d: %p = {<- %p | %p ->}\n", i, p, p.prev, p.next)
-		i++
-	}
-	fmt.Println()
-}
 
 func verify(t *testing.T, r *Ring[any], N int, sum int) {
 	// Len

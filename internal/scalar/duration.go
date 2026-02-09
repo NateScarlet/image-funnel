@@ -242,7 +242,7 @@ func DurationFromFloat64Nano(v float64) Duration {
 	nano = addToDurationFloat64(d, nano, time.Minute)
 	nano = addToDurationFloat64(d, nano, time.Second)
 	nano = addToDurationFloat64(d, nano, time.Millisecond)
-	nano = addToDurationFloat64(d, nano, time.Nanosecond)
+	addToDurationFloat64(d, nano, time.Nanosecond)
 	return Duration{d.String(), v, *d}
 }
 
