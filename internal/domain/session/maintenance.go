@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// #region 维护方法
-
 // UpdateImage 根据路径更新图片信息
 func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	s.mu.Lock()
@@ -164,5 +162,3 @@ func (s *Session) unsafeAddFilteredImage(img *image.Image) error {
 
 	return nil
 }
-
-// #endregion
