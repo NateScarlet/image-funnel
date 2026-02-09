@@ -7,33 +7,30 @@ package graphql
 
 import (
 	"context"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
 // CommitChanges is the resolver for the commitChanges field.
 func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error) {
-	success, errors := r.app.Commit(
+	written, err := r.app.Commit(
 		ctx,
 		input.SessionID,
 		input.WriteActions.KeepRating,
 		input.WriteActions.ShelveRating,
 		input.WriteActions.RejectRating,
 	)
-
-	sess, err := r.app.Session(ctx, input.SessionID)
 	if err != nil {
-		return nil, err
+		graphql.AddError(ctx, err)
 	}
 
-	var errorStrings []string
-	for _, err := range errors {
-		errorStrings = append(errorStrings, err.Error())
+	sess, sessErr := r.app.Session(ctx, input.SessionID)
+	if sessErr != nil {
+		return nil, sessErr
 	}
 
 	return &CommitChangesPayload{
-		Success:          len(errors) == 0,
-		Written:          success,
-		Failed:           len(errors),
-		Errors:           errorStrings,
+		Written:          written,
 		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil

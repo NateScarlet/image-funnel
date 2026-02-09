@@ -1,9 +1,6 @@
 mutation CommitChanges($input: CommitChangesInput!) {
   commitChanges(input: $input) {
-    success
     written
-    failed
-    errors
     session {
       ...Session
     }

@@ -120,6 +120,8 @@ import {
 import { usePresets } from "../composables/usePresets";
 import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
+import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
+import { CombinedGraphQLErrors } from "@apollo/client";
 
 const {
   session,
@@ -187,7 +189,7 @@ async function commit() {
   committing.value = true;
 
   try {
-    const { data } = await mutate(CommitChangesDocument, {
+    const { data, error } = await mutate(CommitChangesDocument, {
       variables: {
         input: {
           sessionId: session.id,
@@ -198,12 +200,25 @@ async function commit() {
           },
         },
       },
+      errorPolicy: "all",
     });
 
-    if (data) {
-      commitResult.value = data.commitChanges;
+    let errors: string[] = [];
+    if (CombinedGraphQLErrors.is(error)) {
+      errors = error.errors.map(getGraphqlErrorMessage);
+    } else if (error) {
+      errors = [error.message];
+    }
 
-      if (data.commitChanges.success && data.commitChanges.failed === 0) {
+    if (data || errors.length > 0) {
+      commitResult.value = {
+        success: errors.length === 0,
+        written: data?.commitChanges.written ?? 0,
+        failed: errors.length,
+        errors,
+      };
+
+      if (commitResult.value.success) {
         setTimeout(() => {
           emit("committed");
         }, 500);

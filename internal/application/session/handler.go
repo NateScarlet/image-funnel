@@ -126,7 +126,7 @@ func (h *Handler) Commit(
 	keepRating int,
 	shelveRating int,
 	rejectRating int,
-) (success int, errors []error) {
+) (success int, err error) {
 	h.logger.Info("will commit session",
 		zap.Stringer("sessionID", sessionID),
 		zap.Int("keepRating", keepRating),
@@ -136,12 +136,12 @@ func (h *Handler) Commit(
 	startTime := time.Now()
 
 	defer func() {
-		if len(errors) > 0 {
+		if err != nil {
 			h.logger.Warn("did commit session",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Int("success", success),
-				zap.Int("errorCount", len(errors)),
+				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did commit session",
@@ -154,7 +154,7 @@ func (h *Handler) Commit(
 
 	sess, err := h.sessionService.Get(sessionID)
 	if err != nil {
-		return 0, []error{fmt.Errorf("session not found: %w", err)}
+		return 0, fmt.Errorf("session not found: %w", err)
 	}
 
 	writeActions := &shared.WriteActions{

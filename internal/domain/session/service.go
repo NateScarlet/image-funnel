@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
@@ -142,7 +143,7 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 	}
 }
 
-func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, []error) {
+func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, error) {
 	var errs []error
 	var successCount int
 	var updatedImages []*image.Image
@@ -228,7 +229,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	s.sessionSaved.Publish(ctx, session)
 
-	return successCount, errs
+	return successCount, errors.Join(errs...)
 }
 
 // Update 更新会话配置

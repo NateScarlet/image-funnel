@@ -56,10 +56,7 @@ type DirectiveRoot struct {
 type ComplexityRoot struct {
 	CommitChangesPayload struct {
 		ClientMutationID func(childComplexity int) int
-		Errors           func(childComplexity int) int
-		Failed           func(childComplexity int) int
 		Session          func(childComplexity int) int
-		Success          func(childComplexity int) int
 		Written          func(childComplexity int) int
 	}
 
@@ -240,30 +237,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CommitChangesPayload.ClientMutationID(childComplexity), true
-	case "CommitChangesPayload.errors":
-		if e.complexity.CommitChangesPayload.Errors == nil {
-			break
-		}
-
-		return e.complexity.CommitChangesPayload.Errors(childComplexity), true
-	case "CommitChangesPayload.failed":
-		if e.complexity.CommitChangesPayload.Failed == nil {
-			break
-		}
-
-		return e.complexity.CommitChangesPayload.Failed(childComplexity), true
 	case "CommitChangesPayload.session":
 		if e.complexity.CommitChangesPayload.Session == nil {
 			break
 		}
 
 		return e.complexity.CommitChangesPayload.Session(childComplexity), true
-	case "CommitChangesPayload.success":
-		if e.complexity.CommitChangesPayload.Success == nil {
-			break
-		}
-
-		return e.complexity.CommitChangesPayload.Success(childComplexity), true
 	case "CommitChangesPayload.written":
 		if e.complexity.CommitChangesPayload.Written == nil {
 			break
@@ -1026,10 +1005,7 @@ input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
 }
 
 type CommitChangesPayload {
-  success: Boolean!
   written: Int!
-  failed: Int!
-  errors: [String!]!
   session: Session
   clientMutationId: String
 }
@@ -1312,35 +1288,6 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
-func (ec *executionContext) _CommitChangesPayload_success(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_CommitChangesPayload_success,
-		func(ctx context.Context) (any, error) {
-			return obj.Success, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_CommitChangesPayload_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "CommitChangesPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _CommitChangesPayload_written(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1365,64 +1312,6 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_written(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _CommitChangesPayload_failed(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_CommitChangesPayload_failed,
-		func(ctx context.Context) (any, error) {
-			return obj.Failed, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_CommitChangesPayload_failed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "CommitChangesPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _CommitChangesPayload_errors(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_CommitChangesPayload_errors,
-		func(ctx context.Context) (any, error) {
-			return obj.Errors, nil
-		},
-		nil,
-		ec.marshalNString2ᚕstringᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_CommitChangesPayload_errors(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "CommitChangesPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2464,14 +2353,8 @@ func (ec *executionContext) fieldContext_Mutation_commitChanges(ctx context.Cont
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "success":
-				return ec.fieldContext_CommitChangesPayload_success(ctx, field)
 			case "written":
 				return ec.fieldContext_CommitChangesPayload_written(ctx, field)
-			case "failed":
-				return ec.fieldContext_CommitChangesPayload_failed(ctx, field)
-			case "errors":
-				return ec.fieldContext_CommitChangesPayload_errors(ctx, field)
 			case "session":
 				return ec.fieldContext_CommitChangesPayload_session(ctx, field)
 			case "clientMutationId":
@@ -5882,23 +5765,8 @@ func (ec *executionContext) _CommitChangesPayload(ctx context.Context, sel ast.S
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("CommitChangesPayload")
-		case "success":
-			out.Values[i] = ec._CommitChangesPayload_success(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "written":
 			out.Values[i] = ec._CommitChangesPayload_written(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "failed":
-			out.Values[i] = ec._CommitChangesPayload_failed(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "errors":
-			out.Values[i] = ec._CommitChangesPayload_errors(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -7843,36 +7711,6 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 		}
 	}
 	return res
-}
-
-func (ec *executionContext) unmarshalNString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]string, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	for i := range v {
-		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
-	}
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {

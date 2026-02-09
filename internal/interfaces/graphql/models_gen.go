@@ -18,10 +18,7 @@ type CommitChangesInput struct {
 }
 
 type CommitChangesPayload struct {
-	Success          bool               `json:"success"`
 	Written          int                `json:"written"`
-	Failed           int                `json:"failed"`
-	Errors           []string           `json:"errors"`
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }

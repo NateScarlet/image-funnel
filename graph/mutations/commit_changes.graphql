@@ -11,10 +11,7 @@ input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
 }
 
 type CommitChangesPayload {
-  success: Boolean!
   written: Int!
-  failed: Int!
-  errors: [String!]!
   session: Session
   clientMutationId: String
 }
