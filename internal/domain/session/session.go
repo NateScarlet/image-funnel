@@ -102,8 +102,12 @@ func (s *Session) UpdatedAt() time.Time {
 }
 
 func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
+	filter := image.BuildImageFilter(s.filter)
 	return func(yield func(*image.Image, shared.ImageAction) bool) {
 		for _, img := range s.images {
+			if !filter(img) {
+				continue
+			}
 			if action, ok := s.actions[img.ID()]; ok {
 				if !yield(img, action) {
 					return

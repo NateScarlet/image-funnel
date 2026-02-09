@@ -152,13 +152,8 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 	var errs []error
 	var successCount int
 
-	// 遍历所有有 action 的图片
-	for imgID, action := range session.actions {
-		idx, ok := session.indexByID[imgID]
-		if !ok {
-			continue
-		}
-		img := session.images[idx]
+	// 遍历所有持有且符合当前筛选条件的图片操作
+	for img, action := range session.Actions() {
 
 		var rating int
 		switch action {

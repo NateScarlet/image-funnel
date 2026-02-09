@@ -19,7 +19,7 @@ import (
 // Fakes used in TestService_Commit_ShouldOnlyWriteMatchingImages are now in testutil_test.go
 
 // Test Service.Commit
-func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
+func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	// Create temp directory and files to satisfy os.Stat
 	tempDir, err := os.MkdirTemp("", "session_test")
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	// 手动注入 img2（因为 img2 不符合初始过滤器的 Rating 0 条件，所以初始化时会被过滤，
 	// 但我们需要模拟一种场景：img2 在之前的轮次或过滤器下被标记了 KEEP，
 	// 之后过滤器变更为只显示 rating=0 的图片，导致 img2 变得不可见。
-	// 此时提交应仍然包含 img2 的修改。）
+	// 此时提交应【不再】包含 img2 的修改。）
 	sess.images = append(sess.images, img2)
 	idx := len(sess.images) - 1
 	sess.indexByID[img2.ID()] = idx
@@ -81,8 +81,6 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	sess.actions[img2.ID()] = shared.ImageActionKeep
 
 	// 标记 img3 为 REJECT
-	// 注意：虽然使用 sess.MarkImage 更符合业务流程，但测试重点在于 Commit
-	// 对已有操作的处理，所以这里也采用直接修改内部状态的方式来确保测试条件精确。
 	sess.actions[img3.ID()] = shared.ImageActionReject
 
 	writeActions := &shared.WriteActions{
@@ -95,8 +93,8 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	success, errs := svc.Commit(context.Background(), sess, writeActions)
 
 	require.Empty(t, errs)
-	// Should match 3: img1 (Keep->5), img2 (Keep->5, even if hidden), img3 (Reject->-1)
-	require.Equal(t, 3, success, "Should successfully write all 3 images")
+	// Should match 2: img1 (Keep->5), img3 (Reject->-1). img2 is filtered out.
+	require.Equal(t, 2, success, "Should successfully write matching images")
 
 	// Validate FakeMeta
 	// Image 1: Matches -> Should be written
@@ -104,10 +102,8 @@ func TestService_Commit_ShouldWriteAllActions(t *testing.T) {
 	require.Equal(t, 5, fakeMeta.Data[file1].Rating())
 	require.Equal(t, shared.ImageActionKeep.String(), fakeMeta.Data[file1].Action())
 
-	// Image 2: Does not match filter, BUT matches action -> Should be written now
-	require.Contains(t, fakeMeta.Data, file2)
-	require.Equal(t, 5, fakeMeta.Data[file2].Rating())
-	require.Equal(t, shared.ImageActionKeep.String(), fakeMeta.Data[file2].Action())
+	// Image 2: Does not match filter -> Should NOT be written
+	require.NotContains(t, fakeMeta.Data, file2)
 
 	// Image 3: Matches (Rating 0) -> Should be written
 	require.Contains(t, fakeMeta.Data, file3)
