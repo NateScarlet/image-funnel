@@ -1,9 +1,9 @@
 package directory
 
 import (
-	"fmt"
 	"strings"
 
+	"main/internal/apperror"
 	"main/internal/scalar"
 )
 
@@ -16,10 +16,10 @@ func EncodeID(path string) scalar.ID {
 func DecodeID(id scalar.ID) (string, error) {
 	idStr := id.String()
 	if idStr == "" {
-		return "", fmt.Errorf("id must not be empty")
+		return "", apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")
 	}
 	if !strings.HasPrefix(idStr, idPrefix) {
-		return "", fmt.Errorf("invalid directory ID format")
+		return "", apperror.New("INVALID_DIRECTORY_ID", "invalid directory ID format", "目录 ID 格式无效")
 	}
 
 	return strings.TrimPrefix(idStr, idPrefix), nil

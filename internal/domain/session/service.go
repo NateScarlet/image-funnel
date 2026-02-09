@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"main/internal/apperror"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
@@ -178,7 +179,11 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		// 如果 ID 不匹配（说明文件已被外部修改），记录错误并跳过
 		if currentImg.ID() != img.ID() {
-			errs = append(errs, errors.New("image ID mismatch (file modified externally): "+img.Path()))
+			errs = append(errs, apperror.New(
+				"IMAGE_MODIFIED_EXTERNALLY",
+				"image ID mismatch (file modified externally): "+img.Path(),
+				"图片 ID 不匹配（文件已被外部修改）: "+img.Path(),
+			))
 			continue
 		}
 

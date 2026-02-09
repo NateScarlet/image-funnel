@@ -44,6 +44,7 @@ image-funnel/
 - **go:** 枚举放在 `internal/shared/enums.go`
 - **go:** 使用 `iter.Seq` `iter.Seq2[T, error]` 模式，减少数组分配
 - **go:** 构建函数使用 `New` 前缀，如果需要清理，将清理函数作为第二个返回值返回
+- **go:** 领域层的自定义错误统一使用 apperror.New　
 - **js:** 避免返回 null，直接使用 undefined 当作 null，但是参数支持 null
 - **js:** 使用 es-toolkit　代替 lodash （它假设现代浏览器，不提供已经被浏览器原生支持的功能）
 - **ts:** 直接使用 @/graphql/generated 生成的 GraphQL 类型，避免手动定义
