@@ -147,11 +147,17 @@ func WithFilter(filter *shared.ImageFilters) UpdateOption {
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, error) {
 	var errs []error
 	var successCount int
-	var updatedImages []*image.Image
 
-	// 1. 遍历并执行写入操作
-	// 注意：这里只收集需要更新的图片，不直接修改 Session，避免死锁（Actions() 持有 RLock）
-	for img, action := range session.Actions() {
+	// 获取写锁，在迭代过程中直接更新
+	session.mu.Lock()
+
+	// 遍历所有有 action 的图片
+	for imgID, action := range session.actions {
+		idx, ok := session.indexByID[imgID]
+		if !ok {
+			continue
+		}
+		img := session.images[idx]
 
 		var rating int
 		switch action {
@@ -200,7 +206,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 		successCount++
 
-		// 写入成功后，构建新的 Image 对象用于后续更新内存
+		// 写入成功后，构建新的 Image 对象并直接更新内存
 		// 强制使用新 Rating，但保留原图其他信息（如 ModTime，等待 FileWatcher 慢慢更新）
 		newImg := image.NewImage(
 			currentImg.ID(),
@@ -212,14 +218,17 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			currentImg.Width(),
 			currentImg.Height(),
 		)
-		updatedImages = append(updatedImages, newImg)
+
+		// 直接更新内存中的图片（已持有写锁）
+		if idx, ok := session.indexByID[img.ID()]; ok {
+			session.images[idx] = newImg
+		}
 	}
 
-	// 2. 批量更新内存状态
-	// 此时 Actions() 的锁已释放，可以安全请求写锁
-	if len(updatedImages) > 0 {
-		session.BatchUpdateImages(updatedImages)
-	}
+	session.updatedAt = time.Now()
+
+	// 释放锁，因为 Save 和 Publish 可能需要读取 session 的字段
+	session.mu.Unlock()
 
 	if err := s.sessionRepo.Save(session); err != nil {
 		errs = append(errs, err)

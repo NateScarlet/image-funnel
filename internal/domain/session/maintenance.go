@@ -9,7 +9,12 @@ import (
 func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.unsafeUpdateImage(img, matchesFilter)
+}
 
+// unsafeUpdateImage 无锁版本的图片更新逻辑
+// 调用者必须持有写锁
+func (s *Session) unsafeUpdateImage(img *image.Image, matchesFilter bool) bool {
 	// 从 map 中获取索引
 	idx, ok := s.indexByPath[img.Path()]
 	var oldQueueIndex = -1 // 在 queue 中的索引
@@ -72,39 +77,6 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 
 	s.updatedAt = time.Now()
 	return true
-}
-
-// BatchUpdateImages 批量更新图片信息
-func (s *Session) BatchUpdateImages(images []*image.Image) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, img := range images {
-		// 1. 尝试通过 ID 查找
-		// 这是最快的方式，也是主要路径
-		if idx, ok := s.indexByID[img.ID()]; ok {
-			// 如果它是已存在的旧图片，我们只更新内容
-			s.images[idx] = img
-
-			// 对于 Commit 产生的更新，通常 path 不变 (或我们只得到 id)
-			// 如果 Path 变了，我们需要更新 indexByPath ... 但这里假定 invariant
-			continue
-		}
-
-		// 2. 如果是新的图片 (例如如果是首次导入?) 但 Commit 不会产生新图片 unless ID changed
-		// 如果 ID 变了，我们需要添加新图片
-		newIdx := len(s.images)
-		s.images = append(s.images, img)
-		s.indexByID[img.ID()] = newIdx
-		s.indexByPath[img.Path()] = newIdx
-
-		// 注意：这里的 context 是 "Commit 后更新内存状态"
-		// 原始代码是 UpdateImageByPath(img, true) -> 也就意味着如果是新图片，加入 queue
-		// 我在这里简化逻辑：如果是 Commit 产生的 "新" 图片 (ID 不匹配任何现有)，
-		// 我们将其加入 queue (因为 matchesFilter=true)
-		s.queue = append(s.queue, newIdx)
-	}
-	s.updatedAt = time.Now()
 }
 
 // RemoveImageByPath 根据路径从会话中移除图片
