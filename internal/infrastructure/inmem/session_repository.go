@@ -12,7 +12,7 @@ import (
 	"main/internal/scalar"
 )
 
-const (
+var (
 	// minRetainedSessions 保留最近的会话数量，无论是否过期
 	minRetainedSessions = 10
 	// maxSessionIdleTime 会话最大空闲时间，超过此时间且不在保留列表中的会话将被清理
@@ -177,7 +177,26 @@ func (r *SessionRepository) cleanup() {
 	for len(r.sessions) > minRetainedSessions && len(candidates) > 0 {
 		var oldest = candidates[len(candidates)-1]
 		candidates = candidates[:len(candidates)-1]
-		delete(r.sessions, oldest.session.ID())
+
+		sessionID := oldest.session.ID()
+		dirID := oldest.session.DirectoryID()
+
+		// 从主存储中删除
+		delete(r.sessions, sessionID)
+
+		// 从目录索引中删除
+		if ids, ok := r.dirIndex[dirID]; ok {
+			for i, id := range ids {
+				if id == sessionID {
+					r.dirIndex[dirID] = append(ids[:i], ids[i+1:]...)
+					break
+				}
+			}
+			if len(r.dirIndex[dirID]) == 0 {
+				delete(r.dirIndex, dirID)
+			}
+		}
+
 		// 虽然会话被删除了，但必须放回 token
 		// 这样如果有人刚好在 Acquire 中拿到了该 ownership 引用，他们可以正常结束而不是永久阻塞
 		oldest.token <- struct{}{}
