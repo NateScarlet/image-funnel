@@ -1,11 +1,11 @@
 package session
 
 import (
-	"iter"
 	"main/internal/apperror"
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"sort"
 	"time"
 )
 
@@ -101,20 +101,82 @@ func (s *Session) UpdatedAt() time.Time {
 	return s.updatedAt
 }
 
-func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
-	filter := image.BuildImageFilter(s.filter)
-	return func(yield func(*image.Image, shared.ImageAction) bool) {
-		for _, img := range s.images {
-			if !filter(img) {
-				continue
-			}
-			if action, ok := s.actions[img.ID()]; ok {
-				if !yield(img, action) {
-					return
-				}
-			}
+// CurrentImage 返回当前正在处理的图片
+func (s *Session) CurrentImage() *image.Image {
+	if s.currentIdx < len(s.queue) {
+		return s.images[s.queue[s.currentIdx]]
+	}
+	return nil
+}
+
+// NextImages 返回指定数量的后续图片
+func (s *Session) NextImages(count int) []*image.Image {
+	if count == 0 {
+		return nil
+	}
+	if count < 0 {
+		// 返回所有
+		indices := s.queue[s.currentIdx+1:]
+		imgs := make([]*image.Image, len(indices))
+		for i, idx := range indices {
+			imgs[i] = s.images[idx]
+		}
+		return imgs
+	}
+	start := s.currentIdx + 1
+	if start >= len(s.queue) {
+		return nil
+	}
+	end := start + count
+	if end > len(s.queue) {
+		end = len(s.queue)
+	}
+
+	indices := s.queue[start:end]
+	imgs := make([]*image.Image, len(indices))
+	for i, idx := range indices {
+		imgs[i] = s.images[idx]
+	}
+	return imgs
+}
+
+// KeptImages 返回所有已被标记为保留的图片
+func (s *Session) KeptImages(limit, offset int) []*image.Image {
+
+	var kept []*image.Image
+	for _, img := range s.images {
+		if s.actions[img.ID()] == shared.ImageActionKeep {
+			kept = append(kept, img)
 		}
 	}
+
+	// 按文件名排序，确保分页确定性
+	sort.Slice(kept, func(i, j int) bool {
+		return kept[i].Filename() < kept[j].Filename()
+	})
+
+	if offset >= len(kept) {
+		return nil
+	}
+
+	end := offset + limit
+	if limit < 0 {
+		end = len(kept)
+	} else if end > len(kept) {
+		end = len(kept)
+	}
+
+	return kept[offset:end]
+}
+
+// CurrentIndex 返回当前处理图片的索引
+func (s *Session) CurrentIndex() int {
+	return s.currentIdx
+}
+
+// CurrentSize 返回当前队列的总图片数量
+func (s *Session) CurrentSize() int {
+	return len(s.queue)
 }
 
 var (
