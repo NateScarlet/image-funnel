@@ -280,7 +280,9 @@ useEventListeners(window, ({ on }) => {
         return;
       }
 
-      e.preventDefault();
+      if (currentImage.value) {
+        e.preventDefault();
+      }
       swiping.value = true;
       touchStartX.value = touch.clientX;
       touchStartY.value = touch.clientY;
@@ -323,9 +325,13 @@ useEventListeners(window, ({ on }) => {
       if (!swiping.value) {
         return;
       }
-      // 在完成状态下不允许默认行为可能影响点击，但在 touchend 这里主要是为了处理手势
-      // 这里的 preventDefault 主要是为了防止触发鼠标事件模拟
-      if (e.cancelable) e.preventDefault();
+      // 在完成状态下，仅当识别到水平手势（如撤销）或有当前图片时才阻止默认行为，
+      // 以防止干扰按钮点击等正常交互，同时仍然保留手势功能。
+      if (e.cancelable) {
+        if (currentImage.value || swipeDirection.value) {
+          e.preventDefault();
+        }
+      }
 
       touchEndX.value = e.changedTouches[0].clientX;
       touchEndY.value = e.changedTouches[0].clientY;
