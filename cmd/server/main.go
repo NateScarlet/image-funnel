@@ -72,7 +72,7 @@ func main() {
 	// Cleanup every 1 hour, remove files older than 24 hours
 	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
 	defer cleanupCache()
-	magickProcessor := magick.NewProcessor(imageCache)
+	magickProcessor := magick.NewProcessor(imageCache, cfg.MagickConcurrency)
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(hybridProcessor)
 

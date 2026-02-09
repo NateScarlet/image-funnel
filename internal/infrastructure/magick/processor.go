@@ -12,15 +12,22 @@ import (
 	appimage "main/internal/application/image"
 	"main/internal/shared"
 	"main/internal/util"
+
+	"golang.org/x/sync/semaphore"
 )
 
 type Processor struct {
 	cache appimage.Cache
+	sem   *semaphore.Weighted
 }
 
-func NewProcessor(cache appimage.Cache) *Processor {
+func NewProcessor(cache appimage.Cache, concurrency int64) *Processor {
+	if concurrency <= 0 {
+		concurrency = 4
+	}
 	return &Processor{
 		cache: cache,
+		sem:   semaphore.NewWeighted(concurrency), // 限制并发处理数量，防止大图片导致内存溢出
 	}
 }
 
@@ -51,6 +58,12 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	}
 
 	cachePath := p.cache.GetPath(cacheKey)
+
+	// Acquire semaphore to limit concurrency
+	if err := p.sem.Acquire(ctx, 1); err != nil {
+		return "", err
+	}
+	defer p.sem.Release(1)
 
 	// Use AtomicSave to write the file securely
 	err = util.AtomicSave(cachePath, func(f *os.File) error {
@@ -83,6 +96,11 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 }
 
 func (p *Processor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
+	if err := p.sem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer p.sem.Release(1)
+
 	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", srcPath)
 	output, err := cmd.Output()
 	if err != nil {

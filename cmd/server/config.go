@@ -3,19 +3,21 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
 )
 
 type Config struct {
-	Port        string
-	RootDir     string
-	AbsRootDir  string
-	SecretKey   string
-	CorsHosts   []string
-	IsDev       bool
-	FrontendDir string
+	Port              string
+	RootDir           string
+	AbsRootDir        string
+	SecretKey         string
+	CorsHosts         []string
+	IsDev             bool
+	FrontendDir       string
+	MagickConcurrency int64
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -65,13 +67,23 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		logger.Warn("frontend directory not found", zap.String("path", frontendDir))
 	}
 
+	magickConcurrency := int64(4)
+	if v := os.Getenv("IMAGE_FUNNEL_MAGICK_CONCURRENCY"); v != "" {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			magickConcurrency = i
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_MAGICK_CONCURRENCY, use default", zap.String("value", v))
+		}
+	}
+
 	return &Config{
-		Port:        port,
-		RootDir:     rootDir,
-		AbsRootDir:  absRootDir,
-		SecretKey:   secretKey,
-		CorsHosts:   corsHosts,
-		IsDev:       isDev,
-		FrontendDir: frontendDir,
+		Port:              port,
+		RootDir:           rootDir,
+		AbsRootDir:        absRootDir,
+		SecretKey:         secretKey,
+		CorsHosts:         corsHosts,
+		IsDev:             isDev,
+		FrontendDir:       frontendDir,
+		MagickConcurrency: magickConcurrency,
 	}, nil
 }
