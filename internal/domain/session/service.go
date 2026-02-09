@@ -163,7 +163,6 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 
 		// 显式重新加载图片最新状态
-		var currentImg *image.Image
 		// Session 中存储的是绝对路径，而 Scanner.LookupImage 期望相对路径
 		relPath, err := filepath.Rel(s.rootDir, img.Path())
 		if err != nil {
@@ -171,18 +170,15 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			continue
 		}
 
-		loaded, err := s.dirScanner.LookupImage(ctx, relPath)
+		currentImg, err := s.dirScanner.LookupImage(ctx, relPath)
 		if err != nil {
-			if !os.IsNotExist(err) {
-				errs = append(errs, err)
-			}
-			// 如果文件不存在，loaded 为 nil，后续会自动跳过
-			// 或者是 LookupImage 返回的错误，也应该记录
+			errs = append(errs, err)
+			continue
 		}
-		currentImg = loaded
 
-		// 如果无法加载（可能已删除）或 ID 不匹配（说明文件已被外部修改），跳过处理
-		if currentImg == nil || currentImg.ID() != img.ID() {
+		// 如果 ID 不匹配（说明文件已被外部修改），记录错误并跳过
+		if currentImg.ID() != img.ID() {
+			errs = append(errs, errors.New("image ID mismatch (file modified externally): "+img.Path()))
 			continue
 		}
 
