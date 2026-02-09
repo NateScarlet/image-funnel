@@ -18,7 +18,7 @@ export interface Preset {
 const defaultPresets: Preset[] = [
   {
     id: "draft",
-    name: "草稿",
+    name: "📝 草稿",
     description: "从大量生成结果中快速筛选",
     filter: {
       rating: [0, 3, 4],
@@ -32,7 +32,7 @@ const defaultPresets: Preset[] = [
   },
   {
     id: "refine",
-    name: "细化",
+    name: "🔍 细化",
     description: "从待定图片中精细筛选",
     filter: {
       rating: [0],
