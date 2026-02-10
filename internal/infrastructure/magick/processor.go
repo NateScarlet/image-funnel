@@ -67,7 +67,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 
 	// Use AtomicSave to write the file securely
 	err = util.AtomicSave(cachePath, func(f *os.File) error {
-		args := []string{srcPath}
+		args := []string{srcPath, "-coalesce"}
 		if width > 0 {
 			args = append(args, "-resize", fmt.Sprintf("%dx>", width))
 		}
