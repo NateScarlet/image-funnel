@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.4.0](https://github.com/NateScarlet/image-funnel/compare/v1.3.0...v1.4.0) (2026-02-10)
+
+
+### Features
+
+* improve directory search experience in selector ([f58781b](https://github.com/NateScarlet/image-funnel/commit/f58781b25b4bccce8f6a47e5bdf4a9fbc08dc81d))
+* increase image thumbnail  quality ([1ab5983](https://github.com/NateScarlet/image-funnel/commit/1ab5983df7c93cdef445d1451612b4a9ef215532))
+* limit concurrent ImageMagick process execution to prevent memory issues ([2d2233c](https://github.com/NateScarlet/image-funnel/commit/2d2233c7db350fef5dd9a318655dee2f0f9435ca))
+* 为预设名称添加 Emoji 前缀以便区分 ([314a0a1](https://github.com/NateScarlet/image-funnel/commit/314a0a1232f5f14c4a17f246cc8c719ee795a03c))
+* 将更新会话弹窗的预设选择改为平铺卡片样式 ([b3590b3](https://github.com/NateScarlet/image-funnel/commit/b3590b3a005e1996f4c43f646924c20d7b16276d))
+
+
+### Bug Fixes
+
+* fix directory index not updated during session cleanup ([5f902be](https://github.com/NateScarlet/image-funnel/commit/5f902bef99473c7b77011b2f93a28bb6469261ef))
+* ImageViewer 双指缩放/位移时误触发 SessionView 标记手势 ([3de7c70](https://github.com/NateScarlet/image-funnel/commit/3de7c70c7510b201920474bb7066711e88edff28))
+* unexpected value reset on customize preset ([0f6b75b](https://github.com/NateScarlet/image-funnel/commit/0f6b75ba5ad0ce663487d2d3b618c8fb3a5aee43))
+* 动图缩放时产生黑色噪点和透明度异常 ([950e1df](https://github.com/NateScarlet/image-funnel/commit/950e1dfd9f388c33f14019091dea396b523102cf))
+* 双指缩放后视图跳动 ([792ca1e](https://github.com/NateScarlet/image-funnel/commit/792ca1e3cdaba0143e9cfd296c241dab13e03230))
+* 应允许在完成界面垂直滚动 ([9151a5f](https://github.com/NateScarlet/image-funnel/commit/9151a5f63218ec4d6d530dbd20a16dd78c723eb0))
+* 应当仅返回和保存符合当前会话筛选条件的图片操作 ([80bc561](https://github.com/NateScarlet/image-funnel/commit/80bc561ce89f8890d4dbbe7262bc945578e28816))
+* 提交后应立即更新会话状态以防止操作遗漏 ([715169b](https://github.com/NateScarlet/image-funnel/commit/715169b1189d837fb0d26ce84a1814440ce3f489))
+* 提交图片时正确报告文件加载错误和外部修改 ([e593f87](https://github.com/NateScarlet/image-funnel/commit/e593f870b2bee953a97a23920080b14cebff4e52))
+
+
+### Performance Improvements
+
+* optimize session image lookup and updates ([4f0159d](https://github.com/NateScarlet/image-funnel/commit/4f0159d3fdfa721df17f5f22fdb71f24eb9819fc))
+* 并发预加载加载多张后续图片 ([0a627ed](https://github.com/NateScarlet/image-funnel/commit/0a627ed5f9f2db9fe36baf3c02a95c3be728a7b0))
+
 ## [1.3.0](https://github.com/NateScarlet/image-funnel/compare/v1.2.1...v1.3.0) (2026-02-05)
 
 
