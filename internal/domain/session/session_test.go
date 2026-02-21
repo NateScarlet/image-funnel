@@ -58,9 +58,9 @@ func TestSession_KeptImages(t *testing.T) {
 	kept := session.KeptImages(10, 0)
 	assert.Empty(t, kept, "Should be empty initially")
 
+	require.NoError(t, session.MarkImage(scalar.ToID("1"), shared.ImageActionReject)) // b.jpg
 	require.NoError(t, session.MarkImage(scalar.ToID("2"), shared.ImageActionKeep))   // a.jpg
 	require.NoError(t, session.MarkImage(scalar.ToID("3"), shared.ImageActionKeep))   // c.jpg
-	require.NoError(t, session.MarkImage(scalar.ToID("1"), shared.ImageActionReject)) // b.jpg
 
 	kept = session.KeptImages(10, 0)
 	require.Len(t, kept, 2)

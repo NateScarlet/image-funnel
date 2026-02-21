@@ -27,7 +27,9 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	currentImage := s.images[s.queue[s.currentIdx]]
 	if currentImage.ID() != imageID {
 		found := false
-		for i, idx := range s.queue {
+		// 只允许向后查找（历史图片），防止因前端状态未同步导致的跳过图片
+		for i := 0; i < s.currentIdx; i++ {
+			idx := s.queue[i]
 			if s.images[idx].ID() == imageID {
 				s.currentIdx = i
 				found = true
@@ -35,6 +37,13 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 			}
 		}
 		if !found {
+			// 如果在未来的队列中找到了该图片，说明前端进度超前（可能在撤销后连击了按键）
+			for i := s.currentIdx + 1; i < len(s.queue); i++ {
+				idx := s.queue[i]
+				if s.images[idx].ID() == imageID {
+					return apperror.New("INVALID_SEQUENCE", "cannot mark future images, UI sequence out of sync", "不能跳过图片标记，请等待前端状态同步")
+				}
+			}
 			return apperror.NewErrDocumentNotFound(imageID)
 		}
 	}

@@ -24,15 +24,13 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 	assert.True(t, session.CanUndo(), "CanUndo should be true")
 }
 
-func TestMarkImage_NonCurrentImage_ShouldFindAndMark(t *testing.T) {
+func TestMarkImage_FutureImage_ShouldReturnError(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
 	imageID := session.images[session.queue[2]].ID()
 	err := session.MarkImage(imageID, shared.ImageActionShelve)
-	require.NoError(t, err)
-
-	assert.Equal(t, 3, session.CurrentIndex(), "CurrentIndex should be 3")
-	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, session.images[session.queue[2]].ID()), "Action should be SHELVE")
+	assert.Error(t, err, "Should return error for future image ID")
+	assert.Equal(t, "INVALID_SEQUENCE", apperror.ErrCode(err))
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {

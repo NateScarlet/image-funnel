@@ -60,6 +60,10 @@ func TestStats_CurrentFilterExcludesKeptImage(t *testing.T) {
 	// Target keep 1
 	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), nil, 1, images)
 
+	// Reject image 0 and 1 to advance sequence
+	require.NoError(t, session.MarkImage(images[0].ID(), shared.ImageActionReject))
+	require.NoError(t, session.MarkImage(images[1].ID(), shared.ImageActionReject))
+
 	// Keep image with rating 3 (index 2)
 	require.NoError(t, session.MarkImage(images[2].ID(), shared.ImageActionKeep))
 
