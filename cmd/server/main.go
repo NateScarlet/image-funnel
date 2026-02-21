@@ -78,11 +78,38 @@ func main() {
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
-	dirScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
+	localScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.Session]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, appsession.NewSessionDTOFactory(signer))
+
+	var dirScanner domdirectory.Scanner = localScanner
+	if cfg.EnableDirectoryStatsCache {
+		var cache = inmem.NewDirectoryStatsCache(localScanner, logger)
+		dirScanner = cache
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			for event, err := range fileChangedTopic.Subscribe(ctx) {
+				if err != nil {
+					continue
+				}
+				if ctx.Err() != nil {
+					return
+				}
+
+				relPath, err := domdirectory.DecodeID(event.DirectoryID)
+				if err != nil {
+					logger.Error("failed to decode directory id", zap.Error(err))
+					continue
+				}
+
+				cache.Invalidate(relPath)
+			}
+		}()
+		defer cancel()
+	}
 
 	fileWatcher := localfs.NewWatcher(logger)
 	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)

@@ -10,14 +10,15 @@ import (
 )
 
 type Config struct {
-	Port              string
-	RootDir           string
-	AbsRootDir        string
-	SecretKey         string
-	CorsHosts         []string
-	IsDev             bool
-	FrontendDir       string
-	MagickConcurrency int64
+	Port                      string
+	RootDir                   string
+	AbsRootDir                string
+	SecretKey                 string
+	CorsHosts                 []string
+	IsDev                     bool
+	FrontendDir               string
+	MagickConcurrency         int64
+	EnableDirectoryStatsCache bool
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -76,14 +77,24 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		}
 	}
 
+	enableDirectoryStatsCache := true
+	if v := os.Getenv("IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			enableDirectoryStatsCache = b
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE, use default", zap.String("value", v))
+		}
+	}
+
 	return &Config{
-		Port:              port,
-		RootDir:           rootDir,
-		AbsRootDir:        absRootDir,
-		SecretKey:         secretKey,
-		CorsHosts:         corsHosts,
-		IsDev:             isDev,
-		FrontendDir:       frontendDir,
-		MagickConcurrency: magickConcurrency,
+		Port:                      port,
+		RootDir:                   rootDir,
+		AbsRootDir:                absRootDir,
+		SecretKey:                 secretKey,
+		CorsHosts:                 corsHosts,
+		IsDev:                     isDev,
+		FrontendDir:               frontendDir,
+		MagickConcurrency:         magickConcurrency,
+		EnableDirectoryStatsCache: enableDirectoryStatsCache,
 	}, nil
 }

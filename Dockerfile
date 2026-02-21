@@ -65,7 +65,8 @@ RUN apk add --no-cache \
 
 # 设置环境变量默认值
 ENV IMAGE_FUNNEL_PORT=80 \
-    IMAGE_FUNNEL_ROOT_DIR=/app/workspace
+    IMAGE_FUNNEL_ROOT_DIR=/app/workspace \
+    IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE=false
 
 # 从之前的阶段复制构建产物
 # 将前端静态文件放在二进制文件同级的 dist 目录下，符合 main.go 的生产环境查找逻辑
