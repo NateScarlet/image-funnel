@@ -11,6 +11,7 @@
     <DirectoryDisplay
       :directory="{ id: directory.id }"
       :filter-rating="filterRating"
+      :loading="loading"
     >
       <template #badge>
         <div
@@ -55,10 +56,11 @@ import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 
-const { directory, filterRating, targetKeep } = defineProps<{
+const { directory, filterRating, targetKeep, loading } = defineProps<{
   directory: DirectoryFragment;
   filterRating: readonly number[];
   targetKeep: number;
+  loading?: boolean;
 }>();
 
 const { getCachedStats } = useDirectoryStats();

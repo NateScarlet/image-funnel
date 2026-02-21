@@ -53,6 +53,7 @@
         :directory="currentDirectory"
         :filter-rating="filterRating"
         :target-keep="targetKeep"
+        :loading="backgroundLoadingCount > 0"
       />
 
       <div v-if="items.length > 5" class="mb-4">
@@ -67,14 +68,15 @@
       <div
         v-if="items.length > 0"
         class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
+        @scroll="handleScroll"
       >
-        <template v-for="item in filteredItems" :key="item.key">
+        <template v-for="item in visibleFilteredItems" :key="item.key">
           <DirectoryItem
-            v-show="showCompletedDirectories || !item.isCompleted"
             v-model="selectedId"
             :directory="item.dir"
             :filter-rating="filterRating"
             :target-keep="targetKeep"
+            :loading="backgroundLoadingCount > 0"
           />
         </template>
       </div>
@@ -102,6 +104,7 @@ import { computed, ref, watch } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import useStorage from "../composables/useStorage";
+import useAsyncTask from "../composables/useAsyncTask";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
@@ -130,7 +133,21 @@ const { model: showCompletedDirectories } = useStorage<boolean>(
 const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
-const { getCachedStats } = useDirectoryStats();
+const { getCachedStats, refetchStats } = useDirectoryStats();
+
+const backgroundLoadingCount = ref(0);
+
+// 在后台批量加载未获取统计信息的目录，避免同时发起大量查询
+useAsyncTask({
+  loadingCount: backgroundLoadingCount,
+  args() {
+    const toLoad = directories.map((d) => d.id);
+    return toLoad.length > 0 ? [toLoad] : undefined;
+  },
+  async task(toLoad, ctx) {
+    await refetchStats(toLoad, ctx.signal());
+  },
+});
 
 const items = computed(() => {
   return sortBy(
@@ -181,6 +198,34 @@ const filteredItems = computed(() => {
     return matcher.match(name);
   });
 });
+
+const displayedFilteredItems = computed(() => {
+  return filteredItems.value.filter(
+    (item) => showCompletedDirectories.value || !item.isCompleted,
+  );
+});
+
+const renderLimit = ref(40);
+
+const visibleFilteredItems = computed(() => {
+  return displayedFilteredItems.value.slice(0, renderLimit.value);
+});
+
+watch(
+  () => currentDirectory?.id,
+  () => {
+    renderLimit.value = 40;
+  },
+);
+
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement;
+  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 100) {
+    if (renderLimit.value < displayedFilteredItems.value.length) {
+      renderLimit.value += 40;
+    }
+  }
+}
 
 const completedCount = computed(() => {
   return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);

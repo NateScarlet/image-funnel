@@ -92,9 +92,14 @@ interface Directory {
   id: string;
 }
 
-const { directory, filterRating = [] } = defineProps<{
+const {
+  directory,
+  filterRating = [],
+  loading: externalLoading,
+} = defineProps<{
   directory: Directory;
   filterRating?: readonly number[];
+  loading?: boolean;
 }>();
 
 const loadingCount = ref(0);
@@ -108,7 +113,7 @@ const directoryData = computed(() => {
   return node?.__typename === "Directory" ? node : undefined;
 });
 const stats = computed(() => directoryData.value?.stats);
-const loading = computed(() => loadingCount.value > 0);
+const loading = computed(() => loadingCount.value > 0 || !!externalLoading);
 const directoryPath = computed(() => directoryData.value?.path ?? "");
 
 function sortedRatingCounts(

@@ -38,6 +38,7 @@ export default function useDirectoryStats() {
     const { data, query } = useQuery(DirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
+      fetchPolicy: "cache-first",
       context: {
         transport: "batch-http:direcotry-stats",
       },
@@ -108,8 +109,39 @@ export default function useDirectoryStats() {
     return statsCache.get(directoryId);
   }
 
+  /**
+   * 批量强制刷新指定目录的统计信息
+   */
+  async function refetchStats(
+    directoryIds: string[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const queue = [...directoryIds];
+    while (queue.length > 0) {
+      const batch = queue.splice(0, 5);
+      if (signal?.aborted) return;
+      try {
+        await Promise.allSettled(
+          batch.map((id) =>
+            apolloClient.query({
+              query: DirectoryStatsDocument,
+              variables: { id },
+              fetchPolicy: "network-only",
+              context: {
+                transport: "batch-http:direcotry-stats",
+              },
+            }),
+          ),
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
+
   return {
     useStats,
     getCachedStats,
+    refetchStats,
   };
 }
