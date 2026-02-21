@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"path/filepath"
 	"sync"
 
 	"go.uber.org/zap"
@@ -28,14 +29,23 @@ func NewDirectoryStatsCache(
 	}
 }
 
+// cacheKey 生成统一路径作为缓存 key
+func (c *DirectoryStatsCache) cacheKey(relPath string) string {
+	if relPath == "" {
+		relPath = "."
+	}
+	return filepath.ToSlash(filepath.Clean(relPath))
+}
+
 // Invalidate clears the cache for a specific directory path.
 func (c *DirectoryStatsCache) Invalidate(relPath string) {
-	c.cache.Delete(relPath)
+	c.cache.Delete(c.cacheKey(relPath))
 }
 
 // AnalyzeDirectory 返回缓存的统计信息或委托给底层的 Scanner
 func (c *DirectoryStatsCache) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
-	if val, ok := c.cache.Load(relPath); ok {
+	key := c.cacheKey(relPath)
+	if val, ok := c.cache.Load(key); ok {
 		return val.(*directory.DirectoryStats), nil
 	}
 
@@ -44,7 +54,7 @@ func (c *DirectoryStatsCache) AnalyzeDirectory(ctx context.Context, relPath stri
 		return nil, err
 	}
 
-	c.cache.Store(relPath, stats)
+	c.cache.Store(key, stats)
 	return stats, nil
 }
 
