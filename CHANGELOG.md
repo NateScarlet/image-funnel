@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.1](https://github.com/NateScarlet/image-funnel/compare/v1.4.0...v1.4.1) (2026-02-22)
+
+
+### Bug Fixes
+
+* **session:** 快速执行撤销和标记时部分图片丢失处理状态 ([ac03c23](https://github.com/NateScarlet/image-funnel/commit/ac03c23b3a935183ac0a42c4aac6a5f7136e2ab1))
+* 其它过滤条件生效导致可选目录为空时应隐藏搜索框 ([5aceca9](https://github.com/NateScarlet/image-funnel/commit/5aceca947acc2555ed5dab0d0902856d5d2f6654))
+* 后端运行期间允许在外部正常删除被监控的文件夹目录 ([fc1099f](https://github.com/NateScarlet/image-funnel/commit/fc1099f615ce454e9ae518e99c660e8fb365dbca))
+* 目录文件变更时统计信息不更新 ([4192ce5](https://github.com/NateScarlet/image-funnel/commit/4192ce530f8a76b3915daa5817be38cb1b9ff18e))
+
+
+### Performance Improvements
+
+* **frontend:** 优化选择器在面对海量目录时的浏览流畅度 ([6750ff9](https://github.com/NateScarlet/image-funnel/commit/6750ff9d72113553a5444d8a99a0f2858ed819d6))
+* 优化目录统计查询的性能 ([85efdc5](https://github.com/NateScarlet/image-funnel/commit/85efdc51962b39e78d2ac2834f25faf067659549))
+
 ## [1.4.0](https://github.com/NateScarlet/image-funnel/compare/v1.3.0...v1.4.0) (2026-02-10)
 
 
