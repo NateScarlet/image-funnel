@@ -56,7 +56,7 @@
         :loading="backgroundLoadingCount > 0"
       />
 
-      <div v-if="items.length > 5" class="mb-4">
+      <div v-if="searchableItems.length > 5" class="mb-4">
         <input
           v-model="searchQuery"
           type="search"
@@ -176,6 +176,12 @@ const items = computed(() => {
       (item) => item.stats?.imageCount === 0,
       (item) => item.stats?.latestImage?.modTime || "",
     ],
+  );
+});
+
+const searchableItems = computed(() => {
+  return items.value.filter(
+    (item) => showCompletedDirectories.value || !item.isCompleted,
   );
 });
 
