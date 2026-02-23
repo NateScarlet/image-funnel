@@ -74,16 +74,24 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 // RemoveImageByPath 根据路径从会话中移除图片
 func (s *Session) RemoveImageByPath(path string) bool {
 	var targetIndex = -1
+	var targetImgIndex = -1
 
 	// 查找 queue 中的索引
 	for i, imgIndex := range s.queue {
 		if s.images[imgIndex].Path() == path {
 			targetIndex = i
+			targetImgIndex = imgIndex
 			break
 		}
 	}
 
 	if targetIndex == -1 {
+		return false
+	}
+
+	// 如果该图片已有用户操作记录，保留它在队列中，以维护 undo stack 的完整性
+	// 例如：Commit 后文件 rating 改变，文件监听器会触发移除，但不应移除已操作图片
+	if _, hasAction := s.actions[s.images[targetImgIndex].ID()]; hasAction {
 		return false
 	}
 
@@ -93,7 +101,7 @@ func (s *Session) RemoveImageByPath(path string) bool {
 		s.currentIdx--
 	}
 
-	// 注意：我们不从 s.images 中移除图片，保持“只增不减”并维持索引稳定性
+	// 注意：我们不从 s.images 中移除图片，保持"只增不减"并维持索引稳定性
 
 	s.updatedAt = time.Now()
 	return true
