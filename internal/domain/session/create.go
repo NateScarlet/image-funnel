@@ -34,6 +34,6 @@ func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.I
 	}
 	defer release()
 
-	s.sessionSaved.Publish(ctx, sess)
+	s.sessionSaved.Publish(ctx, sess.ID())
 	return nil
 }

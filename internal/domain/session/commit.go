@@ -116,7 +116,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	session.updatedAt = time.Now()
 
-	s.sessionSaved.Publish(ctx, session)
+	s.sessionSaved.Publish(ctx, session.ID())
 
 	return successCount, errors.Join(errs...)
 }

@@ -111,6 +111,6 @@ func (s *Service) MarkImage(ctx context.Context, sessionID scalar.ID, imageID sc
 		return err
 	}
 
-	s.sessionSaved.Publish(ctx, sess)
+	s.sessionSaved.Publish(ctx, sess.ID())
 	return nil
 }

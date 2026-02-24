@@ -8,6 +8,7 @@ import (
 	appimage "main/internal/application/image"
 	"main/internal/application/session"
 	dsession "main/internal/domain/session"
+	"main/internal/infrastructure/inmem"
 	"main/internal/pubsub"
 
 	"main/internal/scalar"
@@ -23,21 +24,23 @@ func (m *mockURLSigner) GenerateSignedURL(path string, opts ...appimage.SignOpti
 }
 
 func TestNewEventBus(t *testing.T) {
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*dsession.Session]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
 	factory := session.NewSessionDTOFactory(urlSigner)
-	bus := NewEventBus(sessionTopic, fileChangedTopic, factory)
+	sessionRepo := inmem.NewSessionRepository()
+	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
 	assert.NotNil(t, bus)
 }
 
 func TestSubscribeSession(t *testing.T) {
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*dsession.Session]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
 	factory := session.NewSessionDTOFactory(urlSigner)
-	bus := NewEventBus(sessionTopic, fileChangedTopic, factory)
+	sessionRepo := inmem.NewSessionRepository()
+	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
 	sess := dsession.NewSession(
 		scalar.ToID("test-id"),
@@ -46,13 +49,19 @@ func TestSubscribeSession(t *testing.T) {
 		10,
 		nil,
 	)
+	// 先注册到 repo，再发布 ID
+	release, err := sessionRepo.Create(sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		sessionTopic.Publish(ctx, sess)
+		sessionTopic.Publish(ctx, scalar.ToID("test-id"))
 	}()
 
 	received := false
@@ -70,11 +79,12 @@ func TestSubscribeSession(t *testing.T) {
 }
 
 func TestFileChanged(t *testing.T) {
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*dsession.Session]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
 	factory := session.NewSessionDTOFactory(urlSigner)
-	bus := NewEventBus(sessionTopic, fileChangedTopic, factory)
+	sessionRepo := inmem.NewSessionRepository()
+	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
 	event := &shared.FileChangedEvent{
 		DirectoryID: scalar.ToID("test-dir"),

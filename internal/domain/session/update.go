@@ -163,6 +163,6 @@ func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOpt
 		}
 	}
 
-	s.sessionSaved.Publish(ctx, sess)
+	s.sessionSaved.Publish(ctx, sess.ID())
 	return nil
 }

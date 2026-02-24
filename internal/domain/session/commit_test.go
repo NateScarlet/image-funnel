@@ -113,7 +113,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
 	fakeEventBus := &FakeEventBus{}
-	topic, cleanup := pubsub.NewInMemoryTopic[*Session]()
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
 
 	fakeScanner := &FakeScanner{
@@ -180,7 +180,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
 	fakeEventBus := &FakeEventBus{}
-	topic, cleanup := pubsub.NewInMemoryTopic[*Session]()
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
 
 	fakeScanner := &FakeScanner{

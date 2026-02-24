@@ -63,7 +63,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		}
 
 		if changed {
-			s.sessionSaved.Publish(ctx, sess)
+			s.sessionSaved.Publish(ctx, sess.ID())
 		}
 
 		release()

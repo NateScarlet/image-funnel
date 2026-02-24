@@ -4,41 +4,56 @@ import (
 	"context"
 	"iter"
 
-	"main/internal/application/session"
+	appsession "main/internal/application/session"
 	dsession "main/internal/domain/session"
 	"main/internal/pubsub"
+	"main/internal/scalar"
 	"main/internal/shared"
 )
 
 // EventBus 事件总线实现
 type EventBus struct {
-	sessionTopic     pubsub.Topic[*dsession.Session]
+	// sessionTopic 只传递 ID，订阅者在接收后自行 Acquire 获取最新状态，避免跨 goroutine 持有 *Session 指针
+	sessionTopic     pubsub.Topic[scalar.ID]
 	fileChangedTopic pubsub.Topic[*shared.FileChangedEvent]
-	sessionFactory   *session.SessionDTOFactory
+	sessionRepo      dsession.Repository
+	sessionFactory   *appsession.SessionDTOFactory
 }
 
 func NewEventBus(
-	sessionTopic pubsub.Topic[*dsession.Session],
+	sessionTopic pubsub.Topic[scalar.ID],
 	fileChangedTopic pubsub.Topic[*shared.FileChangedEvent],
-	sessionFactory *session.SessionDTOFactory,
+	sessionRepo dsession.Repository,
+	sessionFactory *appsession.SessionDTOFactory,
 ) *EventBus {
 	return &EventBus{
 		sessionTopic:     sessionTopic,
 		fileChangedTopic: fileChangedTopic,
+		sessionRepo:      sessionRepo,
 		sessionFactory:   sessionFactory,
 	}
 }
 
 func (b *EventBus) SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error] {
 	return func(yield func(*shared.SessionDTO, error) bool) {
-		for sess, err := range b.sessionTopic.Subscribe(ctx) {
+		for id, err := range b.sessionTopic.Subscribe(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
 					return
 				}
 				continue
 			}
-			if !yield(b.sessionFactory.New(sess)) {
+
+			// 重新 Acquire 以持锁读取，避免并发 map 访问竞态
+			sess, release, err := b.sessionRepo.Acquire(ctx, id)
+			if err != nil {
+				// session 可能已被清理，忽略
+				continue
+			}
+			dto, err := b.sessionFactory.New(sess)
+			release()
+
+			if !yield(dto, err) {
 				break
 			}
 		}

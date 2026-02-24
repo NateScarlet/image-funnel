@@ -43,6 +43,6 @@ func (s *Service) Undo(ctx context.Context, sessionID scalar.ID) error {
 		return err
 	}
 
-	s.sessionSaved.Publish(ctx, sess)
+	s.sessionSaved.Publish(ctx, sess.ID())
 	return nil
 }

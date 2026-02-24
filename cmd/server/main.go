@@ -27,6 +27,7 @@ import (
 	"main/internal/interfaces/graphql"
 	interfacehttp "main/internal/interfaces/http"
 	"main/internal/pubsub"
+	"main/internal/scalar"
 	"main/internal/shared"
 
 	gql "github.com/99designs/gqlgen/graphql"
@@ -80,9 +81,9 @@ func main() {
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 	localScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
 
-	sessionTopic, _ := pubsub.NewInMemoryTopic[*session.Session]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
-	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, appsession.NewSessionDTOFactory(signer))
+	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer))
 
 	var dirScanner domdirectory.Scanner = localScanner
 	if cfg.EnableDirectoryStatsCache {
