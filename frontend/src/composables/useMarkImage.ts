@@ -1,36 +1,17 @@
-import {
-  ref,
-  shallowRef,
-  watch,
-  type Ref,
-  type MaybeRefOrGetter,
-  toValue,
-} from "vue";
+import { ref, shallowRef, type MaybeRefOrGetter, toValue } from "vue";
 import Time from "@/utils/Time";
 import useDocumentVisibility from "@/composables/useDocumentVisibility";
 import mutate from "@/graphql/utils/mutate";
-import {
-  MarkImageDocument,
-  ImageAction,
-  type ImageFragment,
-} from "@/graphql/generated";
+import { MarkImageDocument, ImageAction } from "@/graphql/generated";
 import Duration from "@/utils/Duration";
 
 export default function useMarkImage(
   sessionId: MaybeRefOrGetter<string>,
-  currentImage: Ref<ImageFragment | undefined>,
   imageLoadedAt: MaybeRefOrGetter<Time | undefined>,
 ) {
   const marking = ref(false);
   const lastMarkedAt = shallowRef(Time.now());
   const { lastBecameVisibleAt } = useDocumentVisibility();
-
-  watch(
-    () => currentImage.value?.id,
-    () => {
-      lastMarkedAt.value = Time.now();
-    },
-  );
 
   function getDuration(): Duration {
     const now = Time.now();
@@ -50,9 +31,7 @@ export default function useMarkImage(
     return Duration.fromMilliseconds(now.sub(start));
   }
 
-  async function mark(action: ImageAction) {
-    if (!currentImage.value) return;
-
+  async function mark(imageId: string, action: ImageAction) {
     marking.value = true;
     const duration = getDuration();
     lastMarkedAt.value = Time.now();
@@ -62,7 +41,7 @@ export default function useMarkImage(
         variables: {
           input: {
             sessionId: toValue(sessionId),
-            imageId: currentImage.value.id,
+            imageId,
             action,
             duration: duration.toISOString(),
           },

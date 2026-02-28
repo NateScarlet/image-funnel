@@ -93,7 +93,7 @@
           v-if="!didUseGesture"
           class="hidden md:flex gap-4 w-full max-w-md mb-4"
           :marking="marking"
-          @mark="markImage"
+          @mark="markImage(currentImageId!, $event)"
         />
       </template>
 
@@ -237,18 +237,27 @@ const progressClass = computed(() => {
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
+// 优先使用已加载完成的图片 id，避免在图片切换瞬间使用错误的 id
+const currentImageId = computed(
+  () => lastImageLoadedEvent.value?.id ?? currentImage.value?.id,
+);
+
 const swipeEl = useTemplateRef("swipeEl");
 useEventListeners(window, ({ on }) => {
   on("keydown", (e) => {
+    const imageId = currentImageId.value;
+    if (!imageId) {
+      return;
+    }
     switch (e.key) {
       case "ArrowDown":
-        markImage(ImageAction.REJECT);
+        markImage(imageId, ImageAction.REJECT);
         break;
       case "ArrowUp":
-        markImage(ImageAction.SHELVE);
+        markImage(imageId, ImageAction.SHELVE);
         break;
       case "ArrowRight":
-        markImage(ImageAction.KEEP);
+        markImage(imageId, ImageAction.KEEP);
         break;
       case "ArrowLeft":
         undo();
@@ -353,9 +362,7 @@ const imageLoadedAt = computed(() => {
   }
   return undefined;
 });
-const { marking, mark } = useMarkImage(sessionId, currentImage, imageLoadedAt);
-
-const markImage = mark;
+const { marking, mark: markImage } = useMarkImage(sessionId, imageLoadedAt);
 
 const completedView =
   useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
@@ -405,15 +412,19 @@ function handleAllowPan(e: PointerEvent) {
 
 const didUseGesture = ref(false);
 function handleGesture() {
+  const imageId = currentImageId.value;
+  if (!imageId) {
+    return;
+  }
   switch (swipeDirection.value) {
     case "UP":
-      markImage(ImageAction.SHELVE);
+      markImage(imageId, ImageAction.SHELVE);
       break;
     case "DOWN":
-      markImage(ImageAction.REJECT);
+      markImage(imageId, ImageAction.REJECT);
       break;
     case "LEFT":
-      markImage(ImageAction.KEEP);
+      markImage(imageId, ImageAction.KEEP);
       break;
     case "RIGHT":
       undo();
