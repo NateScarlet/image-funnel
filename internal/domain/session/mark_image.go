@@ -20,30 +20,20 @@ import (
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
 	opts := shared.NewMarkImageOptions(options...)
 
-	if s.currentIdx >= len(s.queue) {
-		return ErrNoMoreImages
-	}
+	// 判断要标记的是否是当前图片
+	isCurrentImage := s.currentIdx < len(s.queue) &&
+		s.images[s.queue[s.currentIdx]].ID() == imageID
 
-	currentImage := s.images[s.queue[s.currentIdx]]
-	if currentImage.ID() != imageID {
+	// 乱序标记时，需要确认该图片确实在队列中
+	if !isCurrentImage {
 		found := false
-		// 只允许向后查找（历史图片），防止因前端状态未同步导致的跳过图片
-		for i := 0; i < s.currentIdx; i++ {
-			idx := s.queue[i]
+		for _, idx := range s.queue {
 			if s.images[idx].ID() == imageID {
-				s.currentIdx = i
 				found = true
 				break
 			}
 		}
 		if !found {
-			// 如果在未来的队列中找到了该图片，说明前端进度超前（可能在撤销后连击了按键）
-			for i := s.currentIdx + 1; i < len(s.queue); i++ {
-				idx := s.queue[i]
-				if s.images[idx].ID() == imageID {
-					return apperror.New("INVALID_SEQUENCE", "cannot mark future images, UI sequence out of sync", "不能跳过图片标记，请等待前端状态同步")
-				}
-			}
 			return apperror.NewErrDocumentNotFound(imageID)
 		}
 	}
@@ -60,8 +50,10 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 		}
 		// 注意：不恢复耗时 (durations)，因为我们需要记录用户在图片上花费的总时长（包括撤销重做的过程）
 
-		// 恢复当前索引
-		s.currentIdx = previousIndex
+		// 非当前图片的乱序标记不会改变索引，所以 undo 也不需要恢复
+		if isCurrentImage {
+			s.currentIdx = previousIndex
+		}
 		s.updatedAt = time.Now()
 	})
 
@@ -72,24 +64,27 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	}
 	s.updatedAt = time.Now()
 
-	s.currentIdx++
+	// 只有标记当前图片时才推进队列
+	if isCurrentImage {
+		s.currentIdx++
 
-	if s.currentIdx >= len(s.queue) {
-		stats := s.Stats()
+		if s.currentIdx >= len(s.queue) {
+			stats := s.Stats()
 
-		if stats.Kept > s.targetKeep {
-			var newQueue []*image.Image
-			for _, idx := range s.queue {
-				img := s.images[idx]
-				action := s.actions[img.ID()]
-				if action == shared.ImageActionKeep {
-					newQueue = append(newQueue, img)
+			if stats.Kept > s.targetKeep {
+				var newQueue []*image.Image
+				for _, idx := range s.queue {
+					img := s.images[idx]
+					action := s.actions[img.ID()]
+					if action == shared.ImageActionKeep {
+						newQueue = append(newQueue, img)
+					}
 				}
-			}
 
-			// 开启新一轮
-			if err := s.NextRound(nil, newQueue); err != nil {
-				return err
+				// 开启新一轮
+				if err := s.NextRound(nil, newQueue); err != nil {
+					return err
+				}
 			}
 		}
 	}

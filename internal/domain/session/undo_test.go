@@ -198,23 +198,28 @@ func TestUndo_ShouldRestoreIndex_WhenRemarking(t *testing.T) {
 	session := setupTestSession(t, 2, 1)
 	img0ID := session.images[session.queue[0]].ID()
 
+	// 第一次标记当前图片，索引推进到 1
 	err := session.MarkImage(img0ID, shared.ImageActionKeep)
 	require.NoError(t, err)
 	assert.Equal(t, 1, session.currentIdx)
 
-	err = session.MarkImage(img0ID, shared.ImageActionKeep)
+	// 第二次标记已经处理过的 img0（此时 currentIdx=1），属于乱序标记，不改变索引
+	err = session.MarkImage(img0ID, shared.ImageActionShelve)
 	require.NoError(t, err)
-	assert.Equal(t, 1, session.currentIdx)
+	assert.Equal(t, 1, session.currentIdx, "乱序标记不应改变索引")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, img0ID), "操作应被乱序覆盖")
 
+	// 撤销乱序标记：操作恢复为 Keep，但索引不变（因为乱序标记没有移动过索引）
 	err = session.Undo()
 	require.NoError(t, err)
-	assert.Equal(t, 0, session.currentIdx)
+	assert.Equal(t, 1, session.currentIdx, "撤销乱序标记不应恢复索引")
+	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img0ID), "操作应恢复为 Keep")
 
+	// 撤销第一次标记：索引恢复到 0
 	err = session.Undo()
 	require.NoError(t, err)
-	assert.Equal(t, 0, session.currentIdx)
-
-	assert.True(t, session.currentIdx >= 0)
+	assert.Equal(t, 0, session.currentIdx, "撤销当前图片的标记应恢复索引")
+	assert.True(t, ActionOf(session, img0ID).IsZero(), "操作应恢复为 Pending")
 }
 
 func TestUndo_AfterUpdateAndNextRound(t *testing.T) {

@@ -24,13 +24,18 @@ func TestMarkImage_ShouldUpdateAction(t *testing.T) {
 	assert.True(t, session.CanUndo(), "CanUndo should be true")
 }
 
-func TestMarkImage_FutureImage_ShouldReturnError(t *testing.T) {
+// 乱序标记（非当前图片）应直接覆盖操作记录，不报错，不移动队列位置
+func TestMarkImage_OutOfOrderImage_ShouldOverwriteAction(t *testing.T) {
 	session := setupTestSession(t, 10, 5)
 
+	// 标记队列中第 2 个（未到达的）图片
 	imageID := session.images[session.queue[2]].ID()
 	err := session.MarkImage(imageID, shared.ImageActionShelve)
-	assert.Error(t, err, "Should return error for future image ID")
-	assert.Equal(t, "INVALID_SEQUENCE", apperror.ErrCode(err))
+	assert.NoError(t, err, "乱序标记队列内图片不应报错")
+	assert.Equal(t, 0, session.CurrentIndex(), "乱序标记不应推进队列位置")
+	assert.Equal(t, shared.ImageActionShelve, ActionOf(session, imageID), "操作记录应被覆盖")
+
+	_ = apperror.ErrCode // 保持导入被使用（InvalidImageID 测试仍需要它）
 }
 
 func TestMarkImage_InvalidImageID_ShouldReturnError(t *testing.T) {
