@@ -193,3 +193,33 @@ func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
 	assert.Equal(t, scalar.ToID("img2"), sess.images[sess.queue[1]].ID(), "Second image should be img2 (swapped)")
 	assert.Equal(t, scalar.ToID("img1"), sess.images[sess.queue[2]].ID(), "Third image should be img1")
 }
+
+// 复现 Bug：用户在队列末尾（刚完成状态）对之前的图片做乱序标记，
+// 使 Kept > targetKeep，此时必须触发 NextRound，否则 currentImage 永远为 null。
+func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) {
+	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", 1000, time.Now(), nil, 100, 100)
+	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", 1000, time.Now(), nil, 100, 100)
+	images := []*image.Image{img1, img2}
+
+	sess := NewSession(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images)
+
+	// 标记 img1 KEEP（推进到 currentIdx=1）
+	require.NoError(t, sess.MarkImage(scalar.ToID("img1"), shared.ImageActionKeep))
+	assert.Equal(t, 1, sess.currentIdx)
+
+	// 标记 img2 REJECT（推进到 currentIdx=2，到达末尾）
+	// Kept=1, targetKeep=1，不触发 NextRound，会话正常完成
+	require.NoError(t, sess.MarkImage(scalar.ToID("img2"), shared.ImageActionReject))
+	assert.Equal(t, 2, sess.currentIdx)
+	assert.True(t, sess.Stats().IsCompleted, "session should be completed at this point")
+	assert.Nil(t, sess.CurrentImage(), "currentImage should be nil when completed")
+
+	// 此时处于"已完成"状态，用户将 img2 从 REJECT 改为 KEEP（乱序标记，因为越界了）
+	// 使 Kept=2 > targetKeep=1，应触发 NextRound 开启新一轮
+	require.NoError(t, sess.MarkImage(scalar.ToID("img2"), shared.ImageActionKeep))
+
+	// 验证：NextRound 被正确触发，currentImage 不再是 null
+	assert.NotNil(t, sess.CurrentImage(), "currentImage should not be nil after out-of-order mark triggers NextRound")
+	assert.False(t, sess.Stats().IsCompleted, "session should not be completed after NextRound triggered")
+	assert.Equal(t, 0, sess.currentIdx, "currentIdx should be reset to 0 by NextRound")
+}
