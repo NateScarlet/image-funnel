@@ -24,16 +24,9 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	isCurrentImage := s.currentIdx < len(s.queue) &&
 		s.images[s.queue[s.currentIdx]].ID() == imageID
 
-	// 乱序标记时，需要确认该图片确实在队列中
+	// 乱序标记时，只需确认该图片存在于 images 中（不限于当前轮队列）
 	if !isCurrentImage {
-		found := false
-		for _, idx := range s.queue {
-			if s.images[idx].ID() == imageID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, ok := s.indexByID[imageID]; !ok {
 			return apperror.NewErrDocumentNotFound(imageID)
 		}
 	}
