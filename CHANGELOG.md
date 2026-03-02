@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/NateScarlet/image-funnel/compare/v1.4.1...v1.5.0) (2026-03-02)
+
+
+### Features
+
+* avoid mark image before loaded ([c760b26](https://github.com/NateScarlet/image-funnel/commit/c760b26087b0735739059bcc73b758253add20a3))
+* 乱序标记图片时不再报错或移动队列位置 ([8fee85d](https://github.com/NateScarlet/image-funnel/commit/8fee85d5ce0968d3bff247d7928a4cd12d11e755))
+
+
+### Bug Fixes
+
+* **session:** 乱序标记不应限于当前轮 ([ae43c3b](https://github.com/NateScarlet/image-funnel/commit/ae43c3b5c03e017d85bb2aac92f9de1a8f59e543))
+* 乱序标记在队列末尾时应触发新一轮筛选 ([07f3405](https://github.com/NateScarlet/image-funnel/commit/07f3405b758f22bf81ac8dbd79a710082b429e36))
+
 ## [1.4.1](https://github.com/NateScarlet/image-funnel/compare/v1.4.0...v1.4.1) (2026-02-24)
 
 
