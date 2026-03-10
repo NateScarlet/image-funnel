@@ -23,6 +23,7 @@ import (
 	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/stdimage"
 	"main/internal/infrastructure/urlconv"
+	"main/internal/infrastructure/winsleep"
 	"main/internal/infrastructure/xmpsidecar"
 	"main/internal/interfaces/graphql"
 	interfacehttp "main/internal/interfaces/http"
@@ -31,6 +32,7 @@ import (
 	"main/internal/shared"
 
 	gql "github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -119,6 +121,10 @@ func main() {
 	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir)
 	defer sessionCleanup()
 
+	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
+	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
+	defer stopSleepGuard()
+
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
@@ -168,6 +174,14 @@ func main() {
 			gql.AddError(ctx, i)
 		}
 		return res, nil
+	})
+	sleepGuard.RecordActivity() // 启动服务本身也视为一个活动
+	srv.AroundOperations(func(ctx context.Context, next gql.OperationHandler) gql.ResponseHandler {
+		oc := gql.GetOperationContext(ctx)
+		if oc != nil && oc.Operation != nil && oc.Operation.Operation == ast.Mutation {
+			sleepGuard.RecordActivity()
+		}
+		return next(ctx)
 	})
 
 	gui := playground.Handler("GraphQL Playground", "/graphql")

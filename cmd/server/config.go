@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -19,6 +20,7 @@ type Config struct {
 	FrontendDir               string
 	MagickConcurrency         int64
 	EnableDirectoryStatsCache bool
+	IdleThreshold             time.Duration
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -86,6 +88,15 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		}
 	}
 
+	idleThreshold := 5 * time.Minute
+	if v := os.Getenv("IMAGE_FUNNEL_IDLE_THRESHOLD"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			idleThreshold = d
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_IDLE_THRESHOLD, use default", zap.String("value", v))
+		}
+	}
+
 	return &Config{
 		Port:                      port,
 		RootDir:                   rootDir,
@@ -96,5 +107,6 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		FrontendDir:               frontendDir,
 		MagickConcurrency:         magickConcurrency,
 		EnableDirectoryStatsCache: enableDirectoryStatsCache,
+		IdleThreshold:             idleThreshold,
 	}, nil
 }
