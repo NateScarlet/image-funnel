@@ -1,26 +1,40 @@
 <template>
   <div>
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
       <label class="block text-sm font-medium text-primary-300">
         选择目录
       </label>
-      <template v-if="completedCount">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <span class="text-sm text-primary-400"
-            >显示已达标目录（{{ completedCount }}）</span
-          >
-          <div class="relative">
-            <input
-              v-model="showCompletedDirectories"
-              type="checkbox"
-              class="sr-only peer"
-            />
-            <div
-              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
-            ></div>
-          </div>
+      <div class="flex flex-wrap items-center gap-4">
+        <label
+          class="flex items-center gap-2"
+          title="隐藏未评级文件数量不足的目录"
+        >
+          <span class="text-xs text-primary-400">未评级数量 ≥</span>
+          <input
+            v-model.number="minUnratedCount"
+            type="number"
+            class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500"
+            min="0"
+          />
         </label>
-      </template>
+        <template v-if="completedCount">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <span class="text-sm text-primary-400"
+              >显示已达标目录（{{ completedCount }}）</span
+            >
+            <div class="relative">
+              <input
+                v-model="showCompletedDirectories"
+                type="checkbox"
+                class="sr-only peer"
+              />
+              <div
+                class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
+              ></div>
+            </div>
+          </label>
+        </template>
+      </div>
     </div>
     <div class="bg-primary-700 rounded-lg p-4">
       <div v-if="!currentDirectory?.root" class="mb-4">
@@ -130,6 +144,12 @@ const { model: showCompletedDirectories } = useStorage<boolean>(
   () => false,
 );
 
+const { model: minUnratedCount } = useStorage<number>(
+  localStorage,
+  "minUnratedCount@fab36720-bc2d-4876-8800-47b85f20658f",
+  () => 1,
+);
+
 const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
@@ -160,6 +180,11 @@ const items = computed(() => {
           0,
         ) ?? 0;
 
+      const unratedCount =
+        stats?.ratingCounts.find(
+          (rc: { rating: number; count: number }) => rc.rating === 0,
+        )?.count ?? 0;
+
       const isCompleted =
         stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
       return {
@@ -167,6 +192,7 @@ const items = computed(() => {
         dir,
         stats,
         isCompleted,
+        unratedCount,
       };
     }),
     [
@@ -180,9 +206,19 @@ const items = computed(() => {
 });
 
 const searchableItems = computed(() => {
-  return items.value.filter(
-    (item) => showCompletedDirectories.value || !item.isCompleted,
-  );
+  return items.value.filter((item) => {
+    if (!showCompletedDirectories.value && item.isCompleted) {
+      return false;
+    }
+    if (
+      item.stats &&
+      item.stats.subdirectoryCount === 0 &&
+      item.unratedCount < minUnratedCount.value
+    ) {
+      return false;
+    }
+    return true;
+  });
 });
 
 const searchState = ref({ query: "", directoryId: "" });
@@ -206,9 +242,19 @@ const filteredItems = computed(() => {
 });
 
 const displayedFilteredItems = computed(() => {
-  return filteredItems.value.filter(
-    (item) => showCompletedDirectories.value || !item.isCompleted,
-  );
+  return filteredItems.value.filter((item) => {
+    if (!showCompletedDirectories.value && item.isCompleted) {
+      return false;
+    }
+    if (
+      item.stats &&
+      item.stats.subdirectoryCount === 0 &&
+      item.unratedCount < minUnratedCount.value
+    ) {
+      return false;
+    }
+    return true;
+  });
 });
 
 const renderLimit = ref(40);
