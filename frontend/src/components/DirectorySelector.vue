@@ -5,8 +5,11 @@
         选择目录
       </label>
       <div class="flex flex-wrap items-center gap-4">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <span class="text-sm text-primary-400">
+        <div class="flex items-center gap-2">
+          <label
+            :for="showSmallUnratedId"
+            class="text-sm text-primary-400 cursor-pointer select-none"
+          >
             显示未评级图片 &lt;
             <input
               v-model.number="minUnratedCount"
@@ -16,18 +19,20 @@
               @click.stop
             />
             的目录（{{ smallUnratedCount }}）
-          </span>
+          </label>
           <div class="relative">
             <input
+              :id="showSmallUnratedId"
               v-model="showSmallUnrated"
               type="checkbox"
               class="sr-only peer"
             />
-            <div
-              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
-            ></div>
+            <label
+              :for="showSmallUnratedId"
+              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600 block cursor-pointer"
+            ></label>
           </div>
-        </label>
+        </div>
         <template v-if="completedCount">
           <label class="flex items-center gap-2 cursor-pointer">
             <span class="text-sm text-primary-400"
@@ -125,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, useId } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import useStorage from "../composables/useStorage";
@@ -148,6 +153,8 @@ const { currentDirectory, directories, loading, filterRating, targetKeep } =
 const emit = defineEmits<(e: "go-to-parent") => void>();
 
 const selectedId = defineModel<string>();
+
+const showSmallUnratedId = useId();
 
 const { model: showCompletedDirectories } = useStorage<boolean>(
   localStorage,
