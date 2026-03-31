@@ -83,8 +83,8 @@ func main() {
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 	localScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
 
-	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
-	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
+	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
+	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer))
 
 	var dirScanner domdirectory.Scanner = localScanner
