@@ -5,17 +5,28 @@
         选择目录
       </label>
       <div class="flex flex-wrap items-center gap-4">
-        <label
-          class="flex items-center gap-2"
-          title="隐藏未评级文件数量不足的目录"
-        >
-          <span class="text-xs text-primary-400">未评级数量 ≥</span>
-          <input
-            v-model.number="minUnratedCount"
-            type="number"
-            class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500"
-            min="0"
-          />
+        <label class="flex items-center gap-2 cursor-pointer">
+          <span class="text-sm text-primary-400">
+            显示未评级图片 &lt;
+            <input
+              v-model.number="minUnratedCount"
+              type="number"
+              class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500 mx-1"
+              min="0"
+              @click.stop
+            />
+            的目录（{{ smallUnratedCount }}）
+          </span>
+          <div class="relative">
+            <input
+              v-model="showSmallUnrated"
+              type="checkbox"
+              class="sr-only peer"
+            />
+            <div
+              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
+            ></div>
+          </div>
         </label>
         <template v-if="completedCount">
           <label class="flex items-center gap-2 cursor-pointer">
@@ -150,6 +161,12 @@ const { model: minUnratedCount } = useStorage<number>(
   () => 1,
 );
 
+const { model: showSmallUnrated } = useStorage<boolean>(
+  localStorage,
+  "showSmallUnrated@5918e244-67ad-4971-8608-f404494c25f4",
+  () => false,
+);
+
 const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
@@ -211,6 +228,7 @@ const searchableItems = computed(() => {
       return false;
     }
     if (
+      !showSmallUnrated.value &&
       item.stats &&
       item.stats.subdirectoryCount === 0 &&
       item.unratedCount < minUnratedCount.value
@@ -247,6 +265,7 @@ const displayedFilteredItems = computed(() => {
       return false;
     }
     if (
+      !showSmallUnrated.value &&
       item.stats &&
       item.stats.subdirectoryCount === 0 &&
       item.unratedCount < minUnratedCount.value
@@ -281,6 +300,16 @@ function handleScroll(e: Event) {
 
 const completedCount = computed(() => {
   return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);
+});
+
+const smallUnratedCount = computed(() => {
+  return items.value.reduce((sum, item) => {
+    const isSmall =
+      item.stats &&
+      item.stats.subdirectoryCount === 0 &&
+      item.unratedCount < minUnratedCount.value;
+    return sum + (isSmall ? 1 : 0);
+  }, 0);
 });
 
 watch(
