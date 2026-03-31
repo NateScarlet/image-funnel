@@ -211,39 +211,40 @@ const items = computed(() => {
 
       const isCompleted =
         stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
+      const isSmallUnrated =
+        stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
+
       return {
         key: dir.id,
         dir,
         stats,
         isCompleted,
         unratedCount,
+        keepCount,
+        isSmallUnrated,
       };
     }),
     [
-      (item) => {
-        return !item.stats;
-      },
+      (item) => !item.stats,
       (item) => item.stats?.imageCount === 0,
       (item) => item.stats?.latestImage?.modTime || "",
     ],
   );
 });
 
+/** 判定目录是否应该根据当前筛选设置显示 */
+const isVisible = (item: (typeof items.value)[number]) => {
+  if (!showCompletedDirectories.value && item.isCompleted) {
+    return false;
+  }
+  if (!showSmallUnrated.value && item.isSmallUnrated) {
+    return false;
+  }
+  return true;
+};
+
 const searchableItems = computed(() => {
-  return items.value.filter((item) => {
-    if (!showCompletedDirectories.value && item.isCompleted) {
-      return false;
-    }
-    if (
-      !showSmallUnrated.value &&
-      item.stats &&
-      item.stats.subdirectoryCount === 0 &&
-      item.unratedCount < minUnratedCount.value
-    ) {
-      return false;
-    }
-    return true;
-  });
+  return items.value.filter(isVisible);
 });
 
 const searchState = ref({ query: "", directoryId: "" });
@@ -267,20 +268,7 @@ const filteredItems = computed(() => {
 });
 
 const displayedFilteredItems = computed(() => {
-  return filteredItems.value.filter((item) => {
-    if (!showCompletedDirectories.value && item.isCompleted) {
-      return false;
-    }
-    if (
-      !showSmallUnrated.value &&
-      item.stats &&
-      item.stats.subdirectoryCount === 0 &&
-      item.unratedCount < minUnratedCount.value
-    ) {
-      return false;
-    }
-    return true;
-  });
+  return filteredItems.value.filter(isVisible);
 });
 
 const renderLimit = ref(40);
@@ -306,32 +294,18 @@ function handleScroll(e: Event) {
 }
 
 const completedCount = computed(() => {
-  return items.value.reduce((sum, item) => sum + (item.isCompleted ? 1 : 0), 0);
+  return items.value.filter((item) => item.isCompleted).length;
 });
 
 const smallUnratedCount = computed(() => {
-  return items.value.reduce((sum, item) => {
-    const isSmall =
-      item.stats &&
-      item.stats.subdirectoryCount === 0 &&
-      item.unratedCount < minUnratedCount.value;
-    return sum + (isSmall ? 1 : 0);
-  }, 0);
+  return items.value.filter((item) => item.isSmallUnrated).length;
 });
 
 watch(
   filteredItems,
   (newItems) => {
     const navigableDirectoryIds = newItems
-      .filter((item) => {
-        const keepCount =
-          item.stats?.ratingCounts.reduce(
-            (sum: number, rc: { rating: number; count: number }) =>
-              sum + (filterRating.includes(rc.rating) ? rc.count : 0),
-            0,
-          ) ?? 0;
-        return keepCount > targetKeep;
-      })
+      .filter((item) => item.keepCount > targetKeep)
       .map((item) => item.dir.id);
 
     if (currentDirectory) {
