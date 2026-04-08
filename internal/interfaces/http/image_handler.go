@@ -3,28 +3,26 @@ package http
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
+	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
 
 	"go.uber.org/zap"
 )
 
-type ImageProcessor interface {
-	Process(ctx context.Context, path string, width int, quality int) (string, error)
-}
-
 func handleImage(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	imageProcessor ImageProcessor,
+	imageProcessor appimage.Processor,
 	absRootDir string,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 为不支持 Cache-Control: immutable 的浏览器(Chrome) 提供 304 响应
-		// 缓存条目时会规范要求按 URL 隔离，所以 ETag 不需全局唯一，不考虑错误客户端
 		const etag = `"immutable"`
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(http.StatusNotModified)
@@ -44,9 +42,12 @@ func handleImage(
 		}
 
 		absPath := filepath.Join(absRootDir, relativePath)
-		targetPath := absPath
 
-		if !raw {
+		var file io.ReadSeekCloser
+
+		if raw {
+			file, err = os.Open(absPath)
+		} else {
 			width := 0
 			if widthStr != "" {
 				if w, err := strconv.Atoi(widthStr); err == nil {
@@ -61,21 +62,23 @@ func handleImage(
 				}
 			}
 
-			processedPath, err := imageProcessor.Process(r.Context(), absPath, width, quality)
-			if errors.Is(err, context.Canceled) {
-				http.Error(w, "request canceled", http.StatusRequestTimeout)
-				return
-			}
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				logger.Error("process image", zap.Error(err))
-				return
-			}
-			targetPath = processedPath
+			file, err = imageProcessor.Process(r.Context(), absPath, width, quality)
 		}
+
+		if errors.Is(err, context.Canceled) {
+			http.Error(w, "request canceled", http.StatusRequestTimeout)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Error("process image", zap.Error(err))
+			return
+		}
+		defer file.Close()
 
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", etag)
-		http.ServeFile(w, r, targetPath)
+
+		http.ServeContent(w, r, "", time.Now(), file)
 	}
 }

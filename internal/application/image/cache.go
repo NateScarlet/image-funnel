@@ -1,8 +1,16 @@
 package image
 
+import (
+	"context"
+	"io"
+)
+
+type File interface {
+	io.ReadSeekCloser
+}
+
 type Cache interface {
-	// GetPath returns the absolute path for the given key
-	GetPath(key string) string
-	// Exists checks if the cache key exists and updates access time
-	Exists(key string) bool
+	// Open 在文件不存在时返回 (nil, nil)
+	Open(ctx context.Context, key string) (File, error)
+	Save(ctx context.Context, key string, r io.Reader) error
 }

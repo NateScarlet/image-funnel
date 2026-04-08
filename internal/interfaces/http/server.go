@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
 
 	"github.com/gorilla/mux"
@@ -14,7 +15,7 @@ import (
 type Server struct {
 	logger         *zap.Logger
 	signer         *urlconv.Signer
-	imageProcessor ImageProcessor
+	imageProcessor appimage.Processor
 	graphqlHandler http.Handler
 	playground     http.Handler
 	absRootDir     string
@@ -25,7 +26,7 @@ type Server struct {
 func NewServer(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	imageProcessor ImageProcessor,
+	imageProcessor appimage.Processor,
 	graphqlHandler http.Handler,
 	playground http.Handler,
 	absRootDir string,

@@ -2,12 +2,14 @@ package localfs
 
 import (
 	"context"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	appimage "main/internal/application/image"
+	"main/internal/util"
 )
 
 type ImageCache struct {
@@ -29,20 +31,47 @@ func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration) (*Imag
 	return cache, cancel
 }
 
-func (c *ImageCache) GetPath(key string) string {
+func (c *ImageCache) getPath(key string) string {
 	return filepath.Join(c.rootDir, key)
 }
 
-func (c *ImageCache) Exists(key string) bool {
-	path := c.GetPath(key)
+func (c *ImageCache) Open(ctx context.Context, key string) (appimage.File, error) {
+	path := c.getPath(key)
 	info, err := os.Stat(path)
 	if err != nil {
-		return false
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	// Update access/mod time to prevent cleanup
+
+	if info.IsDir() {
+		return nil, nil
+	}
+
 	now := time.Now()
 	os.Chtimes(path, now, now)
-	return !info.IsDir()
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return file, nil
+}
+
+func (c *ImageCache) Save(ctx context.Context, key string, r io.Reader) error {
+	path := c.getPath(key)
+
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	if err != nil {
+		return err
+	}
+
+	return util.AtomicSave(path, func(f *os.File) error {
+		_, err := io.Copy(f, r)
+		return err
+	})
 }
 
 func (c *ImageCache) startAutoClean(ctx context.Context) {

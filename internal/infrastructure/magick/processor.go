@@ -6,13 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
-	"main/internal/util"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -28,14 +27,18 @@ func NewProcessor(cache appimage.Cache, concurrency int64) *Processor {
 	}
 	return &Processor{
 		cache: cache,
-		sem:   semaphore.NewWeighted(concurrency), // 限制并发处理数量，防止大图片导致内存溢出
+		sem:   semaphore.NewWeighted(concurrency),
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, srcPath string, width, quality int) (string, error) {
+func (p *Processor) Process(ctx context.Context, srcPath string, width, quality int) (appimage.File, error) {
+	if width == 0 && quality == 0 {
+		return os.Open(srcPath)
+	}
+
 	info, err := os.Stat(srcPath)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	timestamp := fmt.Sprintf("%d", info.ModTime().Unix())
@@ -54,24 +57,25 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 
 	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
 
-	if p.cache.Exists(cacheKey) {
-		return p.cache.GetPath(cacheKey), nil
-	}
-
-	cachePath := p.cache.GetPath(cacheKey)
-
-	// Acquire semaphore to limit concurrency
-	if err := p.sem.Acquire(ctx, 1); err != nil {
-		return "", err
-	}
-	defer p.sem.Release(1)
-
-	err = os.MkdirAll(filepath.Dir(cachePath), 0755)
+	file, err := p.cache.Open(ctx, cacheKey)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	// Use AtomicSave to write the file securely
-	err = util.AtomicSave(cachePath, func(f *os.File) error {
+	if file != nil {
+		return file, nil
+	}
+
+	pipeReader, pipeWriter := io.Pipe()
+
+	go func() {
+		defer pipeWriter.Close()
+
+		if err := p.sem.Acquire(ctx, 1); err != nil {
+			pipeWriter.CloseWithError(err)
+			return
+		}
+		defer p.sem.Release(1)
+
 		args := []string{srcPath, "-coalesce"}
 		if width > 0 {
 			args = append(args, "-resize", fmt.Sprintf("%dx>", width))
@@ -82,22 +86,26 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		args = append(args, "webp:-")
 
 		cmd := exec.CommandContext(ctx, "magick", args...)
-		cmd.Stdout = f // Write directly to the temp file
-		// Capture stderr for debugging
+		cmd.Stdout = pipeWriter
 		var b = new(bytes.Buffer)
 		cmd.Stderr = b
 
 		if err := cmd.Run(); err != nil {
-			// If the context was canceled, return that error specifically so the caller knows it wasn't a process failure.
 			if ctx.Err() != nil {
-				return ctx.Err()
+				pipeWriter.CloseWithError(ctx.Err())
+				return
 			}
-			return fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, b.String())
+			pipeWriter.CloseWithError(fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, b.String()))
+			return
 		}
-		return nil
-	})
+	}()
 
-	return cachePath, err
+	saveErr := p.cache.Save(ctx, cacheKey, pipeReader)
+	if saveErr != nil {
+		return nil, saveErr
+	}
+
+	return p.cache.Open(ctx, cacheKey)
 }
 
 func (p *Processor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {

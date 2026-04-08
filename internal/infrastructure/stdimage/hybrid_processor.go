@@ -27,7 +27,7 @@ func NewHybridProcessor(fallback appimage.Processor) *HybridProcessor {
 	}
 }
 
-func (p *HybridProcessor) Process(ctx context.Context, srcPath string, width, quality int) (string, error) {
+func (p *HybridProcessor) Process(ctx context.Context, srcPath string, width, quality int) (appimage.File, error) {
 	return p.fallback.Process(ctx, srcPath, width, quality)
 }
 

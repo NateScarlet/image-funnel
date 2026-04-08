@@ -21,11 +21,7 @@ func NewSingleFlightImageProcessor(next appimage.Processor) *SingleFlightImagePr
 	}
 }
 
-func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string, width, quality int) (string, error) {
-	// Generate a key for request coalescing.
-	// Note: This key depends only on input parameters.
-	// If the underlying file changes, concurrent requests might receive the result of the first one.
-	// This is an acceptable trade-off for cache stampede protection.
+func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string, width, quality int) (appimage.File, error) {
 	key := fmt.Sprintf("%s|%d|%d", srcPath, width, quality)
 
 	result, err, _ := p.group.Do(key, func() (interface{}, error) {
@@ -33,10 +29,10 @@ func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return result.(string), nil
+	return result.(appimage.File), nil
 }
 
 func (p *SingleFlightImageProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
