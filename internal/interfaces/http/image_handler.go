@@ -68,7 +68,9 @@ func handleImage(
 				return
 			}
 			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				logger.Error("process image", zap.Error(err))
+				return
 			} else {
 				targetPath = processedPath
 				shouldSetHeaders = true
