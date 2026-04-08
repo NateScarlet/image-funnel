@@ -45,7 +45,6 @@ func handleImage(
 
 		absPath := filepath.Join(absRootDir, relativePath)
 		targetPath := absPath
-		shouldSetHeaders := raw
 
 		if !raw {
 			width := 0
@@ -71,16 +70,12 @@ func handleImage(
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				logger.Error("process image", zap.Error(err))
 				return
-			} else {
-				targetPath = processedPath
-				shouldSetHeaders = true
 			}
+			targetPath = processedPath
 		}
 
-		if shouldSetHeaders {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			w.Header().Set("ETag", etag)
-		}
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("ETag", etag)
 		http.ServeFile(w, r, targetPath)
 	}
 }
