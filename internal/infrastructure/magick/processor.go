@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
@@ -65,6 +66,10 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	}
 	defer p.sem.Release(1)
 
+	err = os.MkdirAll(filepath.Dir(cachePath), 0755)
+	if err != nil {
+		return "", err
+	}
 	// Use AtomicSave to write the file securely
 	err = util.AtomicSave(cachePath, func(f *os.File) error {
 		args := []string{srcPath, "-coalesce"}

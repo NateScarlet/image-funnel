@@ -17,7 +17,6 @@ type ImageCache struct {
 }
 
 func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration) (*ImageCache, func()) {
-	os.MkdirAll(rootDir, 0755)
 	cache := &ImageCache{
 		rootDir:         rootDir,
 		cleanupInterval: cleanupInterval,
