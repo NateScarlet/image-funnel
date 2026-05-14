@@ -1,4 +1,15 @@
 @import "tailwindcss";
+@import "tailwindcss/preflight" layer(base);
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-primary-900);
+    color: var(--color-primary-100);
+  }
+}
 
 @theme {
   /* Primary (Slate) */
