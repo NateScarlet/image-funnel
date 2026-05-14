@@ -2,22 +2,23 @@ package magick
 
 import (
 	"context"
+	"io"
 	"testing"
+
+	appimage "main/internal/application/image"
 
 	"github.com/stretchr/testify/assert"
 )
 
 type mockCache struct {
-	paths map[string]string
 }
 
-func (m *mockCache) GetPath(key string) string {
-	return m.paths[key]
+func (m *mockCache) Open(ctx context.Context, key string) (appimage.File, error) {
+	return nil, nil
 }
 
-func (m *mockCache) Exists(key string) bool {
-	_, ok := m.paths[key]
-	return ok
+func (m *mockCache) Save(ctx context.Context, key string, r io.Reader) error {
+	return nil
 }
 
 func TestNewProcessor(t *testing.T) {
