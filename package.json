@@ -1,6 +1,7 @@
 {
   "name": "image-funnel",
   "private": true,
+  "packageManager": "pnpm@11.1.1",
   "scripts": {
     "dev": "pnpm --filter image-funnel-frontend dev",
     "build": "pnpm --filter image-funnel-frontend build",
@@ -10,8 +11,5 @@
     "check": "pnpm --filter image-funnel-frontend check",
     "lint": "pnpm --filter image-funnel-frontend lint",
     "lint:fix": "pnpm --filter image-funnel-frontend lint:fix"
-  },
-  "dependencies": {
-    "@noble/hashes": "^2.0.1"
   }
 }
