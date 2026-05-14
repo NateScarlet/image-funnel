@@ -45,6 +45,12 @@ func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, erro
 	return h.dtoFactory.New(m), nil
 }
 
+// MemoByRelPath 根据相对路径获取备忘录内容
+func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.MemoDTO, error) {
+	id := memo.EncodeID(relPath)
+	return h.Memo(ctx, id)
+}
+
 // MemoUpdated 订阅备忘录更新
 func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shared.MemoDTO, error] {
 	return func(yield func(*shared.MemoDTO, error) bool) {

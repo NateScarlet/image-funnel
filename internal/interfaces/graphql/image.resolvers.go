@@ -8,7 +8,6 @@ package graphql
 import (
 	"context"
 	"main/internal/application/image"
-	"main/internal/domain/memo"
 	"main/internal/shared"
 	"path/filepath"
 )
@@ -31,8 +30,7 @@ func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared
 	if err != nil {
 		return nil, err
 	}
-	id := memo.EncodeID(relPath)
-	return r.app.Memo(ctx, id)
+	return r.app.MemoByRelPath(ctx, relPath)
 }
 
 // Image returns ImageResolver implementation.
