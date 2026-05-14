@@ -8,7 +8,9 @@ package graphql
 import (
 	"context"
 	"main/internal/application/image"
+	"main/internal/domain/memo"
 	"main/internal/shared"
+	"path/filepath"
 )
 
 // URL is the resolver for the url field.
@@ -21,6 +23,16 @@ func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *in
 		opts = append(opts, image.WithQuality(*quality))
 	}
 	return r.signer.GenerateSignedURL(obj.Path, opts...)
+}
+
+// Memo is the resolver for the memo field.
+func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error) {
+	relPath, err := filepath.Rel(r.rootDir, obj.Path)
+	if err != nil {
+		return nil, err
+	}
+	id := memo.EncodeID(relPath)
+	return r.app.Memo(ctx, id)
 }
 
 // Image returns ImageResolver implementation.

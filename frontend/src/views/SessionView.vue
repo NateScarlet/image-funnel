@@ -9,6 +9,19 @@
       @show-commit-modal="handleCommit"
       @undo="undo"
     >
+      <template #extra>
+        <button
+          v-if="currentImage"
+          class="p-2 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors flex items-center gap-2"
+          :class="currentImage.memo.content ? 'text-secondary-400' : ''"
+          title="备注"
+          @click="showMemoDialog = true"
+        >
+          <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <path :d="mdiNoteTextOutline" fill="currentColor" />
+          </svg>
+        </button>
+      </template>
     </SessionHeader>
 
     <main
@@ -43,6 +56,19 @@
             <span class="lg:min-w-24 hidden md:block">
               {{ formatDate(currentImage.modTime) }}
             </span>
+            <template v-if="currentImage.memo.content">
+              <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+              <span
+                class="truncate max-w-[150px] lg:max-w-[300px] cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
+                title="编辑备注"
+                @click="showMemoDialog = true"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path :d="mdiNoteTextOutline" fill="currentColor" />
+                </svg>
+                {{ currentImage.memo.content }}
+              </span>
+            </template>
             <template v-if="isFullscreen">
               <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
               <span class="lg:min-w-24">
@@ -84,7 +110,7 @@
 
       <template v-if="currentImage">
         <div
-          class="text-center text-xs md:text-sm text-primary-400 hidden md:block"
+          class="text-center text-xs md:text-sm text-primary-400 hidden md:block mb-2"
         >
           {{ currentImage?.filename || "" }}
         </div>
@@ -134,6 +160,12 @@
       ↓ 排除 | ↑ 搁置 | → 保留 | ← 撤销
     </footer>
 
+    <MemoEditorDialog
+      v-if="currentImage"
+      v-model="showMemoDialog"
+      :memo="currentImage.memo"
+    />
+
     <CommitModal
       v-if="showCommitModal"
       :session
@@ -165,11 +197,13 @@ import CommitModal from "../components/CommitModal.vue";
 import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
-import { mdiHome } from "@mdi/js";
+import { mdiHome, mdiNoteTextOutline } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
+import useMemo from "@/composables/useMemo";
 import Time from "@/utils/Time";
+import MemoEditorDialog from "../components/MemoEditorDialog.vue";
 
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
@@ -185,6 +219,7 @@ const loading = computed(() => loadingCount.value > 0);
 
 const showUpdateSessionModal = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
+const showMemoDialog = ref<boolean>(false);
 const undoing = ref(false);
 
 // TODO: refactor to touchStart touchEnd
@@ -236,6 +271,9 @@ const progressClass = computed(() => {
 });
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
+
+// 开启当前图片的备注订阅
+useMemo(() => currentImage.value?.memo.id);
 
 // 优先使用已加载完成的图片 id，避免在图片切换瞬间使用错误的 id
 const currentImageId = computed(

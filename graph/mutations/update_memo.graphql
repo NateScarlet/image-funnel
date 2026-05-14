@@ -1,0 +1,6 @@
+extend type Mutation {
+  """
+  更新图片的备忘信息。操作是即时的，不参与会话提交。
+  """
+  updateMemo(id: ID!, content: String!): Memo!
+}

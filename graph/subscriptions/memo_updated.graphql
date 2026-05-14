@@ -1,0 +1,6 @@
+extend type Subscription {
+  """
+  订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。
+  """
+  memoUpdated(id: ID!): Memo!
+}

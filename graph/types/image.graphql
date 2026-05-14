@@ -8,4 +8,5 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   height: Int!
   currentRating: Int
   xmpExists: Boolean!
+  memo: Memo!
 }

@@ -1,0 +1,4 @@
+fragment Memo on Memo {
+  id
+  content
+}

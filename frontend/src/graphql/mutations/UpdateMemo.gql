@@ -1,0 +1,5 @@
+mutation UpdateMemo($id: ID!, $content: String!) {
+  updateMemo(id: $id, content: $content) {
+    ...Memo
+  }
+}

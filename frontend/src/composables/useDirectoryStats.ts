@@ -78,11 +78,12 @@ export default function useDirectoryStats() {
     directoryId: string,
   ): DirectoryStatsFragment | undefined {
     if (!statsCache.has(directoryId)) {
-      // 初始化缓存
-      const initial = apolloClient.readQuery({
+      const initialNode = apolloClient.readQuery({
         query: DirectoryStatsDocument,
         variables: { id: directoryId },
-      })?.node?.stats;
+      })?.node;
+      const initial =
+        initialNode?.__typename === "Directory" ? initialNode.stats : undefined;
       statsCache.set(directoryId, initial || undefined);
 
       // 建立订阅
@@ -94,10 +95,12 @@ export default function useDirectoryStats() {
             fetchPolicy: "cache-only",
           })
           .subscribe((result) => {
+            const node = (result.data as DirectoryStatsQuery)?.node;
             statsCache.set(
               directoryId,
               toStableValue(
-                (result.data as DirectoryStatsQuery)?.node?.stats || undefined,
+                (node?.__typename === "Directory" ? node.stats : undefined) ||
+                  undefined,
                 statsCache.get(directoryId),
               ),
             );

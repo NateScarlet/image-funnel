@@ -1,0 +1,7 @@
+"""
+图片的备忘信息
+"""
+type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
+  id: ID!
+  content: String!
+}

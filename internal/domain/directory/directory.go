@@ -38,16 +38,16 @@ func (s *DirectoryStats) RatingCounts() map[int]int {
 }
 
 type Directory struct {
-	id   scalar.ID
-	path string
+	id      scalar.ID
+	relPath string
 }
 
 // FromRepository 从仓库创建目录
 // 不要用作构建函数
-func FromRepository(id scalar.ID, path string) *Directory {
+func FromRepository(id scalar.ID, relPath string) *Directory {
 	return &Directory{
-		id:   id,
-		path: path,
+		id:      id,
+		relPath: relPath,
 	}
 }
 
@@ -55,6 +55,7 @@ func (d *Directory) ID() scalar.ID {
 	return d.id
 }
 
+// TODO: rename to RelPath
 func (d *Directory) Path() string {
-	return d.path
+	return d.relPath
 }

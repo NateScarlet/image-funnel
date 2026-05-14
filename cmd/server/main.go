@@ -12,6 +12,7 @@ import (
 	"main/internal/application"
 	appdirectory "main/internal/application/directory"
 	appimage "main/internal/application/image"
+	appmemo "main/internal/application/memo"
 	appsession "main/internal/application/session"
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
@@ -129,8 +130,9 @@ func main() {
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
 	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
+	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler)
 
 	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version)
 

@@ -86,6 +86,7 @@ type ComplexityRoot struct {
 		Filename      func(childComplexity int) int
 		Height        func(childComplexity int) int
 		ID            func(childComplexity int) int
+		Memo          func(childComplexity int) int
 		ModTime       func(childComplexity int) int
 		Size          func(childComplexity int) int
 		URL           func(childComplexity int, width *int, quality *int) int
@@ -102,6 +103,11 @@ type ComplexityRoot struct {
 		Session          func(childComplexity int) int
 	}
 
+	Memo struct {
+		Content func(childComplexity int) int
+		ID      func(childComplexity int) int
+	}
+
 	Meta struct {
 		RootPath func(childComplexity int) int
 		Version  func(childComplexity int) int
@@ -112,6 +118,7 @@ type ComplexityRoot struct {
 		CreateSession func(childComplexity int, input CreateSessionInput) int
 		MarkImage     func(childComplexity int, input MarkImageInput) int
 		Undo          func(childComplexity int, input UndoInput) int
+		UpdateMemo    func(childComplexity int, id scalar.ID, content string) int
 		UpdateSession func(childComplexity int, input UpdateSessionInput) int
 	}
 
@@ -155,6 +162,7 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
+		MemoUpdated      func(childComplexity int, id scalar.ID) int
 		SessionUpdated   func(childComplexity int, id scalar.ID) int
 	}
 
@@ -184,12 +192,15 @@ type DirectoryStatsResolver interface {
 }
 type ImageResolver interface {
 	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
+
+	Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error)
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
+	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
 type QueryResolver interface {
@@ -210,6 +221,7 @@ type SessionResolver interface {
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
+	MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error)
 }
 
 type executableSchema struct {
@@ -349,6 +361,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.ID(childComplexity), true
+	case "Image.memo":
+		if e.complexity.Image.Memo == nil {
+			break
+		}
+
+		return e.complexity.Image.Memo(childComplexity), true
 	case "Image.modTime":
 		if e.complexity.Image.ModTime == nil {
 			break
@@ -404,6 +422,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.MarkImagePayload.Session(childComplexity), true
+
+	case "Memo.content":
+		if e.complexity.Memo.Content == nil {
+			break
+		}
+
+		return e.complexity.Memo.Content(childComplexity), true
+	case "Memo.id":
+		if e.complexity.Memo.ID == nil {
+			break
+		}
+
+		return e.complexity.Memo.ID(childComplexity), true
 
 	case "Meta.rootPath":
 		if e.complexity.Meta.RootPath == nil {
@@ -462,6 +493,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.Undo(childComplexity, args["input"].(UndoInput)), true
+	case "Mutation.updateMemo":
+		if e.complexity.Mutation.UpdateMemo == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateMemo_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateMemo(childComplexity, args["id"].(scalar.ID), args["content"].(string)), true
 	case "Mutation.updateSession":
 		if e.complexity.Mutation.UpdateSession == nil {
 			break
@@ -665,6 +707,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.DirectoryChanged(childComplexity, args["filterBy"].(*shared.DirectoryFilters)), true
+	case "Subscription.memoUpdated":
+		if e.complexity.Subscription.MemoUpdated == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_memoUpdated_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.MemoUpdated(childComplexity, args["id"].(scalar.ID)), true
 	case "Subscription.sessionUpdated":
 		if e.complexity.Subscription.SessionUpdated == nil {
 			break
@@ -896,6 +949,7 @@ directive @goField(
   height: Int!
   currentRating: Int
   xmpExists: Boolean!
+  memo: Memo!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image_filters.graphql", Input: `type ImageFilters
@@ -906,6 +960,14 @@ directive @goField(
 input ImageFiltersInput
   @goModel(model: "main/internal/shared.ImageFilters") {
   rating: [Int!]!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/memo.graphql", Input: `"""
+图片的备忘信息
+"""
+type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
+  id: ID!
+  content: String!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
@@ -988,6 +1050,13 @@ input DirectoryFilters
   id: [ID!]
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/memo_updated.graphql", Input: `extend type Subscription {
+  """
+  订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。
+  """
+  memoUpdated(id: ID!): Memo!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
   sessionUpdated(id: ID!): Session!
 }
@@ -1059,6 +1128,13 @@ type UndoPayload {
 
 extend type Mutation {
   undo(input: UndoInput!): UndoPayload
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_memo.graphql", Input: `extend type Mutation {
+  """
+  更新图片的备忘信息。操作是即时的，不参与会话提交。
+  """
+  updateMemo(id: ID!, content: String!): Memo!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_session.graphql", Input: `input UpdateSessionInput {
@@ -1143,6 +1219,22 @@ func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArg
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateMemo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "content", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["content"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -1222,6 +1314,17 @@ func (ec *executionContext) field_Subscription_directoryChanged_args(ctx context
 		return nil, err
 	}
 	args["filterBy"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_memoUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -1791,6 +1894,8 @@ func (ec *executionContext) fieldContext_DirectoryStats_latestImage(_ context.Co
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -2106,6 +2211,41 @@ func (ec *executionContext) fieldContext_Image_xmpExists(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Image_memo(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_memo,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Image().Memo(ctx, obj)
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_memo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2213,6 +2353,64 @@ func (ec *executionContext) _MarkImagePayload_clientMutationId(ctx context.Conte
 func (ec *executionContext) fieldContext_MarkImagePayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "MarkImagePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Memo_id(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Memo_content(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -2465,6 +2663,53 @@ func (ec *executionContext) fieldContext_Mutation_undo(ctx context.Context, fiel
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_undo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateMemo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateMemo,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateMemo(ctx, fc.Args["id"].(scalar.ID), fc.Args["content"].(string))
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateMemo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3267,6 +3512,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -3317,6 +3564,8 @@ func (ec *executionContext) fieldContext_Session_nextImages(ctx context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -3378,6 +3627,8 @@ func (ec *executionContext) fieldContext_Session_keptImages(ctx context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -3690,6 +3941,53 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_directoryChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_memoUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_memoUpdated,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().MemoUpdated(ctx, fc.Args["id"].(scalar.ID))
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_memoUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5734,6 +6032,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
+	case shared.MemoDTO:
+		return ec._Memo(ctx, sel, &obj)
+	case *shared.MemoDTO:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Memo(ctx, sel, obj)
 	case shared.DirectoryDTO:
 		return ec._Directory(ctx, sel, &obj)
 	case *shared.DirectoryDTO:
@@ -6124,6 +6429,42 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "memo":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Image_memo(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6201,6 +6542,50 @@ func (ec *executionContext) _MarkImagePayload(ctx context.Context, sel ast.Selec
 			}
 		case "clientMutationId":
 			out.Values[i] = ec._MarkImagePayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var memoImplementors = []string{"Memo", "Node"}
+
+func (ec *executionContext) _Memo(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, memoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Memo")
+		case "id":
+			out.Values[i] = ec._Memo_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._Memo_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6312,6 +6697,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_undo(ctx, field)
 			})
+		case "updateMemo":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateMemo(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateSession":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateSession(ctx, field)
@@ -6855,6 +7247,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_sessionUpdated(ctx, fields[0])
 	case "directoryChanged":
 		return ec._Subscription_directoryChanged(ctx, fields[0])
+	case "memoUpdated":
+		return ec._Subscription_memoUpdated(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -7603,6 +7997,20 @@ func (ec *executionContext) marshalNMarkImagePayload2ᚖmainᚋinternalᚋinterf
 		return graphql.Null
 	}
 	return ec._MarkImagePayload(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMemo2mainᚋinternalᚋsharedᚐMemoDTO(ctx context.Context, sel ast.SelectionSet, v shared.MemoDTO) graphql.Marshaler {
+	return ec._Memo(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Memo(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNMeta2mainᚋinternalᚋinterfacesᚋgraphqlᚐMeta(ctx context.Context, sel ast.SelectionSet, v Meta) graphql.Marshaler {
