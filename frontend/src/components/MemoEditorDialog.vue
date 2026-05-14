@@ -9,37 +9,42 @@
   >
     <div
       v-if="modelValue"
-      class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/60"
+      class="fixed inset-0 z-100 flex flex-col justify-end sm:items-center sm:justify-center bg-black/60"
       @click.self="modelValue = false"
     >
       <div
-        class="w-full max-w-lg bg-primary-900 border border-primary-700 rounded-2xl shadow-2xl overflow-hidden"
+        class="w-full sm:max-w-lg sm:rounded-2xl rounded-t-3xl bg-primary-900 border border-primary-700 shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh] sm:max-h-[85vh]"
         @click.stop
       >
         <div
-          class="p-4 border-b border-primary-700 flex items-center justify-between bg-primary-800/50"
+          class="px-4 sm:px-5 py-3 sm:py-4 border-b border-primary-700 flex items-center justify-between bg-primary-800/50 shrink-0"
         >
           <h3
-            class="text-lg font-bold text-primary-100 flex items-center gap-2"
+            class="text-base sm:text-lg font-bold text-primary-100 flex items-center gap-2"
           >
-            <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
+            <svg
+              class="w-4 sm:w-5 h-4 sm:h-5 text-secondary-400"
+              viewBox="0 0 24 24"
+            >
               <path :d="mdiNoteTextOutline" fill="currentColor" />
             </svg>
             图片备注
           </h3>
           <button
-            class="p-2 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors"
+            class="p-2 sm:p-2.5 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95"
             @click="modelValue = false"
           >
-            <svg class="w-6 h-6" viewBox="0 0 24 24">
+            <svg class="w-5 sm:w-6 h-5 sm:h-6" viewBox="0 0 24 24">
               <path :d="mdiClose" fill="currentColor" />
             </svg>
           </button>
         </div>
 
-        <div class="p-6">
+        <div class="px-4 sm:px-6 py-4 sm:py-6 overflow-y-auto flex-1 min-h-0">
           <MemoEditor ref="editor" :memo="memo" @saved="onSaved" />
-          <p class="mt-4 text-xs text-primary-500 italic">
+          <p
+            class="mt-3 sm:mt-4 text-xs text-primary-500 italic leading-relaxed"
+          >
             备注信息将保存为同名的 .md 文件。内容为空时将自动删除备注文件。
           </p>
         </div>

@@ -5,6 +5,7 @@ import { debounce } from "es-toolkit";
 import useMemo from "@/composables/useMemo";
 import { mdiLoading, mdiCheck, mdiAlertCircleOutline } from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
+import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 
 const textarea = useTemplateRef("textarea");
 
@@ -31,6 +32,8 @@ const content = computed({
     contentBuffer.value = { id: props.memo.id, content: v };
   },
 });
+
+useTextAreaAutoHeight(textarea, content);
 
 enum SaveStatus {
   IDLE,
@@ -125,13 +128,13 @@ const emit = defineEmits<(e: "saved") => void>();
     <textarea
       ref="textarea"
       v-model="content"
-      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl p-4 text-base md:text-lg text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none min-h-50 scrollbar-thin scrollbar-thumb-primary-700"
+      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl px-4 py-3 sm:px-5 sm:py-4 text-sm sm:text-base text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none leading-relaxed min-h-30 max-h-[50vh] overflow-y-auto"
       placeholder="输入备注信息... (自动保存)"
       data-no-gesture
       @input="handleInput"
     ></textarea>
     <div
-      class="absolute bottom-3 right-4 text-[10px] uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-1.5"
+      class="absolute bottom-2 sm:bottom-3 right-3 sm:right-4 text-[10px] uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-1"
       :class="{
         'text-secondary-400 opacity-100': currentStatus === SaveStatus.SAVING,
         'text-success-400 opacity-100': currentStatus === SaveStatus.SAVED,
@@ -143,7 +146,7 @@ const emit = defineEmits<(e: "saved") => void>();
         <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24">
           <path :d="mdiLoading" fill="currentColor" />
         </svg>
-        正在保存...
+        保存中
       </template>
       <template v-else-if="currentStatus === SaveStatus.SAVED">
         <svg class="w-3 h-3" viewBox="0 0 24 24">
@@ -155,7 +158,7 @@ const emit = defineEmits<(e: "saved") => void>();
         <svg class="w-3 h-3" viewBox="0 0 24 24">
           <path :d="mdiAlertCircleOutline" fill="currentColor" />
         </svg>
-        保存失败
+        失败
       </template>
     </div>
   </div>
