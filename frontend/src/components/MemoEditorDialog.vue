@@ -1,19 +1,37 @@
 <template>
-  <Transition
-    enter-active-class="transition duration-300 ease-out"
-    enter-from-class="opacity-0 backdrop-blur-0"
-    enter-to-class="opacity-100 backdrop-blur-md"
-    leave-active-class="transition duration-200 ease-in"
-    leave-from-class="opacity-100 backdrop-blur-md"
-    leave-to-class="opacity-0 backdrop-blur-0"
+  <div
+    v-if="isVisible"
+    class="fixed inset-0 z-100 flex flex-col justify-end sm:items-center sm:justify-center"
   >
-    <div
-      v-if="modelValue"
-      class="fixed inset-0 z-100 flex flex-col justify-end sm:items-center sm:justify-center bg-black/60"
-      @click.self="modelValue = false"
+    <Transition
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
       <div
-        class="w-full sm:max-w-lg sm:rounded-2xl rounded-t-3xl bg-primary-900 border border-primary-700 shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[90vh] sm:max-h-[85vh]"
+        v-if="modelValue"
+        class="fixed inset-0 bg-black/60 backdrop-blur-md"
+        @click.self="close"
+      ></div>
+    </Transition>
+
+    <Transition
+      appear
+      enter-active-class="transition duration-300 ease-out"
+      enter-from-class="translate-y-full"
+      enter-to-class="translate-y-0"
+      leave-active-class="transition duration-200 ease-in"
+      leave-from-class="translate-y-0"
+      leave-to-class="translate-y-full"
+      @leave="onLeave"
+      @after-leave="onAfterLeave"
+    >
+      <div
+        v-if="modelValue"
+        class="relative w-full sm:max-w-lg sm:rounded-2xl rounded-t-3xl bg-primary-900 border border-primary-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh]"
         @click.stop
       >
         <div
@@ -32,7 +50,7 @@
           </h3>
           <button
             class="p-2 sm:p-2.5 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95"
-            @click="modelValue = false"
+            @click="close"
           >
             <svg class="w-5 sm:w-6 h-5 sm:h-6" viewBox="0 0 24 24">
               <path :d="mdiClose" fill="currentColor" />
@@ -49,17 +67,18 @@
           </p>
         </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { mdiNoteTextOutline, mdiClose } from "@mdi/js";
 import MemoEditor from "./MemoEditor.vue";
 import type { MemoFragment as Memo } from "../graphql/generated";
-import { useTemplateRef, watch, nextTick } from "vue";
+import { ref, useTemplateRef, watch, nextTick } from "vue";
 
 const modelValue = defineModel<boolean>({ required: true });
+const isVisible = ref(false);
 
 defineProps<{
   memo: Memo;
@@ -69,13 +88,25 @@ const editor = useTemplateRef<InstanceType<typeof MemoEditor>>("editor");
 
 watch(modelValue, (val) => {
   if (val) {
+    isVisible.value = true;
     nextTick(() => {
       editor.value?.focus();
     });
-  } else {
-    editor.value?.flush();
   }
 });
+
+function close() {
+  editor.value?.flush();
+  modelValue.value = false;
+}
+
+function onLeave() {
+  // Leave animation started
+}
+
+function onAfterLeave() {
+  isVisible.value = false;
+}
 
 function onSaved() {
   // 可以根据需要添加保存后的处理
