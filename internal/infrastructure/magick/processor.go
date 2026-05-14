@@ -31,12 +31,12 @@ func NewProcessor(cache appimage.Cache, concurrency int64) *Processor {
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, srcPath string, width, quality int) (appimage.File, error) {
+func (p *Processor) Process(ctx context.Context, absPath string, width, quality int) (appimage.File, error) {
 	if width == 0 && quality == 0 {
-		return os.Open(srcPath)
+		return os.Open(absPath)
 	}
 
-	info, err := os.Stat(srcPath)
+	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	}
 
 	hash := sha256.New()
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s", srcPath, timestamp, size, wStr, qStr)
+	fmt.Fprintf(hash, "%s|%s|%s|%s|%s", absPath, timestamp, size, wStr, qStr)
 
 	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
 
@@ -76,7 +76,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 		}
 		defer p.sem.Release(1)
 
-		args := []string{srcPath, "-coalesce"}
+		args := []string{absPath, "-coalesce"}
 		if width > 0 {
 			args = append(args, "-resize", fmt.Sprintf("%dx>", width))
 		}
@@ -108,13 +108,13 @@ func (p *Processor) Process(ctx context.Context, srcPath string, width, quality 
 	return p.cache.Open(ctx, cacheKey)
 }
 
-func (p *Processor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
+func (p *Processor) Meta(ctx context.Context, absPath string) (*shared.ImageMeta, error) {
 	if err := p.sem.Acquire(ctx, 1); err != nil {
 		return nil, err
 	}
 	defer p.sem.Release(1)
 
-	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", srcPath)
+	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", absPath)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get image metadata: %w", err)

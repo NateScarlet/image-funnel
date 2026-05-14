@@ -24,14 +24,14 @@ func NewSigner(secretKey, rootDir string) *Signer {
 	}
 }
 
-func (s *Signer) GenerateSignedURL(path string, opts ...image.SignOption) (string, error) {
-	relativePath, err := s.toRelativePath(path)
+func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (string, error) {
+	relPath, err := s.toRelativePath(absPath)
 	if err != nil {
 		return "", err
 	}
 
-	absPath := filepath.Join(s.rootDir, relativePath)
-	fileInfo, err := os.Stat(absPath)
+	absPathOnDisk := filepath.Join(s.rootDir, relPath)
+	fileInfo, err := os.Stat(absPathOnDisk)
 	if err != nil {
 		return "", fmt.Errorf("failed to get file info: %v", err)
 	}
@@ -44,19 +44,19 @@ func (s *Signer) GenerateSignedURL(path string, opts ...image.SignOption) (strin
 		opt(params)
 	}
 
-	params.Set("path", relativePath)
+	params.Set("path", relPath)
 	params.Set("t", fmt.Sprintf("%d", timestamp))
 	params.Set("s", fmt.Sprintf("%d", size))
 
-	signatureBytes := s.calculateSignature(relativePath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
+	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
 	params.Set("sig", base64.URLEncoding.EncodeToString(signatureBytes))
 
 	return fmt.Sprintf("image?%s", params.Encode()), nil
 }
 
-func (s *Signer) calculateSignature(path, timestamp, size, w, q string) []byte {
+func (s *Signer) calculateSignature(relPath, timestamp, size, w, q string) []byte {
 	mac := hmac.New(sha256.New, s.secretKey)
-	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", path, timestamp, size, w, q)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", relPath, timestamp, size, w, q)
 	return mac.Sum(nil)
 }
 

@@ -20,5 +20,5 @@ func WithQuality(q int) SignOption {
 }
 
 type URLSigner interface {
-	GenerateSignedURL(path string, opts ...SignOption) (string, error)
+	GenerateSignedURL(absPath string, opts ...SignOption) (string, error)
 }

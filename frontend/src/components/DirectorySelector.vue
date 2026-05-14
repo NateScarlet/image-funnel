@@ -262,7 +262,7 @@ const searchQuery = computed({
 const filteredItems = computed(() => {
   const matcher = new ExactSearchMatcher(searchQuery.value);
   return items.value.filter((item) => {
-    const name = item.dir.path.split(/[\\/]/).pop() ?? "";
+    const name = item.dir.relPath.split(/[\\/]/).pop() ?? "";
     return matcher.match(name);
   });
 });

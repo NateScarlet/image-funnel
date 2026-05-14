@@ -11,7 +11,7 @@ import (
 type Image struct {
 	id       scalar.ID
 	filename string
-	path     string
+	absPath  string
 	size     int64
 	modTime  time.Time
 	xmpData  *metadata.XMPData
@@ -19,11 +19,11 @@ type Image struct {
 	height   int
 }
 
-func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+func NewImage(id scalar.ID, filename, absPath string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
 		id:       id,
 		filename: filename,
-		path:     path,
+		absPath:  absPath,
 		size:     size,
 		modTime:  modTime,
 		xmpData:  xmpData,
@@ -32,11 +32,11 @@ func NewImage(id scalar.ID, filename, path string, size int64, modTime time.Time
 	}
 }
 
-func NewImageFromPath(filename, path string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+func NewImageFromAbsPath(filename, absPath string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
-		id:       newID(path, modTime),
+		id:       newID(absPath, modTime),
 		filename: filename,
-		path:     path,
+		absPath:  absPath,
 		size:     size,
 		modTime:  modTime,
 		xmpData:  xmpData,
@@ -53,8 +53,8 @@ func (i *Image) Filename() string {
 	return i.filename
 }
 
-func (i *Image) Path() string {
-	return i.path
+func (i *Image) AbsPath() string {
+	return i.absPath
 }
 
 func (i *Image) Size() int64 {
@@ -88,9 +88,9 @@ func (i *Image) Height() int {
 	return i.height
 }
 
-func newID(path string, modTime time.Time) scalar.ID {
+func newID(absPath string, modTime time.Time) scalar.ID {
 	hash := sha256.New()
-	hash.Write([]byte(path))
+	hash.Write([]byte(absPath))
 	hash.Write([]byte(modTime.String()))
 	return scalar.ToID(hex.EncodeToString(hash.Sum(nil))[:16])
 }

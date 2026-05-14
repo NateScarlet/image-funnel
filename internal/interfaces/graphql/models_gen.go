@@ -49,8 +49,9 @@ type MarkImagePayload struct {
 }
 
 type Meta struct {
-	RootPath string `json:"rootPath"`
-	Version  string `json:"version"`
+	RootAbsPath string `json:"rootAbsPath"`
+	RootPath    string `json:"rootPath"`
+	Version     string `json:"version"`
 }
 
 type Mutation struct {

@@ -44,10 +44,10 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 		return nil, err
 	}
 
-	path := dirInfo.Path()
+	relPath := dirInfo.RelPath()
 	var parentID scalar.ID
-	if path != "." {
-		parentPath := filepath.Dir(path)
+	if relPath != "." {
+		parentPath := filepath.Dir(relPath)
 		if parentPath != "." {
 			parentID = directory.EncodeID(parentPath)
 		} else {
@@ -55,7 +55,7 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 		}
 	}
 
-	return h.dtoFactory.New(dirInfo, parentID, path == "."), nil
+	return h.dtoFactory.New(dirInfo, parentID, relPath == "."), nil
 }
 
 // DirectoryStats 查询目录统计信息

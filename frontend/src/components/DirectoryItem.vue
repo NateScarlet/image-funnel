@@ -32,10 +32,10 @@
         <span class="flex-1 break-all">
           {{
             directory.root
-              ? rootPath
+              ? rootAbsPath
               : selected
-                ? directory.path
-                : directory.path.split(/[\\/]/).pop()
+                ? directory.relPath
+                : directory.relPath.split(/[\\/]/).pop()
           }}
         </span>
         <span
@@ -68,7 +68,7 @@ const { getCachedStats } = useDirectoryStats();
 const selectedId = defineModel<string>();
 
 const { data: metaData } = useQuery(MetaDocument);
-const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
+const rootAbsPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
 
 const stats = computed(() => getCachedStats(directory.id));
 

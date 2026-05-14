@@ -11,7 +11,7 @@ const idPrefix = "memo:"
 // Memo 表示图片的备忘信息
 type Memo struct {
 	id      scalar.ID
-	path    string // 绝对路径
+	absPath string // 绝对路径
 	content string
 }
 
@@ -20,7 +20,7 @@ type Memo struct {
 func NewMemo(id scalar.ID, path string, content string) *Memo {
 	return &Memo{
 		id:      id,
-		path:    path,
+		absPath: path,
 		content: content,
 	}
 }
@@ -31,8 +31,8 @@ func (m *Memo) ID() scalar.ID {
 }
 
 // Path 返回备忘录关联的图片路径（绝对路径）
-func (m *Memo) Path() string {
-	return m.path
+func (m *Memo) AbsPath() string {
+	return m.absPath
 }
 
 // Content 返回备忘内容

@@ -131,9 +131,9 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}), 100, 100)
 	img3 := image.NewImage(scalar.ToID("3"), "test3.jpg", file3, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
 
-	fakeScanner.Images[filepath.Base(img1.Path())] = img1
-	fakeScanner.Images[filepath.Base(img2.Path())] = img2
-	fakeScanner.Images[filepath.Base(img3.Path())] = img3
+	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
+	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
+	fakeScanner.Images[filepath.Base(img3.AbsPath())] = img3
 
 	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img3})
 
@@ -142,7 +142,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	sess.images = append(sess.images, img2)
 	idx := len(sess.images) - 1
 	sess.indexByID[img2.ID()] = idx
-	sess.indexByPath[img2.Path()] = idx
+	sess.indexByAbsPath[img2.AbsPath()] = idx
 	sess.actions[img2.ID()] = shared.ImageActionKeep
 
 	sess.actions[img3.ID()] = shared.ImageActionReject
@@ -193,7 +193,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	defer cleanupService()
 
 	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
-	fakeScanner.Images[filepath.Base(img1.Path())] = img1
+	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1})

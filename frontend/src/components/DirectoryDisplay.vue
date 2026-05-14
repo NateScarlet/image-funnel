@@ -114,7 +114,7 @@ const directoryData = computed(() => {
 });
 const stats = computed(() => directoryData.value?.stats);
 const loading = computed(() => loadingCount.value > 0 || !!externalLoading);
-const directoryPath = computed(() => directoryData.value?.path ?? "");
+const directoryPath = computed(() => directoryData.value?.relPath ?? "");
 
 function sortedRatingCounts(
   ratingCounts: RatingCountFragment[],

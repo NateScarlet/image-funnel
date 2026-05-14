@@ -133,8 +133,8 @@ const showMenu = ref(false);
 const { data } = useQuery(MetaDocument);
 const displayName = computed(() => {
   if (session.value?.directory?.root) {
-    return data.value?.meta.rootPath ?? "/";
+    return data.value?.meta.rootAbsPath ?? "/";
   }
-  return basename(session.value?.directory?.path ?? "");
+  return basename(session.value?.directory?.relPath ?? "");
 });
 </script>

@@ -69,7 +69,7 @@ type ComplexityRoot struct {
 		Directories func(childComplexity int) int
 		ID          func(childComplexity int) int
 		ParentID    func(childComplexity int) int
-		Path        func(childComplexity int) int
+		RelPath     func(childComplexity int) int
 		Root        func(childComplexity int) int
 		Stats       func(childComplexity int) int
 	}
@@ -109,8 +109,9 @@ type ComplexityRoot struct {
 	}
 
 	Meta struct {
-		RootPath func(childComplexity int) int
-		Version  func(childComplexity int) int
+		RootAbsPath func(childComplexity int) int
+		RootPath    func(childComplexity int) int
+		Version     func(childComplexity int) int
 	}
 
 	Mutation struct {
@@ -293,12 +294,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.ParentID(childComplexity), true
-	case "Directory.path":
-		if e.complexity.Directory.Path == nil {
+	case "Directory.relPath", "Directory.path":
+		if e.complexity.Directory.RelPath == nil {
 			break
 		}
 
-		return e.complexity.Directory.Path(childComplexity), true
+		return e.complexity.Directory.RelPath(childComplexity), true
 	case "Directory.root":
 		if e.complexity.Directory.Root == nil {
 			break
@@ -436,6 +437,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Memo.ID(childComplexity), true
 
+	case "Meta.rootAbsPath":
+		if e.complexity.Meta.RootAbsPath == nil {
+			break
+		}
+
+		return e.complexity.Meta.RootAbsPath(childComplexity), true
 	case "Meta.rootPath":
 		if e.complexity.Meta.RootPath == nil {
 			break
@@ -926,7 +933,8 @@ directive @goField(
 	{Name: "../../../graph/types/directory.graphql", Input: `type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
-  path: String!
+  relPath: String!
+  path: String! @deprecated(reason: "use relPath") @goField(name: "RelPath")
   root: Boolean!
   stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)
@@ -971,7 +979,8 @@ type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
-  rootPath: String!
+  rootAbsPath: String!
+  rootPath: String! @deprecated(reason: "use rootAbsPath")
   version: String!
 }
 `, BuiltIn: false},
@@ -1654,6 +1663,35 @@ func (ec *executionContext) fieldContext_Directory_parentId(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Directory_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_relPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Directory_path(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1661,7 +1699,7 @@ func (ec *executionContext) _Directory_path(ctx context.Context, field graphql.C
 		field,
 		ec.fieldContext_Directory_path,
 		func(ctx context.Context) (any, error) {
-			return obj.Path, nil
+			return obj.RelPath, nil
 		},
 		nil,
 		ec.marshalNString2string,
@@ -1779,6 +1817,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_id(ctx, field)
 			case "parentId":
 				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
@@ -2421,6 +2461,35 @@ func (ec *executionContext) fieldContext_Memo_content(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Meta_rootAbsPath(ctx context.Context, field graphql.CollectedField, obj *Meta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Meta_rootAbsPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RootAbsPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Meta_rootAbsPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Meta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Meta_rootPath(ctx context.Context, field graphql.CollectedField, obj *Meta) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2828,6 +2897,8 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "rootAbsPath":
+				return ec.fieldContext_Meta_rootAbsPath(ctx, field)
 			case "rootPath":
 				return ec.fieldContext_Meta_rootPath(ctx, field)
 			case "version":
@@ -2867,6 +2938,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_id(ctx, field)
 			case "parentId":
 				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
@@ -3176,6 +3249,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_id(ctx, field)
 			case "parentId":
 				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
@@ -3921,6 +3996,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_id(ctx, field)
 			case "parentId":
 				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
 			case "path":
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
@@ -6161,6 +6238,11 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			}
 		case "parentId":
 			out.Values[i] = ec._Directory_parentId(ctx, field, obj)
+		case "relPath":
+			out.Values[i] = ec._Directory_relPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "path":
 			out.Values[i] = ec._Directory_path(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6620,6 +6702,11 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Meta")
+		case "rootAbsPath":
+			out.Values[i] = ec._Meta_rootAbsPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "rootPath":
 			out.Values[i] = ec._Meta_rootPath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

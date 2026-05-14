@@ -63,7 +63,7 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		}
 
 		// 编码目录ID
-		dir, err := s.repo.GetByPath(ctx, filepath.Dir(relPath))
+		dir, err := s.repo.GetByRelPath(ctx, filepath.Dir(relPath))
 		if err != nil {
 			s.logger.Error("failed to get directory by path",
 				zap.String("path", filepath.Dir(relPath)),

@@ -23,7 +23,7 @@ type DirectoryFilters struct {
 type DirectoryDTO struct {
 	ID       scalar.ID
 	ParentID scalar.ID
-	Path     string // TODO: rename to RelPath
+	RelPath  string
 	Root     bool
 }
 
@@ -40,7 +40,7 @@ type ImageDTO struct {
 	ID            scalar.ID
 	Filename      string
 	Size          int64
-	Path          string // TODO: rename to AbsPath
+	AbsPath       string
 	ModTime       time.Time
 	CurrentRating int
 	Width         int

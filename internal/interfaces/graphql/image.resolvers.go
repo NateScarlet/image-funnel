@@ -22,12 +22,12 @@ func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *in
 	if quality != nil {
 		opts = append(opts, image.WithQuality(*quality))
 	}
-	return r.signer.GenerateSignedURL(obj.Path, opts...)
+	return r.signer.GenerateSignedURL(obj.AbsPath, opts...)
 }
 
 // Memo is the resolver for the memo field.
 func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error) {
-	relPath, err := filepath.Rel(r.rootDir, obj.Path)
+	relPath, err := filepath.Rel(r.rootDir, obj.AbsPath)
 	if err != nil {
 		return nil, err
 	}

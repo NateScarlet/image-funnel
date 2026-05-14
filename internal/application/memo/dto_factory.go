@@ -20,7 +20,7 @@ func NewDTOFactory(rootDir string) *DTOFactory {
 func (f *DTOFactory) New(m *memo.Memo) *shared.MemoDTO {
 	return &shared.MemoDTO{
 		ID:      m.ID(),
-		AbsPath: m.Path(),
+		AbsPath: m.AbsPath(),
 		Content: m.Content(),
 	}
 }

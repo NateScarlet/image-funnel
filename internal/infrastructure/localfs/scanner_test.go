@@ -59,7 +59,7 @@ func TestScanDirectories(t *testing.T) {
 
 	dirs := collectDirInfos(scanner.ScanDirectories(context.Background(), "."))
 	require.Len(t, dirs, 1)
-	assert.Equal(t, "subdir", dirs[0].Path())
+	assert.Equal(t, "subdir", dirs[0].RelPath())
 }
 
 func TestAnalyzeDirectory(t *testing.T) {
@@ -74,7 +74,7 @@ func TestAnalyzeDirectory(t *testing.T) {
 	assert.Equal(t, 1, stats.ImageCount())
 	assert.Equal(t, 0, stats.SubdirectoryCount())
 	assert.NotNil(t, stats.LatestImage())
-	assert.Equal(t, testFile, stats.LatestImage().Path())
+	assert.Equal(t, testFile, stats.LatestImage().AbsPath())
 	assert.Equal(t, 1, stats.RatingCounts()[0])
 }
 

@@ -193,7 +193,7 @@ func (s *FakeScanner) LookupImage(ctx context.Context, relPath string) (*image.I
 			return image.NewImage(
 				img.ID(),
 				img.Filename(),
-				img.Path(),
+				img.AbsPath(),
 				img.Size(),
 				img.ModTime(),
 				xmp,

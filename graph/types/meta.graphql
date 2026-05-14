@@ -1,4 +1,5 @@
 type Meta {
-  rootPath: String!
+  rootAbsPath: String!
+  rootPath: String! @deprecated(reason: "use rootAbsPath")
   version: String!
 }

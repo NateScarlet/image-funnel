@@ -1,7 +1,8 @@
 type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   parentId: ID
-  path: String!
+  relPath: String!
+  path: String! @deprecated(reason: "use relPath") @goField(name: "RelPath")
   root: Boolean!
   stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)

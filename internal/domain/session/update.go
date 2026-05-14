@@ -107,7 +107,7 @@ func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image
 			newIdx := len(s.images)
 			s.images = append(s.images, img)
 			s.indexByID[img.ID()] = newIdx
-			s.indexByPath[img.Path()] = newIdx
+			s.indexByAbsPath[img.AbsPath()] = newIdx
 			newQueue[i] = newIdx
 		}
 	}

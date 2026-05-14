@@ -55,7 +55,6 @@ func (d *Directory) ID() scalar.ID {
 	return d.id
 }
 
-// TODO: rename to RelPath
-func (d *Directory) Path() string {
+func (d *Directory) RelPath() string {
 	return d.relPath
 }

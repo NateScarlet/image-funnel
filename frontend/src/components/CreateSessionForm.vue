@@ -138,7 +138,7 @@ const currentDirectory = computed(() => {
   return node?.__typename === "Directory" ? node : undefined;
 });
 const directories = computed(() => currentDirectory.value?.directories || []);
-const rootPath = computed(() => metaData.value?.meta?.rootPath || "");
+const rootPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
 
 const canCreate = computed(() => {
   return (filterRating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;

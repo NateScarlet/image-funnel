@@ -11,7 +11,7 @@ import (
 )
 
 type Processor interface {
-	Meta(ctx context.Context, path string) (*shared.ImageMeta, error)
+	Meta(ctx context.Context, absPath string) (*shared.ImageMeta, error)
 }
 
 type Factory struct {
@@ -72,7 +72,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath 
 		}
 	}
 
-	return NewImageFromPath(
+	return NewImageFromAbsPath(
 		info.Name(),
 		absPath,
 		info.Size(),

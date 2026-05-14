@@ -1,6 +1,6 @@
 query Meta {
   meta {
-    rootPath
+    rootAbsPath
     version
   }
 }

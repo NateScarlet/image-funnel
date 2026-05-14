@@ -7,5 +7,5 @@ import (
 
 type Repository interface {
 	Get(ctx context.Context, id scalar.ID) (*Directory, error)
-	GetByPath(ctx context.Context, path string) (*Directory, error)
+	GetByRelPath(ctx context.Context, relPath string) (*Directory, error)
 }

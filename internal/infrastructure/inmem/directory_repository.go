@@ -30,14 +30,14 @@ func (d *DirectoryRepository) Get(ctx context.Context, id scalar.ID) (*directory
 	return directory.FromRepository(id, path), nil
 }
 
-// GetByPath implements [directory.Repository].
-func (d *DirectoryRepository) GetByPath(ctx context.Context, path string) (*directory.Directory, error) {
-	var err = util.EnsurePathInRoot(d.rootDir, path)
+// GetByRelPath implements [directory.Repository].
+func (d *DirectoryRepository) GetByRelPath(ctx context.Context, relPath string) (*directory.Directory, error) {
+	var err = util.EnsurePathInRoot(d.rootDir, relPath)
 	if err != nil {
 		return nil, err
 	}
-	id := directory.EncodeID(path)
-	return directory.FromRepository(id, path), nil
+	id := directory.EncodeID(relPath)
+	return directory.FromRepository(id, relPath), nil
 }
 
 var _ directory.Repository = (*DirectoryRepository)(nil)

@@ -20,7 +20,7 @@ func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 		ID:            img.ID(),
 		Filename:      img.Filename(),
 		Size:          img.Size(),
-		Path:          img.Path(),
+		AbsPath:       img.AbsPath(),
 		ModTime:       img.ModTime(),
 		CurrentRating: img.Rating(),
 		Width:         img.Width(),
