@@ -74,15 +74,19 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 			wg.Wait()
 		}()
 
-		buf := make([]byte, 64*1024)
+		// 必须 DWORD (4字节) 对齐，使用 uint32 数组确保对齐
+		// 缓冲区大小减小到 32KB 以提高兼容性
+		buf := make([]uint32, 8192)
+		bufPtr := (*byte)(unsafe.Pointer(&buf[0]))
+		bufLen := uint32(len(buf) * 4)
 		var ret uint32
 
 		for {
 			err := windows.ReadDirectoryChanges(
 				handle,
-				&buf[0],
-				uint32(len(buf)),
-				true, // watchSubTree = true, Windows 原生支持递归监控
+				bufPtr,
+				bufLen,
+				true, // watchSubTree = true
 				windows.FILE_NOTIFY_CHANGE_FILE_NAME|
 					windows.FILE_NOTIFY_CHANGE_DIR_NAME|
 					windows.FILE_NOTIFY_CHANGE_ATTRIBUTES|
@@ -111,7 +115,7 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 				if offset+12 > ret {
 					break // 数据不足以解析 FILE_NOTIFY_INFORMATION 头部
 				}
-				info := (*windows.FileNotifyInformation)(unsafe.Pointer(&buf[offset]))
+				info := (*windows.FileNotifyInformation)(unsafe.Pointer(uintptr(unsafe.Pointer(bufPtr)) + uintptr(offset)))
 				nameLen := info.FileNameLength / 2
 				if offset+12+info.FileNameLength > ret {
 					break // 防止越界
