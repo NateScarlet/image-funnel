@@ -59,7 +59,7 @@
             <template v-if="currentImage.memo.content">
               <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
               <span
-                class="truncate max-w-[150px] lg:max-w-[300px] cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
+                class="truncate max-w-37.5 lg:max-w-75 cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
                 title="编辑备注"
                 @click="showMemoDialog = true"
               >

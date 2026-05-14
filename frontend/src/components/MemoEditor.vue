@@ -125,7 +125,7 @@ const emit = defineEmits<(e: "saved") => void>();
     <textarea
       ref="textarea"
       v-model="content"
-      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl p-4 text-base md:text-lg text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none min-h-[200px] scrollbar-thin scrollbar-thumb-primary-700"
+      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl p-4 text-base md:text-lg text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none min-h-50 scrollbar-thin scrollbar-thumb-primary-700"
       placeholder="输入备注信息... (自动保存)"
       data-no-gesture
       @input="handleInput"
