@@ -52,7 +52,7 @@
 import { mdiNoteTextOutline, mdiClose } from "@mdi/js";
 import MemoEditor from "./MemoEditor.vue";
 import type { MemoFragment as Memo } from "../graphql/generated";
-import { useTemplateRef, watch } from "vue";
+import { useTemplateRef, watch, nextTick } from "vue";
 
 const modelValue = defineModel<boolean>({ required: true });
 
@@ -63,7 +63,11 @@ defineProps<{
 const editor = useTemplateRef<InstanceType<typeof MemoEditor>>("editor");
 
 watch(modelValue, (val) => {
-  if (!val) {
+  if (val) {
+    nextTick(() => {
+      editor.value?.focus();
+    });
+  } else {
     editor.value?.flush();
   }
 });

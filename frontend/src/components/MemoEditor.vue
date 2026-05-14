@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from "vue";
+import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { MemoFragment as Memo } from "../graphql/generated";
 import { debounce } from "es-toolkit";
 import useMemo from "@/composables/useMemo";
 import { mdiLoading, mdiCheck, mdiAlertCircleOutline } from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
+
+const textarea = useTemplateRef("textarea");
+
+function focus() {
+  textarea.value?.focus();
+}
 
 const props = defineProps<{
   memo: Memo;
@@ -105,7 +111,7 @@ function flush() {
   }
 }
 
-defineExpose({ flush });
+defineExpose({ flush, focus });
 
 onUnmounted(() => {
   flush();
