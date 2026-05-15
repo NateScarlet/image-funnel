@@ -16,6 +16,7 @@ fragment Session on Session {
   canUndo
   currentIndex
   currentSize
+  currentRound
   currentImage {
     ...Image
   }

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -141,6 +140,7 @@ type ComplexityRoot struct {
 		CreatedAt    func(childComplexity int) int
 		CurrentImage func(childComplexity int) int
 		CurrentIndex func(childComplexity int) int
+		CurrentRound func(childComplexity int) int
 		CurrentSize  func(childComplexity int) int
 		Directory    func(childComplexity int) int
 		Filter       func(childComplexity int) int
@@ -602,6 +602,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.CurrentIndex(childComplexity), true
+	case "Session.currentRound":
+		if e.complexity.Session.CurrentRound == nil {
+			break
+		}
+
+		return e.complexity.Session.CurrentRound(childComplexity), true
 	case "Session.currentSize":
 		if e.complexity.Session.CurrentSize == nil {
 			break
@@ -1012,6 +1018,7 @@ type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   canUndo: Boolean!
   currentIndex: Int!
   currentSize: Int!
+  currentRound: Int!
   currentImage: Image
   nextImages(count: Int): [Image!]!
   keptImages(limit: Int, offset: Int): [Image!]!
@@ -1483,6 +1490,8 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -1573,6 +1582,8 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -2373,6 +2384,8 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -3016,6 +3029,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -3561,6 +3576,35 @@ func (ec *executionContext) fieldContext_Session_currentSize(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Session_currentRound(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_currentRound,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentRound, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_currentRound(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Session_currentImage(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3988,6 +4032,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -4164,6 +4210,8 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -4254,6 +4302,8 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_currentIndex(ctx, field)
 			case "currentSize":
 				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
 			case "currentImage":
 				return ec.fieldContext_Session_currentImage(ctx, field)
 			case "nextImages":
@@ -7207,6 +7257,11 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "currentRound":
+			out.Values[i] = ec._Session_currentRound(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "currentImage":
 			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
 		case "nextImages":
@@ -8036,13 +8091,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

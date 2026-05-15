@@ -10,6 +10,7 @@ type Session @goModel(model: "main/internal/shared.SessionDTO") {
   canUndo: Boolean!
   currentIndex: Int!
   currentSize: Int!
+  currentRound: Int!
   currentImage: Image
   nextImages(count: Int): [Image!]!
   keptImages(limit: Int, offset: Int): [Image!]!

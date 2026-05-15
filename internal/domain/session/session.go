@@ -179,6 +179,11 @@ func (s *Session) CurrentSize() int {
 	return len(s.queue)
 }
 
+// CurrentRound 返回当前筛选轮次
+func (s *Session) CurrentRound() int {
+	return s.currentRound
+}
+
 // QueueActions 返回当前队列中所有图片的操作状态
 func (s *Session) QueueActions() []shared.ImageAction {
 	actions := make([]shared.ImageAction, s.currentIdx)

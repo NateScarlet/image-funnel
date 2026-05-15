@@ -61,6 +61,7 @@ type SessionDTO struct {
 	CanUndo      bool
 	CurrentIndex int
 	CurrentSize  int
+	CurrentRound int
 	CurrentImage *ImageDTO
 	QueueActions []ImageAction
 }
