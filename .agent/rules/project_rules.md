@@ -14,6 +14,7 @@ image-funnel/
 │   ├── build.ps1        # 构建脚本，用于构建整个项目
 │   └── generate-graphql.ps1 # 更新前后端的 GraphQL 相关代码
 ├── frontend/            # 前端项目
+│   ├── main.tailwind.css # 前端样式主题
 ├── graph/               # GraphQL schema
 ├── internal/            # 后端业务逻辑
 │   ├── interfaces/      # 接口层
