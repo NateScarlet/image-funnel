@@ -179,6 +179,16 @@ func (s *Session) CurrentSize() int {
 	return len(s.queue)
 }
 
+// QueueActions 返回当前队列中所有图片的操作状态
+func (s *Session) QueueActions() []shared.ImageAction {
+	actions := make([]shared.ImageAction, s.currentIdx)
+	for i := 0; i < s.currentIdx; i++ {
+		idx := s.queue[i]
+		actions[i] = s.actions[s.images[idx].ID()]
+	}
+	return actions
+}
+
 var (
 	ErrNoMoreImages  = apperror.New("INVALID_OPERATION", "no more images", "没有更多图片")
 	ErrNothingToUndo = apperror.New("INVALID_OPERATION", "nothing to undo", "没有可以撤销的操作")

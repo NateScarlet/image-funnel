@@ -62,6 +62,7 @@ type SessionDTO struct {
 	CurrentIndex int
 	CurrentSize  int
 	CurrentImage *ImageDTO
+	QueueActions []ImageAction
 }
 
 // StatsDTO 会话统计数据
