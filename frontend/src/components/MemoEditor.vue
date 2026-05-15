@@ -128,13 +128,13 @@ const emit = defineEmits<(e: "saved") => void>();
     <textarea
       ref="textarea"
       v-model="content"
-      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl px-4 py-3 sm:px-5 sm:py-4 landscape:py-1 text-sm sm:text-base text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none leading-relaxed min-h-30 landscape:min-h-10 max-h-[50vh] landscape:max-h-none overflow-y-auto"
+      class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl px-4 py-3 sm:px-8 sm:py-6 short:py-1 text-sm sm:text-xl text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none leading-relaxed min-h-30 sm:min-h-60 short:min-h-10 max-h-[50vh] short:max-h-none overflow-y-auto"
       placeholder="输入备注... (自动保存)"
       data-no-gesture
       @input="handleInput"
     ></textarea>
     <div
-      class="absolute bottom-2 sm:bottom-3 right-3 sm:right-4 text-[10px] uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-1"
+      class="absolute bottom-2 sm:bottom-6 right-3 sm:right-8 text-[10px] sm:text-sm uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-1.5"
       :class="{
         'text-secondary-400 opacity-100': currentStatus === SaveStatus.SAVING,
         'text-success-400 opacity-100': currentStatus === SaveStatus.SAVED,
@@ -143,19 +143,19 @@ const emit = defineEmits<(e: "saved") => void>();
       }"
     >
       <template v-if="currentStatus === SaveStatus.SAVING">
-        <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24">
+        <svg class="w-3 h-3 sm:w-5 sm:h-5 animate-spin" viewBox="0 0 24 24">
           <path :d="mdiLoading" fill="currentColor" />
         </svg>
         保存中
       </template>
       <template v-else-if="currentStatus === SaveStatus.SAVED">
-        <svg class="w-3 h-3" viewBox="0 0 24 24">
+        <svg class="w-3 h-3 sm:w-5 sm:h-5" viewBox="0 0 24 24">
           <path :d="mdiCheck" fill="currentColor" />
         </svg>
         已保存
       </template>
       <template v-else-if="currentStatus === SaveStatus.ERROR">
-        <svg class="w-3 h-3" viewBox="0 0 24 24">
+        <svg class="w-3 h-3 sm:w-5 sm:h-5" viewBox="0 0 24 24">
           <path :d="mdiAlertCircleOutline" fill="currentColor" />
         </svg>
         失败

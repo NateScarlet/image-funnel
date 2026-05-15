@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tailwindcss/preflight" layer(base);
 
+@variant short (@media (max-height: 600px));
+
 @layer base {
   html,
   body {
