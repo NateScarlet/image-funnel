@@ -1,60 +1,64 @@
 <template>
-  <div
-    class="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
-    data-no-gesture
-    @click.self="$emit('close')"
-  >
-    <div class="bg-primary-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
-      <template v-if="session">
-        <CommitForm :session title="提交更改" @committed="$emit('committed')">
-          <template #actions="{ committing, commitResult }">
-            <button
-              v-if="!commitResult"
-              type="button"
-              :disabled="committing"
-              class="flex-1 px-4 py-2 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg transition-colors"
-              @click="$emit('close')"
-            >
-              取消
-            </button>
-            <button
-              v-if="!commitResult"
-              :disabled="committing"
-              class="flex-2 px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
-              type="submit"
-            >
-              <svg
-                v-if="committing"
-                class="w-5 h-5 animate-spin"
-                viewBox="0 0 24 24"
+  <Teleport :to="rendererEl">
+    <div
+      class="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
+      data-no-gesture
+      @click.self="$emit('close')"
+    >
+      <div class="bg-primary-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+        <template v-if="session">
+          <CommitForm :session title="提交更改" @committed="$emit('committed')">
+            <template #actions="{ committing, commitResult }">
+              <button
+                v-if="!commitResult"
+                type="button"
+                :disabled="committing"
+                class="flex-1 px-4 py-2 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg transition-colors"
+                @click="$emit('close')"
               >
-                <path :d="mdiLoading" fill="currentColor" />
-              </svg>
-              <span>确认提交</span>
-            </button>
-            <button
-              v-else
-              class="flex-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-bold"
-              type="button"
-              @click="$emit('committed')"
-            >
-              完成
-            </button>
-          </template>
-        </CommitForm>
-      </template>
-      <template v-else>
-        <div class="font-mono text-error-500">{{ $props }}</div>
-      </template>
+                取消
+              </button>
+              <button
+                v-if="!commitResult"
+                :disabled="committing"
+                class="flex-2 px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
+                type="submit"
+              >
+                <svg
+                  v-if="committing"
+                  class="w-5 h-5 animate-spin"
+                  viewBox="0 0 24 24"
+                >
+                  <path :d="mdiLoading" fill="currentColor" />
+                </svg>
+                <span>确认提交</span>
+              </button>
+              <button
+                v-else
+                class="flex-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-bold"
+                type="button"
+                @click="$emit('committed')"
+              >
+                完成
+              </button>
+            </template>
+          </CommitForm>
+        </template>
+        <template v-else>
+          <div class="font-mono text-error-500">{{ $props }}</div>
+        </template>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { type SessionFragment } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import { mdiLoading } from "@mdi/js";
+import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 
+const rendererEl = useFullscreenRendererElement();
 const { session } = defineProps<{
   session: SessionFragment | null | undefined;
 }>();

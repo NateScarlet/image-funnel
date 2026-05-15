@@ -56,19 +56,18 @@
             <span class="lg:min-w-24 hidden md:block">
               {{ formatDate(currentImage.modTime) }}
             </span>
-            <template v-if="currentImage.memo.content">
-              <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
-              <span
-                class="truncate max-w-37.5 lg:max-w-75 cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
-                title="编辑备注"
-                @click="showMemoDialog = true"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-                  <path :d="mdiNoteTextOutline" fill="currentColor" />
-                </svg>
-                {{ currentImage.memo.content }}
-              </span>
-            </template>
+            <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+            <span
+              class="truncate max-w-37.5 lg:max-w-75 cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
+              :class="currentImage.memo.content ? '' : 'text-primary-400'"
+              :title="currentImage.memo.content ? '编辑备注' : '添加备注'"
+              @click="showMemoDialog = true"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path :d="mdiNoteTextOutline" fill="currentColor" />
+              </svg>
+              {{ currentImage.memo.content || "添加备注" }}
+            </span>
             <template v-if="isFullscreen">
               <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
               <span class="lg:min-w-24">
@@ -283,6 +282,13 @@ const currentImageId = computed(
 const swipeEl = useTemplateRef("swipeEl");
 useEventListeners(window, ({ on }) => {
   on("keydown", (e) => {
+    if (
+      e.target instanceof HTMLInputElement ||
+      e.target instanceof HTMLTextAreaElement ||
+      (e.target instanceof HTMLElement && e.target.isContentEditable)
+    ) {
+      return;
+    }
     const imageId = currentImageId.value;
     if (!imageId) {
       return;
@@ -299,6 +305,10 @@ useEventListeners(window, ({ on }) => {
         break;
       case "ArrowLeft":
         undo();
+        break;
+      case "m":
+      case "M":
+        showMemoDialog.value = true;
         break;
     }
   });
