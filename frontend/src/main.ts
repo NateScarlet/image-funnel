@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
 import App from "./App.vue";
-import "./style.css";
+import "./main.tailwind.css";
 
 import HomeView from "./views/HomeView.vue";
 import SessionView from "./views/SessionView.vue";
