@@ -17,7 +17,7 @@ export default function useTextAreaAutoHeight(
         watch(
           () => toValue(text),
           () => {
-            const scrollHeight = el.scrollHeight;
+            const { scrollHeight } = el;
             const computedStyle = window.getComputedStyle(el);
             const maxHeight = parseFloat(computedStyle.maxHeight) || Infinity;
 
@@ -41,8 +41,8 @@ export default function useTextAreaAutoHeight(
         );
         // 仅在没有干扰的情况下还原
         if (
-          lastHeight === originalHeight &&
-          lastOverflowY === originalOverflowY
+          lastHeight === el.style.height &&
+          lastOverflowY === el.style.overflowY
         ) {
           el.style.height = originalHeight;
           el.style.overflowY = originalOverflowY;
