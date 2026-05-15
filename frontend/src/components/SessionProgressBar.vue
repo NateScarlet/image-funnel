@@ -1,29 +1,32 @@
 <template>
   <div
-    class="flex h-1 w-full bg-black/20 overflow-hidden pointer-events-none relative"
+    class="h-1 w-full bg-black/20 pointer-events-none relative overflow-hidden"
   >
-    <!-- 已处理的部分：为每个操作显示不同的颜色 -->
+    <!-- 背景层 -->
     <div
-      v-for="(action, index) in queueActions"
-      :key="index"
-      class="h-full"
-      :class="getActionClass(action)"
-      :style="{ flex: 1 }"
+      class="absolute inset-0 transition-all duration-700"
+      :class="isTargetMet ? 'bg-green-500/30' : 'bg-white/10'"
     ></div>
-
-    <!-- 未处理的部分：半透明背景 -->
-    <div
-      v-if="remainingSize > 0"
-      class="h-full bg-white/10 transition-all duration-300"
-      :style="{ flex: remainingSize }"
-    ></div>
-
-    <!-- 进度百分比提示（可选，这里保持简洁，仅显示进度条） -->
+    <!-- 操作历史层 -->
+    <TransitionGroup
+      tag="div"
+      class="absolute inset-0 grid"
+      :style="{ gridTemplateColumns: `repeat(${currentSize}, 1fr)` }"
+      :enter-from-class="isBatchChange ? 'opacity-0' : 'scale-x-0 opacity-0'"
+      :leave-to-class="isBatchChange ? 'opacity-0' : 'scale-x-0 opacity-0'"
+    >
+      <div
+        v-for="(action, index) in queueActions"
+        :key="index"
+        class="h-full transition-all duration-300 ease-in-out origin-left"
+        :class="getActionClass(action)"
+      ></div>
+    </TransitionGroup>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { ImageAction, type SessionFragment } from "@/graphql/generated";
 
 const props = defineProps<{
@@ -32,8 +35,16 @@ const props = defineProps<{
 
 const queueActions = computed(() => props.session.queueActions);
 const currentSize = computed(() => props.session.currentSize);
-const remainingSize = computed(() =>
-  Math.max(0, currentSize.value - queueActions.value.length),
+const isTargetMet = computed(
+  () => props.session.stats.kept >= props.session.targetKeep,
+);
+
+const isBatchChange = ref(false);
+watch(
+  () => queueActions.value.length,
+  (newLen, oldLen) => {
+    isBatchChange.value = Math.abs(newLen - (oldLen ?? 0)) > 1;
+  },
 );
 
 /**
