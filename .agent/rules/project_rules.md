@@ -35,7 +35,7 @@ image-funnel/
 - **frontend:** 修改后，使用 `pnpm check` 检查
 - **backend:** 修改后，使用 `go test --timeout 30s` 检查
 - **backend:** 用 zap 给应用层命令添加日志，duration 字段记录耗时，日志消息使用小写字母开头，并遵循“句子片段”的风格，而不是完整的英文句子，不重复其他字段的内容（success/failed是在重复日志级别字段），长耗时操作前后的日志使用 will / did 前缀区分
-- **powershell:** 脚本用当前 shell 直接运行 (直接 "./scripts/xxx.ps1")，不要额外调用 `pwsh` 或 `powershell.exe`
+- **powershell:** 脚本显式指定 pwsh 再运行 (直接 "./scripts/xxx.ps1" 可能用系统自带版本太老不兼容)
 - **go:** 修改代码后，运行包测试并使用 `scripts/build.ps1` 构建
 - **go:** 用 errors 包处理错误，避免直接比较
 - **go:** 禁止静默忽略错误，如果确信不会有错误，则应该panic
