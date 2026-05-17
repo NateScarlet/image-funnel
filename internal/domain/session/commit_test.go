@@ -216,3 +216,80 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	inMemImg := sess.images[idx]
 	require.Equal(t, 5, inMemImg.Rating(), "In-memory image rating should be updated after commit")
 }
+
+func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_test_undo_recommit")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	file2 := filepath.Join(tempDir, "test2.jpg")
+	os.WriteFile(file1, []byte("fake"), 0644)
+	os.WriteFile(file2, []byte("fake"), 0644)
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeSessionRepo := NewFakeSessionRepo()
+	fakeEventBus := &FakeEventBus{}
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
+	defer cleanup()
+
+	fakeScanner := &FakeScanner{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[string]*image.Image),
+	}
+
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
+	defer cleanupService()
+
+	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
+	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}), 100, 100)
+
+	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
+	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
+
+	filter := &shared.ImageFilters{Rating: []int{0}}
+	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, []*image.Image{img1, img2})
+
+	// 第一次标记：保留 img1，排除 img2
+	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(img2.ID(), shared.ImageActionReject))
+
+	require.True(t, sess.Stats().IsCompleted)
+
+	writeActions := &shared.WriteActions{
+		KeepRating:   1,
+		ShelveRating: 0,
+		RejectRating: -1,
+	}
+
+	// 第一次提交
+	success, errs := svc.Commit(context.Background(), sess, writeActions)
+	require.Empty(t, errs)
+	require.Equal(t, 2, success)
+	require.Equal(t, 1, fakeMeta.Data[file1].Rating())
+	require.Equal(t, -1, fakeMeta.Data[file2].Rating())
+
+	// 撤销两步，回到起始位置
+	require.NoError(t, sess.Undo())
+	require.NoError(t, sess.Undo())
+
+	// 验证撤销后的统计数据未被错误过滤
+	require.Equal(t, 0, sess.Stats().Kept)
+
+	// 第二次重新标记：排除 img1，保留 img2
+	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionReject))
+	require.NoError(t, sess.MarkImage(img2.ID(), shared.ImageActionKeep))
+
+	require.True(t, sess.Stats().IsCompleted)
+	require.Equal(t, 1, sess.Stats().Kept)
+
+	// 第二次提交
+	success2, errs2 := svc.Commit(context.Background(), sess, writeActions)
+	require.Empty(t, errs2)
+	require.Equal(t, 2, success2)
+
+	// 验证最终磁盘上的 Rating 符合第二次标记预期
+	require.Equal(t, -1, fakeMeta.Data[file1].Rating())
+	require.Equal(t, 1, fakeMeta.Data[file2].Rating())
+}

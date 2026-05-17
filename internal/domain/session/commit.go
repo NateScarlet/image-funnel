@@ -27,7 +27,8 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 	filter := image.BuildImageFilter(s.filter)
 	return func(yield func(*image.Image, shared.ImageAction) bool) {
 		for _, img := range s.images {
-			if !filter(img) {
+			// 如果图片符合 filter，或者它在本会话中已经被 commit 过，则允许提交
+			if !filter(img) && !s.committed[img.ID()] {
 				continue
 			}
 			if action, ok := s.actions[img.ID()]; ok {
@@ -47,6 +48,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	// 遍历所有持有且符合当前筛选条件的图片操作
 	for img, action := range session.Actions() {
+		session.MarkCommitted(img.ID())
 
 		var rating int
 		switch action {

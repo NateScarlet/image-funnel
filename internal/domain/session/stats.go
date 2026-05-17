@@ -25,10 +25,10 @@ func (s *Session) Stats() *shared.StatsDTO {
 			continue
 		}
 
-		// 确保只计算符合当前过滤条件的图片
-		// 如果图片因为过滤条件改变而不再可见，它不应该计入当前的保留/搁置等统计
-		// 这样可以避免用户因“看不见但已保留”的图片而无法完成会话
-		if filterFunc(img) {
+		// 确保只计算符合当前过滤条件的图片，或者本会话已提交过的图片
+		// 这样既能过滤掉因 Update 修改 filter 而被排除的图片，
+		// 又能保留 Commit 后 Rating 改变但仍保留在会话中的已操作图片。
+		if filterFunc(img) || s.committed[id] {
 			switch action {
 			case shared.ImageActionKeep:
 				stats.Kept++

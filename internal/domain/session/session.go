@@ -36,6 +36,7 @@ type Session struct {
 	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
 	currentRound int // 当前筛选轮次
+	committed    map[scalar.ID]bool // 记录已提交过的图片 ID
 }
 
 // NewSession 创建一个新的图片筛选会话
@@ -59,22 +60,31 @@ func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters
 	}
 
 	return &Session{
-		id:           id,
-		directoryID:  directoryID,
-		filter:       filter,
-		targetKeep:   targetKeep,
-		createdAt:    time.Now(),
-		updatedAt:    time.Now(),
-		images:       images,
-		indexByID:    indexByID,
-		indexByAbsPath:  indexByAbsPath,
-		queue:        queue,
-		currentIdx:   0,
-		undoStack:    make([]func(), 0),
-		actions:      actions,
-		durations:    make(map[scalar.ID]scalar.Duration),
-		currentRound: 0,
+		id:             id,
+		directoryID:    directoryID,
+		filter:         filter,
+		targetKeep:     targetKeep,
+		createdAt:      time.Now(),
+		updatedAt:      time.Now(),
+		images:         images,
+		indexByID:      indexByID,
+		indexByAbsPath: indexByAbsPath,
+		queue:          queue,
+		currentIdx:     0,
+		undoStack:      make([]func(), 0),
+		actions:        actions,
+		durations:      make(map[scalar.ID]scalar.Duration),
+		currentRound:   0,
+		committed:      make(map[scalar.ID]bool),
 	}
+}
+
+// MarkCommitted 记录图片在本会话中已提交过
+func (s *Session) MarkCommitted(id scalar.ID) {
+	if s.committed == nil {
+		s.committed = make(map[scalar.ID]bool)
+	}
+	s.committed[id] = true
 }
 
 func (s *Session) ID() scalar.ID {
