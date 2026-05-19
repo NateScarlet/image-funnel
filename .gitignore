@@ -19,6 +19,7 @@ build/
 
 .trae/documents
 *.local
+*.local.*
 
 # Frontend
 frontend/node_modules/

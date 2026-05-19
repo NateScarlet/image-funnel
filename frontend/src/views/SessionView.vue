@@ -10,17 +10,26 @@
       @undo="undo"
     >
       <template #extra>
-        <button
-          v-if="currentImage"
-          class="p-2 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors flex items-center gap-2"
-          :class="currentImage.memo.content ? 'text-secondary-400' : ''"
-          title="备注"
-          @click="showMemoDialog = true"
-        >
-          <svg class="w-6 h-6" viewBox="0 0 24 24">
-            <path :d="mdiNoteTextOutline" fill="currentColor" />
-          </svg>
-        </button>
+        <div class="mr-4">
+          <button
+            v-if="showEarlyFinish"
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+            :disabled="earlyFinishing"
+            @click="earlyFinish"
+          >
+            <svg
+              v-if="earlyFinishing"
+              class="w-5 h-5 animate-spin"
+              viewBox="0 0 24 24"
+            >
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiCheckAll" fill="currentColor" />
+            </svg>
+            <span>{{ earlyFinishing ? "处理中..." : "全部保留" }}</span>
+          </button>
+        </div>
       </template>
     </SessionHeader>
 
@@ -189,7 +198,7 @@ import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import SessionProgressBar from "../components/SessionProgressBar.vue";
 import useEventListeners from "../composables/useEventListeners";
 import { formatDate } from "../utils/date";
-import { mdiHome, mdiNoteTextOutline } from "@mdi/js";
+import { mdiCheckAll, mdiHome, mdiLoading, mdiNoteTextOutline } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
@@ -389,6 +398,28 @@ const { marking, mark: markImage } = useMarkImage(sessionId, imageLoadedAt);
 
 const completedView =
   useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
+
+const showEarlyFinish = computed(() => {
+  const s = session.value;
+  if (!s || !currentImage.value) return false;
+  return s.stats.kept + s.stats.remaining <= s.targetKeep;
+});
+
+const earlyFinishing = ref(false);
+async function earlyFinish() {
+  const image = currentImage.value;
+  const s = session.value;
+  if (!image || !s) return;
+  const ids = [image.id, ...(s.nextImages ?? []).map((i) => i.id)];
+  earlyFinishing.value = true;
+  try {
+    for (const id of ids) {
+      await markImage(id, ImageAction.KEEP);
+    }
+  } finally {
+    earlyFinishing.value = false;
+  }
+}
 
 function handleCommit() {
   if (!currentImage.value && completedView.value) {
