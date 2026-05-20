@@ -1,8 +1,13 @@
 type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
-  total: Int!
-  kept: Int!
-  shelved: Int!
-  rejected: Int!
-  remaining: Int!
+  total: Int! @deprecated(reason: "Use totalCount instead") @goField(name: "TotalCount")
+  kept: Int! @deprecated(reason: "Use totalKept instead") @goField(name: "TotalKept")
+  shelved: Int! @deprecated(reason: "Use totalShelved instead") @goField(name: "TotalShelved")
+  rejected: Int! @deprecated(reason: "Use totalRejected instead") @goField(name: "TotalRejected")
+  remaining: Int! @deprecated(reason: "Use currentRoundRemaining instead") @goField(name: "CurrentRoundRemaining")
+  totalCount: Int!
+  totalKept: Int!
+  totalShelved: Int!
+  totalRejected: Int!
+  currentRoundRemaining: Int!
   isCompleted: Boolean!
 }

@@ -63,17 +63,17 @@ type SessionDTO struct {
 	CurrentSize  int
 	CurrentRound int
 	CurrentImage *ImageDTO
-	QueueActions []ImageAction
+	CurrentRoundActions []ImageAction
 }
 
 // StatsDTO 会话统计数据
 type StatsDTO struct {
-	Total       int
-	Kept        int
-	Shelved     int
-	Rejected    int
-	Remaining   int
-	IsCompleted bool
+	TotalCount            int
+	TotalKept             int
+	TotalShelved          int
+	TotalRejected         int
+	CurrentRoundRemaining int
+	IsCompleted           bool
 }
 
 // WriteActions 写入操作配置

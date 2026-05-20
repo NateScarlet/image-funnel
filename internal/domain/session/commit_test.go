@@ -49,7 +49,7 @@ func TestCanCommit_FirstRoundWithRejects_SecondRoundStart_ShouldBeAbleToCommit(t
 	assert.True(t, session.CanCommit(), "CanCommit should return true after completing with kept images")
 
 	stats := session.Stats()
-	assert.Equal(t, 5, stats.Rejected, "Expected 5 rejected images")
+	assert.Equal(t, 5, stats.TotalRejected, "Expected 5 rejected images")
 }
 
 func TestCanCommit_FirstRoundOnlyRejects_SecondRoundStart_ShouldBeAbleToCommit(t *testing.T) {
@@ -73,7 +73,7 @@ func TestCanCommit_FirstRoundSingleReject_ShouldBeAbleToCommit(t *testing.T) {
 	assert.True(t, session.CanCommit(), "CanCommit should return true after rejecting one image in first round")
 
 	stats := session.Stats()
-	assert.Equal(t, 1, stats.Rejected, "Expected 1 rejected image")
+	assert.Equal(t, 1, stats.TotalRejected, "Expected 1 rejected image")
 }
 
 func TestActions_ShouldOnlyReturnMarkedImages(t *testing.T) {
@@ -275,14 +275,14 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	require.NoError(t, sess.Undo())
 
 	// 验证撤销后的统计数据未被错误过滤
-	require.Equal(t, 0, sess.Stats().Kept)
+	require.Equal(t, 0, sess.Stats().TotalKept)
 
 	// 第二次重新标记：排除 img1，保留 img2
 	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionReject))
 	require.NoError(t, sess.MarkImage(img2.ID(), shared.ImageActionKeep))
 
 	require.True(t, sess.Stats().IsCompleted)
-	require.Equal(t, 1, sess.Stats().Kept)
+	require.Equal(t, 1, sess.Stats().TotalKept)
 
 	// 第二次提交
 	success2, errs2 := svc.Commit(context.Background(), sess, writeActions)

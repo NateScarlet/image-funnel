@@ -1,8 +1,8 @@
 fragment SessionStats on SessionStats {
-  total
-  kept
-  shelved
-  rejected
-  remaining
+  totalCount
+  totalKept
+  totalShelved
+  totalRejected
+  currentRoundRemaining
   isCompleted
 }

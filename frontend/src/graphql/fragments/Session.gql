@@ -23,5 +23,5 @@ fragment Session on Session {
   nextImages(count: 10) {
     ...Image
   }
-  queueActions
+  currentRoundActions
 }

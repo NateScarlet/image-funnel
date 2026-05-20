@@ -194,8 +194,8 @@ func (s *Session) CurrentRound() int {
 	return s.currentRound
 }
 
-// QueueActions 返回当前队列中所有图片的操作状态
-func (s *Session) QueueActions() []shared.ImageAction {
+// CurrentRoundActions 返回当前队列中所有图片的操作状态
+func (s *Session) CurrentRoundActions() []shared.ImageAction {
 	actions := make([]shared.ImageAction, s.currentIdx)
 	for i := 0; i < s.currentIdx; i++ {
 		idx := s.queue[i]

@@ -135,31 +135,31 @@ type ComplexityRoot struct {
 	}
 
 	Session struct {
-		CanCommit    func(childComplexity int) int
-		CanUndo      func(childComplexity int) int
-		CreatedAt    func(childComplexity int) int
-		CurrentImage func(childComplexity int) int
-		CurrentIndex func(childComplexity int) int
-		CurrentRound func(childComplexity int) int
-		CurrentSize  func(childComplexity int) int
-		Directory    func(childComplexity int) int
-		Filter       func(childComplexity int) int
-		ID           func(childComplexity int) int
-		KeptImages   func(childComplexity int, limit *int, offset *int) int
-		NextImages   func(childComplexity int, count *int) int
-		QueueActions func(childComplexity int) int
-		Stats        func(childComplexity int) int
-		TargetKeep   func(childComplexity int) int
-		UpdatedAt    func(childComplexity int) int
+		CanCommit           func(childComplexity int) int
+		CanUndo             func(childComplexity int) int
+		CreatedAt           func(childComplexity int) int
+		CurrentImage        func(childComplexity int) int
+		CurrentIndex        func(childComplexity int) int
+		CurrentRound        func(childComplexity int) int
+		CurrentRoundActions func(childComplexity int) int
+		CurrentSize         func(childComplexity int) int
+		Directory           func(childComplexity int) int
+		Filter              func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		KeptImages          func(childComplexity int, limit *int, offset *int) int
+		NextImages          func(childComplexity int, count *int) int
+		Stats               func(childComplexity int) int
+		TargetKeep          func(childComplexity int) int
+		UpdatedAt           func(childComplexity int) int
 	}
 
 	SessionStats struct {
-		IsCompleted func(childComplexity int) int
-		Kept        func(childComplexity int) int
-		Rejected    func(childComplexity int) int
-		Remaining   func(childComplexity int) int
-		Shelved     func(childComplexity int) int
-		Total       func(childComplexity int) int
+		CurrentRoundRemaining func(childComplexity int) int
+		IsCompleted           func(childComplexity int) int
+		TotalCount            func(childComplexity int) int
+		TotalKept             func(childComplexity int) int
+		TotalRejected         func(childComplexity int) int
+		TotalShelved          func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -608,6 +608,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.CurrentRound(childComplexity), true
+	case "Session.queueActions", "Session.currentRoundActions":
+		if e.complexity.Session.CurrentRoundActions == nil {
+			break
+		}
+
+		return e.complexity.Session.CurrentRoundActions(childComplexity), true
 	case "Session.currentSize":
 		if e.complexity.Session.CurrentSize == nil {
 			break
@@ -654,12 +660,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Session.NextImages(childComplexity, args["count"].(*int)), true
-	case "Session.queueActions":
-		if e.complexity.Session.QueueActions == nil {
-			break
-		}
-
-		return e.complexity.Session.QueueActions(childComplexity), true
 	case "Session.stats":
 		if e.complexity.Session.Stats == nil {
 			break
@@ -679,42 +679,42 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Session.UpdatedAt(childComplexity), true
 
+	case "SessionStats.remaining", "SessionStats.currentRoundRemaining":
+		if e.complexity.SessionStats.CurrentRoundRemaining == nil {
+			break
+		}
+
+		return e.complexity.SessionStats.CurrentRoundRemaining(childComplexity), true
 	case "SessionStats.isCompleted":
 		if e.complexity.SessionStats.IsCompleted == nil {
 			break
 		}
 
 		return e.complexity.SessionStats.IsCompleted(childComplexity), true
-	case "SessionStats.kept":
-		if e.complexity.SessionStats.Kept == nil {
+	case "SessionStats.total", "SessionStats.totalCount":
+		if e.complexity.SessionStats.TotalCount == nil {
 			break
 		}
 
-		return e.complexity.SessionStats.Kept(childComplexity), true
-	case "SessionStats.rejected":
-		if e.complexity.SessionStats.Rejected == nil {
+		return e.complexity.SessionStats.TotalCount(childComplexity), true
+	case "SessionStats.kept", "SessionStats.totalKept":
+		if e.complexity.SessionStats.TotalKept == nil {
 			break
 		}
 
-		return e.complexity.SessionStats.Rejected(childComplexity), true
-	case "SessionStats.remaining":
-		if e.complexity.SessionStats.Remaining == nil {
+		return e.complexity.SessionStats.TotalKept(childComplexity), true
+	case "SessionStats.rejected", "SessionStats.totalRejected":
+		if e.complexity.SessionStats.TotalRejected == nil {
 			break
 		}
 
-		return e.complexity.SessionStats.Remaining(childComplexity), true
-	case "SessionStats.shelved":
-		if e.complexity.SessionStats.Shelved == nil {
+		return e.complexity.SessionStats.TotalRejected(childComplexity), true
+	case "SessionStats.shelved", "SessionStats.totalShelved":
+		if e.complexity.SessionStats.TotalShelved == nil {
 			break
 		}
 
-		return e.complexity.SessionStats.Shelved(childComplexity), true
-	case "SessionStats.total":
-		if e.complexity.SessionStats.Total == nil {
-			break
-		}
-
-		return e.complexity.SessionStats.Total(childComplexity), true
+		return e.complexity.SessionStats.TotalShelved(childComplexity), true
 
 	case "Subscription.directoryChanged":
 		if e.complexity.Subscription.DirectoryChanged == nil {
@@ -1022,18 +1022,23 @@ type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   currentImage: Image
   nextImages(count: Int): [Image!]!
   keptImages(limit: Int, offset: Int): [Image!]!
-  queueActions: [ImageAction!]!
+  queueActions: [ImageAction!]! @deprecated(reason: "Use currentRoundActions instead") @goField(name: "CurrentRoundActions")
+  currentRoundActions: [ImageAction!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/session_stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
-  total: Int!
-  kept: Int!
-  shelved: Int!
-  rejected: Int!
-  remaining: Int!
+  total: Int! @deprecated(reason: "Use totalCount instead") @goField(name: "TotalCount")
+  kept: Int! @deprecated(reason: "Use totalKept instead") @goField(name: "TotalKept")
+  shelved: Int! @deprecated(reason: "Use totalShelved instead") @goField(name: "TotalShelved")
+  rejected: Int! @deprecated(reason: "Use totalRejected instead") @goField(name: "TotalRejected")
+  remaining: Int! @deprecated(reason: "Use currentRoundRemaining instead") @goField(name: "CurrentRoundRemaining")
+  totalCount: Int!
+  totalKept: Int!
+  totalShelved: Int!
+  totalRejected: Int!
+  currentRoundRemaining: Int!
   isCompleted: Boolean!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/types/write_actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   keepRating: Int!
   shelveRating: Int!
@@ -1500,6 +1505,8 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_session(_ context.
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -1592,6 +1599,8 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -2394,6 +2403,8 @@ func (ec *executionContext) fieldContext_MarkImagePayload_session(_ context.Cont
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3039,6 +3050,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -3393,6 +3406,16 @@ func (ec *executionContext) fieldContext_Session_stats(_ context.Context, field 
 				return ec.fieldContext_SessionStats_rejected(ctx, field)
 			case "remaining":
 				return ec.fieldContext_SessionStats_remaining(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_SessionStats_totalCount(ctx, field)
+			case "totalKept":
+				return ec.fieldContext_SessionStats_totalKept(ctx, field)
+			case "totalShelved":
+				return ec.fieldContext_SessionStats_totalShelved(ctx, field)
+			case "totalRejected":
+				return ec.fieldContext_SessionStats_totalRejected(ctx, field)
+			case "currentRoundRemaining":
+				return ec.fieldContext_SessionStats_currentRoundRemaining(ctx, field)
 			case "isCompleted":
 				return ec.fieldContext_SessionStats_isCompleted(ctx, field)
 			}
@@ -3789,7 +3812,7 @@ func (ec *executionContext) _Session_queueActions(ctx context.Context, field gra
 		field,
 		ec.fieldContext_Session_queueActions,
 		func(ctx context.Context) (any, error) {
-			return obj.QueueActions, nil
+			return obj.CurrentRoundActions, nil
 		},
 		nil,
 		ec.marshalNImageAction2ᚕmainᚋinternalᚋenumᚐEnumᚄ,
@@ -3811,6 +3834,35 @@ func (ec *executionContext) fieldContext_Session_queueActions(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Session_currentRoundActions(ctx context.Context, field graphql.CollectedField, obj *shared.SessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_currentRoundActions,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentRoundActions, nil
+		},
+		nil,
+		ec.marshalNImageAction2ᚕmainᚋinternalᚋenumᚐEnumᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_currentRoundActions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ImageAction does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionStats_total(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3818,7 +3870,7 @@ func (ec *executionContext) _SessionStats_total(ctx context.Context, field graph
 		field,
 		ec.fieldContext_SessionStats_total,
 		func(ctx context.Context) (any, error) {
-			return obj.Total, nil
+			return obj.TotalCount, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3847,7 +3899,7 @@ func (ec *executionContext) _SessionStats_kept(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_SessionStats_kept,
 		func(ctx context.Context) (any, error) {
-			return obj.Kept, nil
+			return obj.TotalKept, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3876,7 +3928,7 @@ func (ec *executionContext) _SessionStats_shelved(ctx context.Context, field gra
 		field,
 		ec.fieldContext_SessionStats_shelved,
 		func(ctx context.Context) (any, error) {
-			return obj.Shelved, nil
+			return obj.TotalShelved, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3905,7 +3957,7 @@ func (ec *executionContext) _SessionStats_rejected(ctx context.Context, field gr
 		field,
 		ec.fieldContext_SessionStats_rejected,
 		func(ctx context.Context) (any, error) {
-			return obj.Rejected, nil
+			return obj.TotalRejected, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3934,7 +3986,7 @@ func (ec *executionContext) _SessionStats_remaining(ctx context.Context, field g
 		field,
 		ec.fieldContext_SessionStats_remaining,
 		func(ctx context.Context) (any, error) {
-			return obj.Remaining, nil
+			return obj.CurrentRoundRemaining, nil
 		},
 		nil,
 		ec.marshalNInt2int,
@@ -3944,6 +3996,151 @@ func (ec *executionContext) _SessionStats_remaining(ctx context.Context, field g
 }
 
 func (ec *executionContext) fieldContext_SessionStats_remaining(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStats_totalCount(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStats_totalKept(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_totalKept,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalKept, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_totalKept(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStats_totalShelved(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_totalShelved,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalShelved, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_totalShelved(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStats_totalRejected(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_totalRejected,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalRejected, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_totalRejected(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStats_currentRoundRemaining(ctx context.Context, field graphql.CollectedField, obj *shared.StatsDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStats_currentRoundRemaining,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentRoundRemaining, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStats_currentRoundRemaining(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionStats",
 		Field:      field,
@@ -4042,6 +4239,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -4220,6 +4419,8 @@ func (ec *executionContext) fieldContext_UndoPayload_session(_ context.Context, 
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -4312,6 +4513,8 @@ func (ec *executionContext) fieldContext_UpdateSessionPayload_session(_ context.
 				return ec.fieldContext_Session_keptImages(ctx, field)
 			case "queueActions":
 				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
 		},
@@ -7341,6 +7544,11 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "currentRoundActions":
+			out.Values[i] = ec._Session_currentRoundActions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7397,6 +7605,31 @@ func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.Selection
 			}
 		case "remaining":
 			out.Values[i] = ec._SessionStats_remaining(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._SessionStats_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalKept":
+			out.Values[i] = ec._SessionStats_totalKept(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalShelved":
+			out.Values[i] = ec._SessionStats_totalShelved(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalRejected":
+			out.Values[i] = ec._SessionStats_totalRejected(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentRoundRemaining":
+			out.Values[i] = ec._SessionStats_currentRoundRemaining(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

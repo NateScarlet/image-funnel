@@ -45,6 +45,6 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 		CurrentSize:  sess.CurrentSize(),
 		CurrentRound: sess.CurrentRound(),
 		CurrentImage: currentImage,
-		QueueActions: sess.QueueActions(),
+		CurrentRoundActions: sess.CurrentRoundActions(),
 	}, nil
 }

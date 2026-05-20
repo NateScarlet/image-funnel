@@ -95,9 +95,9 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	assert.Equal(t, shared.ImageActionKeep, ActionOf(session, img.ID()), "action 记录不应丢失")
 
 	// 图片已被标记过（MarkImage 导致 currentIdx=1），所以 Remaining=0，IsCompleted=true
-	// 重点：如果没有修复（图片被错误移除），stats.Kept 会变为 0，session 依然 IsCompleted，
+	// 重点：如果没有修复（图片被错误移除），stats.TotalKept 会变为 0，session 依然 IsCompleted，
 	// 但后续无法 undo 也无法知道已标记的图片去哪了
 	stats := session.Stats()
-	assert.Equal(t, 0, stats.Remaining, "图片已处理完，Remaining 应为 0")
-	assert.Equal(t, 1, stats.Kept, "Kept 计数应保留（图片仍在 images 中）")
+	assert.Equal(t, 0, stats.CurrentRoundRemaining, "图片已处理完，Remaining 应为 0")
+	assert.Equal(t, 1, stats.TotalKept, "Kept 计数应保留（图片仍在 images 中）")
 }

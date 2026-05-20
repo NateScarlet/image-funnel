@@ -65,10 +65,10 @@
       </div>
     </div>
 
-    <div v-if="session.stats.kept > 0" class="w-full max-w-6xl px-4 mt-8">
+    <div v-if="session.stats.totalKept > 0" class="w-full max-w-6xl px-4 mt-8">
       <KeptImagesGrid
         :session-id="session.id"
-        :total-kept="session.stats.kept"
+        :total-kept="session.stats.totalKept"
       />
     </div>
 
@@ -165,7 +165,7 @@ const showConfirm = ref(false);
 let pendingCommit: (() => void) | null = null;
 
 function interceptCommit(commitFn: () => void) {
-  if (session.stats.kept === 0) {
+  if (session.stats.totalKept === 0) {
     showConfirm.value = true;
     pendingCommit = commitFn;
   } else {

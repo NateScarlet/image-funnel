@@ -45,7 +45,8 @@
               <label class="mb-2 block text-sm font-medium text-primary-300">
                 目标保留数量
                 <span class="ml-2 text-xs text-primary-400"
-                  >({{ session.stats?.kept ?? 0 }} / {{ targetKeep }})</span
+                  >({{ session.stats?.totalKept ?? 0 }} /
+                  {{ targetKeep }})</span
                 >
               </label>
               <input

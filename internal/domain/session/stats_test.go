@@ -15,12 +15,12 @@ func TestStats_InitialState(t *testing.T) {
 
 	stats := session.Stats()
 
-	assert.Equal(t, 10, stats.Total, "Total should be 10")
+	assert.Equal(t, 10, stats.TotalCount, "Total should be 10")
 	assert.Equal(t, 0, session.CurrentIndex(), "Processed should be 0")
-	assert.Equal(t, 0, stats.Kept, "Kept should be 0")
-	assert.Equal(t, 0, stats.Shelved, "Shelved should be 0")
-	assert.Equal(t, 0, stats.Rejected, "Rejected should be 0")
-	assert.Equal(t, 10, stats.Remaining, "Remaining should be 10")
+	assert.Equal(t, 0, stats.TotalKept, "Kept should be 0")
+	assert.Equal(t, 0, stats.TotalShelved, "Shelved should be 0")
+	assert.Equal(t, 0, stats.TotalRejected, "Rejected should be 0")
+	assert.Equal(t, 10, stats.CurrentRoundRemaining, "Remaining should be 10")
 }
 
 func TestStats_AfterMarkingImages(t *testing.T) {
@@ -46,12 +46,12 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 
 	stats := session.Stats()
 
-	assert.Equal(t, 10, stats.Total, "Total should be 10")
+	assert.Equal(t, 10, stats.TotalCount, "Total should be 10")
 	assert.Equal(t, 9, session.CurrentIndex(), "Processed should be 9")
-	assert.Equal(t, 3, stats.Kept, "Kept should be 3")
-	assert.Equal(t, 3, stats.Shelved, "Shelved should be 3")
-	assert.Equal(t, 3, stats.Rejected, "Rejected should be 3")
-	assert.Equal(t, 1, stats.Remaining, "Remaining should be 1")
+	assert.Equal(t, 3, stats.TotalKept, "Kept should be 3")
+	assert.Equal(t, 3, stats.TotalShelved, "Shelved should be 3")
+	assert.Equal(t, 3, stats.TotalRejected, "Rejected should be 3")
+	assert.Equal(t, 1, stats.CurrentRoundRemaining, "Remaining should be 1")
 }
 
 func TestStats_CurrentFilterExcludesKeptImage(t *testing.T) {
@@ -68,7 +68,7 @@ func TestStats_CurrentFilterExcludesKeptImage(t *testing.T) {
 	require.NoError(t, session.MarkImage(images[2].ID(), shared.ImageActionKeep))
 
 	// Stats: Kept=1
-	assert.Equal(t, 1, session.Stats().Kept)
+	assert.Equal(t, 1, session.Stats().TotalKept)
 
 	// Create filter for Rating=4,5
 	filter := &shared.ImageFilters{Rating: []int{4, 5}}
@@ -78,7 +78,7 @@ func TestStats_CurrentFilterExcludesKeptImage(t *testing.T) {
 	require.NoError(t, session.NextRound(filter, filteredImages))
 
 	// Expected: Kept should be 0 because the kept image (rating 3) is excluded by filter (4,5)
-	assert.Equal(t, 0, session.Stats().Kept)
+	assert.Equal(t, 0, session.Stats().TotalKept)
 }
 
 func TestMarkImage_AllImagesRejected_ShouldCompleteSession(t *testing.T) {
@@ -130,8 +130,8 @@ func TestMarkImage_WithShelvedAndKept_ShouldCompleteIfKeptBelowTarget(t *testing
 	})
 
 	stats := session.Stats()
-	assert.Equal(t, 0, stats.Remaining, "All images should be processed")
-	assert.Equal(t, 2, stats.Kept, "Should have 2 kept images")
-	assert.Equal(t, 8, stats.Shelved, "Should have 8 shelved images")
+	assert.Equal(t, 0, stats.CurrentRoundRemaining, "All images should be processed")
+	assert.Equal(t, 2, stats.TotalKept, "Should have 2 kept images")
+	assert.Equal(t, 8, stats.TotalShelved, "Should have 8 shelved images")
 	assert.True(t, stats.IsCompleted, "Session should be completed because shelved images are ignored")
 }

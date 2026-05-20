@@ -5,9 +5,9 @@
       <p class="text-primary-300 mb-2">
         将
         {{
-          (session?.stats.kept ?? 0) +
-          (session?.stats.shelved ?? 0) +
-          (session?.stats.rejected ?? 0)
+          (session?.stats.totalKept ?? 0) +
+          (session?.stats.totalShelved ?? 0) +
+          (session?.stats.totalRejected ?? 0)
         }}
         个操作写入 XMP 文件
       </p>
@@ -22,7 +22,7 @@
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
-              {{ session?.stats.kept || 0 }} 张
+              {{ session?.stats.totalKept || 0 }} 张
             </span>
           </div>
           <RatingSelector v-model="keepRating" />
@@ -33,7 +33,7 @@
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
-              {{ session?.stats.shelved || 0 }} 张
+              {{ session?.stats.totalShelved || 0 }} 张
             </span>
           </div>
           <RatingSelector v-model="shelveRating" />
@@ -44,7 +44,7 @@
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
-              {{ session?.stats.rejected || 0 }} 张
+              {{ session?.stats.totalRejected || 0 }} 张
             </span>
           </div>
           <RatingSelector v-model="rejectRating" />

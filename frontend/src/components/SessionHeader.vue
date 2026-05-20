@@ -20,7 +20,7 @@
         <div class="text-sm md:text-lg font-semibold truncate">
           {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
           <span class="text-green-400 ml-2"
-            >保留: {{ session?.stats.kept || 0 }} /
+            >保留: {{ session?.stats.totalKept || 0 }} /
             {{ session?.targetKeep || 0 }}</span
           >
         </div>

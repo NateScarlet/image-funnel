@@ -53,16 +53,16 @@ const props = defineProps<{
   session: SessionFragment;
 }>();
 
-const queueActions = computed(() => props.session.queueActions);
+const currentRoundActions = computed(() => props.session.currentRoundActions);
 const currentSize = computed(() => props.session.currentSize);
 const isTargetMet = computed(
-  () => props.session.stats.kept >= props.session.targetKeep,
+  () => props.session.stats.totalKept >= props.session.targetKeep,
 );
 
 // 识别是否为批量修改
 const isBatchChange = ref(false);
 watch(
-  () => queueActions.value.length,
+  () => currentRoundActions.value.length,
   (newLen, oldLen) => {
     isBatchChange.value = Math.abs(newLen - (oldLen ?? 0)) > 1;
   },
@@ -86,7 +86,7 @@ interface SplitState {
 }
 
 const splitState = computed((oldValue?: SplitState): SplitState => {
-  const actions = queueActions.value;
+  const actions = currentRoundActions.value;
   const total = actions.length;
   const prevTotal = oldValue?.totalLength ?? 0;
 
@@ -124,7 +124,7 @@ const historyKey = computed(() => {
   const roundPrefix = `r${props.session.currentRound}`;
   // 批量修改时，通过改变 key 触发整体淡入动画
   if (isBatchChange.value)
-    return `${roundPrefix}-batch-${queueActions.value.length}`;
+    return `${roundPrefix}-batch-${currentRoundActions.value.length}`;
   // 单步修改时保持 key 不变，确保底层稳定
   return `${roundPrefix}-stable`;
 });
@@ -175,7 +175,7 @@ function onLeave(el: Element, done: () => void) {
   }
 
   // 如果索引仍然在当前队列范围内，说明它是被移入了渐变层，不需要动画
-  if (index < queueActions.value.length) {
+  if (index < currentRoundActions.value.length) {
     done();
     return;
   }

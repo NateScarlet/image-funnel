@@ -8,8 +8,8 @@ import (
 // Stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
 func (s *Session) Stats() *shared.StatsDTO {
 	var stats shared.StatsDTO
-	stats.Total = len(s.queue)
-	stats.Remaining = len(s.queue) - s.currentIdx
+	stats.TotalCount = len(s.queue)
+	stats.CurrentRoundRemaining = len(s.queue) - s.currentIdx
 
 	filterFunc := image.BuildImageFilter(s.filter)
 
@@ -31,11 +31,11 @@ func (s *Session) Stats() *shared.StatsDTO {
 		if filterFunc(img) || s.committed[id] {
 			switch action {
 			case shared.ImageActionKeep:
-				stats.Kept++
+				stats.TotalKept++
 			case shared.ImageActionShelve:
-				stats.Shelved++
+				stats.TotalShelved++
 			case shared.ImageActionReject:
-				stats.Rejected++
+				stats.TotalRejected++
 			}
 		}
 	}
@@ -45,7 +45,7 @@ func (s *Session) Stats() *shared.StatsDTO {
 	// 1. 所有图片都已处理 (remaining == 0)
 	// 2. 且保留的图片数量不超过目标保留数量 (否则需要开启新一轮)
 	// 注意：搁置 (Shelve) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
-	stats.IsCompleted = stats.Remaining == 0 && (stats.Kept <= s.targetKeep)
+	stats.IsCompleted = stats.CurrentRoundRemaining == 0 && (stats.TotalKept <= s.targetKeep)
 
 	return &stats
 }

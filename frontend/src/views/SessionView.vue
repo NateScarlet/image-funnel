@@ -77,7 +77,7 @@
               </span>
               <div class="w-px h-4 bg-white/30 mx-1"></div>
               <span class="lg:min-w-24 text-green-400">
-                保留: {{ session?.stats.kept || 0 }} /
+                保留: {{ session?.stats.totalKept || 0 }} /
                 {{ session?.targetKeep || 0 }}
               </span>
             </template>
@@ -402,10 +402,10 @@ const completedView =
 const showEarlyFinish = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
-  const currentRoundKept = s.queueActions.filter(
+  const currentRoundKept = s.currentRoundActions.filter(
     (a) => a === ImageAction.KEEP,
   ).length;
-  return currentRoundKept + s.stats.remaining <= s.targetKeep;
+  return currentRoundKept + s.stats.currentRoundRemaining <= s.targetKeep;
 });
 
 const earlyFinishing = ref(false);

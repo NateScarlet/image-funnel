@@ -64,7 +64,7 @@ func TestMarkImage_KeepAndReview_ShouldStartNextRound(t *testing.T) {
 
 	newRoundStats := session.Stats()
 	assert.Equal(t, 0, session.CurrentIndex(), "New round processed should be 0")
-	assert.Equal(t, 3, newRoundStats.Total, "New round total should be 3")
+	assert.Equal(t, 3, newRoundStats.TotalCount, "New round total should be 3")
 }
 
 func TestMarkImage_KeepAndReview_ShouldStartNextRoundWithBoth(t *testing.T) {
