@@ -402,7 +402,10 @@ const completedView =
 const showEarlyFinish = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
-  return s.stats.kept + s.stats.remaining <= s.targetKeep;
+  const currentRoundKept = s.queueActions.filter(
+    (a) => a === ImageAction.KEEP,
+  ).length;
+  return currentRoundKept + s.stats.remaining <= s.targetKeep;
 });
 
 const earlyFinishing = ref(false);
