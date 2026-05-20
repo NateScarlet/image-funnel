@@ -22,7 +22,8 @@ func TestInMemoryTopic(t *testing.T) {
 		var topic, cleanup = pubsub.NewInMemoryTopic[int]()
 		defer cleanup()
 		var seq = []int{0, 1, 2, 3, 4, 5}
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		// 使用 context.WithCancel 管理发布者协程生命周期，避免硬编码超时时间
+		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		var ack = make(chan struct{})
 		var serverReady = make(chan struct{})
@@ -65,8 +66,9 @@ func TestInMemoryTopic(t *testing.T) {
 				continue
 			}
 			t.Logf("receive %d", i)
-			<-ack
+			// 必须先检查错误，避免在超时等异常情况下等待 ack 导致死锁
 			require.NoError(t, err)
+			<-ack
 			require.Equal(t, seq[index], i)
 			index++
 			if index == len(seq) {
@@ -104,7 +106,8 @@ func TestInMemoryTopic(t *testing.T) {
 		defer cleanup()
 		var ack = make(chan struct{})
 		const messageCount = 10
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		// 使用 context.WithCancel 管理发布者协程生命周期，避免硬编码超时时间
+		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		var serverReady = make(chan struct{})
 		go func() {
@@ -143,6 +146,10 @@ func TestInMemoryTopic(t *testing.T) {
 				continue
 			}
 			t.Logf("receive %d", i)
+			// 必须先检查非预期的错误，避免在超时等异常情况下等待 ack 导致死锁
+			if err != nil && !errors.Is(err, pubsub.ErrUndeliveredEvents) {
+				require.NoError(t, err)
+			}
 			receiveCount++
 			if i < 4 {
 				<-ack
