@@ -5,6 +5,7 @@
       selected
         ? ' border-secondary-500 shadow-lg shadow-secondary-500/30'
         : ' border-primary-500 hover:border-primary-400 hover:bg-primary-550',
+      filteredOut ? 'opacity-50' : '',
     ]"
     @click="select"
   >
@@ -26,6 +27,19 @@
             />
           </svg>
           已达标
+        </div>
+        <div
+          v-if="filteredOut"
+          class="flex-none px-2 py-0.5 text-xs bg-yellow-600/80 text-yellow-100 rounded flex items-center gap-1 mt-1"
+        >
+          <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fill-rule="evenodd"
+              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          不匹配筛选
         </div>
       </template>
       <template #title>
@@ -56,11 +70,19 @@ import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 
-const { directory, filterRating, targetKeep, loading } = defineProps<{
+const {
+  directory,
+  filterRating,
+  targetKeep,
+  loading,
+  filteredOut = false,
+} = defineProps<{
   directory: DirectoryFragment;
   filterRating: readonly number[];
   targetKeep: number;
   loading?: boolean;
+  // 标记目录是否因为不匹配全局筛选条件（如已达标、小未评级等）而被过滤隐藏
+  filteredOut?: boolean;
 }>();
 
 const { getCachedStats } = useDirectoryStats();

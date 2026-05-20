@@ -107,6 +107,7 @@
             :filter-rating="filterRating"
             :target-keep="targetKeep"
             :loading="backgroundLoadingCount > 0"
+            :filtered-out="item.filteredOut"
           />
         </template>
       </div>
@@ -268,7 +269,22 @@ const filteredItems = computed(() => {
 });
 
 const displayedFilteredItems = computed(() => {
-  return filteredItems.value.filter(isVisible);
+  // 判断当前是否处于有效搜索状态下
+  const isSearching = searchQuery.value.trim() !== "";
+  return filteredItems.value
+    .map((item) => ({
+      ...item,
+      // 计算每一项是否不满足当前的全局过滤筛选条件
+      filteredOut: !isVisible(item),
+    }))
+    .filter((item) => {
+      // 搜索时忽略筛选条件（即显示所有匹配搜索的项目）
+      if (isSearching) {
+        return true;
+      }
+      // 非搜索时，只显示归档/隐藏以外的符合筛选条件的项目
+      return !item.filteredOut;
+    });
 });
 
 const renderLimit = ref(40);
