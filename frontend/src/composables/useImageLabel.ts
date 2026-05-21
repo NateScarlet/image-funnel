@@ -2,6 +2,7 @@ import { ref, computed, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
 import { UpdateLabelDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
+import useHotkey from "./useHotkey";
 
 // 预设的图片标签颜色映射
 export const PRESET_COLORS: Record<string, string> = {
@@ -83,6 +84,20 @@ export default function useImageLabel(
     const val = customLabelInput.value.trim();
     setLabel(val);
   }
+
+  // #region 快捷键注册
+  const colorNames = Object.keys(PRESET_COLORS);
+  // Ctrl+Shift+1 ~ Ctrl+Shift+9 分别映射 9 个预设颜色标签
+  for (let i = 0; i < 9; i++) {
+    useHotkey(`ctrl+shift+${i + 1}`, () => {
+      setLabel(colorNames[i]);
+    });
+  }
+  // Ctrl+Shift+0 清除标签
+  useHotkey("ctrl+shift+0", () => {
+    setLabel("");
+  });
+  // #endregion
 
   return {
     showPopover,

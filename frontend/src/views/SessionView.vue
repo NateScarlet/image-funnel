@@ -198,6 +198,7 @@ import CommitModal from "../components/CommitModal.vue";
 import UpdateSessionModal from "../components/UpdateSessionModal.vue";
 import SessionProgressBar from "../components/SessionProgressBar.vue";
 import useEventListeners from "../composables/useEventListeners";
+import useHotkey from "../composables/useHotkey";
 import { formatDate } from "../utils/date";
 import { mdiCheckAll, mdiHome, mdiLoading, mdiNoteTextOutline } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
@@ -265,38 +266,41 @@ const currentImageId = computed(
 );
 
 const swipeEl = useTemplateRef("swipeEl");
+
+// #region 快捷键注册
+useHotkey("ArrowDown", () => {
+  const imageId = currentImageId.value;
+  if (imageId) {
+    markImage(imageId, ImageAction.REJECT);
+  }
+});
+useHotkey("ArrowUp", () => {
+  const imageId = currentImageId.value;
+  if (imageId) {
+    markImage(imageId, ImageAction.SHELVE);
+  }
+});
+useHotkey("ArrowRight", () => {
+  const imageId = currentImageId.value;
+  if (imageId) {
+    markImage(imageId, ImageAction.KEEP);
+  }
+});
+useHotkey("ArrowLeft", () => {
+  const imageId = currentImageId.value;
+  if (imageId) {
+    undo();
+  }
+});
+useHotkey(["m", "shift+m"], () => {
+  const imageId = currentImageId.value;
+  if (imageId) {
+    showMemoDialog.value = true;
+  }
+});
+// #endregion
+
 useEventListeners(window, ({ on }) => {
-  on("keydown", (e) => {
-    if (
-      e.target instanceof HTMLInputElement ||
-      e.target instanceof HTMLTextAreaElement ||
-      (e.target instanceof HTMLElement && e.target.isContentEditable)
-    ) {
-      return;
-    }
-    const imageId = currentImageId.value;
-    if (!imageId) {
-      return;
-    }
-    switch (e.key) {
-      case "ArrowDown":
-        markImage(imageId, ImageAction.REJECT);
-        break;
-      case "ArrowUp":
-        markImage(imageId, ImageAction.SHELVE);
-        break;
-      case "ArrowRight":
-        markImage(imageId, ImageAction.KEEP);
-        break;
-      case "ArrowLeft":
-        undo();
-        break;
-      case "m":
-      case "M":
-        showMemoDialog.value = true;
-        break;
-    }
-  });
   on(
     "touchstart",
     (e) => {
