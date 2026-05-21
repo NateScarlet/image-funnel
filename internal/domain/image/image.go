@@ -1,7 +1,6 @@
 package image
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"main/internal/domain/metadata"
@@ -109,20 +108,15 @@ func (i *Image) Height() int {
 
 // #region ID编码与解码
 
-// EncodeID 将图片绝对路径和修改时间转换为 opaque 的 ID，以便客户端不透传具体路径但后端可以通过ID反解出文件位置与修改版本
+// EncodeID 将图片绝对路径和修改时间转换为明文格式的 ID
 func EncodeID(absPath string, modTime time.Time) scalar.ID {
 	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), absPath)
-	encoded := base64.RawURLEncoding.EncodeToString([]byte(str))
-	return scalar.ToID(encoded)
+	return scalar.ToID(str)
 }
 
-// DecodeID 解析 opaque 类型的 ID 并还原为图片的绝对路径和期望修改时间
+// DecodeID 解析明文格式的 ID 并还原为图片的绝对路径和期望修改时间
 func DecodeID(id scalar.ID) (string, time.Time, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(id.String())
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	str := string(decoded)
+	str := id.String()
 	if !strings.HasPrefix(str, "img:") {
 		return "", time.Time{}, errors.New("invalid image id format")
 	}
@@ -132,7 +126,7 @@ func DecodeID(id scalar.ID) (string, time.Time, error) {
 	}
 	nanoStr, absPath := parts[0], parts[1]
 	var nano int64
-	_, err = fmt.Sscanf(nanoStr, "%d", &nano)
+	_, err := fmt.Sscanf(nanoStr, "%d", &nano)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("invalid image id timestamp: %w", err)
 	}
