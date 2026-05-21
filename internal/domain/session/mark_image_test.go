@@ -114,9 +114,9 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 }
 
 func TestSession_MarkImage_Sorting(t *testing.T) {
-	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", 1000, time.Now(), nil, 100, 100)
-	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", 1000, time.Now(), nil, 100, 100)
-	img3 := image.NewImage(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", 1000, time.Now(), nil, 100, 100)
+	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.NewImage(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2, img3}
 
 	sess := NewSession(scalar.ToID("sessSort"), scalar.ToID("dir1"), nil, 1, images)
@@ -144,7 +144,7 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 }
 
 func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
-	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", 1000, time.Now(), nil, 100, 100)
+	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1}
 	sess := NewSession(scalar.ToID("sessAcc"), scalar.ToID("dir1"), nil, 10, images)
 
@@ -169,9 +169,9 @@ func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
 }
 
 func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
-	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", 1000, time.Now(), nil, 100, 100)
-	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", 1000, time.Now(), nil, 100, 100)
-	img3 := image.NewImage(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", 1000, time.Now(), nil, 100, 100)
+	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.NewImage(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img3, img2}
 
 	sess := NewSession(scalar.ToID("sessAvoid"), scalar.ToID("dir1"), nil, 1, images)
@@ -197,8 +197,8 @@ func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
 // 复现 Bug：用户在队列末尾（刚完成状态）对之前的图片做乱序标记，
 // 使 Kept > targetKeep，此时必须触发 NextRound，否则 currentImage 永远为 null。
 func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) {
-	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", 1000, time.Now(), nil, 100, 100)
-	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", 1000, time.Now(), nil, 100, 100)
+	img1 := image.NewImage(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.NewImage(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2}
 
 	sess := NewSession(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images)

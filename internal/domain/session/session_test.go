@@ -47,10 +47,10 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 
 func TestSession_KeptImages(t *testing.T) {
 	images := []*image.Image{
-		image.NewImage(scalar.ToID("1"), "b.jpg", "/path/b.jpg", 100, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("2"), "a.jpg", "/path/a.jpg", 200, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("3"), "c.jpg", "/path/c.jpg", 300, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("4"), "d.jpg", "/path/d.jpg", 400, time.Now(), nil, 100, 100),
+		image.NewImage(scalar.ToID("1"), "b.jpg", "/path/b.jpg", scalar.ToID("d1"), 100, time.Now(), nil, 100, 100),
+		image.NewImage(scalar.ToID("2"), "a.jpg", "/path/a.jpg", scalar.ToID("d1"), 200, time.Now(), nil, 100, 100),
+		image.NewImage(scalar.ToID("3"), "c.jpg", "/path/c.jpg", scalar.ToID("d1"), 300, time.Now(), nil, 100, 100),
+		image.NewImage(scalar.ToID("4"), "d.jpg", "/path/d.jpg", scalar.ToID("d1"), 400, time.Now(), nil, 100, 100),
 	}
 
 	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), nil, 10, images)

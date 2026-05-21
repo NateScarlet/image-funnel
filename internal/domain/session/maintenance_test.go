@@ -59,6 +59,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 		scalar.ToID("img-0"),
 		"test.jpg",
 		"/test/test-0.jpg",
+		scalar.ToID("d1"),
 		1000,
 		time.Now(),
 		xmpRating0,
@@ -78,6 +79,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 		img.ID(), // 同一个 ID（ModTime 未变）
 		img.Filename(),
 		img.AbsPath(),
+		img.DirectoryID(),
 		img.Size(),
 		img.ModTime(),
 		xmpRating5,

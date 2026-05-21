@@ -127,9 +127,9 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
-	img3 := image.NewImage(scalar.ToID("3"), "test3.jpg", file3, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
+	img3 := image.NewImage(scalar.ToID("3"), "test3.jpg", file3, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
@@ -192,7 +192,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
 	defer cleanupService()
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
@@ -242,8 +242,8 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
 	defer cleanupService()
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
