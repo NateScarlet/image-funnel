@@ -17,6 +17,7 @@ type Handler struct {
 	sessionService *session.Service
 	eventBus       EventBus
 	urlSigner      appimage.URLSigner
+	rootDir        string
 	dtoFactory     *SessionDTOFactory
 	logger         *zap.Logger
 }
@@ -25,14 +26,16 @@ func NewHandler(
 	sessionService *session.Service,
 	eventBus EventBus,
 	urlSigner appimage.URLSigner,
+	rootDir string,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
 		sessionService: sessionService,
 		eventBus:       eventBus,
 		urlSigner:      urlSigner,
+		rootDir:        rootDir,
 		// TODO: 应该注入而不是创建
-		dtoFactory: NewSessionDTOFactory(urlSigner),
+		dtoFactory: NewSessionDTOFactory(urlSigner, rootDir),
 		logger:     logger,
 	}
 }
@@ -188,7 +191,7 @@ func (h *Handler) CurrentImage(ctx context.Context, sessionID scalar.ID) (*share
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	return imageDTOFactory.New(img)
 }
 
@@ -218,7 +221,7 @@ func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	result := make([]*shared.ImageDTO, 0, len(images))
 	for _, img := range images {
 		dto, err := imageDTOFactory.New(img)
@@ -242,7 +245,7 @@ func (h *Handler) KeptImages(ctx context.Context, sessionID scalar.ID, limit, of
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	result := make([]*shared.ImageDTO, 0, len(images))
 	for _, img := range images {
 		dto, err := imageDTOFactory.New(img)
@@ -312,6 +315,6 @@ func (h *Handler) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 		return nil, err
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	return imageDTOFactory.New(img)
 }

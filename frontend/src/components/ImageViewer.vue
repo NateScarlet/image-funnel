@@ -110,17 +110,17 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
 
-      <!-- 原图开关 -->
-      <label
+      <!-- 复制路径按钮 -->
+      <button
         class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        title="复制文件路径"
+        @click="copyFilePath"
       >
-        <input
-          v-model="useRawImage"
-          type="checkbox"
-          class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-3.5 h-3.5"
-        />
-        <span class="text-xs">原图</span>
-      </label>
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path :d="mdiContentCopy" />
+        </svg>
+        <span class="text-xs">{{ copyButtonText || "复制路径" }}</span>
+      </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
       <!-- 评星操作区 (仅在无会话模式下展示和操作) -->
@@ -315,6 +315,45 @@
           <path :d="isFullscreen ? mdiFullscreenExit : mdiFullscreen" />
         </svg>
       </button>
+
+      <!-- 溢出菜单 -->
+      <div ref="overflowMenuRef" class="relative">
+        <button
+          class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
+          title="更多选项"
+          @click="showOverflowMenu = !showOverflowMenu"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="mdiDotsVertical" />
+          </svg>
+        </button>
+
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="opacity-0 translate-y-2 scale-95"
+          enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition duration-100 ease-in"
+          leave-from-class="opacity-100 translate-y-0 scale-100"
+          leave-to-class="opacity-0 translate-y-2 scale-95"
+        >
+          <div
+            v-if="showOverflowMenu"
+            class="absolute bottom-full mb-2 right-0 z-50 w-40 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
+          >
+            <label
+              class="flex items-center gap-2 cursor-pointer select-none text-white/70 hover:text-white transition-colors"
+            >
+              <input
+                v-model="useRawImage"
+                type="checkbox"
+                class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-3.5 h-3.5"
+              />
+              <span class="text-xs">原图</span>
+            </label>
+          </div>
+        </Transition>
+      </div>
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
     </div>
   </div>
 </template>
@@ -337,6 +376,8 @@ import {
   mdiDeleteOutline,
   mdiStar,
   mdiStarOffOutline,
+  mdiContentCopy,
+  mdiDotsVertical,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
@@ -346,6 +387,8 @@ import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
+import useQuery from "@/graphql/utils/useQuery";
+import { MetaDocument } from "@/graphql/generated";
 
 const emit =
   defineEmits<
@@ -364,6 +407,48 @@ const {
   nextImages?: ImageFragment[];
   allowPan?: (e: PointerEvent) => boolean;
 }>();
+
+const metaLoadingCount = ref(0);
+const { data: metaData } = useQuery(MetaDocument, {
+  loadingCount: metaLoadingCount,
+});
+
+const showOverflowMenu = ref(false);
+const overflowMenuRef = useTemplateRef<HTMLElement>("overflowMenuRef");
+
+useClickOutside(overflowMenuRef, () => {
+  showOverflowMenu.value = false;
+});
+
+const copyButtonText = ref("");
+
+async function copyFilePath() {
+  const rootPath = metaData.value?.meta?.rootAbsPath;
+  const relPath = image.relPath;
+  if (!rootPath || !relPath) {
+    return;
+  }
+
+  // 拼接完整路径，处理 Windows 路径分隔符
+  let fullPath: string;
+  if (rootPath.includes("\\")) {
+    // Windows 路径，使用反斜杠
+    fullPath = rootPath + "\\" + relPath.replace(/\//g, "\\");
+  } else {
+    // Unix 路径，使用正斜杠
+    fullPath = rootPath + "/" + relPath.replace(/\\/g, "/");
+  }
+
+  try {
+    await window.navigator.clipboard.writeText(fullPath);
+    copyButtonText.value = "已复制!";
+    setTimeout(() => {
+      copyButtonText.value = "";
+    }, 1500);
+  } catch (err) {
+    console.error("Failed to copy path:", err);
+  }
+}
 
 // 使用 composable 提取的 XMP 评分管理逻辑
 const { setRating } = useImageRating(

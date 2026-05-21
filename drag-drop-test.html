@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拖放文件数据对比测试</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-title {
+            font-size: 1.25rem;
+            margin-bottom: 16px;
+            font-weight: 600;
+            color: #e0e0e0;
+        }
+
+        .drop-zone {
+            border: 3px dashed rgba(102, 126, 234, 0.5);
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.15);
+            transform: scale(1.02);
+        }
+
+        .drop-zone-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        .drop-zone-text {
+            color: #a0a0a0;
+            font-size: 1rem;
+        }
+
+        .output {
+            margin-top: 20px;
+            background: #0d0d1a;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        .output::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .output::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .output::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 4px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+
+        .file-info {
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .diff-panel {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+
+        .diff-added {
+            color: #4ade80;
+        }
+
+        .diff-removed {
+            color: #f87171;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin-top: 16px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .empty {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>拖放文件数据对比测试</h1>
+        
+        <div class="grid">
+            <div class="panel">
+                <h2 class="panel-title">区域 1 - 拖放测试</h2>
+                <div class="drop-zone" id="dropZone1">
+                    <div class="drop-zone-icon">📁</div>
+                    <div class="drop-zone-text">将文件拖放到此处</div>
+                </div>
+                <div class="output" id="output1">等待拖放...</div>
+                <button class="btn btn-secondary" onclick="clearOutput(1)">清空</button>
+            </div>
+
+            <div class="panel">
+                <h2 class="panel-title">区域 2 - 拖放测试</h2>
+                <div class="drop-zone" id="dropZone2">
+                    <div class="drop-zone-icon">📁</div>
+                    <div class="drop-zone-text">将文件拖放到此处</div>
+                </div>
+                <div class="output" id="output2">等待拖放...</div>
+                <button class="btn btn-secondary" onclick="clearOutput(2)">清空</button>
+            </div>
+
+            <div class="panel diff-panel">
+                <h2 class="panel-title">差异对比</h2>
+                <div class="output" id="diffOutput">暂无数据可对比...</div>
+                <button class="btn" onclick="compareData()">对比数据</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let data1 = null;
+        let data2 = null;
+
+        function initDropZone(id) {
+            const dropZone = document.getElementById(`dropZone${id}`);
+            const output = document.getElementById(`output${id}`);
+
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('drag-over');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('drag-over');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const data = extractDropData(e, id);
+                if (id === 1) {
+                    data1 = data;
+                } else {
+                    data2 = data;
+                }
+                output.innerHTML = formatData(data);
+            }, false);
+        }
+
+        function extractDropData(e, zoneId) {
+            const result = {
+                timestamp: new Date().toISOString(),
+                zone: zoneId,
+                dataTransfer: {},
+                files: [],
+                items: [],
+                types: []
+            };
+
+            const dt = e.dataTransfer;
+
+            if (dt) {
+                result.types = Array.from(dt.types || []);
+
+                result.dataTransfer = {
+                    effectAllowed: dt.effectAllowed,
+                    dropEffect: dt.dropEffect,
+                    files: {
+                        length: dt.files ? dt.files.length : 0,
+                        isFileList: dt.files instanceof FileList
+                    },
+                    items: {
+                        length: dt.items ? dt.items.length : 0,
+                        isDataTransferItemList: dt.items instanceof DataTransferItemList
+                    }
+                };
+
+                if (dt.files && dt.files.length > 0) {
+                    for (let i = 0; i < dt.files.length; i++) {
+                        const file = dt.files[i];
+                        result.files.push({
+                            index: i,
+                            name: file.name,
+                            size: file.size,
+                            type: file.type,
+                            lastModified: file.lastModified,
+                            lastModifiedDate: file.lastModifiedDate ? file.lastModifiedDate.toISOString() : null,
+                            isFile: file instanceof File,
+                            webkitRelativePath: file.webkitRelativePath || '',
+                            constructor: file.constructor.name
+                        });
+                    }
+                }
+
+                if (dt.items && dt.items.length > 0) {
+                    for (let i = 0; i < dt.items.length; i++) {
+                        const item = dt.items[i];
+                        result.items.push({
+                            index: i,
+                            kind: item.kind,
+                            type: item.type,
+                            constructor: item.constructor.name,
+                            webkitGetAsEntry: typeof item.webkitGetAsEntry === 'function'
+                        });
+
+                        if (typeof item.webkitGetAsEntry === 'function') {
+                            try {
+                                const entry = item.webkitGetAsEntry();
+                                if (entry) {
+                                    result.items[i].entry = {
+                                        isFile: entry.isFile,
+                                        isDirectory: entry.isDirectory,
+                                        name: entry.name,
+                                        fullPath: entry.fullPath,
+                                        constructor: entry.constructor.name
+                                    };
+                                }
+                            } catch (err) {
+                                result.items[i].entryError = err.message;
+                            }
+                        }
+                    }
+                }
+
+                result.types.forEach(type => {
+                    try {
+                        const data = dt.getData(type);
+                        if (data) {
+                            if (!result.dataTransfer.data) result.dataTransfer.data = {};
+                            result.dataTransfer.data[type] = data.length > 500 ? data.substring(0, 500) + '...' : data;
+                        }
+                    } catch (err) {
+                        if (!result.dataTransfer.dataErrors) result.dataTransfer.dataErrors = {};
+                        result.dataTransfer.dataErrors[type] = err.message;
+                    }
+                });
+            }
+
+            return result;
+        }
+
+        function formatData(data) {
+            if (!data) return '等待拖放...';
+
+            let html = '';
+
+            html += '<div class="section">';
+            html += '<div class="section-title">📅 基本信息</div>';
+            html += `<div>时间: ${data.timestamp}</div>`;
+            html += `<div>区域: ${data.zone}</div>`;
+            html += '</div>';
+
+            html += '<div class="section">';
+            html += '<div class="section-title">📋 DataTransfer 信息</div>';
+            html += `<div>effectAllowed: ${data.dataTransfer.effectAllowed}</div>`;
+            html += `<div>dropEffect: ${data.dataTransfer.dropEffect}</div>`;
+            html += `<div>types: [${data.types.join(', ')}]</div>`;
+            html += '</div>';
+
+            if (data.files.length > 0) {
+                html += '<div class="section">';
+                html += '<div class="section-title">📁 Files</div>';
+                data.files.forEach(file => {
+                    html += '<div class="file-info">';
+                    html += `<div><strong>${file.name}</strong></div>`;
+                    html += `<div>大小: ${formatSize(file.size)}</div>`;
+                    html += `<div>类型: ${file.type || '(empty)'}</div>`;
+                    html += `<div>最后修改: ${file.lastModifiedDate || file.lastModified}</div>`;
+                    html += `<div>webkitRelativePath: ${file.webkitRelativePath || '(empty)'}</div>`;
+                    html += `<div>构造函数: ${file.constructor}</div>`;
+                    html += '</div>';
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="section">';
+                html += '<div class="section-title">📁 Files</div>';
+                html += '<div class="empty">无文件</div>';
+                html += '</div>';
+            }
+
+            if (data.items.length > 0) {
+                html += '<div class="section">';
+                html += '<div class="section-title">📦 Items</div>';
+                data.items.forEach(item => {
+                    html += '<div class="file-info">';
+                    html += `<div>kind: ${item.kind}</div>`;
+                    html += `<div>type: ${item.type || '(empty)'}</div>`;
+                    html += `<div>构造函数: ${item.constructor}</div>`;
+                    html += `<div>webkitGetAsEntry: ${item.webkitGetAsEntry ? 'yes' : 'no'}</div>`;
+                    if (item.entry) {
+                        html += `<div>entry: ${item.entry.isFile ? 'file' : item.entry.isDirectory ? 'directory' : 'unknown'}</div>`;
+                        html += `<div>entry.name: ${item.entry.name}</div>`;
+                        html += `<div>entry.fullPath: ${item.entry.fullPath}</div>`;
+                    }
+                    if (item.entryError) {
+                        html += `<div style="color: #f87171;">entryError: ${item.entryError}</div>`;
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+            } else {
+                html += '<div class="section">';
+                html += '<div class="section-title">📦 Items</div>';
+                html += '<div class="empty">无项目</div>';
+                html += '</div>';
+            }
+
+            if (data.dataTransfer.data) {
+                html += '<div class="section">';
+                html += '<div class="section-title">📝 getData() 结果</div>';
+                Object.entries(data.dataTransfer.data).forEach(([type, value]) => {
+                    html += `<div class="file-info">`;
+                    html += `<div><strong>${type}</strong></div>`;
+                    html += `<div>${escapeHtml(value)}</div>`;
+                    html += '</div>';
+                });
+                html += '</div>';
+            }
+
+            return html;
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function clearOutput(id) {
+            if (id === 1) {
+                data1 = null;
+                document.getElementById('output1').innerHTML = '等待拖放...';
+            } else {
+                data2 = null;
+                document.getElementById('output2').innerHTML = '等待拖放...';
+            }
+            document.getElementById('diffOutput').innerHTML = '暂无数据可对比...';
+        }
+
+        function compareData() {
+            const output = document.getElementById('diffOutput');
+            
+            if (!data1 || !data2) {
+                output.innerHTML = '请先在两个区域都拖放文件后再对比';
+                return;
+            }
+
+            let html = '';
+
+            html += '<div class="section">';
+            html += '<div class="section-title">🔍 差异对比</div>';
+
+            const diff = deepDiff(data1, data2);
+            
+            if (Object.keys(diff).length === 0) {
+                html += '<div style="color: #4ade80;">两个拖放数据完全相同！</div>';
+            } else {
+                html += '<div>发现以下差异：</div>';
+                html += formatDiff(diff);
+            }
+
+            html += '</div>';
+
+            html += '<div class="section">';
+            html += '<div class="section-title">📊 原始 JSON 对比</div>';
+            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
+            html += '<div><strong>区域 1:</strong><br><pre>' + escapeHtml(JSON.stringify(data1, null, 2)) + '</pre></div>';
+            html += '<div><strong>区域 2:</strong><br><pre>' + escapeHtml(JSON.stringify(data2, null, 2)) + '</pre></div>';
+            html += '</div>';
+            html += '</div>';
+
+            output.innerHTML = html;
+        }
+
+        function deepDiff(obj1, obj2, path = '') {
+            const diff = {};
+            
+            const allKeys = new Set([
+                ...Object.keys(obj1 || {}),
+                ...Object.keys(obj2 || {})
+            ]);
+
+            allKeys.forEach(key => {
+                const currentPath = path ? `${path}.${key}` : key;
+                const val1 = obj1?.[key];
+                const val2 = obj2?.[key];
+
+                if (!(key in (obj1 || {}))) {
+                    diff[currentPath] = { type: 'added', value: val2 };
+                } else if (!(key in (obj2 || {}))) {
+                    diff[currentPath] = { type: 'removed', value: val1 };
+                } else if (typeof val1 !== typeof val2) {
+                    diff[currentPath] = { type: 'type-changed', value1: val1, value2: val2 };
+                } else if (typeof val1 === 'object' && val1 !== null && val2 !== null) {
+                    const nestedDiff = deepDiff(val1, val2, currentPath);
+                    Object.assign(diff, nestedDiff);
+                } else if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+                    diff[currentPath] = { type: 'changed', value1: val1, value2: val2 };
+                }
+            });
+
+            return diff;
+        }
+
+        function formatDiff(diff) {
+            let html = '';
+            Object.entries(diff).forEach(([path, info]) => {
+                html += '<div class="file-info">';
+                html += `<div><strong>${path}</strong></div>`;
+                switch (info.type) {
+                    case 'added':
+                        html += `<div class="diff-added">+ 新增: ${JSON.stringify(info.value)}</div>`;
+                        break;
+                    case 'removed':
+                        html += `<div class="diff-removed">- 删除: ${JSON.stringify(info.value)}</div>`;
+                        break;
+                    case 'type-changed':
+                        html += `<div>~ 类型变更: ${typeof info.value1} → ${typeof info.value2}</div>`;
+                        html += `<div class="diff-removed">- 原值: ${JSON.stringify(info.value1)}</div>`;
+                        html += `<div class="diff-added">+ 新值: ${JSON.stringify(info.value2)}</div>`;
+                        break;
+                    case 'changed':
+                        html += `<div>~ 值变更:</div>`;
+                        html += `<div class="diff-removed">- ${JSON.stringify(info.value1)}</div>`;
+                        html += `<div class="diff-added">+ ${JSON.stringify(info.value2)}</div>`;
+                        break;
+                }
+                html += '</div>';
+            });
+            return html;
+        }
+
+        initDropZone(1);
+        initDropZone(2);
+    </script>
+</body>
+</html>

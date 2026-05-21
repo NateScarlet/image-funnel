@@ -41,6 +41,7 @@ type ImageDTO struct {
 	Filename      string
 	Size          int64
 	AbsPath       string
+	RelPath       string
 	ModTime       time.Time
 	CurrentRating int
 	Width         int

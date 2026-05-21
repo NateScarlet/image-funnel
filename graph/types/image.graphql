@@ -11,4 +11,5 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   xmpExists: Boolean!
   memo: Memo!
   label: String
+  relPath: String!
 }

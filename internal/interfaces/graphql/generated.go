@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -94,6 +95,7 @@ type ComplexityRoot struct {
 		Memo          func(childComplexity int) int
 		ModTime       func(childComplexity int) int
 		RawURL        func(childComplexity int) int
+		RelPath       func(childComplexity int) int
 		Size          func(childComplexity int) int
 		URL           func(childComplexity int, width *int, quality *int) int
 		Width         func(childComplexity int) int
@@ -442,6 +444,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.RawURL(childComplexity), true
+	case "Image.relPath":
+		if e.complexity.Image.RelPath == nil {
+			break
+		}
+
+		return e.complexity.Image.RelPath(childComplexity), true
 	case "Image.size":
 		if e.complexity.Image.Size == nil {
 			break
@@ -1179,6 +1187,7 @@ type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
   xmpExists: Boolean!
   memo: Memo!
   label: String
+  relPath: String!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image_filters.graphql", Input: `type ImageFilters
@@ -2353,6 +2362,8 @@ func (ec *executionContext) fieldContext_DirectoryStats_latestImage(_ context.Co
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -2761,6 +2772,35 @@ func (ec *executionContext) fieldContext_Image_label(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Image_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_relPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ImageConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.ImageConnectionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2844,6 +2884,8 @@ func (ec *executionContext) fieldContext_ImageConnection_nodes(_ context.Context
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -2938,6 +2980,8 @@ func (ec *executionContext) fieldContext_ImageEdge_node(_ context.Context, field
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -3597,6 +3641,8 @@ func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx contex
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -4643,6 +4689,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -4699,6 +4747,8 @@ func (ec *executionContext) fieldContext_Session_nextImages(ctx context.Context,
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -4766,6 +4816,8 @@ func (ec *executionContext) fieldContext_Session_keptImages(ctx context.Context,
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -5346,6 +5398,8 @@ func (ec *executionContext) fieldContext_Subscription_imageSaved(ctx context.Con
 				return ec.fieldContext_Image_memo(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
 		},
@@ -8126,6 +8180,11 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "label":
 			out.Values[i] = ec._Image_label(ctx, field, obj)
+		case "relPath":
+			out.Values[i] = ec._Image_relPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -9777,13 +9836,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

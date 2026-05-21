@@ -8,16 +8,18 @@ import (
 
 type SessionDTOFactory struct {
 	urlSigner appimage.URLSigner
+	rootDir   string
 }
 
-func NewSessionDTOFactory(urlSigner appimage.URLSigner) *SessionDTOFactory {
+func NewSessionDTOFactory(urlSigner appimage.URLSigner, rootDir string) *SessionDTOFactory {
 	return &SessionDTOFactory{
 		urlSigner: urlSigner,
+		rootDir:   rootDir,
 	}
 }
 
 func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, error) {
-	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner)
+	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner, f.rootDir)
 
 	// 只计算一次统计信息
 	sessionStats := sess.Stats()

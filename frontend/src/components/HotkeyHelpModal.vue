@@ -62,7 +62,7 @@
                       >+</span
                     >
                     <kbd
-                      class="px-2 py-0.5 min-w-[24px] text-center bg-primary-950 text-primary-100 rounded-lg border border-primary-800 font-mono text-xs shadow-md select-none"
+                      class="px-2 py-0.5 min-w-6 text-center bg-primary-950 text-primary-100 rounded-lg border border-primary-800 font-mono text-xs shadow-md select-none"
                     >
                       {{ keyName }}
                     </kbd>

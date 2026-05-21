@@ -39,7 +39,7 @@
 
         <!-- Info Overlay -->
         <div
-          class="flex flex-col justify-end p-3 transition-opacity duration-200 opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:inset-0 [@media(hover:hover)]:bg-gradient-to-t [@media(hover:hover)]:from-black/90 [@media(hover:hover)]:via-black/40 [@media(hover:hover)]:to-transparent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:pointer-events-none"
+          class="flex flex-col justify-end p-3 transition-opacity duration-200 opacity-100 [@media(hover:hover)]:absolute [@media(hover:hover)]:inset-0 [@media(hover:hover)]:bg-linear-to-t@media(hover:hover)]:from-black/90 [@media(hover:hover)]:via-black/40 [@media(hover:hover)]:to-transparent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:pointer-events-none"
         >
           <div
             class="transform translate-y-0 transition-transform duration-200 pointer-events-auto [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0"

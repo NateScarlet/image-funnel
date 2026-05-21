@@ -86,7 +86,7 @@ func main() {
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
-	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer))
+	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer, cfg.AbsRootDir))
 
 	var dirScanner domdirectory.Scanner = localScanner
 	if cfg.EnableDirectoryStatsCache {
@@ -126,10 +126,10 @@ func main() {
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageDTOFactory := appimage.NewImageDTOFactory(signer)
+	imageDTOFactory := appimage.NewImageDTOFactory(signer, cfg.AbsRootDir)
 	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
-	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
+	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, cfg.AbsRootDir, logger)
 	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
 	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
 	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
