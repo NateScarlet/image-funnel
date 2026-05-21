@@ -127,11 +127,12 @@ func main() {
 	defer stopSleepGuard()
 
 	imageDTOFactory := appimage.NewImageDTOFactory(signer)
+	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
 	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
 	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
-	imageHandler := appimage.NewHandler(metadataRepo, imageFactory, signer, logger, cfg.AbsRootDir)
+	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

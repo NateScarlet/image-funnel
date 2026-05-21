@@ -92,6 +92,7 @@ func createTestImagesWithRatings(ratings []int) []*Image {
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
+			scalar.ToID("dir-test"),
 			1000,
 			time.Now(),
 			xmpData,

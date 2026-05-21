@@ -3,10 +3,8 @@ package image
 import (
 	"context"
 	"fmt"
-	"main/internal/apperror"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
-	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"os"
@@ -17,24 +15,24 @@ import (
 )
 
 type Handler struct {
-	xmpRepo      metadata.Repository
+	imageService *image.Service
 	imageFactory *image.Factory
-	urlSigner    URLSigner
+	dtoFactory   *ImageDTOFactory
 	logger       *zap.Logger
 	rootDir      string
 }
 
 func NewHandler(
-	xmpRepo metadata.Repository,
+	imageService *image.Service,
 	imageFactory *image.Factory,
-	urlSigner URLSigner,
+	dtoFactory *ImageDTOFactory,
 	logger *zap.Logger,
 	rootDir string,
 ) *Handler {
 	return &Handler{
-		xmpRepo:      xmpRepo,
+		imageService: imageService,
 		imageFactory: imageFactory,
-		urlSigner:    urlSigner,
+		dtoFactory:   dtoFactory,
 		logger:       logger,
 		rootDir:      rootDir,
 	}
@@ -46,7 +44,7 @@ func (h *Handler) UpdateImageMetadata(
 	id scalar.ID,
 	rating *int,
 	label *string,
-) (dto *shared.ImageDTO, err error) {
+) (err error) {
 	h.logger.Info("will update image metadata", zap.Stringer("id", id))
 	startTime := time.Now()
 
@@ -65,53 +63,22 @@ func (h *Handler) UpdateImageMetadata(
 		}
 	}()
 
-	// 解析出图片的绝对路径与编码时的修改时间
-	absPath, expectedModTime, err := image.DecodeID(id)
+	return h.imageService.UpdateImageMetadata(ctx, id, rating, label)
+}
+
+// Image 通过 ID 获取图片
+func (h *Handler) Image(
+	ctx context.Context,
+	id scalar.ID,
+) (*shared.ImageDTO, error) {
+	// 解析出图片的绝对路径
+	absPath, _, err := image.DecodeID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	// 校验修改时间以防止对过时版本的图片进行修改
+	// 读取文件信息
 	info, err := os.Stat(absPath)
-	if err != nil {
-		return nil, err
-	}
-	if info.ModTime().UnixNano() != expectedModTime.UnixNano() {
-		return nil, apperror.New(
-			"VERSION_CONFLICT",
-			"image file has been modified on disk",
-			"图片在磁盘上已被修改，操作已拒绝",
-		)
-	}
-
-	// 读取现有元数据，如果不存在则创建空白结构
-	xmpData, err := h.xmpRepo.Read(absPath)
-	if err != nil {
-		return nil, err
-	}
-	if xmpData == nil {
-		xmpData = metadata.NewXMPData(0, "", time.Time{}, "")
-	}
-
-	// 按需合并更新内容
-	ratingVal := xmpData.Rating()
-	if rating != nil {
-		ratingVal = *rating
-	}
-
-	labelVal := xmpData.Label()
-	if label != nil {
-		labelVal = *label
-	}
-
-	newXMP := metadata.NewXMPData(ratingVal, xmpData.Action(), time.Now(), labelVal)
-	err = h.xmpRepo.Write(absPath, newXMP)
-	if err != nil {
-		return nil, err
-	}
-
-	// 重新读取/重建 Image 对象以获取最新状态
-	info, err = os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +99,8 @@ func (h *Handler) UpdateImageMetadata(
 		return nil, err
 	}
 	if img == nil {
-		return nil, fmt.Errorf("failed to load image after update: %s", absPath)
+		return nil, fmt.Errorf("failed to load image: %s", absPath)
 	}
 
-	dtoFactory := NewImageDTOFactory(h.urlSigner)
-	return dtoFactory.New(img)
+	return h.dtoFactory.New(img)
 }
