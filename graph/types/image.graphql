@@ -3,6 +3,7 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   filename: String!
   size: Int!
   url(width: Int, quality: Int): URI!
+  rawURL: URI!
   modTime: Time!
   width: Int!
   height: Int!

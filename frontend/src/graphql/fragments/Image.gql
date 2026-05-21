@@ -2,6 +2,7 @@ fragment Image on Image {
   id
   filename
   url
+  rawURL
   url256: url(width: 256, quality: 75)
   url512: url(width: 512, quality: 80)
   url1024: url(width: 1024, quality: 85)

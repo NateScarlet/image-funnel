@@ -109,6 +109,19 @@
         </svg>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+
+      <!-- 原图开关 -->
+      <label
+        class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+      >
+        <input
+          v-model="useRawImage"
+          type="checkbox"
+          class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-3.5 h-3.5"
+        />
+        <span class="text-xs">原图</span>
+      </label>
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
       <template v-if="image.currentRating">
         <RatingIcon :rating="image.currentRating" filled />
         <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
@@ -342,6 +355,10 @@ useClickOutside(popoverContainerRef, () => {
 });
 
 const locked = ref(false);
+const useRawImage = ref(localStorage.getItem("use-raw-image") === "true");
+watch(useRawImage, (val) => {
+  localStorage.setItem("use-raw-image", String(val));
+});
 
 const containerRef = ref<HTMLElement>();
 const rootEl = ref<HTMLElement>();
@@ -368,7 +385,11 @@ const {
   zoomAttrs,
 } = zoom;
 
-const src = computed(() => getImageUrlByZoom(image, zoom.zoom.value));
+const src = computed(() =>
+  useRawImage.value
+    ? image.rawURL || image.url
+    : getImageUrlByZoom(image, zoom.zoom.value),
+);
 
 const activeContainer = computed(() =>
   locked.value ? null : containerRef.value,
@@ -379,8 +400,14 @@ useAsyncTask({
   args() {
     return [
       [
-        getImageUrlByZoom(image, zoom.zoom.value),
-        ...nextImages.map((img) => getImageUrlByZoom(img, zoom.zoom.value)),
+        useRawImage.value
+          ? image.rawURL || image.url
+          : getImageUrlByZoom(image, zoom.zoom.value),
+        ...nextImages.map((img) =>
+          useRawImage.value
+            ? img.rawURL || img.url
+            : getImageUrlByZoom(img, zoom.zoom.value),
+        ),
       ],
     ];
   },

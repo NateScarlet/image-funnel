@@ -19,6 +19,12 @@ func WithQuality(q int) SignOption {
 	}
 }
 
+func WithRaw() SignOption {
+	return func(v url.Values) {
+		v.Set("raw", "")
+	}
+}
+
 type URLSigner interface {
 	GenerateSignedURL(absPath string, opts ...SignOption) (string, error)
 }

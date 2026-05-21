@@ -24,6 +24,11 @@ func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *in
 	return r.signer.GenerateSignedURL(obj.AbsPath, opts...)
 }
 
+// RawURL is the resolver for the rawURL field.
+func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error) {
+	return r.signer.GenerateSignedURL(obj.AbsPath, image.WithRaw())
+}
+
 // Memo is the resolver for the memo field.
 func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error) {
 	relPath, err := filepath.Rel(r.rootDir, obj.AbsPath)

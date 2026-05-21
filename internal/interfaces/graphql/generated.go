@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -89,6 +88,7 @@ type ComplexityRoot struct {
 		Label         func(childComplexity int) int
 		Memo          func(childComplexity int) int
 		ModTime       func(childComplexity int) int
+		RawURL        func(childComplexity int) int
 		Size          func(childComplexity int) int
 		URL           func(childComplexity int, width *int, quality *int) int
 		Width         func(childComplexity int) int
@@ -197,6 +197,7 @@ type DirectoryStatsResolver interface {
 }
 type ImageResolver interface {
 	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
+	RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error)
 
 	Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error)
 }
@@ -385,6 +386,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.ModTime(childComplexity), true
+	case "Image.rawURL":
+		if e.complexity.Image.RawURL == nil {
+			break
+		}
+
+		return e.complexity.Image.RawURL(childComplexity), true
 	case "Image.size":
 		if e.complexity.Image.Size == nil {
 			break
@@ -986,6 +993,7 @@ directive @goField(
   filename: String!
   size: Int!
   url(width: Int, quality: Int): URI!
+  rawURL: URI!
   modTime: Time!
   width: Int!
   height: Int!
@@ -2006,6 +2014,8 @@ func (ec *executionContext) fieldContext_DirectoryStats_latestImage(_ context.Co
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
 			case "width":
@@ -2186,6 +2196,35 @@ func (ec *executionContext) fieldContext_Image_url(ctx context.Context, field gr
 	if fc.Args, err = ec.field_Image_url_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Image_rawURL(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Image_rawURL,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Image().RawURL(ctx, obj)
+		},
+		nil,
+		ec.marshalNURI2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Image_rawURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Image",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type URI does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -2890,6 +2929,8 @@ func (ec *executionContext) fieldContext_Mutation_updateLabel(ctx context.Contex
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
 			case "width":
@@ -3806,6 +3847,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
 			case "width":
@@ -3860,6 +3903,8 @@ func (ec *executionContext) fieldContext_Session_nextImages(ctx context.Context,
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
 			case "width":
@@ -3925,6 +3970,8 @@ func (ec *executionContext) fieldContext_Session_keptImages(ctx context.Context,
 				return ec.fieldContext_Image_size(ctx, field)
 			case "url":
 				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
 			case "modTime":
 				return ec.fieldContext_Image_modTime(ctx, field)
 			case "width":
@@ -6945,6 +6992,42 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "rawURL":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Image_rawURL(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "modTime":
 			out.Values[i] = ec._Image_modTime(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -8489,13 +8572,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
