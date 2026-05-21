@@ -1,0 +1,3 @@
+extend type Query {
+  comfyUIWorkflow(id: ID!): String
+}

@@ -110,16 +110,16 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
 
-      <!-- 复制路径按钮 -->
+      <!-- 复制按钮 -->
       <button
         class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
-        title="复制文件路径"
-        @click="copyFilePath"
+        title="复制"
+        @click="handleCopy"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ copyButtonText || "复制路径" }}</span>
+        <span class="text-xs">{{ copyButtonText || '复制' }}</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
@@ -338,7 +338,7 @@
         >
           <div
             v-if="showOverflowMenu"
-            class="absolute bottom-full mb-2 right-0 z-50 w-40 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
+            class="absolute bottom-full mb-2 right-0 z-50 w-80 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
           >
             <label
               class="flex items-center gap-2 cursor-pointer select-none text-white/70 hover:text-white transition-colors"
@@ -350,6 +350,17 @@
               />
               <span class="text-xs">原图</span>
             </label>
+            <div class="border-t border-white/10 pt-2">
+              <div class="text-xs font-bold text-white/40 tracking-wider uppercase mb-1">
+                文件路径
+              </div>
+              <div
+                class="select-all bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white break-all cursor-text"
+                :title="fullFilePath"
+              >
+                {{ fullFilePath }}
+              </div>
+            </div>
           </div>
         </Transition>
       </div>
@@ -388,7 +399,8 @@ import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument } from "@/graphql/generated";
+import query from "@/graphql/utils/query";
+import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
 
 const emit =
   defineEmits<
@@ -413,6 +425,23 @@ const { data: metaData } = useQuery(MetaDocument, {
   loadingCount: metaLoadingCount,
 });
 
+// 工作流相关 - 按需加载，避免加载所有图片
+const workflowLoading = ref(false);
+const workflowData = ref<string | null>(null);
+const workflowFetched = ref(false);
+
+const fullFilePath = computed(() => {
+  const rootPath = metaData.value?.meta?.rootAbsPath;
+  const relPath = image.relPath;
+  if (!rootPath || !relPath) {
+    return "";
+  }
+  if (rootPath.includes("\\")) {
+    return rootPath + "\\" + relPath.replace(/\//g, "\\");
+  }
+  return rootPath + "/" + relPath.replace(/\\/g, "/");
+});
+
 const showOverflowMenu = ref(false);
 const overflowMenuRef = useTemplateRef<HTMLElement>("overflowMenuRef");
 
@@ -422,31 +451,50 @@ useClickOutside(overflowMenuRef, () => {
 
 const copyButtonText = ref("");
 
-async function copyFilePath() {
-  const rootPath = metaData.value?.meta?.rootAbsPath;
-  const relPath = image.relPath;
-  if (!rootPath || !relPath) {
+// 从服务器获取工作流
+async function fetchWorkflow() {
+  if (workflowFetched.value) {
     return;
   }
+  workflowFetched.value = true;
+  workflowLoading.value = true;
+  try {
+    const result = await query(ComfyUiWorkflowDocument, {
+      variables: { id: image.id },
+    });
+    if (result.data?.comfyUIWorkflow) {
+      workflowData.value = result.data.comfyUIWorkflow;
+    }
+  } catch (err) {
+    console.error("Failed to fetch workflow:", err);
+  } finally {
+    workflowLoading.value = false;
+  }
+}
 
-  // 拼接完整路径，处理 Windows 路径分隔符
-  let fullPath: string;
-  if (rootPath.includes("\\")) {
-    // Windows 路径，使用反斜杠
-    fullPath = rootPath + "\\" + relPath.replace(/\//g, "\\");
-  } else {
-    // Unix 路径，使用正斜杠
-    fullPath = rootPath + "/" + relPath.replace(/\\/g, "/");
+// 处理复制操作
+async function handleCopy() {
+  // 先尝试获取工作流，但我们会明确知道我们要复制什么
+  let textToCopy = fullFilePath.value;
+  let successMessage = "已复制!";
+
+  if (!workflowFetched.value) {
+    await fetchWorkflow();
+  }
+
+  if (workflowData.value) {
+    textToCopy = workflowData.value;
+    successMessage = "已复制工作流!";
   }
 
   try {
-    await window.navigator.clipboard.writeText(fullPath);
-    copyButtonText.value = "已复制!";
+    await window.navigator.clipboard.writeText(textToCopy);
+    copyButtonText.value = successMessage;
     setTimeout(() => {
       copyButtonText.value = "";
     }, 1500);
   } catch (err) {
-    console.error("Failed to copy path:", err);
+    console.error("Failed to copy:", err);
   }
 }
 
