@@ -119,40 +119,13 @@
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ copyButtonText || '复制' }}</span>
+        <span class="text-xs">{{ copyButtonText || "复制" }}</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
       <!-- 评星操作区 (仅在无会话模式下展示和操作) -->
       <template v-if="!sessionId">
-        <div class="flex items-center gap-0.5" data-no-gesture>
-          <button
-            v-for="star in 5"
-            :key="star"
-            class="text-white/40 hover:text-yellow-400 hover:scale-115 active:scale-95 transition-all duration-150 p-0.5 rounded"
-            :class="[
-              (image.currentRating || 0) >= star
-                ? 'text-yellow-400'
-                : 'text-white/40',
-            ]"
-            :title="`评分 ${star} 星`"
-            @click="setRating(star)"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path :d="mdiStar" />
-            </svg>
-          </button>
-          <button
-            v-if="image.currentRating"
-            class="text-white/30 hover:text-red-400 hover:scale-110 transition-all duration-150 p-0.5 ml-0.5 rounded"
-            title="清除评分"
-            @click="setRating(0)"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-              <path :d="mdiStarOffOutline" />
-            </svg>
-          </button>
-        </div>
+        <RatingSelector v-model="ratingModel" />
         <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       </template>
       <template v-else-if="image.currentRating">
@@ -351,7 +324,9 @@
               <span class="text-xs">原图</span>
             </label>
             <div class="border-t border-white/10 pt-2">
-              <div class="text-xs font-bold text-white/40 tracking-wider uppercase mb-1">
+              <div
+                class="text-xs font-bold text-white/40 tracking-wider uppercase mb-1"
+              >
                 文件路径
               </div>
               <div
@@ -371,6 +346,7 @@
 
 <script setup lang="ts">
 import RatingIcon from "./RatingIcon.vue";
+import RatingSelector from "./RatingSelector.vue";
 import { ref, computed, useTemplateRef, shallowRef, watch } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
@@ -385,8 +361,6 @@ import {
   mdiTagOutline,
   mdiCheck,
   mdiDeleteOutline,
-  mdiStar,
-  mdiStarOffOutline,
   mdiContentCopy,
   mdiDotsVertical,
 } from "@mdi/js";
@@ -499,10 +473,16 @@ async function handleCopy() {
 }
 
 // 使用 composable 提取的 XMP 评分管理逻辑
-const { setRating } = useImageRating(
-  () => image,
-  () => sessionId,
-);
+const { setRating } = useImageRating(() => image);
+
+const ratingModel = computed({
+  get() {
+    return image.currentRating || 0;
+  },
+  set(value) {
+    setRating(value);
+  },
+});
 
 // 使用 composable 提取的 XMP 标签管理逻辑
 const {

@@ -194,7 +194,7 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 				}
 				// 尝试查找图片以获取其完整ID（虽然文件已删除，但可能还在缓存中）
 				img, err := h.scanner.LookupImage(ctx, event.RelPath)
-				if err != nil {
+				if err != nil || img == nil {
 					// 文件已删除，无法查找，尝试从路径重建ID
 					// 但我们没有modtime，所以无法准确重建
 					return true
