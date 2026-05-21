@@ -9,4 +9,5 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   currentRating: Int
   xmpExists: Boolean!
   memo: Memo!
+  label: String
 }

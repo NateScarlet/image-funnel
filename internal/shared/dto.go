@@ -46,6 +46,7 @@ type ImageDTO struct {
 	Width         int
 	Height        int
 	XMPExists     bool
+	Label         string
 }
 
 // SessionDTO 会话数据传输对象

@@ -1,0 +1,6 @@
+extend type Mutation {
+  """
+  更新图片的标签值。该操作立即生效并写入 XMP 文件，不与会话提交流程耦合。
+  """
+  updateLabel(sessionId: ID!, imageId: ID!, label: String!): Image!
+}

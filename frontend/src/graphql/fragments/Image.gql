@@ -12,6 +12,7 @@ fragment Image on Image {
   height
   size
   currentRating
+  label
   memo {
     ...Memo
   }

@@ -1,0 +1,5 @@
+mutation UpdateLabel($sessionId: ID!, $imageId: ID!, $label: String!) {
+  updateLabel(sessionId: $sessionId, imageId: $imageId, label: $label) {
+    ...Image
+  }
+}

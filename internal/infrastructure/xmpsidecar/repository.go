@@ -79,12 +79,16 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 				localResult.timestamp = val
 			}
 		}
+		if valStr, ok := getValueByNamespace(rdf, XMPNamespace, "Label"); ok {
+			localResult.label = valStr
+		}
 	}
 
 	return metadata.NewXMPData(
 		localResult.rating,
 		localResult.action,
 		localResult.timestamp,
+		localResult.label,
 	), nil
 }
 
@@ -158,6 +162,7 @@ func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
 	setValueByNamespace(desc, MicrosoftPhotoNS, "MicrosoftPhoto", "Rating", strconv.Itoa(toMicrosoftRating(data.Rating())))
 	setValueByNamespace(desc, ImageFunnelNS, "ImageFunnel", "Action", data.Action())
 	setValueByNamespace(desc, ImageFunnelNS, "ImageFunnel", "Timestamp", data.Timestamp().Format(time.RFC3339))
+	setValueByNamespace(desc, XMPNamespace, "xmp", "Label", data.Label())
 
 	return writeXMPFile(doc, xmpPath)
 }
@@ -175,6 +180,7 @@ type XMPData struct {
 	rating    int
 	action    string
 	timestamp time.Time
+	label     string
 }
 
 func resolveNamespace(elem *etree.Element, prefix string) string {

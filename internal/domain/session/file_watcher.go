@@ -6,6 +6,7 @@ import (
 	"main/internal/shared"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -27,15 +28,21 @@ func (s *Service) subscribeFileChanges(ctx context.Context) {
 }
 
 func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEvent) error {
+	relPath := e.RelPath
+	isXMP := strings.HasSuffix(strings.ToLower(relPath), ".xmp")
+	if isXMP {
+		relPath = relPath[:len(relPath)-4] // 去除 .xmp 后缀以定位到图片本身
+	}
+
 	var img *image.Image
-	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite {
+	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite || (e.Action == shared.FileActionRemove && isXMP) {
 		var err error
-		img, err = s.dirScanner.LookupImage(ctx, e.RelPath)
+		img, err = s.dirScanner.LookupImage(ctx, relPath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
+			if !os.IsNotExist(err) {
+				return err
 			}
-			return err
+			// 如果图片不存在，img 保持为 nil，后续会进入 RemoveImageByAbsPath 处理
 		}
 	}
 
@@ -59,7 +66,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 			changed = sess.UpdateImage(img, filterFunc(img))
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）
-			changed = sess.RemoveImageByAbsPath(filepath.Join(s.rootDir, e.RelPath))
+			changed = sess.RemoveImageByAbsPath(filepath.Join(s.rootDir, relPath))
 		}
 
 		if changed {

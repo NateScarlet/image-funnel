@@ -38,6 +38,10 @@ func TestReadExternalSamples(t *testing.T) {
 				assert.Equal(t, 1, data.Rating(), "rating_1.xmp should have rating 1")
 			case "red_marker.xmp":
 				assert.Equal(t, 0, data.Rating(), "red_marker.xmp should have rating 0")
+			case "rating_4_red.xmp":
+				assert.Equal(t, 4, data.Rating(), "rating_4_red.xmp should have rating 4")
+				assert.Equal(t, "Red", data.Label(), "rating_4_red.xmp should have label Red")
+				assert.Equal(t, "KEEP", data.Action(), "rating_4_red.xmp should have action KEEP")
 			case "valid_xmp.xmp":
 				assert.Equal(t, 5, data.Rating(), "valid_xmp.xmp should have rating 5")
 				assert.Equal(t, "keep", data.Action(), "valid_xmp.xmp should have action keep")
@@ -52,7 +56,7 @@ func TestReadExternalSamples(t *testing.T) {
 
 func TestWriteAndRead(t *testing.T) {
 	repo := NewRepository()
-	testData := metadata.NewXMPData(3, "keep", time.Now())
+	testData := metadata.NewXMPData(3, "keep", time.Now(), "Red")
 
 	tempFile := filepath.Join(os.TempDir(), "test-image.jpg")
 	defer os.Remove(tempFile)
@@ -65,6 +69,7 @@ func TestWriteAndRead(t *testing.T) {
 	require.NoError(t, err, "Failed to read XMP")
 	assert.Equal(t, testData.Rating(), readData.Rating())
 	assert.Equal(t, testData.Action(), readData.Action())
+	assert.Equal(t, testData.Label(), readData.Label())
 }
 
 func TestReadNonExistentFile(t *testing.T) {
@@ -94,7 +99,7 @@ func TestWrite_UpdateExistingWithoutNamespace(t *testing.T) {
 	err := os.WriteFile(xmpPath, []byte(initialXMP), 0644)
 	require.NoError(t, err)
 
-	testData := metadata.NewXMPData(5, "keep", time.Now().Truncate(time.Second))
+	testData := metadata.NewXMPData(5, "keep", time.Now().Truncate(time.Second), "")
 	err = repo.Write(tempFile, testData)
 	require.NoError(t, err)
 
@@ -125,7 +130,7 @@ func TestWrite_UpdateExistingAttribute(t *testing.T) {
 	err := os.WriteFile(xmpPath, []byte(initialXMP), 0644)
 	require.NoError(t, err)
 
-	testData := metadata.NewXMPData(4, "shelve", time.Now().Truncate(time.Second))
+	testData := metadata.NewXMPData(4, "shelve", time.Now().Truncate(time.Second), "")
 	err = repo.Write(tempFile, testData)
 	require.NoError(t, err)
 
@@ -150,7 +155,7 @@ func TestWrite_InvalidFileBackup(t *testing.T) {
 	err := os.WriteFile(xmpPath, []byte(invalidContent), 0644)
 	require.NoError(t, err)
 
-	testData := metadata.NewXMPData(3, "keep", time.Now().Truncate(time.Second))
+	testData := metadata.NewXMPData(3, "keep", time.Now().Truncate(time.Second), "")
 	err = repo.Write(tempFile, testData)
 	require.NoError(t, err)
 
@@ -178,7 +183,7 @@ func TestWrite_XMPTKAttribute(t *testing.T) {
 	xmpPath := tempFile + ".xmp"
 	defer os.Remove(xmpPath)
 
-	testData := metadata.NewXMPData(3, "keep", time.Now())
+	testData := metadata.NewXMPData(3, "keep", time.Now(), "")
 	err := repo.Write(tempFile, testData)
 	require.NoError(t, err)
 
@@ -224,6 +229,7 @@ func TestRead_CustomNamespacePrefix(t *testing.T) {
 	data, err := repo.Read(tempFile)
 	require.NoError(t, err)
 	assert.Equal(t, 4, data.Rating()) // Should read 4 from myxmp:Rating="4"
+	assert.Equal(t, "Red", data.Label())
 	// Note: MicrosoftPhoto rating 75 maps to 4 as well, but xmp rating takes precedence or confirms it.
 	// If we comment out myxmp:Rating="4", ms:Rating>75 should give us 4.
 }

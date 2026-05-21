@@ -113,6 +113,140 @@
         <RatingIcon :rating="image.currentRating" filled />
         <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       </template>
+
+      <!-- 颜色标签 -->
+      <div
+        v-if="sessionId"
+        ref="popoverContainerRef"
+        class="relative flex items-center select-none"
+        data-no-gesture
+      >
+        <!-- 触发按钮 -->
+        <button
+          class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1.5 transition-all active:scale-95 z-40"
+          title="设置标签"
+          @click="showPopover = !showPopover"
+        >
+          <template v-if="currentLabel">
+            <!-- 标准预设色：渲染为发光彩色圆点 -->
+            <span
+              v-if="isPresetColor"
+              class="w-3.5 h-3.5 rounded-full inline-block shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-transform duration-300"
+              :style="{ backgroundColor: currentLabelColor }"
+            ></span>
+            <!-- 自定义文本标签：渲染为气泡 -->
+            <span
+              v-else
+              class="px-2 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white max-w-24 truncate transition-all duration-300 shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
+            >
+              {{ currentLabel }}
+            </span>
+          </template>
+          <template v-else>
+            <!-- 空白标签态 -->
+            <svg
+              class="w-3.5 h-3.5 text-white/50 hover:text-white transition-colors"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path :d="mdiTagOutline" />
+            </svg>
+            <span class="text-white/50 text-xs hidden md:inline">标签</span>
+          </template>
+        </button>
+
+        <!-- 玻璃磨砂下拉气泡菜单 -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="opacity-0 translate-y-2 scale-95"
+          enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition duration-100 ease-in"
+          leave-from-class="opacity-100 translate-y-0 scale-100"
+          leave-to-class="opacity-0 translate-y-2 scale-95"
+        >
+          <div
+            v-if="showPopover"
+            class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-52 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2.5 pointer-events-auto"
+          >
+            <div
+              class="text-xs font-bold text-white/40 tracking-wider uppercase select-none text-left"
+            >
+              选择颜色标签
+            </div>
+
+            <!-- 颜色网格 -->
+            <div class="grid grid-cols-5 gap-1.5 justify-items-center">
+              <button
+                v-for="(color, name) in PRESET_COLORS"
+                :key="name"
+                class="w-6 h-6 rounded-full transition-all duration-200 relative flex items-center justify-center hover:scale-110 active:scale-95 border"
+                :class="[
+                  currentLabel === name
+                    ? 'border-white scale-105 shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+                    : 'border-transparent hover:border-white/30',
+                ]"
+                :style="{ backgroundColor: color }"
+                :title="name"
+                @click="setLabel(name)"
+              >
+                <!-- 选中勾选标记 -->
+                <svg
+                  v-if="currentLabel === name"
+                  class="w-3.5 h-3.5"
+                  :class="name === 'White' ? 'text-black' : 'text-white'"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path :d="mdiCheck" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- 输入自定义文本 -->
+            <div
+              class="flex flex-col gap-1 border-t border-white/10 pt-2 text-left"
+            >
+              <div
+                class="text-xs font-bold text-white/40 tracking-wider uppercase select-none"
+              >
+                自定义标签
+              </div>
+              <div class="flex gap-1">
+                <input
+                  v-model="customLabelInput"
+                  type="text"
+                  placeholder="文字..."
+                  class="flex-1 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs md:text-sm text-white placeholder-white/30 focus:outline-none focus:border-secondary-500 transition-colors w-0"
+                  @keydown.enter="saveCustomLabel"
+                />
+                <button
+                  class="bg-secondary-600 hover:bg-secondary-500 transition-colors text-white rounded px-2 py-0.5 text-xs md:text-sm font-bold shrink-0"
+                  @click="saveCustomLabel"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+
+            <!-- 清除标签按钮 -->
+            <button
+              v-if="currentLabel"
+              class="border-t border-white/10 pt-1.5 text-center text-xs md:text-sm text-red-400 hover:text-red-300 transition-colors flex items-center justify-center gap-1 w-full"
+              @click="setLabel('')"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path :d="mdiDeleteOutline" />
+              </svg>
+              清除标签
+            </button>
+          </div>
+        </Transition>
+      </div>
+      <div
+        v-if="sessionId"
+        class="w-px h-4 bg-white/30 mx-1 hidden md:block"
+      ></div>
+
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
@@ -156,8 +290,13 @@ import {
   mdiLoading,
   mdiLock,
   mdiLockOpenVariant,
+  mdiTagOutline,
+  mdiCheck,
+  mdiDeleteOutline,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
+import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
+import useClickOutside from "@/composables/useClickOutside";
 import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
@@ -168,15 +307,39 @@ const emit =
     (e: "image-loaded", payload: { id: string; time: Time }) => void
   >();
 
+// 接收组件属性。其中 sessionId 是可选的，仅在需要非筛选会话提交耦合的标签设置流程中作为入参
 const {
   image,
+  sessionId = undefined,
   nextImages = [],
   allowPan = () => true,
 } = defineProps<{
   image: ImageFragment;
+  sessionId?: string;
   nextImages?: ImageFragment[];
   allowPan?: (e: PointerEvent) => boolean;
 }>();
+
+// 使用 composable 提取的 XMP 标签管理逻辑
+const {
+  showPopover,
+  customLabelInput,
+  currentLabel,
+  isPresetColor,
+  currentLabelColor,
+  setLabel,
+  saveCustomLabel,
+} = useImageLabel(
+  () => image,
+  () => sessionId,
+);
+
+// 绑定标签选择面板的外层容器 ref
+const popoverContainerRef = useTemplateRef<HTMLElement>("popoverContainerRef");
+// 当点击该标签选择面板外部时，自动收起下拉菜单
+useClickOutside(popoverContainerRef, () => {
+  showPopover.value = false;
+});
 
 const locked = ref(false);
 

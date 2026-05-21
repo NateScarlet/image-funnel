@@ -26,5 +26,6 @@ func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 		Width:         img.Width(),
 		Height:        img.Height(),
 		XMPExists:     img.XMPExists(),
+		Label:         img.Label(),
 	}, nil
 }

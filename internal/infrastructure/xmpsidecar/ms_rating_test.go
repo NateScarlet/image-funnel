@@ -23,7 +23,7 @@ func TestMicrosoftPhotoRating(t *testing.T) {
 
 	// Test case 1: Write ensures MicrosoftPhoto:Rating is percentile
 	t.Run("Write maps to percentile", func(t *testing.T) {
-		testData := metadata.NewXMPData(3, "", time.Now()) // 3 stars -> 50
+		testData := metadata.NewXMPData(3, "", time.Now(), "") // 3 stars -> 50
 		err := repo.Write(tempFile, testData)
 		require.NoError(t, err)
 
@@ -104,7 +104,7 @@ func TestMicrosoftPhotoRating(t *testing.T) {
 			// Clean up previous file to force new creation
 			os.Remove(xmpPath)
 
-			testData := metadata.NewXMPData(m.stars, "", time.Now())
+			testData := metadata.NewXMPData(m.stars, "", time.Now(), "")
 			err := repo.Write(tempFile, testData)
 			require.NoError(t, err)
 

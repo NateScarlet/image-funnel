@@ -72,6 +72,14 @@ func (i *Image) Rating() int {
 	return 0
 }
 
+// Label 返回图片的 XMP 标签
+func (i *Image) Label() string {
+	if i.xmpData != nil {
+		return i.xmpData.Label()
+	}
+	return ""
+}
+
 func (i *Image) XMPData() *metadata.XMPData {
 	return i.xmpData
 }

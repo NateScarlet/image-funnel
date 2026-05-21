@@ -54,7 +54,7 @@ func TestRemoveImageByPath_ShouldNotRemoveImageWithRejectAction(t *testing.T) {
 func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	// filter: rating=0
 	filter := &shared.ImageFilters{Rating: []int{0}}
-	xmpRating0 := metadata.NewXMPData(0, "", time.Time{})
+	xmpRating0 := metadata.NewXMPData(0, "", time.Time{}, "")
 	img := image.NewImage(
 		scalar.ToID("img-0"),
 		"test.jpg",
@@ -73,7 +73,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	assert.Equal(t, 1, len(session.queue))
 
 	// 模拟 Commit 后文件 rating 变为 5，文件监听器触发 UpdateImage
-	xmpRating5 := metadata.NewXMPData(5, "Keep", time.Now())
+	xmpRating5 := metadata.NewXMPData(5, "Keep", time.Now(), "")
 	updatedImg := image.NewImage(
 		img.ID(), // 同一个 ID（ModTime 未变）
 		img.Filename(),

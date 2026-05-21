@@ -19,7 +19,7 @@ func TestWrite_NamespacePlacement(t *testing.T) {
 	xmpPath := tempFile + ".xmp"
 	defer os.Remove(xmpPath)
 
-	testData := metadata.NewXMPData(5, "keep", time.Now())
+	testData := metadata.NewXMPData(5, "keep", time.Now(), "")
 	err := repo.Write(tempFile, testData)
 	require.NoError(t, err)
 
