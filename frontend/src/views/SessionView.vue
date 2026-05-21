@@ -155,10 +155,51 @@
 
     <footer
       v-if="currentImage"
-      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0"
+      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0 flex flex-col md:flex-row justify-center items-center gap-2 select-none"
       :class="didUseGesture ? 'hidden' : ''"
     >
-      ↓ 排除 | ↑ 搁置 | → 保留 | ← 撤销
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <span class="flex items-center gap-1">
+          <kbd
+            class="px-1.5 py-0.5 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            >↓</kbd
+          >
+          排除
+        </span>
+        <span class="text-primary-750">|</span>
+        <span class="flex items-center gap-1">
+          <kbd
+            class="px-1.5 py-0.5 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            >↑</kbd
+          >
+          搁置
+        </span>
+        <span class="text-primary-750">|</span>
+        <span class="flex items-center gap-1">
+          <kbd
+            class="px-1.5 py-0.5 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            >→</kbd
+          >
+          保留
+        </span>
+        <span class="text-primary-750">|</span>
+        <span class="flex items-center gap-1">
+          <kbd
+            class="px-1.5 py-0.5 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            >←</kbd
+          >
+          撤销
+        </span>
+      </div>
+      <div class="hidden md:block text-primary-600/70">|</div>
+      <div class="flex items-center gap-1">
+        <span>按</span>
+        <kbd
+          class="px-1.5 py-0.5 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+          >?</kbd
+        >
+        <span>查看所有快捷键</span>
+      </div>
     </footer>
 
     <MemoEditorDialog
@@ -268,36 +309,66 @@ const currentImageId = computed(
 const swipeEl = useTemplateRef("swipeEl");
 
 // #region 快捷键注册
-useHotkey("ArrowDown", () => {
-  const imageId = currentImageId.value;
-  if (imageId) {
-    markImage(imageId, ImageAction.REJECT);
-  }
-});
-useHotkey("ArrowUp", () => {
-  const imageId = currentImageId.value;
-  if (imageId) {
-    markImage(imageId, ImageAction.SHELVE);
-  }
-});
-useHotkey("ArrowRight", () => {
-  const imageId = currentImageId.value;
-  if (imageId) {
-    markImage(imageId, ImageAction.KEEP);
-  }
-});
-useHotkey("ArrowLeft", () => {
-  const imageId = currentImageId.value;
-  if (imageId) {
-    undo();
-  }
-});
-useHotkey(["m", "shift+m"], () => {
-  const imageId = currentImageId.value;
-  if (imageId) {
-    showMemoDialog.value = true;
-  }
-});
+useHotkey(
+  "ArrowDown",
+  () => {
+    const imageId = currentImageId.value;
+    if (imageId) {
+      markImage(imageId, ImageAction.REJECT);
+    }
+  },
+  {
+    description: "排除图片",
+  },
+);
+useHotkey(
+  "ArrowUp",
+  () => {
+    const imageId = currentImageId.value;
+    if (imageId) {
+      markImage(imageId, ImageAction.SHELVE);
+    }
+  },
+  {
+    description: "搁置图片",
+  },
+);
+useHotkey(
+  "ArrowRight",
+  () => {
+    const imageId = currentImageId.value;
+    if (imageId) {
+      markImage(imageId, ImageAction.KEEP);
+    }
+  },
+  {
+    description: "保留图片",
+  },
+);
+useHotkey(
+  "ArrowLeft",
+  () => {
+    const imageId = currentImageId.value;
+    if (imageId) {
+      undo();
+    }
+  },
+  {
+    description: "撤销操作",
+  },
+);
+useHotkey(
+  ["m", "shift+m"],
+  () => {
+    const imageId = currentImageId.value;
+    if (imageId) {
+      showMemoDialog.value = true;
+    }
+  },
+  {
+    description: "编辑图片备注",
+  },
+);
 // #endregion
 
 useEventListeners(window, ({ on }) => {

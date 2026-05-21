@@ -87,16 +87,42 @@ export default function useImageLabel(
 
   // #region 快捷键注册
   const colorNames = Object.keys(PRESET_COLORS);
+  const colorNamesCn: Record<string, string> = {
+    Red: "红色",
+    Yellow: "黄色",
+    Green: "绿色",
+    Blue: "蓝色",
+    Purple: "紫色",
+    Orange: "橙色",
+    Grey: "灰色",
+    Black: "黑色",
+    White: "白色",
+  };
+
   // Ctrl+Shift+1 ~ Ctrl+Shift+9 分别映射 9 个预设颜色标签
   for (let i = 0; i < 9; i++) {
-    useHotkey(`ctrl+shift+${i + 1}`, () => {
-      setLabel(colorNames[i]);
-    });
+    const colorName = colorNames[i];
+    const colorCn = colorNamesCn[colorName] || colorName;
+    useHotkey(
+      `ctrl+shift+${i + 1}`,
+      () => {
+        setLabel(colorName);
+      },
+      {
+        description: `设置标签为 ${colorCn}`,
+      },
+    );
   }
   // Ctrl+Shift+0 清除标签
-  useHotkey("ctrl+shift+0", () => {
-    setLabel("");
-  });
+  useHotkey(
+    "ctrl+shift+0",
+    () => {
+      setLabel("");
+    },
+    {
+      description: "清除图片标签",
+    },
+  );
   // #endregion
 
   return {

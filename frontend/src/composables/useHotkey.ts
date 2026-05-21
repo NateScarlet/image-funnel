@@ -1,3 +1,4 @@
+import { ref, onUnmounted } from "vue";
 import useEventListeners from "./useEventListeners";
 
 /**
@@ -19,6 +20,10 @@ export interface HotkeyOptions {
    * @default true
    */
   stopPropagation?: boolean;
+  /**
+   * 快捷键的功能描述
+   */
+  description?: string;
 }
 
 /**
@@ -153,4 +158,55 @@ export default function useHotkey(
       }
     });
   });
+
+  // 收集快捷键配置以展示到帮助列表中
+  const description = options.description;
+  if (description) {
+    const id = Math.random().toString(36).substring(2, 9);
+
+    const parseCombinationToKeys = (comb: HotkeyCombination): string[] => {
+      const parts: string[] = [];
+      if (comb.ctrl) parts.push("Ctrl");
+      if (comb.shift) parts.push("Shift");
+      if (comb.alt) parts.push("Alt");
+      if (comb.meta) parts.push("Meta");
+
+      const keyName = comb.key;
+      if (keyName.toLowerCase() === "arrowup") parts.push("↑");
+      else if (keyName.toLowerCase() === "arrowdown") parts.push("↓");
+      else if (keyName.toLowerCase() === "arrowleft") parts.push("←");
+      else if (keyName.toLowerCase() === "arrowright") parts.push("→");
+      else parts.push(keyName.toUpperCase());
+
+      return parts;
+    };
+
+    const keysList = combinations.map(parseCombinationToKeys);
+
+    activeHotkeys.value.push({
+      id,
+      keys: keysList,
+      description,
+    });
+
+    onUnmounted(() => {
+      activeHotkeys.value = activeHotkeys.value.filter(
+        (item) => item.id !== id,
+      );
+    });
+  }
 }
+
+/**
+ * 活跃快捷键条目
+ */
+export interface ActiveHotkey {
+  id: string;
+  keys: string[][];
+  description: string;
+}
+
+/**
+ * 当前活跃注册的快捷键响应式列表
+ */
+export const activeHotkeys = ref<ActiveHotkey[]>([]);
