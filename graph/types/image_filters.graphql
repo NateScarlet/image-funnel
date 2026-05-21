@@ -1,9 +1,22 @@
 type ImageFilters
   @goModel(model: "main/internal/shared.ImageFilters") {
+  "按图片ID过滤，为null表示不按ID过滤"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不按目录过滤"
+  directoryId: [ID!]
   rating: [Int!]
+  label: [String!]
+  query: String
 }
 
 input ImageFiltersInput
   @goModel(model: "main/internal/shared.ImageFilters") {
-  rating: [Int!]!
+  "按图片ID过滤，为null表示不按ID过滤"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不按目录过滤"
+  directoryId: [ID!]
+  rating: [Int!]
+  label: [String!]
+  query: String
 }
+

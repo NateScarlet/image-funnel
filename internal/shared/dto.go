@@ -96,3 +96,25 @@ type MemoDTO struct {
 	AbsPath string
 	Content string
 }
+
+// ImageConnectionDTO 图片连接数据传输对象
+type ImageConnectionDTO struct {
+	Edges    []*ImageEdgeDTO
+	Nodes    []*ImageDTO
+	PageInfo *PageInfoDTO
+}
+
+// ImageEdgeDTO 图片边数据传输对象
+type ImageEdgeDTO struct {
+	Node   *ImageDTO
+	Cursor string
+}
+
+// PageInfoDTO 页面信息数据传输对象
+type PageInfoDTO struct {
+	HasNextPage     bool
+	HasPreviousPage bool
+	StartCursor     string
+	EndCursor       string
+}
+

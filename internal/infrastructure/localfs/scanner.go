@@ -39,6 +39,9 @@ func (s *Scanner) Scan(ctx context.Context, relPath string) iter.Seq2[*domainima
 			return
 		}
 
+		// 计算当前目录的ID
+		directoryID := directory.EncodeID(relPath)
+
 		limit := runtime.NumCPU()
 
 		iterator.ParallelConcatMapTo2(
@@ -58,7 +61,7 @@ func (s *Scanner) Scan(ctx context.Context, relPath string) iter.Seq2[*domainima
 					return yield(nil, err)
 				}
 
-				img, err := s.imageFactory.CreateFromInfo(ctx, info, absFilePath)
+				img, err := s.imageFactory.CreateFromInfo(ctx, info, absFilePath, directoryID)
 				if err != nil {
 					return yield(nil, err)
 				}
@@ -129,6 +132,9 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 	var latestImage *domainimage.Image
 	ratingCounts := make(map[int]int)
 
+	// 计算当前目录的ID
+	directoryID := directory.EncodeID(relPath)
+
 	for _, entry := range entries {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -143,17 +149,13 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 			continue
 		}
 
-		// Optimization: Check extension before full create to skip unsupported files early?
-		// Factory handles it, but check here saves an os.Stat?
-		// We already have DirEntry info, so CreateFromInfo is efficient.
-
 		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
 
 		imagePath := filepath.Join(absPath, entry.Name())
-		img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath)
+		img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath, directoryID)
 		if err != nil || img == nil {
 			continue
 		}
@@ -169,7 +171,13 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 }
 
 func (s *Scanner) LookupImage(ctx context.Context, relPath string) (*domainimage.Image, error) {
-	return s.imageFactory.Create(ctx, relPath, s.rootDir)
+	// 计算目录ID
+	dirRelPath := filepath.Dir(relPath)
+	if dirRelPath == "." {
+		dirRelPath = ""
+	}
+	directoryID := directory.EncodeID(dirRelPath)
+	return s.imageFactory.Create(ctx, relPath, s.rootDir, directoryID)
 }
 
 var _ directory.Scanner = (*Scanner)(nil)

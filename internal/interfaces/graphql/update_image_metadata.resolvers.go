@@ -7,11 +7,10 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
 	"main/internal/shared"
 )
 
-// UpdateLabel is the resolver for the updateLabel field.
-func (r *mutationResolver) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, label string) (*shared.ImageDTO, error) {
-	return r.app.UpdateLabel(ctx, sessionID, imageID, label)
+// UpdateImageMetadata is the resolver for the updateImageMetadata field.
+func (r *mutationResolver) UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error) {
+	return r.app.UpdateImageMetadata(ctx, input.ID, input.Rating, input.Label)
 }

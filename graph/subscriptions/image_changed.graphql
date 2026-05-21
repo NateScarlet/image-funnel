@@ -1,0 +1,12 @@
+extend type Subscription {
+  "订阅图片新增或更新事件（文件被创建或写入时触发）"
+  imageSaved(filterBy: ImageFiltersInput): Image!
+
+  "订阅图片删除或移走事件（文件被移除或重命名时触发）"
+  imageDeleted(filterBy: ImageFiltersInput): DeletedImage!
+}
+
+"删除事件载体，仅保留图片ID（原文件已不存在）"
+type DeletedImage {
+  id: ID!
+}

@@ -1,0 +1,12 @@
+input UpdateImageMetadataInput {
+  id: ID!
+  rating: Int
+  label: String
+}
+
+extend type Mutation {
+  """
+  更新图片的元数据信息（评分和颜色标签）。操作是即时的，不参与会话提交。
+  """
+  updateImageMetadata(input: UpdateImageMetadataInput!): Image!
+}

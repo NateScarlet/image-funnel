@@ -103,6 +103,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			currentImg.ID(),
 			currentImg.Filename(),
 			currentImg.AbsPath(),
+			session.DirectoryID(),
 			currentImg.Size(),
 			currentImg.ModTime(),
 			xmpData,

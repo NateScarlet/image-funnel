@@ -20,6 +20,15 @@ func (r *directoryResolver) Directories(ctx context.Context, obj *shared.Directo
 	return r.app.Directories(ctx, obj.ID)
 }
 
+// Images is the resolver for the images field.
+func (r *directoryResolver) Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error) {
+	var filters shared.ImageFilters
+	if filterBy != nil {
+		filters = *filterBy
+	}
+	return r.app.Images(ctx, obj.ID, filters, first, after)
+}
+
 // Directory returns DirectoryResolver implementation.
 func (r *Resolver) Directory() DirectoryResolver { return &directoryResolver{r} }
 

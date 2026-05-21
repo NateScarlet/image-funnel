@@ -1,52 +1,63 @@
 package image
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
+	"strings"
 	"time"
 )
 
 type Image struct {
-	id       scalar.ID
-	filename string
-	absPath  string
-	size     int64
-	modTime  time.Time
-	xmpData  *metadata.XMPData
-	width    int
-	height   int
+	id          scalar.ID
+	filename    string
+	absPath     string
+	directoryID scalar.ID
+	size        int64
+	modTime     time.Time
+	xmpData     *metadata.XMPData
+	width       int
+	height      int
 }
 
-func NewImage(id scalar.ID, filename, absPath string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+// NewImage 创建一个具有指定ID的图片对象，常用于会话中的图片重建或测试
+func NewImage(id scalar.ID, filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
-		id:       id,
-		filename: filename,
-		absPath:  absPath,
-		size:     size,
-		modTime:  modTime,
-		xmpData:  xmpData,
-		width:    width,
-		height:   height,
+		id:          id,
+		filename:    filename,
+		absPath:     absPath,
+		directoryID: directoryID,
+		size:        size,
+		modTime:     modTime,
+		xmpData:     xmpData,
+		width:       width,
+		height:      height,
 	}
 }
 
-func NewImageFromAbsPath(filename, absPath string, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+// NewImageFromAbsPath 从绝对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
+func NewImageFromAbsPath(filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
 	return &Image{
-		id:       newID(absPath, modTime),
-		filename: filename,
-		absPath:  absPath,
-		size:     size,
-		modTime:  modTime,
-		xmpData:  xmpData,
-		width:    width,
-		height:   height,
+		id:          EncodeID(absPath, modTime),
+		filename:    filename,
+		absPath:     absPath,
+		directoryID: directoryID,
+		size:        size,
+		modTime:     modTime,
+		xmpData:     xmpData,
+		width:       width,
+		height:      height,
 	}
 }
 
 func (i *Image) ID() scalar.ID {
 	return i.id
+}
+
+func (i *Image) DirectoryID() scalar.ID {
+	return i.directoryID
 }
 
 func (i *Image) Filename() string {
@@ -96,9 +107,36 @@ func (i *Image) Height() int {
 	return i.height
 }
 
-func newID(absPath string, modTime time.Time) scalar.ID {
-	hash := sha256.New()
-	hash.Write([]byte(absPath))
-	hash.Write([]byte(modTime.String()))
-	return scalar.ToID(hex.EncodeToString(hash.Sum(nil))[:16])
+// #region ID编码与解码
+
+// EncodeID 将图片绝对路径和修改时间转换为 opaque 的 ID，以便客户端不透传具体路径但后端可以通过ID反解出文件位置与修改版本
+func EncodeID(absPath string, modTime time.Time) scalar.ID {
+	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), absPath)
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(str))
+	return scalar.ToID(encoded)
 }
+
+// DecodeID 解析 opaque 类型的 ID 并还原为图片的绝对路径和期望修改时间
+func DecodeID(id scalar.ID) (string, time.Time, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(id.String())
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	str := string(decoded)
+	if !strings.HasPrefix(str, "img:") {
+		return "", time.Time{}, errors.New("invalid image id format")
+	}
+	parts := strings.SplitN(strings.TrimPrefix(str, "img:"), ":", 2)
+	if len(parts) != 2 {
+		return "", time.Time{}, errors.New("invalid image id components")
+	}
+	nanoStr, absPath := parts[0], parts[1]
+	var nano int64
+	_, err = fmt.Sscanf(nanoStr, "%d", &nano)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("invalid image id timestamp: %w", err)
+	}
+	return absPath, time.Unix(0, nano), nil
+}
+
+// #endregion

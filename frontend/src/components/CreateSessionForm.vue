@@ -54,26 +54,40 @@
       @go-to-parent="goToParent"
     />
 
-    <button
-      :disabled="!canCreate || creatingSession"
-      class="w-full py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-      @click="handleCreate"
-    >
-      <svg
-        v-if="creatingSession"
-        class="w-5 h-5 animate-spin"
-        viewBox="0 0 24 24"
+    <div class="flex gap-4">
+      <button
+        type="button"
+        title="浏览该目录下的图片"
+        class="py-3 px-5 bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors flex items-center justify-center gap-2 border border-primary-600 text-primary-300 hover:text-white"
+        @click="handleBrowse"
       >
-        <path :d="mdiLoading" fill="currentColor" />
-      </svg>
-      <span>{{ creatingSession ? "创建中..." : "开始筛选" }}</span>
-    </button>
+        <svg class="w-5 h-5" viewBox="0 0 24 24">
+          <path :d="mdiFolder" fill="currentColor" />
+        </svg>
+        <span>浏览</span>
+      </button>
+
+      <button
+        :disabled="!canCreate || creatingSession"
+        class="flex-1 py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+        @click="handleCreate"
+      >
+        <svg
+          v-if="creatingSession"
+          class="w-5 h-5 animate-spin"
+          viewBox="0 0 24 24"
+        >
+          <path :d="mdiLoading" fill="currentColor" />
+        </svg>
+        <span>{{ creatingSession ? "创建中..." : "开始筛选" }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { mdiLoading } from "@mdi/js";
+import { mdiLoading, mdiFolder } from "@mdi/js";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
@@ -177,5 +191,12 @@ async function handleCreate() {
   } finally {
     creatingSession.value = false;
   }
+}
+
+function handleBrowse() {
+  router.push({
+    path: "/browse",
+    query: { dir: selectedDirectoryId.value },
+  });
 }
 </script>

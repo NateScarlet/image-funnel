@@ -6,4 +6,28 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
   root: Boolean!
   stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)
+  images(
+    filterBy: ImageFiltersInput
+    first: Int
+    after: String
+  ): ImageConnection! @goField(forceResolver: true)
 }
+
+type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
+  edges: [ImageEdge!]!
+  nodes: [Image!]!
+  pageInfo: PageInfo!
+}
+
+type ImageEdge @goModel(model: "main/internal/shared.ImageEdgeDTO") {
+  node: Image!
+  cursor: String!
+}
+
+type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+

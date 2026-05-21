@@ -4,7 +4,11 @@ fragment Session on Session {
     ...Directory
   }
   filter {
+    id
+    directoryId
     rating
+    label
+    query
   }
   targetKeep
   stats {

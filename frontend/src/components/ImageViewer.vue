@@ -122,14 +122,46 @@
         <span class="text-xs">原图</span>
       </label>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
-      <template v-if="image.currentRating">
+
+      <!-- 评星操作区 (仅在无会话模式下展示和操作) -->
+      <template v-if="!sessionId">
+        <div class="flex items-center gap-0.5" data-no-gesture>
+          <button
+            v-for="star in 5"
+            :key="star"
+            class="text-white/40 hover:text-yellow-400 hover:scale-115 active:scale-95 transition-all duration-150 p-0.5 rounded"
+            :class="[
+              (image.currentRating || 0) >= star
+                ? 'text-yellow-400'
+                : 'text-white/40',
+            ]"
+            :title="`评分 ${star} 星`"
+            @click="setRating(star)"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path :d="mdiStar" />
+            </svg>
+          </button>
+          <button
+            v-if="image.currentRating"
+            class="text-white/30 hover:text-red-400 hover:scale-110 transition-all duration-150 p-0.5 ml-0.5 rounded"
+            title="清除评分"
+            @click="setRating(0)"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <path :d="mdiStarOffOutline" />
+            </svg>
+          </button>
+        </div>
+        <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
+      </template>
+      <template v-else-if="image.currentRating">
         <RatingIcon :rating="image.currentRating" filled />
         <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       </template>
 
       <!-- 颜色标签 -->
       <div
-        v-if="sessionId"
         ref="popoverContainerRef"
         class="relative flex items-center select-none"
         data-no-gesture
@@ -196,7 +228,7 @@
                 :class="[
                   currentLabel === name
                     ? 'border-white scale-105 shadow-[0_0_8px_rgba(255,255,255,0.5)]'
-                    : 'border-transparent hover:border-white/30',
+                    : 'border-white/20 hover:border-white/50',
                 ]"
                 :style="{ backgroundColor: color }"
                 :title="name"
@@ -255,10 +287,7 @@
           </div>
         </Transition>
       </div>
-      <div
-        v-if="sessionId"
-        class="w-px h-4 bg-white/30 mx-1 hidden md:block"
-      ></div>
+      <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
 
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
@@ -306,9 +335,12 @@ import {
   mdiTagOutline,
   mdiCheck,
   mdiDeleteOutline,
+  mdiStar,
+  mdiStarOffOutline,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
+import useImageRating from "@/composables/useImageRating";
 import useClickOutside from "@/composables/useClickOutside";
 import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
@@ -333,6 +365,12 @@ const {
   allowPan?: (e: PointerEvent) => boolean;
 }>();
 
+// 使用 composable 提取的 XMP 评分管理逻辑
+const { setRating } = useImageRating(
+  () => image,
+  () => sessionId,
+);
+
 // 使用 composable 提取的 XMP 标签管理逻辑
 const {
   showPopover,
@@ -342,10 +380,7 @@ const {
   currentLabelColor,
   setLabel,
   saveCustomLabel,
-} = useImageLabel(
-  () => image,
-  () => sessionId,
-);
+} = useImageLabel(() => image);
 
 // 绑定标签选择面板的外层容器 ref
 const popoverContainerRef = useTemplateRef<HTMLElement>("popoverContainerRef");

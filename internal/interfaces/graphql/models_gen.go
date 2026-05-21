@@ -35,6 +35,11 @@ type CreateSessionPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+// 删除事件载体，仅保留图片ID（原文件已不存在）
+type DeletedImage struct {
+	ID scalar.ID `json:"id"`
+}
+
 type MarkImageInput struct {
 	SessionID        scalar.ID                         `json:"sessionId"`
 	ImageID          scalar.ID                         `json:"imageId"`
@@ -76,6 +81,12 @@ type UndoInput struct {
 type UndoPayload struct {
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
+}
+
+type UpdateImageMetadataInput struct {
+	ID     scalar.ID `json:"id"`
+	Rating *int      `json:"rating,omitempty"`
+	Label  *string   `json:"label,omitempty"`
 }
 
 type UpdateSessionInput struct {

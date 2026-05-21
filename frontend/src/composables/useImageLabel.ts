@@ -1,6 +1,6 @@
 import { ref, computed, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
-import { UpdateLabelDocument } from "@/graphql/generated";
+import { UpdateImageMetadataDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
 import useHotkey from "./useHotkey";
 
@@ -20,12 +20,8 @@ export const PRESET_COLORS: Record<string, string> = {
 /**
  * useImageLabel 用于管理图片 XMP 标签的状态及修改逻辑
  * @param image 当前查看的图片对象或其 Getter
- * @param sessionId 当前筛选会话 ID 或其 Getter
  */
-export default function useImageLabel(
-  image: MaybeRefOrGetter<ImageFragment>,
-  sessionId: MaybeRefOrGetter<string | undefined>,
-) {
+export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
   // 控制玻璃磨砂下拉气泡菜单的显示隐藏
   const showPopover = ref(false);
   // 绑定自定义文本输入框的值
@@ -58,18 +54,15 @@ export default function useImageLabel(
    * @param label 目标标签字符串，传入空值代表清除标签
    */
   async function setLabel(label: string) {
-    const sId = toValue(sessionId);
     const img = toValue(image);
-    if (!sId) {
-      return;
-    }
     showPopover.value = false;
     try {
-      await mutate(UpdateLabelDocument, {
+      await mutate(UpdateImageMetadataDocument, {
         variables: {
-          sessionId: sId,
-          imageId: img.id,
-          label: label,
+          input: {
+            id: img.id,
+            label: label,
+          },
         },
       });
     } catch (err) {

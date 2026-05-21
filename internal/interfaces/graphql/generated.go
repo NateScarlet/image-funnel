@@ -64,9 +64,14 @@ type ComplexityRoot struct {
 		Session          func(childComplexity int) int
 	}
 
+	DeletedImage struct {
+		ID func(childComplexity int) int
+	}
+
 	Directory struct {
 		Directories func(childComplexity int) int
 		ID          func(childComplexity int) int
+		Images      func(childComplexity int, filterBy *shared.ImageFilters, first *int, after *string) int
 		ParentID    func(childComplexity int) int
 		RelPath     func(childComplexity int) int
 		Root        func(childComplexity int) int
@@ -95,8 +100,23 @@ type ComplexityRoot struct {
 		XMPExists     func(childComplexity int) int
 	}
 
+	ImageConnection struct {
+		Edges    func(childComplexity int) int
+		Nodes    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	ImageEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
 	ImageFilters struct {
-		Rating func(childComplexity int) int
+		DirectoryID func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Label       func(childComplexity int) int
+		Query       func(childComplexity int) int
+		Rating      func(childComplexity int) int
 	}
 
 	MarkImagePayload struct {
@@ -116,13 +136,20 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CommitChanges func(childComplexity int, input CommitChangesInput) int
-		CreateSession func(childComplexity int, input CreateSessionInput) int
-		MarkImage     func(childComplexity int, input MarkImageInput) int
-		Undo          func(childComplexity int, input UndoInput) int
-		UpdateLabel   func(childComplexity int, sessionID scalar.ID, imageID scalar.ID, label string) int
-		UpdateMemo    func(childComplexity int, id scalar.ID, content string) int
-		UpdateSession func(childComplexity int, input UpdateSessionInput) int
+		CommitChanges       func(childComplexity int, input CommitChangesInput) int
+		CreateSession       func(childComplexity int, input CreateSessionInput) int
+		MarkImage           func(childComplexity int, input MarkImageInput) int
+		Undo                func(childComplexity int, input UndoInput) int
+		UpdateImageMetadata func(childComplexity int, input UpdateImageMetadataInput) int
+		UpdateMemo          func(childComplexity int, id scalar.ID, content string) int
+		UpdateSession       func(childComplexity int, input UpdateSessionInput) int
+	}
+
+	PageInfo struct {
+		EndCursor       func(childComplexity int) int
+		HasNextPage     func(childComplexity int) int
+		HasPreviousPage func(childComplexity int) int
+		StartCursor     func(childComplexity int) int
 	}
 
 	Query struct {
@@ -167,6 +194,8 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
+		ImageDeleted     func(childComplexity int, filterBy *shared.ImageFilters) int
+		ImageSaved       func(childComplexity int, filterBy *shared.ImageFilters) int
 		MemoUpdated      func(childComplexity int, id scalar.ID) int
 		SessionUpdated   func(childComplexity int, id scalar.ID) int
 	}
@@ -191,6 +220,7 @@ type ComplexityRoot struct {
 type DirectoryResolver interface {
 	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
+	Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error)
 }
 type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
@@ -206,7 +236,7 @@ type MutationResolver interface {
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
-	UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, label string) (*shared.ImageDTO, error)
+	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
@@ -228,6 +258,8 @@ type SessionResolver interface {
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
+	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
+	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
 	MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error)
 }
 
@@ -282,6 +314,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.CreateSessionPayload.Session(childComplexity), true
 
+	case "DeletedImage.id":
+		if e.complexity.DeletedImage.ID == nil {
+			break
+		}
+
+		return e.complexity.DeletedImage.ID(childComplexity), true
+
 	case "Directory.directories":
 		if e.complexity.Directory.Directories == nil {
 			break
@@ -294,6 +333,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.ID(childComplexity), true
+	case "Directory.images":
+		if e.complexity.Directory.Images == nil {
+			break
+		}
+
+		args, err := ec.field_Directory_images_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Directory.Images(childComplexity, args["filterBy"].(*shared.ImageFilters), args["first"].(*int), args["after"].(*string)), true
 	case "Directory.parentId":
 		if e.complexity.Directory.ParentID == nil {
 			break
@@ -422,6 +472,62 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Image.XMPExists(childComplexity), true
 
+	case "ImageConnection.edges":
+		if e.complexity.ImageConnection.Edges == nil {
+			break
+		}
+
+		return e.complexity.ImageConnection.Edges(childComplexity), true
+	case "ImageConnection.nodes":
+		if e.complexity.ImageConnection.Nodes == nil {
+			break
+		}
+
+		return e.complexity.ImageConnection.Nodes(childComplexity), true
+	case "ImageConnection.pageInfo":
+		if e.complexity.ImageConnection.PageInfo == nil {
+			break
+		}
+
+		return e.complexity.ImageConnection.PageInfo(childComplexity), true
+
+	case "ImageEdge.cursor":
+		if e.complexity.ImageEdge.Cursor == nil {
+			break
+		}
+
+		return e.complexity.ImageEdge.Cursor(childComplexity), true
+	case "ImageEdge.node":
+		if e.complexity.ImageEdge.Node == nil {
+			break
+		}
+
+		return e.complexity.ImageEdge.Node(childComplexity), true
+
+	case "ImageFilters.directoryId":
+		if e.complexity.ImageFilters.DirectoryID == nil {
+			break
+		}
+
+		return e.complexity.ImageFilters.DirectoryID(childComplexity), true
+	case "ImageFilters.id":
+		if e.complexity.ImageFilters.ID == nil {
+			break
+		}
+
+		return e.complexity.ImageFilters.ID(childComplexity), true
+	case "ImageFilters.label":
+		if e.complexity.ImageFilters.Label == nil {
+			break
+		}
+
+		return e.complexity.ImageFilters.Label(childComplexity), true
+	case "ImageFilters.query":
+		if e.complexity.ImageFilters.Query == nil {
+			break
+		}
+
+		return e.complexity.ImageFilters.Query(childComplexity), true
 	case "ImageFilters.rating":
 		if e.complexity.ImageFilters.Rating == nil {
 			break
@@ -518,17 +624,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.Undo(childComplexity, args["input"].(UndoInput)), true
-	case "Mutation.updateLabel":
-		if e.complexity.Mutation.UpdateLabel == nil {
+	case "Mutation.updateImageMetadata":
+		if e.complexity.Mutation.UpdateImageMetadata == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_updateLabel_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_updateImageMetadata_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateLabel(childComplexity, args["sessionId"].(scalar.ID), args["imageId"].(scalar.ID), args["label"].(string)), true
+		return e.complexity.Mutation.UpdateImageMetadata(childComplexity, args["input"].(UpdateImageMetadataInput)), true
 	case "Mutation.updateMemo":
 		if e.complexity.Mutation.UpdateMemo == nil {
 			break
@@ -551,6 +657,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateSession(childComplexity, args["input"].(UpdateSessionInput)), true
+
+	case "PageInfo.endCursor":
+		if e.complexity.PageInfo.EndCursor == nil {
+			break
+		}
+
+		return e.complexity.PageInfo.EndCursor(childComplexity), true
+	case "PageInfo.hasNextPage":
+		if e.complexity.PageInfo.HasNextPage == nil {
+			break
+		}
+
+		return e.complexity.PageInfo.HasNextPage(childComplexity), true
+	case "PageInfo.hasPreviousPage":
+		if e.complexity.PageInfo.HasPreviousPage == nil {
+			break
+		}
+
+		return e.complexity.PageInfo.HasPreviousPage(childComplexity), true
+	case "PageInfo.startCursor":
+		if e.complexity.PageInfo.StartCursor == nil {
+			break
+		}
+
+		return e.complexity.PageInfo.StartCursor(childComplexity), true
 
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
@@ -755,6 +886,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.DirectoryChanged(childComplexity, args["filterBy"].(*shared.DirectoryFilters)), true
+	case "Subscription.imageDeleted":
+		if e.complexity.Subscription.ImageDeleted == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_imageDeleted_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.ImageDeleted(childComplexity, args["filterBy"].(*shared.ImageFilters)), true
+	case "Subscription.imageSaved":
+		if e.complexity.Subscription.ImageSaved == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_imageSaved_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.ImageSaved(childComplexity, args["filterBy"].(*shared.ImageFilters)), true
 	case "Subscription.memoUpdated":
 		if e.complexity.Subscription.MemoUpdated == nil {
 			break
@@ -837,6 +990,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputUndoInput,
+		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateSessionInput,
 		ec.unmarshalInputWriteActionsInput,
 	)
@@ -979,7 +1133,31 @@ directive @goField(
   root: Boolean!
   stats: DirectoryStats
   directories: [Directory!]! @goField(forceResolver: true)
+  images(
+    filterBy: ImageFiltersInput
+    first: Int
+    after: String
+  ): ImageConnection! @goField(forceResolver: true)
 }
+
+type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
+  edges: [ImageEdge!]!
+  nodes: [Image!]!
+  pageInfo: PageInfo!
+}
+
+type ImageEdge @goModel(model: "main/internal/shared.ImageEdgeDTO") {
+  node: Image!
+  cursor: String!
+}
+
+type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
   imageCount: Int!
@@ -1005,13 +1183,26 @@ directive @goField(
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image_filters.graphql", Input: `type ImageFilters
   @goModel(model: "main/internal/shared.ImageFilters") {
+  "按图片ID过滤，为null表示不按ID过滤"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不按目录过滤"
+  directoryId: [ID!]
   rating: [Int!]
+  label: [String!]
+  query: String
 }
 
 input ImageFiltersInput
   @goModel(model: "main/internal/shared.ImageFilters") {
-  rating: [Int!]!
+  "按图片ID过滤，为null表示不按ID过滤"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不按目录过滤"
+  directoryId: [ID!]
+  rating: [Int!]
+  label: [String!]
+  query: String
 }
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/memo.graphql", Input: `"""
 图片的备忘信息
@@ -1109,6 +1300,19 @@ input DirectoryFilters
   id: [ID!]
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/image_changed.graphql", Input: `extend type Subscription {
+  "订阅图片新增或更新事件（文件被创建或写入时触发）"
+  imageSaved(filterBy: ImageFiltersInput): Image!
+
+  "订阅图片删除或移走事件（文件被移除或重命名时触发）"
+  imageDeleted(filterBy: ImageFiltersInput): DeletedImage!
+}
+
+"删除事件载体，仅保留图片ID（原文件已不存在）"
+type DeletedImage {
+  id: ID!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/memo_updated.graphql", Input: `extend type Subscription {
   """
   订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。
@@ -1189,11 +1393,17 @@ extend type Mutation {
   undo(input: UndoInput!): UndoPayload
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/update_label.graphql", Input: `extend type Mutation {
+	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `input UpdateImageMetadataInput {
+  id: ID!
+  rating: Int
+  label: String
+}
+
+extend type Mutation {
   """
-  更新图片的标签值。该操作立即生效并写入 XMP 文件，不与会话提交流程耦合。
+  更新图片的元数据信息（评分和颜色标签）。操作是即时的，不参与会话提交。
   """
-  updateLabel(sessionId: ID!, imageId: ID!, label: String!): Image!
+  updateImageMetadata(input: UpdateImageMetadataInput!): Image!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_memo.graphql", Input: `extend type Mutation {
@@ -1224,6 +1434,27 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_Directory_images_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	return args, nil
+}
 
 func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
@@ -1285,24 +1516,14 @@ func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArg
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_updateLabel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_updateImageMetadata_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateImageMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataInput)
 	if err != nil {
 		return nil, err
 	}
-	args["sessionId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "imageId", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
-	if err != nil {
-		return nil, err
-	}
-	args["imageId"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "label", ec.unmarshalNString2string)
-	if err != nil {
-		return nil, err
-	}
-	args["label"] = arg2
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -1397,6 +1618,28 @@ func (ec *executionContext) field_Subscription_directoryChanged_args(ctx context
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalODirectoryFilters2ᚖmainᚋinternalᚋsharedᚐDirectoryFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_imageDeleted_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_imageSaved_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -1695,6 +1938,35 @@ func (ec *executionContext) fieldContext_CreateSessionPayload_clientMutationId(_
 	return fc, nil
 }
 
+func (ec *executionContext) _DeletedImage_id(ctx context.Context, field graphql.CollectedField, obj *DeletedImage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeletedImage_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeletedImage_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeletedImage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Directory_id(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1917,9 +2189,60 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Directory_images(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_images,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Directory().Images(ctx, obj, fc.Args["filterBy"].(*shared.ImageFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNImageConnection2ᚖmainᚋinternalᚋsharedᚐImageConnectionDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_images(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_ImageConnection_edges(ctx, field)
+			case "nodes":
+				return ec.fieldContext_ImageConnection_nodes(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_ImageConnection_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ImageConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Directory_images_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -2438,6 +2761,277 @@ func (ec *executionContext) fieldContext_Image_label(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _ImageConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.ImageConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNImageEdge2ᚕᚖmainᚋinternalᚋsharedᚐImageEdgeDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_ImageEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_ImageEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ImageEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageConnection_nodes(ctx context.Context, field graphql.CollectedField, obj *shared.ImageConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageConnection_nodes,
+		func(ctx context.Context) (any, error) {
+			return obj.Nodes, nil
+		},
+		nil,
+		ec.marshalNImage2ᚕᚖmainᚋinternalᚋsharedᚐImageDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageConnection_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
+			case "label":
+				return ec.fieldContext_Image_label(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *shared.ImageConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageEdge_node(ctx context.Context, field graphql.CollectedField, obj *shared.ImageEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
+			case "label":
+				return ec.fieldContext_Image_label(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *shared.ImageEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageFilters_id(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageFilters_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageFilters_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageFilters_directoryId(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageFilters_directoryId,
+		func(ctx context.Context) (any, error) {
+			return obj.DirectoryID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageFilters_directoryId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ImageFilters_rating(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2462,6 +3056,64 @@ func (ec *executionContext) fieldContext_ImageFilters_rating(_ context.Context, 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageFilters_label(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageFilters_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageFilters_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImageFilters_query(ctx context.Context, field graphql.CollectedField, obj *shared.ImageFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImageFilters_query,
+		func(ctx context.Context) (any, error) {
+			return obj.Query, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImageFilters_query(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImageFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2896,15 +3548,15 @@ func (ec *executionContext) fieldContext_Mutation_undo(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_updateImageMetadata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_updateLabel,
+		ec.fieldContext_Mutation_updateImageMetadata,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["sessionId"].(scalar.ID), fc.Args["imageId"].(scalar.ID), fc.Args["label"].(string))
+			return ec.resolvers.Mutation().UpdateImageMetadata(ctx, fc.Args["input"].(UpdateImageMetadataInput))
 		},
 		nil,
 		ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
@@ -2913,7 +3565,7 @@ func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field gra
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_updateLabel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -2956,7 +3608,7 @@ func (ec *executionContext) fieldContext_Mutation_updateLabel(ctx context.Contex
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_updateLabel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_updateImageMetadata_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -3053,6 +3705,122 @@ func (ec *executionContext) fieldContext_Mutation_updateSession(ctx context.Cont
 	if fc.Args, err = ec.field_Mutation_updateSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *shared.PageInfoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_hasNextPage,
+		func(ctx context.Context) (any, error) {
+			return obj.HasNextPage, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_hasNextPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_hasPreviousPage(ctx context.Context, field graphql.CollectedField, obj *shared.PageInfoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_hasPreviousPage,
+		func(ctx context.Context) (any, error) {
+			return obj.HasPreviousPage, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_hasPreviousPage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_startCursor(ctx context.Context, field graphql.CollectedField, obj *shared.PageInfoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_startCursor,
+		func(ctx context.Context) (any, error) {
+			return obj.StartCursor, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_startCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PageInfo_endCursor(ctx context.Context, field graphql.CollectedField, obj *shared.PageInfoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PageInfo_endCursor,
+		func(ctx context.Context) (any, error) {
+			return obj.EndCursor, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PageInfo_endCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PageInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -3173,6 +3941,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -3490,6 +4260,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -3521,8 +4293,16 @@ func (ec *executionContext) fieldContext_Session_filter(_ context.Context, field
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "id":
+				return ec.fieldContext_ImageFilters_id(ctx, field)
+			case "directoryId":
+				return ec.fieldContext_ImageFilters_directoryId(ctx, field)
 			case "rating":
 				return ec.fieldContext_ImageFilters_rating(ctx, field)
+			case "label":
+				return ec.fieldContext_ImageFilters_label(ctx, field)
+			case "query":
+				return ec.fieldContext_ImageFilters_query(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ImageFilters", field.Name)
 		},
@@ -4497,6 +5277,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
 				return ec.fieldContext_Directory_directories(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -4509,6 +5291,118 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_directoryChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_imageSaved(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_imageSaved,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().ImageSaved(ctx, fc.Args["filterBy"].(*shared.ImageFilters))
+		},
+		nil,
+		ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_imageSaved(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "memo":
+				return ec.fieldContext_Image_memo(ctx, field)
+			case "label":
+				return ec.fieldContext_Image_label(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_imageSaved_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_imageDeleted(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_imageDeleted,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().ImageDeleted(ctx, fc.Args["filterBy"].(*shared.ImageFilters))
+		},
+		nil,
+		ec.marshalNDeletedImage2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDeletedImage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_imageDeleted(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_DeletedImage_id(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DeletedImage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_imageDeleted_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -6406,20 +7300,48 @@ func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"rating"}
+	fieldsInOrder := [...]string{"id", "directoryId", "rating", "label", "query"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
 		case "rating":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rating"))
-			data, err := ec.unmarshalNInt2ᚕintᚄ(ctx, v)
+			data, err := ec.unmarshalOInt2ᚕintᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Rating = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Label = data
+		case "query":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("query"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Query = data
 		}
 	}
 
@@ -6509,6 +7431,47 @@ func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any
 				return it, err
 			}
 			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateImageMetadataInput(ctx context.Context, obj any) (UpdateImageMetadataInput, error) {
+	var it UpdateImageMetadataInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "rating", "label"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "rating":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rating"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Rating = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Label = data
 		}
 	}
 
@@ -6723,6 +7686,45 @@ func (ec *executionContext) _CreateSessionPayload(ctx context.Context, sel ast.S
 	return out
 }
 
+var deletedImageImplementors = []string{"DeletedImage"}
+
+func (ec *executionContext) _DeletedImage(ctx context.Context, sel ast.SelectionSet, obj *DeletedImage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, deletedImageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DeletedImage")
+		case "id":
+			out.Values[i] = ec._DeletedImage_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var directoryImplementors = []string{"Directory", "Node"}
 
 func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryDTO) graphql.Marshaler {
@@ -6799,6 +7801,42 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._Directory_directories(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "images":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Directory_images(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -7111,6 +8149,99 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 	return out
 }
 
+var imageConnectionImplementors = []string{"ImageConnection"}
+
+func (ec *executionContext) _ImageConnection(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageConnectionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, imageConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ImageConnection")
+		case "edges":
+			out.Values[i] = ec._ImageConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodes":
+			out.Values[i] = ec._ImageConnection_nodes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._ImageConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var imageEdgeImplementors = []string{"ImageEdge"}
+
+func (ec *executionContext) _ImageEdge(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageEdgeDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, imageEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ImageEdge")
+		case "node":
+			out.Values[i] = ec._ImageEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._ImageEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var imageFiltersImplementors = []string{"ImageFilters"}
 
 func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageFilters) graphql.Marshaler {
@@ -7122,8 +8253,16 @@ func (ec *executionContext) _ImageFilters(ctx context.Context, sel ast.Selection
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("ImageFilters")
+		case "id":
+			out.Values[i] = ec._ImageFilters_id(ctx, field, obj)
+		case "directoryId":
+			out.Values[i] = ec._ImageFilters_directoryId(ctx, field, obj)
 		case "rating":
 			out.Values[i] = ec._ImageFilters_rating(ctx, field, obj)
+		case "label":
+			out.Values[i] = ec._ImageFilters_label(ctx, field, obj)
+		case "query":
+			out.Values[i] = ec._ImageFilters_query(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7325,9 +8464,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_undo(ctx, field)
 			})
-		case "updateLabel":
+		case "updateImageMetadata":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_updateLabel(ctx, field)
+				return ec._Mutation_updateImageMetadata(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -7346,6 +8485,54 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var pageInfoImplementors = []string{"PageInfo"}
+
+func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet, obj *shared.PageInfoDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, pageInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PageInfo")
+		case "hasNextPage":
+			out.Values[i] = ec._PageInfo_hasNextPage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPreviousPage":
+			out.Values[i] = ec._PageInfo_hasPreviousPage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "startCursor":
+			out.Values[i] = ec._PageInfo_startCursor(ctx, field, obj)
+		case "endCursor":
+			out.Values[i] = ec._PageInfo_endCursor(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -7922,6 +9109,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_sessionUpdated(ctx, fields[0])
 	case "directoryChanged":
 		return ec._Subscription_directoryChanged(ctx, fields[0])
+	case "imageSaved":
+		return ec._Subscription_imageSaved(ctx, fields[0])
+	case "imageDeleted":
+		return ec._Subscription_imageDeleted(ctx, fields[0])
 	case "memoUpdated":
 		return ec._Subscription_memoUpdated(ctx, fields[0])
 	default:
@@ -8446,6 +9637,20 @@ func (ec *executionContext) marshalNCreateSessionPayload2ᚖmainᚋinternalᚋin
 	return ec._CreateSessionPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNDeletedImage2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeletedImage(ctx context.Context, sel ast.SelectionSet, v DeletedImage) graphql.Marshaler {
+	return ec._DeletedImage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDeletedImage2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDeletedImage(ctx context.Context, sel ast.SelectionSet, v *DeletedImage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DeletedImage(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNDirectory2mainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirectoryDTO) graphql.Marshaler {
 	return ec._Directory(ctx, sel, &v)
 }
@@ -8641,6 +9846,74 @@ func (ec *executionContext) marshalNImageAction2ᚕmainᚋinternalᚋenumᚐEnum
 	return ret
 }
 
+func (ec *executionContext) marshalNImageConnection2mainᚋinternalᚋsharedᚐImageConnectionDTO(ctx context.Context, sel ast.SelectionSet, v shared.ImageConnectionDTO) graphql.Marshaler {
+	return ec._ImageConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNImageConnection2ᚖmainᚋinternalᚋsharedᚐImageConnectionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageConnectionDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ImageConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNImageEdge2ᚕᚖmainᚋinternalᚋsharedᚐImageEdgeDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.ImageEdgeDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNImageEdge2ᚖmainᚋinternalᚋsharedᚐImageEdgeDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNImageEdge2ᚖmainᚋinternalᚋsharedᚐImageEdgeDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageEdgeDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ImageEdge(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *shared.ImageFilters) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -8688,36 +9961,6 @@ func (ec *executionContext) marshalNInt2int64(ctx context.Context, sel ast.Selec
 	return res
 }
 
-func (ec *executionContext) unmarshalNInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]int, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNInt2int(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	for i := range v {
-		ret[i] = ec.marshalNInt2int(ctx, sel, v[i])
-	}
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
 func (ec *executionContext) unmarshalNMarkImageInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐMarkImageInput(ctx context.Context, v any) (MarkImageInput, error) {
 	res, err := ec.unmarshalInputMarkImageInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -8763,6 +10006,16 @@ func (ec *executionContext) marshalNMeta2ᚖmainᚋinternalᚋinterfacesᚋgraph
 		return graphql.Null
 	}
 	return ec._Meta(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PageInfoDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PageInfo(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*RatingCount) graphql.Marshaler {
@@ -8893,6 +10146,11 @@ func (ec *executionContext) marshalNURI2string(ctx context.Context, sel ast.Sele
 
 func (ec *executionContext) unmarshalNUndoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUndoInput(ctx context.Context, v any) (UndoInput, error) {
 	res, err := ec.unmarshalInputUndoInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateImageMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataInput(ctx context.Context, v any) (UpdateImageMetadataInput, error) {
+	res, err := ec.unmarshalInputUpdateImageMetadataInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

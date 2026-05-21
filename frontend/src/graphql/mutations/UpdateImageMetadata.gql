@@ -1,0 +1,5 @@
+mutation UpdateImageMetadata($input: UpdateImageMetadataInput!) {
+  updateImageMetadata(input: $input) {
+    ...Image
+  }
+}

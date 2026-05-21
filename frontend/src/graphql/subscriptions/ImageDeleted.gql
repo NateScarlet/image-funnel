@@ -1,0 +1,5 @@
+subscription ImageDeleted($filterBy: ImageFiltersInput) {
+  imageDeleted(filterBy: $filterBy) {
+    id
+  }
+}

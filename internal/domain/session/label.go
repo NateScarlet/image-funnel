@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
+	"os"
 	"time"
 )
 
@@ -34,6 +35,7 @@ func (s *Session) UpdateLabel(imageID scalar.ID, label string) (*image.Image, er
 		oldImg.ID(),
 		oldImg.Filename(),
 		oldImg.AbsPath(),
+		s.DirectoryID(),
 		oldImg.Size(),
 		oldImg.ModTime(),
 		newXMP,
@@ -66,6 +68,19 @@ func (s *Service) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 		return nil, apperror.NewErrDocumentNotFound(imageID)
 	}
 	img := sess.images[idx]
+
+	// 校验修改时间以防止对过时版本的图片进行修改
+	info, err := os.Stat(img.AbsPath())
+	if err != nil {
+		return nil, err
+	}
+	if info.ModTime().UnixNano() != img.ModTime().UnixNano() {
+		return nil, apperror.New(
+			"VERSION_CONFLICT",
+			"image file has been modified on disk",
+			"图片在磁盘上已被修改，操作已拒绝",
+		)
+	}
 
 	// 1. 准备要持久化写入的 XMP 元数据，保留其它字段
 	oldXMP := img.XMPData()

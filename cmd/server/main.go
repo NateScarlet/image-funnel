@@ -131,8 +131,9 @@ func main() {
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, logger)
 	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
 	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
+	imageHandler := appimage.NewHandler(metadataRepo, imageFactory, signer, logger, cfg.AbsRootDir)
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 
 	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version)
 

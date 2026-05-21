@@ -3,6 +3,7 @@ package image
 import (
 	"context"
 	"main/internal/domain/metadata"
+	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
 	"os"
@@ -26,7 +27,7 @@ func NewFactory(xmpRepo metadata.Repository, processor Processor) *Factory {
 	}
 }
 
-func (f *Factory) Create(ctx context.Context, relPath string, rootDir string) (*Image, error) {
+func (f *Factory) Create(ctx context.Context, relPath string, rootDir string, directoryID scalar.ID) (*Image, error) {
 	if err := util.EnsurePathInRoot(rootDir, relPath); err != nil {
 		return nil, err
 	}
@@ -37,10 +38,6 @@ func (f *Factory) Create(ctx context.Context, relPath string, rootDir string) (*
 	}
 
 	if info.IsDir() {
-		// Not a file, return nil/error?
-		// Scanner filtered directories, here we assume caller might pass one?
-		// Or we return error "is directory".
-		// But ScanFile returns nil for unsupported.
 		return nil, nil
 	}
 
@@ -48,12 +45,12 @@ func (f *Factory) Create(ctx context.Context, relPath string, rootDir string) (*
 		return nil, nil
 	}
 
-	return f.CreateFromInfo(ctx, info, absPath)
+	return f.CreateFromInfo(ctx, info, absPath, directoryID)
 }
 
 // CreateFromInfo creates an image from os.FileInfo, avoiding re-stat if caller has it.
 // absPath is required.
-func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath string) (*Image, error) {
+func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath string, directoryID scalar.ID) (*Image, error) {
 	if info.IsDir() || !f.isSupportedImage(info.Name()) {
 		return nil, nil
 	}
@@ -75,6 +72,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath 
 	return NewImageFromAbsPath(
 		info.Name(),
 		absPath,
+		directoryID,
 		info.Size(),
 		info.ModTime(),
 		xmpData,

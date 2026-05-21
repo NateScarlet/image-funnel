@@ -1,0 +1,5 @@
+subscription ImageSaved($filterBy: ImageFiltersInput) {
+  imageSaved(filterBy: $filterBy) {
+    ...Image
+  }
+}
