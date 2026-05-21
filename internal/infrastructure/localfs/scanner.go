@@ -127,44 +127,63 @@ func (s *Scanner) AnalyzeDirectory(ctx context.Context, relPath string) (*direct
 		return nil, err
 	}
 
-	imageCount := 0
 	subdirectoryCount := 0
+	var files []os.DirEntry
+
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		if entry.IsDir() {
+			subdirectoryCount++
+			continue
+		}
+		files = append(files, entry)
+	}
+
+	imageCount := 0
 	var latestImage *domainimage.Image
 	ratingCounts := make(map[int]int)
 
 	// 计算当前目录的ID
 	directoryID := directory.EncodeID(relPath)
 
-	for _, entry := range entries {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
+	limit := runtime.NumCPU()
 
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
+	iterator.ParallelConcatMapTo2(
+		ctx,
+		limit,
+		slices.Values(files),
+		func(img *domainimage.Image, err error) bool {
+			if err != nil || img == nil {
+				return true
+			}
+			imageCount++
+			if latestImage == nil || img.ModTime().After(latestImage.ModTime()) {
+				latestImage = img
+			}
+			ratingCounts[img.Rating()]++
+			return true
+		},
+	)(
+		func(ctx context.Context, yield func(*domainimage.Image, error) bool, entry os.DirEntry) bool {
+			if ctx.Err() != nil {
+				return false
+			}
 
-		if entry.IsDir() {
-			subdirectoryCount++
-			continue
-		}
+			info, err := entry.Info()
+			if err != nil {
+				return yield(nil, err)
+			}
 
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
+			imagePath := filepath.Join(absPath, entry.Name())
+			img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath, directoryID)
+			return yield(img, err)
+		},
+	)
 
-		imagePath := filepath.Join(absPath, entry.Name())
-		img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath, directoryID)
-		if err != nil || img == nil {
-			continue
-		}
-
-		imageCount++
-		if latestImage == nil || info.ModTime().After(latestImage.ModTime()) {
-			latestImage = img
-		}
-		ratingCounts[img.Rating()]++
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	return directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
