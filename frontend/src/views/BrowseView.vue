@@ -93,24 +93,8 @@
             </svg>
             笔记列表 ({{ memos.length }} 个)
           </h2>
-          <!-- 隐藏/排除隐藏笔记切换按钮 -->
-          <button
-            class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all"
-            :class="[
-              showHiddenMemos
-                ? 'bg-secondary-500/20 border-secondary-500/40 text-secondary-300 hover:bg-secondary-500/30'
-                : 'bg-primary-800 border-primary-700 text-primary-400 hover:text-primary-300 hover:bg-primary-700',
-            ]"
-            @click="showHiddenMemos = !showHiddenMemos"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                :d="showHiddenMemos ? mdiEye : mdiEyeOff"
-                fill="currentColor"
-              />
-            </svg>
-            <span>{{ showHiddenMemos ? "显示隐藏笔记" : "排除隐藏笔记" }}</span>
-          </button>
+          <!-- 显示隐藏笔记切换开关 -->
+          <ToggleSwitch v-model="showHiddenMemos" label="显示隐藏笔记" />
         </div>
 
         <!-- 暂无笔记状态 -->
@@ -518,6 +502,7 @@ import ImageViewer from "../components/ImageViewer.vue";
 import RatingFilter from "../components/RatingFilter.vue";
 import MemoEditorDialog from "../components/MemoEditorDialog.vue";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
+import ToggleSwitch from "../components/ToggleSwitch.vue";
 
 // #region 路由参数与导航
 const route = useRoute();

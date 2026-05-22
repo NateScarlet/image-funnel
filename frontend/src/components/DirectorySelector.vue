@@ -5,11 +5,9 @@
         选择目录
       </label>
       <div class="flex flex-wrap items-center gap-4">
-        <div class="flex items-center gap-2">
-          <label
-            :for="showSmallUnratedId"
-            class="text-sm text-primary-400 cursor-pointer select-none"
-          >
+        <!-- 筛选未评级图片目录开关 -->
+        <ToggleSwitch v-model="showSmallUnrated">
+          <span class="text-sm text-primary-400">
             显示未评级图片 &lt;
             <input
               v-model.number="minUnratedCount"
@@ -19,36 +17,14 @@
               @click.stop
             />
             的目录（{{ smallUnratedCount }}）
-          </label>
-          <div class="relative">
-            <input
-              :id="showSmallUnratedId"
-              v-model="showSmallUnrated"
-              type="checkbox"
-              class="sr-only peer"
-            />
-            <label
-              :for="showSmallUnratedId"
-              class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600 block cursor-pointer"
-            ></label>
-          </div>
-        </div>
+          </span>
+        </ToggleSwitch>
+        <!-- 筛选已达标目录开关 -->
         <template v-if="completedCount">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <span class="text-sm text-primary-400"
-              >显示已达标目录（{{ completedCount }}）</span
-            >
-            <div class="relative">
-              <input
-                v-model="showCompletedDirectories"
-                type="checkbox"
-                class="sr-only peer"
-              />
-              <div
-                class="w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600"
-              ></div>
-            </div>
-          </label>
+          <ToggleSwitch
+            v-model="showCompletedDirectories"
+            :label="`显示已达标目录（${completedCount}）`"
+          />
         </template>
       </div>
     </div>
@@ -131,9 +107,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, useId } from "vue";
+import { computed, ref, watch } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
+import ToggleSwitch from "./ToggleSwitch.vue";
 import useStorage from "../composables/useStorage";
 import useAsyncTask from "../composables/useAsyncTask";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
@@ -154,8 +131,6 @@ const { currentDirectory, directories, loading, filterRating, targetKeep } =
 const emit = defineEmits<(e: "go-to-parent") => void>();
 
 const selectedId = defineModel<string>();
-
-const showSmallUnratedId = useId();
 
 const { model: showCompletedDirectories } = useStorage<boolean>(
   localStorage,
