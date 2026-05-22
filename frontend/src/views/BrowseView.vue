@@ -486,6 +486,7 @@ import {
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
+import { formatSize } from "@/utils/formatSize";
 import { PRESET_COLORS } from "../composables/useImageLabel";
 import useBrowseImages from "../composables/useBrowseImages";
 import useBrowseMemos from "../composables/useBrowseMemos";
@@ -696,15 +697,5 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("keydown", handleGlobalKeydown);
 });
-// #endregion
-
-// #region 格式化辅助方法
-function formatSize(bytes: number | undefined): string {
-  if (!bytes) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
 // #endregion
 </script>
