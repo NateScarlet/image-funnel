@@ -374,10 +374,7 @@
       </section>
 
       <!-- 懒加载过渡区与加载更多按钮 -->
-      <section
-        v-if="imageConnection.pageInfo.value.hasNextPage"
-        class="flex justify-center pt-4"
-      >
+      <section v-if="hasNextPage" class="flex justify-center pt-4">
         <button
           :disabled="loading"
           class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
@@ -490,7 +487,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   mdiArrowLeft,
@@ -508,22 +505,15 @@ import {
   mdiEyeOff,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
-import useSubscription from "../graphql/utils/useSubscription";
-import mutate from "../graphql/utils/mutate";
 import { PRESET_COLORS } from "../composables/useImageLabel";
-import useLiveConnection from "../composables/useLiveConnection";
-import useRelayConnection from "../composables/useRelayConnection";
+import useBrowseImages from "../composables/useBrowseImages";
+import useBrowseMemos from "../composables/useBrowseMemos";
 import {
   DirectoriesDocument,
-  BrowseImagesDocument,
-  ImageSavedDocument,
-  ImageDeletedDocument,
-  BrowseMemosDocument,
-  MemoSavedDocument,
-  UpdateMemoDocument,
-  type ImageFragment,
-  type ImageFiltersInput,
   type MemoFragment,
+  type BrowseImagesQueryVariables,
+  type BrowseMemosQueryVariables,
+  type ImageFiltersInput,
   type MemoFiltersInput,
 } from "../graphql/generated";
 import ImageViewer from "../components/ImageViewer.vue";
@@ -611,9 +601,9 @@ function getDirName(relPath: string): string {
 }
 // #endregion
 
-// #region 分页获取图片
+// #region 获取并管理实时更新的图片列表
 // 构建图片查询 variables
-const imagesVariables = computed(() => {
+const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
   const filterBy: ImageFiltersInput = {
     rating: filterRating.value,
     label: filterLabels.value.length > 0 ? filterLabels.value : null,
@@ -623,60 +613,34 @@ const imagesVariables = computed(() => {
     id: currentDirectoryId.value,
     filterBy,
     first: 100, // 每页 100 张
-    after: null as string | null,
+    after: null,
   };
 });
-
-const { data: imagesData, query: imagesQuery } = useQuery(
-  BrowseImagesDocument,
-  {
-    variables: () => imagesVariables.value,
-    loadingCount,
-  },
-);
 
 // 对 loading 状态的综合追踪
 const loading = computed(() => loadingCount.value > 0);
 
-// 提取连接对象，useRelayConnection 处理分页拼接和 fetchMore
-const imageConnection = useRelayConnection(
-  () =>
-    imagesData.value?.node?.__typename === "Directory"
-      ? imagesData.value.node.images
-      : undefined,
-  () => imagesQuery,
-);
-
+// 调用 useBrowseImages 获取图片列表
 const {
-  nodes: images,
-  reset: resetImages,
-  onSaved,
-  onDeleted,
-} = useLiveConnection(() => imageConnection.nodes.value);
+  images,
+  hasNextPage,
+  loadMore: imagesLoadMore,
+} = useBrowseImages(imagesVariables, { loadingCount });
 
-// 过滤条件变化时重新执行查询
-watch(
-  [currentDirectoryId, filterRating, filterLabels, searchQuery],
-  () => {
-    // 将 variables 重置到第一页，同时清空本地实时状态
-    resetImages();
-    imagesQuery.refetch({ ...imagesVariables.value, after: null });
-  },
-  { deep: true },
-);
-
+// 触发分页加载更多图片
 function loadMore() {
-  if (loading.value || !imageConnection.pageInfo.value.hasNextPage) return;
-  void imageConnection.fetchMore();
+  if (loading.value || !hasNextPage.value) return;
+  imagesLoadMore();
 }
 // #endregion
 
-// #region 分页获取备忘录/笔记
+// #region 获取并管理实时更新的备忘录/笔记列表
 const showHiddenMemos = ref(false);
 const selectedMemo = ref<MemoFragment | null>(null);
 const isMemoEditorOpen = ref(false);
 
-const memosVariables = computed(() => {
+// 构建备忘录查询 variables
+const memosVariables = computed<BrowseMemosQueryVariables>(() => {
   const filterBy: MemoFiltersInput = {
     directoryId: [currentDirectoryId.value],
   };
@@ -691,169 +655,15 @@ const memosVariables = computed(() => {
   };
 });
 
-const { data: memosData, query: memosQuery } = useQuery(BrowseMemosDocument, {
-  variables: () => memosVariables.value,
+// 调用 useBrowseMemos 获取备忘录列表与隐藏切换操作
+const { memos, toggleMemoHidden } = useBrowseMemos(memosVariables, {
   loadingCount,
 });
-
-const memosConnection = useRelayConnection(
-  () =>
-    memosData.value?.node?.__typename === "Directory"
-      ? memosData.value.node.memos
-      : undefined,
-  () => memosQuery,
-);
-
-const {
-  nodes: memos,
-  reset: resetMemos,
-  onSaved: onMemoSaved,
-  onDeleted: onMemoDeleted,
-} = useLiveConnection(() => memosConnection.nodes.value, {
-  filter: (m) => {
-    if (!showHiddenMemos.value && m.hidden) {
-      return false;
-    }
-    return true;
-  },
-  onNodeDidLeave: (m) => {
-    onMemoDeleted(m);
-  },
-});
-
-// 监听目录ID或显示隐藏开关改变，重置备忘录并重新查询
-watch(
-  [currentDirectoryId, showHiddenMemos],
-  () => {
-    resetMemos();
-    memosQuery.refetch({ ...memosVariables.value, after: null });
-  },
-  { deep: true },
-);
 
 function editMemo(memoItem: MemoFragment) {
   selectedMemo.value = memoItem;
   isMemoEditorOpen.value = true;
 }
-
-// 解析并切换 frontmatter 中的隐藏状态值
-function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
-  // 统一换行符，同时检查原始内容是否使用 CRLF
-  const isCRLF = raw.includes("\r\n");
-  const normalized = raw.replace(/\r\n/g, "\n");
-
-  if (normalized.startsWith("---\n")) {
-    const parts = normalized.split("---\n");
-    if (parts.length >= 3) {
-      // 说明具有合规的 frontmatter 格式 (parts[0] 为空，parts[1] 为 frontmatter 内容)
-      const frontmatter = parts[1];
-      const body = parts.slice(2).join("---\n");
-
-      const lines = frontmatter.split("\n");
-      let found = false;
-      const newLines = lines.map((line) => {
-        const trimmed = line.trim();
-        if (trimmed === "" || trimmed.startsWith("#")) {
-          return line;
-        }
-        const colonIndex = line.indexOf(":");
-        if (colonIndex !== -1) {
-          const key = line.slice(0, colonIndex).trim().toLowerCase();
-          if (key === "hidden" || key === "hide") {
-            found = true;
-            // 保持原缩进与键的原始拼写，仅更新布尔值
-            const indent = line.slice(0, line.indexOf(line.trim()));
-            return `${indent}${line.slice(0, colonIndex).trim()}: ${newHidden}`;
-          }
-        }
-        return line;
-      });
-
-      if (!found) {
-        // 如果没有找到 hidden/hide 字段，则将其追加至 frontmatter 尾部
-        if (
-          newLines.length > 0 &&
-          newLines[newLines.length - 1].trim() === ""
-        ) {
-          newLines[newLines.length - 1] = `hidden: ${newHidden}`;
-          newLines.push("");
-        } else {
-          newLines.push(`hidden: ${newHidden}`);
-        }
-      }
-
-      const newFrontmatter = newLines.join("\n");
-      const result = `---\n${newFrontmatter}---\n${body}`;
-      return isCRLF ? result.replace(/\n/g, "\r\n") : result;
-    }
-  }
-
-  // 没有 frontmatter 时，直接在头部生成一个新的 frontmatter 块
-  const newFrontmatter = `---\nhidden: ${newHidden}\n---\n`;
-  const result = newFrontmatter + normalized;
-  return isCRLF ? result.replace(/\n/g, "\r\n") : result;
-}
-
-// 切换备忘录/笔记的隐藏状态，并触发 Mutation 请求保存
-async function toggleMemoHidden(memoItem: MemoFragment) {
-  const newHidden = !memoItem.hidden;
-  const newRawContent = toggleFrontmatterHidden(memoItem.rawContent, newHidden);
-
-  try {
-    await mutate(UpdateMemoDocument, {
-      variables: {
-        id: memoItem.id,
-        content: newRawContent,
-      },
-    });
-  } catch (err) {
-    console.error("Failed to toggle memo hidden:", err);
-  }
-}
-// #endregion
-
-// #region 订阅文件变更实现增量实时数据同步
-useSubscription(ImageSavedDocument, {
-  variables: () => ({
-    filterBy: currentDirectoryId.value
-      ? { directoryId: [currentDirectoryId.value] }
-      : null,
-  }),
-  onNext: (result) => {
-    const savedImage = result.data?.imageSaved;
-    if (savedImage) {
-      onSaved(savedImage);
-    }
-  },
-});
-
-useSubscription(ImageDeletedDocument, {
-  variables: () => ({
-    filterBy: currentDirectoryId.value
-      ? { directoryId: [currentDirectoryId.value] }
-      : null,
-  }),
-  onNext: (result) => {
-    const deletedImage = result.data?.imageDeleted;
-    if (deletedImage) {
-      onDeleted({ id: deletedImage.id } as ImageFragment);
-    }
-  },
-});
-
-useSubscription(MemoSavedDocument, {
-  variables: () => ({
-    filterBy: currentDirectoryId.value
-      ? { directoryId: [currentDirectoryId.value] }
-      : null,
-  }),
-  onNext: (result) => {
-    const savedMemo = result.data?.memoSaved;
-    if (savedMemo) {
-      onMemoSaved(savedMemo);
-    }
-  },
-});
 // #endregion
 
 // #region 全屏查看器模块
