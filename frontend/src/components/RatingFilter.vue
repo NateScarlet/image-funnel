@@ -7,10 +7,10 @@
     <!-- 操作符切换按钮 -->
     <button
       class="w-7 h-6 bg-primary-750 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded flex items-center justify-center text-xs font-bold text-secondary-400 hover:text-secondary-300 transition-all cursor-pointer"
-      :title="operatorTitles[currentOperator]"
+      :title="configs[currentOperator].title"
       @click="cycleOperator"
     >
-      {{ operatorSymbols[currentOperator] }}
+      {{ configs[currentOperator].symbol }}
     </button>
 
     <!-- 星级评分区域：0-5 星统一用 RatingIcon 渲染 -->
@@ -38,59 +38,124 @@
   </div>
 </template>
 
+<script lang="ts">
+import useStorage from "../composables/useStorage";
+
+// 评分过滤器支持的操作符类型
+export type Operator = "=" | ">=" | "<=";
+
+// 使用 localStorage 记住用户上次选择的评分操作模式
+const { model: currentOperator } = useStorage<Operator>(
+  localStorage,
+  "rating_filter_operator_d8615b",
+  () => "=",
+);
+</script>
+
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { watch } from "vue";
 import RatingIcon from "./RatingIcon.vue";
 
-const props = withDefaults(
-  defineProps<{
-    modelValue?: number[];
-  }>(),
-  {
-    modelValue: () => [],
+// 双向绑定当前的评分过滤值
+const modelValue = defineModel<number[]>({ default: () => [] });
+
+interface OperatorConfig {
+  symbol: string;
+  title: string;
+  // 处理在某颗星上点击，返回新的选值数组
+  handleClick: (currentVal: number[], star: number) => number[];
+  // 获取当前数组下该模式所对应的基准星级（用于切换模式时的数据迁移）
+  getBaseStar: (currentVal: number[]) => number | undefined;
+  // 给定一个基准星级，返回该模式下应当生成的数组值
+  getValuesForStar: (star: number) => number[];
+}
+
+// #region 各项操作符的配置定义
+const configs: Record<Operator, OperatorConfig> = {
+  "=": {
+    symbol: "=",
+    title: "模式: 精确匹配 (支持多选)",
+    handleClick(currentVal, star) {
+      const idx = currentVal.indexOf(star);
+      if (idx >= 0) {
+        return currentVal.filter((v) => v !== star);
+      } else {
+        return [...currentVal, star].sort((a, b) => a - b);
+      }
+    },
+    getBaseStar(currentVal) {
+      return currentVal.length > 0 ? currentVal[0] : undefined;
+    },
+    getValuesForStar(star) {
+      return [star];
+    },
   },
-);
-
-const emit = defineEmits<(e: "update:modelValue", value: number[]) => void>();
-
-type Operator = "=" | ">=" | "<=" | "!=";
-
-const currentOperator = ref<Operator>("=");
-const selectedValue = ref<number | null>(null); // 用于 >=, <=, != 单选模式
-const selectedValues = ref<number[]>([]); // 用于 = 模式
-
-const operatorSymbols: Record<Operator, string> = {
-  "=": "=",
-  ">=": "≥",
-  "<=": "≤",
-  "!=": "≠",
+  ">=": {
+    symbol: "≥",
+    title: "模式: 大于等于",
+    handleClick(currentVal, star) {
+      const expected = configs[">="].getValuesForStar(star);
+      if (
+        currentVal.length === expected.length &&
+        currentVal.every((v, i) => v === expected[i])
+      ) {
+        return [];
+      }
+      return expected;
+    },
+    getBaseStar(currentVal) {
+      if (currentVal.length > 0 && currentVal.includes(5)) {
+        const min = Math.min(...currentVal);
+        if (currentVal.length === 5 - min + 1) {
+          return min;
+        }
+      }
+      return undefined;
+    },
+    getValuesForStar(star) {
+      const res: number[] = [];
+      for (let i = star; i <= 5; i++) {
+        res.push(i);
+      }
+      return res;
+    },
+  },
+  "<=": {
+    symbol: "≤",
+    title: "模式: 小于等于",
+    handleClick(currentVal, star) {
+      const expected = configs["<="].getValuesForStar(star);
+      if (
+        currentVal.length === expected.length &&
+        currentVal.every((v, i) => v === expected[i])
+      ) {
+        return [];
+      }
+      return expected;
+    },
+    getBaseStar(currentVal) {
+      if (currentVal.length > 0 && currentVal.includes(0)) {
+        const max = Math.max(...currentVal);
+        if (currentVal.length === max + 1) {
+          return max;
+        }
+      }
+      return undefined;
+    },
+    getValuesForStar(star) {
+      const res: number[] = [];
+      for (let i = 0; i <= star; i++) {
+        res.push(i);
+      }
+      return res;
+    },
+  },
 };
+// #endregion
 
-const operatorTitles: Record<Operator, string> = {
-  "=": "模式: 精确匹配 (支持多选)",
-  ">=": "模式: 大于等于",
-  "<=": "模式: 小于等于",
-  "!=": "模式: 不等于",
-};
-
-// 判断特定的星是否处于激活态
+// 判断特定的星是否处于激活态，直接检查是否包含在传入的评分数组中
 function isStarActive(star: number): boolean {
-  if (currentOperator.value === "=") {
-    return selectedValues.value.includes(star);
-  }
-  if (selectedValue.value === null) {
-    return false;
-  }
-  switch (currentOperator.value) {
-    case ">=":
-      return star >= selectedValue.value;
-    case "<=":
-      return star <= selectedValue.value;
-    case "!=":
-      return star !== selectedValue.value;
-    default:
-      return false;
-  }
+  return modelValue.value.includes(star);
 }
 
 // 获取各个星星的悬浮提示文案
@@ -98,136 +163,76 @@ function getStarTooltip(star: number): string {
   if (currentOperator.value === "=") {
     return star === 0 ? "无评分 (0 星)" : `${star} 星`;
   }
-  return star === 0
-    ? `${operatorSymbols[currentOperator.value]} 无评分`
-    : `${operatorSymbols[currentOperator.value]} ${star} 星`;
+  const symbol = configs[currentOperator.value].symbol;
+  return star === 0 ? `${symbol} 无评分` : `${symbol} ${star} 星`;
 }
 
 // 切换操作符
 function cycleOperator() {
-  const ops: Operator[] = ["=", ">=", "<=", "!="];
+  const ops: Operator[] = ["=", ">=", "<="];
   const idx = ops.indexOf(currentOperator.value);
-  currentOperator.value = ops[(idx + 1) % ops.length];
+  const nextOp = ops[(idx + 1) % ops.length];
 
-  // 切换操作符后，重新校准选值并发出更新
-  syncAndEmit();
+  // 尝试从当前选中值中提取出基准星级，用于新模式的初始化
+  const baseStar = configs[currentOperator.value].getBaseStar(modelValue.value);
+
+  // 切换操作符
+  currentOperator.value = nextOp;
+
+  // 如果提取到了基准星级，则将选值转换为新模式下的对应范围，否则清空选值
+  if (baseStar !== undefined) {
+    modelValue.value = configs[nextOp].getValuesForStar(baseStar);
+  } else {
+    modelValue.value = [];
+  }
 }
 
 // 点击星星的处理逻辑
 function handleStarClick(star: number) {
-  if (currentOperator.value === "=") {
-    // 多选切换
-    const idx = selectedValues.value.indexOf(star);
-    if (idx >= 0) {
-      selectedValues.value.splice(idx, 1);
-    } else {
-      selectedValues.value.push(star);
-    }
-  } else {
-    // 单选范围切换
-    if (selectedValue.value === star) {
-      selectedValue.value = null; // 再次点击代表取消选择
-    } else {
-      selectedValue.value = star;
-    }
-  }
-
-  syncAndEmit();
+  const config = configs[currentOperator.value];
+  modelValue.value = config.handleClick(modelValue.value, star);
 }
 
-let lastEmitted = "[]";
+// #region 状态同步与事件触发
 
-// 解析外部传入的 modelValue 从而同步组件的内部状态
-function parsePropsValue(val: number[]) {
-  if (!val || val.length === 0) {
-    selectedValue.value = null;
-    selectedValues.value = [];
-    currentOperator.value = "=";
-    return;
+// 根据传入值自动反向推导最贴切的操作符
+function inferOperator(val: number[]): Operator | undefined {
+  if (val.length === 0) return undefined;
+
+  const sortedVal = [...val].sort((a, b) => a - b);
+
+  if (sortedVal.length === 1) {
+    return "=";
   }
 
-  const sorted = [...val].sort((a, b) => a - b);
-
-  // 单元素数组直接解析为精确匹配 '=' 的多选单选，保持界面简洁直观
-  if (sorted.length === 1) {
-    currentOperator.value = "=";
-    selectedValues.value = [...sorted];
-    selectedValue.value = null;
-    return;
-  }
-
-  const min = sorted[0];
-  const max = sorted[sorted.length - 1];
-  const isContinuous =
-    sorted.length === max - min + 1 && sorted.every((v, i) => v === min + i);
-
-  if (isContinuous) {
-    if (max === 5) {
-      currentOperator.value = ">=";
-      selectedValue.value = min;
-      selectedValues.value = [];
-      return;
-    }
-    if (min === 0) {
-      currentOperator.value = "<=";
-      selectedValue.value = max;
-      selectedValues.value = [];
-      return;
-    }
-  }
-
-  if (sorted.length === 5) {
-    const all = [0, 1, 2, 3, 4, 5];
-    const missing = all.filter((x) => !sorted.includes(x));
-    if (missing.length === 1) {
-      currentOperator.value = "!=";
-      selectedValue.value = missing[0];
-      selectedValues.value = [];
-      return;
-    }
-  }
-
-  currentOperator.value = "=";
-  selectedValues.value = [...sorted];
-  selectedValue.value = null;
-}
-
-// 同步状态并向父组件触发 v-model 更新
-function syncAndEmit() {
-  let result: number[] = [];
-
-  if (currentOperator.value === "=") {
-    result = [...selectedValues.value];
-  } else if (selectedValue.value !== null) {
-    const val = selectedValue.value;
-    if (currentOperator.value === ">=") {
-      for (let i = val; i <= 5; i++) result.push(i);
-    } else if (currentOperator.value === "<=") {
-      for (let i = 0; i <= val; i++) result.push(i);
-    } else if (currentOperator.value === "!=") {
-      for (let i = 0; i <= 5; i++) {
-        if (i !== val) result.push(i);
+  const candidates: Operator[] = [">=", "<="];
+  for (const op of candidates) {
+    const baseStar = configs[op].getBaseStar(sortedVal);
+    if (baseStar !== undefined) {
+      const expected = configs[op].getValuesForStar(baseStar);
+      if (
+        sortedVal.length === expected.length &&
+        sortedVal.every((v, i) => v === expected[i])
+      ) {
+        return op;
       }
     }
   }
 
-  const resultStr = JSON.stringify(result);
-  lastEmitted = resultStr;
-  emit("update:modelValue", result);
+  return "=";
 }
 
 // 监听外部清空或修改事件，同步组件内部状态
 watch(
-  () => props.modelValue,
+  modelValue,
   (newVal) => {
-    const newValStr = JSON.stringify(newVal || []);
-    if (newValStr === lastEmitted) {
-      return;
+    const inferred = inferOperator(newVal);
+    if (inferred !== undefined) {
+      currentOperator.value = inferred;
     }
-
-    parsePropsValue(newVal || []);
-    lastEmitted = newValStr;
   },
   { deep: true, immediate: true },
 );
+
+// #endregion
 </script>
