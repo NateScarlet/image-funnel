@@ -4,7 +4,7 @@
   >
     <!-- 顶部导航栏 -->
     <header
-      class="flex-none bg-primary-850/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-30"
+      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-30"
     >
       <div
         class="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3"
@@ -114,7 +114,7 @@
             :class="[
               hasActiveFilters
                 ? 'bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer'
-                : 'bg-primary-850 border-primary-750 text-primary-500 cursor-not-allowed opacity-40',
+                : 'bg-primary-900 border-primary-800 text-primary-500 cursor-not-allowed opacity-40',
             ]"
             :disabled="!hasActiveFilters"
             @click="clearFilters"
@@ -156,6 +156,114 @@
               {{ getDirName(subDir.relPath) }}
             </span>
           </button>
+        </div>
+      </section>
+
+      <!-- 笔记列表容器区 -->
+      <section
+        class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
+      >
+        <div
+          class="flex items-center justify-between border-b border-primary-700/50 pb-3"
+        >
+          <h2
+            class="text-sm font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
+          >
+            <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
+              <path :d="mdiNoteTextOutline" fill="currentColor" />
+            </svg>
+            笔记列表 ({{ memos.length }} 个)
+          </h2>
+          <!-- 隐藏/排除隐藏笔记切换按钮 -->
+          <button
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all"
+            :class="[
+              showHiddenMemos
+                ? 'bg-secondary-500/20 border-secondary-500/40 text-secondary-300 hover:bg-secondary-500/30'
+                : 'bg-primary-800 border-primary-700 text-primary-400 hover:text-primary-300 hover:bg-primary-700',
+            ]"
+            @click="showHiddenMemos = !showHiddenMemos"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path
+                :d="showHiddenMemos ? mdiEye : mdiEyeOff"
+                fill="currentColor"
+              />
+            </svg>
+            <span>{{ showHiddenMemos ? "显示隐藏笔记" : "排除隐藏笔记" }}</span>
+          </button>
+        </div>
+
+        <!-- 暂无笔记状态 -->
+        <div
+          v-if="memos.length === 0"
+          class="py-6 text-center text-primary-500 text-sm italic"
+        >
+          暂无任何笔记
+        </div>
+
+        <!-- 笔记列表项 -->
+        <div v-else class="space-y-2 max-h-60 overflow-y-auto pr-1">
+          <div
+            v-for="memoItem in memos"
+            :key="memoItem.id"
+            class="flex items-center justify-between p-3 rounded-xl bg-primary-800/20 hover:bg-primary-800/60 border border-primary-800/40 hover:border-secondary-500/30 transition-all duration-200 group cursor-pointer"
+            @click="editMemo(memoItem)"
+          >
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <svg
+                class="w-4 h-4 text-primary-400 group-hover:text-secondary-400 transition-colors shrink-0"
+                viewBox="0 0 24 24"
+              >
+                <path :d="mdiNoteTextOutline" fill="currentColor" />
+              </svg>
+              <!-- 列表显示笔记关联的文件名与正文内容，单行 truncate -->
+              <span
+                class="text-[10px] text-primary-400 shrink-0 bg-primary-800/60 px-1.5 py-0.5 rounded border border-primary-700/50 font-mono select-none"
+              >
+                {{ memoItem.title }}
+              </span>
+              <span
+                class="text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium"
+              >
+                {{ memoItem.content || "（空白笔记内容，点击编辑）" }}
+              </span>
+              <!-- 如果是隐藏笔记，显示标记 -->
+              <span
+                v-if="memoItem.hidden"
+                class="px-1.5 py-0.5 text-[10px] bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
+                title="此笔记已通过 frontmatter 隐藏"
+              >
+                <svg class="w-3 h-3" viewBox="0 0 24 24">
+                  <path :d="mdiEyeOff" fill="currentColor" />
+                </svg>
+                已隐藏
+              </span>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <!-- 一键切换隐藏状态按钮 -->
+              <button
+                class="p-1.5 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
+                :title="memoItem.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
+                @click.stop="toggleMemoHidden(memoItem)"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path
+                    :d="memoItem.hidden ? mdiEye : mdiEyeOff"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <div
+                class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1"
+              >
+                <span>编辑</span>
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path :d="mdiChevronRight" fill="currentColor" />
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -272,7 +380,7 @@
       >
         <button
           :disabled="loading"
-          class="px-6 py-2.5 bg-primary-800 hover:bg-primary-750 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
+          class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
           @click="loadMore"
         >
           <!-- 加载中动画 -->
@@ -371,6 +479,13 @@
         </div>
       </div>
     </Transition>
+
+    <!-- 备忘录/笔记编辑对话框 -->
+    <MemoEditorDialog
+      v-if="selectedMemo"
+      v-model="isMemoEditorOpen"
+      :memo="selectedMemo"
+    />
   </div>
 </template>
 
@@ -388,9 +503,13 @@ import {
   mdiStar,
   mdiUndo,
   mdiLoading,
+  mdiNoteTextOutline,
+  mdiEye,
+  mdiEyeOff,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import useSubscription from "../graphql/utils/useSubscription";
+import mutate from "../graphql/utils/mutate";
 import { PRESET_COLORS } from "../composables/useImageLabel";
 import useLiveConnection from "../composables/useLiveConnection";
 import useRelayConnection from "../composables/useRelayConnection";
@@ -399,11 +518,17 @@ import {
   BrowseImagesDocument,
   ImageSavedDocument,
   ImageDeletedDocument,
+  BrowseMemosDocument,
+  MemoSavedDocument,
+  UpdateMemoDocument,
   type ImageFragment,
   type ImageFiltersInput,
+  type MemoFragment,
+  type MemoFiltersInput,
 } from "../graphql/generated";
 import ImageViewer from "../components/ImageViewer.vue";
 import RatingFilter from "../components/RatingFilter.vue";
+import MemoEditorDialog from "../components/MemoEditorDialog.vue";
 
 // #region 路由参数与导航
 const route = useRoute();
@@ -546,6 +671,147 @@ function loadMore() {
 }
 // #endregion
 
+// #region 分页获取备忘录/笔记
+const showHiddenMemos = ref(false);
+const selectedMemo = ref<MemoFragment | null>(null);
+const isMemoEditorOpen = ref(false);
+
+const memosVariables = computed(() => {
+  const filterBy: MemoFiltersInput = {
+    directoryId: [currentDirectoryId.value],
+  };
+  if (!showHiddenMemos.value) {
+    filterBy.hidden = false;
+  }
+  return {
+    id: currentDirectoryId.value,
+    filterBy,
+    first: 100,
+    after: null,
+  };
+});
+
+const { data: memosData, query: memosQuery } = useQuery(BrowseMemosDocument, {
+  variables: () => memosVariables.value,
+  loadingCount,
+});
+
+const memosConnection = useRelayConnection(
+  () =>
+    memosData.value?.node?.__typename === "Directory"
+      ? memosData.value.node.memos
+      : undefined,
+  () => memosQuery,
+);
+
+const {
+  nodes: memos,
+  reset: resetMemos,
+  onSaved: onMemoSaved,
+  onDeleted: onMemoDeleted,
+} = useLiveConnection(() => memosConnection.nodes.value, {
+  filter: (m) => {
+    if (!showHiddenMemos.value && m.hidden) {
+      return false;
+    }
+    return true;
+  },
+  onNodeDidLeave: (m) => {
+    onMemoDeleted(m);
+  },
+});
+
+// 监听目录ID或显示隐藏开关改变，重置备忘录并重新查询
+watch(
+  [currentDirectoryId, showHiddenMemos],
+  () => {
+    resetMemos();
+    memosQuery.refetch({ ...memosVariables.value, after: null });
+  },
+  { deep: true },
+);
+
+function editMemo(memoItem: MemoFragment) {
+  selectedMemo.value = memoItem;
+  isMemoEditorOpen.value = true;
+}
+
+// 解析并切换 frontmatter 中的隐藏状态值
+function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
+  // 统一换行符，同时检查原始内容是否使用 CRLF
+  const isCRLF = raw.includes("\r\n");
+  const normalized = raw.replace(/\r\n/g, "\n");
+
+  if (normalized.startsWith("---\n")) {
+    const parts = normalized.split("---\n");
+    if (parts.length >= 3) {
+      // 说明具有合规的 frontmatter 格式 (parts[0] 为空，parts[1] 为 frontmatter 内容)
+      const frontmatter = parts[1];
+      const body = parts.slice(2).join("---\n");
+
+      const lines = frontmatter.split("\n");
+      let found = false;
+      const newLines = lines.map((line) => {
+        const trimmed = line.trim();
+        if (trimmed === "" || trimmed.startsWith("#")) {
+          return line;
+        }
+        const colonIndex = line.indexOf(":");
+        if (colonIndex !== -1) {
+          const key = line.slice(0, colonIndex).trim().toLowerCase();
+          if (key === "hidden" || key === "hide") {
+            found = true;
+            // 保持原缩进与键的原始拼写，仅更新布尔值
+            const indent = line.slice(0, line.indexOf(line.trim()));
+            return `${indent}${line.slice(0, colonIndex).trim()}: ${newHidden}`;
+          }
+        }
+        return line;
+      });
+
+      if (!found) {
+        // 如果没有找到 hidden/hide 字段，则将其追加至 frontmatter 尾部
+        if (
+          newLines.length > 0 &&
+          newLines[newLines.length - 1].trim() === ""
+        ) {
+          newLines[newLines.length - 1] = `hidden: ${newHidden}`;
+          newLines.push("");
+        } else {
+          newLines.push(`hidden: ${newHidden}`);
+        }
+      }
+
+      const newFrontmatter = newLines.join("\n");
+      const result = `---\n${newFrontmatter}---\n${body}`;
+      return isCRLF ? result.replace(/\n/g, "\r\n") : result;
+    }
+  }
+
+  // 没有 frontmatter 时，直接在头部生成一个新的 frontmatter 块
+  const newFrontmatter = `---\nhidden: ${newHidden}\n---\n`;
+  const result = newFrontmatter + normalized;
+  return isCRLF ? result.replace(/\n/g, "\r\n") : result;
+}
+
+// 切换备忘录/笔记的隐藏状态，并触发 Mutation 请求保存
+async function toggleMemoHidden(memoItem: MemoFragment) {
+  const newHidden = !memoItem.hidden;
+  const newRawContent = toggleFrontmatterHidden(memoItem.rawContent, newHidden);
+
+  try {
+    await mutate(UpdateMemoDocument, {
+      variables: {
+        id: memoItem.id,
+        content: newRawContent,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to toggle memo hidden:", err);
+  }
+}
+// #endregion
+
 // #region 订阅文件变更实现增量实时数据同步
 useSubscription(ImageSavedDocument, {
   variables: () => ({
@@ -571,6 +837,20 @@ useSubscription(ImageDeletedDocument, {
     const deletedImage = result.data?.imageDeleted;
     if (deletedImage) {
       onDeleted({ id: deletedImage.id } as ImageFragment);
+    }
+  },
+});
+
+useSubscription(MemoSavedDocument, {
+  variables: () => ({
+    filterBy: currentDirectoryId.value
+      ? { directoryId: [currentDirectoryId.value] }
+      : null,
+  }),
+  onNext: (result) => {
+    const savedMemo = result.data?.memoSaved;
+    if (savedMemo) {
+      onMemoSaved(savedMemo);
     }
   },
 });

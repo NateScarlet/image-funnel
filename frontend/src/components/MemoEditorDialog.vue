@@ -50,7 +50,9 @@
                 >
                   <path :d="mdiNoteTextOutline" fill="currentColor" />
                 </svg>
-                <span class="short:text-xs">图片备注</span>
+                <span class="short:text-xs truncate" :title="memo.title">
+                  编辑笔记 ({{ memo.title }})
+                </span>
               </h3>
               <button
                 class="p-2 sm:p-3 short:p-1 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95"
@@ -99,14 +101,18 @@ defineProps<{
 
 const editor = useTemplateRef<InstanceType<typeof MemoEditor>>("editor");
 
-watch(modelValue, (val) => {
-  if (val) {
-    document.body.style.overflow = "hidden";
-    isVisible.value = true;
-  } else {
-    document.body.style.overflow = "";
-  }
-});
+watch(
+  modelValue,
+  (val) => {
+    if (val) {
+      document.body.style.overflow = "hidden";
+      isVisible.value = true;
+    } else {
+      document.body.style.overflow = "";
+    }
+  },
+  { immediate: true },
+);
 
 function close() {
   editor.value?.flush();

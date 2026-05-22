@@ -4,7 +4,7 @@ import useSubscription from "@/graphql/utils/useSubscription";
 import mutate from "@/graphql/utils/mutate";
 import {
   MemoDocument,
-  MemoUpdatedDocument,
+  MemoSavedDocument,
   UpdateMemoDocument,
   type MemoQuery,
 } from "@/graphql/generated";
@@ -23,11 +23,11 @@ export default function useMemo(id: MaybeRefOrGetter<string | undefined>) {
   });
 
   // 监听外部更新
-  useSubscription(MemoUpdatedDocument, {
+  useSubscription(MemoSavedDocument, {
     variables: () => {
       const v = toValue(id);
       if (!v) return undefined;
-      return { id: v };
+      return { filterBy: { id: [v] } };
     },
   });
 

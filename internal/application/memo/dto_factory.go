@@ -18,10 +18,17 @@ func NewDTOFactory(rootDir string) *DTOFactory {
 }
 
 func (f *DTOFactory) New(m *memo.Memo) *shared.MemoDTO {
+	title := filepath.Base(m.AbsPath())
+	if relPath, err := memo.DecodeID(m.ID()); err == nil {
+		title = filepath.Base(relPath)
+	}
 	return &shared.MemoDTO{
-		ID:      m.ID(),
-		AbsPath: m.AbsPath(),
-		Content: m.Content(),
+		ID:         m.ID(),
+		Title:      title,
+		AbsPath:    m.AbsPath(),
+		Content:    m.Content(),
+		RawContent: m.RawContent(),
+		Hidden:     m.Hidden(),
 	}
 }
 
@@ -31,8 +38,11 @@ func (f *DTOFactory) NewEmpty(id scalar.ID) (*shared.MemoDTO, error) {
 		return nil, err
 	}
 	return &shared.MemoDTO{
-		ID:      id,
-		AbsPath: filepath.Join(f.rootDir, relPath),
-		Content: "",
+		ID:         id,
+		Title:      filepath.Base(relPath),
+		AbsPath:    filepath.Join(f.rootDir, relPath),
+		Content:    "",
+		RawContent: "",
+		Hidden:     false,
 	}, nil
 }

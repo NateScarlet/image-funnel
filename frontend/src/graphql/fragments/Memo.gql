@@ -1,4 +1,7 @@
 fragment Memo on Memo {
   id
+  title
   content
+  rawContent
+  hidden
 }

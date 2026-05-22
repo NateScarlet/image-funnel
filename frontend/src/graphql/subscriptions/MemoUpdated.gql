@@ -1,5 +1,0 @@
-subscription MemoUpdated($id: ID!) {
-  memoUpdated(id: $id) {
-    ...Memo
-  }
-}

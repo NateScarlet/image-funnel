@@ -7,6 +7,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/memo"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -216,6 +217,10 @@ func (s *FakeScanner) ScanDirectories(ctx context.Context, relPath string) iter.
 
 func (s *FakeScanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
 	return &directory.DirectoryStats{}, nil
+}
+
+func (s *FakeScanner) ScanMemos(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
+	return func(yield func(*memo.Memo, error) bool) {}
 }
 
 // #endregion

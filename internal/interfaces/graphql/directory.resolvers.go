@@ -29,6 +29,15 @@ func (r *directoryResolver) Images(ctx context.Context, obj *shared.DirectoryDTO
 	return r.app.Images(ctx, obj.ID, filters, first, after)
 }
 
+// Memos is the resolver for the memos field.
+func (r *directoryResolver) Memos(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.MemoFilters, first *int, after *string) (*shared.MemoConnectionDTO, error) {
+	var filters shared.MemoFilters
+	if filterBy != nil {
+		filters = *filterBy
+	}
+	return r.app.Memos(ctx, obj.ID, filters, first, after)
+}
+
 // Directory returns DirectoryResolver implementation.
 func (r *Resolver) Directory() DirectoryResolver { return &directoryResolver{r} }
 

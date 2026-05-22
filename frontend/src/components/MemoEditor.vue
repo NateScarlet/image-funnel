@@ -26,7 +26,7 @@ const content = computed({
     if (contentBuffer.value && contentBuffer.value.id === props.memo.id) {
       return contentBuffer.value.content;
     }
-    return memo.value?.content ?? props.memo.content;
+    return memo.value?.rawContent ?? props.memo.rawContent;
   },
   set: (v) => {
     contentBuffer.value = { id: props.memo.id, content: v };
@@ -70,7 +70,7 @@ const currentStatus = computed(() => {
 const performSave = async (newContent: string, targetId: string) => {
   if (targetId !== props.memo.id) return;
 
-  if (newContent === (memo.value?.content ?? props.memo.content)) {
+  if (newContent === (memo.value?.rawContent ?? props.memo.rawContent)) {
     if (contentBuffer.value?.id === targetId) {
       contentBuffer.value = undefined;
     }

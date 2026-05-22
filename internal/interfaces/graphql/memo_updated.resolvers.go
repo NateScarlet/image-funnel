@@ -15,3 +15,8 @@ import (
 func (r *subscriptionResolver) MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error) {
 	return SubscriptionFromSeq(ctx, r.app.MemoUpdated(ctx, id))
 }
+
+// MemoSaved is the resolver for the memoSaved field.
+func (r *subscriptionResolver) MemoSaved(ctx context.Context, filterBy *shared.MemoFilters) (<-chan *shared.MemoDTO, error) {
+	return SubscriptionFromSeq(ctx, r.app.MemoSaved(ctx, filterBy))
+}

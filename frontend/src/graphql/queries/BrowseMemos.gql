@@ -1,0 +1,29 @@
+query BrowseMemos(
+  $id: ID!
+  $filterBy: MemoFiltersInput
+  $first: Int
+  $after: String
+) {
+  node(id: $id) {
+    id
+    ... on Directory {
+      memos(filterBy: $filterBy, first: $first, after: $after) {
+        edges {
+          cursor
+          node {
+            ...Memo
+          }
+        }
+        nodes {
+          ...Memo
+        }
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
+      }
+    }
+  }
+}

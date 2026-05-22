@@ -11,6 +11,11 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
     first: Int
     after: String
   ): ImageConnection! @goField(forceResolver: true)
+  memos(
+    filterBy: MemoFiltersInput
+    first: Int
+    after: String
+  ): MemoConnection! @goField(forceResolver: true)
 }
 
 type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {

@@ -73,6 +73,7 @@ type ComplexityRoot struct {
 		Directories func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Images      func(childComplexity int, filterBy *shared.ImageFilters, first *int, after *string) int
+		Memos       func(childComplexity int, filterBy *shared.MemoFilters, first *int, after *string) int
 		ParentID    func(childComplexity int) int
 		RelPath     func(childComplexity int) int
 		Root        func(childComplexity int) int
@@ -127,8 +128,22 @@ type ComplexityRoot struct {
 	}
 
 	Memo struct {
-		Content func(childComplexity int) int
-		ID      func(childComplexity int) int
+		Content    func(childComplexity int) int
+		Hidden     func(childComplexity int) int
+		ID         func(childComplexity int) int
+		RawContent func(childComplexity int) int
+		Title      func(childComplexity int) int
+	}
+
+	MemoConnection struct {
+		Edges    func(childComplexity int) int
+		Nodes    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	MemoEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 
 	Meta struct {
@@ -199,6 +214,7 @@ type ComplexityRoot struct {
 		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
 		ImageDeleted     func(childComplexity int, filterBy *shared.ImageFilters) int
 		ImageSaved       func(childComplexity int, filterBy *shared.ImageFilters) int
+		MemoSaved        func(childComplexity int, filterBy *shared.MemoFilters) int
 		MemoUpdated      func(childComplexity int, id scalar.ID) int
 		SessionUpdated   func(childComplexity int, id scalar.ID) int
 	}
@@ -224,6 +240,7 @@ type DirectoryResolver interface {
 	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 	Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error)
+	Memos(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.MemoFilters, first *int, after *string) (*shared.MemoConnectionDTO, error)
 }
 type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
@@ -265,6 +282,7 @@ type SubscriptionResolver interface {
 	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
 	MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error)
+	MemoSaved(ctx context.Context, filterBy *shared.MemoFilters) (<-chan *shared.MemoDTO, error)
 }
 
 type executableSchema struct {
@@ -348,6 +366,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.Images(childComplexity, args["filterBy"].(*shared.ImageFilters), args["first"].(*int), args["after"].(*string)), true
+	case "Directory.memos":
+		if e.complexity.Directory.Memos == nil {
+			break
+		}
+
+		args, err := ec.field_Directory_memos_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Directory.Memos(childComplexity, args["filterBy"].(*shared.MemoFilters), args["first"].(*int), args["after"].(*string)), true
 	case "Directory.parentId":
 		if e.complexity.Directory.ParentID == nil {
 			break
@@ -564,12 +593,62 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Memo.Content(childComplexity), true
+	case "Memo.hidden":
+		if e.complexity.Memo.Hidden == nil {
+			break
+		}
+
+		return e.complexity.Memo.Hidden(childComplexity), true
 	case "Memo.id":
 		if e.complexity.Memo.ID == nil {
 			break
 		}
 
 		return e.complexity.Memo.ID(childComplexity), true
+	case "Memo.rawContent":
+		if e.complexity.Memo.RawContent == nil {
+			break
+		}
+
+		return e.complexity.Memo.RawContent(childComplexity), true
+	case "Memo.title":
+		if e.complexity.Memo.Title == nil {
+			break
+		}
+
+		return e.complexity.Memo.Title(childComplexity), true
+
+	case "MemoConnection.edges":
+		if e.complexity.MemoConnection.Edges == nil {
+			break
+		}
+
+		return e.complexity.MemoConnection.Edges(childComplexity), true
+	case "MemoConnection.nodes":
+		if e.complexity.MemoConnection.Nodes == nil {
+			break
+		}
+
+		return e.complexity.MemoConnection.Nodes(childComplexity), true
+	case "MemoConnection.pageInfo":
+		if e.complexity.MemoConnection.PageInfo == nil {
+			break
+		}
+
+		return e.complexity.MemoConnection.PageInfo(childComplexity), true
+
+	case "MemoEdge.cursor":
+		if e.complexity.MemoEdge.Cursor == nil {
+			break
+		}
+
+		return e.complexity.MemoEdge.Cursor(childComplexity), true
+	case "MemoEdge.node":
+		if e.complexity.MemoEdge.Node == nil {
+			break
+		}
+
+		return e.complexity.MemoEdge.Node(childComplexity), true
 
 	case "Meta.rootAbsPath":
 		if e.complexity.Meta.RootAbsPath == nil {
@@ -929,6 +1008,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.ImageSaved(childComplexity, args["filterBy"].(*shared.ImageFilters)), true
+	case "Subscription.memoSaved":
+		if e.complexity.Subscription.MemoSaved == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_memoSaved_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.MemoSaved(childComplexity, args["filterBy"].(*shared.MemoFilters)), true
 	case "Subscription.memoUpdated":
 		if e.complexity.Subscription.MemoUpdated == nil {
 			break
@@ -1010,6 +1100,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
+		ec.unmarshalInputMemoFiltersInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateSessionInput,
@@ -1159,6 +1250,11 @@ directive @goField(
     first: Int
     after: String
   ): ImageConnection! @goField(forceResolver: true)
+  memos(
+    filterBy: MemoFiltersInput
+    first: Int
+    after: String
+  ): MemoConnection! @goField(forceResolver: true)
 }
 
 type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
@@ -1231,7 +1327,30 @@ input ImageFiltersInput
 """
 type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   id: ID!
+  title: String!
   content: String!
+  rawContent: String!
+  hidden: Boolean!
+}
+
+type MemoConnection @goModel(model: "main/internal/shared.MemoConnectionDTO") {
+  edges: [MemoEdge!]!
+  nodes: [Memo!]!
+  pageInfo: PageInfo!
+}
+
+type MemoEdge @goModel(model: "main/internal/shared.MemoEdgeDTO") {
+  node: Memo!
+  cursor: String!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/memo_filters.graphql", Input: `input MemoFiltersInput @goModel(model: "main/internal/shared.MemoFilters") {
+  "按备忘录ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
@@ -1341,9 +1460,14 @@ type DeletedImage {
 `, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/memo_updated.graphql", Input: `extend type Subscription {
   """
-  订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。
+  订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。(已废弃，请使用 memoSaved)
   """
-  memoUpdated(id: ID!): Memo!
+  memoUpdated(id: ID!): Memo! @deprecated(reason: "use memoSaved")
+
+  """
+  按过滤器订阅备忘录的新增、更新与删除事件
+  """
+  memoSaved(filterBy: MemoFiltersInput): Memo!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
@@ -1465,6 +1589,27 @@ func (ec *executionContext) field_Directory_images_args(ctx context.Context, raw
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Directory_memos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -1677,6 +1822,17 @@ func (ec *executionContext) field_Subscription_imageSaved_args(ctx context.Conte
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_memoSaved_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -2228,6 +2384,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_directories(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -2278,6 +2436,55 @@ func (ec *executionContext) fieldContext_Directory_images(ctx context.Context, f
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Directory_images_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Directory_memos(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_memos,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Directory().Memos(ctx, obj, fc.Args["filterBy"].(*shared.MemoFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNMemoConnection2ᚖmainᚋinternalᚋsharedᚐMemoConnectionDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_memos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_MemoConnection_edges(ctx, field)
+			case "nodes":
+				return ec.fieldContext_MemoConnection_nodes(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_MemoConnection_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MemoConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Directory_memos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -2762,8 +2969,14 @@ func (ec *executionContext) fieldContext_Image_memo(_ context.Context, field gra
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
 		},
@@ -3314,6 +3527,35 @@ func (ec *executionContext) fieldContext_Memo_id(_ context.Context, field graphq
 	return fc, nil
 }
 
+func (ec *executionContext) _Memo_title(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Memo_content(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3333,6 +3575,249 @@ func (ec *executionContext) _Memo_content(ctx context.Context, field graphql.Col
 func (ec *executionContext) fieldContext_Memo_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Memo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Memo_rawContent(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_rawContent,
+		func(ctx context.Context) (any, error) {
+			return obj.RawContent, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_rawContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Memo_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_hidden,
+		func(ctx context.Context) (any, error) {
+			return obj.Hidden, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNMemoEdge2ᚕᚖmainᚋinternalᚋsharedᚐMemoEdgeDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_MemoEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_MemoEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MemoEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoConnection_nodes(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoConnection_nodes,
+		func(ctx context.Context) (any, error) {
+			return obj.Nodes, nil
+		},
+		nil,
+		ec.marshalNMemo2ᚕᚖmainᚋinternalᚋsharedᚐMemoDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoConnection_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoEdge_node(ctx context.Context, field graphql.CollectedField, obj *shared.MemoEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *shared.MemoEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -3716,8 +4201,14 @@ func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
 		},
@@ -4058,6 +4549,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_directories(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -4377,6 +4870,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_directories(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -5400,6 +5895,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_directories(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -5559,8 +6056,14 @@ func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
 		},
@@ -5573,6 +6076,59 @@ func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_memoUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_memoSaved(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_memoSaved,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().MemoSaved(ctx, fc.Args["filterBy"].(*shared.MemoFilters))
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_memoSaved_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7526,6 +8082,47 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputMemoFiltersInput(ctx context.Context, obj any) (shared.MemoFilters, error) {
+	var it shared.MemoFilters
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "directoryId", "hidden"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
+		case "hidden":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hidden"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Hidden = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any) (UndoInput, error) {
 	var it UndoInput
 	asMap := map[string]any{}
@@ -7960,6 +8557,42 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._Directory_images(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "memos":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Directory_memos(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -8471,8 +9104,116 @@ func (ec *executionContext) _Memo(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "title":
+			out.Values[i] = ec._Memo_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "content":
 			out.Values[i] = ec._Memo_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rawContent":
+			out.Values[i] = ec._Memo_rawContent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hidden":
+			out.Values[i] = ec._Memo_hidden(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var memoConnectionImplementors = []string{"MemoConnection"}
+
+func (ec *executionContext) _MemoConnection(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoConnectionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, memoConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MemoConnection")
+		case "edges":
+			out.Values[i] = ec._MemoConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodes":
+			out.Values[i] = ec._MemoConnection_nodes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._MemoConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var memoEdgeImplementors = []string{"MemoEdge"}
+
+func (ec *executionContext) _MemoEdge(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoEdgeDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, memoEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MemoEdge")
+		case "node":
+			out.Values[i] = ec._MemoEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._MemoEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -9262,6 +10003,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_imageDeleted(ctx, fields[0])
 	case "memoUpdated":
 		return ec._Subscription_memoUpdated(ctx, fields[0])
+	case "memoSaved":
+		return ec._Subscription_memoSaved(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -10131,6 +10874,50 @@ func (ec *executionContext) marshalNMemo2mainᚋinternalᚋsharedᚐMemoDTO(ctx 
 	return ec._Memo(ctx, sel, &v)
 }
 
+func (ec *executionContext) marshalNMemo2ᚕᚖmainᚋinternalᚋsharedᚐMemoDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.MemoDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -10139,6 +10926,74 @@ func (ec *executionContext) marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(c
 		return graphql.Null
 	}
 	return ec._Memo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMemoConnection2mainᚋinternalᚋsharedᚐMemoConnectionDTO(ctx context.Context, sel ast.SelectionSet, v shared.MemoConnectionDTO) graphql.Marshaler {
+	return ec._MemoConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMemoConnection2ᚖmainᚋinternalᚋsharedᚐMemoConnectionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoConnectionDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MemoConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMemoEdge2ᚕᚖmainᚋinternalᚋsharedᚐMemoEdgeDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.MemoEdgeDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNMemoEdge2ᚖmainᚋinternalᚋsharedᚐMemoEdgeDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMemoEdge2ᚖmainᚋinternalᚋsharedᚐMemoEdgeDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoEdgeDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MemoEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNMeta2mainᚋinternalᚋinterfacesᚋgraphqlᚐMeta(ctx context.Context, sel ast.SelectionSet, v Meta) graphql.Marshaler {
@@ -10764,6 +11619,14 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx context.Context, v any) (*shared.MemoFilters, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputMemoFiltersInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalONode2mainᚋinternalᚋinterfacesᚋgraphqlᚐNode(ctx context.Context, sel ast.SelectionSet, v Node) graphql.Marshaler {

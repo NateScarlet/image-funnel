@@ -11,3 +11,11 @@ type ImageFilters struct {
 	Query       string
 }
 
+// MemoFilters 备忘录过滤条件
+type MemoFilters struct {
+	ID          []scalar.ID // 按备忘录ID过滤，空表示不过滤
+	DirectoryID []scalar.ID // 按所在目录ID过滤，空表示不过滤
+	Hidden      *bool       // 是否被隐藏
+}
+
+

@@ -3,5 +3,19 @@
 """
 type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   id: ID!
+  title: String!
   content: String!
+  rawContent: String!
+  hidden: Boolean!
+}
+
+type MemoConnection @goModel(model: "main/internal/shared.MemoConnectionDTO") {
+  edges: [MemoEdge!]!
+  nodes: [Memo!]!
+  pageInfo: PageInfo!
+}
+
+type MemoEdge @goModel(model: "main/internal/shared.MemoEdgeDTO") {
+  node: Memo!
+  cursor: String!
 }

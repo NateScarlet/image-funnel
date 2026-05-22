@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/memo"
 	"path/filepath"
 	"sync"
 
@@ -71,6 +72,11 @@ func (c *DirectoryStatsCache) LookupImage(ctx context.Context, relPath string) (
 // ScanDirectories 委托给底层的 Scanner
 func (c *DirectoryStatsCache) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
 	return c.underlying.ScanDirectories(ctx, relPath)
+}
+
+// ScanMemos 委托给底层的 Scanner
+func (c *DirectoryStatsCache) ScanMemos(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
+	return c.underlying.ScanMemos(ctx, relPath)
 }
 
 var _ directory.Scanner = (*DirectoryStatsCache)(nil)

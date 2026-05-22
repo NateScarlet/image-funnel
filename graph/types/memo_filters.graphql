@@ -1,0 +1,8 @@
+input MemoFiltersInput @goModel(model: "main/internal/shared.MemoFilters") {
+  "按备忘录ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
+}

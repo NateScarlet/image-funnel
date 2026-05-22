@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/memo"
 	"main/internal/infrastructure/inmem"
 	"testing"
 
@@ -27,6 +28,9 @@ func (m *mockScanner) ScanDirectories(ctx context.Context, relPath string) iter.
 func (m *mockScanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
 	m.analyzeCallCount++
 	return directory.NewDirectoryStats(10, 5, nil, map[int]int{}), nil
+}
+func (m *mockScanner) ScanMemos(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
+	return nil
 }
 
 func TestDirectoryStatsCache(t *testing.T) {

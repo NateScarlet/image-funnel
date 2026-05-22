@@ -93,9 +93,25 @@ type ImageMeta struct {
 
 // MemoDTO 备忘录数据传输对象
 type MemoDTO struct {
-	ID      scalar.ID
-	AbsPath string
-	Content string
+	ID         scalar.ID
+	Title      string
+	AbsPath    string
+	Content    string
+	RawContent string
+	Hidden     bool
+}
+
+// MemoConnectionDTO 备忘录连接数据传输对象
+type MemoConnectionDTO struct {
+	Edges    []*MemoEdgeDTO
+	Nodes    []*MemoDTO
+	PageInfo *PageInfoDTO
+}
+
+// MemoEdgeDTO 备忘录边数据传输对象
+type MemoEdgeDTO struct {
+	Node   *MemoDTO
+	Cursor string
 }
 
 // ImageConnectionDTO 图片连接数据传输对象
