@@ -62,7 +62,7 @@
               v-model="searchQuery"
               type="text"
               placeholder="搜索文件名..."
-              class="w-full pl-9 pr-4 py-1.5 bg-primary-800 border border-primary-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-secondary-500/50 focus:border-secondary-500 transition-all"
+              class="w-full pl-9 pr-4 h-[34px] bg-primary-800 border border-primary-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-secondary-500/50 focus:border-secondary-500 transition-all"
             />
             <svg
               class="w-4 h-4 text-primary-400 absolute left-3 top-1/2 -translate-y-1/2"
@@ -77,7 +77,7 @@
 
           <!-- 颜色标签过滤器 -->
           <div
-            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 py-1 rounded-lg overflow-x-auto"
+            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-[34px] rounded-lg overflow-x-auto"
           >
             <span class="text-xs text-primary-400 select-none">标签:</span>
             <div class="flex items-center gap-1">
@@ -110,7 +110,7 @@
 
           <!-- 清空过滤按钮 -->
           <button
-            class="px-2.5 py-1 text-xs border rounded-lg transition-all flex items-center gap-1"
+            class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1"
             :class="[
               hasActiveFilters
                 ? 'bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer'
