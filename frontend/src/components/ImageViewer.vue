@@ -490,7 +490,7 @@ async function handleCopy() {
   }
 }
 
-// #region 快捷键复制绝对路径
+// #region 快捷键复制
 // 复制绝对路径
 async function copyAbsoluteFilePath() {
   const textToCopy = fullFilePath.value;
@@ -508,9 +508,29 @@ async function copyAbsoluteFilePath() {
   }
 }
 
-// 绑定快捷键 Ctrl+C 复制图片绝对路径
+// 绑定快捷键 Ctrl+C 改为与界面复制相同的逻辑（优先复制工作流，没有则复制绝对路径）
 useHotkey(
   "ctrl+c",
+  async (e) => {
+    // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    await handleCopy();
+  },
+  {
+    preventDefault: false,
+    stopPropagation: false,
+    description: "复制工作流或路径",
+  },
+);
+
+// 绑定快捷键 Ctrl+Shift+C 总是直接复制路径
+useHotkey(
+  "ctrl+shift+c",
   async (e) => {
     // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
     const selection = window.getSelection()?.toString();
