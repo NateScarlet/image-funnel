@@ -159,6 +159,21 @@ func (f *FakeSessionRepo) FindByDirectory(directoryID scalar.ID) iter.Seq2[scala
 	}
 }
 
+func (f *FakeSessionRepo) LastSession(ctx context.Context, directoryID scalar.ID) (*Session, func(), error) {
+	var latest *Session
+	for _, s := range f.Sessions {
+		if s.DirectoryID() == directoryID {
+			if latest == nil || s.UpdatedAt().After(latest.UpdatedAt()) {
+				latest = s
+			}
+		}
+	}
+	if latest == nil {
+		return nil, nil, nil
+	}
+	return latest, func() {}, nil
+}
+
 // FakeEventBus is a mock implementation of EventBus.
 type FakeEventBus struct{}
 

@@ -123,6 +123,37 @@ func (r *SessionRepository) FindByDirectory(directoryID scalar.ID) iter.Seq2[sca
 	}
 }
 
+// LastSession 获取指定目录下最后更新的 Session
+// 阻塞直到该 Session 被释放
+// 返回 Session、释放函数和错误
+func (r *SessionRepository) LastSession(ctx context.Context, directoryID scalar.ID) (*session.Session, func(), error) {
+	r.mu.RLock()
+	ids := r.dirIndex[directoryID]
+	if len(ids) == 0 {
+		r.mu.RUnlock()
+		return nil, nil, nil
+	}
+
+	var latestID scalar.ID
+	var latestTime time.Time
+	for _, id := range ids {
+		if ownership, exists := r.sessions[id]; exists {
+			t := ownership.session.UpdatedAt()
+			if latestTime.IsZero() || t.After(latestTime) {
+				latestTime = t
+				latestID = id
+			}
+		}
+	}
+	r.mu.RUnlock()
+
+	if latestID.IsZero() {
+		return nil, nil, nil
+	}
+
+	return r.Acquire(ctx, latestID)
+}
+
 // cleanup 清理长时间未更新的会话
 // 注意：此方法必须在持有写锁的情况下调用
 func (r *SessionRepository) cleanup() {

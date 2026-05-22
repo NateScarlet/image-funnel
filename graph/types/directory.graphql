@@ -16,6 +16,7 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
     first: Int
     after: String
   ): MemoConnection! @goField(forceResolver: true)
+  lastSession: Session @goField(forceResolver: true)
 }
 
 type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {

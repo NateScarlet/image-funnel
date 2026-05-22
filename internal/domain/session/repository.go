@@ -21,4 +21,10 @@ type Repository interface {
 
 	// FindByDirectory 查找指定目录下的所有 Session ID
 	FindByDirectory(directoryID scalar.ID) iter.Seq2[scalar.ID, error]
+
+	// LastSession 获取指定目录下最后更新的 Session
+	// 阻塞直到该 Session 被释放
+	// 返回 Session、释放函数和错误
+	// 释放函数必须在使用完 Session 后调用，以便其他调用者可以获取访问权
+	LastSession(ctx context.Context, directoryID scalar.ID) (*Session, func(), error)
 }

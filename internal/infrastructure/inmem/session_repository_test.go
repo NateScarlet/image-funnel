@@ -114,3 +114,35 @@ func TestCleanup_SyncDirIndex(t *testing.T) {
 	}
 	assert.Equal(t, []scalar.ID{id3}, foundIDs)
 }
+
+func TestLastSession(t *testing.T) {
+	repo := NewSessionRepository()
+	dirID := scalar.ToID("dir-1")
+
+	// 1. 无会话情况
+	sess, release, err := repo.LastSession(context.Background(), dirID)
+	require.NoError(t, err)
+	assert.Nil(t, sess)
+	assert.Nil(t, release)
+
+	// 2. 创建第一个会话
+	sess1 := session.NewSession(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 0, []*image.Image{})
+	release1, err := repo.Create(sess1)
+	require.NoError(t, err)
+	release1()
+
+	// 等待一小会儿确保 UpdatedAt 有差距
+	time.Sleep(10 * time.Millisecond)
+
+	// 3. 创建第二个会话
+	sess2 := session.NewSession(scalar.ToID("s2"), dirID, &shared.ImageFilters{}, 0, []*image.Image{})
+	release2, err := repo.Create(sess2)
+	require.NoError(t, err)
+	release2()
+
+	// 验证获取最后会话（因为 sess2 是后创建/更新的，它应该是 latest）
+	latestSess, releaseLatest, err := repo.LastSession(context.Background(), dirID)
+	require.NoError(t, err)
+	defer releaseLatest()
+	assert.Equal(t, sess2.ID(), latestSess.ID())
+}

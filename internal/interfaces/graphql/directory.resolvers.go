@@ -38,6 +38,11 @@ func (r *directoryResolver) Memos(ctx context.Context, obj *shared.DirectoryDTO,
 	return r.app.Memos(ctx, obj.ID, filters, first, after)
 }
 
+// LastSession is the resolver for the lastSession field.
+func (r *directoryResolver) LastSession(ctx context.Context, obj *shared.DirectoryDTO) (*shared.SessionDTO, error) {
+	return r.app.LastSession(ctx, obj.ID)
+}
+
 // Directory returns DirectoryResolver implementation.
 func (r *Resolver) Directory() DirectoryResolver { return &directoryResolver{r} }
 

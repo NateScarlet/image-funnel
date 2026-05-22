@@ -1,9 +1,11 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import useStorage from "./useStorage";
-import type {
-  ImageFiltersInput,
-  MemoFiltersInput,
-  SessionFragment,
+import useQuery from "../graphql/utils/useQuery";
+import {
+  DirectoryLastSessionDocument,
+  type ImageFiltersInput,
+  type MemoFiltersInput,
+  type SessionFragment,
 } from "../graphql/generated";
 import optionalArray from "../utils/optionalArray";
 
@@ -130,6 +132,22 @@ export function updateLastSession(session: SessionFragment) {
 
 // #region 主钩子导出
 export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
+  // 从服务器异步查询当前目录的最新会话信息
+  const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
+    variables: () => {
+      const id = toValue(directoryId);
+      if (!id) {
+        return undefined;
+      }
+      return { id };
+    },
+  });
+
+  const serverLastSession = computed(() => {
+    const node = lastSessionData.value?.node;
+    return node?.__typename === "Directory" ? node.lastSession : undefined;
+  });
+
   function getDirState() {
     const dirId = toValue(directoryId);
     return states.value?.[dirId];
@@ -137,11 +155,29 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
   /**
    * 获取当前生效的图片筛选配置。
-   * 本地用户编辑中的筛选（browse.filterBy，即使是空对象）优先级高于上次会话保存的配置。
+   * 1. 本地临时编辑中的筛选（browse.filterBy，即使是空对象）优先级最高。
+   * 2. 本地记录的上次会话 filter 优先级第二。
+   * 3. 服务端查询到的最新会话 filter 优先级第三（多一级回退）。
    */
   function getImageFilters(): ImageFiltersInput | undefined {
     const dirState = getDirState();
-    return dirState?.browse?.filterBy || dirState?.lastSession?.filter;
+    if (dirState?.browse?.filterBy) {
+      return dirState.browse.filterBy;
+    }
+    if (dirState?.lastSession?.filter) {
+      return dirState.lastSession.filter;
+    }
+
+    const serverSess = serverLastSession.value;
+    if (serverSess?.filter) {
+      return {
+        rating: optionalArray(serverSess.filter.rating),
+        label: optionalArray(serverSess.filter.label),
+        query: serverSess.filter.query || undefined,
+      };
+    }
+
+    return undefined;
   }
 
   // 评星过滤器，默认使用上次会话设置（若未修改过任何筛选条件）

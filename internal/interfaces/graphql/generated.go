@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -73,6 +72,7 @@ type ComplexityRoot struct {
 		Directories func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Images      func(childComplexity int, filterBy *shared.ImageFilters, first *int, after *string) int
+		LastSession func(childComplexity int) int
 		Memos       func(childComplexity int, filterBy *shared.MemoFilters, first *int, after *string) int
 		ParentID    func(childComplexity int) int
 		RelPath     func(childComplexity int) int
@@ -241,6 +241,7 @@ type DirectoryResolver interface {
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 	Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error)
 	Memos(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.MemoFilters, first *int, after *string) (*shared.MemoConnectionDTO, error)
+	LastSession(ctx context.Context, obj *shared.DirectoryDTO) (*shared.SessionDTO, error)
 }
 type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
@@ -366,6 +367,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.Images(childComplexity, args["filterBy"].(*shared.ImageFilters), args["first"].(*int), args["after"].(*string)), true
+	case "Directory.lastSession":
+		if e.complexity.Directory.LastSession == nil {
+			break
+		}
+
+		return e.complexity.Directory.LastSession(childComplexity), true
 	case "Directory.memos":
 		if e.complexity.Directory.Memos == nil {
 			break
@@ -1255,6 +1262,7 @@ directive @goField(
     first: Int
     after: String
   ): MemoConnection! @goField(forceResolver: true)
+  lastSession: Session @goField(forceResolver: true)
 }
 
 type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
@@ -2386,6 +2394,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_images(ctx, field)
 			case "memos":
 				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -2487,6 +2497,71 @@ func (ec *executionContext) fieldContext_Directory_memos(ctx context.Context, fi
 	if fc.Args, err = ec.field_Directory_memos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Directory_lastSession(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_lastSession,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Directory().LastSession(ctx, obj)
+		},
+		nil,
+		ec.marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_lastSession(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "directory":
+				return ec.fieldContext_Session_directory(ctx, field)
+			case "filter":
+				return ec.fieldContext_Session_filter(ctx, field)
+			case "targetKeep":
+				return ec.fieldContext_Session_targetKeep(ctx, field)
+			case "stats":
+				return ec.fieldContext_Session_stats(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			case "canCommit":
+				return ec.fieldContext_Session_canCommit(ctx, field)
+			case "canUndo":
+				return ec.fieldContext_Session_canUndo(ctx, field)
+			case "currentIndex":
+				return ec.fieldContext_Session_currentIndex(ctx, field)
+			case "currentSize":
+				return ec.fieldContext_Session_currentSize(ctx, field)
+			case "currentRound":
+				return ec.fieldContext_Session_currentRound(ctx, field)
+			case "currentImage":
+				return ec.fieldContext_Session_currentImage(ctx, field)
+			case "nextImages":
+				return ec.fieldContext_Session_nextImages(ctx, field)
+			case "keptImages":
+				return ec.fieldContext_Session_keptImages(ctx, field)
+			case "queueActions":
+				return ec.fieldContext_Session_queueActions(ctx, field)
+			case "currentRoundActions":
+				return ec.fieldContext_Session_currentRoundActions(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -4551,6 +4626,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_images(ctx, field)
 			case "memos":
 				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -4872,6 +4949,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_images(ctx, field)
 			case "memos":
 				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -5897,6 +5976,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_images(ctx, field)
 			case "memos":
 				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
 		},
@@ -8619,6 +8700,39 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "lastSession":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Directory_lastSession(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -10667,13 +10781,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
