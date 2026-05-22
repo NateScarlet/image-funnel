@@ -1,4 +1,11 @@
-import { InMemoryCache, type NormalizedCacheObject } from "@apollo/client/core";
+import {
+  InMemoryCache,
+  type NormalizedCacheObject,
+  type Cache,
+  type Transaction,
+  type Reference,
+  type OperationVariables,
+} from "@apollo/client/core";
 import { get, set } from "idb-keyval";
 
 /**
@@ -55,14 +62,17 @@ export class PersistentCache extends InMemoryCache {
 
   // #region 重写会修改缓存的方法，触发持久化
 
-  override write(options: unknown) {
-    const result = super.write(options as never);
+  override write<
+    TData = unknown,
+    TVariables extends OperationVariables = OperationVariables,
+  >(options: Cache.WriteOptions<TData, TVariables>): Reference | undefined {
+    const result = super.write(options);
     this.save();
     return result;
   }
 
-  override evict(options: unknown): boolean {
-    const result = super.evict(options as never);
+  override evict(options: Cache.EvictOptions): boolean {
+    const result = super.evict(options);
     if (result) {
       this.save();
     }
@@ -75,8 +85,8 @@ export class PersistentCache extends InMemoryCache {
     return this;
   }
 
-  override reset(options?: unknown): Promise<void> {
-    const result = super.reset(options as never);
+  override reset(options?: Cache.ResetOptions): Promise<void> {
+    const result = super.reset(options);
     this.save();
     return result;
   }
@@ -87,29 +97,32 @@ export class PersistentCache extends InMemoryCache {
   }
 
   override performTransaction(
-    transaction: unknown,
-    optimisticId?: unknown,
-  ): void {
-    super.performTransaction(transaction as never, optimisticId as never);
-    this.save();
-  }
-
-  override recordOptimisticTransaction(
-    transaction: unknown,
-    optimisticId: string,
-  ): void {
-    super.recordOptimisticTransaction(transaction as never, optimisticId);
-    this.save();
-  }
-
-  override gc(): string[] {
-    const result = super.gc();
+    transaction: (cache: InMemoryCache) => unknown,
+    optimisticId?: string | null,
+  ): unknown {
+    const result = super.performTransaction(transaction, optimisticId);
     this.save();
     return result;
   }
 
-  override modify(options: unknown): boolean {
-    const result = super.modify(options as never);
+  override recordOptimisticTransaction(
+    transaction: Transaction,
+    optimisticId: string,
+  ): void {
+    super.recordOptimisticTransaction(transaction, optimisticId);
+    this.save();
+  }
+
+  override gc(options?: { resetResultCache?: boolean }): string[] {
+    const result = super.gc(options);
+    this.save();
+    return result;
+  }
+
+  override modify<
+    Entity extends Record<string, unknown> = Record<string, unknown>,
+  >(options: Cache.ModifyOptions<Entity>): boolean {
+    const result = super.modify(options);
     if (result) {
       this.save();
     }
