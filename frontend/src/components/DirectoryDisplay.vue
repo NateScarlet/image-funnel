@@ -44,10 +44,22 @@
       <slot name="badge"></slot>
     </div>
     <div class="flex-1 min-w-0">
-      <h3 class="font-semibold text-lg mb-1">
-        <slot name="title">
-          <span class="flex-1 break-all">{{ directoryPath }}</span>
-        </slot>
+      <!-- 标题区域：支持外部自定义插槽，并在右侧自适应显示子目录数量 -->
+      <h3
+        class="font-semibold text-lg mb-1 flex items-center justify-between gap-2"
+      >
+        <div class="min-w-0 flex-1">
+          <slot name="title">
+            <span class="block break-all">{{ directoryPath }}</span>
+          </slot>
+        </div>
+        <!-- 子目录数量角标，仅在包含子目录时展示 -->
+        <span
+          v-if="stats?.subdirectoryCount && stats.subdirectoryCount > 0"
+          class="flex-none px-2 py-0.5 text-xs bg-primary-700 rounded text-primary-200"
+        >
+          {{ stats.subdirectoryCount }}子目录
+        </span>
       </h3>
       <div class="text-xs text-primary-300 space-y-1">
         <div v-if="stats">

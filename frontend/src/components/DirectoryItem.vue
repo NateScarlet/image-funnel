@@ -52,11 +52,6 @@
                 : directory.relPath.split(/[\\/]/).pop()
           }}
         </span>
-        <span
-          v-if="stats?.subdirectoryCount && stats.subdirectoryCount > 0"
-          class="flex-none px-2 py-0.5 text-xs bg-primary-700 rounded"
-          >{{ stats.subdirectoryCount }}子目录</span
-        >
       </template>
     </DirectoryDisplay>
   </div>
