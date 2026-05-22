@@ -14,6 +14,7 @@ export default defineConfig(
       "*.config.cjs",
       "*.config.mts",
       "codegen.ts",
+      "**/generated.ts",
     ],
   },
   {
