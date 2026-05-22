@@ -53,11 +53,10 @@ const { model: currentOperator } = useStorage<Operator>(
 </script>
 
 <script setup lang="ts">
-import { watch } from "vue";
 import RatingIcon from "./RatingIcon.vue";
 
 // 双向绑定当前的评分过滤值
-const modelValue = defineModel<number[]>({ default: () => [] });
+const model = defineModel<number[]>({ default: () => [] });
 
 interface OperatorConfig {
   symbol: string;
@@ -67,7 +66,7 @@ interface OperatorConfig {
   // 获取当前数组下该模式所对应的基准星级（用于切换模式时的数据迁移）
   getBaseStar: (currentVal: number[]) => number | undefined;
   // 给定一个基准星级，返回该模式下应当生成的数组值
-  getValuesForStar: (star: number) => number[];
+  getValuesForStar: (star: number | undefined) => number[] | undefined;
 }
 
 // #region 各项操作符的配置定义
@@ -87,6 +86,9 @@ const configs: Record<Operator, OperatorConfig> = {
       return currentVal.length > 0 ? currentVal[0] : undefined;
     },
     getValuesForStar(star) {
+      if (star == null) {
+        return [];
+      }
       return [star];
     },
   },
@@ -94,7 +96,7 @@ const configs: Record<Operator, OperatorConfig> = {
     symbol: "≥",
     title: "模式: 大于等于",
     handleClick(currentVal, star) {
-      const expected = configs[">="].getValuesForStar(star);
+      const expected = this.getValuesForStar(star) ?? [];
       if (
         currentVal.length === expected.length &&
         currentVal.every((v, i) => v === expected[i])
@@ -112,7 +114,7 @@ const configs: Record<Operator, OperatorConfig> = {
       }
       return undefined;
     },
-    getValuesForStar(star) {
+    getValuesForStar(star = 0) {
       const res: number[] = [];
       for (let i = star; i <= 5; i++) {
         res.push(i);
@@ -124,7 +126,7 @@ const configs: Record<Operator, OperatorConfig> = {
     symbol: "≤",
     title: "模式: 小于等于",
     handleClick(currentVal, star) {
-      const expected = configs["<="].getValuesForStar(star);
+      const expected = this.getValuesForStar(star) ?? [];
       if (
         currentVal.length === expected.length &&
         currentVal.every((v, i) => v === expected[i])
@@ -142,7 +144,7 @@ const configs: Record<Operator, OperatorConfig> = {
       }
       return undefined;
     },
-    getValuesForStar(star) {
+    getValuesForStar(star = 5) {
       const res: number[] = [];
       for (let i = 0; i <= star; i++) {
         res.push(i);
@@ -153,9 +155,9 @@ const configs: Record<Operator, OperatorConfig> = {
 };
 // #endregion
 
-// 判断特定的星是否处于激活态，直接检查是否包含在传入的评分数组中
+// 判断特定的星是否处于激活态，直接检查是否包含在评分数组中
 function isStarActive(star: number): boolean {
-  return modelValue.value.includes(star);
+  return model.value.includes(star);
 }
 
 // 获取各个星星的悬浮提示文案
@@ -174,65 +176,17 @@ function cycleOperator() {
   const nextOp = ops[(idx + 1) % ops.length];
 
   // 尝试从当前选中值中提取出基准星级，用于新模式的初始化
-  const baseStar = configs[currentOperator.value].getBaseStar(modelValue.value);
+  const baseStar = configs[currentOperator.value].getBaseStar(model.value);
 
   // 切换操作符
   currentOperator.value = nextOp;
 
-  // 如果提取到了基准星级，则将选值转换为新模式下的对应范围，否则清空选值
-  if (baseStar !== undefined) {
-    modelValue.value = configs[nextOp].getValuesForStar(baseStar);
-  } else {
-    modelValue.value = [];
-  }
+  model.value = configs[nextOp].getValuesForStar(baseStar) ?? model.value;
 }
 
 // 点击星星的处理逻辑
 function handleStarClick(star: number) {
   const config = configs[currentOperator.value];
-  modelValue.value = config.handleClick(modelValue.value, star);
+  model.value = config.handleClick(model.value, star);
 }
-
-// #region 状态同步与事件触发
-
-// 根据传入值自动反向推导最贴切的操作符
-function inferOperator(val: number[]): Operator | undefined {
-  if (val.length === 0) return undefined;
-
-  const sortedVal = [...val].sort((a, b) => a - b);
-
-  if (sortedVal.length === 1) {
-    return "=";
-  }
-
-  const candidates: Operator[] = [">=", "<="];
-  for (const op of candidates) {
-    const baseStar = configs[op].getBaseStar(sortedVal);
-    if (baseStar !== undefined) {
-      const expected = configs[op].getValuesForStar(baseStar);
-      if (
-        sortedVal.length === expected.length &&
-        sortedVal.every((v, i) => v === expected[i])
-      ) {
-        return op;
-      }
-    }
-  }
-
-  return "=";
-}
-
-// 监听外部清空或修改事件，同步组件内部状态
-watch(
-  modelValue,
-  (newVal) => {
-    const inferred = inferOperator(newVal);
-    if (inferred !== undefined) {
-      currentOperator.value = inferred;
-    }
-  },
-  { deep: true, immediate: true },
-);
-
-// #endregion
 </script>
