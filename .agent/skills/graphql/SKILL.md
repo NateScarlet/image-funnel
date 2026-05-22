@@ -1,4 +1,5 @@
 ---
+name: "graphql"
 description: "GraphQL 开发指南，包含 schema 定义、resolver 实现、类型系统、代码生成和前后端集成。Invoke when working with GraphQL schema, resolvers, running generate-graphql.ps1, or implementing GraphQL-related functionality."
 ---
 

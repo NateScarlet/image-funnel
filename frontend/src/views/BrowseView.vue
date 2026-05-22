@@ -486,9 +486,26 @@
   </div>
 </template>
 
+<script lang="ts">
+import useStorage from "../composables/useStorage";
+
+interface DirectoryState {
+  filterRating?: number[];
+  filterLabels?: string[];
+  searchQuery?: string;
+  showHiddenMemos?: boolean;
+  updatedAt: number;
+}
+
+export const { model: states, flush: commitState } = useStorage<
+  Record<string, DirectoryState | undefined>
+>(localStorage, "browse_view_state_f6857b6e8ad4", () => ({}));
+</script>
+
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import optionalArray from "../utils/optionalArray";
 import {
   mdiArrowLeft,
   mdiChevronLeft,
@@ -540,9 +557,87 @@ function navigateToHome() {
 // #endregion
 
 // #region 过滤器与多选状态
-const filterRating = ref<number[]>([]);
-const filterLabels = ref<string[]>([]);
-const searchQuery = ref("");
+const MAX_STATES_COUNT = 50;
+
+// 统一更新过滤状态的辅助函数
+function updateState(patch: Partial<Omit<DirectoryState, "updatedAt">>) {
+  const dirId = currentDirectoryId.value;
+  const currentStates = states.value || {};
+
+  const targetState = (currentStates[dirId] || {}) as DirectoryState;
+
+  // 1. 使用 ?? 空值合并与 optionalArray/|| undefined 链式构造，默认值在赋值时直接剔除并置为 undefined
+  const nextState: Omit<DirectoryState, "updatedAt"> = {
+    filterRating: optionalArray(patch.filterRating ?? targetState.filterRating),
+    filterLabels: optionalArray(patch.filterLabels ?? targetState.filterLabels),
+    searchQuery: (patch.searchQuery ?? targetState.searchQuery) || undefined,
+    showHiddenMemos:
+      (patch.showHiddenMemos ?? targetState.showHiddenMemos) || undefined,
+  };
+
+  // 2. 检测如果所有属性值都是 undefined，则说明没有有效过滤条件，将该目录状态置为 undefined
+  if (Object.values(nextState).every((v) => v === undefined)) {
+    currentStates[dirId] = undefined;
+  } else {
+    currentStates[dirId] = {
+      ...nextState,
+      updatedAt: Date.now(),
+    };
+
+    // 清理机制：只保留最近更新的 MAX_STATES_COUNT 个目录状态
+    const entries = Object.entries(currentStates).filter(
+      ([_, v]) => v !== undefined,
+    ) as [string, DirectoryState][];
+    if (entries.length > MAX_STATES_COUNT) {
+      entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
+      for (let i = MAX_STATES_COUNT; i < entries.length; i++) {
+        currentStates[entries[i][0]] = undefined;
+      }
+    }
+  }
+
+  commitState();
+}
+
+// 评星过滤器，双向同步计算属性
+const filterRating = computed<number[]>({
+  get() {
+    return states.value?.[currentDirectoryId.value]?.filterRating || [];
+  },
+  set(val) {
+    updateState({ filterRating: val });
+  },
+});
+
+// 颜色标签过滤器，双向同步计算属性
+const filterLabels = computed<string[]>({
+  get() {
+    return states.value?.[currentDirectoryId.value]?.filterLabels || [];
+  },
+  set(val) {
+    updateState({ filterLabels: val });
+  },
+});
+
+// 搜索输入框，双向同步计算属性
+const searchQuery = computed<string>({
+  get() {
+    return states.value?.[currentDirectoryId.value]?.searchQuery || "";
+  },
+  set(val) {
+    updateState({ searchQuery: val });
+  },
+});
+
+// 备忘录是否显示隐藏内容，双向同步计算属性
+const showHiddenMemos = computed<boolean>({
+  get() {
+    return states.value?.[currentDirectoryId.value]?.showHiddenMemos || false;
+  },
+  set(val) {
+    updateState({ showHiddenMemos: val });
+  },
+});
 
 const hasActiveFilters = computed(() => {
   return (
@@ -553,18 +648,19 @@ const hasActiveFilters = computed(() => {
 });
 
 function toggleLabelFilter(label: string) {
-  const index = filterLabels.value.indexOf(label);
+  const nextLabels = [...filterLabels.value];
+  const index = nextLabels.indexOf(label);
   if (index >= 0) {
-    filterLabels.value.splice(index, 1);
+    nextLabels.splice(index, 1);
   } else {
-    filterLabels.value.push(label);
+    nextLabels.push(label);
   }
+  filterLabels.value = nextLabels;
 }
 
 function clearFilters() {
-  filterRating.value = [];
-  filterLabels.value = [];
-  searchQuery.value = "";
+  states.value[currentDirectoryId.value] = undefined;
+  commitState();
 }
 // #endregion
 
@@ -635,7 +731,6 @@ function loadMore() {
 // #endregion
 
 // #region 获取并管理实时更新的备忘录/笔记列表
-const showHiddenMemos = ref(false);
 const selectedMemo = ref<MemoFragment | null>(null);
 const isMemoEditorOpen = ref(false);
 
