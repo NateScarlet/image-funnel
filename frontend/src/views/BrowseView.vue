@@ -188,6 +188,18 @@
           </h2>
 
           <div class="flex flex-wrap items-center gap-3">
+            <!-- 当用户激活了任何过滤器时，在最左侧显示一键清除筛选按钮 -->
+            <button
+              v-if="hasActiveFilters"
+              class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer"
+              @click="clearFilters"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path :d="mdiFilterOff" fill="currentColor" />
+              </svg>
+              <span>清除筛选</span>
+            </button>
+
             <!-- 搜索输入框 -->
             <div class="relative min-w-48 max-w-64 flex-1 md:flex-none">
               <input
@@ -239,20 +251,6 @@
                 </button>
               </div>
             </div>
-
-            <!-- 清空过滤按钮 -->
-            <button
-              class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1"
-              :class="[
-                hasActiveFilters
-                  ? 'bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer'
-                  : 'bg-primary-900 border-primary-800 text-primary-500 cursor-not-allowed opacity-40',
-              ]"
-              :disabled="!hasActiveFilters"
-              @click="clearFilters"
-            >
-              <span>清除</span>
-            </button>
           </div>
         </div>
 
@@ -484,6 +482,7 @@ import {
   mdiHome,
   mdiHistory,
   mdiImage,
+  mdiFilterOff,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
