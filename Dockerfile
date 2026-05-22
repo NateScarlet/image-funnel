@@ -1,88 +1,115 @@
-# Stage 1: Build Front-end
+# 阶段 1：构建前端
 FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.28.1 --activate
+
+# 配置 npm/pnpm 和 Corepack 的镜像源参数以支持国内网络环境，默认使用官方源避免空值引起 URL 解析错误
+ARG npm_config_registry=https://registry.npmjs.org
+ARG pnpm_config_registry=${npm_config_registry}
+ARG COREPACK_NPM_REGISTRY=${npm_config_registry}
+
 WORKDIR /app
 
 # 复制依赖定义文件
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY frontend/package.json ./frontend/
 
-# 安装依赖
-RUN pnpm install --frozen-lockfile
+# 拉取依赖并缓存到 pnpm 存储库（仅当依赖定义文件变动时才会使缓存失效）
+RUN --mount=type=cache,target=/root/.pnpm-store \
+    --mount=type=cache,target=/root/.cache/node/corepack \
+    corepack enable && \
+    pnpm fetch
 
-# 复制前端源码
+# 复制前端源码和 GraphQL 架构定义
 COPY frontend/ ./frontend/
-# 复制 GraphQL 定义（如果前端构建需要读取 schema）
 COPY graph/ ./graph/
 
-# 执行构建
-RUN pnpm --filter image-funnel-frontend run build
 
-# Stage 2: Build Back-end
+# 在同一层内进行离线依赖链接、构建及 node_modules 清理，避免垃圾文件残留到中间层中
+RUN --mount=type=cache,target=/root/.pnpm-store \
+    --mount=type=cache,target=/root/.cache/node/corepack \
+    corepack enable && \
+    pnpm install --offline --frozen-lockfile && \
+    pnpm --filter image-funnel-frontend run build && \
+    rm -rf node_modules/ frontend/node_modules/
+
+# 阶段 2：构建后端
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS backend-builder
+
+# 支持替换 Alpine 的源地址以加速 apk 包安装
+ARG ALPINE_MIRROR_URL
+RUN if [ -n "${ALPINE_MIRROR_URL}" ]; then \
+    sed -i "s@https\?://dl-cdn.alpinelinux.org/alpine@${ALPINE_MIRROR_URL}@g" /etc/apk/repositories; \
+    fi
+
+# 配置 Go 模块代理
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
+
 WORKDIR /app
 
-# 安装 git 以便下载依赖
-RUN apk add --no-cache git
+# 安装 git 并缓存 apk 索引与包文件
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk update && apk add --no-cache git
 
-# 复制依赖定义文件
+# 复制依赖定义文件并利用缓存拉取 go 模块
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# 复制全量源码以确保生成代码和引用的内部包都存在
+# 复制后端和共享逻辑的全部源码
 COPY . .
 
-# 构建参数：由 Docker Buildx 自动传入
+# 自动由 Docker Buildx 传入的目标操作系统和架构
 ARG TARGETOS
 ARG TARGETARCH
-# 构建参数：版本号，由 GitHub Action 传入
+# 版本号参数，默认值为 dev
 ARG VERSION=dev
 
-# 构建二进制文件
-# CGO_ENABLED=0 确保静态链接
 ENV GOOS=${TARGETOS} \
     GOARCH=${TARGETARCH} \
     CGO_ENABLED=0
-RUN go test ./... && \
+
+# 挂载编译器缓存和模块依赖缓存，执行单元测试并编译二进制文件
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go test ./... && \
     go build \
     -ldflags "-X main.version=${VERSION} -s -w" \
     -o image-funnel ./cmd/server
 
-# Stage 3: Final Runtime
+# 阶段 3：最终运行环境
 FROM alpine:3.21
+
+# 支持运行时替换 Alpine 的源地址
+ARG ALPINE_MIRROR_URL
+RUN if [ -n "${ALPINE_MIRROR_URL}" ]; then \
+    sed -i "s@https\?://dl-cdn.alpinelinux.org/alpine@${ALPINE_MIRROR_URL}@g" /etc/apk/repositories; \
+    fi
+
 WORKDIR /app
 
-# 安装运行时依赖
-# imagemagick: 后端图像处理核心组件
-# ca-certificates: HTTPS 支持
-# tzdata: 时区支持
+# 安装必要的系统运行时依赖
 RUN apk add --no-cache \
     imagemagick \
     ca-certificates \
     tzdata
 
-# 设置环境变量默认值
+# 设置应用默认环境变量
 ENV IMAGE_FUNNEL_PORT=80 \
     IMAGE_FUNNEL_ROOT_DIR=/app/workspace \
     IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE=false
 
-# 从之前的阶段复制构建产物
-# 将前端静态文件放在二进制文件同级的 dist 目录下，符合 main.go 的生产环境查找逻辑
+# 从前序构建阶段拷贝产物和执行脚本
 COPY --from=backend-builder /app/image-funnel /app/image-funnel
 COPY --from=frontend-builder /app/frontend/dist /app/dist
 COPY deployments/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# 创建持久化数据目录
+# 预先创建持久化所需的目录
 RUN mkdir -p /app/workspace /app/data
 
-# 暴露默认端口
+# 声明暴露的端口和挂载数据卷
 EXPOSE 80
-
-# 指定挂载点
 VOLUME ["/app/workspace", "/app/data"]
 
-# 启动程序
+# 设定入口执行脚本
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

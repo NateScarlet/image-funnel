@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prebuild": "tsx ../scripts/build-open-dir.ts",
+    "prebuild": "tsx ./scripts/build-open-dir.ts",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",

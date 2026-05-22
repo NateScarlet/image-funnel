@@ -3,16 +3,15 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { zipSync, strToU8 } from 'fflate';
 
-// 获取当前脚本所在目录与项目根目录
+// 获取当前脚本所在目录
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SCRIPT_DIR = __dirname;
-const ROOT_DIR = path.resolve(SCRIPT_DIR, '..');
 const OPEN_DIR_SRC = path.join(SCRIPT_DIR, 'open-dir');
 
 // 输出路径参数，默认放到前端的 public/static/open-dir/windows
-const outputDir = path.resolve(ROOT_DIR, 'frontend/public/static/open-dir/windows');
+const outputDir = path.resolve(SCRIPT_DIR, '../public/static/open-dir/windows');
 
 console.log(`自动编译并打包本地路径协议插件到 ${outputDir} ...`);
 
