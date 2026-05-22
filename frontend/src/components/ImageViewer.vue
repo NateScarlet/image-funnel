@@ -6,7 +6,7 @@
     <slot name="progress"></slot>
     <div
       ref="containerRef"
-      class="flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
+      class="relative flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
       :class="[
         locked ? 'pointer-events-none' : '',
         // 修复火狐全屏时竖屏高度计算错误
