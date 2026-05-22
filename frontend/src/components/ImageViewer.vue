@@ -123,6 +123,19 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
+      <!-- 打开文件按钮 (在资源管理器中定位并聚焦) -->
+      <button
+        class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        title="在资源管理器中定位此文件"
+        @click="revealInExplorer(fullFilePath)"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <path :d="mdiOpenInNew" />
+        </svg>
+        <span class="text-xs">打开</span>
+      </button>
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
+
       <!-- 评星操作区 (仅在无会话模式下展示和操作) -->
       <template v-if="!sessionId">
         <RatingSelector v-model="ratingModel" />
@@ -363,6 +376,7 @@ import {
   mdiDeleteOutline,
   mdiContentCopy,
   mdiDotsVertical,
+  mdiOpenInNew,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
@@ -376,6 +390,9 @@ import useQuery from "@/graphql/utils/useQuery";
 import query from "@/graphql/utils/query";
 import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
 import useHotkey from "@/composables/useHotkey";
+import { useOpenDir } from "@/composables/useOpenDir";
+
+const { revealInExplorer } = useOpenDir();
 
 const emit =
   defineEmits<

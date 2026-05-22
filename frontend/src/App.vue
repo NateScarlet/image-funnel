@@ -3,6 +3,7 @@
   <Teleport :to="rendererEl">
     <NotificationList />
     <HotkeyHelpModal :show="showHotkeyHelp" @close="showHotkeyHelp = false" />
+    <OpenDirHelpDialog v-model="showOpenDirHelp" />
   </Teleport>
 </template>
 
@@ -10,11 +11,14 @@
 import { ref } from "vue";
 import NotificationList from "./components/NotificationList.vue";
 import HotkeyHelpModal from "./components/HotkeyHelpModal.vue";
+import OpenDirHelpDialog from "./components/OpenDirHelpDialog.vue";
 import useFullscreenRendererElement from "./composables/useFullscreenRendererElement";
 import useHotkey from "./composables/useHotkey";
+import { useOpenDir } from "./composables/useOpenDir";
 
 const rendererEl = useFullscreenRendererElement();
 const showHotkeyHelp = ref(false);
+const { showOpenDirHelp } = useOpenDir();
 
 useHotkey(
   ["?", "shift+?"],

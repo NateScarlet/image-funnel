@@ -51,6 +51,18 @@
             </template>
           </div>
 
+          <!-- 打开当前目录按钮 -->
+          <button
+            v-if="fullDirectoryPath"
+            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
+            title="在资源管理器中打开当前目录"
+            @click="revealInExplorer(fullDirectoryPath)"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiOpenInNew" fill="currentColor" />
+            </svg>
+          </button>
+
           <!-- 上次会话按钮，显示文本与最后更新时间 -->
           <button
             v-if="lastSession"
@@ -483,6 +495,7 @@ import {
   mdiHistory,
   mdiImage,
   mdiFilterOff,
+  mdiOpenInNew,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
@@ -492,6 +505,7 @@ import useBrowseImages from "../composables/useBrowseImages";
 import useBrowseMemos from "../composables/useBrowseMemos";
 import {
   DirectoriesDocument,
+  MetaDocument,
   type MemoFragment,
   type BrowseImagesQueryVariables,
   type BrowseMemosQueryVariables,
@@ -581,6 +595,31 @@ function goToParent() {
     navigateToDir("");
   }
 }
+// #endregion
+
+// #region 绝对物理路径与资源管理器打开
+import { useOpenDir } from "../composables/useOpenDir";
+const { revealInExplorer } = useOpenDir();
+
+const metaLoadingCount = ref(0);
+const { data: metaData } = useQuery(MetaDocument, {
+  loadingCount: metaLoadingCount,
+});
+
+const fullDirectoryPath = computed(() => {
+  const rootPath = metaData.value?.meta?.rootAbsPath;
+  const relPath = currentDirectory.value?.relPath;
+  if (!rootPath) {
+    return "";
+  }
+  if (!relPath) {
+    return rootPath;
+  }
+  if (rootPath.includes("\\")) {
+    return rootPath + "\\" + relPath.replace(/\//g, "\\");
+  }
+  return rootPath + "/" + relPath.replace(/\\/g, "/");
+});
 // #endregion
 
 // #region 获取并管理实时更新的图片列表

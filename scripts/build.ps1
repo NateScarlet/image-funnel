@@ -40,11 +40,17 @@ if ($Frontend) {
 Write-Host "构建目录: $BUILD_DIR"
 
 if ($Frontend) {
+    # 自动编译并打包本地路径协议插件
+    $OPEN_DIR_TEMP = Join-Path $ROOT_DIR "frontend/public/static/open-dir/windows"
+    pwsh (Join-Path $SCRIPT_DIR "build-open-dir.ps1") -OutputDir $OPEN_DIR_TEMP
+
+
     # 构建前端
     Write-Host "构建前端项目..."
     Push-Location $FRONTEND_DIR
     try {
         pnpm install
+
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ 前端依赖安装失败"
             exit 1
