@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,6 +79,13 @@ func handleImage(
 
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", etag)
+
+		// 使用 mime.FormatMediaType 安全格式化 Content-Disposition 响应头，防止头部注入并正确转义文件名
+		filename := filepath.Base(relativePath)
+		cd := mime.FormatMediaType("inline", map[string]string{
+			"filename": filename,
+		})
+		w.Header().Set("Content-Disposition", cd)
 
 		http.ServeContent(w, r, "", time.Now(), file)
 	}
