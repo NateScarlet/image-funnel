@@ -1,8 +1,9 @@
-import { computed, toValue, type MaybeRefOrGetter } from "vue";
+import { computed, toValue, ref, type MaybeRefOrGetter } from "vue";
 import useStorage from "./useStorage";
 import useQuery from "../graphql/utils/useQuery";
 import {
   DirectoryLastSessionDocument,
+  SessionDocument,
   type ImageFiltersInput,
   type MemoFiltersInput,
   type SessionFragment,
@@ -132,22 +133,6 @@ export function updateLastSession(session: SessionFragment) {
 
 // #region 主钩子导出
 export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
-  // 从服务器异步查询当前目录的最新会话信息
-  const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
-    variables: () => {
-      const id = toValue(directoryId);
-      if (!id) {
-        return undefined;
-      }
-      return { id };
-    },
-  });
-
-  const serverLastSession = computed(() => {
-    const node = lastSessionData.value?.node;
-    return node?.__typename === "Directory" ? node.lastSession : undefined;
-  });
-
   function getDirState() {
     const dirId = toValue(directoryId);
     return states.value?.[dirId];
@@ -276,6 +261,67 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     });
   }
 
+  // #region 上次会话校验与回退机制
+  // 1. 本地会话的加载状态计数
+  const localSessionLoadingCount = ref(0);
+
+  // 2. 优先对本地存储的会话发起网络校验以确认其存在性
+  const { data: localSessionCheckData } = useQuery(SessionDocument, {
+    variables: () => {
+      const id = getDirState()?.lastSession?.id;
+      if (!id) {
+        return undefined;
+      }
+      return { id };
+    },
+    loadingCount: localSessionLoadingCount,
+  });
+
+  // 3. 从服务器异步查询当前目录的最新会话信息（仅在本地无会话或本地会话已被删除时发起查询）
+  const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
+    variables: () => {
+      const id = toValue(directoryId);
+      if (!id) {
+        return undefined;
+      }
+      // 如果处于本地查询校验中，则挂起服务端上次会话的查询
+      if (localSessionLoadingCount.value > 0) {
+        return undefined;
+      }
+      // 如果本地会话校验通过并存在，则不需要查询服务端上次会话
+      if (localSessionCheckData.value?.session) {
+        return undefined;
+      }
+      return { id };
+    },
+  });
+
+  const serverLastSession = computed(() => {
+    const node = lastSessionData.value?.node;
+    return node?.__typename === "Directory" ? node.lastSession : undefined;
+  });
+
+  // 4. 校验通过的本地上次会话
+  const verifiedLocalSession = computed(() => {
+    const localSess = getDirState()?.lastSession;
+    if (!localSess) {
+      return undefined;
+    }
+    if (localSessionCheckData.value?.session?.id === localSess.id) {
+      return localSessionCheckData.value.session;
+    }
+    return undefined;
+  });
+
+  // 5. 最终合并的上次会话，优先本地，回退服务端
+  const lastSession = computed(() => {
+    if (verifiedLocalSession.value) {
+      return verifiedLocalSession.value;
+    }
+    return serverLastSession.value;
+  });
+  // #endregion
+
   return {
     filterRating,
     filterLabels,
@@ -283,6 +329,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     showHiddenMemos,
     hasActiveFilters,
     clearFilters,
+    lastSession,
   };
 }
 // #endregion

@@ -32,6 +32,17 @@
             </svg>
           </button>
 
+          <button
+            v-if="lastSession"
+            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
+            title="返回最近会话"
+            @click="goToLastSession"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiHistory" fill="currentColor" />
+            </svg>
+          </button>
+
           <!-- 磨砂面包屑路径 -->
           <div
             class="flex items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 overflow-hidden text-sm"
@@ -504,6 +515,7 @@ import {
   mdiEye,
   mdiEyeOff,
   mdiHome,
+  mdiHistory,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { PRESET_COLORS } from "../composables/useImageLabel";
@@ -538,6 +550,15 @@ function navigateToDir(id: string) {
 function navigateToHome() {
   router.push("/");
 }
+
+function goToLastSession() {
+  if (lastSession.value) {
+    router.push({
+      name: "session",
+      params: { id: lastSession.value.id },
+    });
+  }
+}
 // #endregion
 
 // #region 过滤器与多选状态
@@ -548,6 +569,7 @@ const {
   showHiddenMemos,
   hasActiveFilters,
   clearFilters,
+  lastSession,
 } = useDirectoryState(currentDirectoryId);
 
 function toggleLabelFilter(label: string) {
