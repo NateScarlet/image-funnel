@@ -1,0 +1,252 @@
+import { computed, toValue, type MaybeRefOrGetter } from "vue";
+import useStorage from "./useStorage";
+import type {
+  ImageFiltersInput,
+  MemoFiltersInput,
+  SessionFragment,
+} from "../graphql/generated";
+import optionalArray from "../utils/optionalArray";
+
+// #region 类型定义
+export interface DirectoryState {
+  browse?: {
+    filterBy?: ImageFiltersInput;
+    filterMemoBy?: MemoFiltersInput;
+  };
+  lastSession?: {
+    id: string;
+    filter: ImageFiltersInput;
+    targetKeep: number;
+  };
+  updatedAt: number;
+}
+// #endregion
+
+const MAX_STATES_COUNT = 50;
+
+// 共享的 LocalStorage 状态模型
+export const { model: states, flush: commitState } = useStorage<
+  Record<string, DirectoryState | undefined>
+>(localStorage, "directory_state_f6857b6e8ad4", () => ({}));
+
+// #region 内部辅助方法
+/**
+ * 统一更新目录状态
+ */
+function updateDirectoryState(
+  dirId: string,
+  edit: (e: DirectoryState) => void,
+) {
+  const currentStates = states.value || {};
+  const dirState = currentStates[dirId] || {
+    updatedAt: Date.now(),
+  };
+
+  // 执行调用方提供的修改逻辑
+  edit(dirState);
+
+  // 统一整理与压缩空对象状态
+  compactDirectoryState(dirState);
+
+  dirState.updatedAt = Date.now();
+  currentStates[dirId] = dirState;
+
+  // 若无 browse 且无 lastSession，则彻底移除该目录的记录
+  if (!dirState.browse && !dirState.lastSession) {
+    currentStates[dirId] = undefined;
+  }
+
+  // 限制保留状态的上限，保持存储空间精简
+  const entries = Object.entries(currentStates).filter(
+    ([, v]) => v !== undefined,
+  ) as [string, DirectoryState][];
+  if (entries.length > MAX_STATES_COUNT) {
+    entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
+    for (let i = MAX_STATES_COUNT; i < entries.length; i++) {
+      currentStates[entries[i][0]] = undefined;
+    }
+  }
+
+  commitState();
+}
+
+/**
+ * 整理目录状态中的空对象，节省 LocalStorage 空间
+ */
+function compactDirectoryState(state: DirectoryState) {
+  if (state.browse) {
+    if (state.browse.filterBy) {
+      // 检查 filterBy 对象的属性值中是否存在有效筛选值
+      const hasFilter = Object.values(state.browse.filterBy).some(
+        (v) => v !== undefined,
+      );
+      if (!hasFilter) {
+        // 无有效值时，如果有 lastSession，保留空对象以防止回退到上次会话的默认值；
+        // 若无 lastSession，则彻底置为 undefined
+        state.browse.filterBy = state.lastSession ? {} : undefined;
+      }
+    }
+
+    // 若图片筛选与备忘录筛选均空，则清除整个 browse 对象
+    if (
+      state.browse.filterBy === undefined &&
+      state.browse.filterMemoBy === undefined
+    ) {
+      state.browse = undefined;
+    }
+  }
+}
+
+/**
+ * 更新上一次会话信息，对外公开
+ */
+export function updateLastSession(session: SessionFragment) {
+  const dirId = session.directory.id;
+  updateDirectoryState(dirId, (state) => {
+    const ratingVal = optionalArray(session.filter?.rating);
+    const labelVal = optionalArray(session.filter?.label);
+    const queryVal = session.filter?.query || undefined;
+
+    state.lastSession = {
+      id: session.id,
+      filter: {
+        rating: ratingVal,
+        label: labelVal,
+        query: queryVal,
+      },
+      targetKeep: session.targetKeep,
+    };
+
+    // 创建或更新会话时，清除本地图片筛选缓存，使其能够继承最新会话配置
+    if (state.browse) {
+      state.browse.filterBy = undefined;
+      if (state.browse.filterMemoBy === undefined) {
+        state.browse = undefined;
+      }
+    }
+  });
+}
+// #endregion
+
+// #region 主钩子导出
+export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
+  function getDirState() {
+    const dirId = toValue(directoryId);
+    return states.value?.[dirId];
+  }
+
+  /**
+   * 获取当前生效的图片筛选配置。
+   * 本地用户编辑中的筛选（browse.filterBy，即使是空对象）优先级高于上次会话保存的配置。
+   */
+  function getImageFilters(): ImageFiltersInput | undefined {
+    const dirState = getDirState();
+    return dirState?.browse?.filterBy || dirState?.lastSession?.filter;
+  }
+
+  // 评星过滤器，默认使用上次会话设置（若未修改过任何筛选条件）
+  const filterRating = computed<number[]>({
+    get() {
+      return getImageFilters()?.rating || [];
+    },
+    set(val) {
+      updateDirectoryState(toValue(directoryId), (state) => {
+        if (!state.browse) {
+          state.browse = {};
+        }
+        state.browse.filterBy = {
+          rating: optionalArray(val),
+          label: optionalArray(state.browse.filterBy?.label),
+          query: state.browse.filterBy?.query || undefined,
+        };
+      });
+    },
+  });
+
+  // 颜色标签过滤器，默认使用上次会话设置（若未修改过任何筛选条件）
+  const filterLabels = computed<string[]>({
+    get() {
+      return getImageFilters()?.label || [];
+    },
+    set(val) {
+      updateDirectoryState(toValue(directoryId), (state) => {
+        if (!state.browse) {
+          state.browse = {};
+        }
+        state.browse.filterBy = {
+          rating: optionalArray(state.browse.filterBy?.rating),
+          label: optionalArray(val),
+          query: state.browse.filterBy?.query || undefined,
+        };
+      });
+    },
+  });
+
+  // 搜索关键字，默认使用上次会话设置（若未修改过任何筛选条件）
+  const searchQuery = computed<string>({
+    get() {
+      return getImageFilters()?.query || "";
+    },
+    set(val) {
+      updateDirectoryState(toValue(directoryId), (state) => {
+        if (!state.browse) {
+          state.browse = {};
+        }
+        state.browse.filterBy = {
+          rating: optionalArray(state.browse.filterBy?.rating),
+          label: optionalArray(state.browse.filterBy?.label),
+          query: val || undefined,
+        };
+      });
+    },
+  });
+
+  // 备忘录是否显示隐藏项，默认值为 false
+  const showHiddenMemos = computed<boolean>({
+    get() {
+      const dirState = getDirState();
+      return dirState?.browse?.filterMemoBy?.hidden === true;
+    },
+    set(val) {
+      updateDirectoryState(toValue(directoryId), (state) => {
+        if (val) {
+          if (!state.browse) {
+            state.browse = {};
+          }
+          state.browse.filterMemoBy = { hidden: true };
+        } else {
+          if (state.browse) {
+            state.browse.filterMemoBy = undefined;
+          }
+        }
+      });
+    },
+  });
+
+  const hasActiveFilters = computed(() => {
+    return (
+      filterRating.value.length > 0 ||
+      filterLabels.value.length > 0 ||
+      searchQuery.value.trim() !== ""
+    );
+  });
+
+  function clearFilters() {
+    updateDirectoryState(toValue(directoryId), (state) => {
+      if (!state.browse) {
+        state.browse = {};
+      }
+      state.browse.filterBy = {};
+    });
+  }
+
+  return {
+    filterRating,
+    filterLabels,
+    searchQuery,
+    showHiddenMemos,
+    hasActiveFilters,
+    clearFilters,
+  };
+}
+// #endregion

@@ -486,26 +486,10 @@
   </div>
 </template>
 
-<script lang="ts">
-import useStorage from "../composables/useStorage";
-
-interface DirectoryState {
-  filterRating?: number[];
-  filterLabels?: string[];
-  searchQuery?: string;
-  showHiddenMemos?: boolean;
-  updatedAt: number;
-}
-
-export const { model: states, flush: commitState } = useStorage<
-  Record<string, DirectoryState | undefined>
->(localStorage, "browse_view_state_f6857b6e8ad4", () => ({}));
-</script>
-
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
-import optionalArray from "../utils/optionalArray";
 import {
   mdiArrowLeft,
   mdiChevronLeft,
@@ -557,95 +541,14 @@ function navigateToHome() {
 // #endregion
 
 // #region 过滤器与多选状态
-const MAX_STATES_COUNT = 50;
-
-// 统一更新过滤状态的辅助函数
-function updateState(patch: Partial<Omit<DirectoryState, "updatedAt">>) {
-  const dirId = currentDirectoryId.value;
-  const currentStates = states.value || {};
-
-  const targetState = (currentStates[dirId] || {}) as DirectoryState;
-
-  // 1. 使用 ?? 空值合并与 optionalArray/|| undefined 链式构造，默认值在赋值时直接剔除并置为 undefined
-  const nextState: Omit<DirectoryState, "updatedAt"> = {
-    filterRating: optionalArray(patch.filterRating ?? targetState.filterRating),
-    filterLabels: optionalArray(patch.filterLabels ?? targetState.filterLabels),
-    searchQuery: (patch.searchQuery ?? targetState.searchQuery) || undefined,
-    showHiddenMemos:
-      (patch.showHiddenMemos ?? targetState.showHiddenMemos) || undefined,
-  };
-
-  // 2. 检测如果所有属性值都是 undefined，则说明没有有效过滤条件，将该目录状态置为 undefined
-  if (Object.values(nextState).every((v) => v === undefined)) {
-    currentStates[dirId] = undefined;
-  } else {
-    currentStates[dirId] = {
-      ...nextState,
-      updatedAt: Date.now(),
-    };
-
-    // 清理机制：只保留最近更新的 MAX_STATES_COUNT 个目录状态
-    const entries = Object.entries(currentStates).filter(
-      ([_, v]) => v !== undefined,
-    ) as [string, DirectoryState][];
-    if (entries.length > MAX_STATES_COUNT) {
-      entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
-      for (let i = MAX_STATES_COUNT; i < entries.length; i++) {
-        currentStates[entries[i][0]] = undefined;
-      }
-    }
-  }
-
-  commitState();
-}
-
-// 评星过滤器，双向同步计算属性
-const filterRating = computed<number[]>({
-  get() {
-    return states.value?.[currentDirectoryId.value]?.filterRating || [];
-  },
-  set(val) {
-    updateState({ filterRating: val });
-  },
-});
-
-// 颜色标签过滤器，双向同步计算属性
-const filterLabels = computed<string[]>({
-  get() {
-    return states.value?.[currentDirectoryId.value]?.filterLabels || [];
-  },
-  set(val) {
-    updateState({ filterLabels: val });
-  },
-});
-
-// 搜索输入框，双向同步计算属性
-const searchQuery = computed<string>({
-  get() {
-    return states.value?.[currentDirectoryId.value]?.searchQuery || "";
-  },
-  set(val) {
-    updateState({ searchQuery: val });
-  },
-});
-
-// 备忘录是否显示隐藏内容，双向同步计算属性
-const showHiddenMemos = computed<boolean>({
-  get() {
-    return states.value?.[currentDirectoryId.value]?.showHiddenMemos || false;
-  },
-  set(val) {
-    updateState({ showHiddenMemos: val });
-  },
-});
-
-const hasActiveFilters = computed(() => {
-  return (
-    filterRating.value.length > 0 ||
-    filterLabels.value.length > 0 ||
-    searchQuery.value.trim() !== ""
-  );
-});
+const {
+  filterRating,
+  filterLabels,
+  searchQuery,
+  showHiddenMemos,
+  hasActiveFilters,
+  clearFilters,
+} = useDirectoryState(currentDirectoryId);
 
 function toggleLabelFilter(label: string) {
   const nextLabels = [...filterLabels.value];
@@ -656,11 +559,6 @@ function toggleLabelFilter(label: string) {
     nextLabels.push(label);
   }
   filterLabels.value = nextLabels;
-}
-
-function clearFilters() {
-  states.value[currentDirectoryId.value] = undefined;
-  commitState();
 }
 // #endregion
 

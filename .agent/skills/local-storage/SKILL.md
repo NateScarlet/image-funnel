@@ -23,3 +23,5 @@ const { model, flush, reload, clear } = useStorage(
 ```
 
 useStorage已经处理了响应式优化，对于复杂对象尽量原地修改然后调用flush而不是每次都重建
+
+localStorage应该用undefined代替null 节省空间

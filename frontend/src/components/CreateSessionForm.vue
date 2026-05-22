@@ -101,6 +101,7 @@ import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import useRouteQuery from "../composables/useRouteQuery";
+import { updateLastSession } from "../composables/useDirectoryState";
 
 type Emits = (e: "created") => void;
 
@@ -185,7 +186,10 @@ async function handleCreate() {
     });
 
     if (data?.createSession) {
-      router.push(`/session/${data.createSession.session.id}`);
+      const session = data.createSession.session;
+      updateLastSession(session);
+
+      router.push(`/session/${session.id}`);
       emit("created");
     }
   } finally {
