@@ -1,10 +1,19 @@
 <template>
-  <section class="space-y-2">
-    <h2
-      class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none"
+  <section
+    class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
+  >
+    <div
+      class="flex items-center justify-between border-b border-primary-700/50 pb-3"
     >
-      子目录
-    </h2>
+      <h2
+        class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
+      >
+        <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
+          <path :d="mdiFolder" fill="currentColor" />
+        </svg>
+        子目录
+      </h2>
+    </div>
     <div
       class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
     >
@@ -34,6 +43,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { mdiFolder } from "@mdi/js";
 import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import useAsyncTask from "@/composables/useAsyncTask";

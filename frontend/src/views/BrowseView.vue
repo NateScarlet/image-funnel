@@ -30,17 +30,6 @@
             </svg>
           </button>
 
-          <button
-            v-if="lastSession"
-            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
-            title="返回最近会话"
-            @click="goToLastSession"
-          >
-            <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiHistory" fill="currentColor" />
-            </svg>
-          </button>
-
           <!-- 磨砂面包屑路径 -->
           <div
             class="flex items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 overflow-hidden text-sm"
@@ -61,6 +50,19 @@
               </span>
             </template>
           </div>
+
+          <!-- 上次会话按钮，显示文本与最后更新时间 -->
+          <button
+            v-if="lastSession"
+            class="flex items-center gap-2 px-3 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium"
+            title="返回最近会话"
+            @click="goToLastSession"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path :d="mdiHistory" fill="currentColor" />
+            </svg>
+            <span>上次会话：{{ formatDate(lastSession.updatedAt) }}</span>
+          </button>
         </div>
       </div>
     </header>
@@ -84,7 +86,7 @@
           class="flex items-center justify-between border-b border-primary-700/50 pb-3"
         >
           <h2
-            class="text-sm font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
+            class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
           >
             <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
               <path :d="mdiNoteTextOutline" fill="currentColor" />
@@ -185,14 +187,19 @@
       </section>
 
       <!-- 图片网格展示区 -->
-      <section class="space-y-3">
+      <section
+        class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
+      >
         <!-- 图片列表标题与图片专用的筛选过滤条件 -->
         <div
-          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary-700/50 pb-3"
         >
           <h2
-            class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none"
+            class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
           >
+            <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
+              <path :d="mdiImage" fill="currentColor" />
+            </svg>
             图片列表 ({{ images.length }} 张)
           </h2>
 
@@ -492,8 +499,10 @@ import {
   mdiEyeOff,
   mdiHome,
   mdiHistory,
+  mdiImage,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
+import { formatDate } from "@/utils/date";
 import { PRESET_COLORS } from "../composables/useImageLabel";
 import useBrowseImages from "../composables/useBrowseImages";
 import useBrowseMemos from "../composables/useBrowseMemos";
