@@ -6,9 +6,7 @@
     <header
       class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-30"
     >
-      <div
-        class="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3"
-      >
+      <div class="max-w-[1600px] mx-auto flex items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
         <div class="flex items-center gap-3 overflow-hidden">
           <button
@@ -63,75 +61,6 @@
               </span>
             </template>
           </div>
-        </div>
-
-        <!-- 过滤器控制区 -->
-        <div class="flex flex-wrap items-center gap-3">
-          <!-- 搜索输入框 -->
-          <div class="relative min-w-48 max-w-64 flex-1 md:flex-none">
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="搜索文件名..."
-              class="w-full pl-9 pr-4 h-[34px] bg-primary-800 border border-primary-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-secondary-500/50 focus:border-secondary-500 transition-all"
-            />
-            <svg
-              class="w-4 h-4 text-primary-400 absolute left-3 top-1/2 -translate-y-1/2"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiMagnify" fill="currentColor" />
-            </svg>
-          </div>
-
-          <!-- 评星过滤器 -->
-          <RatingFilter v-model="filterRating" />
-
-          <!-- 颜色标签过滤器 -->
-          <div
-            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-[34px] rounded-lg overflow-x-auto"
-          >
-            <span class="text-xs text-primary-400 select-none">标签:</span>
-            <div class="flex items-center gap-1">
-              <button
-                v-for="(colorHex, colorName) in PRESET_COLORS"
-                :key="colorName"
-                class="w-3.5 h-3.5 rounded-full transition-all border border-white/20 relative"
-                :style="{
-                  backgroundColor: colorHex,
-                  borderColor: filterLabels.includes(colorName)
-                    ? 'white'
-                    : undefined,
-                }"
-                :class="[
-                  filterLabels.includes(colorName)
-                    ? 'scale-115 shadow-[0_0_8px_rgba(255,255,255,0.6)]'
-                    : 'opacity-60 hover:opacity-100 hover:scale-110',
-                ]"
-                :title="colorName"
-                @click="toggleLabelFilter(colorName)"
-              >
-                <!-- 选中指示点 -->
-                <span
-                  v-if="filterLabels.includes(colorName)"
-                  class="absolute inset-0.5 rounded-full border border-black/30"
-                ></span>
-              </button>
-            </div>
-          </div>
-
-          <!-- 清空过滤按钮 -->
-          <button
-            class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1"
-            :class="[
-              hasActiveFilters
-                ? 'bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer'
-                : 'bg-primary-900 border-primary-800 text-primary-500 cursor-not-allowed opacity-40',
-            ]"
-            :disabled="!hasActiveFilters"
-            @click="clearFilters"
-          >
-            <span>清除</span>
-          </button>
         </div>
       </div>
     </header>
@@ -257,12 +186,83 @@
 
       <!-- 图片网格展示区 -->
       <section class="space-y-3">
-        <div class="flex items-center justify-between">
+        <!-- 图片列表标题与图片专用的筛选过滤条件 -->
+        <div
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
           <h2
             class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none"
           >
             图片列表 ({{ images.length }} 张)
           </h2>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- 搜索输入框 -->
+            <div class="relative min-w-48 max-w-64 flex-1 md:flex-none">
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="搜索文件名..."
+                class="w-full pl-9 pr-4 h-[34px] bg-primary-800 border border-primary-700 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-secondary-500/50 focus:border-secondary-500 transition-all"
+              />
+              <svg
+                class="w-4 h-4 text-primary-400 absolute left-3 top-1/2 -translate-y-1/2"
+                viewBox="0 0 24 24"
+              >
+                <path :d="mdiMagnify" fill="currentColor" />
+              </svg>
+            </div>
+
+            <!-- 评星过滤器 -->
+            <RatingFilter v-model="filterRating" />
+
+            <!-- 颜色标签过滤器 -->
+            <div
+              class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-[34px] rounded-lg overflow-x-auto"
+            >
+              <span class="text-xs text-primary-400 select-none">标签:</span>
+              <div class="flex items-center gap-1">
+                <button
+                  v-for="(colorHex, colorName) in PRESET_COLORS"
+                  :key="colorName"
+                  class="w-3.5 h-3.5 rounded-full transition-all border border-white/20 relative"
+                  :style="{
+                    backgroundColor: colorHex,
+                    borderColor: filterLabels.includes(colorName)
+                      ? 'white'
+                      : undefined,
+                  }"
+                  :class="[
+                    filterLabels.includes(colorName)
+                      ? 'scale-115 shadow-[0_0_8px_rgba(255,255,255,0.6)]'
+                      : 'opacity-60 hover:opacity-100 hover:scale-110',
+                  ]"
+                  :title="colorName"
+                  @click="toggleLabelFilter(colorName)"
+                >
+                  <!-- 选中指示点 -->
+                  <span
+                    v-if="filterLabels.includes(colorName)"
+                    class="absolute inset-0.5 rounded-full border border-black/30"
+                  ></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 清空过滤按钮 -->
+            <button
+              class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1"
+              :class="[
+                hasActiveFilters
+                  ? 'bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer'
+                  : 'bg-primary-900 border-primary-800 text-primary-500 cursor-not-allowed opacity-40',
+              ]"
+              :disabled="!hasActiveFilters"
+              @click="clearFilters"
+            >
+              <span>清除</span>
+            </button>
+          </div>
         </div>
 
         <!-- 骨架图加载指示，避免布局抖动 -->
