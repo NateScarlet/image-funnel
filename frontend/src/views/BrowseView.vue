@@ -17,7 +17,7 @@
             @click="navigateToHome"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiUndo" fill="currentColor" />
+              <path :d="mdiHome" fill="currentColor" />
             </svg>
           </button>
 
@@ -515,11 +515,11 @@ import {
   mdiFolderOpen,
   mdiMagnify,
   mdiStar,
-  mdiUndo,
   mdiLoading,
   mdiNoteTextOutline,
   mdiEye,
   mdiEyeOff,
+  mdiHome,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { PRESET_COLORS } from "../composables/useImageLabel";
