@@ -140,35 +140,12 @@
       class="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden"
     >
       <!-- 子目录容器区 -->
-      <section v-if="subDirectories.length > 0" class="space-y-2">
-        <h2
-          class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none"
-        >
-          子目录
-        </h2>
-        <div
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3"
-        >
-          <button
-            v-for="subDir in subDirectories"
-            :key="subDir.id"
-            class="p-3 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-primary-700/80 rounded-xl transition-all flex items-center gap-2.5 text-left group overflow-hidden"
-            @click="navigateToDir(subDir.id)"
-          >
-            <svg
-              class="w-5 h-5 text-secondary-500 group-hover:scale-110 transition-transform flex-none"
-              viewBox="0 0 24 24"
-            >
-              <path :d="mdiFolder" fill="currentColor" />
-            </svg>
-            <span
-              class="text-sm text-primary-200 group-hover:text-white font-medium truncate flex-1"
-            >
-              {{ getDirName(subDir.relPath) }}
-            </span>
-          </button>
-        </div>
-      </section>
+      <SubdirectoryGrid
+        v-if="subDirectories.length > 0"
+        :directories="subDirectories"
+        :filter-rating="filterRating"
+        @navigate="navigateToDir"
+      />
 
       <!-- 笔记列表容器区 -->
       <section
@@ -506,7 +483,6 @@ import {
   mdiChevronLeft,
   mdiChevronRight,
   mdiClose,
-  mdiFolder,
   mdiFolderOpen,
   mdiMagnify,
   mdiStar,
@@ -532,6 +508,7 @@ import {
 import ImageViewer from "../components/ImageViewer.vue";
 import RatingFilter from "../components/RatingFilter.vue";
 import MemoEditorDialog from "../components/MemoEditorDialog.vue";
+import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 
 // #region 路由参数与导航
 const route = useRoute();
@@ -609,11 +586,6 @@ function goToParent() {
   } else {
     navigateToDir("");
   }
-}
-
-function getDirName(relPath: string): string {
-  if (!relPath) return "";
-  return relPath.split(/[/\\]/).pop() || "";
 }
 // #endregion
 
