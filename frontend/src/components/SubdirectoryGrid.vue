@@ -13,8 +13,25 @@
         </svg>
         子目录
       </h2>
+      <div class="flex items-center gap-4">
+        <!-- 筛选未评级图片目录开关 -->
+        <ToggleSwitch v-model="showLargeUnrated">
+          <span class="text-sm text-primary-400">
+            显示未评级图片 &gt;
+            <input
+              v-model.number="maxUnratedCount"
+              type="number"
+              class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500 mx-1"
+              min="0"
+              @click.stop
+            />
+            的目录（{{ largeUnratedCount }}）
+          </span>
+        </ToggleSwitch>
+      </div>
     </div>
     <div
+      v-if="sortedDirectories.length > 0"
       class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
     >
       <button
@@ -38,14 +55,34 @@
         </DirectoryDisplay>
       </button>
     </div>
+    <div v-else class="py-6 text-center text-primary-500 text-sm italic">
+      无符合筛选条件的子目录
+    </div>
   </section>
 </template>
+
+<script lang="ts">
+import useStorage from "@/composables/useStorage";
+
+const { model: maxUnratedCount } = useStorage<number>(
+  localStorage,
+  "max_unrated_count_sub_dir_bf16419b",
+  () => 0,
+);
+
+const { model: showLargeUnrated } = useStorage<boolean>(
+  localStorage,
+  "show_large_unrated_sub_dir_3dfc6a37",
+  () => false,
+);
+</script>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { mdiFolder } from "@mdi/js";
 import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
+import ToggleSwitch from "./ToggleSwitch.vue";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 import type { DirectoryFragment } from "@/graphql/generated";
@@ -83,28 +120,57 @@ useAsyncTask({
 });
 // #endregion
 
+// #region 未评级图片过滤逻辑
+const largeUnratedCount = computed(() => {
+  return directories.filter((dir) => {
+    const stats = getCachedStats(dir.id);
+    if (!stats) return false;
+    const unratedCount =
+      stats.ratingCounts.find(
+        (rc: { rating: number; count: number }) => rc.rating === 0,
+      )?.count ?? 0;
+    return (
+      stats.subdirectoryCount === 0 && unratedCount > maxUnratedCount.value
+    );
+  }).length;
+});
+// #endregion
+
 // #region 目录倒序排列
 const sortedDirectories = computed(() => {
-  return sortBy(
-    directories.map((dir) => {
-      const stats = getCachedStats(dir.id);
-      return {
-        dir,
-        stats,
-      };
-    }),
-    [
-      // 无统计数据的排在最后，避免初始状态下的布局闪烁
-      (item) => !item.stats,
-      // 无图片数据的排在最后
-      (item) => item.stats?.imageCount === 0,
-      // 最新图片时间倒序（最新的排最前），通过取反时间戳实现
-      (item) => {
-        const modTime = item.stats?.latestImage?.modTime;
-        return modTime ? -new Date(modTime).getTime() : 0;
-      },
-    ],
-  ).map((item) => item.dir);
+  const items = directories.map((dir) => {
+    const stats = getCachedStats(dir.id);
+    const unratedCount =
+      stats?.ratingCounts.find(
+        (rc: { rating: number; count: number }) => rc.rating === 0,
+      )?.count ?? 0;
+    const isLargeUnrated =
+      stats?.subdirectoryCount === 0 && unratedCount > maxUnratedCount.value;
+    return {
+      dir,
+      stats,
+      isLargeUnrated,
+    };
+  });
+
+  const filteredItems = items.filter((item) => {
+    if (!showLargeUnrated.value && item.isLargeUnrated) {
+      return false;
+    }
+    return true;
+  });
+
+  return sortBy(filteredItems, [
+    // 无统计数据的排在最后，避免初始状态下的布局闪烁
+    (item) => !item.stats,
+    // 无图片数据的排在最后
+    (item) => item.stats?.imageCount === 0,
+    // 最新图片时间倒序（最新的排最前），通过取反时间戳实现
+    (item) => {
+      const modTime = item.stats?.latestImage?.modTime;
+      return modTime ? -new Date(modTime).getTime() : 0;
+    },
+  ]).map((item) => item.dir);
 });
 // #endregion
 </script>
