@@ -375,6 +375,7 @@ import useAsyncTask from "@/composables/useAsyncTask";
 import useQuery from "@/graphql/utils/useQuery";
 import query from "@/graphql/utils/query";
 import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
+import useHotkey from "@/composables/useHotkey";
 
 const emit =
   defineEmits<
@@ -471,6 +472,45 @@ async function handleCopy() {
     console.error("Failed to copy:", err);
   }
 }
+
+// #region 快捷键复制绝对路径
+// 复制绝对路径
+async function copyAbsoluteFilePath() {
+  const textToCopy = fullFilePath.value;
+  if (!textToCopy) {
+    return;
+  }
+  try {
+    await window.navigator.clipboard.writeText(textToCopy);
+    copyButtonText.value = "已复制绝对路径!";
+    setTimeout(() => {
+      copyButtonText.value = "";
+    }, 1500);
+  } catch (err) {
+    console.error("Failed to copy absolute path:", err);
+  }
+}
+
+// 绑定快捷键 Ctrl+C 复制图片绝对路径
+useHotkey(
+  "ctrl+c",
+  async (e) => {
+    // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    await copyAbsoluteFilePath();
+  },
+  {
+    preventDefault: false,
+    stopPropagation: false,
+    description: "复制绝对路径",
+  },
+);
+// #endregion
 
 // 使用 composable 提取的 XMP 评分管理逻辑
 const { setRating } = useImageRating(() => image);
