@@ -8,7 +8,7 @@
     >
       <div class="max-w-[1600px] mx-auto flex items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
-        <div class="flex items-center gap-3 overflow-hidden">
+        <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
           <button
             class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
             title="返回主页"
@@ -74,6 +74,48 @@
               <path :d="mdiHistory" fill="currentColor" />
             </svg>
             <span>上次会话：{{ formatDate(lastSession.updatedAt) }}</span>
+          </button>
+        </div>
+
+        <!-- 同级目录导航按钮组，固定在右上角，不可用时显示禁用样式 -->
+        <div class="flex items-center gap-1 flex-none">
+          <button
+            :disabled="!prevSibling"
+            class="p-2 rounded-lg border transition-all flex items-center justify-center"
+            :class="
+              prevSibling
+                ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+            "
+            :title="
+              prevSibling
+                ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
+                : '没有上一个目录'
+            "
+            @click="prevSibling && navigateToDir(prevSibling.id)"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiChevronLeft" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            :disabled="!nextSibling"
+            class="p-2 rounded-lg border transition-all flex items-center justify-center"
+            :class="
+              nextSibling
+                ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+            "
+            :title="
+              nextSibling
+                ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
+                : '没有下一个目录'
+            "
+            @click="nextSibling && navigateToDir(nextSibling.id)"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiChevronRight" fill="currentColor" />
+            </svg>
           </button>
         </div>
       </div>
@@ -476,7 +518,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed } from "vue";
+import useHotkey from "@/composables/useHotkey";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -567,6 +610,18 @@ function toggleLabelFilter(label: string) {
   }
   filterLabels.value = nextLabels;
 }
+
+const subDirectories = computed(() => {
+  return currentDirectory.value?.directories || [];
+});
+
+function goToParent() {
+  if (currentDirectory.value?.parentId) {
+    navigateToDir(currentDirectory.value.parentId);
+  } else {
+    navigateToDir("");
+  }
+}
 // #endregion
 
 // #region 目录与子目录查询
@@ -584,17 +639,70 @@ const currentDirectory = computed(() => {
   return node?.__typename === "Directory" ? node : undefined;
 });
 
-const subDirectories = computed(() => {
-  return currentDirectory.value?.directories || [];
+// #region 同级目录切换逻辑
+import useFilteredDirectories from "@/composables/useFilteredDirectories";
+
+// 推导父目录 ID。若当前已经在根目录，则不加载父目录
+const parentDirectoryId = computed(() => {
+  if (!currentDirectoryId.value) return undefined;
+  return currentDirectory.value?.parentId || "";
 });
 
-function goToParent() {
-  if (currentDirectory.value?.parentId) {
-    navigateToDir(currentDirectory.value.parentId);
-  } else {
-    navigateToDir("");
+// 构建查询父目录下所有子目录的 GraphQL 变量，若 parentDirectoryId 未就绪则跳过查询
+const parentDirectoriesVariables = computed(() => {
+  if (parentDirectoryId.value === undefined) {
+    return undefined;
   }
+  return {
+    id: parentDirectoryId.value,
+  };
+});
+
+const { data: parentDirectoriesData } = useQuery(DirectoriesDocument, {
+  variables: parentDirectoriesVariables,
+});
+
+// 父目录下的所有原始子目录列表
+const parentSubDirectories = computed(() => {
+  const node = parentDirectoriesData.value?.node;
+  return node?.__typename === "Directory" ? node.directories || [] : [];
+});
+
+// 排序后的同级目录
+const { sortedDirectories: sortedSiblings } =
+  useFilteredDirectories(parentSubDirectories);
+
+// 当前目录在排序后同级目录中的索引位置
+const currentSiblingIndex = computed(() => {
+  return sortedSiblings.value.findIndex(
+    (dir) => dir.id === currentDirectoryId.value,
+  );
+});
+
+// 上一个同级目录
+const prevSibling = computed(() => {
+  const idx = currentSiblingIndex.value;
+  if (idx > 0) {
+    return sortedSiblings.value[idx - 1];
+  }
+  return undefined;
+});
+
+// 下一个同级目录
+const nextSibling = computed(() => {
+  const idx = currentSiblingIndex.value;
+  if (idx !== -1 && idx < sortedSiblings.value.length - 1) {
+    return sortedSiblings.value[idx + 1];
+  }
+  return undefined;
+});
+
+// 提取目录名用于 UI 展示
+function getDirName(relPath: string): string {
+  if (!relPath) return "";
+  return relPath.split(/[/\\]/).pop() || "";
 }
+// #endregion
 // #endregion
 
 // #region 绝对物理路径与资源管理器打开
@@ -716,25 +824,45 @@ function nextImage() {
   }
 }
 
-// 挂载和卸载查看器的键盘左右键以及 Esc 键监听
-function handleGlobalKeydown(e: KeyboardEvent) {
-  if (currentImageIndex.value === undefined) return;
+// 查看器打开时：左右方向键切换图片，Esc 关闭查看器
+useHotkey(
+  "arrowleft",
+  () => {
+    if (currentImageIndex.value !== undefined) prevImage();
+  },
+  { allowInInputs: true, description: "上一张图片" },
+);
+useHotkey(
+  "arrowright",
+  () => {
+    if (currentImageIndex.value !== undefined) nextImage();
+  },
+  { allowInInputs: true, description: "下一张图片" },
+);
+useHotkey(
+  "escape",
+  () => {
+    if (currentImageIndex.value !== undefined) closeViewer();
+  },
+  { allowInInputs: true, description: "关闭查看器" },
+);
 
-  if (e.key === "ArrowLeft") {
-    prevImage();
-  } else if (e.key === "ArrowRight") {
-    nextImage();
-  } else if (e.key === "Escape") {
-    closeViewer();
-  }
-}
+// 切换到上一个同级目录
+useHotkey(
+  "[",
+  () => {
+    if (prevSibling.value) navigateToDir(prevSibling.value.id);
+  },
+  { description: "上一个目录" },
+);
 
-onMounted(() => {
-  window.addEventListener("keydown", handleGlobalKeydown);
-});
-
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleGlobalKeydown);
-});
+// 切换到下一个同级目录
+useHotkey(
+  "]",
+  () => {
+    if (nextSibling.value) navigateToDir(nextSibling.value.id);
+  },
+  { description: "下一个目录" },
+);
 // #endregion
 </script>
