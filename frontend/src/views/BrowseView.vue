@@ -26,7 +26,7 @@
             @click="goToParent"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
-              <path :d="mdiArrowLeft" fill="currentColor" />
+              <path :d="mdiArrowUp" fill="currentColor" />
             </svg>
           </button>
 
@@ -367,15 +367,11 @@
                 class="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none opacity-90 group-hover:opacity-100 transition-opacity"
               >
                 <!-- 评分图标 -->
-                <span
+                <RatingIcon
                   v-if="img.currentRating"
-                  class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md text-[10px] font-bold text-yellow-400 shadow-md border border-white/5"
-                >
-                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                    <path :d="mdiStar" />
-                  </svg>
-                  {{ img.currentRating }}
-                </span>
+                  :rating="img.currentRating"
+                  filled
+                />
 
                 <!-- 颜色标签 -->
                 <span
@@ -523,13 +519,11 @@ import useHotkey from "@/composables/useHotkey";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
 import {
-  mdiArrowLeft,
   mdiChevronLeft,
   mdiChevronRight,
   mdiClose,
   mdiFolderOpen,
   mdiMagnify,
-  mdiStar,
   mdiLoading,
   mdiNoteTextOutline,
   mdiEye,
@@ -539,6 +533,7 @@ import {
   mdiImage,
   mdiFilterOff,
   mdiOpenInNew,
+  mdiArrowUp,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
@@ -707,6 +702,7 @@ function getDirName(relPath: string): string {
 
 // #region 绝对物理路径与资源管理器打开
 import { useOpenDir } from "../composables/useOpenDir";
+import RatingIcon from "@/components/RatingIcon.vue";
 const { revealInExplorer } = useOpenDir();
 
 const metaLoadingCount = ref(0);
