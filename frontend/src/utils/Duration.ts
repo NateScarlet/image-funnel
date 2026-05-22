@@ -252,11 +252,10 @@ export default class Duration {
         afterT = true;
       }
 
-      let v = 0;
+      let v: number;
       let f = 0;
       let scale = 1;
-      let neg = false;
-      let pre = false;
+      let neg: boolean;
       let post = false;
 
       [neg, s] = leadingNegative(s);
@@ -265,7 +264,7 @@ export default class Duration {
       const pl = s.length;
       [v, s] = leadingInt(s);
 
-      pre = pl !== s.length; // whether we consumed anything before a period
+      const pre = pl !== s.length; // whether we consumed anything before a period
       if (neg) {
         v = -v;
       }
