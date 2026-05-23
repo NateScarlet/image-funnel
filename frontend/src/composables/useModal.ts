@@ -90,7 +90,7 @@ export default function useModal() {
             "div",
             {
               ...ctx.attrs,
-              class: ctx.attrs.class ?? "fixed inset-0 isolate z-50",
+              class: ctx.attrs.class ?? "fixed inset-0 isolate",
               role: "dialog",
             },
             ctx.slots.default?.(),

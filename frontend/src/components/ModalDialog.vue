@@ -9,7 +9,7 @@
   >
     <template v-if="visibleModel">
       <div
-        class="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer z-40"
+        class="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
         @click="close()"
       />
     </template>
@@ -26,7 +26,7 @@
   >
     <template v-if="visibleModel">
       <div
-        class="absolute inset-x-0 bottom-0 flex flex-col justify-end sm:items-center sm:justify-center short:justify-start overflow-hidden max-h-full pointer-events-none p-0 sm:p-4 z-50"
+        class="absolute inset-x-0 bottom-0 flex flex-col justify-end sm:items-center sm:justify-center short:justify-start overflow-hidden max-h-full pointer-events-none p-0 sm:p-4"
       >
         <div
           class="relative w-full pointer-events-auto bg-primary-900 border-t border-x sm:border border-primary-700 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95dvh] sm:max-h-[85vh] short:max-h-dvh text-left"

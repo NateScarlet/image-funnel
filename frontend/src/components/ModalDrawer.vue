@@ -9,7 +9,7 @@
   >
     <div
       v-if="visibleModel"
-      class="absolute inset-0 bg-black/75 backdrop-blur-xs cursor-pointer z-40"
+      class="absolute inset-0 bg-black/75 backdrop-blur-xs cursor-pointer"
       @click="close()"
     ></div>
   </Transition>
@@ -25,7 +25,7 @@
   >
     <div
       v-if="visibleModel"
-      class="absolute inset-y-0 right-0 lg:max-w-[90vw] z-50 pointer-events-auto"
+      class="absolute inset-y-0 right-0 lg:max-w-[90vw] pointer-events-auto"
       :class="containerClass"
     >
       <!-- 移动端顶部关闭按钮 -->

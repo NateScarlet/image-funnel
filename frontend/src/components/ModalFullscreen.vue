@@ -12,7 +12,7 @@
   >
     <template v-if="visibleModel">
       <div
-        class="absolute inset-0 bg-black/95 backdrop-blur-sm select-none z-50 flex items-center justify-center"
+        class="absolute inset-0 bg-black/95 backdrop-blur-sm select-none flex items-center justify-center"
       >
         <slot></slot>
       </div>

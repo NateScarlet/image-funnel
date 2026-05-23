@@ -4,7 +4,7 @@
   >
     <!-- 顶部导航栏 -->
     <header
-      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-30"
+      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0"
     >
       <div class="max-w-[1600px] mx-auto flex items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
