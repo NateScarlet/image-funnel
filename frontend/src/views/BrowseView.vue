@@ -22,8 +22,13 @@
 
           <!-- 返回上一级 -->
           <button
-            v-if="currentDirectory && !currentDirectory.root"
-            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer"
+            :disabled="!canGoToParent"
+            class="p-2 rounded-lg border transition-all flex-none flex items-center justify-center"
+            :class="
+              canGoToParent
+                ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white cursor-pointer'
+                : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed'
+            "
             title="返回上一级"
             @click="goToParent"
           >
@@ -602,6 +607,11 @@ function toggleLabelFilter(label: string) {
 
 const subDirectories = computed(() => {
   return currentDirectory.value?.directories || [];
+});
+
+// 判断当前是否可以返回上一级目录（存在当前目录且不是根目录）
+const canGoToParent = computed(() => {
+  return !!currentDirectory.value && !currentDirectory.value.root;
 });
 
 function goToParent() {
