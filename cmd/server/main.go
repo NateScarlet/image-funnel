@@ -82,16 +82,21 @@ func main() {
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
-	localScanner := localfs.NewScanner(cfg.AbsRootDir, imageFactory, dirRepo)
+
+	imgScanner := localfs.NewImageScanner(cfg.AbsRootDir, imageFactory)
+	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imgScanner)
+	memoScanner := localfs.NewMemoScanner(cfg.AbsRootDir)
+	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
+	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory)
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer, cfg.AbsRootDir))
 
-	var dirScanner domdirectory.Scanner = localScanner
+	var dirAnalyzer domdirectory.Analyzer = dirAnalyzerImpl
 	if cfg.EnableDirectoryStatsCache {
-		var cache = inmem.NewDirectoryStatsCache(localScanner, logger)
-		dirScanner = cache
+		var cache = inmem.NewDirectoryStatsCache(dirAnalyzerImpl, logger)
+		dirAnalyzer = cache
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
@@ -119,7 +124,7 @@ func main() {
 	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, dirScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
@@ -130,7 +135,17 @@ func main() {
 	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, cfg.AbsRootDir, logger)
-	directoryHandler := appdirectory.NewHandler(dirScanner, localScanner, eventBus, imageDTOFactory, dirRepo, logger)
+	directoryHandler := appdirectory.NewHandler(
+		dirScannerImpl,
+		dirAnalyzer,
+		imgScanner,
+		imgMover,
+		memoScanner,
+		eventBus,
+		imageDTOFactory,
+		dirRepo,
+		logger,
+	)
 	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
 	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
 

@@ -2,46 +2,31 @@ package inmem_test
 
 import (
 	"context"
-	"iter"
 	"main/internal/domain/directory"
-	"main/internal/domain/image"
-	"main/internal/domain/memo"
 	"main/internal/infrastructure/inmem"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
 )
 
-type mockScanner struct {
+type mockAnalyzer struct {
 	analyzeCallCount int
 }
 
-func (m *mockScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
-	return nil
-}
-func (m *mockScanner) LookupImage(ctx context.Context, relPath string) (*image.Image, error) {
-	return nil, nil
-}
-func (m *mockScanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
-	return nil
-}
-func (m *mockScanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
+func (m *mockAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
 	m.analyzeCallCount++
 	return directory.NewDirectoryStats(10, 5, nil, map[int]int{}), nil
-}
-func (m *mockScanner) ScanMemos(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
-	return nil
 }
 
 func TestDirectoryStatsCache(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	mock := &mockScanner{}
+	mock := &mockAnalyzer{}
 
 	cache := inmem.NewDirectoryStatsCache(mock, logger)
 	ctx := context.Background()
 
 	// 第一次调用应该穿透到 mock
-	stats1, err := cache.AnalyzeDirectory(ctx, "test/dir")
+	stats1, err := cache.Analyze(ctx, "test/dir")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +38,7 @@ func TestDirectoryStatsCache(t *testing.T) {
 	}
 
 	// 第二次调用应该命中缓存
-	_, err = cache.AnalyzeDirectory(ctx, "test/dir")
+	_, err = cache.Analyze(ctx, "test/dir")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,7 +50,7 @@ func TestDirectoryStatsCache(t *testing.T) {
 	cache.Invalidate("test/dir")
 
 	// 第三次调用应该重新穿透到 mock
-	_, err = cache.AnalyzeDirectory(ctx, "test/dir")
+	_, err = cache.Analyze(ctx, "test/dir")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

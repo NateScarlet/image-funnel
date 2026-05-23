@@ -7,6 +7,7 @@ import (
 	appsession "main/internal/application/session"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/memo"
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -18,8 +19,11 @@ import (
 
 // Handler 目录应用层处理器
 type Handler struct {
-	scanner         directory.Scanner
-	mover           directory.ImageMover
+	dirScanner      directory.Scanner
+	dirAnalyzer     directory.Analyzer
+	imgScanner      image.Scanner
+	imgMover        image.Mover
+	memoScanner     memo.Scanner
 	eventBus        appsession.EventBus
 	dtoFactory      *DirectoryDTOFactory
 	imageDTOFactory *appimage.ImageDTOFactory
@@ -31,16 +35,22 @@ type Handler struct {
 
 // NewHandler 创建目录处理器
 func NewHandler(
-	scanner directory.Scanner,
-	mover directory.ImageMover,
+	dirScanner directory.Scanner,
+	dirAnalyzer directory.Analyzer,
+	imgScanner image.Scanner,
+	imgMover image.Mover,
+	memoScanner memo.Scanner,
 	eventBus appsession.EventBus,
 	imageDTOFactory *appimage.ImageDTOFactory,
 	repo directory.Repository,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
-		scanner:         scanner,
-		mover:           mover,
+		dirScanner:      dirScanner,
+		dirAnalyzer:     dirAnalyzer,
+		imgScanner:      imgScanner,
+		imgMover:        imgMover,
+		memoScanner:     memoScanner,
 		eventBus:        eventBus,
 		dtoFactory:      NewDirectoryDTOFactory(imageDTOFactory),
 		imageDTOFactory: imageDTOFactory,
@@ -77,7 +87,7 @@ func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.Dir
 	if err != nil {
 		return nil, err
 	}
-	stats, err := h.scanner.AnalyzeDirectory(ctx, path)
+	stats, err := h.dirAnalyzer.Analyze(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +103,7 @@ func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*share
 	}
 
 	var result []*shared.DirectoryDTO
-	for dir, err := range h.scanner.ScanDirectories(ctx, path) {
+	for dir, err := range h.dirScanner.Scan(ctx, path) {
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +155,7 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 				if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
 					return true
 				}
-				img, err := h.scanner.LookupImage(ctx, event.RelPath)
+				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
 				if err != nil {
 					// 文件可能已被快速删除，跳过而不向客户端报错
 					return true
@@ -202,7 +212,7 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 					return true
 				}
 				// 尝试查找图片以获取其完整ID（虽然文件已删除，但可能还在缓存中）
-				img, err := h.scanner.LookupImage(ctx, event.RelPath)
+				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
 				if err != nil || img == nil {
 					// 文件已删除，无法查找，尝试从路径重建ID
 					// 但我们没有modtime，所以无法准确重建
@@ -284,7 +294,7 @@ func (h *Handler) Images(
 
 	// 定义流式扫描与过滤序列
 	filteredSeq := func(yield func(*shared.ImageDTO, error) bool) {
-		for img, scanErr := range h.scanner.Scan(ctx, relPath) {
+		for img, scanErr := range h.imgScanner.Scan(ctx, relPath) {
 			if scanErr != nil {
 				if !yield(nil, scanErr) {
 					return
@@ -371,7 +381,7 @@ func (h *Handler) Memos(
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
 	filteredSeq := func(yield func(*shared.MemoDTO, error) bool) {
-		for m, scanErr := range h.scanner.ScanMemos(ctx, relPath) {
+		for m, scanErr := range h.memoScanner.Scan(ctx, relPath) {
 			if scanErr != nil {
 				if !yield(nil, scanErr) {
 					return
@@ -440,7 +450,7 @@ func (h *Handler) MoveImages(
 		zap.String("toDirectoryRelPath", toDirectoryRelPath),
 	)
 
-	movedCount, targetAbsDir, err = h.mover.MoveImages(ctx, relPath, filterBy, toDirectoryRelPath)
+	movedCount, targetAbsDir, err = h.imgMover.Move(ctx, relPath, filterBy, toDirectoryRelPath)
 	if err != nil {
 		h.logger.Error("move images failed",
 			zap.Stringer("directoryID", directoryID),

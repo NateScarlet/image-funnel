@@ -3,7 +3,7 @@ package session
 import (
 	"context"
 	"iter"
-	"main/internal/domain/directory"
+	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/pubsub"
 	"main/internal/scalar"
@@ -20,7 +20,7 @@ type EventBus interface {
 type Service struct {
 	sessionRepo  Repository
 	metadataRepo metadata.Repository
-	dirScanner   directory.Scanner
+	imageScanner image.Scanner
 	eventBus     EventBus
 	logger       *zap.Logger
 	// 只发布 ID，订阅者需要自己 Acquire 后读取，避免跨 goroutine 持有 *Session 指针导致并发 map 读写
@@ -31,7 +31,7 @@ type Service struct {
 func NewService(
 	sessionRepo Repository,
 	metadataRepo metadata.Repository,
-	dirScanner directory.Scanner,
+	imageScanner image.Scanner,
 	eventBus EventBus,
 	logger *zap.Logger,
 	sessionSaved pubsub.Topic[scalar.ID],
@@ -40,7 +40,7 @@ func NewService(
 	s := &Service{
 		sessionRepo:  sessionRepo,
 		metadataRepo: metadataRepo,
-		dirScanner:   dirScanner,
+		imageScanner: imageScanner,
 		eventBus:     eventBus,
 		logger:       logger,
 		sessionSaved: sessionSaved,

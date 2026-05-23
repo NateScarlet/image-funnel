@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"main/internal/domain/directory"
 	"main/internal/domain/image"
-	"main/internal/domain/memo"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -181,7 +179,7 @@ func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shar
 	return func(yield func(*shared.FileChangedEvent, error) bool) {}
 }
 
-// FakeScanner is a mock implementation of directory.Scanner
+// FakeScanner is a mock implementation of image.Scanner
 type FakeScanner struct {
 	MetaRepo *FakeMetadataRepo
 	BaseDir  string
@@ -192,14 +190,14 @@ func (s *FakeScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*image
 	return func(yield func(*image.Image, error) bool) {}
 }
 
-func (s *FakeScanner) LookupImage(ctx context.Context, relPath string) (*image.Image, error) {
+func (s *FakeScanner) Lookup(ctx context.Context, relPath string) (*image.Image, error) {
 	// Normalize path separators if needed, but simplistic match for now
 	if img, ok := s.Images[relPath]; ok {
 		// Update XMP from MetaRepo if available to simulate disk state
 		fullPath := filepath.Join(s.BaseDir, relPath)
 		if xmp, _ := s.MetaRepo.Read(fullPath); xmp != nil {
 			// Create a copy with updated XMP logic if needed,
-			// but strictly speaking LookupImage just reads file.
+			// but strictly speaking Lookup just reads file.
 			// If we want to simulate "disk has XMP", we should probably
 			// reflect that.
 			// However, for ID consistency, we must return an image that produces the SAME ID
@@ -226,16 +224,6 @@ func (s *FakeScanner) LookupImage(ctx context.Context, relPath string) (*image.I
 	return nil, os.ErrNotExist
 }
 
-func (s *FakeScanner) ScanDirectories(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
-	return func(yield func(*directory.Directory, error) bool) {}
-}
-
-func (s *FakeScanner) AnalyzeDirectory(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
-	return &directory.DirectoryStats{}, nil
-}
-
-func (s *FakeScanner) ScanMemos(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
-	return func(yield func(*memo.Memo, error) bool) {}
-}
+var _ image.Scanner = (*FakeScanner)(nil)
 
 // #endregion
