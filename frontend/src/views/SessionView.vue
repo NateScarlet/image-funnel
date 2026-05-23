@@ -285,6 +285,8 @@ const currentImageId = computed(
 const swipeEl = useTemplateRef("swipeEl");
 
 // #region 快捷键注册
+const isSessionImageActive = computed(() => !!currentImage.value);
+
 useHotkey(
   "ArrowDown",
   () => {
@@ -295,6 +297,7 @@ useHotkey(
   },
   {
     description: "排除图片",
+    enabled: isSessionImageActive,
   },
 );
 useHotkey(
@@ -307,6 +310,7 @@ useHotkey(
   },
   {
     description: "搁置图片",
+    enabled: isSessionImageActive,
   },
 );
 useHotkey(
@@ -319,6 +323,7 @@ useHotkey(
   },
   {
     description: "保留图片",
+    enabled: isSessionImageActive,
   },
 );
 useHotkey(
@@ -331,6 +336,7 @@ useHotkey(
   },
   {
     description: "撤销操作",
+    enabled: isSessionImageActive,
   },
 );
 // #endregion

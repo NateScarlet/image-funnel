@@ -834,38 +834,32 @@ useHotkey(
   },
 );
 
-// 当备注编辑器打开时，阻断 escape 键的事件冒泡，使得仅关闭备注框而不关闭整个大图查看器
+// 当备注编辑器打开时，启用 escape 键以关闭备注框，同时阻断外层查看器关闭的快捷键
 useHotkey(
   "escape",
-  (e) => {
-    if (showMemoDialog.value) {
-      showMemoDialog.value = false;
-      e.stopPropagation();
-      e.preventDefault();
-    }
+  () => {
+    showMemoDialog.value = false;
   },
   {
     allowInInputs: true,
-    preventDefault: false,
-    stopPropagation: false,
+    preventDefault: true,
+    stopPropagation: true,
     description: "关闭备注",
+    enabled: () => showMemoDialog.value,
   },
 );
 
-// 当备注编辑器打开时，阻断 arrowleft 和 arrowright 的事件冒泡，避免光标移动误触发图片切换
+// 当备注编辑器打开时，阻断 arrowleft 和 arrowright 的快捷键处理，避免光标移动误触发图片切换
 useHotkey(
   ["arrowleft", "arrowright"],
-  (e) => {
-    if (showMemoDialog.value) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
+  () => {
+    // 仅用于在此上下文拦截左右方向键分发，保留默认光标移动
   },
   {
     allowInInputs: true,
     preventDefault: false,
-    stopPropagation: false,
-    description: "阻止备注编辑时的图片切换",
+    stopPropagation: true,
+    enabled: () => showMemoDialog.value,
   },
 );
 

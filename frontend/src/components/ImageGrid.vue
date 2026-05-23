@@ -409,26 +409,40 @@ function nextImage() {
 }
 
 // 查看器打开时：左右方向键切换图片，Esc 关闭查看器
+const isViewerOpen = computed(() => currentImageIndex.value !== undefined);
+
 useHotkey(
   "arrowleft",
   () => {
-    if (currentImageIndex.value !== undefined) prevImage();
+    prevImage();
   },
-  { allowInInputs: true, description: "上一张图片" },
+  {
+    allowInInputs: true,
+    description: "上一张图片",
+    enabled: isViewerOpen,
+  },
 );
 useHotkey(
   "arrowright",
   () => {
-    if (currentImageIndex.value !== undefined) nextImage();
+    nextImage();
   },
-  { allowInInputs: true, description: "下一张图片" },
+  {
+    allowInInputs: true,
+    description: "下一张图片",
+    enabled: isViewerOpen,
+  },
 );
 useHotkey(
   "escape",
   () => {
-    if (currentImageIndex.value !== undefined) closeViewer();
+    closeViewer();
   },
-  { allowInInputs: true, description: "关闭查看器" },
+  {
+    allowInInputs: true,
+    description: "关闭查看器",
+    enabled: isViewerOpen,
+  },
 );
 // #endregion
 </script>

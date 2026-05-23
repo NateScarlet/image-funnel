@@ -36,7 +36,7 @@
           <!-- 快捷键列表内容区 -->
           <div class="flex-1 overflow-y-auto pr-1 space-y-2.5 scrollbar-thin">
             <div
-              v-for="item in activeHotkeys"
+              v-for="item in visibleHotkeys"
               :key="item.id"
               class="flex items-center justify-between py-2.5 border-b border-primary-800/40 last:border-b-0 hover:bg-primary-800/30 px-3 rounded-xl transition-colors"
             >
@@ -71,7 +71,7 @@
               </div>
             </div>
             <div
-              v-if="activeHotkeys.length === 0"
+              v-if="visibleHotkeys.length === 0"
               class="text-center py-8 text-primary-400 text-sm"
             >
               当前页面无可用快捷键
@@ -94,6 +94,7 @@
 import { activeHotkeys } from "../composables/useHotkey";
 import { mdiKeyboardOutline, mdiClose } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
+import { computed, toValue } from "vue";
 
 defineProps<{
   show: boolean;
@@ -102,6 +103,13 @@ defineProps<{
 defineEmits<(e: "close") => void>();
 
 const rendererEl = useFullscreenRendererElement();
+
+// 过滤出当前可用状态下的快捷键以在列表中展示
+const visibleHotkeys = computed(() => {
+  return activeHotkeys.value.filter(
+    (item) => item.enabled === undefined || toValue(item.enabled),
+  );
+});
 </script>
 
 <style scoped>

@@ -1,5 +1,10 @@
-import { ref, onUnmounted } from "vue";
-import useEventListeners from "./useEventListeners";
+import {
+  shallowRef,
+  onUnmounted,
+  toValue,
+  getCurrentInstance,
+  type Ref,
+} from "vue";
 
 /**
  * 快捷键配置项
@@ -16,7 +21,7 @@ export interface HotkeyOptions {
    */
   preventDefault?: boolean;
   /**
-   * 是否阻止事件冒泡
+   * 是否阻止事件冒泡 (在全局分发中表现为阻断更低优先级的快捷键触发)
    * @default true
    */
   stopPropagation?: boolean;
@@ -24,6 +29,11 @@ export interface HotkeyOptions {
    * 快捷键的功能描述
    */
   description?: string;
+  /**
+   * 是否启用当前快捷键，支持响应式更新
+   * @default true
+   */
+  enabled?: boolean | Ref<boolean> | (() => boolean);
 }
 
 /**
@@ -53,7 +63,23 @@ export interface HotkeyCombination {
 }
 
 /**
- * 解析 "ctrl+shift+1" 格式的快捷键字符串为 HotkeyCombination 对象
+ * 全局注册项定义
+ */
+interface RegisteredHotkey {
+  id: string;
+  combinations: HotkeyCombination[];
+  handler: (e: KeyboardEvent) => void;
+  allowInInputs: boolean;
+  preventDefault: boolean;
+  stopPropagation: boolean;
+  enabled?: boolean | Ref<boolean> | (() => boolean);
+}
+
+// 全局注册的快捷键列表，按注册顺序排列，后注册的在数组末尾，优先级更高
+const registeredHotkeys: RegisteredHotkey[] = [];
+
+/**
+ * 解析 "ctrl+shift+1" 格式 of 快捷键字符串为 HotkeyCombination 对象
  * @param shortcut 快捷键字符串
  */
 function parseHotkey(shortcut: string): HotkeyCombination {
@@ -82,6 +108,81 @@ function parseHotkey(shortcut: string): HotkeyCombination {
 }
 
 /**
+ * 全局的键盘按下事件处理器，负责按照注册顺序从后往前分发，并处理阻断逻辑
+ */
+function globalKeydownHandler(e: KeyboardEvent) {
+  for (let i = registeredHotkeys.length - 1; i >= 0; i--) {
+    const hotkey = registeredHotkeys[i];
+
+    // 1. 判断是否被禁用
+    if (hotkey.enabled !== undefined && !toValue(hotkey.enabled)) {
+      continue;
+    }
+
+    // 2. 检查输入框聚焦过滤
+    if (!hotkey.allowInInputs) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
+        continue;
+      }
+    }
+
+    // 3. 匹配按键组合
+    let matched = false;
+    for (const combination of hotkey.combinations) {
+      const matchesCtrl = !!e.ctrlKey === !!combination.ctrl;
+      const matchesShift = !!e.shiftKey === !!combination.shift;
+      const matchesAlt = !!e.altKey === !!combination.alt;
+      const matchesMeta = !!e.metaKey === !!combination.meta;
+
+      let matchesKey = e.key.toLowerCase() === combination.key.toLowerCase();
+
+      // 针对数字键的特殊兼容：当配合 Shift 按下数字键时，e.key 会变成其对应的字符（例如 Shift+1 变成 !）
+      // 这种情况下，我们需要借助物理键码 e.code (如 Digit1, Numpad1) 来做辅助匹配
+      if (!matchesKey && /^[0-9]$/.test(combination.key)) {
+        matchesKey =
+          e.code === `Digit${combination.key}` ||
+          e.code === `Numpad${combination.key}`;
+      }
+
+      if (
+        matchesCtrl &&
+        matchesShift &&
+        matchesAlt &&
+        matchesMeta &&
+        matchesKey
+      ) {
+        matched = true;
+        break;
+      }
+    }
+
+    if (matched) {
+      if (hotkey.preventDefault) {
+        e.preventDefault();
+      }
+      if (hotkey.stopPropagation) {
+        e.stopPropagation();
+      }
+      hotkey.handler(e);
+
+      // 若设置了阻断事件，则直接结束循环，不触发其他快捷键
+      if (hotkey.stopPropagation) {
+        break;
+      }
+    }
+  }
+}
+
+// 在全局绑定唯一的键盘事件监听器
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", globalKeydownHandler);
+}
+
+/**
  * 通用快捷键管理 Composable。
  * 当宿主组件被卸载时，绑定的快捷键会自动注销。
  *
@@ -98,6 +199,7 @@ export default function useHotkey(
     allowInInputs = false,
     preventDefault = true,
     stopPropagation = true,
+    enabled,
   } = options;
 
   // 将传入的各种快捷键格式统一转换并标准化为组合对象数组
@@ -108,62 +210,23 @@ export default function useHotkey(
     return k;
   });
 
-  // 使用通用的事件监听 composable，支持生命周期自动清理
-  useEventListeners(window, ({ on }) => {
-    on("keydown", (e) => {
-      // 默认跳过可输入区域，防止干扰用户的正常打字输入
-      if (!allowInInputs) {
-        if (
-          e.target instanceof HTMLInputElement ||
-          e.target instanceof HTMLTextAreaElement ||
-          (e.target instanceof HTMLElement && e.target.isContentEditable)
-        ) {
-          return;
-        }
-      }
+  const id = Math.random().toString(36).substring(2, 9);
 
-      // 遍历所有可能的组合，判断当前按键是否匹配
-      for (const combination of combinations) {
-        const matchesCtrl = !!e.ctrlKey === !!combination.ctrl;
-        const matchesShift = !!e.shiftKey === !!combination.shift;
-        const matchesAlt = !!e.altKey === !!combination.alt;
-        const matchesMeta = !!e.metaKey === !!combination.meta;
-
-        let matchesKey = e.key.toLowerCase() === combination.key.toLowerCase();
-
-        // 针对数字键的特殊兼容：当配合 Shift 按下数字键时，e.key 会变成其对应的字符（例如 Shift+1 变成 !）
-        // 这种情况下，我们需要借助物理键码 e.code (如 Digit1, Numpad1) 来做辅助匹配
-        if (!matchesKey && /^[0-9]$/.test(combination.key)) {
-          matchesKey =
-            e.code === `Digit${combination.key}` ||
-            e.code === `Numpad${combination.key}`;
-        }
-
-        if (
-          matchesCtrl &&
-          matchesShift &&
-          matchesAlt &&
-          matchesMeta &&
-          matchesKey
-        ) {
-          if (preventDefault) {
-            e.preventDefault();
-          }
-          if (stopPropagation) {
-            e.stopPropagation();
-          }
-          handler(e);
-          break;
-        }
-      }
-    });
-  });
+  // 构造注册项并推入全局注册列表
+  const newHotkey: RegisteredHotkey = {
+    id,
+    combinations,
+    handler,
+    allowInInputs,
+    preventDefault,
+    stopPropagation,
+    enabled,
+  };
+  registeredHotkeys.push(newHotkey);
 
   // 收集快捷键配置以展示到帮助列表中
   const description = options.description;
   if (description) {
-    const id = Math.random().toString(36).substring(2, 9);
-
     const parseCombinationToKeys = (comb: HotkeyCombination): string[] => {
       const parts: string[] = [];
       if (comb.ctrl) parts.push("Ctrl");
@@ -183,16 +246,32 @@ export default function useHotkey(
 
     const keysList = combinations.map(parseCombinationToKeys);
 
-    activeHotkeys.value.push({
-      id,
-      keys: keysList,
-      description,
-    });
+    activeHotkeys.value = [
+      ...activeHotkeys.value,
+      {
+        id,
+        keys: keysList,
+        description,
+        enabled,
+      },
+    ];
+  }
 
+  // 组件卸载时自动注销
+  const instance = getCurrentInstance();
+  if (instance) {
     onUnmounted(() => {
-      activeHotkeys.value = activeHotkeys.value.filter(
-        (item) => item.id !== id,
-      );
+      // 从全局注册列表中移除
+      const index = registeredHotkeys.findIndex((item) => item.id === id);
+      if (index !== -1) {
+        registeredHotkeys.splice(index, 1);
+      }
+      // 从帮助列表中移除
+      if (description) {
+        activeHotkeys.value = activeHotkeys.value.filter(
+          (item) => item.id !== id,
+        );
+      }
     });
   }
 }
@@ -204,9 +283,10 @@ export interface ActiveHotkey {
   id: string;
   keys: string[][];
   description: string;
+  enabled?: boolean | Ref<boolean> | (() => boolean);
 }
 
 /**
  * 当前活跃注册的快捷键响应式列表
  */
-export const activeHotkeys = ref<ActiveHotkey[]>([]);
+export const activeHotkeys = shallowRef<ActiveHotkey[]>([]);
