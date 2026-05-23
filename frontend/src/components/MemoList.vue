@@ -92,7 +92,7 @@
 
     <!-- 备忘录/笔记编辑对话框 -->
     <memoDialog.component container-class="sm:max-w-3xl short:max-w-none">
-      <MemoEditorDialog
+      <MemoForm
         v-if="selectedMemo"
         ref="memoDialogRef"
         :memo="selectedMemo"
@@ -118,7 +118,7 @@ import type {
   MemoFiltersInput,
   MemoFragment,
 } from "@/graphql/generated";
-import MemoEditorDialog from "./MemoEditorDialog.vue";
+import MemoForm from "./MemoForm.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 
 // #region 组件属性定义
@@ -158,7 +158,7 @@ const { memos, toggleMemoHidden } = useBrowseMemos(memosVariables);
 // #region 笔记编辑弹出框管理
 const selectedMemo = ref<MemoFragment | null>(null);
 const memoDialogRef =
-  useTemplateRef<InstanceType<typeof MemoEditorDialog>>("memoDialogRef");
+  useTemplateRef<InstanceType<typeof MemoForm>>("memoDialogRef");
 
 const memoDialog = useModalDialog({
   onDidOpen() {

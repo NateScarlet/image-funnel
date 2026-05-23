@@ -28,7 +28,7 @@ description: "前端模态框与抽屉（Modal/Dialog/Drawer）使用规范，�
 ```vue
 <!-- 调用端模板示例 -->
 <memoDialog.component container-class="sm:max-w-3xl">
-  <MemoEditorDialog
+  <MemoForm
     :memo="selectedMemo"
     @close="memoDialog.close"
   />

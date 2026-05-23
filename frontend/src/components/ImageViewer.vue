@@ -377,7 +377,7 @@
 
     <!-- 备忘录/笔记编辑对话框 -->
     <memoDialog.component container-class="sm:max-w-3xl short:max-w-none">
-      <MemoEditorDialog
+      <MemoForm
         v-if="image"
         ref="memoDialogRef"
         :memo="image.memo"
@@ -429,7 +429,7 @@ import query from "@/graphql/utils/query";
 import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
 import useHotkey from "@/composables/useHotkey";
 import { useOpenDir } from "@/composables/useOpenDir";
-import MemoEditorDialog from "./MemoEditorDialog.vue";
+import MemoForm from "./MemoForm.vue";
 import useMemo from "@/composables/useMemo";
 import useModalDialog from "@/composables/useModalDialog";
 
@@ -845,7 +845,7 @@ const memoDialog = useModalDialog({
 });
 
 const memoDialogRef =
-  useTemplateRef<InstanceType<typeof MemoEditorDialog>>("memoDialogRef");
+  useTemplateRef<InstanceType<typeof MemoForm>>("memoDialogRef");
 
 // 开启当前查看图片的备注实时订阅，保证外部修改时能自动同步
 useMemo(() => image.memo.id);
