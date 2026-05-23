@@ -13,7 +13,33 @@
         </svg>
         子目录
       </h2>
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+        <!-- 本地搜索子目录输入框 -->
+        <div class="relative min-w-36 max-w-60 flex-1 sm:flex-none">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索子目录..."
+            class="w-full pl-8 pr-8 h-8 bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all"
+          />
+          <svg
+            class="w-3.5 h-3.5 text-primary-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            viewBox="0 0 24 24"
+          >
+            <path :d="mdiMagnify" fill="currentColor" />
+          </svg>
+          <button
+            v-if="searchQuery"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-200 transition-colors p-0.5 rounded-full hover:bg-primary-700/50 cursor-pointer"
+            title="清空"
+            @click="searchQuery = ''"
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24">
+              <path :d="mdiClose" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+
         <!-- 筛选未评级图片目录开关 -->
         <ToggleSwitch v-model="showLargeUnrated">
           <span class="text-sm text-primary-400">
@@ -62,7 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { mdiFolder } from "@mdi/js";
+import { ref } from "vue";
+import { mdiFolder, mdiMagnify, mdiClose } from "@mdi/js";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import type { DirectoryFragment } from "@/graphql/generated";
@@ -77,6 +104,9 @@ const { directories, filterRating } = defineProps<{
 const emit = defineEmits<(e: "navigate", id: string) => void>();
 // #endregion
 
+// 搜索关键字响应式变量
+const searchQuery = ref("");
+
 // 使用新提取的 composable，共享子目录过滤与排序状态
 const {
   maxUnratedCount,
@@ -84,7 +114,7 @@ const {
   largeUnratedCount,
   sortedDirectories,
   loading,
-} = useFilteredDirectories(() => directories);
+} = useFilteredDirectories(() => directories, searchQuery);
 
 // #region 目录名解析
 function getDirName(relPath: string): string {

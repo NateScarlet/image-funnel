@@ -8,10 +8,12 @@ import type { DirectoryFragment } from "@/graphql/generated";
 /**
  * 过滤并排序目录列表的 composable
  * @param directories 原始目录列表
+ * @param query 可选的搜索关键字
  * @returns 过滤与排序后的目录及相关的状态控制
  */
 export default function useFilteredDirectories(
   directories: MaybeRefOrGetter<DirectoryFragment[]>,
+  query?: MaybeRefOrGetter<string | undefined>,
 ) {
   // 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
   const { model: maxUnratedCount } = useStorage<number>(
@@ -61,6 +63,7 @@ export default function useFilteredDirectories(
   // 排序并过滤后的目录列表
   const sortedDirectories = computed(() => {
     const dirs = toValue(directories);
+    const queryStr = query ? toValue(query)?.trim().toLowerCase() : "";
 
     // #region 过滤与排序逻辑
     const items = dirs.map((dir) => {
@@ -77,8 +80,16 @@ export default function useFilteredDirectories(
     });
 
     const filteredItems = items.filter((item) => {
+      // 过滤大量未评级目录
       if (!showLargeUnrated.value && item.isLargeUnrated) {
         return false;
+      }
+      // 过滤搜索关键字（仅匹配最后一级目录名称，即同级目录名过滤）
+      if (queryStr) {
+        const dirName = getDirName(item.dir.relPath).toLowerCase();
+        if (!dirName.includes(queryStr)) {
+          return false;
+        }
       }
       return true;
     });
@@ -105,3 +116,13 @@ export default function useFilteredDirectories(
     loading: computed(() => loadingCount.value > 0),
   };
 }
+
+// #region 辅助函数
+/**
+ * 从相对路径中解析出最后一级目录的名称
+ */
+function getDirName(relPath: string): string {
+  if (!relPath) return "";
+  return relPath.split(/[/\\]/).pop() || "";
+}
+// #endregion
