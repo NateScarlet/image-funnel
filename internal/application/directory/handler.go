@@ -11,33 +11,42 @@ import (
 	"main/internal/scalar"
 	"main/internal/shared"
 	"path/filepath"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 // Handler 目录应用层处理器
 type Handler struct {
 	scanner         directory.Scanner
+	mover           directory.ImageMover
 	eventBus        appsession.EventBus
 	dtoFactory      *DirectoryDTOFactory
 	imageDTOFactory *appimage.ImageDTOFactory
 
 	filterBuilder *directory.FilterBuilder
 	repo          directory.Repository
+	logger        *zap.Logger
 }
 
 // NewHandler 创建目录处理器
 func NewHandler(
 	scanner directory.Scanner,
+	mover directory.ImageMover,
 	eventBus appsession.EventBus,
 	imageDTOFactory *appimage.ImageDTOFactory,
 	repo directory.Repository,
+	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
 		scanner:         scanner,
+		mover:           mover,
 		eventBus:        eventBus,
 		dtoFactory:      NewDirectoryDTOFactory(imageDTOFactory),
 		imageDTOFactory: imageDTOFactory,
 		filterBuilder:   directory.NewFilterBuilder(),
 		repo:            repo,
+		logger:          logger,
 	}
 }
 
@@ -408,6 +417,51 @@ func (h *Handler) Memos(
 	}
 
 	return buf.Value()
+}
+
+// MoveImages 移动当前目录中筛选匹配的图片及其配套文件至目标相对目录中（相对于当前目录）
+func (h *Handler) MoveImages(
+	ctx context.Context,
+	directoryID scalar.ID,
+	filterBy shared.ImageFilters,
+	toDirectoryRelPath string,
+) (movedCount int, targetAbsDir string, err error) {
+	startTime := time.Now()
+
+	// 还原当前目录相对路径
+	relPath, err := directory.DecodeID(directoryID)
+	if err != nil {
+		return 0, "", err
+	}
+
+	h.logger.Info("will move images",
+		zap.Stringer("directoryID", directoryID),
+		zap.String("fromDirectory", relPath),
+		zap.String("toDirectoryRelPath", toDirectoryRelPath),
+	)
+
+	movedCount, targetAbsDir, err = h.mover.MoveImages(ctx, relPath, filterBy, toDirectoryRelPath)
+	if err != nil {
+		h.logger.Error("move images failed",
+			zap.Stringer("directoryID", directoryID),
+			zap.String("fromDirectory", relPath),
+			zap.String("toDirectoryRelPath", toDirectoryRelPath),
+			zap.Duration("duration", time.Since(startTime)),
+			zap.Error(err),
+		)
+		return 0, "", err
+	}
+
+	h.logger.Info("did move images",
+		zap.Stringer("directoryID", directoryID),
+		zap.String("fromDirectory", relPath),
+		zap.String("toDirectoryRelPath", toDirectoryRelPath),
+		zap.Int("movedCount", movedCount),
+		zap.String("targetAbsDir", targetAbsDir),
+		zap.Duration("duration", time.Since(startTime)),
+	)
+
+	return movedCount, targetAbsDir, nil
 }
 
 // #endregion

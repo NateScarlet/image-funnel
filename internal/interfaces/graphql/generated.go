@@ -152,10 +152,17 @@ type ComplexityRoot struct {
 		Version     func(childComplexity int) int
 	}
 
+	MoveImagesPayload struct {
+		ClientMutationID        func(childComplexity int) int
+		MovedCount              func(childComplexity int) int
+		TargetAbsoluteDirectory func(childComplexity int) int
+	}
+
 	Mutation struct {
 		CommitChanges       func(childComplexity int, input CommitChangesInput) int
 		CreateSession       func(childComplexity int, input CreateSessionInput) int
 		MarkImage           func(childComplexity int, input MarkImageInput) int
+		MoveImages          func(childComplexity int, input MoveImagesInput) int
 		Undo                func(childComplexity int, input UndoInput) int
 		UpdateImageMetadata func(childComplexity int, input UpdateImageMetadataInput) int
 		UpdateMemo          func(childComplexity int, id scalar.ID, content string) int
@@ -256,6 +263,7 @@ type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
+	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
@@ -676,6 +684,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Meta.Version(childComplexity), true
 
+	case "MoveImagesPayload.clientMutationId":
+		if e.complexity.MoveImagesPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.MoveImagesPayload.ClientMutationID(childComplexity), true
+	case "MoveImagesPayload.movedCount":
+		if e.complexity.MoveImagesPayload.MovedCount == nil {
+			break
+		}
+
+		return e.complexity.MoveImagesPayload.MovedCount(childComplexity), true
+	case "MoveImagesPayload.targetAbsoluteDirectory":
+		if e.complexity.MoveImagesPayload.TargetAbsoluteDirectory == nil {
+			break
+		}
+
+		return e.complexity.MoveImagesPayload.TargetAbsoluteDirectory(childComplexity), true
+
 	case "Mutation.commitChanges":
 		if e.complexity.Mutation.CommitChanges == nil {
 			break
@@ -709,6 +736,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.MarkImage(childComplexity, args["input"].(MarkImageInput)), true
+	case "Mutation.moveImages":
+		if e.complexity.Mutation.MoveImages == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_moveImages_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.MoveImages(childComplexity, args["input"].(MoveImagesInput)), true
 	case "Mutation.undo":
 		if e.complexity.Mutation.Undo == nil {
 			break
@@ -1108,6 +1146,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMemoFiltersInput,
+		ec.unmarshalInputMoveImagesInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateSessionInput,
@@ -1537,6 +1576,28 @@ extend type Mutation {
   markImage(input: MarkImageInput!): MarkImagePayload!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/move_images.graphql", Input: `input MoveImagesInput {
+  "当前所在的目录ID"
+  directoryId: ID!
+  "图片过滤条件"
+  filterBy: ImageFiltersInput!
+  "目标目录相对路径，相对于当前所在的目录（支持 ..）"
+  toDirectoryRelPath: String!
+  clientMutationId: String
+}
+
+type MoveImagesPayload {
+  "移动成功的图片数量"
+  movedCount: Int!
+  "移动的目标目录绝对物理路径，用于前端通过协议调起资源管理器并定位"
+  targetAbsoluteDirectory: String!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  moveImages(input: MoveImagesInput!): MoveImagesPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/undo.graphql", Input: `input UndoInput {
   sessionId: ID!
   clientMutationId: String
@@ -1677,6 +1738,17 @@ func (ec *executionContext) field_Mutation_markImage_args(ctx context.Context, r
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMarkImageInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐMarkImageInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_moveImages_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMoveImagesInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3990,6 +4062,93 @@ func (ec *executionContext) fieldContext_Meta_version(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _MoveImagesPayload_movedCount(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MoveImagesPayload_movedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.MovedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MoveImagesPayload_movedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MoveImagesPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MoveImagesPayload_targetAbsoluteDirectory(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MoveImagesPayload_targetAbsoluteDirectory,
+		func(ctx context.Context) (any, error) {
+			return obj.TargetAbsoluteDirectory, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MoveImagesPayload_targetAbsoluteDirectory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MoveImagesPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MoveImagesPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MoveImagesPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MoveImagesPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MoveImagesPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4127,6 +4286,55 @@ func (ec *executionContext) fieldContext_Mutation_markImage(ctx context.Context,
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_markImage_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_moveImages(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_moveImages,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().MoveImages(ctx, fc.Args["input"].(MoveImagesInput))
+		},
+		nil,
+		ec.marshalNMoveImagesPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_moveImages(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "movedCount":
+				return ec.fieldContext_MoveImagesPayload_movedCount(ctx, field)
+			case "targetAbsoluteDirectory":
+				return ec.fieldContext_MoveImagesPayload_targetAbsoluteDirectory(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_MoveImagesPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MoveImagesPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_moveImages_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8204,6 +8412,54 @@ func (ec *executionContext) unmarshalInputMemoFiltersInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, obj any) (MoveImagesInput, error) {
+	var it MoveImagesInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"directoryId", "filterBy", "toDirectoryRelPath", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
+		case "filterBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterBy"))
+			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilterBy = data
+		case "toDirectoryRelPath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("toDirectoryRelPath"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ToDirectoryRelPath = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any) (UndoInput, error) {
 	var it UndoInput
 	asMap := map[string]any{}
@@ -9403,6 +9659,52 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 	return out
 }
 
+var moveImagesPayloadImplementors = []string{"MoveImagesPayload"}
+
+func (ec *executionContext) _MoveImagesPayload(ctx context.Context, sel ast.SelectionSet, obj *MoveImagesPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, moveImagesPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MoveImagesPayload")
+		case "movedCount":
+			out.Values[i] = ec._MoveImagesPayload_movedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targetAbsoluteDirectory":
+			out.Values[i] = ec._MoveImagesPayload_targetAbsoluteDirectory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._MoveImagesPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var mutationImplementors = []string{"Mutation"}
 
 func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -9439,6 +9741,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "markImage":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_markImage(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "moveImages":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_moveImages(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -11122,6 +11431,25 @@ func (ec *executionContext) marshalNMeta2ᚖmainᚋinternalᚋinterfacesᚋgraph
 		return graphql.Null
 	}
 	return ec._Meta(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNMoveImagesInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesInput(ctx context.Context, v any) (MoveImagesInput, error) {
+	res, err := ec.unmarshalInputMoveImagesInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNMoveImagesPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesPayload(ctx context.Context, sel ast.SelectionSet, v MoveImagesPayload) graphql.Marshaler {
+	return ec._MoveImagesPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNMoveImagesPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesPayload(ctx context.Context, sel ast.SelectionSet, v *MoveImagesPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MoveImagesPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PageInfoDTO) graphql.Marshaler {

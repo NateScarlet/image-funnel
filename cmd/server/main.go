@@ -130,7 +130,7 @@ func main() {
 	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, cfg.AbsRootDir, logger)
-	directoryHandler := appdirectory.NewHandler(dirScanner, eventBus, imageDTOFactory, dirRepo)
+	directoryHandler := appdirectory.NewHandler(dirScanner, localScanner, eventBus, imageDTOFactory, dirRepo, logger)
 	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
 	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
 

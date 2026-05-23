@@ -1,0 +1,7 @@
+mutation MoveImages($input: MoveImagesInput!) {
+  moveImages(input: $input) {
+    movedCount
+    targetAbsoluteDirectory
+    clientMutationId
+  }
+}

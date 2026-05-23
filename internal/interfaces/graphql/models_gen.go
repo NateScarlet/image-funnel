@@ -59,6 +59,24 @@ type Meta struct {
 	Version     string `json:"version"`
 }
 
+type MoveImagesInput struct {
+	// 当前所在的目录ID
+	DirectoryID scalar.ID `json:"directoryId"`
+	// 图片过滤条件
+	FilterBy *shared.ImageFilters `json:"filterBy"`
+	// 目标目录相对路径，相对于当前所在的目录（支持 ..）
+	ToDirectoryRelPath string  `json:"toDirectoryRelPath"`
+	ClientMutationID   *string `json:"clientMutationId,omitempty"`
+}
+
+type MoveImagesPayload struct {
+	// 移动成功的图片数量
+	MovedCount int `json:"movedCount"`
+	// 移动的目标目录绝对物理路径，用于前端通过协议调起资源管理器并定位
+	TargetAbsoluteDirectory string  `json:"targetAbsoluteDirectory"`
+	ClientMutationID        *string `json:"clientMutationId,omitempty"`
+}
+
 type Mutation struct {
 }
 

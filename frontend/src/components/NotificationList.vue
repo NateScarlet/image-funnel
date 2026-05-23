@@ -46,6 +46,14 @@
         </div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-medium">{{ notification.message }}</div>
+          <div v-if="notification.action" class="mt-2">
+            <button
+              class="px-2.5 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer"
+              @click.stop="triggerAction(notification)"
+            >
+              {{ notification.action.text }}
+            </button>
+          </div>
         </div>
         <button
           class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
@@ -67,6 +75,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import useNotification from "../composables/useNotification";
+import type { Notification } from "../composables/useNotification";
 import {
   mdiClose,
   mdiAlertCircleOutline,
@@ -100,6 +109,12 @@ const typeClasses: Record<string, string> = {
   warning: "bg-yellow-900/90 text-yellow-100 border border-yellow-700",
   info: "bg-blue-900/90 text-blue-100 border border-blue-700",
 };
+
+function triggerAction(notification: Notification) {
+  if (notification.action && notification.action.onClick) {
+    notification.action.onClick(() => remove(notification.id));
+  }
+}
 </script>
 
 <style scoped>

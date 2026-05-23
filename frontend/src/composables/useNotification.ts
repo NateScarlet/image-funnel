@@ -2,11 +2,17 @@ import { ref } from "vue";
 
 export type NotificationType = "error" | "success" | "info" | "warning";
 
+export interface NotificationAction {
+  text: string;
+  onClick: (close: () => void) => void;
+}
+
 export interface Notification {
   id: string;
   type: NotificationType;
   message: string;
   duration?: number;
+  action?: NotificationAction;
 }
 
 const notifications = ref<Notification[]>([]);
@@ -16,6 +22,7 @@ export default function useNotification() {
     message: string,
     type: NotificationType = "info",
     duration = 3000,
+    action?: NotificationAction,
   ) {
     const id = Date.now().toString();
     const notification: Notification = {
@@ -23,6 +30,7 @@ export default function useNotification() {
       type,
       message,
       duration,
+      action,
     };
 
     notifications.value.push(notification);

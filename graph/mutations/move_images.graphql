@@ -1,0 +1,21 @@
+input MoveImagesInput {
+  "当前所在的目录ID"
+  directoryId: ID!
+  "图片过滤条件"
+  filterBy: ImageFiltersInput!
+  "目标目录相对路径，相对于当前所在的目录（支持 ..）"
+  toDirectoryRelPath: String!
+  clientMutationId: String
+}
+
+type MoveImagesPayload {
+  "移动成功的图片数量"
+  movedCount: Int!
+  "移动的目标目录绝对物理路径，用于前端通过协议调起资源管理器并定位"
+  targetAbsoluteDirectory: String!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  moveImages(input: MoveImagesInput!): MoveImagesPayload!
+}
