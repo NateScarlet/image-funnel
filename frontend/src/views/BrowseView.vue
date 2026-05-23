@@ -9,8 +9,9 @@
       <div class="max-w-[1600px] mx-auto flex items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
         <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+          <!-- 返回主页 -->
           <button
-            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
+            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer"
             title="返回主页"
             @click="navigateToHome"
           >
@@ -19,9 +20,10 @@
             </svg>
           </button>
 
+          <!-- 返回上一级 -->
           <button
             v-if="currentDirectory && !currentDirectory.root"
-            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center"
+            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer"
             title="返回上一级"
             @click="goToParent"
           >
@@ -34,21 +36,13 @@
           <div
             class="flex items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 overflow-hidden text-sm"
           >
-            <span class="text-primary-400 flex-none flex items-center gap-1">
-              <svg class="w-4 h-4" viewBox="0 0 24 24">
-                <path :d="mdiFolderOpen" fill="currentColor" />
-              </svg>
-              Root
-            </span>
-            <template v-if="currentDirectory?.relPath">
-              <span class="text-primary-600">/</span>
-              <span
-                class="text-primary-200 font-medium truncate"
-                :title="currentDirectory.relPath"
-              >
-                {{ currentDirectory.relPath }}
-              </span>
-            </template>
+            <!-- 递归路径面包屑 -->
+            <DirectoryBreadcrumb
+              v-if="currentDirectoryId"
+              :directory-id="currentDirectoryId"
+              :is-current="true"
+              @navigate="navigateToDir"
+            />
           </div>
 
           <!-- 打开当前目录按钮 -->
@@ -522,7 +516,6 @@ import {
   mdiChevronLeft,
   mdiChevronRight,
   mdiClose,
-  mdiFolderOpen,
   mdiMagnify,
   mdiLoading,
   mdiNoteTextOutline,
@@ -555,6 +548,7 @@ import RatingFilter from "../components/RatingFilter.vue";
 import MemoEditorDialog from "../components/MemoEditorDialog.vue";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import ToggleSwitch from "../components/ToggleSwitch.vue";
+import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 
 // #region 路由参数与导航
 const route = useRoute();
