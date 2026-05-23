@@ -47,16 +47,11 @@ func (h *Handler) CreateSession(
 	filter *shared.ImageFilters,
 	target_keep int,
 ) (err error) {
-	h.logger.Info("will create session",
-		zap.Stringer("id", id),
-		zap.Stringer("directoryId", directoryId),
-		zap.Int("targetKeep", target_keep),
-	)
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
-			h.logger.Error("did create session",
+			h.logger.Error("create session failed",
 				zap.Stringer("id", id),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
@@ -83,7 +78,7 @@ func (h *Handler) MarkImage(
 
 	defer func() {
 		if err != nil {
-			h.logger.Error("mark image",
+			h.logger.Error("mark image failed",
 				zap.Stringer("sessionID", sessionID),
 				zap.Stringer("imageID", imageID),
 				zap.Stringer("action", action),
@@ -91,7 +86,7 @@ func (h *Handler) MarkImage(
 				zap.Error(err),
 			)
 		} else {
-			h.logger.Info("mark image",
+			h.logger.Info("did mark image",
 				zap.Stringer("sessionID", sessionID),
 				zap.Stringer("imageID", imageID),
 				zap.Stringer("action", action),
@@ -107,13 +102,13 @@ func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
 	startTime := time.Now()
 	defer func() {
 		if err != nil {
-			h.logger.Error("undo",
+			h.logger.Error("undo failed",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
 			)
 		} else {
-			h.logger.Info("undo",
+			h.logger.Info("did undo",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 			)
@@ -130,17 +125,11 @@ func (h *Handler) Commit(
 	shelveRating int,
 	rejectRating int,
 ) (success int, err error) {
-	h.logger.Info("will commit session",
-		zap.Stringer("sessionID", sessionID),
-		zap.Int("keepRating", keepRating),
-		zap.Int("shelveRating", shelveRating),
-		zap.Int("rejectRating", rejectRating),
-	)
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
-			h.logger.Warn("did commit session",
+			h.logger.Error("commit session failed",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Int("success", success),
@@ -264,14 +253,11 @@ func (h *Handler) UpdateSession(
 	targetKeep *int,
 	filter *shared.ImageFilters,
 ) (err error) {
-	h.logger.Info("will update session",
-		zap.Stringer("sessionID", sessionID),
-	)
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
-			h.logger.Error("did update session",
+			h.logger.Error("update session failed",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
@@ -299,12 +285,11 @@ func (h *Handler) UpdateSession(
 
 // UpdateLabel 更新图片的标签
 func (h *Handler) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID scalar.ID, label string) (dto *shared.ImageDTO, err error) {
-	h.logger.Info("will update label", zap.Stringer("sessionID", sessionID), zap.Stringer("imageID", imageID), zap.String("label", label))
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
-			h.logger.Error("did update label", zap.Stringer("sessionID", sessionID), zap.Stringer("imageID", imageID), zap.Duration("duration", time.Since(startTime)), zap.Error(err))
+			h.logger.Error("update label faield", zap.Stringer("sessionID", sessionID), zap.Stringer("imageID", imageID), zap.Duration("duration", time.Since(startTime)), zap.Error(err))
 		} else {
 			h.logger.Info("did update label", zap.Stringer("sessionID", sessionID), zap.Stringer("imageID", imageID), zap.Duration("duration", time.Since(startTime)))
 		}
