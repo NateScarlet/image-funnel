@@ -284,7 +284,7 @@
             : ''
         "
         :title="image.memo.content ? '编辑备注' : '添加备注'"
-        @click="showMemoDialog = true"
+        @click="memoDialog.open()"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiNoteTextOutline" />
@@ -376,18 +376,28 @@
     </div>
 
     <!-- 备忘录/笔记编辑对话框 -->
-    <MemoEditorDialog
-      v-if="image"
-      v-model="showMemoDialog"
-      :memo="image.memo"
-    />
+    <memoDialog.component container-class="sm:max-w-3xl short:max-w-none">
+      <MemoEditorDialog
+        v-if="image"
+        ref="memoDialogRef"
+        :memo="image.memo"
+        @close="memoDialog.close"
+      />
+    </memoDialog.component>
   </div>
 </template>
 
 <script setup lang="ts">
 import RatingIcon from "./RatingIcon.vue";
 import RatingSelector from "./RatingSelector.vue";
-import { ref, computed, useTemplateRef, shallowRef, watch } from "vue";
+import {
+  ref,
+  computed,
+  useTemplateRef,
+  shallowRef,
+  watch,
+  nextTick,
+} from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
@@ -421,6 +431,7 @@ import useHotkey from "@/composables/useHotkey";
 import { useOpenDir } from "@/composables/useOpenDir";
 import MemoEditorDialog from "./MemoEditorDialog.vue";
 import useMemo from "@/composables/useMemo";
+import useModalDialog from "@/composables/useModalDialog";
 
 const { revealInExplorer } = useOpenDir();
 
@@ -820,7 +831,21 @@ useEventListeners(containerRef, ({ on }) => {
   });
 });
 
-const showMemoDialog = ref(false);
+const memoDialog = useModalDialog({
+  onDidOpen() {
+    document.body.style.overflow = "hidden";
+    nextTick(() => {
+      memoDialogRef.value?.focus();
+    });
+  },
+  onWillClose() {
+    document.body.style.overflow = "";
+    memoDialogRef.value?.flush();
+  },
+});
+
+const memoDialogRef =
+  useTemplateRef<InstanceType<typeof MemoEditorDialog>>("memoDialogRef");
 
 // 开启当前查看图片的备注实时订阅，保证外部修改时能自动同步
 useMemo(() => image.memo.id);
@@ -829,7 +854,7 @@ useMemo(() => image.memo.id);
 useHotkey(
   ["m", "shift+m"],
   () => {
-    showMemoDialog.value = true;
+    memoDialog.open();
   },
   {
     description: "编辑图片备注",
@@ -841,14 +866,14 @@ useHotkey(
 useHotkey(
   "escape",
   () => {
-    showMemoDialog.value = false;
+    memoDialog.close();
   },
   {
     allowInInputs: true,
     preventDefault: true,
     stopPropagation: true,
     description: "关闭备注",
-    enabled: () => showMemoDialog.value,
+    enabled: memoDialog.visible,
     category: "图片操作",
   },
 );
@@ -863,7 +888,7 @@ useHotkey(
     allowInInputs: true,
     preventDefault: false,
     stopPropagation: true,
-    enabled: () => showMemoDialog.value,
+    enabled: memoDialog.visible,
   },
 );
 

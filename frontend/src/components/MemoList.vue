@@ -91,16 +91,20 @@
     </div>
 
     <!-- 备忘录/笔记编辑对话框 -->
-    <MemoEditorDialog
-      v-if="selectedMemo"
-      v-model="isMemoEditorOpen"
-      :memo="selectedMemo"
-    />
+    <memoDialog.component container-class="sm:max-w-3xl short:max-w-none">
+      <MemoEditorDialog
+        v-if="selectedMemo"
+        ref="memoDialogRef"
+        :memo="selectedMemo"
+        @close="memoDialog.close"
+      />
+    </memoDialog.component>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, useTemplateRef, nextTick } from "vue";
+import useModalDialog from "@/composables/useModalDialog";
 import {
   mdiNoteTextOutline,
   mdiEye,
@@ -153,11 +157,27 @@ const { memos, toggleMemoHidden } = useBrowseMemos(memosVariables);
 
 // #region 笔记编辑弹出框管理
 const selectedMemo = ref<MemoFragment | null>(null);
-const isMemoEditorOpen = ref(false);
+const memoDialogRef =
+  useTemplateRef<InstanceType<typeof MemoEditorDialog>>("memoDialogRef");
+
+const memoDialog = useModalDialog({
+  onDidOpen() {
+    document.body.style.overflow = "hidden";
+    nextTick(() => {
+      memoDialogRef.value?.focus();
+    });
+  },
+  onWillClose() {
+    document.body.style.overflow = "";
+    memoDialogRef.value?.flush();
+  },
+});
 
 function editMemo(memoItem: MemoFragment) {
   selectedMemo.value = memoItem;
-  isMemoEditorOpen.value = true;
+  nextTick(() => {
+    memoDialog.open();
+  });
 }
 // #endregion
 </script>

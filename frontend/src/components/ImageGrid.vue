@@ -23,7 +23,7 @@
             v-if="images.length > 0"
             class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
             title="将当前过滤匹配的图片移动到新目录"
-            @click="showMoveModal = true"
+            @click="moveModalRef?.open()"
           >
             <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
               <path :d="mdiFolderMove" fill="currentColor" />
@@ -303,126 +303,17 @@
     </Transition>
 
     <!-- 移动匹配图片模态框 -->
-    <Teleport :to="rendererEl">
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 scale-95"
-        enter-to-class="opacity-100 scale-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 scale-100"
-        leave-to-class="opacity-0 scale-95"
-      >
-        <div
-          v-if="showMoveModal"
-          class="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-          data-no-gesture
-          @click.self="closeMoveModal"
-        >
-          <div
-            class="w-full max-w-md rounded-2xl bg-primary-800 border border-primary-700 p-6 shadow-2xl transition-all transform scale-100 flex flex-col"
-          >
-            <div class="mb-6 flex justify-between items-center">
-              <div>
-                <h2
-                  class="text-lg font-bold text-primary-50 flex items-center gap-2"
-                >
-                  <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
-                    <path :d="mdiFolderMove" fill="currentColor" />
-                  </svg>
-                  移动匹配图片
-                </h2>
-                <p class="mt-1.5 text-xs text-primary-400">
-                  将当前筛选匹配的图片及其配套伴随文件移动到新目录
-                </p>
-              </div>
-              <button
-                class="text-primary-400 hover:text-primary-200 transition-colors p-1.5 rounded-lg hover:bg-primary-700/50 cursor-pointer"
-                @click="closeMoveModal"
-              >
-                <svg class="w-5 h-5" viewBox="0 0 24 24">
-                  <path :d="mdiClose" fill="currentColor" />
-                </svg>
-              </button>
-            </div>
-
-            <div class="space-y-4">
-              <!-- 匹配图片数量展示 -->
-              <div
-                class="rounded-xl bg-primary-900/40 border border-primary-800/30 p-4 text-sm text-primary-200 leading-relaxed"
-              >
-                <span class="font-medium text-secondary-400">待移动图片：</span>
-                <span class="font-bold">{{ images.length }} 张</span>
-                <p class="mt-1 text-xs text-primary-400 leading-relaxed">
-                  提示：图片对应的配套伴随文件（如同名
-                  .txt，.json，或者带有当前图片完整名称及额外扩展名的文件）也将同步移动。
-                </p>
-              </div>
-
-              <!-- 目标目录输入 -->
-              <div>
-                <label
-                  class="mb-2 block text-xs font-semibold text-primary-300"
-                >
-                  目标目录名称（相对于当前目录）
-                </label>
-                <input
-                  v-model="targetDirInput"
-                  type="text"
-                  placeholder="例如：selected 或 ../sibling-dir"
-                  class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-850 px-4 py-2.5 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all"
-                  :disabled="moving"
-                  @keyup.enter="handleMoveImages"
-                />
-              </div>
-
-              <!-- 错误信息 -->
-              <div
-                v-if="moveError"
-                class="text-xs text-red-400 bg-red-950/40 border border-red-900/50 p-3 rounded-xl leading-relaxed"
-              >
-                {{ moveError }}
-              </div>
-            </div>
-
-            <div class="mt-6 flex justify-end gap-3 shrink-0">
-              <button
-                class="rounded-xl bg-primary-750 px-4 py-2 text-xs text-primary-200 hover:text-white transition-colors hover:bg-primary-700 cursor-pointer"
-                :disabled="moving"
-                @click="closeMoveModal"
-              >
-                取消
-              </button>
-              <button
-                class="rounded-xl bg-secondary-600 hover:bg-secondary-700 px-5 py-2 text-xs text-white transition-colors disabled:cursor-not-allowed disabled:bg-primary-700 flex items-center gap-2 cursor-pointer font-semibold"
-                :disabled="moving || !targetDirInput.trim()"
-                @click="handleMoveImages"
-              >
-                <svg
-                  v-if="moving"
-                  class="w-4.5 h-4.5 animate-spin text-white"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <path
-                    :d="mdiLoading"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="3"
-                    stroke-linecap="round"
-                  />
-                </svg>
-                <span>{{ moving ? "正在移动..." : "确认移动" }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <MoveImagesModal
+      ref="moveModalRef"
+      :directory-id="directoryId"
+      :filter-by="imagesVariables.filterBy || {}"
+      :match-count="images.length"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, useTemplateRef } from "vue";
 import {
   mdiImage,
   mdiFilterOff,
@@ -445,10 +336,7 @@ import type {
   BrowseImagesQueryVariables,
   ImageFiltersInput,
 } from "@/graphql/generated";
-import mutate from "@/graphql/utils/mutate";
-import { MoveImagesDocument } from "@/graphql/generated";
-import { useOpenDir } from "@/composables/useOpenDir";
-import useNotification from "@/composables/useNotification";
+import MoveImagesModal from "./MoveImagesModal.vue";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -585,68 +473,7 @@ useHotkey(
 // #endregion
 
 // #region 移动匹配图片模块
-import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
-
-const rendererEl = useFullscreenRendererElement();
-const showMoveModal = ref(false);
-const targetDirInput = ref("");
-const moving = ref(false);
-const moveError = ref("");
-
-const { show: showNotification } = useNotification();
-const { revealInExplorer } = useOpenDir();
-
-function closeMoveModal() {
-  showMoveModal.value = false;
-  targetDirInput.value = "";
-  moveError.value = "";
-}
-
-async function handleMoveImages() {
-  const dirName = targetDirInput.value.trim();
-  if (!dirName || moving.value) return;
-
-  moving.value = true;
-  moveError.value = "";
-
-  try {
-    const result = await mutate(MoveImagesDocument, {
-      variables: {
-        input: {
-          directoryId: props.directoryId,
-          filterBy: imagesVariables.value.filterBy || {},
-          toDirectoryRelPath: dirName,
-        },
-      },
-    });
-
-    const movedCount = result.data?.moveImages.movedCount ?? 0;
-    const targetAbsoluteDirectory =
-      result.data?.moveImages.targetAbsoluteDirectory;
-
-    closeMoveModal();
-
-    // 弹出成功通知，带有触发用户手势的打开资源管理器按钮
-    showNotification(
-      `成功移动了 ${movedCount} 张图片及其配套文件`,
-      "success",
-      8000,
-      targetAbsoluteDirectory
-        ? {
-            text: "在资源管理器中打开",
-            onClick: (closeNotification) => {
-              revealInExplorer(targetAbsoluteDirectory);
-              closeNotification();
-            },
-          }
-        : undefined,
-    );
-  } catch (err: unknown) {
-    moveError.value =
-      err instanceof Error ? err.message : "移动图片失败，请检查路径或权限";
-  } finally {
-    moving.value = false;
-  }
-}
+const moveModalRef =
+  useTemplateRef<InstanceType<typeof MoveImagesModal>>("moveModalRef");
 // #endregion
 </script>
