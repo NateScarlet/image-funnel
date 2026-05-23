@@ -5,7 +5,7 @@
     <SessionHeader
       :session
       :undoing="undoing"
-      @show-update-session-modal="showUpdateSessionModal = true"
+      @show-update-session-modal="updateSessionDialog.open()"
       @show-commit-modal="handleCommit"
       @undo="undo"
     >
@@ -190,19 +190,59 @@
       </div>
     </footer>
 
-    <CommitModal
-      v-if="showCommitModal"
-      :session
-      @close="showCommitModal = false"
-      @committed="showCommitModal = false"
-    />
+    <commitDialog.component v-if="session" container-class="sm:max-w-md p-6">
+      <CommitForm
+        :session="session"
+        title="提交更改"
+        @committed="commitDialog.close"
+      >
+        <template #actions="{ committing, commitResult }">
+          <button
+            v-if="!commitResult"
+            type="button"
+            :disabled="committing"
+            class="flex-1 px-4 py-2 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg transition-colors"
+            @click="commitDialog.close"
+          >
+            取消
+          </button>
+          <button
+            v-if="!commitResult"
+            :disabled="committing"
+            class="flex-2 px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
+            type="submit"
+          >
+            <svg
+              v-if="committing"
+              class="w-5 h-5 animate-spin"
+              viewBox="0 0 24 24"
+            >
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            <span>确认提交</span>
+          </button>
+          <button
+            v-else
+            class="flex-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors font-bold"
+            type="button"
+            @click="commitDialog.close"
+          >
+            完成
+          </button>
+        </template>
+      </CommitForm>
+    </commitDialog.component>
 
-    <UpdateSessionModal
-      v-if="showUpdateSessionModal && session"
-      :session
-      @close="showUpdateSessionModal = false"
-      @updated="showUpdateSessionModal = false"
-    />
+    <updateSessionDialog.component
+      v-if="session"
+      container-class="sm:max-w-md p-6"
+    >
+      <UpdateSessionForm
+        :session="session"
+        @close="updateSessionDialog.close"
+        @updated="updateSessionDialog.close"
+      />
+    </updateSessionDialog.component>
   </div>
 </template>
 
@@ -217,9 +257,10 @@ import SessionActions from "../components/SessionActions.vue";
 
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
-import CommitModal from "../components/CommitModal.vue";
-import UpdateSessionModal from "../components/UpdateSessionModal.vue";
+import CommitForm from "../components/CommitForm.vue";
+import UpdateSessionForm from "../components/UpdateSessionForm.vue";
 import SessionProgressBar from "../components/SessionProgressBar.vue";
+import useModalDialog from "@/composables/useModalDialog";
 import useEventListeners from "../composables/useEventListeners";
 import useHotkey from "../composables/useHotkey";
 import { formatDate } from "../utils/date";
@@ -241,8 +282,8 @@ const sessionId = computed(() => props.id);
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 
-const showUpdateSessionModal = ref<boolean>(false);
-const showCommitModal = ref<boolean>(false);
+const commitDialog = useModalDialog();
+const updateSessionDialog = useModalDialog();
 const undoing = ref(false);
 
 // TODO: refactor to touchStart touchEnd
@@ -478,7 +519,7 @@ function handleCommit() {
   if (!currentImage.value && completedView.value) {
     completedView.value.submit();
   } else {
-    showCommitModal.value = true;
+    commitDialog.open();
   }
 }
 

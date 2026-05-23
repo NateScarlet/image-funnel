@@ -1,8 +1,5 @@
 <template>
-  <ModalDialogWrapper
-    container-class="sm:max-w-md p-6"
-    @after-leave="emit('afterLeave')"
-  >
+  <div>
     <!-- 头部标题区域 -->
     <div class="mb-6 flex justify-between items-center">
       <div>
@@ -19,7 +16,7 @@
       <button
         class="text-primary-400 hover:text-primary-200 transition-colors p-1.5 rounded-lg hover:bg-primary-700/50 cursor-pointer"
         type="button"
-        @click="close"
+        @click="$emit('close')"
       >
         <svg class="w-5 h-5" viewBox="0 0 24 24">
           <path :d="mdiClose" fill="currentColor" />
@@ -71,7 +68,7 @@
         class="rounded-xl bg-primary-750 px-4 py-2 text-xs text-primary-200 hover:text-white transition-colors hover:bg-primary-700 cursor-pointer"
         type="button"
         :disabled="moving"
-        @click="close"
+        @click="$emit('close')"
       >
         取消
       </button>
@@ -98,13 +95,12 @@
         <span>{{ moving ? "正在移动..." : "确认移动" }}</span>
       </button>
     </div>
-  </ModalDialogWrapper>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue";
 import { mdiFolderMove, mdiClose, mdiLoading } from "@mdi/js";
-import useModalDialog from "@/composables/useModalDialog";
 import mutate from "@/graphql/utils/mutate";
 import {
   MoveImagesDocument,
@@ -120,7 +116,7 @@ const props = defineProps<{
   matchCount: number;
 }>();
 
-const emit = defineEmits<(e: "afterLeave") => void>();
+const emit = defineEmits<(e: "close") => void>();
 // #endregion
 
 // #region 内部状态管理
@@ -130,19 +126,6 @@ const moveError = ref("");
 
 const { show: showNotification } = useNotification();
 const { revealInExplorer } = useOpenDir();
-// #endregion
-
-// #region 使用 useModalDialog Composable 声明组件包装器
-const {
-  component: ModalDialogWrapper,
-  open,
-  close,
-} = useModalDialog({
-  onDidClose() {
-    targetDirInput.value = "";
-    moveError.value = "";
-  },
-});
 // #endregion
 
 // #region 执行移动图片操作
@@ -168,7 +151,7 @@ async function handleMoveImages() {
     const targetAbsoluteDirectory =
       result.data?.moveImages.targetAbsoluteDirectory;
 
-    close();
+    emit("close");
 
     // 弹出成功通知，带有触发用户手势的打开资源管理器按钮
     showNotification(
@@ -192,12 +175,5 @@ async function handleMoveImages() {
     moving.value = false;
   }
 }
-// #endregion
-
-// #region 暴露方法供外部组件使用
-defineExpose({
-  open,
-  close,
-});
 // #endregion
 </script>

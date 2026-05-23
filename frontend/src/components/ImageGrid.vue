@@ -23,7 +23,7 @@
             v-if="images.length > 0"
             class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
             title="将当前过滤匹配的图片移动到新目录"
-            @click="moveModalRef?.open()"
+            @click="moveImagesDialog.open()"
           >
             <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
               <path :d="mdiFolderMove" fill="currentColor" />
@@ -225,19 +225,12 @@
       </button>
     </section>
 
-    <!-- 全屏查看器遮罩层 -->
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0 scale-95"
-      enter-to-class="opacity-100 scale-100"
-      leave-active-class="transition duration-150 ease-in"
-      leave-from-class="opacity-100 scale-100"
-      leave-to-class="opacity-0 scale-95"
+    <!-- 全屏查看器模态框 -->
+    <imageViewerDialog.component
+      v-if="currentImageIndex !== undefined && currentImage"
+      @after-leave="currentImageIndex = undefined"
     >
-      <div
-        v-if="currentImageIndex !== undefined && currentImage"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm select-none"
-      >
+      <div class="w-full h-full flex flex-col justify-between">
         <!-- 侧边关闭按钮 -->
         <button
           class="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors border border-white/10"
@@ -274,46 +267,46 @@
         </button>
 
         <!-- 图像查看器组件 -->
-        <div class="w-full h-full flex flex-col justify-between">
-          <ImageViewer :image="currentImage" class="w-full h-full flex-1">
-            <!-- 插入底部信息 -->
-            <template #info>
-              <span
-                class="truncate max-w-72 font-semibold"
-                :title="currentImage.filename"
-              >
-                {{ currentImage.filename }}
-              </span>
-              <div class="w-px h-4 bg-white/30 mx-1"></div>
-              <span>
-                {{ (currentImageIndex || 0) + 1 }} / {{ images.length }}
-              </span>
-              <div class="w-px h-4 bg-white/30 mx-1"></div>
-              <span class="text-white/60">
-                {{ currentImage.width || 0 }}x{{ currentImage.height || 0 }}
-              </span>
-              <div class="w-px h-4 bg-white/30 mx-1"></div>
-              <span class="text-white/60">
-                {{ formatSize(currentImage.size) }}
-              </span>
-            </template>
-          </ImageViewer>
-        </div>
+        <ImageViewer :image="currentImage" class="w-full h-full flex-1">
+          <!-- 插入底部信息 -->
+          <template #info>
+            <span
+              class="truncate max-w-72 font-semibold"
+              :title="currentImage.filename"
+            >
+              {{ currentImage.filename }}
+            </span>
+            <div class="w-px h-4 bg-white/30 mx-1"></div>
+            <span>
+              {{ (currentImageIndex || 0) + 1 }} / {{ images.length }}
+            </span>
+            <div class="w-px h-4 bg-white/30 mx-1"></div>
+            <span class="text-white/60">
+              {{ currentImage.width || 0 }}x{{ currentImage.height || 0 }}
+            </span>
+            <div class="w-px h-4 bg-white/30 mx-1"></div>
+            <span class="text-white/60">
+              {{ formatSize(currentImage.size) }}
+            </span>
+          </template>
+        </ImageViewer>
       </div>
-    </Transition>
+    </imageViewerDialog.component>
 
     <!-- 移动匹配图片模态框 -->
-    <MoveImagesModal
-      ref="moveModalRef"
-      :directory-id="directoryId"
-      :filter-by="imagesVariables.filterBy || {}"
-      :match-count="images.length"
-    />
+    <moveImagesDialog.component container-class="sm:max-w-md p-6">
+      <MoveImagesForm
+        :directory-id="directoryId"
+        :filter-by="imagesVariables.filterBy || {}"
+        :match-count="images.length"
+        @close="moveImagesDialog.close"
+      />
+    </moveImagesDialog.component>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from "vue";
+import { ref, computed } from "vue";
 import {
   mdiImage,
   mdiFilterOff,
@@ -336,7 +329,9 @@ import type {
   BrowseImagesQueryVariables,
   ImageFiltersInput,
 } from "@/graphql/generated";
-import MoveImagesModal from "./MoveImagesModal.vue";
+import MoveImagesForm from "./MoveImagesForm.vue";
+import useModalDialog from "@/composables/useModalDialog";
+import useModalFullscreen from "@/composables/useModalFullscreen";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -410,10 +405,11 @@ const currentImage = computed(() => {
 
 function openViewer(index: number) {
   currentImageIndex.value = index;
+  imageViewerDialog.open();
 }
 
 function closeViewer() {
-  currentImageIndex.value = undefined;
+  imageViewerDialog.close();
 }
 
 function prevImage() {
@@ -458,22 +454,10 @@ useHotkey(
     category: "图片浏览",
   },
 );
-useHotkey(
-  "escape",
-  () => {
-    closeViewer();
-  },
-  {
-    allowInInputs: true,
-    description: "关闭查看器",
-    enabled: isViewerOpen,
-    category: "图片浏览",
-  },
-);
 // #endregion
 
 // #region 移动匹配图片模块
-const moveModalRef =
-  useTemplateRef<InstanceType<typeof MoveImagesModal>>("moveModalRef");
+const moveImagesDialog = useModalDialog();
+const imageViewerDialog = useModalFullscreen();
 // #endregion
 </script>
