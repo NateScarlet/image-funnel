@@ -27,6 +27,7 @@ useHotkey(
   },
   {
     description: "显示/隐藏快捷键帮助",
+    category: "全局",
   },
 );
 </script>

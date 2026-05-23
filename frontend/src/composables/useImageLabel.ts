@@ -103,6 +103,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
       },
       {
         description: `设置标签为 ${colorCn}`,
+        category: "图片标签",
       },
     );
   }
@@ -114,6 +115,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
     },
     {
       description: "清除图片标签",
+      category: "图片标签",
     },
   );
   // #endregion

@@ -7,9 +7,9 @@
         data-no-gesture
         @click.self="$emit('close')"
       >
-        <!-- 使用 Glassmorphism 并带有微妙的边框和过渡动画 -->
+        <!-- 模态框主体：使用不透明背景增强视觉层级，在桌面端采用宽屏布局 -->
         <div
-          class="bg-primary-850/90 border border-primary-700/60 rounded-2xl max-w-lg w-full p-6 shadow-2xl transition-all transform scale-100 flex flex-col max-h-[85vh]"
+          class="bg-primary-800 border border-primary-700 rounded-2xl w-full max-w-lg md:max-w-4xl p-6 shadow-2xl transition-all transform scale-100 flex flex-col max-h-[85vh]"
         >
           <!-- 头部区域 -->
           <div
@@ -33,47 +33,70 @@
             </button>
           </div>
 
-          <!-- 快捷键列表内容区 -->
-          <div class="flex-1 overflow-y-auto pr-1 space-y-2.5 scrollbar-thin">
+          <!-- 快捷键列表内容区：使用双列网格按分组分列展示，分组内部的快捷键垂直排列，确保逻辑清晰 -->
+          <div class="flex-1 overflow-y-auto pr-1 scrollbar-thin">
             <div
-              v-for="item in visibleHotkeys"
-              :key="item.id"
-              class="flex items-center justify-between py-2.5 border-b border-primary-800/40 last:border-b-0 hover:bg-primary-800/30 px-3 rounded-xl transition-colors"
+              v-if="groupedHotkeys.length > 0"
+              class="grid grid-cols-1 md:grid-cols-2 gap-6 py-2"
             >
-              <span class="text-sm text-primary-300 font-medium mr-4">{{
-                item.description
-              }}</span>
-              <div class="flex items-center gap-1.5 flex-wrap justify-end">
-                <div
-                  v-for="(combo, comboIdx) in item.keys"
-                  :key="comboIdx"
-                  class="flex items-center gap-1"
+              <div
+                v-for="group in groupedHotkeys"
+                :key="group.name"
+                class="space-y-2.5"
+              >
+                <!-- 分组标题：提供清晰的分组识别度 -->
+                <h4
+                  class="text-xs font-bold text-primary-400 tracking-wider uppercase px-2 select-none"
                 >
-                  <!-- 支持多组快捷键的 or 拼接 -->
-                  <span
-                    v-if="comboIdx > 0"
-                    class="text-primary-500 text-xs px-1 select-none"
-                    >/</span
+                  {{ group.name }}
+                </h4>
+                <!-- 分组内快捷键列表：保持单列，防止如“评分”等关联快捷键被拆开 -->
+                <div class="space-y-2">
+                  <div
+                    v-for="item in group.items"
+                    :key="item.id"
+                    class="flex items-center justify-between py-2 px-3.5 bg-primary-900/40 hover:bg-primary-900/80 border border-primary-800/30 hover:border-primary-700/40 rounded-xl transition-all duration-200"
                   >
-                  <template v-for="(keyName, keyIdx) in combo" :key="keyIdx">
                     <span
-                      v-if="keyIdx > 0"
-                      class="text-primary-500 text-xs font-light select-none"
-                      >+</span
+                      class="text-xs md:text-sm text-primary-200 font-medium mr-4"
+                      >{{ item.description }}</span
                     >
-                    <kbd
-                      class="px-2 py-0.5 min-w-6 text-center bg-primary-950 text-primary-100 rounded-lg border border-primary-800 font-mono text-xs shadow-md select-none"
+                    <div
+                      class="flex items-center gap-1.5 flex-wrap justify-end"
                     >
-                      {{ keyName }}
-                    </kbd>
-                  </template>
+                      <div
+                        v-for="(combo, comboIdx) in item.keys"
+                        :key="comboIdx"
+                        class="flex items-center gap-1"
+                      >
+                        <!-- 支持多组快捷键的 or 拼接 -->
+                        <span
+                          v-if="comboIdx > 0"
+                          class="text-primary-500 text-xs px-1 select-none"
+                          >/</span
+                        >
+                        <template
+                          v-for="(keyName, keyIdx) in combo"
+                          :key="keyIdx"
+                        >
+                          <span
+                            v-if="keyIdx > 0"
+                            class="text-primary-500 text-xs font-light select-none"
+                            >+</span
+                          >
+                          <kbd
+                            class="px-2 py-0.5 min-w-6 text-center bg-primary-950 text-primary-100 rounded-lg border border-primary-800 font-mono text-xs shadow-md select-none"
+                          >
+                            {{ keyName }}
+                          </kbd>
+                        </template>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-            <div
-              v-if="visibleHotkeys.length === 0"
-              class="text-center py-8 text-primary-400 text-sm"
-            >
+            <div v-else class="text-center py-8 text-primary-400 text-sm">
               当前页面无可用快捷键
             </div>
           </div>
@@ -104,11 +127,45 @@ defineEmits<(e: "close") => void>();
 
 const rendererEl = useFullscreenRendererElement();
 
-// 过滤出当前可用状态下的快捷键以在列表中展示
-const visibleHotkeys = computed(() => {
-  return activeHotkeys.value.filter(
+// 将可用的快捷键按 category 进行分组
+const groupedHotkeys = computed(() => {
+  const list = activeHotkeys.value.filter(
     (item) => item.enabled === undefined || toValue(item.enabled),
   );
+
+  const groups: Record<string, typeof list> = {};
+  for (const item of list) {
+    const cat = item.category || "其他";
+    if (!groups[cat]) {
+      groups[cat] = [];
+    }
+    groups[cat].push(item);
+  }
+
+  // 固定的分组显示顺序，保证全局和主要交互在最前面，操作类在后
+  const categoryOrder = [
+    "全局",
+    "目录导航",
+    "图片浏览",
+    "筛选会话",
+    "图片评分",
+    "图片标签",
+    "图片操作",
+    "其他",
+  ];
+
+  return Object.keys(groups)
+    .sort((a, b) => {
+      const idxA = categoryOrder.indexOf(a);
+      const idxB = categoryOrder.indexOf(b);
+      const orderA = idxA !== -1 ? idxA : 999;
+      const orderB = idxB !== -1 ? idxB : 999;
+      return orderA - orderB;
+    })
+    .map((name) => ({
+      name,
+      items: groups[name],
+    }));
 });
 </script>
 

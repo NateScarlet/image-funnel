@@ -555,6 +555,7 @@ useHotkey(
     preventDefault: false,
     stopPropagation: false,
     description: "复制工作流或路径",
+    category: "图片操作",
   },
 );
 
@@ -575,6 +576,7 @@ useHotkey(
     preventDefault: false,
     stopPropagation: false,
     description: "复制绝对路径",
+    category: "图片操作",
   },
 );
 // #endregion
@@ -831,6 +833,7 @@ useHotkey(
   },
   {
     description: "编辑图片备注",
+    category: "图片操作",
   },
 );
 
@@ -846,6 +849,7 @@ useHotkey(
     stopPropagation: true,
     description: "关闭备注",
     enabled: () => showMemoDialog.value,
+    category: "图片操作",
   },
 );
 

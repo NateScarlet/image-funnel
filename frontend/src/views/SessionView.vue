@@ -298,6 +298,7 @@ useHotkey(
   {
     description: "排除图片",
     enabled: isSessionImageActive,
+    category: "筛选会话",
   },
 );
 useHotkey(
@@ -311,6 +312,7 @@ useHotkey(
   {
     description: "搁置图片",
     enabled: isSessionImageActive,
+    category: "筛选会话",
   },
 );
 useHotkey(
@@ -324,6 +326,7 @@ useHotkey(
   {
     description: "保留图片",
     enabled: isSessionImageActive,
+    category: "筛选会话",
   },
 );
 useHotkey(
@@ -337,6 +340,7 @@ useHotkey(
   {
     description: "撤销操作",
     enabled: isSessionImageActive,
+    category: "筛选会话",
   },
 );
 // #endregion

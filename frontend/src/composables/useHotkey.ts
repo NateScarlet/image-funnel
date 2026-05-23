@@ -30,6 +30,10 @@ export interface HotkeyOptions {
    */
   description?: string;
   /**
+   * 快捷键所属的分组名称 (如 "图片评分", "图片操作", "导航切换")
+   */
+  category?: string;
+  /**
    * 是否启用当前快捷键，支持响应式更新
    * @default true
    */
@@ -199,6 +203,7 @@ export default function useHotkey(
     allowInInputs = false,
     preventDefault = true,
     stopPropagation = true,
+    category,
     enabled,
   } = options;
 
@@ -252,6 +257,7 @@ export default function useHotkey(
         id,
         keys: keysList,
         description,
+        category,
         enabled,
       },
     ];
@@ -283,6 +289,7 @@ export interface ActiveHotkey {
   id: string;
   keys: string[][];
   description: string;
+  category?: string;
   enabled?: boolean | Ref<boolean> | (() => boolean);
 }
 

@@ -463,7 +463,7 @@ useHotkey(
   () => {
     if (prevSibling.value) navigateToDir(prevSibling.value.id);
   },
-  { description: "上一个目录" },
+  { description: "上一个目录", category: "目录导航" },
 );
 
 // 切换到下一个同级目录
@@ -472,7 +472,7 @@ useHotkey(
   () => {
     if (nextSibling.value) navigateToDir(nextSibling.value.id);
   },
-  { description: "下一个目录" },
+  { description: "下一个目录", category: "目录导航" },
 );
 // #endregion
 </script>

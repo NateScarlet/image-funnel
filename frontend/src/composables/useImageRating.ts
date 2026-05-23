@@ -29,6 +29,7 @@ export default function useImageRating(image: MaybeRefOrGetter<ImageFragment>) {
   for (let r = 0; r <= 5; r++) {
     useHotkey(String(r), () => setRating(r), {
       description: `设置评分为 ${r} 星`,
+      category: "图片评分",
     });
   }
 

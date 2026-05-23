@@ -420,6 +420,7 @@ useHotkey(
     allowInInputs: true,
     description: "上一张图片",
     enabled: isViewerOpen,
+    category: "图片浏览",
   },
 );
 useHotkey(
@@ -431,6 +432,7 @@ useHotkey(
     allowInInputs: true,
     description: "下一张图片",
     enabled: isViewerOpen,
+    category: "图片浏览",
   },
 );
 useHotkey(
@@ -442,6 +444,7 @@ useHotkey(
     allowInInputs: true,
     description: "关闭查看器",
     enabled: isViewerOpen,
+    category: "图片浏览",
   },
 );
 // #endregion
