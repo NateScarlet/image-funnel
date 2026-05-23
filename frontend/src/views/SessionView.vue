@@ -58,18 +58,6 @@
             <span class="lg:min-w-24 hidden md:block">
               {{ formatDate(currentImage.modTime) }}
             </span>
-            <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
-            <span
-              class="truncate max-w-37.5 lg:max-w-75 cursor-pointer hover:text-secondary-400 transition-colors flex items-center gap-1"
-              :class="currentImage.memo.content ? '' : 'text-primary-400'"
-              :title="currentImage.memo.content ? '编辑备注' : '添加备注'"
-              @click="showMemoDialog = true"
-            >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-                <path :d="mdiNoteTextOutline" fill="currentColor" />
-              </svg>
-              {{ currentImage.memo.content || "添加备注" }}
-            </span>
             <template v-if="isFullscreen">
               <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
               <span class="lg:min-w-24">
@@ -202,12 +190,6 @@
       </div>
     </footer>
 
-    <MemoEditorDialog
-      v-if="currentImage"
-      v-model="showMemoDialog"
-      :memo="currentImage.memo"
-    />
-
     <CommitModal
       v-if="showCommitModal"
       :session
@@ -241,13 +223,11 @@ import SessionProgressBar from "../components/SessionProgressBar.vue";
 import useEventListeners from "../composables/useEventListeners";
 import useHotkey from "../composables/useHotkey";
 import { formatDate } from "../utils/date";
-import { mdiCheckAll, mdiHome, mdiLoading, mdiNoteTextOutline } from "@mdi/js";
+import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
-import useMemo from "@/composables/useMemo";
 import Time from "@/utils/Time";
-import MemoEditorDialog from "../components/MemoEditorDialog.vue";
 
 const rendererEl = useFullscreenRendererElement();
 const router = useRouter();
@@ -263,7 +243,6 @@ const loading = computed(() => loadingCount.value > 0);
 
 const showUpdateSessionModal = ref<boolean>(false);
 const showCommitModal = ref<boolean>(false);
-const showMemoDialog = ref<boolean>(false);
 const undoing = ref(false);
 
 // TODO: refactor to touchStart touchEnd
@@ -297,9 +276,6 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 const { session } = useSession(sessionId, { loadingCount });
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
-
-// 开启当前图片的备注订阅
-useMemo(() => currentImage.value?.memo.id);
 
 // 优先使用已加载完成的图片 id，避免在图片切换瞬间使用错误的 id
 const currentImageId = computed(
@@ -355,18 +331,6 @@ useHotkey(
   },
   {
     description: "撤销操作",
-  },
-);
-useHotkey(
-  ["m", "shift+m"],
-  () => {
-    const imageId = currentImageId.value;
-    if (imageId) {
-      showMemoDialog.value = true;
-    }
-  },
-  {
-    description: "编辑图片备注",
   },
 );
 // #endregion

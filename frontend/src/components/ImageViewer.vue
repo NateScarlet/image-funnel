@@ -275,6 +275,26 @@
       </div>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
 
+      <!-- 备注按钮 -->
+      <button
+        class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1.5 transition-all active:scale-95 text-white/50 hover:text-white shrink-0 cursor-pointer"
+        :class="
+          image.memo.content
+            ? 'text-secondary-400 hover:text-secondary-300'
+            : ''
+        "
+        :title="image.memo.content ? '编辑备注' : '添加备注'"
+        @click="showMemoDialog = true"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <path :d="mdiNoteTextOutline" />
+        </svg>
+        <span class="truncate max-w-24 md:max-w-36 text-xs">{{
+          image.memo.content || "添加备注"
+        }}</span>
+      </button>
+      <div class="w-px h-4 bg-white/30 mx-1"></div>
+
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
@@ -354,6 +374,13 @@
       </div>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
     </div>
+
+    <!-- 备忘录/笔记编辑对话框 -->
+    <MemoEditorDialog
+      v-if="image"
+      v-model="showMemoDialog"
+      :memo="image.memo"
+    />
   </div>
 </template>
 
@@ -377,6 +404,7 @@ import {
   mdiContentCopy,
   mdiDotsVertical,
   mdiOpenInNew,
+  mdiNoteTextOutline,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
@@ -391,6 +419,8 @@ import query from "@/graphql/utils/query";
 import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
 import useHotkey from "@/composables/useHotkey";
 import { useOpenDir } from "@/composables/useOpenDir";
+import MemoEditorDialog from "./MemoEditorDialog.vue";
+import useMemo from "@/composables/useMemo";
 
 const { revealInExplorer } = useOpenDir();
 
@@ -787,6 +817,57 @@ useEventListeners(containerRef, ({ on }) => {
     }
   });
 });
+
+const showMemoDialog = ref(false);
+
+// 开启当前查看图片的备注实时订阅，保证外部修改时能自动同步
+useMemo(() => image.memo.id);
+
+// 绑定快捷键 m 或 shift+m 来编辑备注
+useHotkey(
+  ["m", "shift+m"],
+  () => {
+    showMemoDialog.value = true;
+  },
+  {
+    description: "编辑图片备注",
+  },
+);
+
+// 当备注编辑器打开时，阻断 escape 键的事件冒泡，使得仅关闭备注框而不关闭整个大图查看器
+useHotkey(
+  "escape",
+  (e) => {
+    if (showMemoDialog.value) {
+      showMemoDialog.value = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  },
+  {
+    allowInInputs: true,
+    preventDefault: false,
+    stopPropagation: false,
+    description: "关闭备注",
+  },
+);
+
+// 当备注编辑器打开时，阻断 arrowleft 和 arrowright 的事件冒泡，避免光标移动误触发图片切换
+useHotkey(
+  ["arrowleft", "arrowright"],
+  (e) => {
+    if (showMemoDialog.value) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  },
+  {
+    allowInInputs: true,
+    preventDefault: false,
+    stopPropagation: false,
+    description: "阻止备注编辑时的图片切换",
+  },
+);
 
 defineExpose({
   zoomIn,
