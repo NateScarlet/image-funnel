@@ -47,12 +47,11 @@ func (h *Handler) UpdateImageMetadata(
 	rating *int,
 	label *string,
 ) (err error) {
-	h.logger.Info("will update image metadata", zap.Stringer("id", id))
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
-			h.logger.Error("did update image metadata",
+			h.logger.Error("update image metadata failed",
 				zap.Stringer("id", id),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
@@ -111,16 +110,20 @@ func (h *Handler) Image(
 func (h *Handler) ComfyUIWorkflow(
 	ctx context.Context,
 	id scalar.ID,
-) (*string, error) {
-	h.logger.Debug("will get ComfyUI workflow", zap.Stringer("id", id))
+) (_ *string, err error) {
 	startTime := time.Now()
 
 	defer func() {
-		if err := recover(); err != nil {
-			h.logger.Error("did get ComfyUI workflow (panic)",
+		if err != nil {
+			h.logger.Error("get ComfyUI workflow failed",
 				zap.Stringer("id", id),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Any("err", err),
+			)
+		} else {
+			h.logger.Debug("did get ComfyUI workflow",
+				zap.Stringer("id", id),
+				zap.Duration("duration", time.Since(startTime)),
 			)
 		}
 	}()
@@ -135,10 +138,6 @@ func (h *Handler) ComfyUIWorkflow(
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			h.logger.Debug("file not found",
-				zap.Stringer("id", id),
-				zap.String("path", absPath),
-			)
 			return nil, apperror.NewErrDocumentNotFound(id)
 		}
 		return nil, err
@@ -148,12 +147,6 @@ func (h *Handler) ComfyUIWorkflow(
 	// 如果时间不匹配，说明文件已被修改，返回版本冲突错误
 	actualModTime := info.ModTime()
 	if actualModTime.UnixNano() != expectedModTime.UnixNano() {
-		h.logger.Debug("file modification time does not match",
-			zap.Stringer("id", id),
-			zap.String("path", absPath),
-			zap.Time("expected_mod_time", expectedModTime),
-			zap.Time("actual_mod_time", actualModTime),
-		)
 		return nil, apperror.New(
 			"VERSION_CONFLICT",
 			"image file has been modified on disk",
@@ -170,23 +163,8 @@ func (h *Handler) ComfyUIWorkflow(
 	// 提取工作流
 	workflow, err := ExtractComfyUIWorkflow(absPath)
 	if err != nil {
-		h.logger.Error("did get ComfyUI workflow (error)",
-			zap.Stringer("id", id),
-			zap.String("path", absPath),
-			zap.Duration("duration", time.Since(startTime)),
-			zap.Error(err),
-		)
 		return nil, err
 	}
-
-	h.logger.Debug("did get ComfyUI workflow",
-		zap.Stringer("id", id),
-		zap.String("path", absPath),
-		zap.Time("expected_mod_time", expectedModTime),
-		zap.Time("actual_mod_time", actualModTime),
-		zap.Duration("duration", time.Since(startTime)),
-		zap.Bool("has_workflow", workflow != nil),
-	)
 
 	return workflow, nil
 }
