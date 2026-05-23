@@ -30,7 +30,7 @@
 
       <button
         class="md:hidden p-2 rounded-lg hover:bg-primary-700 transition-colors"
-        @click="showMenu = true"
+        @click="menuDialog.open"
       >
         <svg
           class="w-6 h-6"
@@ -79,14 +79,53 @@
         </button>
       </div>
     </div>
-    <SessionHeaderMenu
-      v-model:show="showMenu"
-      :session
-      :undoing="undoing"
-      @show-commit-modal="$emit('showCommitModal')"
-      @show-update-session-modal="$emit('showUpdateSessionModal')"
-      @undo="$emit('undo')"
-    />
+    <menuDialog.component container-class="p-6 sm:max-w-sm">
+      <div class="space-y-3">
+        <button
+          :disabled="!session?.canUndo || undoing"
+          class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+          @click="
+            $emit('undo');
+            menuDialog.close();
+          "
+        >
+          <svg v-if="undoing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
+            <path :d="mdiLoading" fill="currentColor" />
+          </svg>
+          <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
+            <path :d="mdiUndo" fill="currentColor" />
+          </svg>
+          撤销
+        </button>
+
+        <button
+          class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+          @click="
+            $emit('showUpdateSessionModal');
+            menuDialog.close();
+          "
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path :d="mdiCogOutline" fill="currentColor" />
+          </svg>
+          修改会话
+        </button>
+
+        <button
+          :disabled="!session?.canCommit"
+          class="w-full py-3 px-4 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
+          @click="
+            $emit('showCommitModal');
+            menuDialog.close();
+          "
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path :d="mdiCheck" fill="currentColor" />
+          </svg>
+          提交
+        </button>
+      </div>
+    </menuDialog.component>
   </header>
 </template>
 
@@ -100,11 +139,11 @@ import {
   mdiCogOutline,
   mdiHome,
 } from "@mdi/js";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
-import SessionHeaderMenu from "./SessionHeaderMenu.vue";
+import useModalDialog from "@/composables/useModalDialog";
 
 const router = useRouter();
 
@@ -128,7 +167,7 @@ defineEmits<
   (e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void
 >();
 
-const showMenu = ref(false);
+const menuDialog = useModalDialog();
 
 const { data } = useQuery(MetaDocument);
 const displayName = computed(() => {
