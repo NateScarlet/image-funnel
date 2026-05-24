@@ -204,7 +204,7 @@
       <button
         :disabled="loading"
         class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
-        @click="loadMore"
+        @click="fetchMore"
       >
         <!-- 加载中动画 -->
         <svg
@@ -372,17 +372,9 @@ const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
 const loading = computed(() => loadingCount.value > 0);
 
 // 调用 useBrowseImages 获取图片列表
-const {
-  images,
-  hasNextPage,
-  loadMore: imagesLoadMore,
-} = useBrowseImages(imagesVariables, { loadingCount });
-
-// 触发分页加载更多图片
-function loadMore() {
-  if (loading.value || !hasNextPage.value) return;
-  void imagesLoadMore();
-}
+const { images, hasNextPage, fetchMore } = useBrowseImages(imagesVariables, {
+  loadingCount,
+});
 // #endregion
 
 // #region 过滤器操作逻辑

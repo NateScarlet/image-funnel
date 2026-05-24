@@ -83,20 +83,9 @@ export default function useBrowseImages(
     },
   });
 
-  // 计算是否还有下一页数据
-  const hasNextPage = computed(
-    () => imageConnection.pageInfo.value.hasNextPage,
-  );
-
-  // 触发加载更多
-  function loadMore() {
-    if (!hasNextPage.value) return;
-    void imageConnection.fetchMore();
-  }
-
   return {
     images,
-    hasNextPage,
-    loadMore,
+    hasNextPage: computed(() => imageConnection.pageInfo.value.hasNextPage),
+    fetchMore: imageConnection.fetchMore,
   };
 }
