@@ -14,8 +14,11 @@ import {
   provide,
   ref,
   toValue,
+  onUnmounted,
 } from "vue";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
+import useEventListeners from "@/composables/useEventListeners";
+import randomUUID from "@/utils/randomUUID";
 
 // #region 渲染目标依赖注入配置
 const rendererKey: InjectionKey<() => string | RendererElement> =
@@ -37,10 +40,39 @@ export function provideModalRenderer(
 /**
  * 基础模态框挂载与动画状态控制 Composable
  */
-export default function useModal() {
+export default function useModal(
+  onPopState?: () => Promise<boolean> | boolean | undefined,
+) {
   const defaultRenderer = useFullscreenRendererElement();
   const skipRender = ref(true);
   const visible = ref(false);
+
+  // 内部维护物理返回键拦截所需的状态
+  const stateKey = `modal-${randomUUID()}`;
+  let hasPushState = false;
+
+  // 使用统一的事件监听 Composable 挂载并自动清理 popstate 监听器
+  useEventListeners(window, ({ on }) => {
+    on("popstate", async (event: PopStateEvent) => {
+      // 若 Modal 处于开启状态，且历史状态中不再存在当前 Modal 的 stateKey，说明发生了返回回退
+      if (visible.value && (!event.state || !event.state[stateKey])) {
+        hasPushState = false;
+        if (onPopState) {
+          const result = await onPopState();
+          // 如果外层关闭操作被拦截（如 onWillClose 返回 false），则重新 pushState 恢复拦截状态
+          if (result === false) {
+            window.history.pushState(
+              { ...window.history.state, [stateKey]: true },
+              "",
+            );
+            hasPushState = true;
+          }
+        } else {
+          close();
+        }
+      }
+    });
+  });
 
   // 包装模态框的函数式组件
   const component: FunctionalComponent<
@@ -112,12 +144,30 @@ export default function useModal() {
 
   function close() {
     visible.value = false;
+    // 如果存在历史记录标记，需要主动调用 history.back() 抹掉它
+    if (hasPushState) {
+      window.history.back();
+      hasPushState = false;
+    }
   }
 
   function open() {
     visible.value = true;
     skipRender.value = false;
+
+    // 当需要拦截返回键时，向 history 栈中推送 dummy state
+    if (!hasPushState) {
+      window.history.pushState(
+        { ...window.history.state, [stateKey]: true },
+        "",
+      );
+      hasPushState = true;
+    }
   }
+
+  onUnmounted(() => {
+    hasPushState = false;
+  });
 
   return {
     component,

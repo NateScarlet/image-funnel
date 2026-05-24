@@ -1,21 +1,9 @@
 import "core-js/actual/disposable-stack";
-import {
-  getCurrentInstance,
-  onUnmounted,
-  watch,
-  type MaybeRefOrGetter,
-} from "vue";
+import { onScopeDispose, watch, type MaybeRefOrGetter } from "vue";
 import createEventListeners from "@/utils/createEventListeners";
 import isWatchSource from "@/utils/isWatchSource";
 
-export default function useEventListeners<
-  T extends {
-    addEventListener: (...args: Parameters<T["addEventListener"]>) => void;
-    removeEventListener: (
-      ...args: Parameters<T["removeEventListener"]>
-    ) => void;
-  },
->(
+export default function useEventListeners<T extends EventTarget>(
   target: MaybeRefOrGetter<T | null | undefined>,
   init: (ctx: {
     target: T;
@@ -32,11 +20,7 @@ export default function useEventListeners<
   }
 
   const stack = new DisposableStack();
-  if (getCurrentInstance()) {
-    onUnmounted(() => {
-      stack.dispose();
-    });
-  }
+  onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
 
   if (isWatchSource(target)) {

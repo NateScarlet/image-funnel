@@ -20,7 +20,7 @@ export default function useModalDrawer({
   onWillOpen?: (e: Event) => PromiseInput<void>;
   onWillClose?: (e: Event) => PromiseInput<void>;
 } = {}) {
-  const modal = useModal();
+  const modal = useModal(() => close());
   const visible = ref(false);
 
   // 包装后的抽屉组件，内部渲染 ModalDrawer 并传递事件与属性
@@ -82,9 +82,10 @@ export default function useModalDrawer({
     const e = new Event("close", { cancelable: true });
     await onWillClose?.(e);
     if (e.defaultPrevented) {
-      return;
+      return false;
     }
     visible.value = false;
+    return true;
   }
 
   return {
