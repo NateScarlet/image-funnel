@@ -49,7 +49,7 @@
             title="打开关联图片"
             @click.stop="openImageViewerForMemo(memoItem)"
           >
-            {{ memoItem.title }}
+            {{ memoDisplayName(memoItem) }}
           </span>
           <span
             class="text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium"
@@ -135,6 +135,11 @@ interface Props {
 const props = defineProps<Props>();
 // #endregion
 
+function memoDisplayName(memo: MemoFragment) {
+  const basename = memo.relPath.split("/").pop() ?? memo.relPath;
+  return basename.replace(/\.md$/, "");
+}
+
 // #region 数据查询与过滤状态处理
 const directoryIdRef = computed(() => props.directoryId);
 
@@ -188,7 +193,7 @@ function editMemo(memoItem: MemoFragment) {
 
 function openImageViewerForMemo(memoItem: MemoFragment) {
   openImageViewerByFilename.dispatch({
-    detail: { filename: memoItem.title },
+    detail: { filename: memoDisplayName(memoItem) },
   });
 }
 // #endregion

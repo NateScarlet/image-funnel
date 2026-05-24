@@ -13,8 +13,8 @@
         >
           <path :d="mdiNoteTextOutline" fill="currentColor" />
         </svg>
-        <span class="short:text-xs truncate" :title="memo.title">
-          编辑笔记 ({{ memo.title }})
+        <span class="short:text-xs truncate" :title="displayTitle">
+          编辑笔记 ({{ displayTitle }})
         </span>
       </h3>
       <button
@@ -105,6 +105,11 @@ const props = defineProps<{
 
 const emit = defineEmits<(e: "close" | "saved") => void>();
 // #endregion
+
+const displayTitle = computed(() => {
+  const basename = props.memo.relPath.split("/").pop() ?? props.memo.relPath;
+  return basename.replace(/\.md$/, "");
+});
 
 const textarea = useTemplateRef("textarea");
 

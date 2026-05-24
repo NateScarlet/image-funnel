@@ -3,7 +3,8 @@
 """
 type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   id: ID!
-  title: String!
+  title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
+  relPath: String!
   content: String!
   rawContent: String!
   hidden: Boolean!

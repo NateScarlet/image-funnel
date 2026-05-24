@@ -1,6 +1,6 @@
 fragment Memo on Memo {
   id
-  title
+  relPath
   content
   rawContent
   hidden

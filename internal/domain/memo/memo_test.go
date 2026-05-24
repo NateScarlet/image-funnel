@@ -98,8 +98,8 @@ hidden: true
 
 func TestMemoCreation(t *testing.T) {
 	// 测试 NewMemo 是否正确封装了 ParseMemoContent 的结果
-	id := EncodeID("test.jpg")
-	path := "/absolute/path/test.jpg"
+	id := EncodeID("test.jpg.md")
+	path := "/absolute/path/test.jpg.md"
 	raw := "---\nhidden: true\n---\nHello World"
 
 	m := NewMemo(id, path, raw)

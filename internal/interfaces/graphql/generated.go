@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -43,6 +44,7 @@ type ResolverRoot interface {
 	Directory() DirectoryResolver
 	DirectoryStats() DirectoryStatsResolver
 	Image() ImageResolver
+	Memo() MemoResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Session() SessionResolver
@@ -132,6 +134,7 @@ type ComplexityRoot struct {
 		Hidden     func(childComplexity int) int
 		ID         func(childComplexity int) int
 		RawContent func(childComplexity int) int
+		RelPath    func(childComplexity int) int
 		Title      func(childComplexity int) int
 	}
 
@@ -258,6 +261,9 @@ type ImageResolver interface {
 	RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error)
 
 	Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error)
+}
+type MemoResolver interface {
+	Title(ctx context.Context, obj *shared.MemoDTO) (string, error)
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
@@ -626,6 +632,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Memo.RawContent(childComplexity), true
+	case "Memo.relPath":
+		if e.complexity.Memo.RelPath == nil {
+			break
+		}
+
+		return e.complexity.Memo.RelPath(childComplexity), true
 	case "Memo.title":
 		if e.complexity.Memo.Title == nil {
 			break
@@ -1374,7 +1386,8 @@ input ImageFiltersInput
 """
 type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   id: ID!
-  title: String!
+  title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
+  relPath: String!
   content: String!
   rawContent: String!
   hidden: Boolean!
@@ -3118,6 +3131,8 @@ func (ec *executionContext) fieldContext_Image_memo(_ context.Context, field gra
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -3681,7 +3696,7 @@ func (ec *executionContext) _Memo_title(ctx context.Context, field graphql.Colle
 		field,
 		ec.fieldContext_Memo_title,
 		func(ctx context.Context) (any, error) {
-			return obj.Title, nil
+			return ec.resolvers.Memo().Title(ctx, obj)
 		},
 		nil,
 		ec.marshalNString2string,
@@ -3691,6 +3706,35 @@ func (ec *executionContext) _Memo_title(ctx context.Context, field graphql.Colle
 }
 
 func (ec *executionContext) fieldContext_Memo_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Memo",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Memo_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Memo_relPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Memo_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Memo",
 		Field:      field,
@@ -3853,6 +3897,8 @@ func (ec *executionContext) fieldContext_MemoConnection_nodes(_ context.Context,
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -3933,6 +3979,8 @@ func (ec *executionContext) fieldContext_MemoEdge_node(_ context.Context, field 
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -4486,6 +4534,8 @@ func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -6347,6 +6397,8 @@ func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Co
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -6400,6 +6452,8 @@ func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Cont
 				return ec.fieldContext_Memo_id(ctx, field)
 			case "title":
 				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
 			case "content":
 				return ec.fieldContext_Memo_content(ctx, field)
 			case "rawContent":
@@ -9472,27 +9526,63 @@ func (ec *executionContext) _Memo(ctx context.Context, sel ast.SelectionSet, obj
 		case "id":
 			out.Values[i] = ec._Memo_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "title":
-			out.Values[i] = ec._Memo_title(ctx, field, obj)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Memo_title(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "relPath":
+			out.Values[i] = ec._Memo_relPath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "content":
 			out.Values[i] = ec._Memo_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "rawContent":
 			out.Values[i] = ec._Memo_rawContent(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "hidden":
 			out.Values[i] = ec._Memo_hidden(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
@@ -11090,13 +11180,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

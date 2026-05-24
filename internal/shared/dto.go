@@ -94,7 +94,7 @@ type ImageMeta struct {
 // MemoDTO 备忘录数据传输对象
 type MemoDTO struct {
 	ID         scalar.ID
-	Title      string
+	RelPath    string
 	AbsPath    string
 	Content    string
 	RawContent string
