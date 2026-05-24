@@ -1,13 +1,20 @@
+"会话统计信息，反映当前筛选进度和操作分布"
 type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int! @deprecated(reason: "Use totalCount instead") @goField(name: "TotalCount")
   kept: Int! @deprecated(reason: "Use totalKept instead") @goField(name: "TotalKept")
   shelved: Int! @deprecated(reason: "Use totalShelved instead") @goField(name: "TotalShelved")
   rejected: Int! @deprecated(reason: "Use totalRejected instead") @goField(name: "TotalRejected")
   remaining: Int! @deprecated(reason: "Use currentRoundRemaining instead") @goField(name: "CurrentRoundRemaining")
+  "当前队列的图片总数"
   totalCount: Int!
+  "被标记为保留的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalKept: Int!
+  "被标记为搁置的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalShelved: Int!
+  "被标记为排除的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalRejected: Int!
+  "当前轮剩余待处理的图片数量"
   currentRoundRemaining: Int!
+  "会话是否已完成。条件：所有图片已处理 且 保留数不超过目标数"
   isCompleted: Boolean!
 }

@@ -1,11 +1,16 @@
+"创建新筛选会话"
 input CreateSessionInput {
+  "初始筛选条件，确定哪类图片进入筛选队列"
   filter: ImageFiltersInput!
+  "目标保留图片数量"
   targetKeep: Int!
+  "要创建会话的目录ID"
   directoryId: ID!
   clientMutationId: String
 }
 
 type CreateSessionPayload {
+  "创建的会话对象"
   session: Session!
   clientMutationId: String
 }

@@ -1,5 +1,17 @@
+"""
+图片筛选操作类型，对应三态分类决策。
+"""
 enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
+  """
+  保留操作，标记图片为优质候选。提交时对应 keepRating 评分。
+  """
   KEEP
+  """
+  搁置操作，标记图片为暂时不确定。提交时对应 shelveRating 评分。
+  """
   SHELVE
+  """
+  排除操作，标记图片为不合格。提交时对应 rejectRating 评分。
+  """
   REJECT
 }

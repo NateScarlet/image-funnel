@@ -1,4 +1,8 @@
+"RFC3339 格式的时间戳，如 2006-01-02T15:04:05Z07:00"
 scalar Time
+"统一资源标识符，用于图片签名 URL 等"
 scalar URI
+"文件上传类型"
 scalar Upload
+"时长值（毫秒），用于记录用户操作耗时"
 scalar Duration

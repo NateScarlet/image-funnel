@@ -1,17 +1,28 @@
+"""
+提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
+已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
+"""
 input CommitChangesInput {
+  "会话ID"
   sessionId: ID!
+  "各操作对应的评分写入配置"
   writeActions: WriteActionsInput!
   clientMutationId: String
 }
 
 input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
+  "保留操作写入的评分值"
   keepRating: Int!
+  "搁置操作写入的评分值"
   shelveRating: Int!
+  "排除操作写入的评分值"
   rejectRating: Int!
 }
 
 type CommitChangesPayload {
+  "实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）"
   written: Int!
+  "提交后的会话对象"
   session: Session
   clientMutationId: String
 }

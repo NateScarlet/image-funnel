@@ -1,3 +1,7 @@
 extend type Query {
+  """
+  通过图片 ID 获取嵌入在 PNG 文件 tEXt 块中的 ComfyUI 工作流 JSON。
+  仅 PNG 文件支持此查询，非 PNG 文件或未包含工作流的图片返回 null。
+  """
   comfyUIWorkflow(id: ID!): String
 }

@@ -1,19 +1,37 @@
+"""
+图片筛选会话，维护筛选过程中的队列、操作历史和统计数据。
+"""
 type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
+  "所属目录"
   directory: Directory!
+  "当前生效的筛选条件"
   filter: ImageFilters!
+  "目标保留图片数量"
   targetKeep: Int!
+  "会话统计信息"
   stats: SessionStats!
+  "创建时间（RFC3339 格式）"
   createdAt: String!
+  "最后更新时间（RFC3339 格式）"
   updatedAt: String!
+  "是否可以提交。条件：至少有一张图片被处理 或 已完成至少一轮筛选"
   canCommit: Boolean!
+  "是否可以撤销。条件：撤销栈非空（支持跨轮撤销）"
   canUndo: Boolean!
+  "当前处理的图片在队列中的索引（从0开始）"
   currentIndex: Int!
+  "当前队列的图片总数"
   currentSize: Int!
+  "当前筛选轮次（从0开始，每完成一轮自动递增）"
   currentRound: Int!
+  "当前正在处理的图片，队列为空时返回null"
   currentImage: Image
+  "预加载的后续图片列表。count <= 0 时返回所有剩余图片"
   nextImages(count: Int): [Image!]!
+  "已标记为保留的图片列表，按文件名排序，支持 limit/offset 分页"
   keptImages(limit: Int, offset: Int): [Image!]!
   queueActions: [ImageAction!]! @deprecated(reason: "Use currentRoundActions instead") @goField(name: "CurrentRoundActions")
+  "当前轮已操作的动作列表，按队列顺序排列，长度等于 currentIndex"
   currentRoundActions: [ImageAction!]!
 }

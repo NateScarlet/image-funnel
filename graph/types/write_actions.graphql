@@ -1,5 +1,9 @@
+"提交时将操作映射到 XMP 评分的配置"
 type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
+  "保留操作写入的评分值"
   keepRating: Int!
+  "搁置操作写入的评分值"
   shelveRating: Int!
+  "排除操作写入的评分值"
   rejectRating: Int!
 }

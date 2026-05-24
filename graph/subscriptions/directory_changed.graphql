@@ -1,4 +1,8 @@
 extend type Subscription {
+  """
+  订阅目录变更事件。变更发生时推送完整的目录对象。
+  支持按目录 ID 过滤，为 null 时订阅所有目录，空数组不订阅任何目录。
+  """
   directoryChanged(filterBy: DirectoryFilters): Directory!
 }
 

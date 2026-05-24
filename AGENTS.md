@@ -130,6 +130,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **Schema 变更后**: 运行 `pwsh scripts/generate-graphql.ps1`，然后更新 resolvers
 - **废弃字段**: GraphQL 不允许删除字段，只能标记 `@deprecated`。如需从 DTO 移除对应字段，gqlgen 重新生成后会自动为该字段生成 resolver stub（无需手动添加 `@goField(forceResolver: true)`），在 resolver 中实现原有的计算逻辑以保持向后兼容，不可随意返回空值
 - **自动 resolver**: 当 `@goModel` 绑定的 Go 结构体缺少 schema 中的某个字段时，gqlgen 会自动生成 resolver，多此一举添加 `@goField(forceResolver: true)` 是冗余操作
+- **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
 
 ### 通用
 

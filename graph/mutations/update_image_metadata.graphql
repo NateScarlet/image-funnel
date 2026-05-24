@@ -1,12 +1,16 @@
-input UpdateImageMetadataInput {
-  id: ID!
-  rating: Int
-  label: String
-}
-
 extend type Mutation {
   """
-  更新图片的元数据信息（评分和颜色标签）。操作是即时的，不参与会话提交。
+  更新图片的评分和颜色标签。操作即时写入 XMP sidecar 文件，不参与会话提交。
+  rating 和 label 均为可选，仅传入的字段会被更新。
   """
   updateImageMetadata(input: UpdateImageMetadataInput!): Image!
+}
+
+input UpdateImageMetadataInput {
+  "图片ID"
+  id: ID!
+  "新的评分值（0-5），为null表示不修改"
+  rating: Int
+  "新的颜色标签，为null表示不修改"
+  label: String
 }

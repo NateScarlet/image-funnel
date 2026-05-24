@@ -1,15 +1,30 @@
+"""
+图片对象，核心实体之一。ID 基于绝对路径和修改时间编码，文件变更后 ID 会变化。
+"""
 type Image @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
+  "文件名（不含路径）"
   filename: String!
+  "文件大小（字节）"
   size: Int!
+  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）和 quality"
   url(width: Int, quality: Int): URI!
+  "带签名的原始图片URL（无缩放）"
   rawURL: URI!
+  "文件最后修改时间"
   modTime: Time!
+  "图片像素宽度"
   width: Int!
+  "图片像素高度"
   height: Int!
+  "当前 XMP 评分（0-5），无 sidecar 文件时返回 0"
   currentRating: Int
+  "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
+  "关联的备忘信息，无备忘文件时返回空备忘对象"
   memo: Memo!
+  "颜色标签（来自 XMP sidecar），无标签时返回空字符串"
   label: String
+  "相对根目录的路径"
   relPath: String!
 }

@@ -8,61 +8,83 @@ import (
 	"main/internal/shared"
 )
 
+// 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
 type Node interface {
 }
 
+// 提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
+// 已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
 type CommitChangesInput struct {
-	SessionID        scalar.ID            `json:"sessionId"`
+	// 会话ID
+	SessionID scalar.ID `json:"sessionId"`
+	// 各操作对应的评分写入配置
 	WriteActions     *shared.WriteActions `json:"writeActions"`
 	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type CommitChangesPayload struct {
-	Written          int                `json:"written"`
+	// 实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）
+	Written int `json:"written"`
+	// 提交后的会话对象
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+// 创建新筛选会话
 type CreateSessionInput struct {
-	Filter           *shared.ImageFilters `json:"filter"`
-	TargetKeep       int                  `json:"targetKeep"`
-	DirectoryID      scalar.ID            `json:"directoryId"`
-	ClientMutationID *string              `json:"clientMutationId,omitempty"`
+	// 初始筛选条件，确定哪类图片进入筛选队列
+	Filter *shared.ImageFilters `json:"filter"`
+	// 目标保留图片数量
+	TargetKeep int `json:"targetKeep"`
+	// 要创建会话的目录ID
+	DirectoryID      scalar.ID `json:"directoryId"`
+	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
 type CreateSessionPayload struct {
+	// 创建的会话对象
 	Session          *shared.SessionDTO `json:"session"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
-// 删除事件载体，仅保留图片ID（原文件已不存在）
+// 图片删除事件载体，仅保留图片ID（原文件已不存在，无法获取其他字段）
 type DeletedImage struct {
 	ID scalar.ID `json:"id"`
 }
 
+// 对当前图片执行分类操作（保留/搁置/排除）
 type MarkImageInput struct {
-	SessionID        scalar.ID                         `json:"sessionId"`
-	ImageID          scalar.ID                         `json:"imageId"`
-	Action           enum.Enum[shared.ImageActionMeta] `json:"action"`
-	Duration         *scalar.Duration                  `json:"duration,omitempty"`
-	ClientMutationID *string                           `json:"clientMutationId,omitempty"`
+	// 会话ID
+	SessionID scalar.ID `json:"sessionId"`
+	// 要标记的图片ID
+	ImageID scalar.ID `json:"imageId"`
+	// 标记动作
+	Action enum.Enum[shared.ImageActionMeta] `json:"action"`
+	// 用户操作耗时（毫秒），用于统计分析
+	Duration         *scalar.Duration `json:"duration,omitempty"`
+	ClientMutationID *string          `json:"clientMutationId,omitempty"`
 }
 
 type MarkImagePayload struct {
+	// 操作后的会话对象
 	Session          *shared.SessionDTO `json:"session"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+// 应用元信息
 type Meta struct {
+	// 应用根目录的绝对路径
 	RootAbsPath string `json:"rootAbsPath"`
 	RootPath    string `json:"rootPath"`
-	Version     string `json:"version"`
+	// 当前应用版本号
+	Version string `json:"version"`
 }
 
+// 将符合条件的图片移动到指定子目录
 type MoveImagesInput struct {
 	// 当前所在的目录ID
 	DirectoryID scalar.ID `json:"directoryId"`
-	// 图片过滤条件
+	// 需要移动的图片筛选条件
 	FilterBy *shared.ImageFilters `json:"filterBy"`
 	// 目标目录相对路径，相对于当前所在的目录（支持 ..）
 	ToDirectoryRelPath string  `json:"toDirectoryRelPath"`
@@ -72,7 +94,7 @@ type MoveImagesInput struct {
 type MoveImagesPayload struct {
 	// 移动成功的图片数量
 	MovedCount int `json:"movedCount"`
-	// 移动的目标目录绝对物理路径，用于前端通过协议调起资源管理器并定位
+	// 目标目录的绝对物理路径，可用于前端调起系统资源管理器定位
 	TargetAbsoluteDirectory string  `json:"targetAbsoluteDirectory"`
 	ClientMutationID        *string `json:"clientMutationId,omitempty"`
 }
@@ -83,38 +105,53 @@ type Mutation struct {
 type Query struct {
 }
 
+// 图片评分分布统计
 type RatingCount struct {
+	// XMP 评分值
 	Rating int `json:"rating"`
-	Count  int `json:"count"`
+	// 持有该评分的图片数量
+	Count int `json:"count"`
 }
 
 type Subscription struct {
 }
 
+// 撤销上一次标记操作，支持跨轮撤销
 type UndoInput struct {
+	// 会话ID
 	SessionID        scalar.ID `json:"sessionId"`
 	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
 type UndoPayload struct {
+	// 撤销后的会话对象，无操作可撤销时返回null
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
 type UpdateImageMetadataInput struct {
-	ID     scalar.ID `json:"id"`
-	Rating *int      `json:"rating,omitempty"`
-	Label  *string   `json:"label,omitempty"`
+	// 图片ID
+	ID scalar.ID `json:"id"`
+	// 新的评分值（0-5），为null表示不修改
+	Rating *int `json:"rating,omitempty"`
+	// 新的颜色标签，为null表示不修改
+	Label *string `json:"label,omitempty"`
 }
 
+// 更新会话配置（目标保留数量、筛选条件）
 type UpdateSessionInput struct {
-	SessionID        scalar.ID            `json:"sessionId"`
-	TargetKeep       *int                 `json:"targetKeep,omitempty"`
+	// 会话ID
+	SessionID scalar.ID `json:"sessionId"`
+	// 新的目标保留数量，为null表示不修改
+	TargetKeep *int `json:"targetKeep,omitempty"`
+	// 新的筛选条件。
+	// TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
 	Filter           *shared.ImageFilters `json:"filter,omitempty"`
 	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type UpdateSessionPayload struct {
+	// 更新后的会话对象
 	Session          *shared.SessionDTO `json:"session"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }

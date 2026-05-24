@@ -1,4 +1,7 @@
+"图片评分分布统计"
 type RatingCount {
+  "XMP 评分值"
   rating: Int!
+  "持有该评分的图片数量"
   count: Int!
 }

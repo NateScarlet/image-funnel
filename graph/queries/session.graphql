@@ -1,3 +1,4 @@
 extend type Query {
+  "通过 ID 获取会话，不存在时返回 null"
   session(id: ID!): Session
 }

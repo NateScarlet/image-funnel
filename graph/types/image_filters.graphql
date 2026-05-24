@@ -1,11 +1,15 @@
+"图片筛选条件，所有条件之间为 AND 关系"
 type ImageFilters
   @goModel(model: "main/internal/shared.ImageFilters") {
   "按图片ID过滤，为null表示不按ID过滤"
   id: [ID!]
   "按所在目录ID过滤，为null表示不按目录过滤"
   directoryId: [ID!]
+  "按评分过滤（筛选匹配任一评分的图片）"
   rating: [Int!]
+  "按颜色标签过滤（忽略大小写，匹配任一标签的图片）"
   label: [String!]
+  "按文件名模糊搜索（忽略大小写，包含即匹配）"
   query: String
 }
 
@@ -15,8 +19,10 @@ input ImageFiltersInput
   id: [ID!]
   "按所在目录ID过滤，为null表示不按目录过滤"
   directoryId: [ID!]
+  "按评分过滤（筛选匹配任一评分的图片）"
   rating: [Int!]
+  "按颜色标签过滤（忽略大小写，匹配任一标签的图片）"
   label: [String!]
+  "按文件名模糊搜索（忽略大小写，包含即匹配）"
   query: String
 }
-

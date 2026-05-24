@@ -1,3 +1,4 @@
 extend type Query {
+  "获取应用元信息（版本号、根目录路径）"
   meta: Meta!
 }

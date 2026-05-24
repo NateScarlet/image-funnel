@@ -1,12 +1,18 @@
+"对当前图片执行分类操作（保留/搁置/排除）"
 input MarkImageInput {
+  "会话ID"
   sessionId: ID!
+  "要标记的图片ID"
   imageId: ID!
+  "标记动作"
   action: ImageAction!
+  "用户操作耗时（毫秒），用于统计分析"
   duration: Duration
   clientMutationId: String
 }
 
 type MarkImagePayload {
+  "操作后的会话对象"
   session: Session!
   clientMutationId: String
 }

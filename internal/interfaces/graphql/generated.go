@@ -149,6 +149,12 @@ type ComplexityRoot struct {
 		Node   func(childComplexity int) int
 	}
 
+	MemoFilters struct {
+		DirectoryID func(childComplexity int) int
+		Hidden      func(childComplexity int) int
+		ID          func(childComplexity int) int
+	}
+
 	Meta struct {
 		RootAbsPath func(childComplexity int) int
 		RootPath    func(childComplexity int) int
@@ -676,6 +682,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.MemoEdge.Node(childComplexity), true
+
+	case "MemoFilters.directoryId":
+		if e.complexity.MemoFilters.DirectoryID == nil {
+			break
+		}
+
+		return e.complexity.MemoFilters.DirectoryID(childComplexity), true
+	case "MemoFilters.hidden":
+		if e.complexity.MemoFilters.Hidden == nil {
+			break
+		}
+
+		return e.complexity.MemoFilters.Hidden(childComplexity), true
+	case "MemoFilters.id":
+		if e.complexity.MemoFilters.ID == nil {
+			break
+		}
+
+		return e.complexity.MemoFilters.ID(childComplexity), true
 
 	case "Meta.rootAbsPath":
 		if e.complexity.Meta.RootAbsPath == nil {
@@ -1277,11 +1302,14 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 }
 
 var sources = []*ast.Source{
-	{Name: "../../../graph/scalars.graphql", Input: `scalar Time
+	{Name: "../../../graph/scalars.graphql", Input: `"RFC3339 格式的时间戳，如 2006-01-02T15:04:05Z07:00"
+scalar Time
+"统一资源标识符，用于图片签名 URL 等"
 scalar URI
+"文件上传类型"
 scalar Upload
-scalar Duration
-`, BuiltIn: false},
+"时长值（毫秒），用于记录用户操作耗时"
+scalar Duration`, BuiltIn: false},
 	{Name: "../../../graph/directives.graphql", Input: `directive @goModel(
   model: String
   models: [String!]
@@ -1295,24 +1323,35 @@ directive @goField(
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 `, BuiltIn: false},
-	{Name: "../../../graph/types/directory.graphql", Input: `type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
+	{Name: "../../../graph/types/directory.graphql", Input: `"""
+目录节点，表示文件系统中的一个子目录。根目录的 relPath 为空字符串。
+"""
+type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
+  "上级目录ID，根目录此值为null"
   parentId: ID
+  "相对根目录的路径"
   relPath: String!
   path: String! @deprecated(reason: "use relPath") @goField(name: "RelPath")
+  "是否为根目录"
   root: Boolean!
+  "目录统计信息（图片数量、子目录数、评分分布等）"
   stats: DirectoryStats
+  "子目录列表"
   directories: [Directory!]! @goField(forceResolver: true)
+  "目录下的图片列表，支持筛选与分页"
   images(
     filterBy: ImageFiltersInput
     first: Int
     after: String
   ): ImageConnection! @goField(forceResolver: true)
+  "目录下的备忘录列表，支持筛选与分页"
   memos(
     filterBy: MemoFiltersInput
     first: Int
     after: String
   ): MemoConnection! @goField(forceResolver: true)
+  "该目录下最后活跃的会话，无历史会话时返回null"
   lastSession: Session @goField(forceResolver: true)
 }
 
@@ -1328,44 +1367,68 @@ type ImageEdge @goModel(model: "main/internal/shared.ImageEdgeDTO") {
 }
 
 type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
+  "是否有下一页"
   hasNextPage: Boolean!
+  "是否有上一页"
   hasPreviousPage: Boolean!
+  "当前页起始游标，首页为null"
   startCursor: String
+  "当前页结束游标，末页为null"
   endCursor: String
-}
-
-`, BuiltIn: false},
-	{Name: "../../../graph/types/directory_stats.graphql", Input: `type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
+type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+  "图片数量"
   imageCount: Int!
+  "子目录数量"
   subdirectoryCount: Int!
+  "最新修改的图片，目录无图片时返回null"
   latestImage: Image
+  "各评分级别的图片数量分布"
   ratingCounts: [RatingCount!]!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/image.graphql", Input: `type Image @goModel(model: "main/internal/shared.ImageDTO") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/image.graphql", Input: `"""
+图片对象，核心实体之一。ID 基于绝对路径和修改时间编码，文件变更后 ID 会变化。
+"""
+type Image @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
+  "文件名（不含路径）"
   filename: String!
+  "文件大小（字节）"
   size: Int!
+  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）和 quality"
   url(width: Int, quality: Int): URI!
+  "带签名的原始图片URL（无缩放）"
   rawURL: URI!
+  "文件最后修改时间"
   modTime: Time!
+  "图片像素宽度"
   width: Int!
+  "图片像素高度"
   height: Int!
+  "当前 XMP 评分（0-5），无 sidecar 文件时返回 0"
   currentRating: Int
+  "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
+  "关联的备忘信息，无备忘文件时返回空备忘对象"
   memo: Memo!
+  "颜色标签（来自 XMP sidecar），无标签时返回空字符串"
   label: String
+  "相对根目录的路径"
   relPath: String!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/image_filters.graphql", Input: `type ImageFilters
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/image_filters.graphql", Input: `"图片筛选条件，所有条件之间为 AND 关系"
+type ImageFilters
   @goModel(model: "main/internal/shared.ImageFilters") {
   "按图片ID过滤，为null表示不按ID过滤"
   id: [ID!]
   "按所在目录ID过滤，为null表示不按目录过滤"
   directoryId: [ID!]
+  "按评分过滤（筛选匹配任一评分的图片）"
   rating: [Int!]
+  "按颜色标签过滤（忽略大小写，匹配任一标签的图片）"
   label: [String!]
+  "按文件名模糊搜索（忽略大小写，包含即匹配）"
   query: String
 }
 
@@ -1375,21 +1438,27 @@ input ImageFiltersInput
   id: [ID!]
   "按所在目录ID过滤，为null表示不按目录过滤"
   directoryId: [ID!]
+  "按评分过滤（筛选匹配任一评分的图片）"
   rating: [Int!]
+  "按颜色标签过滤（忽略大小写，匹配任一标签的图片）"
   label: [String!]
+  "按文件名模糊搜索（忽略大小写，包含即匹配）"
   query: String
-}
-
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/types/memo.graphql", Input: `"""
-图片的备忘信息
+图片的备忘信息，以 Markdown 文件形式存储于图片同目录。
+frontmatter 中可包含 hidden/hide 字段控制是否隐藏。
 """
 type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
   id: ID!
   title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
+  "备忘文件相对根目录的路径"
   relPath: String!
+  "剥离 frontmatter 后的正文内容（纯 Markdown）"
   content: String!
+  "包含 frontmatter 的完整原始内容"
   rawContent: String!
+  "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
   hidden: Boolean!
 }
 
@@ -1402,9 +1471,10 @@ type MemoConnection @goModel(model: "main/internal/shared.MemoConnectionDTO") {
 type MemoEdge @goModel(model: "main/internal/shared.MemoEdgeDTO") {
   node: Memo!
   cursor: String!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/memo_filters.graphql", Input: `input MemoFiltersInput @goModel(model: "main/internal/shared.MemoFilters") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/memo_filters.graphql", Input: `"备忘录过滤条件"
+type MemoFilters
+  @goModel(model: "main/internal/shared.MemoFilters") {
   "按备忘录ID过滤，为null表示不限制"
   id: [ID!]
   "按所在目录ID过滤，为null表示不限制"
@@ -1412,88 +1482,152 @@ type MemoEdge @goModel(model: "main/internal/shared.MemoEdgeDTO") {
   "按是否隐藏过滤，为null表示不限制"
   hidden: Boolean
 }
-`, BuiltIn: false},
-	{Name: "../../../graph/types/meta.graphql", Input: `type Meta {
+input MemoFiltersInput
+  @goModel(model: "main/internal/shared.MemoFilters") {
+  "按备忘录ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/meta.graphql", Input: `"应用元信息"
+type Meta {
+  "应用根目录的绝对路径"
   rootAbsPath: String!
   rootPath: String! @deprecated(reason: "use rootAbsPath")
+  "当前应用版本号"
   version: String!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/node.graphql", Input: `interface Node {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/node.graphql", Input: `"""
+全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
+"""
+interface Node {
+  "全局唯一标识符，格式为 {类型前缀}:{编码信息}，客户端不应解析其内部结构"
   id: ID!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/rating_count.graphql", Input: `type RatingCount {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/rating_count.graphql", Input: `"图片评分分布统计"
+type RatingCount {
+  "XMP 评分值"
   rating: Int!
+  "持有该评分的图片数量"
   count: Int!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/session.graphql", Input: `type Session @goModel(model: "main/internal/shared.SessionDTO") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/session.graphql", Input: `"""
+图片筛选会话，维护筛选过程中的队列、操作历史和统计数据。
+"""
+type Session @goModel(model: "main/internal/shared.SessionDTO") {
   id: ID!
+  "所属目录"
   directory: Directory!
+  "当前生效的筛选条件"
   filter: ImageFilters!
+  "目标保留图片数量"
   targetKeep: Int!
+  "会话统计信息"
   stats: SessionStats!
+  "创建时间（RFC3339 格式）"
   createdAt: String!
+  "最后更新时间（RFC3339 格式）"
   updatedAt: String!
+  "是否可以提交。条件：至少有一张图片被处理 或 已完成至少一轮筛选"
   canCommit: Boolean!
+  "是否可以撤销。条件：撤销栈非空（支持跨轮撤销）"
   canUndo: Boolean!
+  "当前处理的图片在队列中的索引（从0开始）"
   currentIndex: Int!
+  "当前队列的图片总数"
   currentSize: Int!
+  "当前筛选轮次（从0开始，每完成一轮自动递增）"
   currentRound: Int!
+  "当前正在处理的图片，队列为空时返回null"
   currentImage: Image
+  "预加载的后续图片列表。count <= 0 时返回所有剩余图片"
   nextImages(count: Int): [Image!]!
+  "已标记为保留的图片列表，按文件名排序，支持 limit/offset 分页"
   keptImages(limit: Int, offset: Int): [Image!]!
   queueActions: [ImageAction!]! @deprecated(reason: "Use currentRoundActions instead") @goField(name: "CurrentRoundActions")
+  "当前轮已操作的动作列表，按队列顺序排列，长度等于 currentIndex"
   currentRoundActions: [ImageAction!]!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/types/session_stats.graphql", Input: `type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/session_stats.graphql", Input: `"会话统计信息，反映当前筛选进度和操作分布"
+type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   total: Int! @deprecated(reason: "Use totalCount instead") @goField(name: "TotalCount")
   kept: Int! @deprecated(reason: "Use totalKept instead") @goField(name: "TotalKept")
   shelved: Int! @deprecated(reason: "Use totalShelved instead") @goField(name: "TotalShelved")
   rejected: Int! @deprecated(reason: "Use totalRejected instead") @goField(name: "TotalRejected")
   remaining: Int! @deprecated(reason: "Use currentRoundRemaining instead") @goField(name: "CurrentRoundRemaining")
+  "当前队列的图片总数"
   totalCount: Int!
+  "被标记为保留的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalKept: Int!
+  "被标记为搁置的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalShelved: Int!
+  "被标记为排除的图片数量（仅统计符合当前 filter 或已提交过的图片）"
   totalRejected: Int!
+  "当前轮剩余待处理的图片数量"
   currentRoundRemaining: Int!
+  "会话是否已完成。条件：所有图片已处理 且 保留数不超过目标数"
   isCompleted: Boolean!
 }`, BuiltIn: false},
-	{Name: "../../../graph/types/write_actions.graphql", Input: `type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
+	{Name: "../../../graph/types/write_actions.graphql", Input: `"提交时将操作映射到 XMP 评分的配置"
+type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
+  "保留操作写入的评分值"
   keepRating: Int!
+  "搁置操作写入的评分值"
   shelveRating: Int!
+  "排除操作写入的评分值"
   rejectRating: Int!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/enums/image_action.graphql", Input: `enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
+}`, BuiltIn: false},
+	{Name: "../../../graph/enums/image_action.graphql", Input: `"""
+图片筛选操作类型，对应三态分类决策。
+"""
+enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
+  """
+  保留操作，标记图片为优质候选。提交时对应 keepRating 评分。
+  """
   KEEP
+  """
+  搁置操作，标记图片为暂时不确定。提交时对应 shelveRating 评分。
+  """
   SHELVE
+  """
+  排除操作，标记图片为不合格。提交时对应 rejectRating 评分。
+  """
   REJECT
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/queries/comfy_ui_workflow.graphql", Input: `extend type Query {
+  """
+  通过图片 ID 获取嵌入在 PNG 文件 tEXt 块中的 ComfyUI 工作流 JSON。
+  仅 PNG 文件支持此查询，非 PNG 文件或未包含工作流的图片返回 null。
+  """
   comfyUIWorkflow(id: ID!): String
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/queries/meta.graphql", Input: `extend type Query {
+  "获取应用元信息（版本号、根目录路径）"
   meta: Meta!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/queries/node.graphql", Input: `type Query {
+  """
+  通过全局唯一 ID 查找节点。
+  支持按前缀解析：dir: → Directory，memo: → Memo。
+  不支持的 ID 格式返回 null。
+  """
   node(id: ID!): Node
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/queries/root_directory.graphql", Input: `extend type Query {
+  "获取根目录节点，relPath 为空字符串"
   rootDirectory: Directory!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/queries/session.graphql", Input: `extend type Query {
+  "通过 ID 获取会话，不存在时返回 null"
   session(id: ID!): Session
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/directory_changed.graphql", Input: `extend type Subscription {
+  """
+  订阅目录变更事件。变更发生时推送完整的目录对象。
+  支持按目录 ID 过滤，为 null 时订阅所有目录，空数组不订阅任何目录。
+  """
   directoryChanged(filterBy: DirectoryFilters): Directory!
 }
 
@@ -1503,96 +1637,115 @@ input DirectoryFilters
   目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录
   """
   id: [ID!]
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/image_changed.graphql", Input: `extend type Subscription {
-  "订阅图片新增或更新事件（文件被创建或写入时触发）"
+  "订阅图片新增或更新事件（文件被创建或写入时触发），支持按筛选条件过滤"
   imageSaved(filterBy: ImageFiltersInput): Image!
 
-  "订阅图片删除或移走事件（文件被移除或重命名时触发）"
+  "订阅图片删除或移走事件（文件被移除或重命名时触发），支持按筛选条件过滤"
   imageDeleted(filterBy: ImageFiltersInput): DeletedImage!
 }
 
-"删除事件载体，仅保留图片ID（原文件已不存在）"
+"图片删除事件载体，仅保留图片ID（原文件已不存在，无法获取其他字段）"
 type DeletedImage {
   id: ID!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/memo_updated.graphql", Input: `extend type Subscription {
   """
-  订阅特定备忘录的更新。当文件被外部或应用内部修改时推送。(已废弃，请使用 memoSaved)
+  按 ID 订阅特定备忘录的更新（已废弃，请使用 memoSaved）
   """
   memoUpdated(id: ID!): Memo! @deprecated(reason: "use memoSaved")
 
   """
-  按过滤器订阅备忘录的新增、更新与删除事件
+  按过滤器订阅备忘录的新增、更新与删除事件。
+  支持按目录ID、备忘录ID、隐藏状态过滤。
+  文件被删除时推送空内容备忘对象。
   """
   memoSaved(filterBy: MemoFiltersInput): Memo!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
+  "订阅指定会话的变更事件。会话状态变更时（标记、撤销、提交、更新配置）推送完整的会话对象。"
   sessionUpdated(id: ID!): Session!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/commit_changes.graphql", Input: `input CommitChangesInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/commit_changes.graphql", Input: `"""
+提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
+已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
+"""
+input CommitChangesInput {
+  "会话ID"
   sessionId: ID!
+  "各操作对应的评分写入配置"
   writeActions: WriteActionsInput!
   clientMutationId: String
 }
 
 input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
+  "保留操作写入的评分值"
   keepRating: Int!
+  "搁置操作写入的评分值"
   shelveRating: Int!
+  "排除操作写入的评分值"
   rejectRating: Int!
 }
 
 type CommitChangesPayload {
+  "实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）"
   written: Int!
+  "提交后的会话对象"
   session: Session
   clientMutationId: String
 }
 
 extend type Mutation {
   commitChanges(input: CommitChangesInput!): CommitChangesPayload!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/create_session.graphql", Input: `input CreateSessionInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/create_session.graphql", Input: `"创建新筛选会话"
+input CreateSessionInput {
+  "初始筛选条件，确定哪类图片进入筛选队列"
   filter: ImageFiltersInput!
+  "目标保留图片数量"
   targetKeep: Int!
+  "要创建会话的目录ID"
   directoryId: ID!
   clientMutationId: String
 }
 
 type CreateSessionPayload {
+  "创建的会话对象"
   session: Session!
   clientMutationId: String
 }
 
 type Mutation {
   createSession(input: CreateSessionInput!): CreateSessionPayload!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/mark_image.graphql", Input: `input MarkImageInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/mark_image.graphql", Input: `"对当前图片执行分类操作（保留/搁置/排除）"
+input MarkImageInput {
+  "会话ID"
   sessionId: ID!
+  "要标记的图片ID"
   imageId: ID!
+  "标记动作"
   action: ImageAction!
+  "用户操作耗时（毫秒），用于统计分析"
   duration: Duration
   clientMutationId: String
 }
 
 type MarkImagePayload {
+  "操作后的会话对象"
   session: Session!
   clientMutationId: String
 }
 
 extend type Mutation {
   markImage(input: MarkImageInput!): MarkImagePayload!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/move_images.graphql", Input: `input MoveImagesInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/move_images.graphql", Input: `"将符合条件的图片移动到指定子目录"
+input MoveImagesInput {
   "当前所在的目录ID"
   directoryId: ID!
-  "图片过滤条件"
+  "需要移动的图片筛选条件"
   filterBy: ImageFiltersInput!
   "目标目录相对路径，相对于当前所在的目录（支持 ..）"
   toDirectoryRelPath: String!
@@ -1602,57 +1755,69 @@ extend type Mutation {
 type MoveImagesPayload {
   "移动成功的图片数量"
   movedCount: Int!
-  "移动的目标目录绝对物理路径，用于前端通过协议调起资源管理器并定位"
+  "目标目录的绝对物理路径，可用于前端调起系统资源管理器定位"
   targetAbsoluteDirectory: String!
   clientMutationId: String
 }
 
 extend type Mutation {
   moveImages(input: MoveImagesInput!): MoveImagesPayload!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/undo.graphql", Input: `input UndoInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/undo.graphql", Input: `"撤销上一次标记操作，支持跨轮撤销"
+input UndoInput {
+  "会话ID"
   sessionId: ID!
   clientMutationId: String
 }
 
 type UndoPayload {
+  "撤销后的会话对象，无操作可撤销时返回null"
   session: Session
   clientMutationId: String
 }
 
 extend type Mutation {
   undo(input: UndoInput!): UndoPayload
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `input UpdateImageMetadataInput {
-  id: ID!
-  rating: Int
-  label: String
-}
-
-extend type Mutation {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `extend type Mutation {
   """
-  更新图片的元数据信息（评分和颜色标签）。操作是即时的，不参与会话提交。
+  更新图片的评分和颜色标签。操作即时写入 XMP sidecar 文件，不参与会话提交。
+  rating 和 label 均为可选，仅传入的字段会被更新。
   """
   updateImageMetadata(input: UpdateImageMetadataInput!): Image!
 }
-`, BuiltIn: false},
+
+input UpdateImageMetadataInput {
+  "图片ID"
+  id: ID!
+  "新的评分值（0-5），为null表示不修改"
+  rating: Int
+  "新的颜色标签，为null表示不修改"
+  label: String
+}`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_memo.graphql", Input: `extend type Mutation {
   """
-  更新图片的备忘信息。操作是即时的，不参与会话提交。
+  更新图片的备忘内容。操作即时写入 Markdown 文件，不参与会话提交。
+  content 可包含 frontmatter（如 hidden/hide 字段）以控制备忘的隐藏状态。
   """
   updateMemo(id: ID!, content: String!): Memo!
-}
-`, BuiltIn: false},
-	{Name: "../../../graph/mutations/update_session.graphql", Input: `input UpdateSessionInput {
+}`, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_session.graphql", Input: `"更新会话配置（目标保留数量、筛选条件）"
+input UpdateSessionInput {
+  "会话ID"
   sessionId: ID!
+  "新的目标保留数量，为null表示不修改"
   targetKeep: Int
+  """
+  新的筛选条件。
+  TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
+  """
   filter: ImageFiltersInput
   clientMutationId: String
 }
 
 type UpdateSessionPayload {
+  "更新后的会话对象"
   session: Session!
   clientMutationId: String
 }
@@ -4018,6 +4183,93 @@ func (ec *executionContext) fieldContext_MemoEdge_cursor(_ context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoFilters_id(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoFilters_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoFilters_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoFilters_directoryId(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoFilters_directoryId,
+		func(ctx context.Context) (any, error) {
+			return obj.DirectoryID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoFilters_directoryId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MemoFilters_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MemoFilters_hidden,
+		func(ctx context.Context) (any, error) {
+			return obj.Hidden, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MemoFilters_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MemoFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -9677,6 +9929,46 @@ func (ec *executionContext) _MemoEdge(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var memoFiltersImplementors = []string{"MemoFilters"}
+
+func (ec *executionContext) _MemoFilters(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoFilters) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, memoFiltersImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MemoFilters")
+		case "id":
+			out.Values[i] = ec._MemoFilters_id(ctx, field, obj)
+		case "directoryId":
+			out.Values[i] = ec._MemoFilters_directoryId(ctx, field, obj)
+		case "hidden":
+			out.Values[i] = ec._MemoFilters_hidden(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

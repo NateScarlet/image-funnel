@@ -1,9 +1,12 @@
+"撤销上一次标记操作，支持跨轮撤销"
 input UndoInput {
+  "会话ID"
   sessionId: ID!
   clientMutationId: String
 }
 
 type UndoPayload {
+  "撤销后的会话对象，无操作可撤销时返回null"
   session: Session
   clientMutationId: String
 }

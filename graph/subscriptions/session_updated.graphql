@@ -1,3 +1,4 @@
 type Subscription {
+  "订阅指定会话的变更事件。会话状态变更时（标记、撤销、提交、更新配置）推送完整的会话对象。"
   sessionUpdated(id: ID!): Session!
 }

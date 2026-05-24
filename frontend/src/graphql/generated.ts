@@ -15,22 +15,36 @@ export type Scalars = {
   Boolean: { input: boolean; output: boolean; }
   Int: { input: number; output: number; }
   Float: { input: number; output: number; }
+  /** 时长值（毫秒），用于记录用户操作耗时 */
   Duration: { input: string; output: string; }
+  /** RFC3339 格式的时间戳，如 2006-01-02T15:04:05Z07:00 */
   Time: { input: string; output: string; }
+  /** 统一资源标识符，用于图片签名 URL 等 */
   URI: { input: string; output: string; }
+  /** 文件上传类型 */
   Upload: { input: File; output: File; }
 };
 
+/**
+ * 提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
+ * 已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
+ */
 export type CommitChangesInput = {
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  /** 会话ID */
   sessionId: Scalars['ID']['input'];
+  /** 各操作对应的评分写入配置 */
   writeActions: WriteActionsInput;
 };
 
+/** 创建新筛选会话 */
 export type CreateSessionInput = {
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  /** 要创建会话的目录ID */
   directoryId: Scalars['ID']['input'];
+  /** 初始筛选条件，确定哪类图片进入筛选队列 */
   filter: ImageFiltersInput;
+  /** 目标保留图片数量 */
   targetKeep: Scalars['Int']['input'];
 };
 
@@ -39,9 +53,13 @@ export type DirectoryFilters = {
   id?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
+/** 图片筛选操作类型，对应三态分类决策。 */
 export enum ImageAction {
+  /** 保留操作，标记图片为优质候选。提交时对应 keepRating 评分。 */
   KEEP = 'KEEP',
+  /** 排除操作，标记图片为不合格。提交时对应 rejectRating 评分。 */
   REJECT = 'REJECT',
+  /** 搁置操作，标记图片为暂时不确定。提交时对应 shelveRating 评分。 */
   SHELVE = 'SHELVE'
 }
 
@@ -50,16 +68,24 @@ export type ImageFiltersInput = {
   directoryId?: InputMaybe<Array<Scalars['ID']['input']>>;
   /** 按图片ID过滤，为null表示不按ID过滤 */
   id?: InputMaybe<Array<Scalars['ID']['input']>>;
+  /** 按颜色标签过滤（忽略大小写，匹配任一标签的图片） */
   label?: InputMaybe<Array<Scalars['String']['input']>>;
+  /** 按文件名模糊搜索（忽略大小写，包含即匹配） */
   query?: InputMaybe<Scalars['String']['input']>;
+  /** 按评分过滤（筛选匹配任一评分的图片） */
   rating?: InputMaybe<Array<Scalars['Int']['input']>>;
 };
 
+/** 对当前图片执行分类操作（保留/搁置/排除） */
 export type MarkImageInput = {
+  /** 标记动作 */
   action: ImageAction;
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  /** 用户操作耗时（毫秒），用于统计分析 */
   duration?: InputMaybe<Scalars['Duration']['input']>;
+  /** 要标记的图片ID */
   imageId: Scalars['ID']['input'];
+  /** 会话ID */
   sessionId: Scalars['ID']['input'];
 };
 
@@ -72,37 +98,53 @@ export type MemoFiltersInput = {
   id?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
+/** 将符合条件的图片移动到指定子目录 */
 export type MoveImagesInput = {
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
   /** 当前所在的目录ID */
   directoryId: Scalars['ID']['input'];
-  /** 图片过滤条件 */
+  /** 需要移动的图片筛选条件 */
   filterBy: ImageFiltersInput;
   /** 目标目录相对路径，相对于当前所在的目录（支持 ..） */
   toDirectoryRelPath: Scalars['String']['input'];
 };
 
+/** 撤销上一次标记操作，支持跨轮撤销 */
 export type UndoInput = {
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  /** 会话ID */
   sessionId: Scalars['ID']['input'];
 };
 
 export type UpdateImageMetadataInput = {
+  /** 图片ID */
   id: Scalars['ID']['input'];
+  /** 新的颜色标签，为null表示不修改 */
   label?: InputMaybe<Scalars['String']['input']>;
+  /** 新的评分值（0-5），为null表示不修改 */
   rating?: InputMaybe<Scalars['Int']['input']>;
 };
 
+/** 更新会话配置（目标保留数量、筛选条件） */
 export type UpdateSessionInput = {
   clientMutationId?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * 新的筛选条件。
+   * TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
+   */
   filter?: InputMaybe<ImageFiltersInput>;
+  /** 会话ID */
   sessionId: Scalars['ID']['input'];
+  /** 新的目标保留数量，为null表示不修改 */
   targetKeep?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type WriteActionsInput = {
+  /** 保留操作写入的评分值 */
   keepRating: Scalars['Int']['input'];
+  /** 排除操作写入的评分值 */
   rejectRating: Scalars['Int']['input'];
+  /** 搁置操作写入的评分值 */
   shelveRating: Scalars['Int']['input'];
 };
 

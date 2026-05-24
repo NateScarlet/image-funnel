@@ -1,3 +1,4 @@
 extend type Query {
+  "获取根目录节点，relPath 为空字符串"
   rootDirectory: Directory!
 }

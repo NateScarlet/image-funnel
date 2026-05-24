@@ -1,11 +1,19 @@
+"更新会话配置（目标保留数量、筛选条件）"
 input UpdateSessionInput {
+  "会话ID"
   sessionId: ID!
+  "新的目标保留数量，为null表示不修改"
   targetKeep: Int
+  """
+  新的筛选条件。
+  TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
+  """
   filter: ImageFiltersInput
   clientMutationId: String
 }
 
 type UpdateSessionPayload {
+  "更新后的会话对象"
   session: Session!
   clientMutationId: String
 }

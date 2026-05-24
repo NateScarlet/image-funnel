@@ -1,5 +1,8 @@
+"应用元信息"
 type Meta {
+  "应用根目录的绝对路径"
   rootAbsPath: String!
   rootPath: String! @deprecated(reason: "use rootAbsPath")
+  "当前应用版本号"
   version: String!
 }

@@ -1,6 +1,11 @@
+"目录统计信息"
 type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
+  "图片数量"
   imageCount: Int!
+  "子目录数量"
   subdirectoryCount: Int!
+  "最新修改的图片，目录无图片时返回null"
   latestImage: Image
+  "各评分级别的图片数量分布"
   ratingCounts: [RatingCount!]!
 }
