@@ -19,16 +19,14 @@ type Handler struct {
 	service    *memo.Service
 	ebus       EventBus
 	dtoFactory *DTOFactory
-	rootDir    string
 }
 
-func NewHandler(repo memo.Repository, ebus EventBus, rootDir string) *Handler {
+func NewHandler(repo memo.Repository, service *memo.Service, ebus EventBus, dtoFactory *DTOFactory) *Handler {
 	return &Handler{
 		repo:       repo,
-		service:    memo.NewService(repo),
+		service:    service,
 		ebus:       ebus,
-		dtoFactory: NewDTOFactory(rootDir),
-		rootDir:    rootDir,
+		dtoFactory: dtoFactory,
 	}
 }
 

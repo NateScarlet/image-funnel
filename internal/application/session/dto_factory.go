@@ -7,19 +7,16 @@ import (
 )
 
 type SessionDTOFactory struct {
-	urlSigner appimage.URLSigner
-	rootDir   string
+	imageDTOFactory *appimage.ImageDTOFactory
 }
 
-func NewSessionDTOFactory(urlSigner appimage.URLSigner, rootDir string) *SessionDTOFactory {
+func NewSessionDTOFactory(imageDTOFactory *appimage.ImageDTOFactory) *SessionDTOFactory {
 	return &SessionDTOFactory{
-		urlSigner: urlSigner,
-		rootDir:   rootDir,
+		imageDTOFactory: imageDTOFactory,
 	}
 }
 
 func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, error) {
-	imageDTOFactory := appimage.NewImageDTOFactory(f.urlSigner, f.rootDir)
 
 	// 只计算一次统计信息
 	sessionStats := sess.Stats()
@@ -27,7 +24,7 @@ func (f *SessionDTOFactory) New(sess *session.Session) (*shared.SessionDTO, erro
 	var currentImage *shared.ImageDTO
 	var err error
 	if img := sess.CurrentImage(); img != nil {
-		currentImage, err = imageDTOFactory.New(img)
+		currentImage, err = f.imageDTOFactory.New(img)
 		if err != nil {
 			return nil, err
 		}

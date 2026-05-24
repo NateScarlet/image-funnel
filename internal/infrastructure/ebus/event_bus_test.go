@@ -27,7 +27,8 @@ func TestNewEventBus(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
-	factory := session.NewSessionDTOFactory(urlSigner, "")
+	imageDTOFactory := appimage.NewImageDTOFactory(urlSigner, "")
+	factory := session.NewSessionDTOFactory(imageDTOFactory)
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
@@ -38,7 +39,8 @@ func TestSubscribeSession(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
-	factory := session.NewSessionDTOFactory(urlSigner, "")
+	imageDTOFactory := appimage.NewImageDTOFactory(urlSigner, "")
+	factory := session.NewSessionDTOFactory(imageDTOFactory)
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
@@ -82,7 +84,8 @@ func TestFileChanged(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
 	urlSigner := &mockURLSigner{}
-	factory := session.NewSessionDTOFactory(urlSigner, "")
+	imageDTOFactory := appimage.NewImageDTOFactory(urlSigner, "")
+	factory := session.NewSessionDTOFactory(imageDTOFactory)
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 

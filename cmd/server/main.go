@@ -16,6 +16,7 @@ import (
 	appsession "main/internal/application/session"
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/memo"
 	"main/internal/domain/session"
 	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
@@ -89,9 +90,12 @@ func main() {
 	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory)
 
+	imageDTOFactory := appimage.NewImageDTOFactory(signer, cfg.AbsRootDir)
+	sessionDTOFactory := appsession.NewSessionDTOFactory(imageDTOFactory)
+
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
-	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, appsession.NewSessionDTOFactory(signer, cfg.AbsRootDir))
+	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, sessionDTOFactory)
 
 	var dirAnalyzer domdirectory.Analyzer = dirAnalyzerImpl
 	if cfg.EnableDirectoryStatsCache {
@@ -131,10 +135,12 @@ func main() {
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageDTOFactory := appimage.NewImageDTOFactory(signer, cfg.AbsRootDir)
 	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
-	sessionHandler := appsession.NewHandler(sessionService, eventBus, signer, cfg.AbsRootDir, logger)
+	directoryDTOFactory := appdirectory.NewDirectoryDTOFactory(imageDTOFactory)
+	filterBuilder := domdirectory.NewFilterBuilder()
+
+	sessionHandler := appsession.NewHandler(sessionService, eventBus, sessionDTOFactory, imageDTOFactory, logger)
 	directoryHandler := appdirectory.NewHandler(
 		dirScannerImpl,
 		dirAnalyzer,
@@ -143,10 +149,13 @@ func main() {
 		memoScanner,
 		eventBus,
 		imageDTOFactory,
+		directoryDTOFactory,
+		filterBuilder,
 		dirRepo,
 		logger,
 	)
-	memoHandler := appmemo.NewHandler(localfs.NewMemoRepository(cfg.AbsRootDir), eventBus, cfg.AbsRootDir)
+	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), eventBus, appmemo.NewDTOFactory(cfg.AbsRootDir))
 	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)

@@ -14,29 +14,26 @@ import (
 )
 
 type Handler struct {
-	sessionService *session.Service
-	eventBus       EventBus
-	urlSigner      appimage.URLSigner
-	rootDir        string
-	dtoFactory     *SessionDTOFactory
-	logger         *zap.Logger
+	sessionService  *session.Service
+	eventBus        EventBus
+	dtoFactory      *SessionDTOFactory
+	imageDTOFactory *appimage.ImageDTOFactory
+	logger          *zap.Logger
 }
 
 func NewHandler(
 	sessionService *session.Service,
 	eventBus EventBus,
-	urlSigner appimage.URLSigner,
-	rootDir string,
+	dtoFactory *SessionDTOFactory,
+	imageDTOFactory *appimage.ImageDTOFactory,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
-		sessionService: sessionService,
-		eventBus:       eventBus,
-		urlSigner:      urlSigner,
-		rootDir:        rootDir,
-		// TODO: 应该注入而不是创建
-		dtoFactory: NewSessionDTOFactory(urlSigner, rootDir),
-		logger:     logger,
+		sessionService:  sessionService,
+		eventBus:        eventBus,
+		dtoFactory:      dtoFactory,
+		imageDTOFactory: imageDTOFactory,
+		logger:          logger,
 	}
 }
 
@@ -180,8 +177,7 @@ func (h *Handler) CurrentImage(ctx context.Context, sessionID scalar.ID) (*share
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
-	return imageDTOFactory.New(img)
+	return h.imageDTOFactory.New(img)
 }
 
 func (h *Handler) SessionStats(ctx context.Context, sessionID scalar.ID) (*shared.StatsDTO, error) {
@@ -210,10 +206,9 @@ func (h *Handler) NextImages(ctx context.Context, sessionID scalar.ID, count int
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	result := make([]*shared.ImageDTO, 0, len(images))
 	for _, img := range images {
-		dto, err := imageDTOFactory.New(img)
+		dto, err := h.imageDTOFactory.New(img)
 		if err != nil {
 			return nil, err
 		}
@@ -234,10 +229,9 @@ func (h *Handler) KeptImages(ctx context.Context, sessionID scalar.ID, limit, of
 		return nil, nil
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
 	result := make([]*shared.ImageDTO, 0, len(images))
 	for _, img := range images {
-		dto, err := imageDTOFactory.New(img)
+		dto, err := h.imageDTOFactory.New(img)
 		if err != nil {
 			return nil, err
 		}
@@ -300,8 +294,7 @@ func (h *Handler) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 		return nil, err
 	}
 
-	imageDTOFactory := appimage.NewImageDTOFactory(h.urlSigner, h.rootDir)
-	return imageDTOFactory.New(img)
+	return h.imageDTOFactory.New(img)
 }
 
 // LastSession 获取指定目录下最后更新的会话 DTO

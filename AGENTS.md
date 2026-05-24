@@ -102,6 +102,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **无 `Get` 前缀**: 查询方法直接使用大写名称，如 `Session()` 而非 `GetSession()`
 - **`iter.Seq` / `iter.Seq2[T, error]`**: 使用迭代器模式减少数组分配
 - **构造函数**: 使用 `New` 前缀，如需清理，将清理函数作为第二个返回值
+- **依赖注入**: 构造函数应通过参数接受所有依赖，不得在内部自行 `New*()` 构建。调用者（如 `main.go`）负责组装依赖图。这适用于 handler、service、factory 等所有带构造函数的类型
 - **编译时接口检查**: 使用 `var _ Interface = (*Impl)(nil)`
 - **错误处理**: 绝不静默忽略错误，使用 `errors` 包处理
 - **业务错误**: 使用 `internal/apperror` 包

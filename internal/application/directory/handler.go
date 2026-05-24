@@ -42,6 +42,8 @@ func NewHandler(
 	memoScanner memo.Scanner,
 	eventBus appsession.EventBus,
 	imageDTOFactory *appimage.ImageDTOFactory,
+	dtoFactory *DirectoryDTOFactory,
+	filterBuilder *directory.FilterBuilder,
 	repo directory.Repository,
 	logger *zap.Logger,
 ) *Handler {
@@ -52,9 +54,9 @@ func NewHandler(
 		imgMover:        imgMover,
 		memoScanner:     memoScanner,
 		eventBus:        eventBus,
-		dtoFactory:      NewDirectoryDTOFactory(imageDTOFactory),
+		dtoFactory:      dtoFactory,
 		imageDTOFactory: imageDTOFactory,
-		filterBuilder:   directory.NewFilterBuilder(),
+		filterBuilder:   filterBuilder,
 		repo:            repo,
 		logger:          logger,
 	}
