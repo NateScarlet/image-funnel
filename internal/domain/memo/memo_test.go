@@ -85,7 +85,7 @@ hidden: true
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hidden, body := ParseMemoContent(tt.raw)
+			hidden, body := ParseContent(tt.raw)
 			if hidden != tt.expectedHidden {
 				t.Errorf("ParseMemoContent() hidden = %v, 想要 %v", hidden, tt.expectedHidden)
 			}
@@ -102,7 +102,7 @@ func TestMemoCreation(t *testing.T) {
 	path := "/absolute/path/test.jpg.md"
 	raw := "---\nhidden: true\n---\nHello World"
 
-	m := NewMemo(id, path, raw)
+	m := New(id, path, raw)
 
 	if m.ID() != id {
 		t.Errorf("NewMemo().ID() = %v, 想要 %v", m.ID(), id)

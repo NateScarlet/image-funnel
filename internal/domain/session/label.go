@@ -23,7 +23,7 @@ func (s *Session) UpdateLabel(imageID scalar.ID, label string) (*image.Image, er
 	oldXMP := oldImg.XMPData()
 
 	// 重新构建 XMPData 元数据，保留其它字段（rating, action, timestamp）
-	var newXMP *metadata.XMPData
+	var newXMP *metadata.Data
 	if oldXMP != nil {
 		newXMP = metadata.NewXMPData(oldXMP.Rating(), oldXMP.Action(), oldXMP.Timestamp(), label)
 	} else {
@@ -31,7 +31,7 @@ func (s *Session) UpdateLabel(imageID scalar.ID, label string) (*image.Image, er
 	}
 
 	// 创建包含新元数据的新图片实体
-	newImg := image.NewImage(
+	newImg := image.New(
 		oldImg.ID(),
 		oldImg.Filename(),
 		oldImg.AbsPath(),
@@ -84,7 +84,7 @@ func (s *Service) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 
 	// 1. 准备要持久化写入的 XMP 元数据，保留其它字段
 	oldXMP := img.XMPData()
-	var newXMP *metadata.XMPData
+	var newXMP *metadata.Data
 	if oldXMP != nil {
 		newXMP = metadata.NewXMPData(oldXMP.Rating(), oldXMP.Action(), oldXMP.Timestamp(), label)
 	} else {

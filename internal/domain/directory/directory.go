@@ -5,15 +5,15 @@ import (
 	"main/internal/scalar"
 )
 
-type DirectoryStats struct {
+type Stats struct {
 	imageCount        int
 	subdirectoryCount int
 	latestImage       *image.Image
 	ratingCounts      map[int]int
 }
 
-func NewDirectoryStats(imageCount, subdirectoryCount int, latestImage *image.Image, ratingCounts map[int]int) *DirectoryStats {
-	return &DirectoryStats{
+func NewStats(imageCount, subdirectoryCount int, latestImage *image.Image, ratingCounts map[int]int) *Stats {
+	return &Stats{
 		imageCount:        imageCount,
 		subdirectoryCount: subdirectoryCount,
 		latestImage:       latestImage,
@@ -21,19 +21,19 @@ func NewDirectoryStats(imageCount, subdirectoryCount int, latestImage *image.Ima
 	}
 }
 
-func (s *DirectoryStats) ImageCount() int {
+func (s *Stats) ImageCount() int {
 	return s.imageCount
 }
 
-func (s *DirectoryStats) SubdirectoryCount() int {
+func (s *Stats) SubdirectoryCount() int {
 	return s.subdirectoryCount
 }
 
-func (s *DirectoryStats) LatestImage() *image.Image {
+func (s *Stats) LatestImage() *image.Image {
 	return s.latestImage
 }
 
-func (s *DirectoryStats) RatingCounts() map[int]int {
+func (s *Stats) RatingCounts() map[int]int {
 	return s.ratingCounts
 }
 

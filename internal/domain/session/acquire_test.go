@@ -32,7 +32,7 @@ func TestService_LastSession(t *testing.T) {
 	assert.Nil(t, release)
 
 	// 2. 创建一个会话
-	sess1 := NewSession(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 5, nil)
+	sess1 := New(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 5, nil)
 	releaseCreate1, err := fakeRepo.Create(sess1)
 	require.NoError(t, err)
 	releaseCreate1()

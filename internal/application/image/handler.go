@@ -19,7 +19,7 @@ import (
 type Handler struct {
 	imageService *image.Service
 	imageFactory *image.Factory
-	dtoFactory   *ImageDTOFactory
+	dtoFactory   *DTOFactory
 	logger       *zap.Logger
 	rootDir      string
 }
@@ -27,7 +27,7 @@ type Handler struct {
 func NewHandler(
 	imageService *image.Service,
 	imageFactory *image.Factory,
-	dtoFactory *ImageDTOFactory,
+	dtoFactory *DTOFactory,
 	logger *zap.Logger,
 	rootDir string,
 ) *Handler {

@@ -55,7 +55,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	// filter: rating=0
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	xmpRating0 := metadata.NewXMPData(0, "", time.Time{}, "")
-	img := image.NewImage(
+	img := image.New(
 		scalar.ToID("img-0"),
 		"test.jpg",
 		"/test/test-0.jpg",
@@ -67,7 +67,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 		1080,
 	)
 
-	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 5, []*image.Image{img})
+	session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 5, []*image.Image{img})
 
 	// 用户操作：标记为 Keep
 	require.NoError(t, session.MarkImage(img.ID(), shared.ImageActionKeep))
@@ -75,7 +75,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 
 	// 模拟 Commit 后文件 rating 变为 5，文件监听器触发 UpdateImage
 	xmpRating5 := metadata.NewXMPData(5, "Keep", time.Now(), "")
-	updatedImg := image.NewImage(
+	updatedImg := image.New(
 		img.ID(), // 同一个 ID（ModTime 未变）
 		img.Filename(),
 		img.AbsPath(),

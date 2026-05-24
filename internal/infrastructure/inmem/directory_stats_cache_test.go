@@ -13,9 +13,9 @@ type mockAnalyzer struct {
 	analyzeCallCount int
 }
 
-func (m *mockAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
+func (m *mockAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
 	m.analyzeCallCount++
-	return directory.NewDirectoryStats(10, 5, nil, map[int]int{}), nil
+	return directory.NewStats(10, 5, nil, map[int]int{}), nil
 }
 
 func TestDirectoryStatsCache(t *testing.T) {

@@ -17,14 +17,14 @@ type EventBus struct {
 	sessionTopic     pubsub.Topic[scalar.ID]
 	fileChangedTopic pubsub.Topic[*shared.FileChangedEvent]
 	sessionRepo      dsession.Repository
-	sessionFactory   *appsession.SessionDTOFactory
+	sessionFactory   *appsession.DTOFactory
 }
 
 func NewEventBus(
 	sessionTopic pubsub.Topic[scalar.ID],
 	fileChangedTopic pubsub.Topic[*shared.FileChangedEvent],
 	sessionRepo dsession.Repository,
-	sessionFactory *appsession.SessionDTOFactory,
+	sessionFactory *appsession.DTOFactory,
 ) *EventBus {
 	return &EventBus{
 		sessionTopic:     sessionTopic,

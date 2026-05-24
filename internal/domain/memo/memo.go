@@ -18,10 +18,10 @@ type Memo struct {
 	hidden     bool   // 是否被隐藏
 }
 
-// NewMemo 创建一个新的备忘信息
+// New 创建一个新的备忘信息
 // path 必须是绝对路径，content 为包含 frontmatter 的完整内容
-func NewMemo(id scalar.ID, absPath string, content string) *Memo {
-	hidden, parsedContent := ParseMemoContent(content)
+func New(id scalar.ID, absPath string, content string) *Memo {
+	hidden, parsedContent := ParseContent(content)
 	if !strings.HasSuffix(absPath, ".md") {
 		// TODO: 改成报错
 		absPath = absPath + ".md"
@@ -35,8 +35,8 @@ func NewMemo(id scalar.ID, absPath string, content string) *Memo {
 	}
 }
 
-// ParseMemoContent 解析备忘录文本，返回是否隐藏以及剔除了 frontmatter 后的纯文本正文
-func ParseMemoContent(raw string) (hidden bool, body string) {
+// ParseContent 解析备忘录文本，返回是否隐藏以及剔除了 frontmatter 后的纯文本正文
+func ParseContent(raw string) (hidden bool, body string) {
 	// 统一处理换行符，以便正则或前缀匹配
 	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
 

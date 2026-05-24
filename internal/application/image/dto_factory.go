@@ -7,20 +7,19 @@ import (
 	"main/internal/shared"
 )
 
-// TODO: rename to DTOFactory
-type ImageDTOFactory struct {
+type DTOFactory struct {
 	urlSigner URLSigner
 	rootDir   string
 }
 
-func NewImageDTOFactory(urlSigner URLSigner, rootDir string) *ImageDTOFactory {
-	return &ImageDTOFactory{
+func NewDTOFactory(urlSigner URLSigner, rootDir string) *DTOFactory {
+	return &DTOFactory{
 		urlSigner: urlSigner,
 		rootDir:   rootDir,
 	}
 }
 
-func (f *ImageDTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
+func (f *DTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 	relPath, err := filepath.Rel(f.rootDir, img.AbsPath())
 	if err != nil {
 		relPath = img.Filename()

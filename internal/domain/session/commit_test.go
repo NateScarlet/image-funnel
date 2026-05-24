@@ -127,15 +127,15 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
-	img3 := image.NewImage(scalar.ToID("3"), "test3.jpg", file3, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
+	img3 := image.New(scalar.ToID("3"), "test3.jpg", file3, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
 	fakeScanner.Images[filepath.Base(img3.AbsPath())] = img3
 
-	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img3})
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img3})
 
 	sess.MarkImage(img1.ID(), shared.ImageActionKeep)
 
@@ -192,11 +192,11 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
 	defer cleanupService()
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
-	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1})
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1})
 
 	sess.MarkImage(img1.ID(), shared.ImageActionKeep)
 
@@ -242,14 +242,14 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir)
 	defer cleanupService()
 
-	img1 := image.NewImage(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.NewImage(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
 	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
-	sess := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, []*image.Image{img1, img2})
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, []*image.Image{img1, img2})
 
 	// 第一次标记：保留 img1，排除 img2
 	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionKeep))

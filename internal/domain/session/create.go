@@ -27,7 +27,7 @@ func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.I
 		}
 	}
 
-	sess := NewSession(id, directoryID, filter, targetKeep, filteredImages)
+	sess := New(id, directoryID, filter, targetKeep, filteredImages)
 	release, err := s.sessionRepo.Create(sess)
 	if err != nil {
 		return err

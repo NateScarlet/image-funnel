@@ -26,7 +26,7 @@ func NewRepository() *Repository {
 	return &Repository{}
 }
 
-func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
+func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 	xmpPath := imagePath + ".xmp"
 
 	data, err := os.ReadFile(xmpPath)
@@ -93,7 +93,7 @@ func (r *Repository) Read(imagePath string) (*metadata.XMPData, error) {
 }
 
 // #region Write
-func (r *Repository) Write(imagePath string, data *metadata.XMPData) error {
+func (r *Repository) Write(imagePath string, data *metadata.Data) error {
 	xmpPath := imagePath + ".xmp"
 
 	doc := etree.NewDocument()

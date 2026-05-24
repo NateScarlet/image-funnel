@@ -25,21 +25,21 @@ type Session struct {
 	createdAt   time.Time            // 会话创建时间
 	updatedAt   time.Time            // 会话最后更新时间
 
-	images      []*image.Image    // 会话所有图片集合（只增不减，引用稳定）
-	indexByID   map[scalar.ID]int // ID -> images索引映射
+	images         []*image.Image    // 会话所有图片集合（只增不减，引用稳定）
+	indexByID      map[scalar.ID]int // ID -> images索引映射
 	indexByAbsPath map[string]int    // AbsPath -> images索引映射（最新版本）
-	queue       []int             // 待处理队列（存储 images 索引）
+	queue          []int             // 待处理队列（存储 images 索引）
 
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []func()                         // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
 	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
-	currentRound int // 当前筛选轮次
+	currentRound int                // 当前筛选轮次
 	committed    map[scalar.ID]bool // 记录已提交过的图片 ID
 }
 
-// NewSession 创建一个新的图片筛选会话
+// New 创建一个新的图片筛选会话
 //
 // 参数：
 // - id: 会话唯一标识符
@@ -47,7 +47,7 @@ type Session struct {
 // - filter: 图片过滤器
 // - targetKeep: 目标保留图片数量
 // - images: 待处理的图片集合
-func NewSession(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
+func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	indexByID := make(map[scalar.ID]int, len(images))
 	indexByAbsPath := make(map[string]int, len(images))

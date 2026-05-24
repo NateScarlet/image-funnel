@@ -10,10 +10,10 @@ func newMockMetadataRepository() metadata.Repository {
 	return &mockMetadataRepository{}
 }
 
-func (m *mockMetadataRepository) Read(imagePath string) (*metadata.XMPData, error) {
+func (m *mockMetadataRepository) Read(imagePath string) (*metadata.Data, error) {
 	return nil, nil
 }
 
-func (m *mockMetadataRepository) Write(imagePath string, data *metadata.XMPData) error {
+func (m *mockMetadataRepository) Write(imagePath string, data *metadata.Data) error {
 	return nil
 }

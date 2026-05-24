@@ -16,13 +16,13 @@ type Image struct {
 	directoryID scalar.ID
 	size        int64
 	modTime     time.Time
-	xmpData     *metadata.XMPData
+	xmpData     *metadata.Data
 	width       int
 	height      int
 }
 
-// NewImage 创建一个具有指定ID的图片对象，常用于会话中的图片重建或测试
-func NewImage(id scalar.ID, filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+// New 创建一个具有指定ID的图片对象，常用于会话中的图片重建或测试
+func New(id scalar.ID, filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{
 		id:          id,
 		filename:    filename,
@@ -36,8 +36,8 @@ func NewImage(id scalar.ID, filename, absPath string, directoryID scalar.ID, siz
 	}
 }
 
-// NewImageFromAbsPath 从绝对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
-func NewImageFromAbsPath(filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.XMPData, width, height int) *Image {
+// FromAbsPath 从绝对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
+func FromAbsPath(filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{
 		id:          EncodeID(absPath, modTime),
 		filename:    filename,
@@ -90,7 +90,7 @@ func (i *Image) Label() string {
 	return ""
 }
 
-func (i *Image) XMPData() *metadata.XMPData {
+func (i *Image) XMPData() *metadata.Data {
 	return i.xmpData
 }
 

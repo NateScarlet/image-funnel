@@ -110,6 +110,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **日志**: 使用 zap，日志消息小写，记录耗时用 `duration` 字段，长耗时操作前后用 `will`/`did` 前缀
 - **测试**: 新增功能时添加对应的单元测试，测试文件名与逻辑文件对应
 - **Context**: 使用 `context.Context` 传递请求上下文
+- **类型命名**：不要在命名中重复包名，除名称正好和包名相同
 
 ### Vue / TypeScript
 

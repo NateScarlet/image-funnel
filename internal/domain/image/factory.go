@@ -55,7 +55,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath 
 		return nil, nil
 	}
 
-	var xmpData *metadata.XMPData
+	var xmpData *metadata.Data
 	xmpData, err := f.xmpRepo.Read(absPath)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, absPath 
 		}
 	}
 
-	return NewImageFromAbsPath(
+	return FromAbsPath(
 		info.Name(),
 		absPath,
 		directoryID,

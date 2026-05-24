@@ -15,7 +15,7 @@ func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 	filter := &shared.ImageFilters{Rating: []int{0, 1, 2}}
 	images := createTestImages(10)
 
-	session := NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, 5, images)
+	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, 5, images)
 
 	assert.NotEmpty(t, session.ID(), "Session ID should not be empty")
 	assert.Equal(t, scalar.ToID("test-dir-id"), session.DirectoryID(), "DirectoryID should match")
@@ -47,13 +47,13 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 
 func TestSession_KeptImages(t *testing.T) {
 	images := []*image.Image{
-		image.NewImage(scalar.ToID("1"), "b.jpg", "/path/b.jpg", scalar.ToID("d1"), 100, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("2"), "a.jpg", "/path/a.jpg", scalar.ToID("d1"), 200, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("3"), "c.jpg", "/path/c.jpg", scalar.ToID("d1"), 300, time.Now(), nil, 100, 100),
-		image.NewImage(scalar.ToID("4"), "d.jpg", "/path/d.jpg", scalar.ToID("d1"), 400, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("1"), "b.jpg", "/path/b.jpg", scalar.ToID("d1"), 100, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("2"), "a.jpg", "/path/a.jpg", scalar.ToID("d1"), 200, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("3"), "c.jpg", "/path/c.jpg", scalar.ToID("d1"), 300, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("4"), "d.jpg", "/path/d.jpg", scalar.ToID("d1"), 400, time.Now(), nil, 100, 100),
 	}
 
-	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), nil, 10, images)
+	session := New(scalar.ToID("s1"), scalar.ToID("d1"), nil, 10, images)
 
 	kept := session.KeptImages(10, 0)
 	assert.Empty(t, kept, "Should be empty initially")

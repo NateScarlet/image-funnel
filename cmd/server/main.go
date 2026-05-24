@@ -90,8 +90,8 @@ func main() {
 	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory)
 
-	imageDTOFactory := appimage.NewImageDTOFactory(signer, cfg.AbsRootDir)
-	sessionDTOFactory := appsession.NewSessionDTOFactory(imageDTOFactory)
+	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
+	sessionDTOFactory := appsession.NewDTOFactory(imageDTOFactory)
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
@@ -137,7 +137,7 @@ func main() {
 
 	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
 
-	directoryDTOFactory := appdirectory.NewDirectoryDTOFactory(imageDTOFactory)
+	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
 	filterBuilder := domdirectory.NewFilterBuilder()
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, sessionDTOFactory, imageDTOFactory, logger)

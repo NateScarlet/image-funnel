@@ -16,16 +16,16 @@ import (
 type Handler struct {
 	sessionService  *session.Service
 	eventBus        EventBus
-	dtoFactory      *SessionDTOFactory
-	imageDTOFactory *appimage.ImageDTOFactory
+	dtoFactory      *DTOFactory
+	imageDTOFactory *appimage.DTOFactory
 	logger          *zap.Logger
 }
 
 func NewHandler(
 	sessionService *session.Service,
 	eventBus EventBus,
-	dtoFactory *SessionDTOFactory,
-	imageDTOFactory *appimage.ImageDTOFactory,
+	dtoFactory *DTOFactory,
+	imageDTOFactory *appimage.DTOFactory,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{

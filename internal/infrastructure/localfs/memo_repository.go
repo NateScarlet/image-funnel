@@ -33,7 +33,7 @@ func (r *MemoRepository) Read(ctx context.Context, id scalar.ID) (*memo.Memo, er
 		return nil, err
 	}
 
-	return memo.NewMemo(id, absPath, string(content)), nil
+	return memo.New(id, absPath, string(content)), nil
 }
 
 func (r *MemoRepository) Write(ctx context.Context, id scalar.ID, content string) error {

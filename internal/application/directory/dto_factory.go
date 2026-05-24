@@ -7,18 +7,17 @@ import (
 	"main/internal/shared"
 )
 
-// TODO: rename to DTOFactory
-type DirectoryDTOFactory struct {
-	imageDTOFactory *appimage.ImageDTOFactory
+type DTOFactory struct {
+	imageDTOFactory *appimage.DTOFactory
 }
 
-func NewDirectoryDTOFactory(imageDTOFactory *appimage.ImageDTOFactory) *DirectoryDTOFactory {
-	return &DirectoryDTOFactory{
+func NewDTOFactory(imageDTOFactory *appimage.DTOFactory) *DTOFactory {
+	return &DTOFactory{
 		imageDTOFactory: imageDTOFactory,
 	}
 }
 
-func (f *DirectoryDTOFactory) New(dirInfo *directory.Directory, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
+func (f *DTOFactory) New(dirInfo *directory.Directory, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
 	return &shared.DirectoryDTO{
 		ID:       dirInfo.ID(),
 		ParentID: parentID,
@@ -27,7 +26,7 @@ func (f *DirectoryDTOFactory) New(dirInfo *directory.Directory, parentID scalar.
 	}
 }
 
-func (f *DirectoryDTOFactory) NewDirectoryStatsDTO(stats *directory.DirectoryStats) (*shared.DirectoryStatsDTO, error) {
+func (f *DTOFactory) NewDirectoryStatsDTO(stats *directory.Stats) (*shared.DirectoryStatsDTO, error) {
 	if stats == nil {
 		return nil, nil
 	}

@@ -12,7 +12,7 @@ import (
 )
 
 func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
-	imgA := image.NewImage(
+	imgA := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
 		"/test/test-a.jpg",
@@ -25,14 +25,14 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 	)
 
 	filter := &shared.ImageFilters{}
-	session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{imgA})
+	session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{imgA})
 
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
 	session.RemoveImageByAbsPath(imgA.AbsPath())
 	assert.Equal(t, 0, session.CurrentSize())
 
-	imgAFresh := image.NewImage(
+	imgAFresh := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
 		"/test/test-a.jpg",
@@ -66,7 +66,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 		images := createTestImages(3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		// 设置目标保留数为 1。当 3 张图都被标记为 Keep 时，会因为 Keep 数量大于目标数而自动触发换轮
-		session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
+		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
 
 		// 显式指定不同的操作耗时。
 		// 由于换轮时新队列会根据耗时升序排序，我们将最后一张 img-2 耗时设为最短（1ms），而其余设为 10ms，
@@ -75,7 +75,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 		require.NoError(t, err)
 		err = session.MarkImage(scalar.ToID("img-1"), shared.ImageActionKeep, shared.WithDuration(scalar.DurationFromStandard(10*time.Millisecond)))
 		require.NoError(t, err)
-		
+
 		// 标记最后一张图片触发自动换轮
 		err = session.MarkImage(scalar.ToID("img-2"), shared.ImageActionKeep, shared.WithDuration(scalar.DurationFromStandard(1*time.Millisecond)))
 		require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 	t.Run("incomplete round", func(t *testing.T) {
 		images := createTestImages(3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
-		session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
+		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
 
 		// 仅标记首张图片，此时 currentIdx 为 1，即指向队列中的第二张图片 img-1（用户当前正在浏览/处理的图片）
 		err := session.MarkImage(scalar.ToID("img-0"), shared.ImageActionKeep, shared.WithDuration(scalar.DurationFromStandard(1*time.Millisecond)))
@@ -119,7 +119,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 	t.Run("no exchange needed", func(t *testing.T) {
 		images := createTestImages(3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
-		session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
+		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images)
 
 		// 将 img-0 设为最短耗时（1ms），而最后一张 img-2 设为 10ms
 		err := session.MarkImage(scalar.ToID("img-0"), shared.ImageActionKeep, shared.WithDuration(scalar.DurationFromStandard(1*time.Millisecond)))
@@ -142,13 +142,13 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 		images := createTestImages(3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		// 将目标保留数量设为 0。当有图片被 Keep 时（哪怕只有 1 张），由于 1 > 0，也会触发换轮
-		session := NewSession(scalar.ToID("s1"), scalar.ToID("d1"), filter, 0, images)
+		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 0, images)
 
 		err := session.MarkImage(scalar.ToID("img-0"), shared.ImageActionReject)
 		require.NoError(t, err)
 		err = session.MarkImage(scalar.ToID("img-1"), shared.ImageActionReject)
 		require.NoError(t, err)
-		
+
 		// 仅保留最后一张 img-2。上一轮最后一张是 img-2，新队列中也只有 img-2。
 		err = session.MarkImage(scalar.ToID("img-2"), shared.ImageActionKeep)
 		require.NoError(t, err)
@@ -158,4 +158,3 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 		assert.Equal(t, scalar.ToID("img-2"), session.images[session.queue[0]].ID())
 	})
 }
-

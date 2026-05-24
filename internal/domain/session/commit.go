@@ -99,7 +99,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		// 写入成功后，构建新的 Image 对象并直接更新内存
 		// 强制使用新 Rating，但保留原图其他信息（如 ModTime，等待 FileWatcher 慢慢更新）
-		newImg := image.NewImage(
+		newImg := image.New(
 			currentImg.ID(),
 			currentImg.Filename(),
 			currentImg.AbsPath(),

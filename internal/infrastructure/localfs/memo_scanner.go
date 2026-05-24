@@ -58,7 +58,7 @@ func (s *MemoScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*memo.
 				continue
 			}
 
-			m := memo.NewMemo(memoID, absFilePath, string(contentBytes))
+			m := memo.New(memoID, absFilePath, string(contentBytes))
 			if !yield(m, nil) {
 				return
 			}

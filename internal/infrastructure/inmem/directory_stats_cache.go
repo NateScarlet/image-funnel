@@ -41,10 +41,10 @@ func (c *DirectoryStatsCache) Invalidate(relPath string) {
 }
 
 // Analyze 返回缓存的统计信息或委托给底层的 Analyzer
-func (c *DirectoryStatsCache) Analyze(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
+func (c *DirectoryStatsCache) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
 	key := c.cacheKey(relPath)
 	if val, ok := c.cache.Load(key); ok {
-		return val.(*directory.DirectoryStats), nil
+		return val.(*directory.Stats), nil
 	}
 
 	stats, err := c.underlying.Analyze(ctx, relPath)

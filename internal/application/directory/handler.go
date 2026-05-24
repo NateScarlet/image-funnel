@@ -26,8 +26,8 @@ type Handler struct {
 	imgMover        image.Mover
 	memoScanner     memo.Scanner
 	eventBus        appsession.EventBus
-	dtoFactory      *DirectoryDTOFactory
-	imageDTOFactory *appimage.ImageDTOFactory
+	dtoFactory      *DTOFactory
+	imageDTOFactory *appimage.DTOFactory
 	memoDTOFactory  *appmemo.DTOFactory
 
 	filterBuilder *directory.FilterBuilder
@@ -43,9 +43,9 @@ func NewHandler(
 	imgMover image.Mover,
 	memoScanner memo.Scanner,
 	eventBus appsession.EventBus,
-	imageDTOFactory *appimage.ImageDTOFactory,
+	imageDTOFactory *appimage.DTOFactory,
 	memoDTOFactory *appmemo.DTOFactory,
-	dtoFactory *DirectoryDTOFactory,
+	dtoFactory *DTOFactory,
 	filterBuilder *directory.FilterBuilder,
 	repo directory.Repository,
 	logger *zap.Logger,

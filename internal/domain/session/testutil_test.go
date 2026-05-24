@@ -34,7 +34,7 @@ func ImagesOf(s *Session) []*image.Image {
 func createTestImages(count int) []*image.Image {
 	images := make([]*image.Image, count)
 	for i := 0; i < count; i++ {
-		images[i] = image.NewImage(
+		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
@@ -54,7 +54,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 	images := make([]*image.Image, len(ratings))
 	for i, rating := range ratings {
 		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
-		images[i] = image.NewImage(
+		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
 			fmt.Sprintf("/test/test-%d.jpg", i),
@@ -73,7 +73,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 func setupTestSession(_ *testing.T, imageCount int, targetKeep int) *Session {
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(imageCount)
-	session := NewSession(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images)
+	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images)
 	return session
 }
 
@@ -94,21 +94,21 @@ func markImagesInSession(t *testing.T, session *Session, actionFn func(index int
 
 // FakeMetadataRepo is a mock implementation of MetadataRepository.
 type FakeMetadataRepo struct {
-	Data map[string]*metadata.XMPData
+	Data map[string]*metadata.Data
 }
 
 func NewFakeMetadataRepo() *FakeMetadataRepo {
 	return &FakeMetadataRepo{
-		Data: make(map[string]*metadata.XMPData),
+		Data: make(map[string]*metadata.Data),
 	}
 }
 
-func (f *FakeMetadataRepo) Write(path string, data *metadata.XMPData) error {
+func (f *FakeMetadataRepo) Write(path string, data *metadata.Data) error {
 	f.Data[path] = data
 	return nil
 }
 
-func (f *FakeMetadataRepo) Read(path string) (*metadata.XMPData, error) {
+func (f *FakeMetadataRepo) Read(path string) (*metadata.Data, error) {
 	if d, ok := f.Data[path]; ok {
 		return d, nil
 	}
@@ -206,7 +206,7 @@ func (s *FakeScanner) Lookup(ctx context.Context, relPath string) (*image.Image,
 
 			// Currently image.ID() depends on ModTime.
 			// If we want to return the same ID, we must use the same ModTime.
-			return image.NewImage(
+			return image.New(
 				img.ID(),
 				img.Filename(),
 				img.AbsPath(),

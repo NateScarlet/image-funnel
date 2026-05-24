@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type XMPData struct {
+type Data struct {
 	rating    int
 	action    string
 	timestamp time.Time
@@ -14,7 +14,7 @@ type XMPData struct {
 }
 
 // Rating 返回 XMP 评分星级
-func (d *XMPData) Rating() (_ int) {
+func (d *Data) Rating() (_ int) {
 	if d == nil {
 		return
 	}
@@ -22,7 +22,7 @@ func (d *XMPData) Rating() (_ int) {
 }
 
 // Action 返回筛选操作动作
-func (d *XMPData) Action() (_ string) {
+func (d *Data) Action() (_ string) {
 	if d == nil {
 		return
 	}
@@ -30,7 +30,7 @@ func (d *XMPData) Action() (_ string) {
 }
 
 // Timestamp 返回动作时间戳
-func (d *XMPData) Timestamp() (_ time.Time) {
+func (d *Data) Timestamp() (_ time.Time) {
 	if d == nil {
 		return
 	}
@@ -38,7 +38,7 @@ func (d *XMPData) Timestamp() (_ time.Time) {
 }
 
 // Label 返回 XMP 标签文本
-func (d *XMPData) Label() (_ string) {
+func (d *Data) Label() (_ string) {
 	if d == nil {
 		return
 	}
@@ -46,8 +46,8 @@ func (d *XMPData) Label() (_ string) {
 }
 
 // NewXMPData 创建一个新的 XMP 伴随元数据对象
-func NewXMPData(rating int, action string, timestamp time.Time, label string) *XMPData {
-	return &XMPData{
+func NewXMPData(rating int, action string, timestamp time.Time, label string) *Data {
+	return &Data{
 		rating:    rating,
 		action:    action,
 		timestamp: timestamp,

@@ -29,7 +29,7 @@ func NewDirectoryAnalyzer(rootDir string, imageFactory *domainimage.Factory) *Di
 }
 
 // Analyze 遍历物理目录并汇总得到统计数据
-func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.DirectoryStats, error) {
+func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
 	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*direc
 		return nil, ctx.Err()
 	}
 
-	return directory.NewDirectoryStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
+	return directory.NewStats(imageCount, subdirectoryCount, latestImage, ratingCounts), nil
 }
 
 var _ directory.Analyzer = (*DirectoryAnalyzer)(nil)
