@@ -369,8 +369,7 @@ const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
   return {
     id: props.directoryId,
     filterBy,
-    first: 100, // 每页 100 张
-    after: null,
+    first: 20,
   };
 });
 
