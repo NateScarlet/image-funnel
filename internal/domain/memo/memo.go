@@ -3,6 +3,7 @@ package memo
 import (
 	"main/internal/apperror"
 	"main/internal/scalar"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,6 +22,10 @@ type Memo struct {
 // path 必须是绝对路径，content 为包含 frontmatter 的完整内容
 func NewMemo(id scalar.ID, absPath string, content string) *Memo {
 	hidden, parsedContent := ParseMemoContent(content)
+	if !strings.HasSuffix(absPath, ".md") {
+		// TODO: 改成报错
+		absPath = absPath + ".md"
+	}
 	return &Memo{
 		id:         id,
 		absPath:    absPath,
@@ -77,7 +82,7 @@ func (m *Memo) ID() scalar.ID {
 	return m.id
 }
 
-// Path 返回备忘录关联的图片路径（绝对路径）
+// Path 返回备忘录绝对路径
 func (m *Memo) AbsPath() string {
 	return m.absPath
 }
@@ -99,7 +104,7 @@ func (m *Memo) Hidden() bool {
 
 // EncodeID 根据图片相对路径生成备忘 ID
 func EncodeID(relPath string) scalar.ID {
-	return scalar.ToID(idPrefix + relPath)
+	return scalar.ToID(idPrefix + strings.TrimSuffix(filepath.ToSlash(relPath), ".md"))
 }
 
 // DecodeID 从备忘 ID 中提取图片相对路径
@@ -112,5 +117,5 @@ func DecodeID(id scalar.ID) (string, error) {
 		return "", apperror.New("INVALID_MEMO_ID", "invalid memo ID format", "备忘录 ID 格式无效")
 	}
 
-	return strings.TrimPrefix(idStr, idPrefix), nil
+	return strings.TrimPrefix(idStr, idPrefix) + ".md", nil
 }

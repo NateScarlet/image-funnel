@@ -76,8 +76,8 @@ hidden: true
 			expectedBody:   "---\nhidden: true\n正文内容在此。",
 		},
 		{
-			name: "Windows 换行符（CRLF）的正确解析处理",
-			raw: "---\r\nhidden: true\r\n---\r\nWindows 风格换行正文。",
+			name:           "Windows 换行符（CRLF）的正确解析处理",
+			raw:            "---\r\nhidden: true\r\n---\r\nWindows 风格换行正文。",
 			expectedHidden: true,
 			expectedBody:   "Windows 风格换行正文。",
 		},
@@ -122,7 +122,7 @@ func TestMemoCreation(t *testing.T) {
 }
 
 func TestIDEncodingDecoding(t *testing.T) {
-	relPath := "subdir/image.png"
+	relPath := "subdir/image.png.md"
 	id := EncodeID(relPath)
 
 	decoded, err := DecodeID(id)

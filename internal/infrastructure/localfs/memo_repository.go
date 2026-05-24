@@ -24,9 +24,8 @@ func (r *MemoRepository) Read(ctx context.Context, id scalar.ID) (*memo.Memo, er
 	if err != nil {
 		return nil, err
 	}
-	absPath := filepath.Join(r.rootDir, relPath)
-	memoPath := r.memoPath(relPath)
-	content, err := os.ReadFile(memoPath)
+	absPath := r.absPath(relPath)
+	content, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -45,18 +44,18 @@ func (r *MemoRepository) Write(ctx context.Context, id scalar.ID, content string
 	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
 		return err
 	}
-	memoPath := r.memoPath(relPath)
+	absPath := r.absPath(relPath)
 	if content == "" {
-		err := os.Remove(memoPath)
+		err := os.Remove(absPath)
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		return nil
 	}
-	return os.WriteFile(memoPath, []byte(content), 0644)
+	return os.WriteFile(absPath, []byte(content), 0644)
 }
 
-func (r *MemoRepository) memoPath(relPath string) string {
+func (r *MemoRepository) absPath(relPath string) string {
 	return filepath.Join(r.rootDir, relPath)
 
 }

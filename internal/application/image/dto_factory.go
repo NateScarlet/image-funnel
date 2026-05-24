@@ -7,6 +7,7 @@ import (
 	"main/internal/shared"
 )
 
+// TODO: rename to DTOFactory
 type ImageDTOFactory struct {
 	urlSigner URLSigner
 	rootDir   string

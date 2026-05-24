@@ -6,7 +6,6 @@ import (
 	"main/internal/domain/memo"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"path/filepath"
 	"strings"
 )
 
@@ -59,13 +58,11 @@ func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.Me
 // MemoUpdated 订阅特定备忘录更新（保持老版本向后兼容）
 func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shared.MemoDTO, error] {
 	return func(yield func(*shared.MemoDTO, error) bool) {
-		targetRelPath, err := memo.DecodeID(id)
+		relPath, err := memo.DecodeID(id)
 		if err != nil {
 			yield(nil, err)
 			return
 		}
-		targetMemoPath := strings.TrimSuffix(targetRelPath, filepath.Ext(targetRelPath)) + ".md"
-
 		for event, err := range h.ebus.SubscribeFileChanged(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
@@ -75,7 +72,7 @@ func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shar
 			}
 
 			// 检查是否是目标备注文件的变更
-			if event.RelPath == targetMemoPath {
+			if event.RelPath == relPath {
 				m, err := h.Memo(ctx, id)
 				if !yield(m, err) {
 					return

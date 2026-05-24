@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 	appimage "main/internal/application/image"
+	appmemo "main/internal/application/memo"
 	appsession "main/internal/application/session"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
@@ -27,6 +28,7 @@ type Handler struct {
 	eventBus        appsession.EventBus
 	dtoFactory      *DirectoryDTOFactory
 	imageDTOFactory *appimage.ImageDTOFactory
+	memoDTOFactory  *appmemo.DTOFactory
 
 	filterBuilder *directory.FilterBuilder
 	repo          directory.Repository
@@ -42,6 +44,7 @@ func NewHandler(
 	memoScanner memo.Scanner,
 	eventBus appsession.EventBus,
 	imageDTOFactory *appimage.ImageDTOFactory,
+	memoDTOFactory *appmemo.DTOFactory,
 	dtoFactory *DirectoryDTOFactory,
 	filterBuilder *directory.FilterBuilder,
 	repo directory.Repository,
@@ -234,6 +237,7 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 
 // #region 目录内图片过滤与分页查询
 
+// TODO: 移动到　images 领域
 // Images 获取目录下的图片列表，支持过滤与基于 Relay 规范的游标分页
 func (h *Handler) Images(
 	ctx context.Context,
@@ -328,6 +332,7 @@ func (h *Handler) Images(
 	return buf.Value()
 }
 
+// TODO: 移动到　memo 领域
 // Memos 获取目录下的备忘录列表，支持过滤与基于 Relay 规范的游标分页
 func (h *Handler) Memos(
 	ctx context.Context,
@@ -390,14 +395,8 @@ func (h *Handler) Memos(
 				}
 				continue
 			}
-			dto := &shared.MemoDTO{
-				ID:         m.ID(),
-				AbsPath:    m.AbsPath(),
-				Content:    m.Content(),
-				RawContent: m.RawContent(),
-				Hidden:     m.Hidden(),
-			}
-
+			dto := h.memoDTOFactory.New(m)
+			// TODO: 应该用filterBuilder
 			// 应用过滤条件
 			if len(filterBy.ID) > 0 {
 				found := false

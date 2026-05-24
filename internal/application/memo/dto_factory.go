@@ -5,6 +5,7 @@ import (
 	"main/internal/scalar"
 	"main/internal/shared"
 	"path/filepath"
+	"strings"
 )
 
 type DTOFactory struct {
@@ -18,7 +19,7 @@ func NewDTOFactory(rootDir string) *DTOFactory {
 }
 
 func (f *DTOFactory) New(m *memo.Memo) *shared.MemoDTO {
-	title := filepath.Base(m.AbsPath())
+	title := strings.TrimSuffix(filepath.Base(m.AbsPath()), ".md")
 	return &shared.MemoDTO{
 		ID:         m.ID(),
 		Title:      title,
