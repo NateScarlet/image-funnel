@@ -6,7 +6,6 @@ input UpdateSessionInput {
   targetKeep: Int
   """
   新的筛选条件。
-  TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
   """
   filter: ImageFiltersInput
   clientMutationId: String
