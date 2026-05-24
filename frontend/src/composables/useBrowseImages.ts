@@ -53,11 +53,12 @@ export default function useBrowseImages(
 
   // 订阅图片的新增与修改事件
   useSubscription(ImageSavedDocument, {
-    variables: () => ({
-      filterBy: directoryId.value
+    variables: () => {
+      const filterBy = directoryId.value
         ? { directoryId: [directoryId.value] }
-        : undefined, // 避免返回 null，使用 undefined 代替
-    }),
+        : undefined; // 避免返回 null，使用 undefined 代替
+      return { filterBy };
+    },
     onNext: (result) => {
       const savedImage = result.data?.imageSaved;
       if (savedImage) {
@@ -68,11 +69,12 @@ export default function useBrowseImages(
 
   // 订阅图片的删除事件
   useSubscription(ImageDeletedDocument, {
-    variables: () => ({
-      filterBy: directoryId.value
+    variables: () => {
+      const filterBy = directoryId.value
         ? { directoryId: [directoryId.value] }
-        : undefined, // 避免返回 null，使用 undefined 代替
-    }),
+        : undefined; // 避免返回 null，使用 undefined 代替
+      return { filterBy };
+    },
     onNext: (result) => {
       const deletedImage = result.data?.imageDeleted;
       if (deletedImage) {

@@ -306,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watchEffect, watch } from "vue";
 import {
   mdiImage,
   mdiFilterOff,
@@ -328,10 +328,12 @@ import { formatSize } from "@/utils/formatSize";
 import type {
   BrowseImagesQueryVariables,
   ImageFiltersInput,
+  ImageFragment,
 } from "@/graphql/generated";
 import MoveImagesForm from "./MoveImagesForm.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import useModalFullscreen from "@/composables/useModalFullscreen";
+import { openImageViewerByMemoIdEvent } from "@/composables/useImageViewerEvent";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -379,7 +381,7 @@ const {
 // 触发分页加载更多图片
 function loadMore() {
   if (loading.value || !hasNextPage.value) return;
-  imagesLoadMore();
+  void imagesLoadMore();
 }
 // #endregion
 
@@ -459,5 +461,38 @@ useHotkey(
 // #region 移动匹配图片模块
 const moveImagesDialog = useModalDialog();
 const imageViewerDialog = useModalFullscreen();
+// #endregion
+
+// #region 响应 MemoList 打开图片查看器的事件
+watchEffect((onCleanup) => {
+  const unsubscribe = openImageViewerByMemoIdEvent.subscribe((event) => {
+    const { memoId, filename } = event.detail;
+    let imageIndex = images.value.findIndex(
+      (img: ImageFragment) => img.memo.id === memoId,
+    );
+    if (imageIndex !== -1) {
+      openViewer(imageIndex);
+      return;
+    }
+    // 清除筛选后通过文件名搜索，监听图片列表变化自动打开
+    clearFilters();
+    searchQuery.value = filename;
+    const stopWatch = watch(
+      images,
+      () => {
+        const index = images.value.findIndex(
+          (img: ImageFragment) => img.memo.id === memoId,
+        );
+        if (index !== -1) {
+          stopWatch();
+          openViewer(index);
+        }
+      },
+      { deep: true },
+    );
+    onCleanup(stopWatch);
+  });
+  onCleanup(unsubscribe);
+});
 // #endregion
 </script>

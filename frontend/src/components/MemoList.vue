@@ -32,18 +32,22 @@
         v-for="memoItem in memos"
         :key="memoItem.id"
         class="flex items-center justify-between p-3 rounded-xl bg-primary-800/20 hover:bg-primary-800/60 border border-primary-800/40 hover:border-secondary-500/30 transition-all duration-200 group cursor-pointer"
-        @click="editMemo(memoItem)"
       >
-        <div class="flex items-center gap-3 min-w-0 flex-1">
+        <div
+          class="flex items-center gap-3 min-w-0 flex-1"
+          @click="editMemo(memoItem)"
+        >
           <svg
             class="w-4 h-4 text-primary-400 group-hover:text-secondary-400 transition-colors shrink-0"
             viewBox="0 0 24 24"
           >
             <path :d="mdiNoteTextOutline" fill="currentColor" />
           </svg>
-          <!-- 列表显示笔记关联的文件名与正文内容，单行 truncate -->
+          <!-- 文件名按钮，点击打开对应图片查看器 -->
           <span
-            class="text-[10px] text-primary-400 shrink-0 bg-primary-800/60 px-1.5 py-0.5 rounded border border-primary-700/50 font-mono select-none"
+            class="text-[10px] text-primary-400 shrink-0 bg-primary-800/60 px-1.5 py-0.5 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
+            title="打开关联图片"
+            @click.stop="openImageViewerForMemo(memoItem)"
           >
             {{ memoItem.title }}
           </span>
@@ -64,7 +68,7 @@
             已隐藏
           </span>
         </div>
-        <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-2 shrink-0">
           <!-- 一键切换隐藏状态按钮 -->
           <button
             class="p-1.5 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
@@ -79,7 +83,8 @@
             </svg>
           </button>
           <div
-            class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1"
+            class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1 cursor-pointer"
+            @click="editMemo(memoItem)"
           >
             <span>编辑</span>
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -120,6 +125,7 @@ import type {
 } from "@/graphql/generated";
 import MemoForm from "./MemoForm.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
+import { openImageViewerByMemoIdEvent } from "@/composables/useImageViewerEvent";
 
 // #region 组件属性定义
 interface Props {
@@ -177,6 +183,12 @@ function editMemo(memoItem: MemoFragment) {
   selectedMemo.value = memoItem;
   nextTick(() => {
     memoDialog.open();
+  });
+}
+
+function openImageViewerForMemo(memoItem: MemoFragment) {
+  openImageViewerByMemoIdEvent.dispatch({
+    detail: { memoId: memoItem.id, filename: memoItem.title },
   });
 }
 // #endregion
