@@ -306,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, watch } from "vue";
+import { ref, computed, watchEffect, onMounted, nextTick } from "vue";
 import {
   mdiImage,
   mdiFilterOff,
@@ -333,7 +333,8 @@ import type {
 import MoveImagesForm from "./MoveImagesForm.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import useModalFullscreen from "@/composables/useModalFullscreen";
-import { openImageViewerByMemoIdEvent } from "@/composables/useImageViewerEvent";
+import { openImageViewerByFilename } from "@/events";
+import useLocationHash from "@/composables/useLocationHash";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -351,7 +352,12 @@ const {
 } = useDirectoryState(() => props.directoryId);
 
 // 提取加载状态计数，以实现精细的骨架图切换与加载动画
-const loadingCount = ref(0);
+const loadingCount = ref(1);
+onMounted(() => {
+  nextTick(() => {
+    loadingCount.value -= 1;
+  });
+});
 
 // 构建图片查询 variables
 const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
@@ -397,18 +403,13 @@ const currentImage = computed(() => {
   return images.value[currentImageIndex.value];
 });
 
-function openViewer(index: number) {
-  currentImageIndex.value = index;
-  imageViewerDialog.open();
-}
-
-function closeViewer() {
-  imageViewerDialog.close();
-}
-
 function prevImage() {
   if (currentImageIndex.value !== undefined && currentImageIndex.value > 0) {
     currentImageIndex.value--;
+    const img = images.value[currentImageIndex.value];
+    if (img) {
+      viewerHash.value = img.filename;
+    }
   }
 }
 
@@ -418,6 +419,10 @@ function nextImage() {
     currentImageIndex.value < images.value.length - 1
   ) {
     currentImageIndex.value++;
+    const img = images.value[currentImageIndex.value];
+    if (img) {
+      viewerHash.value = img.filename;
+    }
   }
 }
 
@@ -455,34 +460,72 @@ const moveImagesDialog = useModalDialog();
 const imageViewerDialog = useModalFullscreen();
 // #endregion
 
+// #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
+const viewerHash = useLocationHash();
+
+function openViewer(index: number) {
+  const image = images.value[index];
+  if (image) {
+    viewerHash.value = image.filename;
+  }
+  currentImageIndex.value = index;
+  imageViewerDialog.open();
+}
+
+function closeViewer() {
+  viewerHash.value = "";
+  imageViewerDialog.close();
+}
+
+function tryOpenViewerByFilename(filename: string): boolean {
+  console.log("try open", filename);
+  const index = images.value.findIndex(
+    (img: ImageFragment) => img.filename === filename,
+  );
+  if (index !== -1) {
+    openViewer(index);
+    return true;
+  }
+  return false;
+}
+
+async function searchAndOpenViewer(filename: string) {
+  if (tryOpenViewerByFilename(filename)) {
+    return;
+  }
+  clearFilters();
+  searchQuery.value = filename;
+  await waitLoading();
+  tryOpenViewerByFilename(filename);
+}
+
+async function waitLoading() {
+  await nextTick();
+  using stack = new DisposableStack();
+  await new Promise<void>((resolve) => {
+    stack.defer(
+      watchEffect(() => {
+        if (!loading.value) {
+          resolve();
+        }
+      }),
+    );
+  });
+}
+
+onMounted(async () => {
+  if (viewerHash.value) {
+    await waitLoading();
+    searchAndOpenViewer(viewerHash.value);
+  }
+});
+
+// #endregion
+
 // #region 响应 MemoList 打开图片查看器的事件
 watchEffect((onCleanup) => {
-  const unsubscribe = openImageViewerByMemoIdEvent.subscribe((event) => {
-    const { memoId, filename } = event.detail;
-    let imageIndex = images.value.findIndex(
-      (img: ImageFragment) => img.memo.id === memoId,
-    );
-    if (imageIndex !== -1) {
-      openViewer(imageIndex);
-      return;
-    }
-    // 清除筛选后通过文件名搜索，监听图片列表变化自动打开
-    clearFilters();
-    searchQuery.value = filename;
-    const stopWatch = watch(
-      images,
-      () => {
-        const index = images.value.findIndex(
-          (img: ImageFragment) => img.memo.id === memoId,
-        );
-        if (index !== -1) {
-          stopWatch();
-          openViewer(index);
-        }
-      },
-      { deep: true },
-    );
-    onCleanup(stopWatch);
+  const unsubscribe = openImageViewerByFilename.subscribe((event) => {
+    searchAndOpenViewer(event.detail.filename);
   });
   onCleanup(unsubscribe);
 });

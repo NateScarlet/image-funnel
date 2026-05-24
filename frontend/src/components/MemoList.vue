@@ -125,7 +125,7 @@ import type {
 } from "@/graphql/generated";
 import MemoForm from "./MemoForm.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
-import { openImageViewerByMemoIdEvent } from "@/composables/useImageViewerEvent";
+import { openImageViewerByFilename } from "@/events";
 
 // #region 组件属性定义
 interface Props {
@@ -187,8 +187,8 @@ function editMemo(memoItem: MemoFragment) {
 }
 
 function openImageViewerForMemo(memoItem: MemoFragment) {
-  openImageViewerByMemoIdEvent.dispatch({
-    detail: { memoId: memoItem.id, filename: memoItem.title },
+  openImageViewerByFilename.dispatch({
+    detail: { filename: memoItem.title },
   });
 }
 // #endregion
