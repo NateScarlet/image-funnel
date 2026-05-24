@@ -19,11 +19,11 @@ type Memo struct {
 
 // NewMemo 创建一个新的备忘信息
 // path 必须是绝对路径，content 为包含 frontmatter 的完整内容
-func NewMemo(id scalar.ID, path string, content string) *Memo {
+func NewMemo(id scalar.ID, absPath string, content string) *Memo {
 	hidden, parsedContent := ParseMemoContent(content)
 	return &Memo{
 		id:         id,
-		absPath:    path,
+		absPath:    absPath,
 		content:    parsedContent,
 		rawContent: content,
 		hidden:     hidden,

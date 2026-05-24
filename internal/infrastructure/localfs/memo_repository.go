@@ -7,7 +7,6 @@ import (
 	"main/internal/util"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type MemoRepository struct {
@@ -58,9 +57,8 @@ func (r *MemoRepository) Write(ctx context.Context, id scalar.ID, content string
 }
 
 func (r *MemoRepository) memoPath(relPath string) string {
-	absPath := filepath.Join(r.rootDir, relPath)
-	ext := filepath.Ext(absPath)
-	return strings.TrimSuffix(absPath, ext) + ".md"
+	return filepath.Join(r.rootDir, relPath)
+
 }
 
 var _ memo.Repository = (*MemoRepository)(nil)

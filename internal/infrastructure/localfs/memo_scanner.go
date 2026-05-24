@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"main/internal/domain/memo"
-	"main/internal/scalar"
 )
 
 // MemoScanner 负责扫描本地物理目录下的备忘录文件并构建领域 Memo 对象
@@ -48,27 +47,7 @@ func (s *MemoScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*memo.
 				continue
 			}
 
-			// 推导关联图片相对路径以生成最匹配的 Memo ID
-			baseName := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-			supportedExtensions := []string{".jpg", ".jpeg", ".png", ".webp", ".avif"}
-			imageFound := false
-			imageRelPath := ""
-			for _, ext := range supportedExtensions {
-				imageFilename := baseName + ext
-				imageAbsPath := filepath.Join(absPath, imageFilename)
-				if _, err := os.Stat(imageAbsPath); err == nil {
-					imageFound = true
-					imageRelPath = filepath.Join(relPath, imageFilename)
-					break
-				}
-			}
-
-			var memoID scalar.ID
-			if imageFound {
-				memoID = memo.EncodeID(imageRelPath)
-			} else {
-				memoID = memo.EncodeID(filepath.Join(relPath, entry.Name()))
-			}
+			var memoID = memo.EncodeID(filepath.Join(relPath, entry.Name()))
 
 			absFilePath := filepath.Join(absPath, entry.Name())
 			contentBytes, err := os.ReadFile(absFilePath)

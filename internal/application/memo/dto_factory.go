@@ -19,9 +19,6 @@ func NewDTOFactory(rootDir string) *DTOFactory {
 
 func (f *DTOFactory) New(m *memo.Memo) *shared.MemoDTO {
 	title := filepath.Base(m.AbsPath())
-	if relPath, err := memo.DecodeID(m.ID()); err == nil {
-		title = filepath.Base(relPath)
-	}
 	return &shared.MemoDTO{
 		ID:         m.ID(),
 		Title:      title,

@@ -6,7 +6,6 @@ import (
 	"main/internal/domain/memo"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -56,31 +55,6 @@ func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.Me
 	id := memo.EncodeID(relPath)
 	return h.Memo(ctx, id)
 }
-
-// #region 辅助方法
-
-// deriveMemoID 根据 markdown 物理文件相对路径推导其关联的最佳 Memo ID
-func (h *Handler) deriveMemoID(relPath string) scalar.ID {
-	if !strings.HasSuffix(strings.ToLower(relPath), ".md") {
-		return memo.EncodeID(relPath)
-	}
-
-	baseName := strings.TrimSuffix(relPath, filepath.Ext(relPath))
-	supportedExtensions := []string{".jpg", ".jpeg", ".png", ".webp", ".avif"}
-
-	// 检查该目录下是否存在同名图片
-	for _, ext := range supportedExtensions {
-		imageFilename := baseName + ext
-		imageAbsPath := filepath.Join(h.rootDir, imageFilename)
-		if _, err := os.Stat(imageAbsPath); err == nil {
-			return memo.EncodeID(imageFilename)
-		}
-	}
-
-	return memo.EncodeID(relPath)
-}
-
-// #endregion
 
 // #region 订阅逻辑
 
@@ -153,7 +127,7 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 			}
 
 			// 推导 Memo ID
-			derivedID := h.deriveMemoID(event.RelPath)
+			derivedID := memo.EncodeID(event.RelPath)
 
 			// 过滤备忘录 ID
 			if allowedIDs != nil && !allowedIDs[derivedID] {
