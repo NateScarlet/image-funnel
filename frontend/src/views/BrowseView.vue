@@ -6,9 +6,10 @@
     <header
       class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0"
     >
-      <div class="max-w-400 mx-auto flex items-center gap-3">
+      <!-- 大屏布局：一行显示所有内容 -->
+      <div class="hidden md:flex max-w-400 mx-auto items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
-        <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
           <!-- 返回主页 -->
           <button
             class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer"
@@ -39,9 +40,8 @@
 
           <!-- 磨砂面包屑路径 -->
           <div
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 overflow-hidden text-sm"
+            class="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
           >
-            <!-- 递归路径面包屑 -->
             <DirectoryBreadcrumb
               v-if="currentDirectoryId"
               :directory-id="currentDirectoryId"
@@ -62,7 +62,7 @@
             </svg>
           </button>
 
-          <!-- 上次会话按钮，显示文本与最后更新时间 -->
+          <!-- 上次会话按钮 -->
           <button
             v-if="lastSession"
             class="flex items-center gap-2 px-3 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium"
@@ -76,7 +76,7 @@
           </button>
         </div>
 
-        <!-- 同级目录导航按钮组，固定在右上角，不可用时显示禁用样式 -->
+        <!-- 同级目录导航按钮组 -->
         <div class="flex items-center gap-1 flex-none">
           <button
             :disabled="!prevSibling"
@@ -116,6 +116,109 @@
               <path :d="mdiChevronRight" fill="currentColor" />
             </svg>
           </button>
+        </div>
+      </div>
+
+      <!-- 小屏布局：两行显示 -->
+      <div class="md:hidden max-w-400 mx-auto flex flex-col gap-3">
+        <!-- 第一行：所有按钮 -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <!-- 左侧按钮组 -->
+          <div class="flex items-center gap-2">
+            <!-- 返回主页 -->
+            <button
+              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center cursor-pointer"
+              title="返回主页"
+              @click="navigateToHome"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path :d="mdiHome" fill="currentColor" />
+              </svg>
+            </button>
+
+            <!-- 返回上一级 -->
+            <button
+              :disabled="!canGoToParent"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+              :class="
+                canGoToParent
+                  ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white cursor-pointer'
+                  : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed'
+              "
+              title="返回上一级"
+              @click="goToParent"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path :d="mdiArrowUp" fill="currentColor" />
+              </svg>
+            </button>
+
+            <!-- 上次会话按钮 - 仅显示图标 -->
+            <button
+              v-if="lastSession"
+              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center"
+              title="返回最近会话"
+              @click="goToLastSession"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24">
+                <path :d="mdiHistory" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- 右侧同级目录导航按钮组 -->
+          <div class="flex items-center gap-1">
+            <button
+              :disabled="!prevSibling"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+              :class="
+                prevSibling
+                  ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+              "
+              :title="
+                prevSibling
+                  ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
+                  : '没有上一个目录'
+              "
+              @click="prevSibling && navigateToDir(prevSibling.id)"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path :d="mdiChevronLeft" fill="currentColor" />
+              </svg>
+            </button>
+            <button
+              :disabled="!nextSibling"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+              :class="
+                nextSibling
+                  ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+              "
+              :title="
+                nextSibling
+                  ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
+                  : '没有下一个目录'
+              "
+              @click="nextSibling && navigateToDir(nextSibling.id)"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24">
+                <path :d="mdiChevronRight" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 第二行：面包屑路径 -->
+        <div
+          class="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
+        >
+          <DirectoryBreadcrumb
+            v-if="currentDirectoryId"
+            :directory-id="currentDirectoryId"
+            :is-current="true"
+            @navigate="navigateToDir"
+          />
         </div>
       </div>
     </header>

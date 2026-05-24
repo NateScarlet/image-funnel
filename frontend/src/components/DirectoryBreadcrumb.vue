@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-1">
+  <div class="flex flex-wrap items-center gap-1">
     <!-- #region 递归渲染父级目录 -->
     <template v-if="!isRoot && parentID">
       <DirectoryBreadcrumb
@@ -12,7 +12,7 @@
 
     <!-- #region 渲染当前目录节点 -->
     <button
-      class="px-1 py-0.5 rounded transition-all flex items-center gap-1"
+      class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0"
       :class="[
         isCurrent
           ? 'text-white font-semibold'
