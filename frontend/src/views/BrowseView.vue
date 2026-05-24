@@ -6,7 +6,7 @@
     <header
       class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0"
     >
-      <div class="max-w-[1600px] mx-auto flex items-center gap-3">
+      <div class="max-w-400 mx-auto flex items-center gap-3">
         <!-- 路径面包屑与返回上级 -->
         <div class="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
           <!-- 返回主页 -->
@@ -121,7 +121,7 @@
     </header>
 
     <main
-      class="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden"
+      class="flex-1 w-full max-w-400 mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden"
     >
       <!-- 子目录容器区 -->
       <SubdirectoryGrid

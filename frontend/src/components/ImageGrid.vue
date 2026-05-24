@@ -21,7 +21,7 @@
           <!-- 移动匹配图片按钮 -->
           <button
             v-if="images.length > 0"
-            class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
+            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
             title="将当前过滤匹配的图片移动到新目录"
             @click="moveImagesDialog.open()"
           >
@@ -34,7 +34,7 @@
           <!-- 当用户激活了任何过滤器时，在最左侧显示一键清除筛选按钮 -->
           <button
             v-if="hasActiveFilters"
-            class="px-2.5 h-[34px] text-xs border rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer"
+            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer"
             @click="clearFilters"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -74,7 +74,7 @@
 
           <!-- 颜色标签过滤器 -->
           <div
-            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-[34px] rounded-lg overflow-x-auto"
+            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-8.5 rounded-lg overflow-x-auto"
           >
             <span class="text-xs text-primary-400 select-none">标签:</span>
             <div class="flex items-center gap-1">
@@ -186,7 +186,7 @@
 
           <!-- 卡片底部的文件名遮罩 -->
           <div
-            class="absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
+            class="absolute inset-x-0 top-0 bg-linear-to-b from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
           >
             <p
               class="text-[10px] text-white font-medium truncate"
@@ -233,7 +233,7 @@
       <div class="w-full h-full flex flex-col justify-between">
         <!-- 侧边关闭按钮 -->
         <button
-          class="absolute top-4 right-4 z-[60] p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors border border-white/10"
+          class="absolute top-4 right-4 z-60 p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors border border-white/10"
           title="关闭查看器 (Esc)"
           @click="closeViewer"
         >
@@ -245,7 +245,7 @@
         <!-- 上一张按钮 -->
         <button
           v-if="currentImageIndex > 0"
-          class="absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
+          class="absolute left-4 top-1/2 -translate-y-1/2 z-60 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
           title="上一张图片 (ArrowLeft)"
           @click="prevImage"
         >
@@ -257,7 +257,7 @@
         <!-- 下一张按钮 -->
         <button
           v-if="currentImageIndex < images.length - 1"
-          class="absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
+          class="absolute right-4 top-1/2 -translate-y-1/2 z-60 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
           title="下一张图片 (ArrowRight)"
           @click="nextImage"
         >

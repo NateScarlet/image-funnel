@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex items-center gap-2 bg-primary-800 border border-primary-700 px-3 h-[34px] rounded-lg select-none"
+    class="flex items-center gap-2 bg-primary-800 border border-primary-700 px-3 h-8.5 rounded-lg select-none"
   >
     <span class="text-xs text-primary-400">评分:</span>
 
@@ -24,7 +24,7 @@
         <RatingIcon
           :rating="star"
           :filled="isStarActive(star)"
-          class="!w-5 !h-5"
+          class="w-5! h-5!"
         />
 
         <!-- 悬浮微型文字指示，特别是非等号模式时提示范围 -->
