@@ -75,7 +75,7 @@ func main() {
 	// Initialize Image Cache and Processor
 	cacheDir := filepath.Join(os.TempDir(), "image-funnel-cache")
 	// Cleanup every 1 hour, remove files older than 24 hours
-	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour)
+	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour, logger)
 	defer cleanupCache()
 	magickProcessor := magick.NewProcessor(imageCache, cfg.MagickConcurrency)
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)

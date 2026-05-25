@@ -3,26 +3,29 @@ package localfs
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	appimage "main/internal/application/image"
 	"main/internal/util"
+
+	"go.uber.org/zap"
 )
 
 type ImageCache struct {
 	rootDir         string
 	cleanupInterval time.Duration
 	maxAge          time.Duration
+	logger          *zap.Logger
 }
 
-func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration) (*ImageCache, func()) {
+func NewImageCache(rootDir string, cleanupInterval, maxAge time.Duration, logger *zap.Logger) (*ImageCache, func()) {
 	cache := &ImageCache{
 		rootDir:         rootDir,
 		cleanupInterval: cleanupInterval,
 		maxAge:          maxAge,
+		logger:          logger,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -92,7 +95,7 @@ func (c *ImageCache) startAutoClean(ctx context.Context) {
 func (c *ImageCache) cleanup() {
 	entries, err := os.ReadDir(c.rootDir)
 	if err != nil {
-		log.Printf("Failed to read cache dir: %v", err)
+		c.logger.Error("failed to read cache dir", zap.Error(err))
 		return
 	}
 
@@ -107,7 +110,7 @@ func (c *ImageCache) cleanup() {
 			path := filepath.Join(c.rootDir, entry.Name())
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				// 忽略文件已被其他进程或操作删除的情况，避免输出无意义的错误日志
-				log.Printf("Failed to remove old cache file %s: %v", path, err)
+				c.logger.Error("failed to remove old cache file", zap.String("path", path), zap.Error(err))
 			}
 		}
 	}
