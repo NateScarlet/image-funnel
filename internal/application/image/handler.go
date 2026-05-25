@@ -2,13 +2,9 @@ package image
 
 import (
 	"context"
-	"fmt"
-	"main/internal/apperror"
-	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,28 +14,19 @@ import (
 
 type Handler struct {
 	imageService *image.Service
-	imageFactory *image.Factory
 	dtoFactory   *DTOFactory
 	logger       *zap.Logger
-	rootDir      string
-	dirRepo      directory.Repository
 }
 
 func NewHandler(
 	imageService *image.Service,
-	imageFactory *image.Factory,
 	dtoFactory *DTOFactory,
 	logger *zap.Logger,
-	rootDir string,
-	dirRepo directory.Repository,
 ) *Handler {
 	return &Handler{
 		imageService: imageService,
-		imageFactory: imageFactory,
 		dtoFactory:   dtoFactory,
 		logger:       logger,
-		rootDir:      rootDir,
-		dirRepo:      dirRepo,
 	}
 }
 
@@ -75,40 +62,13 @@ func (h *Handler) Image(
 	ctx context.Context,
 	id scalar.ID,
 ) (*shared.ImageDTO, error) {
-	// 解析出图片的绝对路径
-	absPath, _, err := image.DecodeID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	// 读取文件信息
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// 计算目录ID
-	relPath, err := filepath.Rel(h.rootDir, absPath)
-	if err != nil {
-		return nil, err
-	}
-	dirRelPath := filepath.Dir(relPath)
-	if dirRelPath == "." {
-		dirRelPath = ""
-	}
-	dir, err := h.dirRepo.GetByRelPath(ctx, dirRelPath)
-	if err != nil {
-		return nil, err
-	}
-
-	img, err := h.imageFactory.CreateFromInfo(ctx, info, absPath, dir.ID())
+	img, err := h.imageService.GetImage(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if img == nil {
-		return nil, fmt.Errorf("failed to load image: %s", absPath)
+		return nil, nil
 	}
-
 	return h.dtoFactory.New(img)
 }
 
@@ -134,40 +94,17 @@ func (h *Handler) ComfyUIWorkflow(
 		}
 	}()
 
-	// 解析出图片的绝对路径和期望的修改时间
-	absPath, expectedModTime, err := image.DecodeID(id)
+	img, err := h.imageService.GetImage(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// 检查文件是否存在
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, apperror.NewErrDocumentNotFound(id)
-		}
-		return nil, err
-	}
-
-	// 验证文件修改时间是否匹配 ID 中的时间戳
-	// 如果时间不匹配，说明文件已被修改，返回版本冲突错误
-	actualModTime := info.ModTime()
-	if actualModTime.UnixNano() != expectedModTime.UnixNano() {
-		return nil, apperror.New(
-			"VERSION_CONFLICT",
-			"image file has been modified on disk",
-			"图片在磁盘上已被修改",
-		)
-	}
-
-	// 验证文件类型，只处理 PNG 文件
-	ext := strings.ToLower(filepath.Ext(info.Name()))
+	ext := strings.ToLower(filepath.Ext(img.Filename()))
 	if ext != ".png" {
 		return nil, nil
 	}
 
-	// 提取工作流
-	workflow, err := ExtractComfyUIWorkflow(absPath)
+	workflow, err := ExtractComfyUIWorkflow(img.AbsPath())
 	if err != nil {
 		return nil, err
 	}

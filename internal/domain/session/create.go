@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -12,14 +11,14 @@ import (
 // Create 初始化一个新的会话
 // 扫描目录、应用过滤器并创建会话，ID 由领域层自行生成
 func (s *Service) Create(ctx context.Context, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int) (scalar.ID, error) {
-	directory, err := directory.DecodeID(directoryID)
+	dir, err := s.directoryResolver.GetDirectory(ctx, directoryID)
 	if err != nil {
 		return scalar.ID{}, err
 	}
 
 	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 	var filteredImages []*image.Image
-	for img, err := range s.imageScanner.Scan(ctx, directory) {
+	for img, err := range s.imageScanner.Scan(ctx, dir.RelPath()) {
 		if err != nil {
 			return scalar.ID{}, err
 		}

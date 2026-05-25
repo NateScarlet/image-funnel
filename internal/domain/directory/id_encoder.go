@@ -13,7 +13,7 @@ func encodeID(relPath string) scalar.ID {
 	return scalar.ToID(idPrefix + relPath)
 }
 
-func DecodeID(id scalar.ID) (string, error) {
+func decodeID(id scalar.ID) (string, error) {
 	idStr := id.String()
 	if idStr == "" {
 		return "", apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")

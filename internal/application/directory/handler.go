@@ -22,21 +22,22 @@ import (
 
 // Handler 目录应用层处理器
 type Handler struct {
-	dirScanner         directory.Scanner
-	dirAnalyzer        directory.Analyzer
-	imgScanner         image.Scanner
-	imgMover           image.Mover
-	memoScanner        memo.Scanner
-	eventBus           appsession.EventBus
-	dtoFactory         *DTOFactory
-	imageDTOFactory    *appimage.DTOFactory
-	memoDTOFactory     *appmemo.DTOFactory
+	dirScanner      directory.Scanner
+	dirAnalyzer     directory.Analyzer
+	imgScanner      image.Scanner
+	imgMover        image.Mover
+	memoScanner     memo.Scanner
+	eventBus        appsession.EventBus
+	dtoFactory      *DTOFactory
+	imageDTOFactory *appimage.DTOFactory
+	memoDTOFactory  *appmemo.DTOFactory
 
-	filterBuilder     *directory.FilterBuilder
+	filterBuilder      *directory.FilterBuilder
 	imageFilterBuilder *image.FilterBuilder
 	memoFilterBuilder  *memo.FilterBuilder
-	repo              directory.Repository
-	logger            *zap.Logger
+	repo               directory.Repository
+	dirSvc             *directory.Service
+	logger             *zap.Logger
 }
 
 // NewHandler 创建目录处理器
@@ -54,6 +55,7 @@ func NewHandler(
 	imageFilterBuilder *image.FilterBuilder,
 	memoFilterBuilder *memo.FilterBuilder,
 	repo directory.Repository,
+	dirSvc *directory.Service,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
@@ -69,13 +71,14 @@ func NewHandler(
 		imageFilterBuilder: imageFilterBuilder,
 		memoFilterBuilder:  memoFilterBuilder,
 		repo:               repo,
+		dirSvc:             dirSvc,
 		logger:             logger,
 	}
 }
 
 // Directory 查询目录信息
 func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.DirectoryDTO, error) {
-	dirInfo, err := h.repo.Get(ctx, id)
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +88,13 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 	if relPath != "." {
 		parentPath := filepath.Dir(relPath)
 		if parentPath != "." {
-			parentDir, err := h.repo.GetByRelPath(ctx, parentPath)
+			parentDir, err := h.repo.Get(ctx, parentPath)
 			if err != nil {
 				return nil, err
 			}
 			parentID = parentDir.ID()
 		} else {
-			rootDir, err := h.repo.GetByRelPath(ctx, ".")
+			rootDir, err := h.repo.Get(ctx, ".")
 			if err != nil {
 				return nil, err
 			}
@@ -104,7 +107,7 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 
 // RootDirectory 查询根目录信息
 func (h *Handler) RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error) {
-	dir, err := h.repo.GetByRelPath(ctx, ".")
+	dir, err := h.repo.Get(ctx, ".")
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +116,11 @@ func (h *Handler) RootDirectory(ctx context.Context) (*shared.DirectoryDTO, erro
 
 // DirectoryStats 查询目录统计信息
 func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.DirectoryStatsDTO, error) {
-	path, err := directory.DecodeID(id)
+	dir, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	stats, err := h.dirAnalyzer.Analyze(ctx, path)
+	stats, err := h.dirAnalyzer.Analyze(ctx, dir.RelPath())
 	if err != nil {
 		return nil, err
 	}
@@ -127,13 +130,13 @@ func (h *Handler) DirectoryStats(ctx context.Context, id scalar.ID) (*shared.Dir
 
 // Directories 查询子目录列表
 func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*shared.DirectoryDTO, error) {
-	path, err := directory.DecodeID(parentID)
+	parentDir, err := h.dirSvc.GetDirectory(ctx, parentID)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []*shared.DirectoryDTO
-	for dir, err := range h.dirScanner.Scan(ctx, path) {
+	for dir, err := range h.dirScanner.Scan(ctx, parentDir.RelPath()) {
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +158,7 @@ func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.Directory
 				if err != nil {
 					return yield(nil, err)
 				}
-				dir, err := h.repo.Get(ctx, event.DirectoryID)
+				dir, err := h.dirSvc.GetDirectory(ctx, event.DirectoryID)
 				if err != nil {
 					return yield(nil, err)
 				}
@@ -262,7 +265,7 @@ func (h *Handler) Images(
 	}
 
 	// 还原目录真实相对路径
-	relPath, err := directory.DecodeID(id)
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -307,8 +310,10 @@ func (h *Handler) Images(
 	// 从 GraphQL 输入转换为通用的分页选项
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
+	relPath := dirInfo.RelPath()
+
 	// 使用 ByDirection 解析分页选项
-	dir, cursorStr, limit, err := pagination.ByDirection(options, true)
+	direction, cursorStr, limit, err := pagination.ByDirection(options, true)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +346,7 @@ func (h *Handler) Images(
 	if cursorStr != "" {
 		var filtered []*shared.ImageDTO
 		for _, item := range items {
-			if dir == pagination.ODDescend {
+			if direction == pagination.ODDescend {
 				if item.ModTime.Before(cursorTime) {
 					filtered = append(filtered, item)
 				}
@@ -356,7 +361,7 @@ func (h *Handler) Images(
 
 	// 根据排序方向对图片列表进行稳定排序
 	slices.SortFunc(items, func(a, b *shared.ImageDTO) int {
-		if dir == pagination.ODDescend {
+		if direction == pagination.ODDescend {
 			if a.ModTime.After(b.ModTime) {
 				return -1
 			}
@@ -393,7 +398,7 @@ func (h *Handler) Images(
 
 	// 使用 ReverseWriter 自动处理 ODAscend 时的反向写入和反向 pageInfo
 	var writer pagination.Writer[*shared.ImageDTO] = buf
-	if dir == pagination.ODAscend {
+	if direction == pagination.ODAscend {
 		writer = pagination.NewReverseWriter[*shared.ImageDTO](buf)
 	}
 
@@ -436,7 +441,7 @@ func (h *Handler) Memos(
 		first = &defaultFirst
 	}
 
-	relPath, err := directory.DecodeID(id)
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -477,6 +482,8 @@ func (h *Handler) Memos(
 
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
+	relPath := dirInfo.RelPath()
+
 	filteredSeq := func(yield func(*shared.MemoDTO, error) bool) {
 		memoFilter := h.memoFilterBuilder.Build(filterBy)
 		for m, scanErr := range h.memoScanner.Scan(ctx, relPath) {
@@ -514,10 +521,11 @@ func (h *Handler) MoveImages(
 	startTime := time.Now()
 
 	// 还原当前目录相对路径
-	relPath, err := directory.DecodeID(directoryID)
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, directoryID)
 	if err != nil {
 		return 0, "", err
 	}
+	relPath := dirInfo.RelPath()
 
 	h.logger.Info("will move images",
 		zap.Stringer("directoryID", directoryID),

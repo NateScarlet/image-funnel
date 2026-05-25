@@ -23,9 +23,11 @@ func NewService(repo Repository) *Service {
 // Save 保存备忘录，将更新操作及相关逻辑封装在领域层
 // 传入的 content 为包含 frontmatter 的完整内容（rawContent）
 func (s *Service) Save(ctx context.Context, id scalar.ID, content string) error {
-	// 在此处可以通过领域服务直接对内容或者状态进行处理，如果未来有更为复杂的修改或者状态验证可以在这编写
-	// 目前封装了 repo.Write 的调用
-	return s.repo.Write(ctx, id, content)
+	relPath, err := decodeID(id)
+	if err != nil {
+		return err
+	}
+	return s.repo.Write(ctx, relPath, content)
 }
 
 // Create 创建新的备忘录文件，若已存在同名备忘则返回 ALREADY_EXISTS 错误。
@@ -43,11 +45,8 @@ func (s *Service) Create(ctx context.Context, dirRelPath string, name string, co
 		relPath = filepath.ToSlash(filepath.Join(dirRelPath, name)) + ".md"
 	}
 
-	// 在领域层内部自建生成 ID
-	id := encodeID(relPath)
-
-	// 检查该 ID 是否已存在
-	existing, err := s.repo.Read(ctx, id)
+	// 检查该相对路径是否已存在
+	existing, err := s.repo.Read(ctx, relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -56,11 +55,20 @@ func (s *Service) Create(ctx context.Context, dirRelPath string, name string, co
 	}
 
 	// 写入新文件内容
-	if err := s.repo.Write(ctx, id, content); err != nil {
+	if err := s.repo.Write(ctx, relPath, content); err != nil {
 		return nil, err
 	}
 
 	// 重新读取并返回包含系统元数据信息的实体
-	return s.repo.Read(ctx, id)
+	return s.repo.Read(ctx, relPath)
+}
+
+// Read 根据备忘 ID 获取备忘实体，由领域层内部解码 ID
+func (s *Service) Read(ctx context.Context, id scalar.ID) (*Memo, error) {
+	relPath, err := decodeID(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.Read(ctx, relPath)
 }
 

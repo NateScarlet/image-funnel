@@ -42,7 +42,7 @@ func (s *ImageScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*doma
 		}
 
 		// 通过仓库获取合法的目录对象，由其生成目录 ID
-		dir, err := s.dirRepo.GetByRelPath(ctx, relPath)
+		dir, err := s.dirRepo.Get(ctx, relPath)
 		if err != nil {
 			yield(nil, err)
 			return
@@ -88,7 +88,7 @@ func (s *ImageScanner) Lookup(ctx context.Context, relPath string) (*domainimage
 	if dirRelPath == "." {
 		dirRelPath = ""
 	}
-	dir, err := s.dirRepo.GetByRelPath(ctx, dirRelPath)
+	dir, err := s.dirRepo.Get(ctx, dirRelPath)
 	if err != nil {
 		return nil, err
 	}

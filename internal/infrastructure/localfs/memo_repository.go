@@ -3,7 +3,6 @@ package localfs
 import (
 	"context"
 	"main/internal/domain/memo"
-	"main/internal/scalar"
 	"main/internal/util"
 	"os"
 	"path/filepath"
@@ -19,9 +18,8 @@ func NewMemoRepository(rootDir string) *MemoRepository {
 	}
 }
 
-func (r *MemoRepository) Read(ctx context.Context, id scalar.ID) (*memo.Memo, error) {
-	relPath, err := memo.DecodeID(id)
-	if err != nil {
+func (r *MemoRepository) Read(ctx context.Context, relPath string) (*memo.Memo, error) {
+	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
 		return nil, err
 	}
 	absPath := r.absPath(relPath)
@@ -36,24 +34,7 @@ func (r *MemoRepository) Read(ctx context.Context, id scalar.ID) (*memo.Memo, er
 	return memo.FromRepository(relPath, absPath, string(content)), nil
 }
 
-func (r *MemoRepository) ReadByRelPath(ctx context.Context, relPath string) (*memo.Memo, error) {
-	absPath := r.absPath(relPath)
-	content, err := os.ReadFile(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return memo.FromRepository(relPath, absPath, ""), nil
-		}
-		return nil, err
-	}
-
-	return memo.FromRepository(relPath, absPath, string(content)), nil
-}
-
-func (r *MemoRepository) Write(ctx context.Context, id scalar.ID, content string) error {
-	relPath, err := memo.DecodeID(id)
-	if err != nil {
-		return err
-	}
+func (r *MemoRepository) Write(ctx context.Context, relPath string, content string) error {
 	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
 		return err
 	}

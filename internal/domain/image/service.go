@@ -6,23 +6,44 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/util"
-	"os"
 	"path/filepath"
 	"time"
 )
 
 // Service 图片领域服务
 type Service struct {
-	xmpRepo metadata.Repository
-	rootDir string
+	xmpRepo   metadata.Repository
+	imageRepo Repository
+	rootDir   string
 }
 
 // NewService 创建图片领域服务
-func NewService(xmpRepo metadata.Repository, rootDir string) *Service {
+func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir string) *Service {
 	return &Service{
-		xmpRepo: xmpRepo,
-		rootDir: rootDir,
+		xmpRepo:   xmpRepo,
+		imageRepo: imageRepo,
+		rootDir:   rootDir,
 	}
+}
+
+// GetImage 根据图片 ID 获取图片实体，由领域层内部解码 ID 并校验版本一致性
+func (s *Service) GetImage(ctx context.Context, id scalar.ID) (*Image, error) {
+	absPath, expectedModTime, err := decodeID(id)
+	if err != nil {
+		return nil, err
+	}
+	img, err := s.imageRepo.Get(ctx, absPath)
+	if err != nil {
+		return nil, err
+	}
+	if img.ModTime().UnixNano() != expectedModTime.UnixNano() {
+		return nil, apperror.New(
+			"VERSION_CONFLICT",
+			"image file has been modified on disk",
+			"图片在磁盘上已被修改，操作已拒绝",
+		)
+	}
+	return img, nil
 }
 
 // UpdateImageMetadata 更新单个图片的元数据（评星和颜色标签），操作即时写入 XMP 伴随文件
@@ -32,14 +53,12 @@ func (s *Service) UpdateImageMetadata(
 	rating *int,
 	label *string,
 ) (err error) {
-	// 解析出图片的绝对路径与编码时的修改时间
-	absPath, expectedModTime, err := DecodeID(id)
+	img, err := s.GetImage(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	// 确保路径在 rootDir 下，防止修改非当前应用管理的文件
-	relPath, err := filepath.Rel(s.rootDir, absPath)
+	relPath, err := filepath.Rel(s.rootDir, img.AbsPath())
 	if err != nil {
 		return err
 	}
@@ -47,21 +66,8 @@ func (s *Service) UpdateImageMetadata(
 		return err
 	}
 
-	// 校验修改时间以防止对过时版本的图片进行修改
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return err
-	}
-	if info.ModTime().UnixNano() != expectedModTime.UnixNano() {
-		return apperror.New(
-			"VERSION_CONFLICT",
-			"image file has been modified on disk",
-			"图片在磁盘上已被修改，操作已拒绝",
-		)
-	}
-
 	// 读取现有元数据，如果不存在则创建空白结构
-	xmpData, err := s.xmpRepo.Read(absPath)
+	xmpData, err := s.xmpRepo.Read(img.AbsPath())
 	if err != nil {
 		return err
 	}
@@ -81,5 +87,5 @@ func (s *Service) UpdateImageMetadata(
 	}
 
 	newXMP := metadata.NewXMPData(ratingVal, xmpData.Action(), time.Now(), labelVal)
-	return s.xmpRepo.Write(absPath, newXMP)
+	return s.xmpRepo.Write(img.AbsPath(), newXMP)
 }

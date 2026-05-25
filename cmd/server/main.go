@@ -100,10 +100,18 @@ func main() {
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, sessionDTOFactory)
 
 	var dirAnalyzer domdirectory.Analyzer = dirAnalyzerImpl
+	var statsCache *inmem.DirectoryStatsCache
 	if cfg.EnableDirectoryStatsCache {
 		var cache = inmem.NewDirectoryStatsCache(dirAnalyzerImpl, logger)
+		statsCache = cache
 		dirAnalyzer = cache
+	}
 
+	fileWatcher := localfs.NewWatcher(logger)
+	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
+	defer dirServiceCleanup()
+
+	if cfg.EnableDirectoryStatsCache && statsCache != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
 			for event, err := range fileChangedTopic.Subscribe(ctx) {
@@ -114,30 +122,27 @@ func main() {
 					return
 				}
 
-				relPath, err := domdirectory.DecodeID(event.DirectoryID)
+				dir, err := dirSvc.GetDirectory(ctx, event.DirectoryID)
 				if err != nil {
-					logger.Error("failed to decode directory id", zap.Error(err))
+					logger.Error("failed to get directory", zap.Error(err))
 					continue
 				}
 
-				cache.Invalidate(relPath)
+				statsCache.Invalidate(dir.RelPath())
 			}
 		}()
 		defer cancel()
 	}
 
-	fileWatcher := localfs.NewWatcher(logger)
-	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
-	defer dirServiceCleanup()
-
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageService := image.NewService(metadataRepo, cfg.AbsRootDir)
+	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
+	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir)
 
 	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
 	filterBuilder := domdirectory.NewFilterBuilder()
@@ -159,11 +164,12 @@ func main() {
 		imageFilterBuilder,
 		memoFilterBuilder,
 		dirRepo,
+		dirSvc,
 		logger,
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir, dirRepo)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
+	imageHandler := appimage.NewHandler(imageService, imageDTOFactory, logger)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

@@ -53,7 +53,7 @@ func (s *DirectoryScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*
 			}
 
 			subRelPath := filepath.Join(relPath, entry.Name())
-			dirInfo, err := s.dirRepo.GetByRelPath(ctx, subRelPath)
+			dirInfo, err := s.dirRepo.Get(ctx, subRelPath)
 			if err != nil {
 				if !yield(nil, err) {
 					return

@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -143,14 +142,14 @@ func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOpt
 	}
 
 	if opts.filter != nil {
-		directory, err := directory.DecodeID(sess.DirectoryID())
+		dir, err := s.directoryResolver.GetDirectory(ctx, sess.DirectoryID())
 		if err != nil {
 			return err
 		}
 
 		filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(opts.filter))
 		var filteredImages []*image.Image
-		for img, err := range s.imageScanner.Scan(ctx, directory) {
+		for img, err := range s.imageScanner.Scan(ctx, dir.RelPath()) {
 			if err != nil {
 				return err
 			}

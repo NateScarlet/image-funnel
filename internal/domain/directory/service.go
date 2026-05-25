@@ -2,6 +2,7 @@ package directory
 
 import (
 	"context"
+	"main/internal/scalar"
 	"main/internal/shared"
 	"path/filepath"
 
@@ -63,7 +64,7 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		}
 
 		// 编码目录ID
-		dir, err := s.repo.GetByRelPath(ctx, filepath.Dir(relPath))
+		dir, err := s.repo.Get(ctx, filepath.Dir(relPath))
 		if err != nil {
 			s.logger.Error("failed to get directory by path",
 				zap.String("path", filepath.Dir(relPath)),
@@ -82,4 +83,13 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		// 发布事件
 		s.eventBus.PublishFileChanged(ctx, event)
 	}
+}
+
+// GetDirectory 根据目录 ID 获取目录实体，由领域层内部解码 ID
+func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, error) {
+	relPath, err := decodeID(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.Get(ctx, relPath)
 }

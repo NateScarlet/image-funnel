@@ -12,6 +12,7 @@ const idPrefix = "memo:"
 // Memo 表示图片的备忘信息
 type Memo struct {
 	id         scalar.ID
+	relPath    string // 相对路径
 	absPath    string // 绝对路径
 	content    string // 剥离后的正文
 	rawContent string // 完整的原始内容
@@ -20,7 +21,7 @@ type Memo struct {
 
 // newMemo 创建一个新的备忘信息，仅供 package 内部使用
 // absPath 必须是绝对路径，content 为包含 frontmatter 的完整内容
-func newMemo(id scalar.ID, absPath string, content string) *Memo {
+func newMemo(id scalar.ID, relPath string, absPath string, content string) *Memo {
 	hidden, parsedContent := ParseContent(content)
 	if !strings.HasSuffix(absPath, ".md") {
 		// TODO: 改成报错
@@ -28,6 +29,7 @@ func newMemo(id scalar.ID, absPath string, content string) *Memo {
 	}
 	return &Memo{
 		id:         id,
+		relPath:    relPath,
 		absPath:    absPath,
 		content:    parsedContent,
 		rawContent: content,
@@ -38,7 +40,7 @@ func newMemo(id scalar.ID, absPath string, content string) *Memo {
 // FromRepository 从仓库加载备忘信息，ID 由领域层根据相对路径自动生成
 // 仅由 Repository 实现调用，外部不得直接构造
 func FromRepository(relPath string, absPath string, content string) *Memo {
-	return newMemo(encodeID(relPath), absPath, content)
+	return newMemo(encodeID(relPath), relPath, absPath, content)
 }
 
 // ParseContent 解析备忘录文本，返回是否隐藏以及剔除了 frontmatter 后的纯文本正文
@@ -88,6 +90,11 @@ func (m *Memo) ID() scalar.ID {
 	return m.id
 }
 
+// RelPath 返回备忘录相对路径
+func (m *Memo) RelPath() string {
+	return m.relPath
+}
+
 // Path 返回备忘录绝对路径
 func (m *Memo) AbsPath() string {
 	return m.absPath
@@ -113,8 +120,8 @@ func encodeID(relPath string) scalar.ID {
 	return scalar.ToID(idPrefix + strings.TrimSuffix(filepath.ToSlash(relPath), ".md"))
 }
 
-// DecodeID 从备忘 ID 中提取图片相对路径
-func DecodeID(id scalar.ID) (string, error) {
+// decodeID 从备忘 ID 中提取图片相对路径
+func decodeID(id scalar.ID) (string, error) {
 	idStr := id.String()
 	if idStr == "" {
 		return "", apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")

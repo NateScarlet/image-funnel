@@ -123,7 +123,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir, imageFb)
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb)
 	defer cleanupService()
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
@@ -191,7 +191,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir, imageFb)
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb)
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
@@ -242,7 +242,7 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, tempDir, imageFb)
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb)
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)

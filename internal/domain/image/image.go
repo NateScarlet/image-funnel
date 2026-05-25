@@ -114,8 +114,8 @@ func encodeID(absPath string, modTime time.Time) scalar.ID {
 	return scalar.ToID(str)
 }
 
-// DecodeID 解析明文格式的 ID 并还原为图片的绝对路径和期望修改时间
-func DecodeID(id scalar.ID) (string, time.Time, error) {
+// decodeID 解析明文格式的 ID 并还原为图片的绝对路径和期望修改时间
+func decodeID(id scalar.ID) (string, time.Time, error) {
 	str := id.String()
 	if !strings.HasPrefix(str, "img:") {
 		return "", time.Time{}, errors.New("invalid image id format")

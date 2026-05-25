@@ -104,7 +104,7 @@ func TestMemoCreation(t *testing.T) {
 	path := "/absolute/path/test.jpg.md"
 	raw := "---\nhidden: true\n---\nHello World"
 
-	m := newMemo(id, path, raw)
+	m := newMemo(id, "test.jpg.md", path, raw)
 
 	if m.ID() != id {
 		t.Errorf("newMemo().ID() = %v, 想要 %v", m.ID(), id)
@@ -127,50 +127,43 @@ func TestIDEncodingDecoding(t *testing.T) {
 	relPath := "subdir/image.png.md"
 	id := encodeID(relPath)
 
-	decoded, err := DecodeID(id)
+	decoded, err := decodeID(id)
 	if err != nil {
-		t.Fatalf("DecodeID 失败: %v", err)
+		t.Fatalf("decodeID 失败: %v", err)
 	}
 	if decoded != relPath {
-		t.Errorf("DecodeID() = %q, 想要 %q", decoded, relPath)
+		t.Errorf("decodeID() = %q, 想要 %q", decoded, relPath)
 	}
 
-	// 测试无效 ID 解码
-	_, err = DecodeID(scalar.ToID(""))
+	_, err = decodeID(scalar.ToID(""))
 	if err == nil {
-		t.Error("DecodeID 空ID 应该报错但没有")
+		t.Error("decodeID 空ID 应该报错但没有")
 	}
-
-	_, err = DecodeID(scalar.ToID("invalid-prefix:abc"))
+	_, err = decodeID(scalar.ToID("invalid-prefix:abc"))
 	if err == nil {
-		t.Error("DecodeID 错误前缀 应该报错但没有")
+		t.Error("decodeID 错误前缀 应该报错但没有")
 	}
 }
 
 type mockRepo struct {
-	memos map[scalar.ID]*Memo
+	memos map[string]*Memo // key is relPath
 }
 
-func (r *mockRepo) Read(ctx context.Context, id scalar.ID) (*Memo, error) {
-	return r.memos[id], nil
+func (r *mockRepo) Read(ctx context.Context, relPath string) (*Memo, error) {
+	return r.memos[relPath], nil
 }
 
-func (r *mockRepo) ReadByRelPath(ctx context.Context, relPath string) (*Memo, error) {
-	return r.memos[encodeID(relPath)], nil
-}
-
-func (r *mockRepo) Write(ctx context.Context, id scalar.ID, content string) error {
+func (r *mockRepo) Write(ctx context.Context, relPath string, content string) error {
 	if content == "" {
-		delete(r.memos, id)
+		delete(r.memos, relPath)
 		return nil
 	}
-	relPath, _ := DecodeID(id)
-	r.memos[id] = FromRepository(relPath, id.String()+".md", content)
+	r.memos[relPath] = FromRepository(relPath, relPath, content)
 	return nil
 }
 
 func TestServiceCreate(t *testing.T) {
-	repo := &mockRepo{memos: make(map[scalar.ID]*Memo)}
+	repo := &mockRepo{memos: make(map[string]*Memo)}
 	service := NewService(repo)
 	ctx := context.Background()
 

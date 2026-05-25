@@ -3,7 +3,6 @@ package inmem
 import (
 	"context"
 	"main/internal/domain/directory"
-	"main/internal/scalar"
 	"main/internal/util"
 )
 
@@ -18,21 +17,8 @@ type DirectoryRepository struct {
 }
 
 // Get implements [directory.Repository].
-func (d *DirectoryRepository) Get(ctx context.Context, id scalar.ID) (*directory.Directory, error) {
-	path, err := directory.DecodeID(id)
-	if err != nil {
-		return nil, err
-	}
-	err = util.EnsurePathInRoot(d.rootDir, path)
-	if err != nil {
-		return nil, err
-	}
-	return directory.FromRepository(path), nil
-}
-
-// GetByRelPath implements [directory.Repository].
-func (d *DirectoryRepository) GetByRelPath(ctx context.Context, relPath string) (*directory.Directory, error) {
-	var err = util.EnsurePathInRoot(d.rootDir, relPath)
+func (d *DirectoryRepository) Get(ctx context.Context, relPath string) (*directory.Directory, error) {
+	err := util.EnsurePathInRoot(d.rootDir, relPath)
 	if err != nil {
 		return nil, err
 	}

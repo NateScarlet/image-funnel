@@ -61,7 +61,7 @@ func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*direc
 	ratingCounts := make(map[int]int)
 
 	// 通过仓库获取合法的目录对象，由其生成目录 ID
-	dir, err := s.dirRepo.GetByRelPath(ctx, relPath)
+	dir, err := s.dirRepo.Get(ctx, relPath)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,6 @@ package memo
 
 import (
 	"main/internal/domain/memo"
-	"main/internal/scalar"
 	"main/internal/shared"
 	"path/filepath"
 )
@@ -18,28 +17,15 @@ func NewDTOFactory(rootDir string) *DTOFactory {
 }
 
 func (f *DTOFactory) New(m *memo.Memo) *shared.MemoDTO {
-	relPath, _ := memo.DecodeID(m.ID())
+	if m == nil {
+		return nil
+	}
 	return &shared.MemoDTO{
 		ID:         m.ID(),
-		RelPath:    filepath.ToSlash(relPath),
+		RelPath:    filepath.ToSlash(m.RelPath()),
 		AbsPath:    m.AbsPath(),
 		Content:    m.Content(),
 		RawContent: m.RawContent(),
 		Hidden:     m.Hidden(),
 	}
-}
-
-func (f *DTOFactory) NewEmpty(id scalar.ID) (*shared.MemoDTO, error) {
-	relPath, err := memo.DecodeID(id)
-	if err != nil {
-		return nil, err
-	}
-	return &shared.MemoDTO{
-		ID:         id,
-		RelPath:    filepath.ToSlash(relPath),
-		AbsPath:    filepath.Join(f.rootDir, relPath),
-		Content:    "",
-		RawContent: "",
-		Hidden:     false,
-	}, nil
 }

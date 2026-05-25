@@ -18,15 +18,17 @@ type EventBus interface {
 type Handler struct {
 	repo          memo.Repository
 	service       *memo.Service
+	dirSvc        *directory.Service
 	ebus          EventBus
 	dtoFactory    *DTOFactory
 	filterBuilder *memo.FilterBuilder
 }
 
-func NewHandler(repo memo.Repository, service *memo.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
+func NewHandler(repo memo.Repository, service *memo.Service, dirSvc *directory.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
 	return &Handler{
 		repo:          repo,
 		service:       service,
+		dirSvc:        dirSvc,
 		ebus:          ebus,
 		dtoFactory:    dtoFactory,
 		filterBuilder: filterBuilder,
@@ -41,11 +43,11 @@ func (h *Handler) UpdateMemo(ctx context.Context, id scalar.ID, content string) 
 
 // CreateMemo 创建新备忘录文件，若已存在则返回 ALREADY_EXISTS 错误。
 func (h *Handler) CreateMemo(ctx context.Context, directoryID scalar.ID, name string, content string) (*shared.MemoDTO, error) {
-	dirRelPath, err := directory.DecodeID(directoryID)
+	dir, err := h.dirSvc.GetDirectory(ctx, directoryID)
 	if err != nil {
 		return nil, err
 	}
-	m, err := h.service.Create(ctx, dirRelPath, name, content)
+	m, err := h.service.Create(ctx, dir.RelPath(), name, content)
 	if err != nil {
 		return nil, err
 	}
@@ -55,19 +57,16 @@ func (h *Handler) CreateMemo(ctx context.Context, directoryID scalar.ID, name st
 
 // Memo 获取备忘录内容
 func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, error) {
-	m, err := h.repo.Read(ctx, id)
+	m, err := h.service.Read(ctx, id)
 	if err != nil {
 		return nil, err
-	}
-	if m == nil {
-		return h.dtoFactory.NewEmpty(id)
 	}
 	return h.dtoFactory.New(m), nil
 }
 
 // MemoByRelPath 根据相对路径获取备忘录内容
 func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.MemoDTO, error) {
-	m, err := h.repo.ReadByRelPath(ctx, relPath)
+	m, err := h.repo.Read(ctx, relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -79,11 +78,6 @@ func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.Me
 // MemoUpdated 订阅特定备忘录更新（保持老版本向后兼容）
 func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shared.MemoDTO, error] {
 	return func(yield func(*shared.MemoDTO, error) bool) {
-		relPath, err := memo.DecodeID(id)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
 		for event, err := range h.ebus.SubscribeFileChanged(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
@@ -92,12 +86,23 @@ func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shar
 				continue
 			}
 
-			// 检查是否是目标备注文件的变更
-			if event.RelPath == relPath {
-				m, err := h.Memo(ctx, id)
-				if !yield(m, err) {
+			if !strings.HasSuffix(strings.ToLower(event.RelPath), ".md") {
+				continue
+			}
+
+			m, err := h.repo.Read(ctx, event.RelPath)
+			if err != nil {
+				if !yield(nil, err) {
 					return
 				}
+				continue
+			}
+			if m == nil || m.ID() != id {
+				continue
+			}
+
+			if !yield(h.dtoFactory.New(m), nil) {
+				return
 			}
 		}
 	}
@@ -135,7 +140,7 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			m, err := h.repo.ReadByRelPath(ctx, event.RelPath)
+			m, err := h.repo.Read(ctx, event.RelPath)
 			if err != nil {
 				if !yield(nil, err) {
 					return
@@ -143,7 +148,7 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			if !memoFilter(m) {
+			if m == nil || !memoFilter(m) {
 				continue
 			}
 
