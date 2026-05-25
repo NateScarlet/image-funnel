@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
@@ -95,7 +96,13 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 				pipeWriter.CloseWithError(ctx.Err())
 				return
 			}
-			pipeWriter.CloseWithError(fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, b.String()))
+			errStr := b.String()
+			// 识别文件尚未写完时的意外截止错误
+			if strings.Contains(errStr, "unexpected end-of-file") || strings.Contains(errStr, "unexpected end of file") {
+				pipeWriter.CloseWithError(fmt.Errorf("%w: ImageMagick error: %s", io.ErrUnexpectedEOF, errStr))
+				return
+			}
+			pipeWriter.CloseWithError(fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, errStr))
 			return
 		}
 	}()
@@ -115,9 +122,16 @@ func (p *Processor) Meta(ctx context.Context, absPath string) (*shared.ImageMeta
 	defer p.sem.Release(1)
 
 	cmd := exec.CommandContext(ctx, "magick", "identify", "-ping", "-format", "%w %h", absPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image metadata: %w", err)
+		errStr := stderr.String()
+		// 识别并转换为领域层标准错误
+		if strings.Contains(errStr, "unexpected end-of-file") || strings.Contains(errStr, "unexpected end of file") {
+			return nil, fmt.Errorf("%w: failed to get image metadata: %s", io.ErrUnexpectedEOF, errStr)
+		}
+		return nil, fmt.Errorf("failed to get image metadata: %w, stderr: %s", err, errStr)
 	}
 
 	var width, height int

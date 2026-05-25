@@ -2,11 +2,13 @@ package stdimage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,6 +53,12 @@ func (p *HybridProcessor) getImageMeta(srcPath string) (*shared.ImageMeta, error
 
 	config, _, err := image.DecodeConfig(file)
 	if err != nil {
+		// 检查是否为意外截断的 unexpected EOF 错误
+		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) ||
+			strings.Contains(err.Error(), "unexpected EOF") ||
+			strings.Contains(err.Error(), "unexpected end-of-file") {
+			return nil, fmt.Errorf("%w: failed to decode image config: %v", io.ErrUnexpectedEOF, err)
+		}
 		return nil, fmt.Errorf("failed to decode image config: %w", err)
 	}
 

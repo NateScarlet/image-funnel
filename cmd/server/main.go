@@ -79,7 +79,8 @@ func main() {
 	defer cleanupCache()
 	magickProcessor := magick.NewProcessor(imageCache, cfg.MagickConcurrency)
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)
-	imageProcessor := concurrency.NewSingleFlightImageProcessor(hybridProcessor)
+	retryProcessor := appimage.NewRetryProcessor(hybridProcessor, logger)
+	imageProcessor := concurrency.NewSingleFlightImageProcessor(retryProcessor)
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
