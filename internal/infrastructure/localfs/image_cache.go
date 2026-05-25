@@ -105,7 +105,8 @@ func (c *ImageCache) cleanup() {
 		}
 		if info.ModTime().Before(threshold) {
 			path := filepath.Join(c.rootDir, entry.Name())
-			if err := os.Remove(path); err != nil {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				// 忽略文件已被其他进程或操作删除的情况，避免输出无意义的错误日志
 				log.Printf("Failed to remove old cache file %s: %v", path, err)
 			}
 		}
