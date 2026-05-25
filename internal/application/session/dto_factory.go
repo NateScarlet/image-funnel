@@ -1,33 +1,25 @@
 package session
 
 import (
-	appimage "main/internal/application/image"
 	"main/internal/domain/session"
+	"main/internal/scalar"
 	"main/internal/shared"
 )
 
 type DTOFactory struct {
-	imageDTOFactory *appimage.DTOFactory
 }
 
-func NewDTOFactory(imageDTOFactory *appimage.DTOFactory) *DTOFactory {
-	return &DTOFactory{
-		imageDTOFactory: imageDTOFactory,
-	}
+func NewDTOFactory() *DTOFactory {
+	return &DTOFactory{}
 }
 
 func (f *DTOFactory) New(sess *session.Session) (*shared.SessionDTO, error) {
 
-	// 只计算一次统计信息
 	sessionStats := sess.Stats()
 
-	var currentImage *shared.ImageDTO
-	var err error
+	var currentImageID scalar.ID
 	if img := sess.CurrentImage(); img != nil {
-		currentImage, err = f.imageDTOFactory.New(img)
-		if err != nil {
-			return nil, err
-		}
+		currentImageID = img.ID()
 	}
 
 	return &shared.SessionDTO{
@@ -43,7 +35,7 @@ func (f *DTOFactory) New(sess *session.Session) (*shared.SessionDTO, error) {
 		CurrentIndex:        sess.CurrentIndex(),
 		CurrentSize:         sess.CurrentSize(),
 		CurrentRound:        sess.CurrentRound(),
-		CurrentImage:        currentImage,
+		CurrentImageID:      currentImageID,
 		CurrentRoundActions: sess.CurrentRoundActions(),
 	}, nil
 }

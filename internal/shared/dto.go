@@ -64,7 +64,7 @@ type SessionDTO struct {
 	CurrentIndex int
 	CurrentSize  int
 	CurrentRound int
-	CurrentImage *ImageDTO
+	CurrentImageID scalar.ID
 	CurrentRoundActions []ImageAction
 }
 

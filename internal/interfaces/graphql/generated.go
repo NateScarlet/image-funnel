@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -295,6 +296,7 @@ type SessionResolver interface {
 	CreatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 	UpdatedAt(ctx context.Context, obj *shared.SessionDTO) (string, error)
 
+	CurrentImage(ctx context.Context, obj *shared.SessionDTO) (*shared.ImageDTO, error)
 	NextImages(ctx context.Context, obj *shared.SessionDTO, count *int) ([]*shared.ImageDTO, error)
 	KeptImages(ctx context.Context, obj *shared.SessionDTO, limit *int, offset *int) ([]*shared.ImageDTO, error)
 }
@@ -5896,7 +5898,7 @@ func (ec *executionContext) _Session_currentImage(ctx context.Context, field gra
 		field,
 		ec.fieldContext_Session_currentImage,
 		func(ctx context.Context) (any, error) {
-			return obj.CurrentImage, nil
+			return ec.resolvers.Session().CurrentImage(ctx, obj)
 		},
 		nil,
 		ec.marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
@@ -5909,8 +5911,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 	fc = &graphql.FieldContext{
 		Object:     "Session",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10733,7 +10735,38 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "currentImage":
-			out.Values[i] = ec._Session_currentImage(ctx, field, obj)
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Session_currentImage(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "nextImages":
 			field := field
 
@@ -11620,13 +11653,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

@@ -93,7 +93,7 @@ func main() {
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
 
 	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
-	sessionDTOFactory := appsession.NewDTOFactory(imageDTOFactory)
+	sessionDTOFactory := appsession.NewDTOFactory()
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
@@ -153,23 +153,15 @@ func main() {
 	directoryHandler := appdirectory.NewHandler(
 		dirScannerImpl,
 		dirAnalyzer,
-		imgScanner,
-		imgMover,
-		memoScanner,
 		eventBus,
-		imageDTOFactory,
-		memoDTOFactory,
 		directoryDTOFactory,
 		filterBuilder,
-		imageFilterBuilder,
-		memoFilterBuilder,
 		dirRepo,
 		dirSvc,
-		logger,
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, imageDTOFactory, logger)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), memoScanner, dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
+	imageHandler := appimage.NewHandler(imageService, eventBus, imgScanner, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

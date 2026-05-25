@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/memo"
+	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -18,16 +19,18 @@ type EventBus interface {
 type Handler struct {
 	repo          memo.Repository
 	service       *memo.Service
+	memoScanner   memo.Scanner
 	dirSvc        *directory.Service
 	ebus          EventBus
 	dtoFactory    *DTOFactory
 	filterBuilder *memo.FilterBuilder
 }
 
-func NewHandler(repo memo.Repository, service *memo.Service, dirSvc *directory.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
+func NewHandler(repo memo.Repository, service *memo.Service, memoScanner memo.Scanner, dirSvc *directory.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
 	return &Handler{
 		repo:          repo,
 		service:       service,
+		memoScanner:   memoScanner,
 		dirSvc:        dirSvc,
 		ebus:          ebus,
 		dtoFactory:    dtoFactory,
@@ -37,7 +40,6 @@ func NewHandler(repo memo.Repository, service *memo.Service, dirSvc *directory.S
 
 // UpdateMemo 更新备忘录
 func (h *Handler) UpdateMemo(ctx context.Context, id scalar.ID, content string) error {
-	// 将更新逻辑及所需依赖提取到 domain/memo/service.go 执行
 	return h.service.Save(ctx, id, content)
 }
 
@@ -53,7 +55,6 @@ func (h *Handler) CreateMemo(ctx context.Context, directoryID scalar.ID, name st
 	}
 	return h.dtoFactory.New(m), nil
 }
-
 
 // Memo 获取备忘录内容
 func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, error) {
@@ -116,7 +117,6 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 			filters = *filter
 		}
 
-		// 事件级目录粗筛
 		var allowedDirectoryIDs util.Set[scalar.ID]
 		if len(filters.DirectoryID) > 0 {
 			allowedDirectoryIDs = util.AddToSet(nil, filters.DirectoryID...)
@@ -160,3 +160,85 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 }
 
 // #endregion
+
+// Memos 获取目录下的备忘录列表，支持过滤与基于 Relay 规范的游标分页
+func (h *Handler) Memos(
+	ctx context.Context,
+	id scalar.ID,
+	filterBy shared.MemoFilters,
+	first *int,
+	after *string,
+) (connection *shared.MemoConnectionDTO, err error) {
+	if first == nil {
+		defaultFirst := 100
+		first = &defaultFirst
+	}
+
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	builder := pagination.NewConnectionBufferBuilder[*shared.MemoDTO, *shared.MemoEdgeDTO, *shared.MemoConnectionDTO]()
+	buf := builder(
+		func(item *shared.MemoDTO, cursor string) (*shared.MemoEdgeDTO, error) {
+			return &shared.MemoEdgeDTO{
+				Node:   item,
+				Cursor: cursor,
+			}, nil
+		},
+		func(edges []*shared.MemoEdgeDTO, pageInfo pagination.PageInfo) (*shared.MemoConnectionDTO, error) {
+			var nodes = make([]*shared.MemoDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			var startCursor, endCursor string
+			if pageInfo.StartCursor != nil {
+				startCursor = *pageInfo.StartCursor
+			}
+			if pageInfo.EndCursor != nil {
+				endCursor = *pageInfo.EndCursor
+			}
+			return &shared.MemoConnectionDTO{
+				Edges: edges,
+				Nodes: nodes,
+				PageInfo: &shared.PageInfoDTO{
+					HasNextPage:     pageInfo.HasNextPage,
+					HasPreviousPage: pageInfo.HasPreviousPage,
+					StartCursor:     startCursor,
+					EndCursor:       endCursor,
+				},
+			}, nil
+		},
+	)
+
+	options := pagination.OptionFromInput(after, nil, first, nil)
+
+	relPath := dirInfo.RelPath()
+
+	filteredSeq := func(yield func(*shared.MemoDTO, error) bool) {
+		memoFilter := h.filterBuilder.Build(filterBy)
+		for m, scanErr := range h.memoScanner.Scan(ctx, relPath) {
+			if scanErr != nil {
+				if !yield(nil, scanErr) {
+					return
+				}
+				continue
+			}
+			if !memoFilter(m) {
+				continue
+			}
+			dto := h.dtoFactory.New(m)
+			if !yield(dto, nil) {
+				return
+			}
+		}
+	}
+
+	err = pagination.ByIndexE(filteredSeq, buf, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Value()
+}

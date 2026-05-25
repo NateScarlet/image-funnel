@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	appimage "main/internal/application/image"
 	"main/internal/application/session"
 	"main/internal/domain/image"
 	dsession "main/internal/domain/session"
@@ -18,18 +17,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockURLSigner struct{}
-
-func (m *mockURLSigner) GenerateSignedURL(path string, opts ...appimage.SignOption) (string, error) {
-	return "signed://" + path, nil
-}
-
 func TestNewEventBus(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
-	urlSigner := &mockURLSigner{}
-	imageDTOFactory := appimage.NewDTOFactory(urlSigner, "")
-	factory := session.NewDTOFactory(imageDTOFactory)
+	factory := session.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
@@ -39,9 +30,7 @@ func TestNewEventBus(t *testing.T) {
 func TestSubscribeSession(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
-	urlSigner := &mockURLSigner{}
-	imageDTOFactory := appimage.NewDTOFactory(urlSigner, "")
-	factory := session.NewDTOFactory(imageDTOFactory)
+	factory := session.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 
@@ -85,9 +74,7 @@ func TestSubscribeSession(t *testing.T) {
 func TestFileChanged(t *testing.T) {
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent]()
-	urlSigner := &mockURLSigner{}
-	imageDTOFactory := appimage.NewDTOFactory(urlSigner, "")
-	factory := session.NewDTOFactory(imageDTOFactory)
+	factory := session.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
 	bus := NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, factory)
 

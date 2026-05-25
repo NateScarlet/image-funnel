@@ -32,6 +32,14 @@ func (r *sessionResolver) UpdatedAt(ctx context.Context, obj *shared.SessionDTO)
 	return obj.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"), nil
 }
 
+// CurrentImage is the resolver for the currentImage field.
+func (r *sessionResolver) CurrentImage(ctx context.Context, obj *shared.SessionDTO) (*shared.ImageDTO, error) {
+	if obj.CurrentImageID.IsZero() {
+		return nil, nil
+	}
+	return r.app.Image(ctx, obj.CurrentImageID)
+}
+
 // NextImages is the resolver for the nextImages field.
 func (r *sessionResolver) NextImages(ctx context.Context, obj *shared.SessionDTO, count *int) ([]*shared.ImageDTO, error) {
 	if count == nil {
