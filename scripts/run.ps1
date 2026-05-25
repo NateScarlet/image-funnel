@@ -87,6 +87,7 @@ if (Test-Path $RUN_DIR) {
 }
 New-Item -ItemType Directory -Path $RUN_DIR -Force | Out-Null
 
+$exitCode = 0
 try {
     Write-Host "正在准备运行环境 (目录: $RUN_DIR)..." -ForegroundColor Cyan
     Copy-Item -Path "$BUILD_DIR\*" -Destination $RUN_DIR -Recurse -Force
@@ -96,6 +97,12 @@ try {
     Write-Host "--- 开始运行 ---" -ForegroundColor Green
     # 直接运行二进制文件，不切换目录，使程序默认使用当前 Shell 路径作为 Root (CWD)
     & $runBinary $args
+    # 记录二进制程序的退出码，防止被后续 finally 块中的清理命令重置
+    $exitCode = $LASTEXITCODE
+}
+catch {
+    Write-Error "运行过程中发生错误: $_"
+    $exitCode = 1
 }
 finally {
     if (Test-Path $RUN_DIR) {
@@ -104,4 +111,5 @@ finally {
         Write-Host "`n--- 运行结束，清理完成 ---" -ForegroundColor Gray
     }
 }
+exit $exitCode
 # #endregion
