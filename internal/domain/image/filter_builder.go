@@ -16,6 +16,11 @@ type FilterBuilder struct {
 func (fb *FilterBuilder) Build(filter shared.ImageFilters) func(*Image) bool {
 	var b util.FilterBuilder[*Image]
 
+	// 过滤掉无效的空指针，避免空指针解引用引发崩溃
+	b.Add(func(img *Image) bool {
+		return img != nil
+	})
+
 	if v := filter.ID; len(v) > 0 {
 		m := util.AddToSet(nil, v...)
 		b.Add(func(img *Image) bool {

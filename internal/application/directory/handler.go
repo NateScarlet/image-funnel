@@ -169,8 +169,8 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 					return true
 				}
 				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
-				if err != nil {
-					// 文件可能已被快速删除，跳过而不向客户端报错
+				if err != nil || img == nil {
+					// 文件可能已被快速删除，或不是支持的图片类型，跳过而不向客户端报错
 					return true
 				}
 				if !imageFilter(img) {
