@@ -462,13 +462,13 @@ const imageViewerDialog = useModalFullscreen();
 // #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
 const viewerHash = useLocationHash();
 
-function openViewer(index: number) {
+async function openViewer(index: number) {
+  currentImageIndex.value = index;
+  await imageViewerDialog.open();
   const image = images.value[index];
   if (image) {
     viewerHash.value = image.filename;
   }
-  currentImageIndex.value = index;
-  imageViewerDialog.open();
 }
 
 function closeViewer() {
@@ -513,9 +513,11 @@ async function waitLoading() {
 }
 
 onMounted(async () => {
-  if (viewerHash.value) {
+  const initialHash = viewerHash.value;
+  if (initialHash) {
     await waitLoading();
-    searchAndOpenViewer(viewerHash.value);
+    viewerHash.value = "";
+    await searchAndOpenViewer(initialHash);
   }
 });
 
