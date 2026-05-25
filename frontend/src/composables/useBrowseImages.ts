@@ -49,7 +49,9 @@ export default function useBrowseImages(
     nodes: images,
     onSaved,
     onDeleted,
-  } = useLiveConnection(() => imageConnection.nodes.value);
+  } = useLiveConnection(() => imageConnection.nodes.value, {
+    identity: (i) => i.relPath,
+  });
 
   // 订阅图片的新增与修改事件
   useSubscription(ImageSavedDocument, {

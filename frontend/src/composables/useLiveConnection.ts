@@ -9,15 +9,19 @@ export default function useLiveConnection<
     compare,
     filter,
     onNodeDidLeave,
+    identity,
   }: {
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
     onNodeDidLeave?: (i: T) => void;
+    identity?: (i: T) => string;
   } = {},
 ) {
+  const resolvedIdentity = identity ?? ((i: T) => i.id);
   const { items, addItem, deleteItem, reset } = useLiveArray(nodes, {
     compare,
     filter,
+    identity: resolvedIdentity,
   });
   const onSaved = (i: T | null | undefined) => {
     if (i == null) {
@@ -39,7 +43,10 @@ export default function useLiveConnection<
     if (i == null) {
       return;
     }
-    if (items.value.some((j) => j.id === i.id) || (filter && filter(i))) {
+    if (
+      items.value.some((j) => resolvedIdentity(j) === resolvedIdentity(i)) ||
+      (filter && filter(i))
+    ) {
       return onSaved(i);
     }
   };

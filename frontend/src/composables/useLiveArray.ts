@@ -8,9 +8,11 @@ export default function useLiveArray<T extends { id: string }>(
   {
     compare,
     filter = () => true,
+    identity = (i) => i.id,
   }: {
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
+    identity?: (i: T) => string;
   } = {},
 ) {
   const liveDeletedID = shallowReactive(new Set<string>());
@@ -22,19 +24,19 @@ export default function useLiveArray<T extends { id: string }>(
     liveDeletedID.delete(v.id);
     liveItems.value = replaceArrayItemBy(
       liveItems.value,
-      (i) => i.id === v.id,
+      (i) => identity(i) === identity(v),
       v,
       { whenNoMatch: "prepend" },
     );
   };
   const items = computed(() => {
     const v = arr();
-    return uniqBy([...liveItems.value, ...v], (i) => i.id)
+    return uniqBy([...liveItems.value, ...v], (i) => identity(i))
       .filter((i) => !liveDeletedID.has(i.id))
       .filter(filter)
       .sort((a, b) => {
-        const aIndex = v.findIndex((i) => i.id === a.id);
-        const bIndex = v.findIndex((i) => i.id === b.id);
+        const aIndex = v.findIndex((i) => identity(i) === identity(a));
+        const bIndex = v.findIndex((i) => identity(i) === identity(b));
         if (aIndex >= 0 && bIndex >= 0) {
           // preserve original order
           return aIndex - bIndex;
@@ -51,7 +53,11 @@ export default function useLiveArray<T extends { id: string }>(
     liveItems.value = [];
   }
   watch(arr, (newValue, oldValue) => {
-    if (!equalArray(newValue, oldValue, { equal: (a, b) => a.id === b.id })) {
+    if (
+      !equalArray(newValue, oldValue, {
+        equal: (a, b) => identity(a) === identity(b),
+      })
+    ) {
       reset();
     }
   });
