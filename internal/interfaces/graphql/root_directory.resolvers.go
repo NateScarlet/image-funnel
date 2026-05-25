@@ -7,11 +7,10 @@ package graphql
 
 import (
 	"context"
-	"main/internal/domain/directory"
 	"main/internal/shared"
 )
 
 // RootDirectory is the resolver for the rootDirectory field.
 func (r *queryResolver) RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error) {
-	return r.app.Directory(ctx, directory.EncodeID("."))
+	return r.app.RootDirectory(ctx)
 }

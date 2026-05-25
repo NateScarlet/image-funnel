@@ -18,9 +18,9 @@ type Memo struct {
 	hidden     bool   // 是否被隐藏
 }
 
-// New 创建一个新的备忘信息
-// path 必须是绝对路径，content 为包含 frontmatter 的完整内容
-func New(id scalar.ID, absPath string, content string) *Memo {
+// newMemo 创建一个新的备忘信息，仅供 package 内部使用
+// absPath 必须是绝对路径，content 为包含 frontmatter 的完整内容
+func newMemo(id scalar.ID, absPath string, content string) *Memo {
 	hidden, parsedContent := ParseContent(content)
 	if !strings.HasSuffix(absPath, ".md") {
 		// TODO: 改成报错
@@ -33,6 +33,12 @@ func New(id scalar.ID, absPath string, content string) *Memo {
 		rawContent: content,
 		hidden:     hidden,
 	}
+}
+
+// FromRepository 从仓库加载备忘信息，ID 由领域层根据相对路径自动生成
+// 仅由 Repository 实现调用，外部不得直接构造
+func FromRepository(relPath string, absPath string, content string) *Memo {
+	return newMemo(encodeID(relPath), absPath, content)
 }
 
 // ParseContent 解析备忘录文本，返回是否隐藏以及剔除了 frontmatter 后的纯文本正文
@@ -102,8 +108,8 @@ func (m *Memo) Hidden() bool {
 	return m.hidden
 }
 
-// EncodeID 根据图片相对路径生成备忘 ID
-func EncodeID(relPath string) scalar.ID {
+// encodeID 根据图片相对路径生成备忘 ID
+func encodeID(relPath string) scalar.ID {
 	return scalar.ToID(idPrefix + strings.TrimSuffix(filepath.ToSlash(relPath), ".md"))
 }
 

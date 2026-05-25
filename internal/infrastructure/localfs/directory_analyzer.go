@@ -18,13 +18,15 @@ import (
 type DirectoryAnalyzer struct {
 	rootDir      string
 	imageFactory *domainimage.Factory
+	dirRepo      directory.Repository
 }
 
 // NewDirectoryAnalyzer 创建目录分析实现实例
-func NewDirectoryAnalyzer(rootDir string, imageFactory *domainimage.Factory) *DirectoryAnalyzer {
+func NewDirectoryAnalyzer(rootDir string, imageFactory *domainimage.Factory, dirRepo directory.Repository) *DirectoryAnalyzer {
 	return &DirectoryAnalyzer{
 		rootDir:      rootDir,
 		imageFactory: imageFactory,
+		dirRepo:      dirRepo,
 	}
 }
 
@@ -58,8 +60,12 @@ func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*direc
 	var latestImage *domainimage.Image
 	ratingCounts := make(map[int]int)
 
-	// 计算当前目录的ID
-	directoryID := directory.EncodeID(relPath)
+	// 通过仓库获取合法的目录对象，由其生成目录 ID
+	dir, err := s.dirRepo.GetByRelPath(ctx, relPath)
+	if err != nil {
+		return nil, err
+	}
+	directoryID := dir.ID()
 
 	limit := runtime.NumCPU()
 

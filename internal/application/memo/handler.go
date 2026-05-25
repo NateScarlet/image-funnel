@@ -67,8 +67,11 @@ func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, erro
 
 // MemoByRelPath 根据相对路径获取备忘录内容
 func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.MemoDTO, error) {
-	id := memo.EncodeID(relPath)
-	return h.Memo(ctx, id)
+	m, err := h.repo.ReadByRelPath(ctx, relPath)
+	if err != nil {
+		return nil, err
+	}
+	return h.dtoFactory.New(m), nil
 }
 
 // #region 订阅逻辑
@@ -132,9 +135,7 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			derivedID := memo.EncodeID(event.RelPath)
-
-			m, err := h.repo.Read(ctx, derivedID)
+			m, err := h.repo.ReadByRelPath(ctx, event.RelPath)
 			if err != nil {
 				if !yield(nil, err) {
 					return
@@ -142,25 +143,12 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			if m != nil && !memoFilter(m) {
+			if !memoFilter(m) {
 				continue
 			}
 
-			if m != nil {
-				if !yield(h.dtoFactory.New(m), nil) {
-					return
-				}
-			} else {
-				dto, err := h.dtoFactory.NewEmpty(derivedID)
-				if err != nil {
-					if !yield(nil, err) {
-						return
-					}
-					continue
-				}
-				if !yield(dto, nil) {
-					return
-				}
+			if !yield(h.dtoFactory.New(m), nil) {
+				return
 			}
 		}
 	}

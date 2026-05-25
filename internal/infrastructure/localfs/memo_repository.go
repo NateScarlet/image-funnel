@@ -33,7 +33,20 @@ func (r *MemoRepository) Read(ctx context.Context, id scalar.ID) (*memo.Memo, er
 		return nil, err
 	}
 
-	return memo.New(id, absPath, string(content)), nil
+	return memo.FromRepository(relPath, absPath, string(content)), nil
+}
+
+func (r *MemoRepository) ReadByRelPath(ctx context.Context, relPath string) (*memo.Memo, error) {
+	absPath := r.absPath(relPath)
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return memo.FromRepository(relPath, absPath, ""), nil
+		}
+		return nil, err
+	}
+
+	return memo.FromRepository(relPath, absPath, string(content)), nil
 }
 
 func (r *MemoRepository) Write(ctx context.Context, id scalar.ID, content string) error {

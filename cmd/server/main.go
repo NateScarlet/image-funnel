@@ -85,12 +85,12 @@ func main() {
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 
-	imgScanner := localfs.NewImageScanner(cfg.AbsRootDir, imageFactory)
+	imgScanner := localfs.NewImageScanner(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
 	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imgScanner, imageFilterBuilder)
 	memoScanner := localfs.NewMemoScanner(cfg.AbsRootDir)
 	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
-	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory)
+	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
 
 	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
 	sessionDTOFactory := appsession.NewDTOFactory(imageDTOFactory)
@@ -163,7 +163,7 @@ func main() {
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
+	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir, dirRepo)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

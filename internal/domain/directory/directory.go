@@ -42,11 +42,11 @@ type Directory struct {
 	relPath string
 }
 
-// FromRepository 从仓库创建目录
+// FromRepository 从仓库创建目录，根据相对路径生成 ID
 // 不要用作构建函数
-func FromRepository(id scalar.ID, relPath string) *Directory {
+func FromRepository(relPath string) *Directory {
 	return &Directory{
-		id:      id,
+		id:      encodeID(relPath),
 		relPath: relPath,
 	}
 }

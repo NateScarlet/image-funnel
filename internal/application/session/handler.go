@@ -39,29 +39,28 @@ func NewHandler(
 
 func (h *Handler) CreateSession(
 	ctx context.Context,
-	id scalar.ID,
 	directoryId scalar.ID,
 	filter *shared.ImageFilters,
 	target_keep int,
-) (err error) {
+) (sessionID scalar.ID, err error) {
 	startTime := time.Now()
 
 	defer func() {
 		if err != nil {
 			h.logger.Error("create session failed",
-				zap.Stringer("id", id),
+				zap.Stringer("id", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did create session",
-				zap.Stringer("id", id),
+				zap.Stringer("id", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
 			)
 		}
 	}()
 
-	return h.sessionService.Create(ctx, id, directoryId, filter, target_keep)
+	return h.sessionService.Create(ctx, directoryId, filter, target_keep)
 }
 
 func (h *Handler) MarkImage(

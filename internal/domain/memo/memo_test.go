@@ -99,33 +99,33 @@ hidden: true
 }
 
 func TestMemoCreation(t *testing.T) {
-	// 测试 NewMemo 是否正确封装了 ParseMemoContent 的结果
-	id := EncodeID("test.jpg.md")
+	// 测试 newMemo 是否正确封装了 ParseMemoContent 的结果
+	id := encodeID("test.jpg.md")
 	path := "/absolute/path/test.jpg.md"
 	raw := "---\nhidden: true\n---\nHello World"
 
-	m := New(id, path, raw)
+	m := newMemo(id, path, raw)
 
 	if m.ID() != id {
-		t.Errorf("NewMemo().ID() = %v, 想要 %v", m.ID(), id)
+		t.Errorf("newMemo().ID() = %v, 想要 %v", m.ID(), id)
 	}
 	if m.AbsPath() != path {
-		t.Errorf("NewMemo().AbsPath() = %q, 想要 %q", m.AbsPath(), path)
+		t.Errorf("newMemo().AbsPath() = %q, 想要 %q", m.AbsPath(), path)
 	}
 	if m.RawContent() != raw {
-		t.Errorf("NewMemo().RawContent() = %q, 想要 %q", m.RawContent(), raw)
+		t.Errorf("newMemo().RawContent() = %q, 想要 %q", m.RawContent(), raw)
 	}
 	if m.Content() != "Hello World" {
-		t.Errorf("NewMemo().Content() = %q, 想要 %q", m.Content(), "Hello World")
+		t.Errorf("newMemo().Content() = %q, 想要 %q", m.Content(), "Hello World")
 	}
 	if !m.Hidden() {
-		t.Errorf("NewMemo().Hidden() = %v, 想要 true", m.Hidden())
+		t.Errorf("newMemo().Hidden() = %v, 想要 true", m.Hidden())
 	}
 }
 
 func TestIDEncodingDecoding(t *testing.T) {
 	relPath := "subdir/image.png.md"
-	id := EncodeID(relPath)
+	id := encodeID(relPath)
 
 	decoded, err := DecodeID(id)
 	if err != nil {
@@ -155,12 +155,17 @@ func (r *mockRepo) Read(ctx context.Context, id scalar.ID) (*Memo, error) {
 	return r.memos[id], nil
 }
 
+func (r *mockRepo) ReadByRelPath(ctx context.Context, relPath string) (*Memo, error) {
+	return r.memos[encodeID(relPath)], nil
+}
+
 func (r *mockRepo) Write(ctx context.Context, id scalar.ID, content string) error {
 	if content == "" {
 		delete(r.memos, id)
 		return nil
 	}
-	r.memos[id] = New(id, id.String()+".md", content)
+	relPath, _ := DecodeID(id)
+	r.memos[id] = FromRepository(relPath, id.String()+".md", content)
 	return nil
 }
 
@@ -175,7 +180,7 @@ func TestServiceCreate(t *testing.T) {
 		t.Fatalf("创建笔记失败: %v", err)
 	}
 
-	expectedID := EncodeID("subdir/README.md")
+	expectedID := encodeID("subdir/README.md")
 	if m.ID() != expectedID {
 		t.Errorf("创建出的 Memo ID = %v, 想要 %v", m.ID(), expectedID)
 	}

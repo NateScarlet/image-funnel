@@ -27,7 +27,7 @@ func (d *DirectoryRepository) Get(ctx context.Context, id scalar.ID) (*directory
 	if err != nil {
 		return nil, err
 	}
-	return directory.FromRepository(id, path), nil
+	return directory.FromRepository(path), nil
 }
 
 // GetByRelPath implements [directory.Repository].
@@ -36,8 +36,7 @@ func (d *DirectoryRepository) GetByRelPath(ctx context.Context, relPath string) 
 	if err != nil {
 		return nil, err
 	}
-	id := directory.EncodeID(relPath)
-	return directory.FromRepository(id, relPath), nil
+	return directory.FromRepository(relPath), nil
 }
 
 var _ directory.Repository = (*DirectoryRepository)(nil)

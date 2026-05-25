@@ -9,7 +9,7 @@ import (
 
 const idPrefix = "dir:"
 
-func EncodeID(relPath string) scalar.ID {
+func encodeID(relPath string) scalar.ID {
 	return scalar.ToID(idPrefix + relPath)
 }
 

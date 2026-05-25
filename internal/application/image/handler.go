@@ -22,6 +22,7 @@ type Handler struct {
 	dtoFactory   *DTOFactory
 	logger       *zap.Logger
 	rootDir      string
+	dirRepo      directory.Repository
 }
 
 func NewHandler(
@@ -30,6 +31,7 @@ func NewHandler(
 	dtoFactory *DTOFactory,
 	logger *zap.Logger,
 	rootDir string,
+	dirRepo directory.Repository,
 ) *Handler {
 	return &Handler{
 		imageService: imageService,
@@ -37,6 +39,7 @@ func NewHandler(
 		dtoFactory:   dtoFactory,
 		logger:       logger,
 		rootDir:      rootDir,
+		dirRepo:      dirRepo,
 	}
 }
 
@@ -93,9 +96,12 @@ func (h *Handler) Image(
 	if dirRelPath == "." {
 		dirRelPath = ""
 	}
-	directoryID := directory.EncodeID(dirRelPath)
+	dir, err := h.dirRepo.GetByRelPath(ctx, dirRelPath)
+	if err != nil {
+		return nil, err
+	}
 
-	img, err := h.imageFactory.CreateFromInfo(ctx, info, absPath, directoryID)
+	img, err := h.imageFactory.CreateFromInfo(ctx, info, absPath, dir.ID())
 	if err != nil {
 		return nil, err
 	}

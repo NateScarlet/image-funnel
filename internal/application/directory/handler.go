@@ -85,13 +85,30 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 	if relPath != "." {
 		parentPath := filepath.Dir(relPath)
 		if parentPath != "." {
-			parentID = directory.EncodeID(parentPath)
+			parentDir, err := h.repo.GetByRelPath(ctx, parentPath)
+			if err != nil {
+				return nil, err
+			}
+			parentID = parentDir.ID()
 		} else {
-			parentID = directory.EncodeID(".")
+			rootDir, err := h.repo.GetByRelPath(ctx, ".")
+			if err != nil {
+				return nil, err
+			}
+			parentID = rootDir.ID()
 		}
 	}
 
 	return h.dtoFactory.New(dirInfo, parentID, relPath == "."), nil
+}
+
+// RootDirectory 查询根目录信息
+func (h *Handler) RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error) {
+	dir, err := h.repo.GetByRelPath(ctx, ".")
+	if err != nil {
+		return nil, err
+	}
+	return h.Directory(ctx, dir.ID())
 }
 
 // DirectoryStats 查询目录统计信息

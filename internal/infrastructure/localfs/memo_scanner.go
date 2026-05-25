@@ -47,8 +47,6 @@ func (s *MemoScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*memo.
 				continue
 			}
 
-			var memoID = memo.EncodeID(filepath.Join(relPath, entry.Name()))
-
 			absFilePath := filepath.Join(absPath, entry.Name())
 			contentBytes, err := os.ReadFile(absFilePath)
 			if err != nil {
@@ -58,7 +56,7 @@ func (s *MemoScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*memo.
 				continue
 			}
 
-			m := memo.New(memoID, absFilePath, string(contentBytes))
+			m := memo.FromRepository(filepath.Join(relPath, entry.Name()), absFilePath, string(contentBytes))
 			if !yield(m, nil) {
 				return
 			}

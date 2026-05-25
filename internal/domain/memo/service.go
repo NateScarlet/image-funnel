@@ -44,7 +44,7 @@ func (s *Service) Create(ctx context.Context, dirRelPath string, name string, co
 	}
 
 	// 在领域层内部自建生成 ID
-	id := EncodeID(relPath)
+	id := encodeID(relPath)
 
 	// 检查该 ID 是否已存在
 	existing, err := s.repo.Read(ctx, id)

@@ -28,14 +28,14 @@ func newTestScannerContext(t *testing.T) *testScannerContext {
 	factory := domainimage.NewFactory(newMockMetadataRepository(), nil)
 	rootDir := t.TempDir()
 	dirRepo := inmem.NewDirectoryRepository(rootDir)
-	imgScanner := NewImageScanner(rootDir, factory)
+	imgScanner := NewImageScanner(rootDir, factory, dirRepo)
 	return &testScannerContext{
 		rootDir:      rootDir,
 		imageScanner: imgScanner,
 		imageMover:   NewImageMover(rootDir, imgScanner, domainimage.NewFilterBuilder()),
 		memoScanner:  NewMemoScanner(rootDir),
 		dirScanner:   NewDirectoryScanner(rootDir, dirRepo),
-		dirAnalyzer:  NewDirectoryAnalyzer(rootDir, factory),
+		dirAnalyzer:  NewDirectoryAnalyzer(rootDir, factory, dirRepo),
 	}
 }
 

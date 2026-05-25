@@ -115,6 +115,9 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **筛选器传值**: `Build` 方法接受值类型（非指针），调用方通过 `util.UnwrapPointer` 将可空指针安全转为零值
 - **筛选逻辑集中**: 内存筛选逻辑集中在领域层 `FilterBuilder`。应用层和基础设施层禁止自行实现筛选，只能通过事件级粗筛后委托领域 `FilterBuilder` 做最终筛选
 - **ID 生成**: 新建资源的 ID 生成应由领域层（如 `domain/*/service.go` 或实体构造器）自行负责，禁止由应用层（`application`）或接口层计算并传递 ID
+- **ID 编码不导出**: 各领域的 `EncodeID` 函数统一为非导出（小写 `encodeID`），外部任何层级不得直接调用编码函数生成 ID。领域层对外仅暴露 `DecodeID` 用于翻译 ID 为路径。
+- **仓库构造权**: 领域实体的原始构造函数（如 `New`）不应导出供包外调用。外部构造入口统一为 `FromRepository` 专用方法，该方法内部调用非导出的构造函数与 `encodeID` 生成 ID。只有仓库实现有权限构造领域对象。
+- **通过仓库获取 ID**: 当外部代码需要领域实体的 ID 时，应通过仓库获取领域对象后调用 `.ID()`，不得自行编码。需要目录 ID 的组件（如 `ImageScanner`、`image.Handler`）应注入 `directory.Repository`，通过 `GetByRelPath` 获取 `*Directory` 后取其 `ID()`，而非从路径字符串自行编码。
 - **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.DecodeID` 解密翻译），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
 
 

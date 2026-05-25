@@ -39,7 +39,7 @@ func New(id scalar.ID, filename, absPath string, directoryID scalar.ID, size int
 // FromAbsPath 从绝对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
 func FromAbsPath(filename, absPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{
-		id:          EncodeID(absPath, modTime),
+		id:          encodeID(absPath, modTime),
 		filename:    filename,
 		absPath:     absPath,
 		directoryID: directoryID,
@@ -108,8 +108,8 @@ func (i *Image) Height() int {
 
 // #region ID编码与解码
 
-// EncodeID 将图片绝对路径和修改时间转换为明文格式的 ID
-func EncodeID(absPath string, modTime time.Time) scalar.ID {
+// encodeID 将图片绝对路径和修改时间转换为明文格式的 ID
+func encodeID(absPath string, modTime time.Time) scalar.ID {
 	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), absPath)
 	return scalar.ToID(str)
 }

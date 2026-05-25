@@ -19,13 +19,15 @@ import (
 type ImageScanner struct {
 	rootDir      string
 	imageFactory *domainimage.Factory
+	dirRepo      directory.Repository
 }
 
 // NewImageScanner 创建图片扫描实现实例
-func NewImageScanner(rootDir string, imageFactory *domainimage.Factory) *ImageScanner {
+func NewImageScanner(rootDir string, imageFactory *domainimage.Factory, dirRepo directory.Repository) *ImageScanner {
 	return &ImageScanner{
 		rootDir:      rootDir,
 		imageFactory: imageFactory,
+		dirRepo:      dirRepo,
 	}
 }
 
@@ -39,8 +41,13 @@ func (s *ImageScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*doma
 			return
 		}
 
-		// 计算当前目录的ID
-		directoryID := directory.EncodeID(relPath)
+		// 通过仓库获取合法的目录对象，由其生成目录 ID
+		dir, err := s.dirRepo.GetByRelPath(ctx, relPath)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		directoryID := dir.ID()
 
 		limit := runtime.NumCPU()
 
@@ -77,13 +84,15 @@ func (s *ImageScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*doma
 
 // Lookup 还原出单个图片相对路径的领域 Image 对象
 func (s *ImageScanner) Lookup(ctx context.Context, relPath string) (*domainimage.Image, error) {
-	// 计算目录ID
 	dirRelPath := filepath.Dir(relPath)
 	if dirRelPath == "." {
 		dirRelPath = ""
 	}
-	directoryID := directory.EncodeID(dirRelPath)
-	return s.imageFactory.Create(ctx, relPath, s.rootDir, directoryID)
+	dir, err := s.dirRepo.GetByRelPath(ctx, dirRelPath)
+	if err != nil {
+		return nil, err
+	}
+	return s.imageFactory.Create(ctx, relPath, s.rootDir, dir.ID())
 }
 
 var _ domainimage.Scanner = (*ImageScanner)(nil)
