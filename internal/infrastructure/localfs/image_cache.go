@@ -57,6 +57,9 @@ func (c *ImageCache) Open(ctx context.Context, key string) (appimage.File, error
 
 	file, err := os.Open(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
