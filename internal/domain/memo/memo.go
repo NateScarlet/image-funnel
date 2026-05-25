@@ -43,6 +43,11 @@ func FromRepository(relPath string, absPath string, content string) *Memo {
 	return newMemo(encodeID(relPath), relPath, absPath, content)
 }
 
+// NewEmpty 创建一个未在磁盘中持久化的空备忘实体
+func NewEmpty(relPath string, absPath string) *Memo {
+	return newMemo(encodeID(relPath), relPath, absPath, "")
+}
+
 // ParseContent 解析备忘录文本，返回是否隐藏以及剔除了 frontmatter 后的纯文本正文
 func ParseContent(raw string) (hidden bool, body string) {
 	// 统一处理换行符，以便正则或前缀匹配

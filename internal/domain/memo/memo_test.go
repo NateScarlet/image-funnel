@@ -192,3 +192,21 @@ func TestServiceCreate(t *testing.T) {
 	}
 }
 
+func TestNewEmpty(t *testing.T) {
+	relPath := "subdir/image.png.md"
+	absPath := "/absolute/path/subdir/image.png.md"
+	m := NewEmpty(relPath, absPath)
+	if m.ID() != encodeID(relPath) {
+		t.Errorf("NewEmpty().ID() = %v, 想要 %v", m.ID(), encodeID(relPath))
+	}
+	if m.RelPath() != relPath {
+		t.Errorf("NewEmpty().RelPath() = %q, 想要 %q", m.RelPath(), relPath)
+	}
+	if m.AbsPath() != absPath {
+		t.Errorf("NewEmpty().AbsPath() = %q, 想要 %q", m.AbsPath(), absPath)
+	}
+	if m.Content() != "" {
+		t.Errorf("NewEmpty().Content() = %q, 想要 %q", m.Content(), "")
+	}
+}
+

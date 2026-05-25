@@ -35,7 +35,8 @@ func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared
 	if err != nil {
 		return nil, err
 	}
-	return r.app.MemoByRelPath(ctx, relPath+".md")
+	memoPath := filepath.ToSlash(relPath) + ".md"
+	return r.app.MemoByRelPath(ctx, memoPath)
 }
 
 // Image returns ImageResolver implementation.

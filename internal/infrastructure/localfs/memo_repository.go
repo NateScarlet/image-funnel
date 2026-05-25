@@ -2,6 +2,7 @@ package localfs
 
 import (
 	"context"
+	"main/internal/apperror"
 	"main/internal/domain/memo"
 	"main/internal/util"
 	"os"
@@ -18,6 +19,23 @@ func NewMemoRepository(rootDir string) *MemoRepository {
 	}
 }
 
+// isText 检查前 1024 字节是否包含空字符以判定其是否为文本文件
+func isText(data []byte) bool {
+	if len(data) == 0 {
+		return true
+	}
+	limit := len(data)
+	if limit > 1024 {
+		limit = 1024
+	}
+	for i := 0; i < limit; i++ {
+		if data[i] == 0x00 {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *MemoRepository) Read(ctx context.Context, relPath string) (*memo.Memo, error) {
 	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
 		return nil, err
@@ -29,6 +47,10 @@ func (r *MemoRepository) Read(ctx context.Context, relPath string) (*memo.Memo, 
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	if !isText(content) {
+		return nil, apperror.New("NOT_TEXT", "file is not a valid text file", "文件不是有效的文本文件")
 	}
 
 	return memo.FromRepository(relPath, absPath, string(content)), nil
