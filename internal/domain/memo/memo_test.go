@@ -1,6 +1,8 @@
 package memo
 
 import (
+	"context"
+	"main/internal/apperror"
 	"main/internal/scalar"
 	"testing"
 )
@@ -144,3 +146,51 @@ func TestIDEncodingDecoding(t *testing.T) {
 		t.Error("DecodeID 错误前缀 应该报错但没有")
 	}
 }
+
+type mockRepo struct {
+	memos map[scalar.ID]*Memo
+}
+
+func (r *mockRepo) Read(ctx context.Context, id scalar.ID) (*Memo, error) {
+	return r.memos[id], nil
+}
+
+func (r *mockRepo) Write(ctx context.Context, id scalar.ID, content string) error {
+	if content == "" {
+		delete(r.memos, id)
+		return nil
+	}
+	r.memos[id] = New(id, id.String()+".md", content)
+	return nil
+}
+
+func TestServiceCreate(t *testing.T) {
+	repo := &mockRepo{memos: make(map[scalar.ID]*Memo)}
+	service := NewService(repo)
+	ctx := context.Background()
+
+	// 1. 测试成功创建新笔记
+	m, err := service.Create(ctx, "subdir", "README.md", "测试内容")
+	if err != nil {
+		t.Fatalf("创建笔记失败: %v", err)
+	}
+
+	expectedID := EncodeID("subdir/README.md")
+	if m.ID() != expectedID {
+		t.Errorf("创建出的 Memo ID = %v, 想要 %v", m.ID(), expectedID)
+	}
+	if m.Content() != "测试内容" {
+		t.Errorf("创建出的 Memo Content = %q, 想要 %q", m.Content(), "测试内容")
+	}
+
+	// 2. 测试试图覆盖已存在的同名笔记，应返回 ALREADY_EXISTS 错误
+	_, err = service.Create(ctx, "subdir", "README", "新内容")
+	if err == nil {
+		t.Fatal("尝试创建已存在的同名笔记，期望报错但返回了成功")
+	}
+
+	if apperror.ErrCode(err) != "ALREADY_EXISTS" {
+		t.Errorf("期望的错误码是 ALREADY_EXISTS, 实际得到: %v", err)
+	}
+}
+

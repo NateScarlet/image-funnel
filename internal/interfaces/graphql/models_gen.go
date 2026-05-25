@@ -30,6 +30,15 @@ type CommitChangesPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+type CreateMemoInput struct {
+	// 所在目录的 ID
+	DirectoryID scalar.ID `json:"directoryId"`
+	// 备忘主文件名（例如 README，若包含 .md 会自动处理）
+	Name string `json:"name"`
+	// 笔记内容
+	Content string `json:"content"`
+}
+
 // 创建新筛选会话
 type CreateSessionInput struct {
 	// 初始筛选条件，确定哪类图片进入筛选队列
@@ -145,7 +154,6 @@ type UpdateSessionInput struct {
 	// 新的目标保留数量，为null表示不修改
 	TargetKeep *int `json:"targetKeep,omitempty"`
 	// 新的筛选条件。
-	// TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
 	Filter           *shared.ImageFilters `json:"filter,omitempty"`
 	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }

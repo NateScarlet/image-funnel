@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -169,6 +168,7 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		CommitChanges       func(childComplexity int, input CommitChangesInput) int
+		CreateMemo          func(childComplexity int, input CreateMemoInput) int
 		CreateSession       func(childComplexity int, input CreateSessionInput) int
 		MarkImage           func(childComplexity int, input MarkImageInput) int
 		MoveImages          func(childComplexity int, input MoveImagesInput) int
@@ -274,6 +274,7 @@ type MemoResolver interface {
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
+	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
@@ -751,6 +752,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CommitChanges(childComplexity, args["input"].(CommitChangesInput)), true
+	case "Mutation.createMemo":
+		if e.complexity.Mutation.CreateMemo == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createMemo_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CreateMemo(childComplexity, args["input"].(CreateMemoInput)), true
 	case "Mutation.createSession":
 		if e.complexity.Mutation.CreateSession == nil {
 			break
@@ -1178,6 +1190,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCommitChangesInput,
+		ec.unmarshalInputCreateMemoInput,
 		ec.unmarshalInputCreateSessionInput,
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputImageFiltersInput,
@@ -1699,6 +1712,22 @@ type CommitChangesPayload {
 extend type Mutation {
   commitChanges(input: CommitChangesInput!): CommitChangesPayload!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/create_memo.graphql", Input: `input CreateMemoInput {
+  "所在目录的 ID"
+  directoryId: ID!
+  "备忘主文件名（例如 README，若包含 .md 会自动处理）"
+  name: String!
+  "笔记内容"
+  content: String!
+}
+
+extend type Mutation {
+  """
+  创建目录下的备忘内容。如果已存在同名备忘，则返回错误。
+  """
+  createMemo(input: CreateMemoInput!): Memo!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/create_session.graphql", Input: `"创建新筛选会话"
 input CreateSessionInput {
   "初始筛选条件，确定哪类图片进入筛选队列"
@@ -1810,7 +1839,6 @@ input UpdateSessionInput {
   targetKeep: Int
   """
   新的筛选条件。
-  TODO: 当前实现仅传递 rating 字段，id/directoryId/label/query 在更新 session 时被忽略。
   """
   filter: ImageFiltersInput
   clientMutationId: String
@@ -1824,7 +1852,8 @@ type UpdateSessionPayload {
 
 extend type Mutation {
   updateSession(input: UpdateSessionInput!): UpdateSessionPayload!
-}`, BuiltIn: false},
+}
+`, BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -1894,6 +1923,17 @@ func (ec *executionContext) field_Mutation_commitChanges_args(ctx context.Contex
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCommitChangesInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCommitChangesInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createMemo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateMemoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateMemoInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4539,6 +4579,61 @@ func (ec *executionContext) fieldContext_Mutation_commitChanges(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_commitChanges_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createMemo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createMemo,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().CreateMemo(ctx, fc.Args["input"].(CreateMemoInput))
+		},
+		nil,
+		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createMemo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Memo_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Memo_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Memo_relPath(ctx, field)
+			case "content":
+				return ec.fieldContext_Memo_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Memo_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Memo_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createMemo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8492,6 +8587,47 @@ func (ec *executionContext) unmarshalInputCommitChangesInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateMemoInput(ctx context.Context, obj any) (CreateMemoInput, error) {
+	var it CreateMemoInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"directoryId", "name", "content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context, obj any) (CreateSessionInput, error) {
 	var it CreateSessionInput
 	asMap := map[string]any{}
@@ -10120,6 +10256,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createMemo":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createMemo(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "markImage":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_markImage(ctx, field)
@@ -11313,6 +11456,11 @@ func (ec *executionContext) marshalNCommitChangesPayload2ᚖmainᚋinternalᚋin
 	return ec._CommitChangesPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNCreateMemoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateMemoInput(ctx context.Context, v any) (CreateMemoInput, error) {
+	res, err := ec.unmarshalInputCreateMemoInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateSessionInput(ctx context.Context, v any) (CreateSessionInput, error) {
 	res, err := ec.unmarshalInputCreateSessionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -11472,13 +11620,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

@@ -1,0 +1,15 @@
+input CreateMemoInput {
+  "所在目录的 ID"
+  directoryId: ID!
+  "备忘主文件名（例如 README，若包含 .md 会自动处理）"
+  name: String!
+  "笔记内容"
+  content: String!
+}
+
+extend type Mutation {
+  """
+  创建目录下的备忘内容。如果已存在同名备忘，则返回错误。
+  """
+  createMemo(input: CreateMemoInput!): Memo!
+}

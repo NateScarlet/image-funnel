@@ -14,8 +14,21 @@
         </svg>
         笔记列表 ({{ memos.length }} 个)
       </h2>
-      <!-- 显示隐藏笔记切换开关 -->
-      <ToggleSwitch v-model="showHiddenMemos" label="显示隐藏笔记" />
+      <!-- 按钮区，包含新建按钮和切换开关 -->
+      <div class="flex items-center gap-4">
+        <button
+          class="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-secondary-500/30 hover:border-secondary-500/60 bg-secondary-500/10 hover:bg-secondary-500/20 text-secondary-400 hover:text-secondary-300 transition-all duration-200 active:scale-95 cursor-pointer"
+          title="新建笔记"
+          @click="openCreateDialog"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24">
+            <path :d="mdiPlus" fill="currentColor" />
+          </svg>
+          <span>新建</span>
+        </button>
+        <!-- 显示隐藏笔记切换开关 -->
+        <ToggleSwitch v-model="showHiddenMemos" label="显示隐藏笔记" />
+      </div>
     </div>
 
     <!-- 暂无笔记状态 -->
@@ -104,6 +117,17 @@
         @close="memoDialog.close"
       />
     </memoDialog.component>
+
+    <!-- 新建笔记对话框 -->
+    <createDialog.component container-class="sm:max-w-3xl short:max-w-none">
+      <CreateMemoForm
+        ref="createDialogRef"
+        :directory-id="props.directoryId"
+        :existing-memos="memos"
+        @close="createDialog.close"
+        @saved="createDialog.close"
+      />
+    </createDialog.component>
   </section>
 </template>
 
@@ -115,7 +139,9 @@ import {
   mdiEye,
   mdiEyeOff,
   mdiChevronRight,
+  mdiPlus,
 } from "@mdi/js";
+import CreateMemoForm from "./CreateMemoForm.vue";
 import useBrowseMemos from "@/composables/useBrowseMemos";
 import { useDirectoryState } from "@/composables/useDirectoryState";
 import type {
@@ -196,5 +222,26 @@ function openImageViewerForMemo(memoItem: MemoFragment) {
     detail: { filename: memoDisplayName(memoItem) },
   });
 }
+
+// #region 新建笔记弹出框管理
+const createDialogRef =
+  useTemplateRef<InstanceType<typeof CreateMemoForm>>("createDialogRef");
+
+const createDialog = useModalDialog({
+  onDidOpen() {
+    document.body.style.overflow = "hidden";
+    nextTick(() => {
+      createDialogRef.value?.focus();
+    });
+  },
+  onWillClose() {
+    document.body.style.overflow = "";
+  },
+});
+
+function openCreateDialog() {
+  createDialog.open();
+}
+// #endregion
 // #endregion
 </script>

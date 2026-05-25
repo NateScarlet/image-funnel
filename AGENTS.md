@@ -114,6 +114,9 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **筛选器**: 每个领域实体统一使用 `FilterBuilder` struct + `Build` 方法模式（参考 `directory.FilterBuilder`），内部使用 `util.FilterBuilder` 和 `util.AddToSet` 构建筛选闭包
 - **筛选器传值**: `Build` 方法接受值类型（非指针），调用方通过 `util.UnwrapPointer` 将可空指针安全转为零值
 - **筛选逻辑集中**: 内存筛选逻辑集中在领域层 `FilterBuilder`。应用层和基础设施层禁止自行实现筛选，只能通过事件级粗筛后委托领域 `FilterBuilder` 做最终筛选
+- **ID 生成**: 新建资源的 ID 生成应由领域层（如 `domain/*/service.go` 或实体构造器）自行负责，禁止由应用层（`application`）或接口层计算并传递 ID
+- **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.DecodeID` 解密翻译），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
+
 
 ### Vue / TypeScript
 
@@ -125,6 +128,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **加载状态**: 使用样式和动画，避免文本提示导致布局抖动
 - **lodash 替代**: 使用 `es-toolkit`
 - **`useStorage`**: 用于 localStorage，键格式为 `name@randomSuffix`，在 `<script lang="ts">` 块中定义以共享状态
+- **组件复用原则**: 若新建资源表单与已有编辑表单的提交模式（如新建采用手动保存，编辑采用自动保存）或输入字段有明显差异，应创建独立的表单组件，避免过度复用引入复杂的条件分支与防御性逻辑。
 
 ### GraphQL
 
@@ -135,6 +139,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **废弃字段**: GraphQL 不允许删除字段，只能标记 `@deprecated`。如需从 DTO 移除对应字段，gqlgen 重新生成后会自动为该字段生成 resolver stub（无需手动添加 `@goField(forceResolver: true)`），在 resolver 中实现原有的计算逻辑以保持向后兼容，不可随意返回空值
 - **自动 resolver**: 当 `@goModel` 绑定的 Go 结构体缺少 schema 中的某个字段时，gqlgen 会自动生成 resolver，多此一举添加 `@goField(forceResolver: true)` 是冗余操作
 - **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
+- **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 
 ### 通用
 

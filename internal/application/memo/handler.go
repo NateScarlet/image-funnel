@@ -3,6 +3,7 @@ package memo
 import (
 	"context"
 	"iter"
+	"main/internal/domain/directory"
 	"main/internal/domain/memo"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -37,6 +38,20 @@ func (h *Handler) UpdateMemo(ctx context.Context, id scalar.ID, content string) 
 	// 将更新逻辑及所需依赖提取到 domain/memo/service.go 执行
 	return h.service.Save(ctx, id, content)
 }
+
+// CreateMemo 创建新备忘录文件，若已存在则返回 ALREADY_EXISTS 错误。
+func (h *Handler) CreateMemo(ctx context.Context, directoryID scalar.ID, name string, content string) (*shared.MemoDTO, error) {
+	dirRelPath, err := directory.DecodeID(directoryID)
+	if err != nil {
+		return nil, err
+	}
+	m, err := h.service.Create(ctx, dirRelPath, name, content)
+	if err != nil {
+		return nil, err
+	}
+	return h.dtoFactory.New(m), nil
+}
+
 
 // Memo 获取备忘录内容
 func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, error) {
