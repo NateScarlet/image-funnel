@@ -14,6 +14,7 @@ import (
 	"main/internal/shared"
 	"main/internal/util"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -289,33 +290,114 @@ func (h *Handler) Images(
 	// 从 GraphQL 输入转换为通用的分页选项
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
-	// 定义流式扫描与过滤序列
-	filteredSeq := func(yield func(*shared.ImageDTO, error) bool) {
-		for img, scanErr := range h.imgScanner.Scan(ctx, relPath) {
-			if scanErr != nil {
-				if !yield(nil, scanErr) {
-					return
-				}
-				continue
-			}
-			if !imgFilter(img) {
-				continue
-			}
-			dto, factoryErr := h.imageDTOFactory.New(img)
-			if factoryErr != nil {
-				if !yield(nil, factoryErr) {
-					return
-				}
-				continue
-			}
-			if !yield(dto, nil) {
-				return
-			}
+	// 使用 ByDirection 解析分页选项
+	dir, cursorStr, limit, err := pagination.ByDirection(options, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var cursorTime time.Time
+	if cursorStr != "" {
+		cursorTime, err = pagination.TimeFromCursor(cursorStr)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	// 利用 pagination 工具包完成游标分页截取与 PageInfo 计算
-	err = pagination.ByIndexE(filteredSeq, buf, options...)
+	// 收集并过滤图片
+	var items []*shared.ImageDTO
+	for img, scanErr := range h.imgScanner.Scan(ctx, relPath) {
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		if !imgFilter(img) {
+			continue
+		}
+		dto, factoryErr := h.imageDTOFactory.New(img)
+		if factoryErr != nil {
+			return nil, factoryErr
+		}
+		items = append(items, dto)
+	}
+
+	// 按照游标时间过滤图片（降序时保留更旧的图片，升序时保留更新的图片）
+	if cursorStr != "" {
+		var filtered []*shared.ImageDTO
+		for _, item := range items {
+			if dir == pagination.ODDescend {
+				if item.ModTime.Before(cursorTime) {
+					filtered = append(filtered, item)
+				}
+			} else {
+				if item.ModTime.After(cursorTime) {
+					filtered = append(filtered, item)
+				}
+			}
+		}
+		items = filtered
+	}
+
+	// 根据排序方向对图片列表进行稳定排序
+	slices.SortFunc(items, func(a, b *shared.ImageDTO) int {
+		if dir == pagination.ODDescend {
+			if a.ModTime.After(b.ModTime) {
+				return -1
+			}
+			if a.ModTime.Before(b.ModTime) {
+				return 1
+			}
+			aStr := a.ID.String()
+			bStr := b.ID.String()
+			if aStr > bStr {
+				return -1
+			}
+			if aStr < bStr {
+				return 1
+			}
+			return 0
+		} else {
+			if a.ModTime.Before(b.ModTime) {
+				return -1
+			}
+			if a.ModTime.After(b.ModTime) {
+				return 1
+			}
+			aStr := a.ID.String()
+			bStr := b.ID.String()
+			if aStr < bStr {
+				return -1
+			}
+			if aStr > bStr {
+				return 1
+			}
+			return 0
+		}
+	})
+
+	// 使用 ReverseWriter 自动处理 ODAscend 时的反向写入和反向 pageInfo
+	var writer pagination.Writer[*shared.ImageDTO] = buf
+	if dir == pagination.ODAscend {
+		writer = pagination.NewReverseWriter[*shared.ImageDTO](buf)
+	}
+
+	// 裁剪并写入
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+
+	writer.WriteHasNextPage(hasMore)
+	writer.WriteHasPreviousPage(cursorStr != "")
+
+	for _, item := range items {
+		cursor := pagination.TimeToCursor(item.ModTime)
+		err = writer.Write(item, cursor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = writer.Close()
 	if err != nil {
 		return nil, err
 	}

@@ -51,6 +51,14 @@ export default function useBrowseImages(
     onDeleted,
   } = useLiveConnection(() => imageConnection.nodes.value, {
     identity: (i) => i.relPath,
+    compare: (a, b) => {
+      const aTime = new Date(a.modTime).getTime();
+      const bTime = new Date(b.modTime).getTime();
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return b.id.localeCompare(a.id);
+    },
   });
 
   // 订阅图片的新增与修改事件
