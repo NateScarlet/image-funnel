@@ -7,6 +7,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/application/session"
+	"main/internal/domain/image"
 	dsession "main/internal/domain/session"
 	"main/internal/infrastructure/inmem"
 	"main/internal/pubsub"
@@ -50,6 +51,7 @@ func TestSubscribeSession(t *testing.T) {
 		&shared.ImageFilters{},
 		10,
 		nil,
+		image.NewFilterBuilder(),
 	)
 	// 先注册到 repo，再发布 ID
 	release, err := sessionRepo.Create(sess)

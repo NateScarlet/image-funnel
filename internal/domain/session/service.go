@@ -24,8 +24,9 @@ type Service struct {
 	eventBus     EventBus
 	logger       *zap.Logger
 	// 只发布 ID，订阅者需要自己 Acquire 后读取，避免跨 goroutine 持有 *Session 指针导致并发 map 读写
-	sessionSaved pubsub.Topic[scalar.ID]
-	rootDir      string
+	sessionSaved       pubsub.Topic[scalar.ID]
+	rootDir            string
+	imageFilterBuilder *image.FilterBuilder
 }
 
 func NewService(
@@ -36,15 +37,17 @@ func NewService(
 	logger *zap.Logger,
 	sessionSaved pubsub.Topic[scalar.ID],
 	rootDir string,
+	imageFilterBuilder *image.FilterBuilder,
 ) (*Service, func()) {
 	s := &Service{
-		sessionRepo:  sessionRepo,
-		metadataRepo: metadataRepo,
-		imageScanner: imageScanner,
-		eventBus:     eventBus,
-		logger:       logger,
-		sessionSaved: sessionSaved,
-		rootDir:      rootDir,
+		sessionRepo:        sessionRepo,
+		metadataRepo:       metadataRepo,
+		imageScanner:       imageScanner,
+		eventBus:           eventBus,
+		logger:             logger,
+		sessionSaved:       sessionSaved,
+		rootDir:            rootDir,
+		imageFilterBuilder: imageFilterBuilder,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

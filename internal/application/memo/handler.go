@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/memo"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"strings"
 )
 
@@ -14,18 +15,20 @@ type EventBus interface {
 }
 
 type Handler struct {
-	repo       memo.Repository
-	service    *memo.Service
-	ebus       EventBus
-	dtoFactory *DTOFactory
+	repo          memo.Repository
+	service       *memo.Service
+	ebus          EventBus
+	dtoFactory    *DTOFactory
+	filterBuilder *memo.FilterBuilder
 }
 
-func NewHandler(repo memo.Repository, service *memo.Service, ebus EventBus, dtoFactory *DTOFactory) *Handler {
+func NewHandler(repo memo.Repository, service *memo.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
 	return &Handler{
-		repo:       repo,
-		service:    service,
-		ebus:       ebus,
-		dtoFactory: dtoFactory,
+		repo:          repo,
+		service:       service,
+		ebus:          ebus,
+		dtoFactory:    dtoFactory,
+		filterBuilder: filterBuilder,
 	}
 }
 
@@ -85,23 +88,18 @@ func (h *Handler) MemoUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shar
 // MemoSaved 订阅备忘录改变（新接口，支持目录/ID/是否隐藏等条件灵活过滤）
 func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) iter.Seq2[*shared.MemoDTO, error] {
 	return func(yield func(*shared.MemoDTO, error) bool) {
-		var allowedDirectoryIDs map[scalar.ID]bool
-		var allowedIDs map[scalar.ID]bool
-
+		var filters shared.MemoFilters
 		if filter != nil {
-			if len(filter.DirectoryID) > 0 {
-				allowedDirectoryIDs = make(map[scalar.ID]bool)
-				for _, id := range filter.DirectoryID {
-					allowedDirectoryIDs[id] = true
-				}
-			}
-			if len(filter.ID) > 0 {
-				allowedIDs = make(map[scalar.ID]bool)
-				for _, id := range filter.ID {
-					allowedIDs[id] = true
-				}
-			}
+			filters = *filter
 		}
+
+		// 事件级目录粗筛
+		var allowedDirectoryIDs util.Set[scalar.ID]
+		if len(filters.DirectoryID) > 0 {
+			allowedDirectoryIDs = util.AddToSet(nil, filters.DirectoryID...)
+		}
+
+		memoFilter := h.filterBuilder.Build(filters)
 
 		for event, err := range h.ebus.SubscribeFileChanged(ctx) {
 			if err != nil {
@@ -111,26 +109,17 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			// 仅关心以 .md 结尾的文件变更
 			if !strings.HasSuffix(strings.ToLower(event.RelPath), ".md") {
 				continue
 			}
 
-			// 过滤目录 ID
-			if allowedDirectoryIDs != nil && !allowedDirectoryIDs[event.DirectoryID] {
+			if allowedDirectoryIDs != nil && !allowedDirectoryIDs.Has(event.DirectoryID) {
 				continue
 			}
 
-			// 推导 Memo ID
 			derivedID := memo.EncodeID(event.RelPath)
 
-			// 过滤备忘录 ID
-			if allowedIDs != nil && !allowedIDs[derivedID] {
-				continue
-			}
-
-			// 读取备忘录最新内容（删除事件读取会得到空 DTO，完全匹配语义）
-			m, err := h.Memo(ctx, derivedID)
+			m, err := h.repo.Read(ctx, derivedID)
 			if err != nil {
 				if !yield(nil, err) {
 					return
@@ -138,15 +127,25 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 				continue
 			}
 
-			// 过滤是否隐藏
-			if filter != nil && filter.Hidden != nil {
-				if *filter.Hidden != m.Hidden {
-					continue
-				}
+			if m != nil && !memoFilter(m) {
+				continue
 			}
 
-			if !yield(m, nil) {
-				return
+			if m != nil {
+				if !yield(h.dtoFactory.New(m), nil) {
+					return
+				}
+			} else {
+				dto, err := h.dtoFactory.NewEmpty(derivedID)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				if !yield(dto, nil) {
+					return
+				}
 			}
 		}
 	}

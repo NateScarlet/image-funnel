@@ -4,6 +4,7 @@ import (
 	"context"
 	"main/internal/domain/image"
 	"main/internal/shared"
+	"main/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		changed := false
 		if img != nil {
 			// 创建或更新
-			filterFunc := image.BuildImageFilter(sess.Filter())
+			filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(sess.Filter()))
 			changed = sess.UpdateImage(img, filterFunc(img))
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）

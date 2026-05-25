@@ -32,7 +32,7 @@ func newTestScannerContext(t *testing.T) *testScannerContext {
 	return &testScannerContext{
 		rootDir:      rootDir,
 		imageScanner: imgScanner,
-		imageMover:   NewImageMover(rootDir, imgScanner),
+		imageMover:   NewImageMover(rootDir, imgScanner, domainimage.NewFilterBuilder()),
 		memoScanner:  NewMemoScanner(rootDir),
 		dirScanner:   NewDirectoryScanner(rootDir, dirRepo),
 		dirAnalyzer:  NewDirectoryAnalyzer(rootDir, factory),

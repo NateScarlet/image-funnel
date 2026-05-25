@@ -111,6 +111,9 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **测试**: 新增功能时添加对应的单元测试，测试文件名与逻辑文件对应
 - **Context**: 使用 `context.Context` 传递请求上下文
 - **类型命名**：不要在命名中重复包名，除名称正好和包名相同
+- **筛选器**: 每个领域实体统一使用 `FilterBuilder` struct + `Build` 方法模式（参考 `directory.FilterBuilder`），内部使用 `util.FilterBuilder` 和 `util.AddToSet` 构建筛选闭包
+- **筛选器传值**: `Build` 方法接受值类型（非指针），调用方通过 `util.UnwrapPointer` 将可空指针安全转为零值
+- **筛选逻辑集中**: 内存筛选逻辑集中在领域层 `FilterBuilder`。应用层和基础设施层禁止自行实现筛选，只能通过事件级粗筛后委托领域 `FilterBuilder` 做最终筛选
 
 ### Vue / TypeScript
 

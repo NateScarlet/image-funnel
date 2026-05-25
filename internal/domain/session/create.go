@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // Create 初始化一个新的会话
@@ -16,7 +17,7 @@ func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.I
 		return err
 	}
 
-	filterFunc := image.BuildImageFilter(filter)
+	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 	var filteredImages []*image.Image
 	for img, err := range s.imageScanner.Scan(ctx, directory) {
 		if err != nil {
@@ -27,7 +28,7 @@ func (s *Service) Create(ctx context.Context, id scalar.ID, directoryID scalar.I
 		}
 	}
 
-	sess := New(id, directoryID, filter, targetKeep, filteredImages)
+	sess := New(id, directoryID, filter, targetKeep, filteredImages, s.imageFilterBuilder)
 	release, err := s.sessionRepo.Create(sess)
 	if err != nil {
 		return err

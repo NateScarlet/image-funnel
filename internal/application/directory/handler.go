@@ -12,6 +12,7 @@ import (
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"path/filepath"
 	"time"
 
@@ -20,19 +21,21 @@ import (
 
 // Handler 目录应用层处理器
 type Handler struct {
-	dirScanner      directory.Scanner
-	dirAnalyzer     directory.Analyzer
-	imgScanner      image.Scanner
-	imgMover        image.Mover
-	memoScanner     memo.Scanner
-	eventBus        appsession.EventBus
-	dtoFactory      *DTOFactory
-	imageDTOFactory *appimage.DTOFactory
-	memoDTOFactory  *appmemo.DTOFactory
+	dirScanner         directory.Scanner
+	dirAnalyzer        directory.Analyzer
+	imgScanner         image.Scanner
+	imgMover           image.Mover
+	memoScanner        memo.Scanner
+	eventBus           appsession.EventBus
+	dtoFactory         *DTOFactory
+	imageDTOFactory    *appimage.DTOFactory
+	memoDTOFactory     *appmemo.DTOFactory
 
-	filterBuilder *directory.FilterBuilder
-	repo          directory.Repository
-	logger        *zap.Logger
+	filterBuilder     *directory.FilterBuilder
+	imageFilterBuilder *image.FilterBuilder
+	memoFilterBuilder  *memo.FilterBuilder
+	repo              directory.Repository
+	logger            *zap.Logger
 }
 
 // NewHandler 创建目录处理器
@@ -47,21 +50,25 @@ func NewHandler(
 	memoDTOFactory *appmemo.DTOFactory,
 	dtoFactory *DTOFactory,
 	filterBuilder *directory.FilterBuilder,
+	imageFilterBuilder *image.FilterBuilder,
+	memoFilterBuilder *memo.FilterBuilder,
 	repo directory.Repository,
 	logger *zap.Logger,
 ) *Handler {
 	return &Handler{
-		dirScanner:      dirScanner,
-		dirAnalyzer:     dirAnalyzer,
-		imgScanner:      imgScanner,
-		imgMover:        imgMover,
-		memoScanner:     memoScanner,
-		eventBus:        eventBus,
-		dtoFactory:      dtoFactory,
-		imageDTOFactory: imageDTOFactory,
-		filterBuilder:   filterBuilder,
-		repo:            repo,
-		logger:          logger,
+		dirScanner:         dirScanner,
+		dirAnalyzer:        dirAnalyzer,
+		imgScanner:         imgScanner,
+		imgMover:           imgMover,
+		memoScanner:        memoScanner,
+		eventBus:           eventBus,
+		dtoFactory:         dtoFactory,
+		imageDTOFactory:    imageDTOFactory,
+		filterBuilder:      filterBuilder,
+		imageFilterBuilder: imageFilterBuilder,
+		memoFilterBuilder:  memoFilterBuilder,
+		repo:               repo,
+		logger:             logger,
 	}
 }
 
@@ -150,7 +157,7 @@ func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.Directory
 // 文件创建或写入时，扫描该路径并返回完整 ImageDTO
 func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) iter.Seq2[*shared.ImageDTO, error] {
 	return func(yield func(*shared.ImageDTO, error) bool) {
-		imageFilter := image.BuildImageFilter(filter)
+		imageFilter := h.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
 			if !func() bool {
 				if err != nil {
@@ -184,24 +191,11 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 // 文件消失时，返回原来的图片 ID 以便前端从列表中移除
 func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters) iter.Seq2[scalar.ID, error] {
 	return func(yield func(scalar.ID, error) bool) {
-		// 对于删除事件，我们只应用目录ID和ID筛选，因为图片已经被删除
-		// 所以我们不能构建完整的 Image 对象来应用其他筛选
-		var allowedDirectoryIDs map[scalar.ID]bool
-		var allowedIDs map[scalar.ID]bool
-		if filter != nil {
-			if len(filter.DirectoryID) > 0 {
-				allowedDirectoryIDs = make(map[scalar.ID]bool)
-				for _, id := range filter.DirectoryID {
-					allowedDirectoryIDs[id] = true
-				}
-			}
-			if len(filter.ID) > 0 {
-				allowedIDs = make(map[scalar.ID]bool)
-				for _, id := range filter.ID {
-					allowedIDs[id] = true
-				}
-			}
+		var allowedDirectoryIDs util.Set[scalar.ID]
+		if filter != nil && len(filter.DirectoryID) > 0 {
+			allowedDirectoryIDs = util.AddToSet(nil, filter.DirectoryID...)
 		}
+		imageFilter := h.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 
 		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
 			if !func() bool {
@@ -212,19 +206,16 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 				if event.Action != shared.FileActionRemove && event.Action != shared.FileActionRename {
 					return true
 				}
-				// 应用目录ID筛选
-				if allowedDirectoryIDs != nil && !allowedDirectoryIDs[event.DirectoryID] {
+				// 事件级目录粗筛
+				if allowedDirectoryIDs != nil && !allowedDirectoryIDs.Has(event.DirectoryID) {
 					return true
 				}
 				// 尝试查找图片以获取其完整ID（虽然文件已删除，但可能还在缓存中）
 				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
 				if err != nil || img == nil {
-					// 文件已删除，无法查找，尝试从路径重建ID
-					// 但我们没有modtime，所以无法准确重建
 					return true
 				}
-				// 应用ID筛选
-				if allowedIDs != nil && !allowedIDs[img.ID()] {
+				if !imageFilter(img) {
 					return true
 				}
 				return yield(img.ID(), nil)
@@ -259,7 +250,7 @@ func (h *Handler) Images(
 	}
 
 	// 构造星级、颜色标签、文本关键字等多维度图片过滤器
-	imgFilter := image.BuildImageFilter(&filterBy)
+	imgFilter := h.imageFilterBuilder.Build(filterBy)
 
 	// 创建游标连接缓存，用于处理分页边界与数据打包
 	builder := pagination.NewConnectionBufferBuilder[*shared.ImageDTO, *shared.ImageEdgeDTO, *shared.ImageConnectionDTO]()
@@ -388,6 +379,7 @@ func (h *Handler) Memos(
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
 	filteredSeq := func(yield func(*shared.MemoDTO, error) bool) {
+		memoFilter := h.memoFilterBuilder.Build(filterBy)
 		for m, scanErr := range h.memoScanner.Scan(ctx, relPath) {
 			if scanErr != nil {
 				if !yield(nil, scanErr) {
@@ -395,27 +387,10 @@ func (h *Handler) Memos(
 				}
 				continue
 			}
+			if !memoFilter(m) {
+				continue
+			}
 			dto := h.memoDTOFactory.New(m)
-			// TODO: 应该用filterBuilder
-			// 应用过滤条件
-			if len(filterBy.ID) > 0 {
-				found := false
-				for _, filterId := range filterBy.ID {
-					if filterId == dto.ID {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
-				}
-			}
-			if filterBy.Hidden != nil {
-				if *filterBy.Hidden != dto.Hidden {
-					continue
-				}
-			}
-
 			if !yield(dto, nil) {
 				return
 			}

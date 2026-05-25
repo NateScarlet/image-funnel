@@ -14,15 +14,17 @@ import (
 
 // ImageMover 专职处理图片及其同名或带有额外扩展名的配套伴随文件物理移动操作
 type ImageMover struct {
-	rootDir      string
-	imageScanner domainimage.Scanner
+	rootDir           string
+	imageScanner      domainimage.Scanner
+	imageFilterBuilder *domainimage.FilterBuilder
 }
 
 // NewImageMover 创建图片移动实现实例
-func NewImageMover(rootDir string, imageScanner domainimage.Scanner) *ImageMover {
+func NewImageMover(rootDir string, imageScanner domainimage.Scanner, imageFilterBuilder *domainimage.FilterBuilder) *ImageMover {
 	return &ImageMover{
-		rootDir:      rootDir,
-		imageScanner: imageScanner,
+		rootDir:           rootDir,
+		imageScanner:      imageScanner,
+		imageFilterBuilder: imageFilterBuilder,
 	}
 }
 
@@ -45,7 +47,7 @@ func (s *ImageMover) Move(
 	}
 
 	// 构造过滤器以对图片进行多维度条件筛选
-	imgFilter := domainimage.BuildImageFilter(&filterBy)
+	imgFilter := s.imageFilterBuilder.Build(filterBy)
 
 	// 扫描当前目录并收集满足过滤条件的所有图片的绝对路径
 	var matchingPaths []string

@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"main/internal/domain/image"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -20,7 +21,8 @@ func TestService_LastSession(t *testing.T) {
 	topic, topicCleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer topicCleanup()
 
-	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, "")
+	imageFb := image.NewFilterBuilder()
+	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fakeEventBus, zap.NewNop(), topic, "", imageFb)
 	defer cleanupService()
 
 	dirID := scalar.ToID("dir-1")
@@ -32,7 +34,7 @@ func TestService_LastSession(t *testing.T) {
 	assert.Nil(t, release)
 
 	// 2. 创建一个会话
-	sess1 := New(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 5, nil)
+	sess1 := New(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 5, nil, imageFb)
 	releaseCreate1, err := fakeRepo.Create(sess1)
 	require.NoError(t, err)
 	releaseCreate1()

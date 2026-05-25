@@ -5,6 +5,7 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func TestBuildImageFilter_WithRating(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 0, 1, 2, 3, 4})
 
 	filter := &shared.ImageFilters{Rating: []int{0, 1}}
-	filterFunc := BuildImageFilter(filter)
+	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
 	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 4, len(filtered), "Should filter to 4 images with rating 0 or 1")
@@ -47,7 +48,8 @@ func TestBuildImageFilter_WithRating(t *testing.T) {
 func TestBuildImageFilter_WithNilFilter(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
 
-	filterFunc := BuildImageFilter(nil)
+	var filter *shared.ImageFilters
+	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
 	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, len(images), len(filtered), "Should not filter with nil filter")
@@ -57,7 +59,7 @@ func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
 
 	filter := &shared.ImageFilters{Rating: []int{}}
-	filterFunc := BuildImageFilter(filter)
+	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
 	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 6, len(filtered), "Should include all images when rating is empty")
@@ -67,7 +69,7 @@ func TestBuildImageFilter_WithSingleRating(t *testing.T) {
 	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5, 2, 2})
 
 	filter := &shared.ImageFilters{Rating: []int{2}}
-	filterFunc := BuildImageFilter(filter)
+	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
 	filtered := filterImages(images, filterFunc)
 
 	assert.Equal(t, 3, len(filtered), "Should filter to 3 images with rating 2")

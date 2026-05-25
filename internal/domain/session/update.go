@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"sort"
 	"time"
 )
@@ -147,7 +148,7 @@ func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOpt
 			return err
 		}
 
-		filterFunc := image.BuildImageFilter(opts.filter)
+		filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(opts.filter))
 		var filteredImages []*image.Image
 		for img, err := range s.imageScanner.Scan(ctx, directory) {
 			if err != nil {

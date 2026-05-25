@@ -119,7 +119,7 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2, img3}
 
-	sess := New(scalar.ToID("sessSort"), scalar.ToID("dir1"), nil, 1, images)
+	sess := New(scalar.ToID("sessSort"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
 
 	mark := func(id scalar.ID, durationMs int64) {
 		opts := []shared.MarkImageOption{}
@@ -146,7 +146,7 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
 	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1}
-	sess := New(scalar.ToID("sessAcc"), scalar.ToID("dir1"), nil, 10, images)
+	sess := New(scalar.ToID("sessAcc"), scalar.ToID("dir1"), nil, 10, images, image.NewFilterBuilder())
 
 	// 1. Mark with 1000ms
 	d1 := scalar.NewDuration(scalar.DurationWithMilliseconds(1000))
@@ -174,7 +174,7 @@ func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
 	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img3, img2}
 
-	sess := New(scalar.ToID("sessAvoid"), scalar.ToID("dir1"), nil, 1, images)
+	sess := New(scalar.ToID("sessAvoid"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
 
 	mark := func(id scalar.ID, durationMs int64) {
 		d := scalar.NewDuration(scalar.DurationWithMilliseconds(durationMs))
@@ -201,7 +201,7 @@ func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) 
 	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2}
 
-	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images)
+	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
 
 	// 标记 img1 KEEP（推进到 currentIdx=1）
 	require.NoError(t, sess.MarkImage(scalar.ToID("img1"), shared.ImageActionKeep))

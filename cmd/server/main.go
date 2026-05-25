@@ -85,7 +85,8 @@ func main() {
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 
 	imgScanner := localfs.NewImageScanner(cfg.AbsRootDir, imageFactory)
-	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imgScanner)
+	imageFilterBuilder := image.NewFilterBuilder()
+	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imgScanner, imageFilterBuilder)
 	memoScanner := localfs.NewMemoScanner(cfg.AbsRootDir)
 	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory)
@@ -128,7 +129,7 @@ func main() {
 	_, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
@@ -142,6 +143,7 @@ func main() {
 
 	sessionHandler := appsession.NewHandler(sessionService, eventBus, sessionDTOFactory, imageDTOFactory, logger)
 	memoDTOFactory := appmemo.NewDTOFactory(cfg.AbsRootDir)
+	memoFilterBuilder := memo.NewFilterBuilder()
 	directoryHandler := appdirectory.NewHandler(
 		dirScannerImpl,
 		dirAnalyzer,
@@ -153,11 +155,13 @@ func main() {
 		memoDTOFactory,
 		directoryDTOFactory,
 		filterBuilder,
+		imageFilterBuilder,
+		memoFilterBuilder,
 		dirRepo,
 		logger,
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), eventBus, memoDTOFactory)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), eventBus, memoDTOFactory, memoFilterBuilder)
 	imageHandler := appimage.NewHandler(imageService, imageFactory, imageDTOFactory, logger, cfg.AbsRootDir)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)

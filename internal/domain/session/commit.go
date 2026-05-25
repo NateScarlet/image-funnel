@@ -8,6 +8,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/shared"
+	"main/internal/util"
 	"path/filepath"
 	"time"
 )
@@ -24,7 +25,7 @@ func (s *Session) CanCommit() bool {
 }
 
 func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
-	filter := image.BuildImageFilter(s.filter)
+	filter := s.imageFilterBuilder.Build(util.UnwrapPointer(s.filter))
 	return func(yield func(*image.Image, shared.ImageAction) bool) {
 		for _, img := range s.images {
 			// 如果图片符合 filter，或者它在本会话中已经被 commit 过，则允许提交

@@ -3,6 +3,7 @@ package session
 import (
 	"main/internal/domain/image"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // Stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
@@ -11,7 +12,7 @@ func (s *Session) Stats() *shared.StatsDTO {
 	stats.TotalCount = len(s.queue)
 	stats.CurrentRoundRemaining = len(s.queue) - s.currentIdx
 
-	filterFunc := image.BuildImageFilter(s.filter)
+	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(s.filter))
 
 	for id, action := range s.actions {
 		// 查找对应的图片对象

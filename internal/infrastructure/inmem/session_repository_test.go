@@ -24,7 +24,7 @@ func TestSave(t *testing.T) {
 	repo := NewSessionRepository()
 
 	img := image.New(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
-	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
+	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img}, image.NewFilterBuilder())
 	release, err := repo.Create(sess)
 	require.NoError(t, err)
 	release() // 先释放 Create 的锁
@@ -38,7 +38,7 @@ func TestAcquire(t *testing.T) {
 	repo := NewSessionRepository()
 
 	img := image.New(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
-	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img})
+	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img}, image.NewFilterBuilder())
 	release1, err := repo.Create(sess)
 	require.NoError(t, err)
 	release1() // 先释放 Create 的锁
@@ -75,7 +75,7 @@ func TestCleanup_SyncDirIndex(t *testing.T) {
 	// 创建会话辅助函数
 	createSession := func(id string) scalar.ID {
 		sid := scalar.ToID(id)
-		sess := session.New(sid, dirID, &shared.ImageFilters{}, 0, []*image.Image{})
+		sess := session.New(sid, dirID, &shared.ImageFilters{}, 0, []*image.Image{}, image.NewFilterBuilder())
 		release, err := repo.Create(sess)
 		require.NoError(t, err)
 		release()
@@ -126,7 +126,7 @@ func TestLastSession(t *testing.T) {
 	assert.Nil(t, release)
 
 	// 2. 创建第一个会话
-	sess1 := session.New(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 0, []*image.Image{})
+	sess1 := session.New(scalar.ToID("s1"), dirID, &shared.ImageFilters{}, 0, []*image.Image{}, image.NewFilterBuilder())
 	release1, err := repo.Create(sess1)
 	require.NoError(t, err)
 	release1()
@@ -135,7 +135,7 @@ func TestLastSession(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// 3. 创建第二个会话
-	sess2 := session.New(scalar.ToID("s2"), dirID, &shared.ImageFilters{}, 0, []*image.Image{})
+	sess2 := session.New(scalar.ToID("s2"), dirID, &shared.ImageFilters{}, 0, []*image.Image{}, image.NewFilterBuilder())
 	release2, err := repo.Create(sess2)
 	require.NoError(t, err)
 	release2()

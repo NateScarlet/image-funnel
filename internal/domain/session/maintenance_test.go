@@ -5,6 +5,7 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"testing"
 	"time"
 
@@ -67,7 +68,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 		1080,
 	)
 
-	session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 5, []*image.Image{img})
+	session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 5, []*image.Image{img}, image.NewFilterBuilder())
 
 	// 用户操作：标记为 Keep
 	require.NoError(t, session.MarkImage(img.ID(), shared.ImageActionKeep))
@@ -88,7 +89,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	)
 
 	// rating=5 不符合 filter(rating=0)，matchesFilter=false
-	filterFunc := image.BuildImageFilter(filter)
+	filterFunc := session.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 	changed := session.UpdateImage(updatedImg, filterFunc(updatedImg))
 
 	// 因为图片已有 action，不应被移除

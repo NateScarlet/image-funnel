@@ -73,7 +73,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 func setupTestSession(_ *testing.T, imageCount int, targetKeep int) *Session {
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	images := createTestImages(imageCount)
-	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images)
+	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images, image.NewFilterBuilder())
 	return session
 }
 

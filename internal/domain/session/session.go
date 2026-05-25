@@ -30,13 +30,14 @@ type Session struct {
 	indexByAbsPath map[string]int    // AbsPath -> images索引映射（最新版本）
 	queue          []int             // 待处理队列（存储 images 索引）
 
-	currentIdx int                              // 当前处理的图片在队列中的索引
-	undoStack  []func()                         // 撤销操作栈
-	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
-	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
+	currentIdx          int                              // 当前处理的图片在队列中的索引
+	undoStack           []func()                         // 撤销操作栈
+	actions             map[scalar.ID]shared.ImageAction // 图片操作映射
+	durations           map[scalar.ID]scalar.Duration    // 图片操作耗时映射
 
-	currentRound int                // 当前筛选轮次
-	committed    map[scalar.ID]bool // 记录已提交过的图片 ID
+	currentRound        int                // 当前筛选轮次
+	committed           map[scalar.ID]bool // 记录已提交过的图片 ID
+	imageFilterBuilder  *image.FilterBuilder
 }
 
 // New 创建一个新的图片筛选会话
@@ -47,7 +48,7 @@ type Session struct {
 // - filter: 图片过滤器
 // - targetKeep: 目标保留图片数量
 // - images: 待处理的图片集合
-func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image) *Session {
+func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image, imageFilterBuilder *image.FilterBuilder) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	indexByID := make(map[scalar.ID]int, len(images))
 	indexByAbsPath := make(map[string]int, len(images))
@@ -60,22 +61,23 @@ func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targe
 	}
 
 	return &Session{
-		id:             id,
-		directoryID:    directoryID,
-		filter:         filter,
-		targetKeep:     targetKeep,
-		createdAt:      time.Now(),
-		updatedAt:      time.Now(),
-		images:         images,
-		indexByID:      indexByID,
-		indexByAbsPath: indexByAbsPath,
-		queue:          queue,
-		currentIdx:     0,
-		undoStack:      make([]func(), 0),
-		actions:        actions,
-		durations:      make(map[scalar.ID]scalar.Duration),
-		currentRound:   0,
-		committed:      make(map[scalar.ID]bool),
+		id:                  id,
+		directoryID:         directoryID,
+		filter:              filter,
+		targetKeep:          targetKeep,
+		createdAt:           time.Now(),
+		updatedAt:           time.Now(),
+		images:              images,
+		indexByID:           indexByID,
+		indexByAbsPath:      indexByAbsPath,
+		queue:               queue,
+		currentIdx:          0,
+		undoStack:           make([]func(), 0),
+		actions:             actions,
+		durations:           make(map[scalar.ID]scalar.Duration),
+		currentRound:        0,
+		committed:           make(map[scalar.ID]bool),
+		imageFilterBuilder:  imageFilterBuilder,
 	}
 }
 
