@@ -152,6 +152,15 @@ function globalKeydownHandler(e: KeyboardEvent) {
           e.code === `Numpad${combination.key}`;
       }
 
+      // 新增：针对物理键码的前缀精确匹配（支持 digit0-digit9, numpad0-numpad9 显式指定）
+      if (
+        !matchesKey &&
+        (combination.key.toLowerCase().startsWith("numpad") ||
+          combination.key.toLowerCase().startsWith("digit"))
+      ) {
+        matchesKey = e.code.toLowerCase() === combination.key.toLowerCase();
+      }
+
       if (
         matchesCtrl &&
         matchesShift &&
@@ -239,12 +248,18 @@ export default function useHotkey(
       if (comb.alt) parts.push("Alt");
       if (comb.meta) parts.push("Meta");
 
-      const keyName = comb.key;
-      if (keyName.toLowerCase() === "arrowup") parts.push("↑");
-      else if (keyName.toLowerCase() === "arrowdown") parts.push("↓");
-      else if (keyName.toLowerCase() === "arrowleft") parts.push("←");
-      else if (keyName.toLowerCase() === "arrowright") parts.push("→");
-      else parts.push(keyName.toUpperCase());
+      const keyName = comb.key.toLowerCase();
+      if (keyName === "arrowup") parts.push("↑");
+      else if (keyName === "arrowdown") parts.push("↓");
+      else if (keyName === "arrowleft") parts.push("←");
+      else if (keyName === "arrowright") parts.push("→");
+      else if (keyName.startsWith("numpad")) {
+        parts.push("Num " + keyName.slice(6));
+      } else if (keyName.startsWith("digit")) {
+        parts.push(keyName.slice(5));
+      } else {
+        parts.push(comb.key.toUpperCase());
+      }
 
       return parts;
     };

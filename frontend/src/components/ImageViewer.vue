@@ -434,10 +434,10 @@ import useModalDialog from "@/composables/useModalDialog";
 
 const { revealInExplorer } = useOpenDir();
 
-const emit =
-  defineEmits<
-    (e: "image-loaded", payload: { id: string; time: Time }) => void
-  >();
+const emit = defineEmits<{
+  (e: "image-loaded", payload: { id: string; time: Time }): void;
+  (e: "request-next"): void;
+}>();
 
 // 接收组件属性。其中 sessionId 是可选的，仅在需要非筛选会话提交耦合的标签设置流程中作为入参
 const {
@@ -602,6 +602,39 @@ const ratingModel = computed({
     setRating(value);
   },
 });
+
+// 绑定快捷键 Ctrl+0~5 用于直接修改评分
+for (let r = 0; r <= 5; r++) {
+  useHotkey(
+    `ctrl+digit${r}`,
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRating(r);
+    },
+    {
+      description: `设置评分为 ${r} 星`,
+      category: "图片评分",
+    },
+  );
+}
+
+// 绑定小键盘 0-5 快捷键用于标记评分并切换到下一张
+for (let r = 0; r <= 5; r++) {
+  useHotkey(
+    `numpad${r}`,
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setRating(r);
+      emit("request-next");
+    },
+    {
+      description: `标记评分为 ${r} 星并切换到下一张`,
+      category: "图片评分",
+    },
+  );
+}
 
 // 使用 composable 提取的 XMP 标签管理逻辑
 const {

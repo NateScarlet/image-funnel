@@ -267,7 +267,11 @@
         </button>
 
         <!-- 图像查看器组件 -->
-        <ImageViewer :image="currentImage" class="w-full h-full flex-1">
+        <ImageViewer
+          :image="currentImage"
+          class="w-full h-full flex-1"
+          @request-next="nextImage"
+        >
           <!-- 插入底部信息 -->
           <template #info>
             <span
