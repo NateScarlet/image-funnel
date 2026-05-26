@@ -28,16 +28,13 @@ func NewImageRepository(rootDir string, factory *image.Factory, dirRepo director
 	}
 }
 
-func (r *ImageRepository) Get(ctx context.Context, absPath string) (*image.Image, error) {
+func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image, error) {
+	absPath := filepath.Join(r.rootDir, relPath)
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
 
-	relPath, err := filepath.Rel(r.rootDir, absPath)
-	if err != nil {
-		return nil, err
-	}
 	dirRelPath := filepath.Dir(relPath)
 	if dirRelPath == "." {
 		dirRelPath = ""
@@ -48,7 +45,7 @@ func (r *ImageRepository) Get(ctx context.Context, absPath string) (*image.Image
 		return nil, err
 	}
 
-	return r.factory.CreateFromInfo(ctx, info, absPath, dir.ID())
+	return r.factory.CreateFromInfo(ctx, info, relPath, dir.ID())
 }
 
 func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
@@ -80,13 +77,13 @@ func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*i
 					return true
 				}
 
-				absFilePath := filepath.Join(absPath, entry.Name())
+				fileRelPath := filepath.Join(relPath, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
 					return yield(nil, err)
 				}
 
-				img, err := r.factory.CreateFromInfo(ctx, info, absFilePath, directoryID)
+				img, err := r.factory.CreateFromInfo(ctx, info, fileRelPath, directoryID)
 				if err != nil {
 					return yield(nil, err)
 				}
@@ -98,18 +95,6 @@ func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*i
 			},
 		)
 	}
-}
-
-func (r *ImageRepository) Lookup(ctx context.Context, relPath string) (*image.Image, error) {
-	dirRelPath := filepath.Dir(relPath)
-	if dirRelPath == "." {
-		dirRelPath = ""
-	}
-	dir, err := r.dirRepo.Get(ctx, dirRelPath)
-	if err != nil {
-		return nil, err
-	}
-	return r.factory.Create(ctx, relPath, r.rootDir, dir.ID())
 }
 
 var _ image.Repository = (*ImageRepository)(nil)

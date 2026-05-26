@@ -20,17 +20,14 @@ func NewDTOFactory(urlSigner URLSigner, rootDir string) *DTOFactory {
 }
 
 func (f *DTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
-	relPath, err := filepath.Rel(f.rootDir, img.AbsPath())
-	if err != nil {
-		relPath = img.Filename()
-	}
+	absPath := filepath.Join(f.rootDir, img.RelPath())
 
 	return &shared.ImageDTO{
 		ID:            img.ID(),
 		Filename:      img.Filename(),
 		Size:          img.Size(),
-		AbsPath:       img.AbsPath(),
-		RelPath:       relPath,
+		AbsPath:       absPath,
+		RelPath:       img.RelPath(),
 		ModTime:       img.ModTime(),
 		CurrentRating: img.Rating(),
 		Width:         img.Width(),

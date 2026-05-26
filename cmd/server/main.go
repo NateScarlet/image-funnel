@@ -82,7 +82,7 @@ func main() {
 	retryProcessor := appimage.NewRetryProcessor(hybridProcessor, logger)
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(retryProcessor)
 
-	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
+	imageFactory := image.NewFactory(metadataRepo, imageProcessor, cfg.AbsRootDir)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 
 	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
@@ -157,7 +157,7 @@ func main() {
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger)
+	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

@@ -37,7 +37,7 @@ func createTestImages(count int) []*image.Image {
 		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
-			fmt.Sprintf("/test/test-%d.jpg", i),
+			fmt.Sprintf("test-%d.jpg", i),
 			scalar.ToID("test-dir-id"),
 			1000,
 			time.Now(),
@@ -57,7 +57,7 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
-			fmt.Sprintf("/test/test-%d.jpg", i),
+			fmt.Sprintf("test-%d.jpg", i),
 			scalar.ToID("test-dir-id"),
 			1000,
 			time.Now(),
@@ -186,26 +186,14 @@ type FakeImageRepo struct {
 	Images   map[string]*image.Image // RelPath -> Image
 }
 
-func (s *FakeImageRepo) Get(ctx context.Context, absPath string) (*image.Image, error) {
-	relPath, err := filepath.Rel(s.BaseDir, absPath)
-	if err != nil {
-		return nil, err
-	}
-	return s.Lookup(ctx, relPath)
-}
-
-func (s *FakeImageRepo) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
-	return func(yield func(*image.Image, error) bool) {}
-}
-
-func (s *FakeImageRepo) Lookup(ctx context.Context, relPath string) (*image.Image, error) {
+func (s *FakeImageRepo) Get(ctx context.Context, relPath string) (*image.Image, error) {
 	if img, ok := s.Images[relPath]; ok {
 		fullPath := filepath.Join(s.BaseDir, relPath)
 		if xmp, _ := s.MetaRepo.Read(fullPath); xmp != nil {
 			return image.New(
 				img.ID(),
 				img.Filename(),
-				img.AbsPath(),
+				img.RelPath(),
 				img.DirectoryID(),
 				img.Size(),
 				img.ModTime(),
@@ -217,6 +205,10 @@ func (s *FakeImageRepo) Lookup(ctx context.Context, relPath string) (*image.Imag
 		return img, nil
 	}
 	return nil, os.ErrNotExist
+}
+
+func (s *FakeImageRepo) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+	return func(yield func(*image.Image, error) bool) {}
 }
 
 var _ image.Repository = (*FakeImageRepo)(nil)

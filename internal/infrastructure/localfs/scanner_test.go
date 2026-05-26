@@ -25,8 +25,8 @@ type testContext struct {
 }
 
 func newTestContext(t *testing.T) *testContext {
-	factory := domainimage.NewFactory(newMockMetadataRepository(), nil)
 	rootDir := t.TempDir()
+	factory := domainimage.NewFactory(newMockMetadataRepository(), nil, rootDir)
 	dirRepo := inmem.NewDirectoryRepository(rootDir)
 	imgRepo := NewImageRepository(rootDir, factory, dirRepo)
 	return &testContext{
@@ -92,7 +92,7 @@ func TestAnalyzeDirectory(t *testing.T) {
 	assert.Equal(t, 1, stats.ImageCount())
 	assert.Equal(t, 0, stats.SubdirectoryCount())
 	assert.NotNil(t, stats.LatestImage())
-	assert.Equal(t, testFile, stats.LatestImage().AbsPath())
+	assert.Equal(t, testFile, filepath.Join(ctx.rootDir, stats.LatestImage().RelPath()))
 	assert.Equal(t, 1, stats.RatingCounts()[0])
 }
 

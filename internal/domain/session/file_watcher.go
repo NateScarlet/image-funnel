@@ -6,7 +6,6 @@ import (
 	"main/internal/shared"
 	"main/internal/util"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"go.uber.org/zap"
@@ -38,12 +37,12 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 	var img *image.Image
 	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite || (e.Action == shared.FileActionRemove && isXMP) {
 		var err error
-		img, err = s.imageRepo.Lookup(ctx, relPath)
+		img, err = s.imageRepo.Get(ctx, relPath)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
-			// 如果图片不存在，img 保持为 nil，后续会进入 RemoveImageByAbsPath 处理
+			// 如果图片不存在，img 保持为 nil，后续会进入 RemoveImageByRelPath 处理
 		}
 	}
 
@@ -67,7 +66,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 			changed = sess.UpdateImage(img, filterFunc(img))
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）
-			changed = sess.RemoveImageByAbsPath(filepath.Join(s.rootDir, relPath))
+			changed = sess.RemoveImageByRelPath(relPath)
 		}
 
 		if changed {

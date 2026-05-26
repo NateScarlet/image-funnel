@@ -62,14 +62,8 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 
 		// 显式重新加载图片最新状态
-		// Session 中存储的是绝对路径，而 Repository.Lookup 期望相对路径
-		relPath, err := filepath.Rel(s.rootDir, img.AbsPath())
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		currentImg, err := s.imageRepo.Lookup(ctx, relPath)
+		// Session 中存储的是相对路径
+		currentImg, err := s.imageRepo.Get(ctx, img.RelPath())
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -79,8 +73,8 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		if currentImg.ID() != img.ID() {
 			errs = append(errs, apperror.New(
 				"IMAGE_MODIFIED_EXTERNALLY",
-				"image ID mismatch (file modified externally): "+img.AbsPath(),
-				"图片 ID 不匹配（文件已被外部修改）: "+img.AbsPath(),
+				"image ID mismatch (file modified externally): "+filepath.Join(s.rootDir, img.RelPath()),
+				"图片 ID 不匹配（文件已被外部修改）: "+filepath.Join(s.rootDir, img.RelPath()),
 			))
 			continue
 		}
@@ -92,7 +86,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		xmpData := metadata.NewXMPData(rating, action.String(), time.Now(), currentImg.Label())
 
-		if err := s.metadataRepo.Write(img.AbsPath(), xmpData); err != nil {
+		if err := s.metadataRepo.Write(filepath.Join(s.rootDir, img.RelPath()), xmpData); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -103,7 +97,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		newImg := image.New(
 			currentImg.ID(),
 			currentImg.Filename(),
-			currentImg.AbsPath(),
+			currentImg.RelPath(),
 			session.DirectoryID(),
 			currentImg.Size(),
 			currentImg.ModTime(),

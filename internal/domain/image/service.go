@@ -28,11 +28,11 @@ func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir strin
 
 // GetImage 根据图片 ID 获取图片实体，由领域层内部解码 ID 并校验版本一致性
 func (s *Service) GetImage(ctx context.Context, id scalar.ID) (*Image, error) {
-	absPath, expectedModTime, err := decodeID(id)
+	relPath, expectedModTime, err := decodeID(id)
 	if err != nil {
 		return nil, err
 	}
-	img, err := s.imageRepo.Get(ctx, absPath)
+	img, err := s.imageRepo.Get(ctx, relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -58,16 +58,15 @@ func (s *Service) UpdateImageMetadata(
 		return err
 	}
 
-	relPath, err := filepath.Rel(s.rootDir, img.AbsPath())
-	if err != nil {
-		return err
-	}
+	relPath := img.RelPath()
+	absPath := filepath.Join(s.rootDir, relPath)
+
 	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
 		return err
 	}
 
 	// 读取现有元数据，如果不存在则创建空白结构
-	xmpData, err := s.xmpRepo.Read(img.AbsPath())
+	xmpData, err := s.xmpRepo.Read(absPath)
 	if err != nil {
 		return err
 	}
@@ -87,5 +86,5 @@ func (s *Service) UpdateImageMetadata(
 	}
 
 	newXMP := metadata.NewXMPData(ratingVal, xmpData.Action(), time.Now(), labelVal)
-	return s.xmpRepo.Write(img.AbsPath(), newXMP)
+	return s.xmpRepo.Write(absPath, newXMP)
 }

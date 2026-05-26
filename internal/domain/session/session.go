@@ -27,7 +27,7 @@ type Session struct {
 
 	images         []*image.Image    // 会话所有图片集合（只增不减，引用稳定）
 	indexByID      map[scalar.ID]int // ID -> images索引映射
-	indexByAbsPath map[string]int    // AbsPath -> images索引映射（最新版本）
+	indexByRelPath map[string]int    // RelPath -> images索引映射（最新版本）
 	queue          []int             // 待处理队列（存储 images 索引）
 
 	currentIdx          int                              // 当前处理的图片在队列中的索引
@@ -51,12 +51,12 @@ type Session struct {
 func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image, imageFilterBuilder *image.FilterBuilder) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	indexByID := make(map[scalar.ID]int, len(images))
-	indexByAbsPath := make(map[string]int, len(images))
+	indexByRelPath := make(map[string]int, len(images))
 	queue := make([]int, len(images))
 
 	for i, img := range images {
 		indexByID[img.ID()] = i
-		indexByAbsPath[img.AbsPath()] = i
+		indexByRelPath[img.RelPath()] = i
 		queue[i] = i
 	}
 
@@ -69,7 +69,7 @@ func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targe
 		updatedAt:           time.Now(),
 		images:              images,
 		indexByID:           indexByID,
-		indexByAbsPath:      indexByAbsPath,
+		indexByRelPath:      indexByRelPath,
 		queue:               queue,
 		currentIdx:          0,
 		undoStack:           make([]func(), 0),

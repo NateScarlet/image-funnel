@@ -96,7 +96,11 @@ func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*direc
 			}
 
 			imagePath := filepath.Join(absPath, entry.Name())
-			img, err := s.imageFactory.CreateFromInfo(ctx, info, imagePath, directoryID)
+			imgRelPath, err := filepath.Rel(s.rootDir, imagePath)
+			if err != nil {
+				return yield(nil, err)
+			}
+			img, err := s.imageFactory.CreateFromInfo(ctx, info, imgRelPath, directoryID)
 			return yield(img, err)
 		},
 	)

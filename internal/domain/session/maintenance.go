@@ -7,14 +7,13 @@ import (
 
 // UpdateImage 更新会话中的图片信息
 func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
-	// 从 map 中获取索引
-	idx, ok := s.indexByAbsPath[img.AbsPath()]
+	idx, ok := s.indexByRelPath[img.RelPath()]
 	var oldQueueIndex = -1 // 在 queue 中的索引
 	var oldImageIndex = -1 // 在 images 中的索引
 
 	// 在 queue 中查找匹配该路径的图片
 	for i, imgIndex := range s.queue {
-		if s.images[imgIndex].AbsPath() == img.AbsPath() {
+		if s.images[imgIndex].RelPath() == img.RelPath() {
 			oldQueueIndex = i
 			oldImageIndex = imgIndex
 			break
@@ -37,7 +36,7 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 
 	// 如果不匹配过滤器，从 queue 中移除
 	if !matchesFilter {
-		return s.RemoveImageByAbsPath(img.AbsPath())
+		return s.RemoveImageByRelPath(img.RelPath())
 	}
 
 	// 匹配过滤器，执行更新
@@ -53,7 +52,7 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 		newImageIndex := len(s.images)
 		s.images = append(s.images, img)
 		s.indexByID[img.ID()] = newImageIndex
-		s.indexByAbsPath[img.AbsPath()] = newImageIndex
+		s.indexByRelPath[img.RelPath()] = newImageIndex
 
 		// 迁移 action
 		if action, ok := s.actions[oldImg.ID()]; ok {
@@ -71,13 +70,13 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	return true
 }
 
-func (s *Session) RemoveImageByAbsPath(absPath string) bool {
+func (s *Session) RemoveImageByRelPath(relPath string) bool {
 	var targetIndex = -1
 	var targetImgIndex = -1
 
 	// 查找 queue 中的索引
 	for i, imgIndex := range s.queue {
-		if s.images[imgIndex].AbsPath() == absPath {
+		if s.images[imgIndex].RelPath() == relPath {
 			targetIndex = i
 			targetImgIndex = imgIndex
 			break
@@ -120,7 +119,7 @@ func (s *Session) addFilteredImage(img *image.Image) error {
 	newIdx := len(s.images)
 	s.images = append(s.images, img)
 	s.indexByID[img.ID()] = newIdx
-	s.indexByAbsPath[img.AbsPath()] = newIdx
+	s.indexByRelPath[img.RelPath()] = newIdx
 	s.queue = append(s.queue, newIdx)
 
 	s.updatedAt = time.Now()

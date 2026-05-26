@@ -7,6 +7,7 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -34,7 +35,7 @@ func (s *Session) UpdateLabel(imageID scalar.ID, label string) (*image.Image, er
 	newImg := image.New(
 		oldImg.ID(),
 		oldImg.Filename(),
-		oldImg.AbsPath(),
+		oldImg.RelPath(),
 		s.DirectoryID(),
 		oldImg.Size(),
 		oldImg.ModTime(),
@@ -70,7 +71,8 @@ func (s *Service) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 	img := sess.images[idx]
 
 	// 校验修改时间以防止对过时版本的图片进行修改
-	info, err := os.Stat(img.AbsPath())
+	absPath := filepath.Join(s.rootDir, img.RelPath())
+	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func (s *Service) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 	}
 
 	// 2. 直接持久化写入磁盘对应的 .xmp 文件，实现与会话提交解耦的即时更新
-	if err := s.metadataRepo.Write(img.AbsPath(), newXMP); err != nil {
+	if err := s.metadataRepo.Write(absPath, newXMP); err != nil {
 		return nil, err
 	}
 

@@ -15,7 +15,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 	imgA := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
-		"/test/test-a.jpg",
+		"test-a.jpg",
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),
@@ -29,13 +29,13 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
-	session.RemoveImageByAbsPath(imgA.AbsPath())
+	session.RemoveImageByRelPath(imgA.RelPath())
 	assert.Equal(t, 0, session.CurrentSize())
 
 	imgAFresh := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
-		"/test/test-a.jpg",
+		"test-a.jpg",
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),

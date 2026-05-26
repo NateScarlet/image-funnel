@@ -31,6 +31,7 @@ type Handler struct {
 	dtoFactory         *DTOFactory
 	imageFilterBuilder *image.FilterBuilder
 	logger             *zap.Logger
+	rootDir            string
 }
 
 func NewHandler(
@@ -42,6 +43,7 @@ func NewHandler(
 	dtoFactory *DTOFactory,
 	imageFilterBuilder *image.FilterBuilder,
 	logger *zap.Logger,
+	rootDir string,
 ) *Handler {
 	return &Handler{
 		imageService:       imageService,
@@ -52,6 +54,7 @@ func NewHandler(
 		dtoFactory:         dtoFactory,
 		imageFilterBuilder: imageFilterBuilder,
 		logger:             logger,
+		rootDir:            rootDir,
 	}
 }
 
@@ -129,7 +132,7 @@ func (h *Handler) ComfyUIWorkflow(
 		return nil, nil
 	}
 
-	workflow, err := ExtractComfyUIWorkflow(img.AbsPath())
+	workflow, err := ExtractComfyUIWorkflow(filepath.Join(h.rootDir, img.RelPath()))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +155,7 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 				if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
 					return true
 				}
-				img, err := h.imgRepo.Lookup(ctx, event.RelPath)
+				img, err := h.imgRepo.Get(ctx, event.RelPath)
 				if err != nil || img == nil {
 					return true
 				}
@@ -192,7 +195,7 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 				if allowedDirectoryIDs != nil && !allowedDirectoryIDs.Has(event.DirectoryID) {
 					return true
 				}
-				img, err := h.imgRepo.Lookup(ctx, event.RelPath)
+				img, err := h.imgRepo.Get(ctx, event.RelPath)
 				if err != nil || img == nil {
 					return true
 				}

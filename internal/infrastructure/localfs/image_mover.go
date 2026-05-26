@@ -56,7 +56,7 @@ func (s *ImageMover) Move(
 			return 0, "", scanErr
 		}
 		if imgFilter(img) {
-			matchingPaths = append(matchingPaths, img.AbsPath())
+			matchingPaths = append(matchingPaths, filepath.Join(s.rootDir, img.RelPath()))
 		}
 	}
 

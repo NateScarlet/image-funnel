@@ -19,7 +19,7 @@ func TestRemoveImageByPath_ShouldRemoveUnmarkedImage(t *testing.T) {
 	img0 := session.images[session.queue[0]]
 	originalSize := len(session.queue)
 
-	removed := session.RemoveImageByAbsPath(img0.AbsPath())
+	removed := session.RemoveImageByRelPath(img0.RelPath())
 
 	assert.True(t, removed, "未操作的图片应该被移除")
 	assert.Equal(t, originalSize-1, len(session.queue), "队列长度应减少 1")
@@ -32,7 +32,7 @@ func TestRemoveImageByPath_ShouldNotRemoveImageWithAction(t *testing.T) {
 	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))
 
 	originalSize := len(session.queue)
-	removed := session.RemoveImageByAbsPath(img0.AbsPath())
+	removed := session.RemoveImageByRelPath(img0.RelPath())
 
 	assert.False(t, removed, "已操作的图片不应该被移除")
 	assert.Equal(t, originalSize, len(session.queue), "队列长度不应改变")
@@ -44,7 +44,7 @@ func TestRemoveImageByPath_ShouldNotRemoveImageWithRejectAction(t *testing.T) {
 	img0 := session.images[session.queue[0]]
 	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionReject))
 
-	removed := session.RemoveImageByAbsPath(img0.AbsPath())
+	removed := session.RemoveImageByRelPath(img0.RelPath())
 
 	assert.False(t, removed, "已 Reject 的图片同样不应该被移除")
 }
@@ -59,7 +59,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	img := image.New(
 		scalar.ToID("img-0"),
 		"test.jpg",
-		"/test/test-0.jpg",
+		"test-0.jpg",
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),
@@ -79,7 +79,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	updatedImg := image.New(
 		img.ID(), // 同一个 ID（ModTime 未变）
 		img.Filename(),
-		img.AbsPath(),
+		img.RelPath(),
 		img.DirectoryID(),
 		img.Size(),
 		img.ModTime(),

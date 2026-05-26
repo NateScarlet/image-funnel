@@ -128,13 +128,13 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
-	img3 := image.New(scalar.ToID("3"), "test3.jpg", file3, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
+	img3 := image.New(scalar.ToID("3"), "test3.jpg", "test3.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
-	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
-	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
-	fakeScanner.Images[filepath.Base(img3.AbsPath())] = img3
+	fakeScanner.Images[img1.RelPath()] = img1
+	fakeScanner.Images[img2.RelPath()] = img2
+	fakeScanner.Images[img3.RelPath()] = img3
 
 	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img3}, imageFb)
 
@@ -143,7 +143,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	sess.images = append(sess.images, img2)
 	idx := len(sess.images) - 1
 	sess.indexByID[img2.ID()] = idx
-	sess.indexByAbsPath[img2.AbsPath()] = idx
+	sess.indexByRelPath[img2.RelPath()] = idx
 	sess.actions[img2.ID()] = shared.ImageActionKeep
 
 	sess.actions[img3.ID()] = shared.ImageActionReject
@@ -194,8 +194,8 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb)
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	fakeScanner.Images[img1.RelPath()] = img1
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1}, imageFb)
@@ -245,11 +245,11 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb)
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", file1, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", file2, scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
-	fakeScanner.Images[filepath.Base(img1.AbsPath())] = img1
-	fakeScanner.Images[filepath.Base(img2.AbsPath())] = img2
+	fakeScanner.Images[img1.RelPath()] = img1
+	fakeScanner.Images[img2.RelPath()] = img2
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, []*image.Image{img1, img2}, imageFb)
