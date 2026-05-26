@@ -10,6 +10,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  esbuild: {
+    pure: ["console.log", "console.info", "console.debug", "console.warn"],
+  },
   server: {
     port: 8080,
     strictPort: true,

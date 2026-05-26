@@ -10,7 +10,7 @@
     <template v-if="visibleModel">
       <div
         class="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer"
-        @click="close()"
+        @click="onMaskClick"
       />
     </template>
   </Transition>
@@ -57,15 +57,28 @@ const emit = defineEmits<(e: "afterLeave") => void>();
 const visibleModel = defineModel<boolean>("visible", { required: true });
 
 const close = () => {
+  console.log("[ModalDialog] close() function called");
   visibleModel.value = false;
+};
+
+const onMaskClick = () => {
+  console.log("[ModalDialog] mask click event triggered");
+  close();
 };
 // #endregion
 
 // #region 快捷键监听
-useHotkey("Escape", close, {
-  enabled: visibleModel,
-  description: "关闭对话框",
-  category: "对话框",
-});
+useHotkey(
+  "Escape",
+  () => {
+    console.log("[ModalDialog] Escape hotkey triggered");
+    close();
+  },
+  {
+    enabled: visibleModel,
+    description: "关闭对话框",
+    category: "对话框",
+  },
+);
 // #endregion
 </script>

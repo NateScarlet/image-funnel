@@ -85,6 +85,7 @@ export default function useModalDialog({
       return false;
     }
     visible.value = false;
+    modal.close();
     return true;
   }
 

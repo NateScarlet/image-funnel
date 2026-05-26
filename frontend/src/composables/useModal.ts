@@ -54,8 +54,23 @@ export default function useModal(
   // 使用统一的事件监听 Composable 挂载并自动清理 popstate 监听器
   useEventListeners(window, ({ on }) => {
     on("popstate", async (event: PopStateEvent) => {
-      // 若 Modal 处于开启状态，且历史状态中不再存在当前 Modal 的 stateKey，说明发生了返回回退
-      if (visible.value && (!event.state || !event.state[stateKey])) {
+      console.log(
+        "[useModal] popstate event:",
+        event.state,
+        "for key:",
+        stateKey,
+        "visible:",
+        visible.value,
+        "hasPushState:",
+        hasPushState,
+      );
+      // 若 Modal 处于开启状态，且已成功推入历史状态，且历史状态中不再存在当前 Modal 的 stateKey，说明发生了返回回退
+      if (
+        visible.value &&
+        hasPushState &&
+        (!event.state || !event.state[stateKey])
+      ) {
+        console.log("[useModal] popstate triggers close for key:", stateKey);
         hasPushState = false;
         if (onPopState) {
           const result = await onPopState();
@@ -142,8 +157,17 @@ export default function useModal(
   ];
   component.emits = ["afterLeave", "afterEnter"];
 
+  let openTimeoutId: number | undefined;
+
   function close() {
+    console.log(
+      "[useModal] close() called, key:",
+      stateKey,
+      "hasPushState:",
+      hasPushState,
+    );
     visible.value = false;
+    clearTimeout(openTimeoutId);
     // 如果存在历史记录标记，需要主动调用 history.back() 抹掉它
     if (hasPushState) {
       window.history.back();
@@ -152,20 +176,36 @@ export default function useModal(
   }
 
   function open() {
+    console.log(
+      "[useModal] open() called, key:",
+      stateKey,
+      "hasPushState:",
+      hasPushState,
+    );
     visible.value = true;
     skipRender.value = false;
 
     // 当需要拦截返回键时，向 history 栈中推送 dummy state
     if (!hasPushState) {
-      window.history.pushState(
-        { ...window.history.state, [stateKey]: true },
-        "",
-      );
-      hasPushState = true;
+      clearTimeout(openTimeoutId);
+      openTimeoutId = window.setTimeout(() => {
+        if (visible.value && !hasPushState) {
+          console.log(
+            "[useModal] open() setTimeout pushing state, key:",
+            stateKey,
+          );
+          window.history.pushState(
+            { ...window.history.state, [stateKey]: true },
+            "",
+          );
+          hasPushState = true;
+        }
+      }, 0);
     }
   }
 
   onUnmounted(() => {
+    clearTimeout(openTimeoutId);
     hasPushState = false;
   });
 
