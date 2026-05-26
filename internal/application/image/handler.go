@@ -25,7 +25,7 @@ type EventBus interface {
 type Handler struct {
 	imageService       *image.Service
 	eventBus           EventBus
-	imgScanner         image.Scanner
+	imgRepo            image.Repository
 	imgMover           image.Mover
 	dirSvc             *directory.Service
 	dtoFactory         *DTOFactory
@@ -36,7 +36,7 @@ type Handler struct {
 func NewHandler(
 	imageService *image.Service,
 	eventBus EventBus,
-	imgScanner image.Scanner,
+	imgRepo image.Repository,
 	imgMover image.Mover,
 	dirSvc *directory.Service,
 	dtoFactory *DTOFactory,
@@ -46,7 +46,7 @@ func NewHandler(
 	return &Handler{
 		imageService:       imageService,
 		eventBus:           eventBus,
-		imgScanner:         imgScanner,
+		imgRepo:            imgRepo,
 		imgMover:           imgMover,
 		dirSvc:             dirSvc,
 		dtoFactory:         dtoFactory,
@@ -152,7 +152,7 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 				if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
 					return true
 				}
-				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
+				img, err := h.imgRepo.Lookup(ctx, event.RelPath)
 				if err != nil || img == nil {
 					return true
 				}
@@ -192,7 +192,7 @@ func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters)
 				if allowedDirectoryIDs != nil && !allowedDirectoryIDs.Has(event.DirectoryID) {
 					return true
 				}
-				img, err := h.imgScanner.Lookup(ctx, event.RelPath)
+				img, err := h.imgRepo.Lookup(ctx, event.RelPath)
 				if err != nil || img == nil {
 					return true
 				}
@@ -282,7 +282,7 @@ func (h *Handler) Images(
 	}
 
 	var items []*shared.ImageDTO
-	for img, scanErr := range h.imgScanner.Scan(ctx, relPath) {
+	for img, scanErr := range h.imgRepo.Find(ctx, relPath) {
 		if scanErr != nil {
 			return nil, scanErr
 		}

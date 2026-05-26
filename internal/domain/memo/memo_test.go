@@ -2,6 +2,7 @@ package memo
 
 import (
 	"context"
+	"iter"
 	"main/internal/apperror"
 	"main/internal/scalar"
 	"testing"
@@ -160,6 +161,10 @@ func (r *mockRepo) Write(ctx context.Context, relPath string, content string) er
 	}
 	r.memos[relPath] = FromRepository(relPath, relPath, content)
 	return nil
+}
+
+func (r *mockRepo) Find(ctx context.Context, relPath string) iter.Seq2[*Memo, error] {
+	return func(yield func(*Memo, error) bool) {}
 }
 
 func TestServiceCreate(t *testing.T) {

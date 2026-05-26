@@ -149,7 +149,7 @@ func (s *Service) Update(ctx context.Context, id scalar.ID, options ...UpdateOpt
 
 		filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(opts.filter))
 		var filteredImages []*image.Image
-		for img, err := range s.imageScanner.Scan(ctx, dir.RelPath()) {
+		for img, err := range s.imageRepo.Find(ctx, dir.RelPath()) {
 			if err != nil {
 				return err
 			}

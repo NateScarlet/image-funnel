@@ -179,33 +179,29 @@ func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shar
 	return func(yield func(*shared.FileChangedEvent, error) bool) {}
 }
 
-// FakeScanner is a mock implementation of image.Scanner
-type FakeScanner struct {
+// FakeImageRepo is a mock implementation of image.Repository
+type FakeImageRepo struct {
 	MetaRepo *FakeMetadataRepo
 	BaseDir  string
 	Images   map[string]*image.Image // RelPath -> Image
 }
 
-func (s *FakeScanner) Scan(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+func (s *FakeImageRepo) Get(ctx context.Context, absPath string) (*image.Image, error) {
+	relPath, err := filepath.Rel(s.BaseDir, absPath)
+	if err != nil {
+		return nil, err
+	}
+	return s.Lookup(ctx, relPath)
+}
+
+func (s *FakeImageRepo) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
 	return func(yield func(*image.Image, error) bool) {}
 }
 
-func (s *FakeScanner) Lookup(ctx context.Context, relPath string) (*image.Image, error) {
-	// Normalize path separators if needed, but simplistic match for now
+func (s *FakeImageRepo) Lookup(ctx context.Context, relPath string) (*image.Image, error) {
 	if img, ok := s.Images[relPath]; ok {
-		// Update XMP from MetaRepo if available to simulate disk state
 		fullPath := filepath.Join(s.BaseDir, relPath)
 		if xmp, _ := s.MetaRepo.Read(fullPath); xmp != nil {
-			// Create a copy with updated XMP logic if needed,
-			// but strictly speaking Lookup just reads file.
-			// If we want to simulate "disk has XMP", we should probably
-			// reflect that.
-			// However, for ID consistency, we must return an image that produces the SAME ID
-			// unless the file content/modtime changed.
-			// In our tests, we don't change modtime usually.
-
-			// Currently image.ID() depends on ModTime.
-			// If we want to return the same ID, we must use the same ModTime.
 			return image.New(
 				img.ID(),
 				img.Filename(),
@@ -220,10 +216,9 @@ func (s *FakeScanner) Lookup(ctx context.Context, relPath string) (*image.Image,
 		}
 		return img, nil
 	}
-	// If not found in our "mock filesystem", return error
 	return nil, os.ErrNotExist
 }
 
-var _ image.Scanner = (*FakeScanner)(nil)
+var _ image.Repository = (*FakeImageRepo)(nil)
 
 // #endregion

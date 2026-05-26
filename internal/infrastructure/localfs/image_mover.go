@@ -14,16 +14,16 @@ import (
 
 // ImageMover 专职处理图片及其同名或带有额外扩展名的配套伴随文件物理移动操作
 type ImageMover struct {
-	rootDir           string
-	imageScanner      domainimage.Scanner
+	rootDir            string
+	imageRepo          domainimage.Repository
 	imageFilterBuilder *domainimage.FilterBuilder
 }
 
 // NewImageMover 创建图片移动实现实例
-func NewImageMover(rootDir string, imageScanner domainimage.Scanner, imageFilterBuilder *domainimage.FilterBuilder) *ImageMover {
+func NewImageMover(rootDir string, imageRepo domainimage.Repository, imageFilterBuilder *domainimage.FilterBuilder) *ImageMover {
 	return &ImageMover{
-		rootDir:           rootDir,
-		imageScanner:      imageScanner,
+		rootDir:            rootDir,
+		imageRepo:          imageRepo,
 		imageFilterBuilder: imageFilterBuilder,
 	}
 }
@@ -51,7 +51,7 @@ func (s *ImageMover) Move(
 
 	// 扫描当前目录并收集满足过滤条件的所有图片的绝对路径
 	var matchingPaths []string
-	for img, scanErr := range s.imageScanner.Scan(ctx, relPath) {
+	for img, scanErr := range s.imageRepo.Find(ctx, relPath) {
 		if scanErr != nil {
 			return 0, "", scanErr
 		}

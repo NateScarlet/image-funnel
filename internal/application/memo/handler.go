@@ -21,18 +21,16 @@ type EventBus interface {
 type Handler struct {
 	repo          memo.Repository
 	service       *memo.Service
-	memoScanner   memo.Scanner
 	dirSvc        *directory.Service
 	ebus          EventBus
 	dtoFactory    *DTOFactory
 	filterBuilder *memo.FilterBuilder
 }
 
-func NewHandler(repo memo.Repository, service *memo.Service, memoScanner memo.Scanner, dirSvc *directory.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
+func NewHandler(repo memo.Repository, service *memo.Service, dirSvc *directory.Service, ebus EventBus, dtoFactory *DTOFactory, filterBuilder *memo.FilterBuilder) *Handler {
 	return &Handler{
 		repo:          repo,
 		service:       service,
-		memoScanner:   memoScanner,
 		dirSvc:        dirSvc,
 		ebus:          ebus,
 		dtoFactory:    dtoFactory,
@@ -231,7 +229,7 @@ func (h *Handler) Memos(
 
 	filteredSeq := func(yield func(*shared.MemoDTO, error) bool) {
 		memoFilter := h.filterBuilder.Build(filterBy)
-		for m, scanErr := range h.memoScanner.Scan(ctx, relPath) {
+		for m, scanErr := range h.repo.Find(ctx, relPath) {
 			if scanErr != nil {
 				if !yield(nil, scanErr) {
 					return

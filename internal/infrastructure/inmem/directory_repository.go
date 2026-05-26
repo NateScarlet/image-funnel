@@ -2,8 +2,13 @@ package inmem
 
 import (
 	"context"
+	"fmt"
+	"iter"
 	"main/internal/domain/directory"
 	"main/internal/util"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 func NewDirectoryRepository(rootDir string) *DirectoryRepository {
@@ -23,6 +28,47 @@ func (d *DirectoryRepository) Get(ctx context.Context, relPath string) (*directo
 		return nil, err
 	}
 	return directory.FromRepository(relPath), nil
+}
+
+func (d *DirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+	return func(yield func(*directory.Directory, error) bool) {
+		if relPath != "" {
+			if err := util.EnsurePathInRoot(d.rootDir, relPath); err != nil {
+				yield(nil, err)
+				return
+			}
+		}
+
+		absPath := filepath.Join(d.rootDir, relPath)
+		entries, err := os.ReadDir(absPath)
+		if err != nil {
+			yield(nil, fmt.Errorf("failed to read directory: %w", err))
+			return
+		}
+
+		for _, entry := range entries {
+			if ctx.Err() != nil {
+				yield(nil, ctx.Err())
+				return
+			}
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+
+			subRelPath := filepath.Join(relPath, entry.Name())
+			dirInfo, err := d.Get(ctx, subRelPath)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
+			if !yield(dirInfo, nil) {
+				break
+			}
+		}
+	}
 }
 
 var _ directory.Repository = (*DirectoryRepository)(nil)

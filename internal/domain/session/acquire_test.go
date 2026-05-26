@@ -16,7 +16,7 @@ import (
 func TestService_LastSession(t *testing.T) {
 	fakeRepo := NewFakeSessionRepo()
 	fakeMeta := NewFakeMetadataRepo()
-	fakeScanner := &FakeScanner{}
+	fakeScanner := &FakeImageRepo{}
 	fakeEventBus := &FakeEventBus{}
 	topic, topicCleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer topicCleanup()

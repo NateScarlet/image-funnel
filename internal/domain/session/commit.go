@@ -62,14 +62,14 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 
 		// 显式重新加载图片最新状态
-		// Session 中存储的是绝对路径，而 Scanner.Lookup 期望相对路径
+		// Session 中存储的是绝对路径，而 Repository.Lookup 期望相对路径
 		relPath, err := filepath.Rel(s.rootDir, img.AbsPath())
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 
-		currentImg, err := s.imageScanner.Lookup(ctx, relPath)
+		currentImg, err := s.imageRepo.Lookup(ctx, relPath)
 		if err != nil {
 			errs = append(errs, err)
 			continue

@@ -26,7 +26,7 @@ type EventBus interface {
 type Service struct {
 	sessionRepo        Repository
 	metadataRepo       metadata.Repository
-	imageScanner       image.Scanner
+	imageRepo          image.Repository
 	eventBus           EventBus
 	directoryResolver  DirectoryResolver
 	logger             *zap.Logger
@@ -39,7 +39,7 @@ type Service struct {
 func NewService(
 	sessionRepo Repository,
 	metadataRepo metadata.Repository,
-	imageScanner image.Scanner,
+	imageRepo image.Repository,
 	eventBus EventBus,
 	directoryResolver DirectoryResolver,
 	logger *zap.Logger,
@@ -50,7 +50,7 @@ func NewService(
 	s := &Service{
 		sessionRepo:        sessionRepo,
 		metadataRepo:       metadataRepo,
-		imageScanner:       imageScanner,
+		imageRepo:          imageRepo,
 		eventBus:           eventBus,
 		directoryResolver:  directoryResolver,
 		logger:             logger,

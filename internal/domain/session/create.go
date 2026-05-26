@@ -18,7 +18,7 @@ func (s *Service) Create(ctx context.Context, directoryID scalar.ID, filter *sha
 
 	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(filter))
 	var filteredImages []*image.Image
-	for img, err := range s.imageScanner.Scan(ctx, dir.RelPath()) {
+	for img, err := range s.imageRepo.Find(ctx, dir.RelPath()) {
 		if err != nil {
 			return scalar.ID{}, err
 		}

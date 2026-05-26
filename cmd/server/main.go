@@ -85,11 +85,9 @@ func main() {
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor)
 	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
 
-	imgScanner := localfs.NewImageScanner(cfg.AbsRootDir, imageFactory, dirRepo)
+	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
-	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imgScanner, imageFilterBuilder)
-	memoScanner := localfs.NewMemoScanner(cfg.AbsRootDir)
-	dirScannerImpl := localfs.NewDirectoryScanner(cfg.AbsRootDir, dirRepo)
+	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
 
 	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
@@ -134,14 +132,13 @@ func main() {
 		defer cancel()
 	}
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imgScanner, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir)
 
 	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
@@ -151,7 +148,6 @@ func main() {
 	memoDTOFactory := appmemo.NewDTOFactory(cfg.AbsRootDir)
 	memoFilterBuilder := memo.NewFilterBuilder()
 	directoryHandler := appdirectory.NewHandler(
-		dirScannerImpl,
 		dirAnalyzer,
 		eventBus,
 		directoryDTOFactory,
@@ -160,8 +156,8 @@ func main() {
 		dirSvc,
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), memoScanner, dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, eventBus, imgScanner, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
+	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

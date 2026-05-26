@@ -12,7 +12,6 @@ import (
 
 // Handler 目录应用层处理器
 type Handler struct {
-	dirScanner  directory.Scanner
 	dirAnalyzer directory.Analyzer
 	eventBus    appsession.EventBus
 	dtoFactory  *DTOFactory
@@ -24,7 +23,6 @@ type Handler struct {
 
 // NewHandler 创建目录处理器
 func NewHandler(
-	dirScanner directory.Scanner,
 	dirAnalyzer directory.Analyzer,
 	eventBus appsession.EventBus,
 	dtoFactory *DTOFactory,
@@ -33,7 +31,6 @@ func NewHandler(
 	dirSvc *directory.Service,
 ) *Handler {
 	return &Handler{
-		dirScanner:    dirScanner,
 		dirAnalyzer:   dirAnalyzer,
 		eventBus:      eventBus,
 		dtoFactory:    dtoFactory,
@@ -103,7 +100,7 @@ func (h *Handler) Directories(ctx context.Context, parentID scalar.ID) ([]*share
 	}
 
 	var result []*shared.DirectoryDTO
-	for dir, err := range h.dirScanner.Scan(ctx, parentDir.RelPath()) {
+	for dir, err := range h.repo.Find(ctx, parentDir.RelPath()) {
 		if err != nil {
 			return nil, err
 		}

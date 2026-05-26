@@ -2,11 +2,14 @@ package localfs
 
 import (
 	"context"
+	"fmt"
+	"iter"
 	"main/internal/apperror"
 	"main/internal/domain/memo"
 	"main/internal/util"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type MemoRepository struct {
@@ -69,6 +72,44 @@ func (r *MemoRepository) Write(ctx context.Context, relPath string, content stri
 		return nil
 	}
 	return os.WriteFile(absPath, []byte(content), 0644)
+}
+
+func (r *MemoRepository) Find(ctx context.Context, relPath string) iter.Seq2[*memo.Memo, error] {
+	return func(yield func(*memo.Memo, error) bool) {
+		absPath := filepath.Join(r.rootDir, relPath)
+		entries, err := os.ReadDir(absPath)
+		if err != nil {
+			yield(nil, fmt.Errorf("failed to read directory: %w", err))
+			return
+		}
+
+		for _, entry := range entries {
+			if ctx.Err() != nil {
+				yield(nil, ctx.Err())
+				return
+			}
+			if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			if strings.ToLower(filepath.Ext(entry.Name())) != ".md" {
+				continue
+			}
+
+			absFilePath := filepath.Join(absPath, entry.Name())
+			contentBytes, err := os.ReadFile(absFilePath)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
+			m := memo.FromRepository(filepath.Join(relPath, entry.Name()), absFilePath, string(contentBytes))
+			if !yield(m, nil) {
+				return
+			}
+		}
+	}
 }
 
 func (r *MemoRepository) absPath(relPath string) string {

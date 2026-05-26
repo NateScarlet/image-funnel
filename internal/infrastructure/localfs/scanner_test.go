@@ -15,57 +15,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testScannerContext struct {
-	rootDir      string
-	imageScanner *ImageScanner
-	imageMover   *ImageMover
-	memoScanner  *MemoScanner
-	dirScanner   *DirectoryScanner
-	dirAnalyzer  *DirectoryAnalyzer
+type testContext struct {
+	rootDir     string
+	imageRepo   *ImageRepository
+	imageMover  *ImageMover
+	memoRepo    *MemoRepository
+	dirRepo     directory.Repository
+	dirAnalyzer *DirectoryAnalyzer
 }
 
-func newTestScannerContext(t *testing.T) *testScannerContext {
+func newTestContext(t *testing.T) *testContext {
 	factory := domainimage.NewFactory(newMockMetadataRepository(), nil)
 	rootDir := t.TempDir()
 	dirRepo := inmem.NewDirectoryRepository(rootDir)
-	imgScanner := NewImageScanner(rootDir, factory, dirRepo)
-	return &testScannerContext{
-		rootDir:      rootDir,
-		imageScanner: imgScanner,
-		imageMover:   NewImageMover(rootDir, imgScanner, domainimage.NewFilterBuilder()),
-		memoScanner:  NewMemoScanner(rootDir),
-		dirScanner:   NewDirectoryScanner(rootDir, dirRepo),
-		dirAnalyzer:  NewDirectoryAnalyzer(rootDir, factory, dirRepo),
+	imgRepo := NewImageRepository(rootDir, factory, dirRepo)
+	return &testContext{
+		rootDir:     rootDir,
+		imageRepo:   imgRepo,
+		imageMover:  NewImageMover(rootDir, imgRepo, domainimage.NewFilterBuilder()),
+		memoRepo:    NewMemoRepository(rootDir),
+		dirRepo:     dirRepo,
+		dirAnalyzer: NewDirectoryAnalyzer(rootDir, factory, dirRepo),
 	}
 }
 
-func TestNewScanner(t *testing.T) {
-	ctx := newTestScannerContext(t)
-	assert.NotNil(t, ctx.imageScanner)
+func TestNewRepository(t *testing.T) {
+	ctx := newTestContext(t)
+	assert.NotNil(t, ctx.imageRepo)
 	assert.NotEmpty(t, ctx.rootDir)
 }
 
-func TestScan(t *testing.T) {
-	ctx := newTestScannerContext(t)
+func TestFindImages(t *testing.T) {
+	ctx := newTestContext(t)
 
 	testFile := filepath.Join(ctx.rootDir, "test.jpg")
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	images := collectImages(ctx.imageScanner.Scan(context.Background(), "."))
+	images := collectImages(ctx.imageRepo.Find(context.Background(), "."))
 	require.Len(t, images, 1)
 	assert.Equal(t, "test.jpg", images[0].Filename())
 }
 
-func TestScan_EmptyDirectory(t *testing.T) {
-	ctx := newTestScannerContext(t)
+func TestFindImages_EmptyDirectory(t *testing.T) {
+	ctx := newTestContext(t)
 
-	images := collectImages(ctx.imageScanner.Scan(context.Background(), "."))
+	images := collectImages(ctx.imageRepo.Find(context.Background(), "."))
 	require.Empty(t, images)
 }
 
-func TestScanDirectories(t *testing.T) {
-	ctx := newTestScannerContext(t)
+func TestFindDirectories(t *testing.T) {
+	ctx := newTestContext(t)
 
 	subDir := filepath.Join(ctx.rootDir, "subdir")
 	err := os.Mkdir(subDir, 0755)
@@ -75,13 +75,13 @@ func TestScanDirectories(t *testing.T) {
 	err = os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	dirs := collectDirInfos(ctx.dirScanner.Scan(context.Background(), "."))
+	dirs := collectDirInfos(ctx.dirRepo.Find(context.Background(), "."))
 	require.Len(t, dirs, 1)
 	assert.Equal(t, "subdir", dirs[0].RelPath())
 }
 
 func TestAnalyzeDirectory(t *testing.T) {
-	ctx := newTestScannerContext(t)
+	ctx := newTestContext(t)
 
 	testFile := filepath.Join(ctx.rootDir, "test.jpg")
 	err := os.WriteFile(testFile, []byte("test"), 0644)
@@ -118,8 +118,8 @@ func collectDirInfos(seq iter.Seq2[*directory.Directory, error]) []*directory.Di
 	return dirs
 }
 
-func TestScanner_MoveImages(t *testing.T) {
-	ctx := newTestScannerContext(t)
+func TestMoveImages(t *testing.T) {
+	ctx := newTestContext(t)
 
 	// 创建源子目录
 	srcDir := "source-dir"

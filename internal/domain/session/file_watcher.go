@@ -38,7 +38,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 	var img *image.Image
 	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite || (e.Action == shared.FileActionRemove && isXMP) {
 		var err error
-		img, err = s.imageScanner.Lookup(ctx, relPath)
+		img, err = s.imageRepo.Lookup(ctx, relPath)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return err

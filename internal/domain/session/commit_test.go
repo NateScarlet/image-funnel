@@ -116,7 +116,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
 
-	fakeScanner := &FakeScanner{
+	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
 		Images:   make(map[string]*image.Image),
@@ -184,7 +184,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
 
-	fakeScanner := &FakeScanner{
+	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
 		Images:   make(map[string]*image.Image),
@@ -235,7 +235,7 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
 
-	fakeScanner := &FakeScanner{
+	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
 		Images:   make(map[string]*image.Image),
