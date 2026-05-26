@@ -1,10 +1,13 @@
 package xmpsidecar
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"main/internal/domain/metadata"
@@ -26,10 +29,45 @@ func NewRepository() *Repository {
 	return &Repository{}
 }
 
+func (r *Repository) readFileWithRetry(path string) ([]byte, error) {
+	var data []byte
+	var err error
+	for i := 0; i < 5; i++ {
+		data, err = os.ReadFile(path)
+		if err == nil {
+			return data, nil
+		}
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		if isSharingViolation(err) && i < 4 {
+			// 共享冲突，Windows 上由于 File Watcher 等并发读取可能会发生瞬时锁定，进行指数退避重试
+			time.Sleep(time.Duration(10*(1<<i)) * time.Millisecond)
+			continue
+		}
+		break
+	}
+	return nil, err
+}
+
+func isSharingViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		if errno, ok := pe.Err.(syscall.Errno); ok {
+			// 在 Windows 上，32 代表 ERROR_SHARING_VIOLATION
+			return runtime.GOOS == "windows" && errno == 32
+		}
+	}
+	return false
+}
+
 func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 	xmpPath := imagePath + ".xmp"
 
-	data, err := os.ReadFile(xmpPath)
+	data, err := r.readFileWithRetry(xmpPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -98,7 +136,7 @@ func (r *Repository) Write(imagePath string, data *metadata.Data) error {
 
 	doc := etree.NewDocument()
 	// 加载已有文件
-	if existingData, err := os.ReadFile(xmpPath); err == nil {
+	if existingData, err := r.readFileWithRetry(xmpPath); err == nil {
 		if err := doc.ReadFromBytes(existingData); err != nil {
 			// 如果解析失败，备份原文件并创建新文档
 			backupPath := fmt.Sprintf("%s.broken%d", xmpPath, time.Now().UnixNano())
