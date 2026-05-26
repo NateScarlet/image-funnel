@@ -46,7 +46,7 @@ export default function useModalDialog({
             visible: visible.value,
             containerClass: props.containerClass,
             onAfterLeave: () => {
-              modal.close();
+              modal.hide();
               onDidClose?.();
               ctx.emit("afterLeave");
             },
@@ -74,7 +74,7 @@ export default function useModalDialog({
     if (e.defaultPrevented) {
       return;
     }
-    modal.open();
+    modal.show();
     onDidOpen?.();
   }
 

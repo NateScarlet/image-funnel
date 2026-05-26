@@ -110,19 +110,19 @@ export default function useModal() {
   ];
   component.emits = ["afterLeave", "afterEnter"];
 
-  function close() {
+  function hide() {
     visible.value = false;
   }
 
-  function open() {
+  function show() {
     visible.value = true;
     skipRender.value = false;
   }
 
   return {
     component,
-    close,
-    open,
+    hide,
+    show,
     visible,
   };
 }

@@ -43,7 +43,7 @@ export default function useModalFullscreen({
             ...ctx.attrs,
             visible: visible.value,
             onAfterLeave: () => {
-              modal.close();
+              modal.hide();
               onDidClose?.();
               ctx.emit("afterLeave");
             },
@@ -71,7 +71,7 @@ export default function useModalFullscreen({
     if (e.defaultPrevented) {
       return;
     }
-    modal.open();
+    modal.show();
     onDidOpen?.();
   }
 

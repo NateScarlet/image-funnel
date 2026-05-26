@@ -46,7 +46,7 @@ export default function useModalDrawer({
             visible: visible.value,
             containerClass: props.containerClass,
             onAfterLeave: () => {
-              modal.close();
+              modal.hide();
               onDidClose?.();
               ctx.emit("afterLeave");
             },
@@ -74,7 +74,7 @@ export default function useModalDrawer({
     if (e.defaultPrevented) {
       return;
     }
-    modal.open();
+    modal.show();
     onDidOpen?.();
   }
 
