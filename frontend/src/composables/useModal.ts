@@ -14,11 +14,9 @@ import {
   provide,
   ref,
   toValue,
-  onUnmounted,
 } from "vue";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
-import useEventListeners from "@/composables/useEventListeners";
-import randomUUID from "@/utils/randomUUID";
+import useBackKeyInterceptor from "@/composables/useBackKeyInterceptor";
 
 // #region 渲染目标依赖注入配置
 const rendererKey: InjectionKey<() => string | RendererElement> =
@@ -47,46 +45,17 @@ export default function useModal(
   const skipRender = ref(true);
   const visible = ref(false);
 
-  // 内部维护物理返回键拦截所需的状态
-  const stateKey = `modal-${randomUUID()}`;
-  let hasPushState = false;
-
-  // 使用统一的事件监听 Composable 挂载并自动清理 popstate 监听器
-  useEventListeners(window, ({ on }) => {
-    on("popstate", async (event: PopStateEvent) => {
-      console.log(
-        "[useModal] popstate event:",
-        event.state,
-        "for key:",
-        stateKey,
-        "visible:",
-        visible.value,
-        "hasPushState:",
-        hasPushState,
-      );
-      // 若 Modal 处于开启状态，且已成功推入历史状态，且历史状态中不再存在当前 Modal 的 stateKey，说明发生了返回回退
-      if (
-        visible.value &&
-        hasPushState &&
-        (!event.state || !event.state[stateKey])
-      ) {
-        console.log("[useModal] popstate triggers close for key:", stateKey);
-        hasPushState = false;
-        if (onPopState) {
-          const result = await onPopState();
-          // 如果外层关闭操作被拦截（如 onWillClose 返回 false），则重新 pushState 恢复拦截状态
-          if (result === false) {
-            window.history.pushState(
-              { ...window.history.state, [stateKey]: true },
-              "",
-            );
-            hasPushState = true;
-          }
-        } else {
-          close();
-        }
+  // 接入物理返回键拦截 Composable
+  const { register, unregister } = useBackKeyInterceptor(() => {
+    if (onPopState) {
+      const result = onPopState();
+      if (!result) {
+        // 代表外界拦截了关闭操作
+        return false;
       }
-    });
+    }
+    visible.value = false;
+    return true;
   });
 
   // 包装模态框的函数式组件
@@ -157,57 +126,16 @@ export default function useModal(
   ];
   component.emits = ["afterLeave", "afterEnter"];
 
-  let openTimeoutId: number | undefined;
-
   function close() {
-    console.log(
-      "[useModal] close() called, key:",
-      stateKey,
-      "hasPushState:",
-      hasPushState,
-    );
     visible.value = false;
-    clearTimeout(openTimeoutId);
-    // 如果存在历史记录标记，需要主动调用 history.back() 抹掉它
-    if (hasPushState) {
-      window.history.back();
-      hasPushState = false;
-    }
+    unregister();
   }
 
   function open() {
-    console.log(
-      "[useModal] open() called, key:",
-      stateKey,
-      "hasPushState:",
-      hasPushState,
-    );
     visible.value = true;
     skipRender.value = false;
-
-    // 当需要拦截返回键时，向 history 栈中推送 dummy state
-    if (!hasPushState) {
-      clearTimeout(openTimeoutId);
-      openTimeoutId = window.setTimeout(() => {
-        if (visible.value && !hasPushState) {
-          console.log(
-            "[useModal] open() setTimeout pushing state, key:",
-            stateKey,
-          );
-          window.history.pushState(
-            { ...window.history.state, [stateKey]: true },
-            "",
-          );
-          hasPushState = true;
-        }
-      }, 0);
-    }
+    register();
   }
-
-  onUnmounted(() => {
-    clearTimeout(openTimeoutId);
-    hasPushState = false;
-  });
 
   return {
     component,

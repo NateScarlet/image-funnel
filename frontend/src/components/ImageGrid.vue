@@ -228,7 +228,7 @@
     <!-- 全屏查看器模态框 -->
     <imageViewerDialog.component
       v-if="currentImageIndex !== undefined && currentImage"
-      @after-leave="currentImageIndex = undefined"
+      @after-leave="handleViewerAfterLeave"
     >
       <div class="w-full h-full flex flex-col justify-between">
         <!-- 侧边关闭按钮 -->
@@ -466,18 +466,22 @@ const imageViewerDialog = useModalFullscreen();
 // #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
 const viewerHash = useLocationHash();
 
-async function openViewer(index: number) {
-  currentImageIndex.value = index;
-  await imageViewerDialog.open();
+function openViewer(index: number) {
   const image = images.value[index];
   if (image) {
     viewerHash.value = image.filename;
   }
+  currentImageIndex.value = index;
+  imageViewerDialog.open();
 }
 
 function closeViewer() {
-  viewerHash.value = "";
   imageViewerDialog.close();
+}
+
+function handleViewerAfterLeave() {
+  currentImageIndex.value = undefined;
+  viewerHash.value = "";
 }
 
 function tryOpenViewerByFilename(filename: string): boolean {
@@ -517,11 +521,9 @@ async function waitLoading() {
 }
 
 onMounted(async () => {
-  const initialHash = viewerHash.value;
-  if (initialHash) {
+  if (viewerHash.value) {
     await waitLoading();
-    viewerHash.value = "";
-    await searchAndOpenViewer(initialHash);
+    searchAndOpenViewer(viewerHash.value);
   }
 });
 
