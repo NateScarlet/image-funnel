@@ -16,7 +16,6 @@ import {
   toValue,
 } from "vue";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
-import useBackKeyInterceptor from "@/composables/useBackKeyInterceptor";
 
 // #region 渲染目标依赖注入配置
 const rendererKey: InjectionKey<() => string | RendererElement> =
@@ -38,25 +37,10 @@ export function provideModalRenderer(
 /**
  * 基础模态框挂载与动画状态控制 Composable
  */
-export default function useModal(
-  onPopState?: () => Promise<boolean> | boolean | undefined,
-) {
+export default function useModal() {
   const defaultRenderer = useFullscreenRendererElement();
   const skipRender = ref(true);
   const visible = ref(false);
-
-  // 接入物理返回键拦截 Composable
-  const { register, unregister } = useBackKeyInterceptor(() => {
-    if (onPopState) {
-      const result = onPopState();
-      if (!result) {
-        // 代表外界拦截了关闭操作
-        return false;
-      }
-    }
-    visible.value = false;
-    return true;
-  });
 
   // 包装模态框的函数式组件
   const component: FunctionalComponent<
@@ -128,13 +112,11 @@ export default function useModal(
 
   function close() {
     visible.value = false;
-    unregister();
   }
 
   function open() {
     visible.value = true;
     skipRender.value = false;
-    register();
   }
 
   return {

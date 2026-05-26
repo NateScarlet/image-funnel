@@ -20,7 +20,7 @@ export default function useModalDialog({
   onWillOpen?: (e: Event) => PromiseInput<void>;
   onWillClose?: (e: Event) => PromiseInput<void>;
 } = {}) {
-  const modal = useModal(() => close());
+  const modal = useModal();
   const visible = ref(false);
 
   // 包装后的对话框组件，内部渲染 ModalDialog 并传递事件与属性
