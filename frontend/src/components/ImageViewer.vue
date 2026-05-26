@@ -372,7 +372,6 @@
           </div>
         </Transition>
       </div>
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
     </div>
 
     <!-- 备忘录/笔记编辑对话框 -->
