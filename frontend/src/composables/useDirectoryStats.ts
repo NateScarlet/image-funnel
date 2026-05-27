@@ -35,7 +35,7 @@ export default function useDirectoryStats() {
     loadingCount?: Ref<number>,
   ) {
     // 执行 GraphQL 查询
-    const { data, query } = useQuery(DirectoryStatsDocument, {
+    const { data, refresh } = useQuery(DirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
       fetchPolicy: "cache-first",
@@ -46,7 +46,7 @@ export default function useDirectoryStats() {
 
     // 防抖的 refetch 函数
     const debouncedRefetch = debounce(() => {
-      query.refetch();
+      refresh();
     }, 1000);
 
     // 订阅目录变化
