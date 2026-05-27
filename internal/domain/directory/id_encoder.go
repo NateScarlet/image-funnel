@@ -1,6 +1,8 @@
 package directory
 
 import (
+	"fmt"
+	"path/filepath"
 	"strings"
 
 	"main/internal/apperror"
@@ -22,5 +24,11 @@ func decodeID(id scalar.ID) (string, error) {
 		return "", apperror.New("INVALID_DIRECTORY_ID", "invalid directory ID format", "目录 ID 格式无效")
 	}
 
-	return strings.TrimPrefix(idStr, idPrefix), nil
+	relPath := strings.TrimPrefix(idStr, idPrefix)
+	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
+	if filepath.IsAbs(relPath) {
+		return "", fmt.Errorf("absolute path not allowed in directory ID: %s", relPath)
+	}
+
+	return relPath, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -130,6 +131,12 @@ func decodeID(id scalar.ID) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("invalid image id timestamp: %w", err)
 	}
+
+	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
+	if filepath.IsAbs(relPath) {
+		return "", time.Time{}, fmt.Errorf("absolute path not allowed in image ID: %s", relPath)
+	}
+
 	return relPath, time.Unix(0, nano), nil
 }
 

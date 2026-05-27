@@ -172,3 +172,30 @@ func TestMoveImages(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes root directory")
 }
+
+func TestImageRepository_AbsolutePaths(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// 写入测试图片
+	testFileName := "test.jpg"
+	testFileAbsPath := filepath.Join(ctx.rootDir, testFileName)
+	err := os.WriteFile(testFileAbsPath, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	// 测试一：Get 接口接收绝对路径，应该返回错误
+	img, err := ctx.imageRepo.Get(context.Background(), testFileAbsPath)
+	require.Error(t, err)
+	assert.Nil(t, img)
+	assert.Contains(t, err.Error(), "absolute path not allowed")
+
+	// 测试二：Find 接口接收绝对路径，迭代器应该返回错误
+	var findErr error
+	for _, err := range ctx.imageRepo.Find(context.Background(), ctx.rootDir) {
+		if err != nil {
+			findErr = err
+			break
+		}
+	}
+	require.Error(t, findErr)
+	assert.Contains(t, findErr.Error(), "absolute path not allowed")
+}

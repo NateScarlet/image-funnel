@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"fmt"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -52,6 +53,11 @@ func (f *Factory) Create(ctx context.Context, relPath string, directoryID scalar
 
 // CreateFromInfo creates an image from os.FileInfo, avoiding re-stat if caller has it.
 func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, relPath string, directoryID scalar.ID) (*Image, error) {
+	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
+	if filepath.IsAbs(relPath) {
+		return nil, fmt.Errorf("absolute path not allowed: %s", relPath)
+	}
+
 	if info.IsDir() || !f.isSupportedImage(info.Name()) {
 		return nil, nil
 	}

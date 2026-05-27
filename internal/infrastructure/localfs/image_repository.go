@@ -29,6 +29,11 @@ func NewImageRepository(rootDir string, factory *image.Factory, dirRepo director
 }
 
 func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image, error) {
+	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
+	if filepath.IsAbs(relPath) {
+		return nil, fmt.Errorf("absolute path not allowed: %s", relPath)
+	}
+
 	absPath := filepath.Join(r.rootDir, relPath)
 	info, err := os.Stat(absPath)
 	if err != nil {
@@ -49,6 +54,13 @@ func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image
 }
 
 func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
+	if filepath.IsAbs(relPath) {
+		return func(yield func(*image.Image, error) bool) {
+			yield(nil, fmt.Errorf("absolute path not allowed: %s", relPath))
+		}
+	}
+
 	return func(yield func(*image.Image, error) bool) {
 		absPath := filepath.Join(r.rootDir, relPath)
 		entries, err := os.ReadDir(absPath)

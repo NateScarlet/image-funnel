@@ -140,7 +140,12 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 						goto next
 					}
 
-					absPath := filepath.Join(dir, name)
+					var absPath string
+					if filepath.IsAbs(name) {
+						absPath = filepath.Clean(name)
+					} else {
+						absPath = filepath.Join(dir, name)
+					}
 					if !yield(directory.NewFileChange(absPath, action, time.Now()), nil) {
 						return
 					}
