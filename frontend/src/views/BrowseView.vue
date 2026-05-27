@@ -4,7 +4,7 @@
   >
     <!-- 顶部导航栏 -->
     <header
-      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0"
+      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-10"
     >
       <!-- 大屏布局：一行显示所有内容 -->
       <div class="hidden md:flex max-w-400 mx-auto items-center gap-3">
