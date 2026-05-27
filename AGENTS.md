@@ -136,6 +136,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **lodash 替代**: 使用 `es-toolkit`
 - **`useStorage`**: 用于 localStorage，键格式为 `name@randomSuffix`，在 `<script lang="ts">` 块中定义以共享状态
 - **组件复用原则**: 若新建资源表单与已有编辑表单的提交模式（如新建采用手动保存，编辑采用自动保存）或输入字段有明显差异，应创建独立的表单组件，避免过度复用引入复杂的条件分支与防御性逻辑。
+- **缓存策略优先**: 对于已提供 GraphQL 查询的数据（如工作流数据），应直接查询并依赖 Apollo Client 缓存，（可配置 `cache-first` 策略避免重复查询）避免在组件内声明多余的本地响应式状态进行二次缓存。这可以规避组件复用但 Prop（如 ID）切换时，本地状态未及时清理导致显示/复制旧数据的问题。
 
 ### GraphQL
 

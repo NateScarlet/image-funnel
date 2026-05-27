@@ -457,11 +457,6 @@ const { data: metaData } = useQuery(MetaDocument, {
   loadingCount: metaLoadingCount,
 });
 
-// 工作流相关 - 按需加载，避免加载所有图片
-const workflowLoading = ref(false);
-const workflowData = ref<string | null>(null);
-const workflowFetched = ref(false);
-
 const fullFilePath = computed(() => {
   const rootPath = metaData.value?.meta?.rootAbsPath;
   const relPath = image.relPath;
@@ -483,40 +478,23 @@ useClickOutside(overflowMenuRef, () => {
 
 const copyButtonText = ref("");
 
-// 从服务器获取工作流
-async function fetchWorkflow() {
-  if (workflowFetched.value) {
-    return;
-  }
-  workflowFetched.value = true;
-  workflowLoading.value = true;
-  try {
-    const result = await query(ComfyUiWorkflowDocument, {
-      variables: { id: image.id },
-    });
-    if (result.data?.comfyUIWorkflow) {
-      workflowData.value = result.data.comfyUIWorkflow;
-    }
-  } catch (err) {
-    console.error("Failed to fetch workflow:", err);
-  } finally {
-    workflowLoading.value = false;
-  }
-}
-
 // 处理复制操作
 async function handleCopy() {
-  // 先尝试获取工作流，但我们会明确知道我们要复制什么
+  // 优先获取并复制 ComfyUI 工作流数据，若无则复制图片文件的绝对路径
   let textToCopy = fullFilePath.value;
   let successMessage = "已复制!";
 
-  if (!workflowFetched.value) {
-    await fetchWorkflow();
-  }
-
-  if (workflowData.value) {
-    textToCopy = workflowData.value;
-    successMessage = "已复制工作流!";
+  try {
+    const result = await query(ComfyUiWorkflowDocument, {
+      variables: { id: image.id },
+      fetchPolicy: "cache-first",
+    });
+    if (result.data?.comfyUIWorkflow) {
+      textToCopy = result.data.comfyUIWorkflow;
+      successMessage = "已复制工作流!";
+    }
+  } catch (err) {
+    console.error("获取工作流数据失败:", err);
   }
 
   try {
