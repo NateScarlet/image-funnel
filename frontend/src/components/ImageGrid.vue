@@ -729,6 +729,56 @@ useHotkey(
     category: "图片浏览",
   },
 );
+useHotkey(
+  "home",
+  () => {
+    if (images.value.length > 0) {
+      const img = images.value[0];
+      currentImageId.value = img.id;
+      viewerHash.value = img.filename;
+    }
+  },
+  {
+    allowInInputs: true,
+    description: "切换到第一张图片",
+    enabled: isViewerOpen,
+    category: "图片浏览",
+  },
+);
+useHotkey(
+  "end",
+  async () => {
+    let pageCount = 0;
+    while (hasNextPage.value) {
+      if (pageCount > 0 && pageCount % 10 === 0) {
+        const shouldContinue = confirm(
+          `已经自动加载了 ${pageCount} 页图片，是否继续加载？`,
+        );
+        if (!shouldContinue) {
+          break;
+        }
+      }
+      const prevLength = images.value.length;
+      await fetchMore();
+      await nextTick();
+      if (images.value.length <= prevLength) {
+        break;
+      }
+      pageCount++;
+    }
+    if (images.value.length > 0) {
+      const img = images.value[images.value.length - 1];
+      currentImageId.value = img.id;
+      viewerHash.value = img.filename;
+    }
+  },
+  {
+    allowInInputs: true,
+    description: "自动向后加载并切换到最后一张图片",
+    enabled: isViewerOpen,
+    category: "图片浏览",
+  },
+);
 // #endregion
 
 // #region 移动匹配图片模块
