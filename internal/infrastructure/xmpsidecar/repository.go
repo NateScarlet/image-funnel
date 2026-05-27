@@ -68,8 +68,8 @@ func isSharingViolation(err error) bool {
 
 func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 	xmpPath := imagePath + ".xmp"
-	unlock := r.locks.Lock(xmpPath)
-	defer unlock()
+	r.locks.Lock(xmpPath)
+	defer r.locks.Unlock(xmpPath)
 
 	data, err := r.readFileWithRetry(xmpPath)
 	if err != nil {
@@ -137,8 +137,8 @@ func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 // #region Write
 func (r *Repository) Write(imagePath string, data *metadata.Data) error {
 	xmpPath := imagePath + ".xmp"
-	unlock := r.locks.Lock(xmpPath)
-	defer unlock()
+	r.locks.Lock(xmpPath)
+	defer r.locks.Unlock(xmpPath)
 
 	doc := etree.NewDocument()
 	// 加载已有文件

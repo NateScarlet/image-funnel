@@ -2,16 +2,105 @@ package util
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
+
+// TestKeyLock_Basic 验证基本加锁与解锁功能，以及不同 key 之间的互不干扰
+func TestKeyLock_Basic(t *testing.T) {
+	kl := &KeyLock{}
+
+	// 同一个 key 在被锁定时，另一个 goroutine 获取锁应该会被阻塞
+	kl.Lock("key1")
+	locked := make(chan struct{})
+	go func() {
+		kl.Lock("key1")
+		close(locked)
+		kl.Unlock("key1")
+	}()
+
+	select {
+	case <-locked:
+		t.Fatal("key1 was locked but another goroutine obtained lock")
+	case <-time.After(50 * time.Millisecond):
+		// 正常阻塞
+	}
+
+	kl.Unlock("key1")
+
+	select {
+	case <-locked:
+		// 释放后成功获得锁
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("lock was not released or other goroutine failed to obtain lock")
+	}
+
+	// 不同的 key 应该能够同时加锁，不互相阻塞
+	kl.Lock("keyA")
+	chanB := make(chan struct{})
+	go func() {
+		kl.Lock("keyB")
+		close(chanB)
+		kl.Unlock("keyB")
+	}()
+
+	select {
+	case <-chanB:
+		// 正常通过，不同的 key 互不阻塞
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("keyB was blocked by keyA")
+	}
+	kl.Unlock("keyA")
+}
+
+// TestKeyLock_DuplicateUnlock 验证多次解锁同一个 key 不会 panic 且可以安全忽略
+func TestKeyLock_DuplicateUnlock(t *testing.T) {
+	kl := &KeyLock{}
+
+	kl.Lock("key_dup")
+	kl.Unlock("key_dup")
+
+	// 触发重复解锁，新设计中不应发生 panic
+	kl.Unlock("key_dup")
+	kl.Unlock("key_dup")
+}
+
+// TestKeyLock_Concurrency 压力测试高并发下加解锁的正确性
+func TestKeyLock_Concurrency(t *testing.T) {
+	kl := &KeyLock{}
+	var wg sync.WaitGroup
+	var counter int64
+
+	const goroutines = 100
+	const iterations = 1000
+	const key = "concurrency_key"
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				kl.Lock(key)
+				// 临界区逻辑
+				atomic.AddInt64(&counter, 1)
+				time.Sleep(time.Nanosecond) // 略微让出 CPU
+				kl.Unlock(key)
+			}
+		}()
+	}
+
+	wg.Wait()
+	if counter != goroutines*iterations {
+		t.Errorf("expected counter %d, got %d", goroutines*iterations, counter)
+	}
+}
 
 // BenchmarkKeyLock 测试不同 key 数量下的性能
 func BenchmarkKeyLock(b *testing.B) {
-	// 定义测试的 key 池大小：1（高竞争）、10（中竞争）、100（低竞争）
 	for _, keyCount := range []int{1, 10, 100} {
 		b.Run("keys="+itoa(keyCount), func(b *testing.B) {
 			kl := &KeyLock{}
-			// 预先生成 key 列表，避免运行时产生字符串分配开销
 			keys := make([]string, keyCount)
 			for i := range keyCount {
 				keys[i] = "key_" + itoa(i)
@@ -19,14 +108,11 @@ func BenchmarkKeyLock(b *testing.B) {
 
 			b.ResetTimer()
 			b.RunParallel(func(pb *testing.PB) {
-				// 每个 goroutine 独立取一个递增的计数器，用于选择 key
 				var idx int
 				for pb.Next() {
 					key := keys[idx%len(keys)]
-					unlock := kl.Lock(key)
-					// 模拟临界区内的轻微操作（可省略，仅测试锁开销）
-					// 这里不加入实际工作负载，以测量锁本身的延迟
-					unlock()
+					kl.Lock(key)
+					kl.Unlock(key)
 					idx++
 				}
 			})
@@ -48,7 +134,6 @@ func BenchmarkMutexBaseline(b *testing.B) {
 
 // 辅助函数，将整数转为字符串，避免引入 strconv 开销
 func itoa(i int) string {
-	// 简单实现，仅支持小范围整数，满足测试需求
 	const digits = "0123456789"
 	if i == 0 {
 		return "0"
@@ -62,3 +147,5 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
+
+
