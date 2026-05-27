@@ -56,33 +56,35 @@
         </ToggleSwitch>
       </div>
     </div>
-    <div
-      v-if="sortedDirectories.length > 0"
-      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-    >
-      <button
-        v-for="subDir in sortedDirectories"
-        :key="subDir.id"
-        class="p-4 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-secondary-500/50 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20"
-        @click="emit('navigate', subDir.id)"
+    <div class="max-h-[40vh] overflow-y-auto pr-1">
+      <div
+        v-if="sortedDirectories.length > 0"
+        class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
-        <DirectoryDisplay
-          :directory="{ id: subDir.id }"
-          :filter-rating="filterRating"
-          :loading="loading"
+        <button
+          v-for="subDir in sortedDirectories"
+          :key="subDir.id"
+          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-secondary-500/50 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20"
+          @click="emit('navigate', subDir.id)"
         >
-          <template #title>
-            <span
-              class="text-sm font-semibold text-primary-200 group-hover:text-white truncate"
-            >
-              {{ getDirName(subDir.relPath) }}
-            </span>
-          </template>
-        </DirectoryDisplay>
-      </button>
-    </div>
-    <div v-else class="py-6 text-center text-primary-500 text-sm italic">
-      无符合筛选条件的子目录
+          <DirectoryDisplay
+            :directory="{ id: subDir.id }"
+            :filter-rating="filterRating"
+            :loading="loading"
+          >
+            <template #title>
+              <span
+                class="text-sm font-semibold text-primary-200 group-hover:text-white truncate"
+              >
+                {{ getDirName(subDir.relPath) }}
+              </span>
+            </template>
+          </DirectoryDisplay>
+        </button>
+      </div>
+      <div v-else class="py-6 text-center text-primary-500 text-sm italic">
+        无符合筛选条件的子目录
+      </div>
     </div>
   </section>
 </template>

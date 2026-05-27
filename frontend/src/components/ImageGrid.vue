@@ -129,147 +129,150 @@
         </div>
       </div>
 
-      <!-- 骨架图加载指示，避免布局抖动 -->
-      <div
-        v-if="loading && images.length === 0"
-        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 animate-pulse"
-      >
+      <!-- 滚动容器：包裹列表、空状态、骨架图与加载更多按钮 -->
+      <div class="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
+        <!-- 骨架图加载指示，避免布局抖动 -->
         <div
-          v-for="n in 16"
-          :key="n"
-          class="aspect-square bg-primary-800/50 rounded-xl"
-        ></div>
-      </div>
-
-      <!-- 无图片空状态 -->
-      <div
-        v-else-if="images.length === 0"
-        class="flex flex-col items-center justify-center py-20 text-primary-500 gap-2"
-      >
-        <svg
-          class="w-12 h-12 stroke-[1.5]"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+          v-if="loading && images.length === 0"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 animate-pulse"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 00-1.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-          />
-        </svg>
-        <span class="text-sm">该目录或过滤条件下未找到任何图片</span>
-      </div>
-
-      <!-- 网格列表 -->
-      <div
-        v-else
-        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
-      >
-        <div
-          v-for="img in images"
-          :key="img.id"
-          class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
-          :class="[
-            isBulkMode && selectedImageIds.includes(img.id)
-              ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-[1.02]'
-              : 'border-primary-800 hover:border-primary-600/80',
-          ]"
-          @click="handleImageClick(img)"
-        >
-          <!-- 缩略图加载 -->
           <div
-            class="w-full h-full relative overflow-hidden bg-black/10 flex items-center justify-center"
-          >
-            <!-- 左上角勾选徽章 -->
-            <div
-              v-if="isBulkMode"
-              class="absolute top-2 left-2 z-10 w-5.5 h-5.5 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
-              :class="[
-                selectedImageIds.includes(img.id)
-                  ? 'bg-secondary-500 border-secondary-400 text-white shadow-[0_2px_8px_rgba(235,94,85,0.4)] scale-110'
-                  : 'bg-black/40 border-white/20 text-white/50 opacity-0 group-hover:opacity-100 hover:scale-105',
-              ]"
-            >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-                <path
-                  :d="mdiCheck"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-              </svg>
-            </div>
-
-            <img
-              :src="img.url256 || img.url"
-              :alt="img.filename"
-              loading="lazy"
-              class="object-cover w-full h-full select-none"
-            />
-
-            <!-- 评星与标签的悬浮徽章 -->
-            <div
-              class="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none opacity-90 group-hover:opacity-100 transition-opacity"
-            >
-              <!-- 评分图标 -->
-              <RatingIcon
-                v-if="img.currentRating"
-                :rating="img.currentRating"
-                filled
-              />
-
-              <!-- 颜色标签 -->
-              <span
-                v-if="img.label"
-                class="w-3.5 h-3.5 rounded-full shadow-md border border-white/20 ml-auto"
-                :style="{
-                  backgroundColor: PRESET_COLORS[img.label] || '#94a3b8',
-                }"
-                :title="img.label"
-              ></span>
-            </div>
-          </div>
-
-          <!-- 卡片底部的文件名遮罩 -->
-          <div
-            class="absolute inset-x-0 top-0 bg-linear-to-b from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
-          >
-            <p
-              class="text-[10px] text-white font-medium truncate"
-              :title="img.filename"
-            >
-              {{ img.filename }}
-            </p>
-          </div>
+            v-for="n in 16"
+            :key="n"
+            class="aspect-square bg-primary-800/50 rounded-xl"
+          ></div>
         </div>
-      </div>
-    </section>
 
-    <!-- 懒加载过渡区与加载更多按钮 -->
-    <section v-if="hasNextPage" class="flex justify-center pt-4">
-      <button
-        :disabled="loading"
-        class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
-        @click="fetchMore"
-      >
-        <!-- 加载中动画 -->
-        <svg
-          v-if="loading"
-          class="w-4 h-4 animate-spin text-secondary-500"
-          viewBox="0 0 24 24"
-          fill="none"
+        <!-- 无图片空状态 -->
+        <div
+          v-else-if="images.length === 0"
+          class="flex flex-col items-center justify-center py-20 text-primary-500 gap-2"
         >
-          <path
-            :d="mdiLoading"
+          <svg
+            class="w-12 h-12 stroke-[1.5]"
             fill="none"
             stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-          />
-        </svg>
-        <span>{{ loading ? "正在加载..." : "加载更多图片" }}</span>
-      </button>
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 00-1.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+            />
+          </svg>
+          <span class="text-sm">该目录或过滤条件下未找到任何图片</span>
+        </div>
+
+        <!-- 网格列表 -->
+        <div
+          v-else
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
+        >
+          <div
+            v-for="img in images"
+            :key="img.id"
+            class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
+            :class="[
+              isBulkMode && selectedImageIds.includes(img.id)
+                ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-[1.02]'
+                : 'border-primary-800 hover:border-primary-600/80',
+            ]"
+            @click="handleImageClick(img)"
+          >
+            <!-- 缩略图加载 -->
+            <div
+              class="w-full h-full relative overflow-hidden bg-black/10 flex items-center justify-center"
+            >
+              <!-- 左上角勾选徽章 -->
+              <div
+                v-if="isBulkMode"
+                class="absolute top-2 left-2 z-10 w-5.5 h-5.5 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
+                :class="[
+                  selectedImageIds.includes(img.id)
+                    ? 'bg-secondary-500 border-secondary-400 text-white shadow-[0_2px_8px_rgba(235,94,85,0.4)] scale-110'
+                    : 'bg-black/40 border-white/20 text-white/50 opacity-0 group-hover:opacity-100 hover:scale-105',
+                ]"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path
+                    :d="mdiCheck"
+                    fill="currentColor"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                </svg>
+              </div>
+
+              <img
+                :src="img.url256 || img.url"
+                :alt="img.filename"
+                loading="lazy"
+                class="object-cover w-full h-full select-none"
+              />
+
+              <!-- 评星与标签的悬浮徽章 -->
+              <div
+                class="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none opacity-90 group-hover:opacity-100 transition-opacity"
+              >
+                <!-- 评分图标 -->
+                <RatingIcon
+                  v-if="img.currentRating"
+                  :rating="img.currentRating"
+                  filled
+                />
+
+                <!-- 颜色标签 -->
+                <span
+                  v-if="img.label"
+                  class="w-3.5 h-3.5 rounded-full shadow-md border border-white/20 ml-auto"
+                  :style="{
+                    backgroundColor: PRESET_COLORS[img.label] || '#94a3b8',
+                  }"
+                  :title="img.label"
+                ></span>
+              </div>
+            </div>
+
+            <!-- 卡片底部的文件名遮罩 -->
+            <div
+              class="absolute inset-x-0 top-0 bg-linear-to-b from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
+            >
+              <p
+                class="text-[10px] text-white font-medium truncate"
+                :title="img.filename"
+              >
+                {{ img.filename }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 懒加载过渡区与加载更多按钮 -->
+        <div v-if="hasNextPage" class="flex justify-center pt-2">
+          <button
+            :disabled="loading"
+            class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
+            @click="fetchMore"
+          >
+            <!-- 加载中动画 -->
+            <svg
+              v-if="loading"
+              class="w-4 h-4 animate-spin text-secondary-500"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <path
+                :d="mdiLoading"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>{{ loading ? "正在加载..." : "加载更多图片" }}</span>
+          </button>
+        </div>
+      </div>
     </section>
 
     <!-- 全屏查看器模态框 -->

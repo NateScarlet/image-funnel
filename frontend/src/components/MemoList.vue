@@ -40,7 +40,7 @@
     </div>
 
     <!-- 笔记列表项 -->
-    <div v-else class="space-y-2 max-h-60 overflow-y-auto pr-1">
+    <div v-else class="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
       <div
         v-for="memoItem in memos"
         :key="memoItem.id"
