@@ -402,6 +402,7 @@ useEventListeners(window, ({ on }) => {
             (el) =>
               el.hasAttribute("data-no-gesture") ||
               el.role == "input" ||
+              el.role == "dialog" ||
               el.tagName == "BUTTON" ||
               el.tagName == "INPUT" ||
               el.tagName == "TEXTAREA" ||
