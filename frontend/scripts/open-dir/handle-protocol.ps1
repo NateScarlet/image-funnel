@@ -23,8 +23,9 @@ while (-not (Test-Path $path)) {
 }
 
 if (Test-Path $path -PathType Container) {
+    # 路径使用双引号包裹，防止路径中包含逗号时被 explorer.exe 错误拆分为多个参数
     Start-Process explorer.exe -ArgumentList @(
-        $path
+        "`"$path`""
     )
 }
 else {
