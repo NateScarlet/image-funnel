@@ -38,7 +38,25 @@ func (c *ImageCache) getPath(key string) string {
 	return filepath.Join(c.rootDir, key)
 }
 
-func (c *ImageCache) Open(ctx context.Context, key string) (appimage.File, error) {
+type cachedFile struct {
+	path string
+}
+
+// Open 实现 appimage.File 接口，返回一个独立的文件读取器。
+func (f *cachedFile) Open() (io.ReadSeekCloser, error) {
+	now := time.Now()
+	// 每次打开更新文件的访问与修改时间，以防其被缓存清理逻辑判定为过期
+	os.Chtimes(f.path, now, now)
+
+	file, err := os.Open(f.path)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+// Lookup 根据 key 获取文件句柄。如果文件不存在，返回 (nil, nil)。
+func (c *ImageCache) Lookup(ctx context.Context, key string) (appimage.File, error) {
 	path := c.getPath(key)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -52,18 +70,7 @@ func (c *ImageCache) Open(ctx context.Context, key string) (appimage.File, error
 		return nil, nil
 	}
 
-	now := time.Now()
-	os.Chtimes(path, now, now)
-
-	file, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return file, nil
+	return &cachedFile{path: path}, nil
 }
 
 func (c *ImageCache) Save(ctx context.Context, key string, r io.Reader) error {

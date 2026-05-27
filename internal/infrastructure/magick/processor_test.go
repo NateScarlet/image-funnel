@@ -13,7 +13,7 @@ import (
 type mockCache struct {
 }
 
-func (m *mockCache) Open(ctx context.Context, key string) (appimage.File, error) {
+func (m *mockCache) Lookup(ctx context.Context, key string) (appimage.File, error) {
 	return nil, nil
 }
 

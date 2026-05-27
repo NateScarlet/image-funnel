@@ -44,10 +44,10 @@ func handleImage(
 
 		absPath := filepath.Join(absRootDir, relativePath)
 
-		var file io.ReadSeekCloser
+		var reader io.ReadSeekCloser
 
 		if raw {
-			file, err = os.Open(absPath)
+			reader, err = os.Open(absPath)
 		} else {
 			width := 0
 			if widthStr != "" {
@@ -63,7 +63,11 @@ func handleImage(
 				}
 			}
 
+			var file appimage.File
 			file, err = imageProcessor.Process(r.Context(), absPath, width, quality)
+			if err == nil {
+				reader, err = file.Open()
+			}
 		}
 
 		if errors.Is(err, context.Canceled) {
@@ -75,7 +79,7 @@ func handleImage(
 			logger.Error("process image", zap.Error(err))
 			return
 		}
-		defer file.Close()
+		defer reader.Close()
 
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", etag)
@@ -87,6 +91,6 @@ func handleImage(
 		})
 		w.Header().Set("Content-Disposition", cd)
 
-		http.ServeContent(w, r, "", time.Now(), file)
+		http.ServeContent(w, r, "", time.Now(), reader)
 	}
 }

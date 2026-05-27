@@ -32,9 +32,18 @@ func NewProcessor(cache appimage.Cache, concurrency int64) *Processor {
 	}
 }
 
+type rawFile struct {
+	path string
+}
+
+// Open 实现 appimage.File 接口，延迟打开原始图像文件。
+func (f *rawFile) Open() (io.ReadSeekCloser, error) {
+	return os.Open(f.path)
+}
+
 func (p *Processor) Process(ctx context.Context, absPath string, width, quality int) (appimage.File, error) {
 	if width == 0 && quality == 0 {
-		return os.Open(absPath)
+		return &rawFile{path: absPath}, nil
 	}
 
 	info, err := os.Stat(absPath)
@@ -58,7 +67,7 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 
 	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
 
-	file, err := p.cache.Open(ctx, cacheKey)
+	file, err := p.cache.Lookup(ctx, cacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +121,7 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 		return nil, saveErr
 	}
 
-	return p.cache.Open(ctx, cacheKey)
+	return p.cache.Lookup(ctx, cacheKey)
 }
 
 func (p *Processor) Meta(ctx context.Context, absPath string) (*shared.ImageMeta, error) {
