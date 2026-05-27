@@ -12,7 +12,7 @@
 
     <!-- #region 渲染当前目录节点 -->
     <button
-      class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0"
+      class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0 select-all"
       :class="[
         isCurrent
           ? 'text-white font-semibold'
