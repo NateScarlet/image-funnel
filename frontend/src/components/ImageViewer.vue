@@ -119,7 +119,7 @@
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ copyButtonText || "复制" }}</span>
+        <span class="text-xs">复制</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
@@ -431,8 +431,10 @@ import { useOpenDir } from "@/composables/useOpenDir";
 import MemoForm from "./MemoForm.vue";
 import useMemo from "@/composables/useMemo";
 import useModalDialog from "@/composables/useModalDialog";
+import useNotification from "@/composables/useNotification";
 
 const { revealInExplorer } = useOpenDir();
+const { showSuccess, showError } = useNotification();
 
 const emit = defineEmits<{
   (e: "image-loaded", payload: { id: string; time: Time }): void;
@@ -476,13 +478,11 @@ useClickOutside(overflowMenuRef, () => {
   showOverflowMenu.value = false;
 });
 
-const copyButtonText = ref("");
-
 // 处理复制操作
 async function handleCopy() {
   // 优先获取并复制 ComfyUI 工作流数据，若无则复制图片文件的绝对路径
   let textToCopy = fullFilePath.value;
-  let successMessage = "已复制!";
+  let successMessage = "已复制图片路径!";
 
   try {
     const result = await query(ComfyUiWorkflowDocument, {
@@ -491,20 +491,17 @@ async function handleCopy() {
     });
     if (result.data?.comfyUIWorkflow) {
       textToCopy = result.data.comfyUIWorkflow;
-      successMessage = "已复制工作流!";
+      successMessage = "已复制 ComfyUI 工作流数据!";
     }
-  } catch (err) {
-    console.error("获取工作流数据失败:", err);
+  } catch {
+    showError("获取工作流数据失败");
   }
 
   try {
     await window.navigator.clipboard.writeText(textToCopy);
-    copyButtonText.value = successMessage;
-    setTimeout(() => {
-      copyButtonText.value = "";
-    }, 1500);
-  } catch (err) {
-    console.error("Failed to copy:", err);
+    showSuccess(successMessage);
+  } catch {
+    showError("复制失败");
   }
 }
 
@@ -517,12 +514,9 @@ async function copyAbsoluteFilePath() {
   }
   try {
     await window.navigator.clipboard.writeText(textToCopy);
-    copyButtonText.value = "已复制绝对路径!";
-    setTimeout(() => {
-      copyButtonText.value = "";
-    }, 1500);
-  } catch (err) {
-    console.error("Failed to copy absolute path:", err);
+    showSuccess("已复制绝对路径!");
+  } catch {
+    showError("复制绝对路径失败");
   }
 }
 
