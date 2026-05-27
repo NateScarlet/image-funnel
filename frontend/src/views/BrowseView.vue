@@ -421,6 +421,17 @@ const fullDirectoryPath = computed(() => {
 
 // #region 同级目录切换快捷键
 
+// 返回上一级目录
+useHotkey(
+  "backspace",
+  () => {
+    if (canGoToParent.value) {
+      goToParent();
+    }
+  },
+  { description: "返回上一级目录", category: "目录导航" },
+);
+
 // 切换到上一个同级目录
 useHotkey(
   "[",
