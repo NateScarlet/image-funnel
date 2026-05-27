@@ -31,13 +31,31 @@ export default function useLiveArray<T extends { id: string }>(
   };
   const items = computed(() => {
     const v = arr();
-    return uniqBy([...liveItems.value, ...v], (i) => identity(i))
+
+    // 建立单次遍历缓存 Map，将频繁的 O(N) 查找优化为 O(1)
+    const itemByKey = new Map<string, T>();
+    const indexByKey = new Map<string, number>();
+    v.forEach((item, index) => {
+      const key = identity(item);
+      itemByKey.set(key, item);
+      indexByKey.set(key, index);
+    });
+
+    const merged = uniqBy([...liveItems.value, ...v], (i) => identity(i));
+    const mapped = merged.map((item) => {
+      const activeItem = itemByKey.get(identity(item));
+      return activeItem || item;
+    });
+
+    return mapped
       .filter((i) => !liveDeletedID.has(i.id))
       .filter(filter)
       .sort((a, b) => {
-        const aIndex = v.findIndex((i) => identity(i) === identity(a));
-        const bIndex = v.findIndex((i) => identity(i) === identity(b));
-        if (aIndex >= 0 && bIndex >= 0) {
+        const aKey = identity(a);
+        const bKey = identity(b);
+        const aIndex = indexByKey.get(aKey);
+        const bIndex = indexByKey.get(bKey);
+        if (aIndex !== undefined && bIndex !== undefined) {
           // preserve original order
           return aIndex - bIndex;
         }
