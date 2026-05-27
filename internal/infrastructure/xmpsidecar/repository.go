@@ -23,7 +23,9 @@ const (
 	MicrosoftPhotoNS = "http://ns.microsoft.com/photo/1.0/"
 )
 
-type Repository struct{}
+type Repository struct {
+	locks util.KeyLock
+}
 
 func NewRepository() *Repository {
 	return &Repository{}
@@ -66,6 +68,8 @@ func isSharingViolation(err error) bool {
 
 func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 	xmpPath := imagePath + ".xmp"
+	unlock := r.locks.Lock(xmpPath)
+	defer unlock()
 
 	data, err := r.readFileWithRetry(xmpPath)
 	if err != nil {
@@ -133,6 +137,8 @@ func (r *Repository) Read(imagePath string) (*metadata.Data, error) {
 // #region Write
 func (r *Repository) Write(imagePath string, data *metadata.Data) error {
 	xmpPath := imagePath + ".xmp"
+	unlock := r.locks.Lock(xmpPath)
+	defer unlock()
 
 	doc := etree.NewDocument()
 	// 加载已有文件

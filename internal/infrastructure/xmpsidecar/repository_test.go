@@ -1,9 +1,11 @@
 package xmpsidecar
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -255,4 +257,31 @@ func TestRead_CustomNamespacePrefix_ChildElement(t *testing.T) {
 	data, err := repo.Read(tempFile)
 	require.NoError(t, err)
 	assert.Equal(t, 2, data.Rating())
+}
+
+func TestConcurrentWrite(t *testing.T) {
+	repo := NewRepository()
+	tempFile := filepath.Join(os.TempDir(), "test-concurrent-write.jpg")
+	xmpPath := tempFile + ".xmp"
+	defer os.Remove(xmpPath)
+
+	const concurrency = 20
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func(rating int) {
+			defer wg.Done()
+			testData := metadata.NewXMPData(rating%6, fmt.Sprintf("action-%d", rating), time.Now(), "Label")
+			err := repo.Write(tempFile, testData)
+			assert.NoError(t, err)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// 最终文件应当存在，且能够被正常解析
+	data, err := repo.Read(tempFile)
+	require.NoError(t, err)
+	require.NotNil(t, data)
 }
