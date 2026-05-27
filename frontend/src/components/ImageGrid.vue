@@ -145,10 +145,10 @@
         class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
       >
         <div
-          v-for="(img, index) in images"
+          v-for="img in images"
           :key="img.id"
           class="group relative bg-primary-800/40 hover:bg-primary-800/90 border border-primary-800 hover:border-primary-600/80 rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
-          @click="openViewer(index)"
+          @click="openViewer(img)"
         >
           <!-- 缩略图加载 -->
           <div
@@ -227,7 +227,7 @@
 
     <!-- 全屏查看器模态框 -->
     <imageViewerDialog.component
-      v-if="currentImageIndex !== undefined && currentImage"
+      v-if="currentImageId !== undefined && currentImage"
       @after-leave="handleViewerAfterLeave"
     >
       <div class="w-full h-full flex flex-col justify-between">
@@ -256,7 +256,7 @@
 
         <!-- 下一张按钮 -->
         <button
-          v-if="currentImageIndex < images.length - 1"
+          v-if="currentImageIndex >= 0 && currentImageIndex < images.length - 1"
           class="absolute right-4 top-1/2 -translate-y-1/2 z-60 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
           title="下一张图片 (ArrowRight)"
           @click="nextImage"
@@ -281,9 +281,7 @@
               {{ currentImage.filename }}
             </span>
             <div class="w-px h-4 bg-white/30 mx-1"></div>
-            <span>
-              {{ (currentImageIndex || 0) + 1 }} / {{ images.length }}
-            </span>
+            <span> {{ currentImageIndex + 1 }} / {{ images.length }} </span>
             <div class="w-px h-4 bg-white/30 mx-1"></div>
             <span class="text-white/60">
               {{ currentImage.width || 0 }}x{{ currentImage.height || 0 }}
@@ -400,37 +398,42 @@ function toggleLabelFilter(label: string) {
 // #endregion
 
 // #region 全屏查看器模块
-const currentImageIndex = ref<number | undefined>(undefined);
+const currentImageId = ref<string | undefined>(undefined);
 const currentImage = computed(() => {
-  if (currentImageIndex.value === undefined) return undefined;
-  return images.value[currentImageIndex.value];
+  if (currentImageId.value === undefined) return undefined;
+  return images.value.find((img) => img.id === currentImageId.value);
+});
+
+// 计算当前图片在列表中的索引，用于 UI 进度和边界判断
+const currentImageIndex = computed(() => {
+  if (currentImageId.value === undefined) return -1;
+  return images.value.findIndex((img) => img.id === currentImageId.value);
 });
 
 function prevImage() {
-  if (currentImageIndex.value !== undefined && currentImageIndex.value > 0) {
-    currentImageIndex.value--;
-    const img = images.value[currentImageIndex.value];
+  const index = currentImageIndex.value;
+  if (index > 0) {
+    const img = images.value[index - 1];
     if (img) {
+      currentImageId.value = img.id;
       viewerHash.value = img.filename;
     }
   }
 }
 
 function nextImage() {
-  if (
-    currentImageIndex.value !== undefined &&
-    currentImageIndex.value < images.value.length - 1
-  ) {
-    currentImageIndex.value++;
-    const img = images.value[currentImageIndex.value];
+  const index = currentImageIndex.value;
+  if (index !== -1 && index < images.value.length - 1) {
+    const img = images.value[index + 1];
     if (img) {
+      currentImageId.value = img.id;
       viewerHash.value = img.filename;
     }
   }
 }
 
 // 查看器打开时：左右方向键切换图片，Esc 关闭查看器
-const isViewerOpen = computed(() => currentImageIndex.value !== undefined);
+const isViewerOpen = computed(() => currentImageId.value !== undefined);
 
 useHotkey(
   "arrowleft",
@@ -466,12 +469,9 @@ const imageViewerDialog = useModalFullscreen();
 // #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
 const viewerHash = useLocationHash();
 
-function openViewer(index: number) {
-  const image = images.value[index];
-  if (image) {
-    viewerHash.value = image.filename;
-  }
-  currentImageIndex.value = index;
+function openViewer(image: ImageFragment) {
+  currentImageId.value = image.id;
+  viewerHash.value = image.filename;
   imageViewerDialog.open();
 }
 
@@ -480,17 +480,17 @@ function closeViewer() {
 }
 
 function handleViewerAfterLeave() {
-  currentImageIndex.value = undefined;
+  currentImageId.value = undefined;
   viewerHash.value = "";
 }
 
 function tryOpenViewerByFilename(filename: string): boolean {
   console.log("try open", filename);
-  const index = images.value.findIndex(
+  const image = images.value.find(
     (img: ImageFragment) => img.filename === filename,
   );
-  if (index !== -1) {
-    openViewer(index);
+  if (image) {
+    openViewer(image);
     return true;
   }
   return false;
