@@ -324,7 +324,7 @@ func (t *InMemoryTopic[T]) Subscribe(ctx context.Context) iter.Seq2[T, error] {
 				sub.clearFlag(subscriptionBusy)
 				for i, err := range sub.more(t) {
 					if ctx.Err() != nil {
-						yield(zero, err)
+						yield(zero, ctx.Err())
 						return
 					}
 					if !yield(i, err) {

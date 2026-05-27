@@ -96,6 +96,60 @@ func TestInMemoryTopic(t *testing.T) {
 			assert.ErrorIs(t, err, context.Canceled)
 		}
 	})
+	t.Run("should stop on context cancel inside loop", func(t *testing.T) {
+		t.Parallel()
+		var topic, cleanup = pubsub.NewInMemoryTopic[int]()
+		defer cleanup()
+		var ctx, cancel = context.WithCancel(ctx)
+
+		var received []int
+		var errs []error
+		var ready = make(chan struct{})
+
+		go func() {
+			var isReady bool
+			for val, err := range topic.Subscribe(ctx) {
+				if val == -1 {
+					if !isReady {
+						close(ready)
+						isReady = true
+					}
+					continue
+				}
+				if err != nil {
+					errs = append(errs, err)
+					continue
+				}
+				received = append(received, val)
+				if val == 1 {
+					cancel()
+				}
+			}
+		}()
+
+		var ticker = time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+	Warmup:
+		for {
+			select {
+			case <-ready:
+				break Warmup
+			case <-ticker.C:
+				_ = topic.Publish(context.Background(), -1)
+			}
+		}
+
+		_ = topic.Publish(context.Background(), 1)
+		_ = topic.Publish(context.Background(), 2)
+
+		time.Sleep(100 * time.Millisecond)
+
+		assert.Equal(t, []int{1}, received)
+		assert.Len(t, errs, 1)
+		if len(errs) > 0 {
+			assert.ErrorIs(t, errs[0], context.Canceled)
+		}
+	})
 	t.Run("should return ignorable error on undelivered events", func(t *testing.T) {
 		t.Parallel()
 		var topic, cleanup = pubsub.NewInMemoryTopic[int](
