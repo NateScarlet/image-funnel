@@ -20,7 +20,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <!-- 移动匹配图片按钮 -->
           <button
-            v-if="images.length > 0"
+            v-if="images.length > 0 && !isBulkMode"
             class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
             title="将当前过滤匹配的图片移动到新目录"
             @click="moveImagesDialog.open()"
@@ -29,6 +29,28 @@
               <path :d="mdiFolderMove" fill="currentColor" />
             </svg>
             <span>移动匹配图片</span>
+          </button>
+
+          <!-- 批量管理按钮 -->
+          <button
+            v-if="images.length > 0"
+            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 cursor-pointer select-none"
+            :class="[
+              isBulkMode
+                ? 'bg-secondary-600 hover:bg-secondary-700 border-secondary-500 text-white shadow-[0_0_10px_rgba(235,94,85,0.3)] font-semibold'
+                : 'bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200',
+            ]"
+            :title="
+              isBulkMode
+                ? '退出批量管理模式'
+                : '进入批量管理模式，对多张图片执行操作'
+            "
+            @click="toggleBulkMode"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+              <path :d="mdiCheckboxMultipleMarkedOutline" fill="currentColor" />
+            </svg>
+            <span>{{ isBulkMode ? "退出批量" : "批量管理" }}</span>
           </button>
 
           <!-- 当用户激活了任何过滤器时，在最左侧显示一键清除筛选按钮 -->
@@ -147,13 +169,38 @@
         <div
           v-for="img in images"
           :key="img.id"
-          class="group relative bg-primary-800/40 hover:bg-primary-800/90 border border-primary-800 hover:border-primary-600/80 rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
-          @click="openViewer(img)"
+          class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
+          :class="[
+            isBulkMode && selectedImageIds.includes(img.id)
+              ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-[1.02]'
+              : 'border-primary-800 hover:border-primary-600/80',
+          ]"
+          @click="handleImageClick(img)"
         >
           <!-- 缩略图加载 -->
           <div
             class="w-full h-full relative overflow-hidden bg-black/10 flex items-center justify-center"
           >
+            <!-- 左上角勾选徽章 -->
+            <div
+              v-if="isBulkMode"
+              class="absolute top-2 left-2 z-10 w-5.5 h-5.5 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
+              :class="[
+                selectedImageIds.includes(img.id)
+                  ? 'bg-secondary-500 border-secondary-400 text-white shadow-[0_2px_8px_rgba(235,94,85,0.4)] scale-110'
+                  : 'bg-black/40 border-white/20 text-white/50 opacity-0 group-hover:opacity-100 hover:scale-105',
+              ]"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path
+                  :d="mdiCheck"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+              </svg>
+            </div>
+
             <img
               :src="img.url256 || img.url"
               :alt="img.filename"
@@ -295,15 +342,180 @@
       </div>
     </imageViewerDialog.component>
 
-    <!-- 移动匹配图片模态框 -->
+    <!-- 移动图片模态框 -->
     <moveImagesDialog.component container-class="sm:max-w-md p-6">
       <MoveImagesForm
         :directory-id="directoryId"
-        :filter-by="imagesVariables.filterBy || {}"
-        :match-count="images.length"
-        @close="moveImagesDialog.close"
+        :filter-by="moveImagesFilterBy"
+        :match-count="moveImagesMatchCount"
+        @close="handleMoveClose"
       />
     </moveImagesDialog.component>
+
+    <!-- 批量操作底栏 -->
+    <div
+      class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl pointer-events-none"
+    >
+      <Transition name="slide-up">
+        <div
+          v-if="isBulkMode"
+          class="pointer-events-auto bg-primary-900/90 backdrop-blur-xl border border-primary-700/80 rounded-2xl shadow-[0_10px_30px_-5px_rgba(0,0,0,0.8)] px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300"
+        >
+          <!-- 左侧：选择状态与全选控制 -->
+          <div class="flex items-center justify-between md:justify-start gap-4">
+            <div class="flex items-center gap-2">
+              <span
+                class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-secondary-500/20 border border-secondary-500/30 text-xs font-bold text-secondary-400 animate-pulse"
+              >
+                {{ selectedImageIds.length }}
+              </span>
+              <span class="text-xs text-primary-200 font-medium"
+                >张图片已选中</span
+              >
+            </div>
+            <div class="h-4 w-px bg-primary-750 hidden md:block"></div>
+            <div class="flex items-center gap-2">
+              <button
+                class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
+                @click="selectAll"
+              >
+                全选
+              </button>
+              <button
+                class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
+                :disabled="selectedImageIds.length === 0"
+                :class="
+                  selectedImageIds.length === 0
+                    ? 'opacity-50 cursor-not-allowed'
+                    : ''
+                "
+                @click="deselectAll"
+              >
+                取消全选
+              </button>
+            </div>
+          </div>
+
+          <!-- 右侧：批量动作 -->
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <!-- 批量评分 -->
+            <div class="relative group/rating">
+              <button
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+                :disabled="selectedImageIds.length === 0 || isUpdating"
+                :class="
+                  selectedImageIds.length === 0
+                    ? 'opacity-40 cursor-not-allowed'
+                    : ''
+                "
+              >
+                <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24">
+                  <path :d="mdiStar" fill="currentColor" />
+                </svg>
+                <span>批量评星</span>
+              </button>
+
+              <!-- 评分悬浮窗 -->
+              <div
+                v-if="selectedImageIds.length > 0"
+                class="absolute bottom-full right-0 mb-2 invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2.5 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
+              >
+                <button
+                  class="px-2 py-1 text-xs hover:bg-red-950/40 border border-transparent hover:border-red-900/50 rounded-lg text-red-400 transition-colors cursor-pointer select-none"
+                  @click="bulkSetRating(0)"
+                >
+                  无评分
+                </button>
+                <div class="w-px h-4 bg-primary-750"></div>
+                <button
+                  v-for="r in [1, 2, 3, 4, 5]"
+                  :key="r"
+                  class="p-1 text-primary-300 hover:text-yellow-400 transition-colors cursor-pointer"
+                  :title="`设置为 ${r} 星`"
+                  @click="bulkSetRating(r)"
+                >
+                  <svg class="w-5 h-5" viewBox="0 0 24 24">
+                    <path :d="mdiStar" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 批量标签 -->
+            <div class="relative group/label">
+              <button
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+                :disabled="selectedImageIds.length === 0 || isUpdating"
+                :class="
+                  selectedImageIds.length === 0
+                    ? 'opacity-40 cursor-not-allowed'
+                    : ''
+                "
+              >
+                <span
+                  class="w-3 h-3 rounded-full bg-linear-to-tr from-sky-400 via-green-400 to-yellow-400"
+                ></span>
+                <span>颜色标签</span>
+              </button>
+
+              <!-- 标签悬浮窗 -->
+              <div
+                v-if="selectedImageIds.length > 0"
+                class="absolute bottom-full right-0 mb-2 invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2.5 rounded-xl shadow-xl z-60 w-max"
+              >
+                <div class="flex items-center gap-1.5">
+                  <button
+                    v-for="(colorHex, colorName) in PRESET_COLORS"
+                    :key="colorName"
+                    class="w-5.5 h-5.5 rounded-full transition-all border border-white/20 hover:scale-120 cursor-pointer relative"
+                    :style="{ backgroundColor: colorHex }"
+                    :title="colorName"
+                    @click="bulkSetLabel(colorName)"
+                  ></button>
+                  <div class="w-px h-5 bg-primary-750 mx-1"></div>
+                  <button
+                    class="px-2 py-1 text-xs hover:bg-primary-800 border border-primary-700/60 hover:text-white rounded-lg text-primary-300 transition-colors cursor-pointer select-none"
+                    @click="bulkSetLabel('')"
+                  >
+                    清除
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 批量移动 -->
+            <button
+              class="px-3.5 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+              :disabled="selectedImageIds.length === 0 || isUpdating"
+              :class="
+                selectedImageIds.length === 0
+                  ? 'opacity-40 cursor-not-allowed'
+                  : ''
+              "
+              @click="moveImagesDialog.open()"
+            >
+              <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
+                <path :d="mdiFolderMove" fill="currentColor" />
+              </svg>
+              <span>批量移动</span>
+            </button>
+
+            <div class="h-5 w-px bg-primary-750"></div>
+
+            <!-- 关闭批量管理模式 -->
+            <button
+              class="px-3 h-9 text-xs font-semibold bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 rounded-xl transition-colors cursor-pointer flex items-center gap-1 select-none"
+              @click="toggleBulkMode"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24">
+                <path :d="mdiClose" fill="currentColor" />
+              </svg>
+              <span>退出</span>
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </div>
   </div>
 </template>
 
@@ -318,9 +530,13 @@ import {
   mdiChevronLeft,
   mdiChevronRight,
   mdiFolderMove,
+  mdiCheck,
+  mdiCheckboxMultipleMarkedOutline,
+  mdiStar,
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
+import useBulkOperations from "@/composables/useBulkOperations";
 import RatingFilter from "./RatingFilter.vue";
 import ImageViewer from "./ImageViewer.vue";
 import useHotkey from "@/composables/useHotkey";
@@ -382,6 +598,57 @@ const loading = computed(() => loadingCount.value > 0);
 const { images, hasNextPage, fetchMore } = useBrowseImages(imagesVariables, {
   loadingCount,
 });
+
+// #region 批量操作状态与逻辑管理
+const {
+  isBulkMode,
+  selectedImageIds,
+  isUpdating,
+  toggleBulkMode,
+  toggleSelectImage,
+  selectAll,
+  deselectAll,
+  bulkSetRating,
+  bulkSetLabel,
+} = useBulkOperations(images);
+
+// 在批量模式下，根据选中的图片 ID 动态生成 filterBy 和匹配图片数量
+const moveImagesFilterBy = computed<ImageFiltersInput>(() => {
+  if (isBulkMode.value) {
+    return {
+      id: selectedImageIds.value,
+    };
+  }
+  return imagesVariables.value.filterBy || {};
+});
+
+const moveImagesMatchCount = computed(() => {
+  if (isBulkMode.value) {
+    return selectedImageIds.value.length;
+  }
+  return images.value.length;
+});
+
+// 批量模式下移动成功后，关闭弹框，过滤掉已不存在于当前列表的图片ID并保持批量模式
+function handleMoveClose() {
+  moveImagesDialog.close();
+  if (isBulkMode.value) {
+    const currentIds = images.value.map((img) => img.id);
+    selectedImageIds.value = selectedImageIds.value.filter((id) =>
+      currentIds.includes(id),
+    );
+  }
+}
+
+// 批量模式下点击图片执行选择，正常模式打开大图查看器
+function handleImageClick(img: ImageFragment) {
+  if (isBulkMode.value) {
+    toggleSelectImage(img.id);
+  } else {
+    openViewer(img);
+  }
+}
+// #endregion
 // #endregion
 
 // #region 过滤器操作逻辑
@@ -538,3 +805,19 @@ watchEffect((onCleanup) => {
 });
 // #endregion
 </script>
+
+<style scoped>
+/* 底部批量管理栏的升降过渡动画 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+</style>
