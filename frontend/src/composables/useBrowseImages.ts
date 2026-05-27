@@ -7,8 +7,11 @@ import {
   BrowseImagesDocument,
   ImageSavedDocument,
   ImageDeletedDocument,
+  ImageFragmentDoc,
   type BrowseImagesQueryVariables,
+  type ImageFragment,
 } from "@/graphql/generated";
+import client from "@/graphql/client";
 
 /**
  * useBrowseImages 提供目录图片的查询、实时订阅和分页加载功能
@@ -57,6 +60,19 @@ export default function useBrowseImages(
         return bTime - aTime;
       }
       return b.id.localeCompare(a.id);
+    },
+    subscribe: (item, callback) => {
+      const observable = client.watchFragment<ImageFragment>({
+        fragment: ImageFragmentDoc,
+        fragmentName: "Image",
+        from: item,
+      });
+      const sub = observable.subscribe((result) => {
+        if (result.complete && result.data) {
+          callback(result.data);
+        }
+      });
+      return () => sub.unsubscribe();
     },
   });
 

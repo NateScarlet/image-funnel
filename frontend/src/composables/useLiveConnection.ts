@@ -10,11 +10,13 @@ export default function useLiveConnection<
     filter,
     onNodeDidLeave,
     identity,
+    subscribe,
   }: {
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
     onNodeDidLeave?: (i: T) => void;
     identity?: (i: T) => string;
+    subscribe?: (item: T, callback: (v: T) => void) => () => void;
   } = {},
 ) {
   const resolvedIdentity = identity ?? ((i: T) => i.id);
@@ -22,6 +24,7 @@ export default function useLiveConnection<
     compare,
     filter,
     identity: resolvedIdentity,
+    subscribe,
   });
   const onSaved = (i: T | null | undefined) => {
     if (i == null) {

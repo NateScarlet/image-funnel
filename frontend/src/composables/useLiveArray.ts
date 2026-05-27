@@ -1,7 +1,13 @@
-import { shallowReactive, shallowRef, computed, watch } from "vue";
-import { uniqBy } from "es-toolkit";
+import {
+  shallowReactive,
+  shallowRef,
+  computed,
+  watch,
+  onScopeDispose,
+} from "vue";
 import replaceArrayItemBy from "@/utils/replaceArrayItemBy";
 import equalArray from "@/utils/equalArray";
+import { isEqual, uniqBy } from "es-toolkit";
 
 export default function useLiveArray<T extends { id: string }>(
   arr: () => readonly T[],
@@ -9,10 +15,12 @@ export default function useLiveArray<T extends { id: string }>(
     compare,
     filter = () => true,
     identity = (i) => i.id,
+    subscribe,
   }: {
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
     identity?: (i: T) => string;
+    subscribe?: (item: T, callback: (v: T) => void) => () => void;
   } = {},
 ) {
   const liveDeletedID = shallowReactive(new Set<string>());
@@ -29,6 +37,48 @@ export default function useLiveArray<T extends { id: string }>(
       { whenNoMatch: "prepend" },
     );
   };
+
+  if (subscribe) {
+    const subs = new Map<string, () => void>();
+    onScopeDispose(() => {
+      subs.values().forEach((i) => i());
+      subs.clear();
+    }, true);
+    watch(
+      liveItems,
+      (items, oldItems) => {
+        const incoming = new Map(items.map((i) => [identity(i), i]));
+
+        for (const [k, v] of incoming) {
+          if (!subs.has(k)) {
+            let skipOnce = true;
+            subs.set(
+              k,
+              subscribe(v, (newValue) => {
+                if (skipOnce && isEqual(newValue, v)) {
+                  // 订阅可能立即返回当前值，没必要插入
+                  skipOnce = false;
+                  return;
+                }
+                addItem(newValue);
+              }),
+            );
+            skipOnce = false;
+          }
+        }
+        if (oldItems) {
+          for (const i of oldItems) {
+            const k = identity(i);
+            if (!incoming.has(k)) {
+              subs.get(k)?.();
+              subs.delete(k);
+            }
+          }
+        }
+      },
+      { immediate: true },
+    );
+  }
   const items = computed(() => {
     const v = arr();
 
