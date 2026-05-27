@@ -7,7 +7,6 @@ import {
   BrowseImagesDocument,
   ImageSavedDocument,
   ImageDeletedDocument,
-  type ImageFragment,
   type BrowseImagesQueryVariables,
 } from "@/graphql/generated";
 
@@ -86,10 +85,7 @@ export default function useBrowseImages(
       return { filterBy };
     },
     onNext: (result) => {
-      const deletedImage = result.data?.imageDeleted;
-      if (deletedImage) {
-        onDeleted({ id: deletedImage.id } as ImageFragment);
-      }
+      onDeleted(result.data?.imageDeleted);
     },
   });
 
