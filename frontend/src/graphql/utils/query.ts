@@ -6,7 +6,7 @@ import type {
   ApolloClient,
 } from "@apollo/client/core";
 import type { OperationContext } from "../client";
-import { apolloClient } from "../client";
+import { client } from "../client";
 
 export default function query<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
@@ -20,7 +20,7 @@ export default function query<TData, TVariables extends OperationVariables>(
     errorPolicy?: ErrorPolicy;
   } = {},
 ): Promise<ApolloClient.QueryResult<TData>> {
-  return apolloClient.query<TData, TVariables>({
+  return client.query<TData, TVariables>({
     ...options,
     query: document,
     variables: variables as TVariables,

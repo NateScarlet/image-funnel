@@ -148,7 +148,7 @@ const persistentCache = new PersistentCache(
 
 await persistentCache.load();
 
-export const apolloClient = new ApolloClient({
+export const client = new ApolloClient({
   link: ApolloLink.from([errorLink, persistedQueryLink, link]),
   cache: persistentCache,
   assumeImmutableResults: true,
@@ -158,3 +158,5 @@ export const apolloClient = new ApolloClient({
     },
   },
 });
+
+export default client;

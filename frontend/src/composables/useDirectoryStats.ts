@@ -16,7 +16,7 @@ import type {
   DirectoryStatsFragment,
   DirectoryStatsQuery,
 } from "../graphql/generated";
-import { apolloClient } from "../graphql/client";
+import { client } from "../graphql/client";
 import toStableValue from "@/utils/toStableValue";
 
 /**
@@ -78,7 +78,7 @@ export default function useDirectoryStats() {
     directoryId: string,
   ): DirectoryStatsFragment | undefined {
     if (!statsCache.has(directoryId)) {
-      const initialNode = apolloClient.readQuery({
+      const initialNode = client.readQuery({
         query: DirectoryStatsDocument,
         variables: { id: directoryId },
       })?.node;
@@ -88,7 +88,7 @@ export default function useDirectoryStats() {
 
       // 建立订阅
       stack.adopt(
-        apolloClient
+        client
           .watchQuery({
             query: DirectoryStatsDocument,
             variables: { id: directoryId },
@@ -126,7 +126,7 @@ export default function useDirectoryStats() {
       try {
         await Promise.allSettled(
           batch.map((id) =>
-            apolloClient.query({
+            client.query({
               query: DirectoryStatsDocument,
               variables: { id },
               fetchPolicy: "network-only",

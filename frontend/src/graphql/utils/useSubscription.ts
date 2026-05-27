@@ -12,7 +12,7 @@ import { computed, onScopeDispose, watch, type WatchSource } from "vue";
 import { debounce } from "es-toolkit/compat";
 import toStableValue from "@/utils/toStableValue";
 import type { OperationContext } from "../client";
-import { apolloClient } from "../client";
+import { client } from "../client";
 
 export default function useSubscription<
   TData,
@@ -33,7 +33,7 @@ export default function useSubscription<
   import.meta.hot?.dispose(() => stack.dispose());
 
   function run(stack: DisposableStack, variables?: TVariables) {
-    const ob = apolloClient.subscribe({
+    const ob = client.subscribe({
       ...options,
       query: document,
       variables: variables as TVariables,

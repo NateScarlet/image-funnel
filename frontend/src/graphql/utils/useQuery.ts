@@ -7,10 +7,12 @@ import type {
 import { NetworkStatus } from "@apollo/client/core";
 import type { MaybeRefOrGetter, Ref } from "vue";
 import { computed, onScopeDispose, shallowRef, toValue, watch } from "vue";
-import toStableValue from "@/utils/toStableValue";
-import type { OperationContext } from "../client";
-import { apolloClient } from "../client";
 import stableComputed from "@/composables/stableComputed";
+import type OperationContext from "../OperationContext";
+import getOperationName from "./getOperationName";
+import SingleFlightGroup from "@/utils/SingleFlightGroup";
+import { isEqual } from "es-toolkit";
+import client from "../client";
 
 function isLoading(v: ObservableQuery.Result<unknown> | undefined): boolean {
   return (
@@ -39,43 +41,75 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   > = {},
 ): {
   data: Ref<TData | undefined>;
-  query: ObservableQuery<TData, TVariables>;
+  query: Omit<ObservableQuery<TData, TVariables>, "refetch">;
+  refresh: () => Promise<void>;
 } & Disposable {
   const stack = new DisposableStack();
   onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
+  const skip = computed(() => variables != null && !toValue(variables));
+  let lastVariables = toValue(variables);
   const query = stack.adopt(
-    apolloClient.watchQuery({
+    client.watchQuery({
       ...options,
       query: document,
-      variables: toValue(variables) as TVariables,
+      variables: lastVariables as TVariables,
       notifyOnNetworkStatusChange: true,
-    }),
+      skipPollAttempt() {
+        return skip.value;
+      },
+    } satisfies ApolloClient.WatchQueryOptions<TData, TVariables>),
     (i) => i.stopPolling(),
   );
-  const resultBuffer = shallowRef<{ v?: ObservableQuery.Result<TData> }>();
-  const resultModel = computed({
-    get() {
-      return resultBuffer.value?.v;
-    },
-    set(v) {
-      resultBuffer.value = { v };
-    },
-  });
+  const result = shallowRef<ObservableQuery.Result<TData>>();
+  // 变量修改
+  const stableVariables = stableComputed(() => toValue(variables));
+  stack.defer(
+    watch(
+      stableVariables,
+      (vars) => {
+        if (vars && !isEqual(vars, lastVariables)) {
+          lastVariables = vars;
+          void query.setVariables(vars);
+        }
+      },
+      { immediate: true },
+    ),
+  );
+  // 中止
+  stack.defer(
+    watch(
+      skip,
+      (skip, _, onCleanup) => {
+        if (skip) {
+          result.value = undefined;
+          return;
+        }
+        let cancelled = false;
+        onCleanup(() => {
+          cancelled = true;
+        });
+        result.value = query.getCurrentResult();
+        const sub = query.subscribe((data) => {
+          if (cancelled) {
+            return;
+          }
+          result.value = data;
+        });
+        onCleanup(() => sub.unsubscribe());
+      },
+      { immediate: true },
+    ),
+  );
+  // 加载状态
   if (loadingCount) {
     stack.defer(
       watch(
-        () => {
-          if (variables != null && toValue(variables) == null) {
-            // skipping
-            return false;
-          }
-          return resultBuffer.value && isLoading(resultBuffer.value.v);
-        },
-        (value, _, cleanup) => {
-          if (value) {
+        () => !skip.value && isLoading(result.value),
+        (loading, _, onCleanup) => {
+          if (loading) {
             loadingCount.value += 1;
-            cleanup(() => {
+            onCleanup(() => {
               loadingCount.value -= 1;
             });
           }
@@ -84,50 +118,33 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
       ),
     );
   }
-  async function run(stack: DisposableStack, variables?: TVariables) {
-    if (variables) {
-      await query.setVariables(variables);
-    }
-    if (stack.disposed) {
-      return;
-    }
-    resultModel.value = query.getCurrentResult();
-    stack.adopt(
-      query.subscribe({
-        next: (data) => {
-          if (!stack.disposed) {
-            resultModel.value = data;
-          }
-        },
-      }),
-      (i) => i.unsubscribe(),
-    );
-  }
-  if (variables) {
-    const stableVariables = computed<TVariables | undefined>((oldValue) =>
-      toStableValue(variables, oldValue),
-    );
-    stack.defer(
-      watch(
-        stableVariables,
-        (n, _, onCleanup) => {
-          if (n == null) {
-            resultModel.value = undefined;
-            return;
-          }
-          const stack = new DisposableStack();
-          onCleanup(() => stack.dispose());
-          run(stack, n);
-        },
-        { immediate: true },
-      ),
-    );
-  } else {
-    run(stack);
+  // 刷新
+  const flight = new SingleFlightGroup();
+  let lastRefreshDurationMs = 0;
+  async function refresh() {
+    await flight.do("refresh", async () => {
+      const startAt = performance.now();
+      const vars = toValue(variables);
+      if (variables == null || !!vars) {
+        await query.refetch(vars);
+        lastRefreshDurationMs = performance.now() - startAt;
+        if (lastRefreshDurationMs > 1e3) {
+          console.warn("slow refresh", {
+            operationName: getOperationName(document),
+            lastRefreshDurationMs,
+          });
+        }
+      }
+    });
   }
   return {
-    data: stableComputed(() => resultModel.value?.data as TData | undefined),
+    data: stableComputed(() => {
+      if (result.value?.dataState === "complete") {
+        return result.value.data;
+      }
+    }),
     query,
+    refresh,
     [Symbol.dispose]: () => stack.dispose(),
   };
 }
