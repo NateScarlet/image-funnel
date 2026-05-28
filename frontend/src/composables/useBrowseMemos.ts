@@ -7,6 +7,7 @@ import useLiveConnection from "./useLiveConnection";
 import {
   BrowseMemosDocument,
   MemoSavedDocument,
+  DirEntryDeletedDocument,
   UpdateMemoDocument,
   type MemoFragment,
   type BrowseMemosQueryVariables,
@@ -73,6 +74,24 @@ export default function useBrowseMemos(
       const savedMemo = result.data?.memoSaved;
       if (savedMemo) {
         onMemoSaved(savedMemo);
+      }
+    },
+  });
+
+  // 订阅文件/目录的删除事件
+  useSubscription(DirEntryDeletedDocument, {
+    variables: () => {
+      return { directoryId: directoryId.value || undefined };
+    },
+    onNext: (result) => {
+      const deletedEntry = result.data?.dirEntryDeleted;
+      if (deletedEntry) {
+        const match = memos.value.find(
+          (m) => m.relPath === deletedEntry.relPath,
+        );
+        if (match) {
+          onMemoDeleted({ id: match.id });
+        }
       }
     },
   });

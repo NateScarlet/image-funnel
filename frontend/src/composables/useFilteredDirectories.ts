@@ -4,6 +4,9 @@ import useAsyncTask from "@/composables/useAsyncTask";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 import { sortBy } from "es-toolkit";
 import type { DirectoryFragment } from "@/graphql/generated";
+import useSubscription from "@/graphql/utils/useSubscription";
+import useLiveConnection from "./useLiveConnection";
+import { DirEntryDeletedDocument } from "@/graphql/generated";
 
 /**
  * 过滤并排序目录列表的 composable
@@ -32,11 +35,40 @@ export default function useFilteredDirectories(
   const { getCachedStats, refetchStats } = useDirectoryStats();
   const loadingCount = ref(0);
 
+  // 接入实时增量更新逻辑
+  const { nodes: liveDirectories, onDeleted } = useLiveConnection(() =>
+    toValue(directories),
+  );
+
+  // 从目录列表中获取父目录 ID
+  const parentId = computed(() => {
+    const dirs = toValue(directories);
+    return dirs.length > 0 ? dirs[0].parentId : undefined;
+  });
+
+  // 订阅文件/目录的删除事件
+  useSubscription(DirEntryDeletedDocument, {
+    variables: () => {
+      return { directoryId: parentId.value || undefined };
+    },
+    onNext: (result) => {
+      const deletedEntry = result.data?.dirEntryDeleted;
+      if (deletedEntry) {
+        const match = liveDirectories.value.find(
+          (d) => d.relPath === deletedEntry.relPath,
+        );
+        if (match) {
+          onDeleted({ id: match.id });
+        }
+      }
+    },
+  });
+
   // 在后台批量加载未获取统计信息的目录，避免同时发起大量查询
   useAsyncTask({
     loadingCount,
     args() {
-      const dirs = toValue(directories);
+      const dirs = liveDirectories.value;
       const toLoad = dirs.map((d) => d.id);
       return toLoad.length > 0 ? [toLoad] : undefined;
     },
@@ -47,7 +79,7 @@ export default function useFilteredDirectories(
 
   // 计算未评级图片多于设定阈值的目录数量
   const largeUnratedCount = computed(() => {
-    const dirs = toValue(directories);
+    const dirs = liveDirectories.value;
     return dirs.filter((dir) => {
       const stats = getCachedStats(dir.id);
       if (!stats) return false;
@@ -62,7 +94,7 @@ export default function useFilteredDirectories(
 
   // 排序并过滤后的目录列表
   const sortedDirectories = computed(() => {
-    const dirs = toValue(directories);
+    const dirs = liveDirectories.value;
     const queryStr = query ? toValue(query)?.trim().toLowerCase() : "";
 
     // #region 过滤与排序逻辑
