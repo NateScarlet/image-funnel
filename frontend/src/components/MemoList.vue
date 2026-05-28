@@ -40,7 +40,11 @@
     </div>
 
     <!-- 笔记列表项 -->
-    <div v-else class="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+    <div
+      v-else
+      ref="containerRef"
+      class="space-y-2 max-h-[40vh] overflow-y-auto pr-1"
+    >
       <div
         v-for="memoItem in memos"
         :key="memoItem.id"
@@ -103,6 +107,35 @@
           </div>
         </div>
       </div>
+
+      <!-- 加载更多分页控制 -->
+      <div
+        v-if="hasNextPage"
+        class="mt-4 flex justify-center border-t border-primary-700/30 pt-3 pb-1"
+      >
+        <button
+          :disabled="loading"
+          class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="fetchMore"
+        >
+          <!-- 加载中动画 -->
+          <svg
+            v-if="loading"
+            class="w-3.5 h-3.5 animate-spin text-secondary-500"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>{{ loading ? "正在加载..." : "加载更多笔记" }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- 备忘录/笔记编辑对话框 -->
@@ -137,9 +170,11 @@ import {
   mdiEyeOff,
   mdiChevronRight,
   mdiPlus,
+  mdiLoading,
 } from "@mdi/js";
 import CreateMemoForm from "./CreateMemoForm.vue";
 import useBrowseMemos from "@/composables/useBrowseMemos";
+import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import { useDirectoryState } from "@/composables/useDirectoryState";
 import type {
   BrowseMemosQueryVariables,
@@ -180,13 +215,28 @@ const memosVariables = computed<BrowseMemosQueryVariables>(() => {
   return {
     id: directoryIdRef.value,
     filterBy,
-    first: 100,
+    first: 20, // 设定较小的值以启用分页和无限加载
     after: null,
   };
 });
 
+// 定义加载状态
+const loadingCount = ref(0);
+const loading = computed(() => loadingCount.value > 0);
+
 // 调用 composable 查询并订阅笔记数据的变化
-const { memos, toggleMemoHidden } = useBrowseMemos(memosVariables);
+const { memos, toggleMemoHidden, hasNextPage, fetchMore } = useBrowseMemos(
+  memosVariables,
+  { loadingCount },
+);
+
+const containerRef = useTemplateRef<HTMLElement>("containerRef");
+
+useInfiniteScroll(containerRef, async () => {
+  if (hasNextPage.value && !loading.value) {
+    await fetchMore();
+  }
+});
 // #endregion
 
 // #region 笔记编辑弹出框管理

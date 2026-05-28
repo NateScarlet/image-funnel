@@ -57,7 +57,7 @@
         </ToggleSwitch>
       </div>
     </div>
-    <div class="max-h-[40vh] overflow-y-auto pr-1">
+    <div ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
       <div
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
@@ -88,10 +88,26 @@
         class="mt-4 flex justify-center border-t border-primary-700/30 pt-3"
       >
         <button
-          class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer"
+          :disabled="loading"
+          class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           @click="fetchMore"
         >
-          加载更多子目录...
+          <!-- 加载中动画 -->
+          <svg
+            v-if="loading"
+            class="w-3.5 h-3.5 animate-spin text-secondary-500"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span>{{ loading ? "正在加载..." : "加载更多子目录" }}</span>
         </button>
       </div>
     </div>
@@ -99,11 +115,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { mdiFolder, mdiMagnify, mdiClose } from "@mdi/js";
+import { ref, useTemplateRef } from "vue";
+import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import useDirectories from "@/composables/useDirectories";
+import useInfiniteScroll from "@/composables/useInfiniteScroll";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{
@@ -127,6 +144,14 @@ const {
   hasNextPage,
   fetchMore,
 } = useDirectories(() => ({ id: directoryId }), { query: searchQuery });
+
+const containerRef = useTemplateRef<HTMLElement>("containerRef");
+
+useInfiniteScroll(containerRef, async () => {
+  if (hasNextPage.value && !loading.value) {
+    await fetchMore();
+  }
+});
 
 // #region 目录名解析
 function getDirName(relPath: string): string {

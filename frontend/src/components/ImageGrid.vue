@@ -146,7 +146,10 @@
       </div>
 
       <!-- 滚动容器：包裹列表、空状态、骨架图与加载更多按钮 -->
-      <div class="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
+      <div
+        ref="containerRef"
+        class="max-h-[60vh] overflow-y-auto pr-1 space-y-4"
+      >
         <!-- 骨架图加载指示，避免布局抖动 -->
         <div
           v-if="loading && images.length === 0"
@@ -540,7 +543,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watchEffect, onMounted, nextTick } from "vue";
+import {
+  ref,
+  computed,
+  watchEffect,
+  onMounted,
+  nextTick,
+  useTemplateRef,
+} from "vue";
+import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import {
   mdiImage,
   mdiFilterOff,
@@ -617,6 +628,14 @@ const loading = computed(() => loadingCount.value > 0);
 // 调用 useBrowseImages 获取图片列表
 const { images, hasNextPage, fetchMore } = useBrowseImages(imagesVariables, {
   loadingCount,
+});
+
+const containerRef = useTemplateRef<HTMLElement>("containerRef");
+
+useInfiniteScroll(containerRef, async () => {
+  if (hasNextPage.value && !loading.value) {
+    await fetchMore();
+  }
 });
 
 // #region 批量操作状态与逻辑管理

@@ -172,5 +172,7 @@ export default function useBrowseMemos(
   return {
     memos,
     toggleMemoHidden,
+    hasNextPage: computed(() => memosConnection.pageInfo.value.hasNextPage),
+    fetchMore: memosConnection.fetchMore,
   };
 }
