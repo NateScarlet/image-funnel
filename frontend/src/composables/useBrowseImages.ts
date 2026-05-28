@@ -87,6 +87,12 @@ export default function useBrowseImages(
     onNext: (result) => {
       const savedImage = result.data?.imageSaved;
       if (savedImage) {
+        client.writeFragment({
+          id: client.cache.identify(savedImage),
+          fragment: ImageFragmentDoc,
+          fragmentName: "Image",
+          data: savedImage,
+        });
         onSaved(savedImage);
       }
     },
