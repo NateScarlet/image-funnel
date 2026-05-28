@@ -3,7 +3,6 @@ import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import useRelayConnection from "./useRelayConnection";
 import useLiveConnection from "./useLiveConnection";
-import useStorage from "@/composables/useStorage";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 import { sortBy } from "es-toolkit";
@@ -27,6 +26,7 @@ export default function useDirectories(
   options?: {
     loadingCount?: Ref<number>;
     query?: MaybeRefOrGetter<string | undefined>;
+    maxUnratedCount?: MaybeRefOrGetter<number | undefined>;
   },
 ) {
   const resolvedVariables = computed(() => {
@@ -44,19 +44,7 @@ export default function useDirectories(
   });
   const directoryId = computed(() => toValue(variables).id);
 
-  // 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
-  const { model: maxUnratedCount } = useStorage<number>(
-    localStorage,
-    "max_unrated_count_sub_dir_bf16419b",
-    () => 0,
-  );
-
-  // 从 localStorage 读取是否显示大量未评级目录的开关
-  const { model: showLargeUnrated } = useStorage<boolean>(
-    localStorage,
-    "show_large_unrated_sub_dir_3dfc6a37",
-    () => false,
-  );
+  const maxUnratedCountVal = computed(() => toValue(options?.maxUnratedCount));
 
   const { getCachedStats, refetchStats } = useDirectoryStats();
   const internalLoadingCount = ref(0);
@@ -166,27 +154,30 @@ export default function useDirectories(
   // 计算未评级图片多于设定阈值的目录数量
   const largeUnratedCount = computed(() => {
     const dirs = liveDirectories.value;
+    const limit = maxUnratedCountVal.value;
+    if (limit === undefined) return 0;
     return dirs.filter((dir) => {
       const stats = getCachedStats(dir.id);
       if (!stats) return false;
       const unratedCount =
         stats.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
-      return (
-        stats.subdirectoryCount === 0 && unratedCount > maxUnratedCount.value
-      );
+      return stats.subdirectoryCount === 0 && unratedCount > limit;
     }).length;
   });
 
   // 排序并过滤后的目录列表
   const sortedDirectories = computed(() => {
     const dirs = liveDirectories.value;
+    const limit = maxUnratedCountVal.value;
 
     const items = dirs.map((dir) => {
       const stats = getCachedStats(dir.id);
       const unratedCount =
         stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       const isLargeUnrated =
-        stats?.subdirectoryCount === 0 && unratedCount > maxUnratedCount.value;
+        limit !== undefined &&
+        stats?.subdirectoryCount === 0 &&
+        unratedCount > limit;
       return {
         dir,
         stats,
@@ -196,7 +187,7 @@ export default function useDirectories(
 
     const filteredItems = items.filter((item) => {
       // 过滤大量未评级目录
-      if (!showLargeUnrated.value && item.isLargeUnrated) {
+      if (item.isLargeUnrated) {
         return false;
       }
       return true;
@@ -214,8 +205,6 @@ export default function useDirectories(
 
   return {
     currentDirectory,
-    maxUnratedCount,
-    showLargeUnrated,
     largeUnratedCount,
     sortedDirectories,
     hasNextPage: computed(() => directoryConnection.pageInfo.value.hasNextPage),

@@ -148,10 +148,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, useTemplateRef } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
+import useStorage from "@/composables/useStorage";
 import useDirectories from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 
@@ -167,16 +168,36 @@ const emit = defineEmits<(e: "navigate", id: string) => void>();
 // 搜索关键字响应式变量
 const searchQuery = ref("");
 
+// 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
+const { model: maxUnratedCount } = useStorage<number>(
+  localStorage,
+  "max_unrated_count_sub_dir_bf16419b",
+  () => 0,
+);
+
+// 从 localStorage 读取是否显示大量未评级目录的开关
+const { model: showLargeUnrated } = useStorage<boolean>(
+  localStorage,
+  "show_large_unrated_sub_dir_3dfc6a37",
+  () => false,
+);
+
+// 只有在 !showLargeUnrated 时才需要限制最大未评级数量，否则传 undefined 表示不限制
+const effectiveMaxUnratedCount = computed(() => {
+  return showLargeUnrated.value ? undefined : maxUnratedCount.value;
+});
+
 // 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
 const {
-  maxUnratedCount,
-  showLargeUnrated,
   largeUnratedCount,
   sortedDirectories,
   loading,
   hasNextPage,
   fetchMore,
-} = useDirectories(() => ({ id: directoryId }), { query: searchQuery });
+} = useDirectories(() => ({ id: directoryId }), {
+  query: searchQuery,
+  maxUnratedCount: effectiveMaxUnratedCount,
+});
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 
