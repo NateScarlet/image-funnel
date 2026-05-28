@@ -1,6 +1,5 @@
 <template>
   <section
-    v-if="sortedDirectories.length > 0"
     class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
   >
     <div
@@ -59,6 +58,7 @@
     </div>
     <div ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
       <div
+        v-if="sortedDirectories.length > 0"
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
         <button
@@ -82,6 +82,39 @@
           </DirectoryDisplay>
         </button>
       </div>
+
+      <!-- 搜索无结果或加载中的提示 -->
+      <div
+        v-else
+        class="py-8 flex flex-col items-center justify-center text-primary-400 gap-2 select-none"
+      >
+        <template v-if="loading">
+          <!-- 正在加载动画 -->
+          <svg
+            class="w-8 h-8 animate-spin text-secondary-500"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span class="text-sm">正在加载子目录...</span>
+        </template>
+        <template v-else>
+          <svg class="w-8 h-8 text-primary-500" viewBox="0 0 24 24">
+            <path :d="mdiFolder" fill="currentColor" />
+          </svg>
+          <span class="text-sm">
+            {{ searchQuery.trim() ? "未找到匹配的子目录" : "无子目录" }}
+          </span>
+        </template>
+      </div>
+
       <!-- 加载更多分页控制 -->
       <div
         v-if="hasNextPage"
