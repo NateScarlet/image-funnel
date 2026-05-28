@@ -115,6 +115,8 @@ export default function useModal() {
   }
 
   function show() {
+    // 打开模态框时清除选中的文本，避免误操作导致 Ctrl+C 复制被拦截
+    window.getSelection()?.removeAllRanges();
     visible.value = true;
     skipRender.value = false;
   }
