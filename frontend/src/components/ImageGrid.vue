@@ -14,7 +14,23 @@
           <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
             <path :d="mdiImage" fill="currentColor" />
           </svg>
-          图片列表 ({{ images.length }} 张)
+          <span>图片列表 ({{ images.length }} 张)</span>
+          <!-- 加载中即使有缓存数据也显示旋转加载提示 -->
+          <svg
+            v-if="loading"
+            class="w-4 h-4 animate-spin text-secondary-500"
+            viewBox="0 0 24 24"
+            fill="none"
+            title="正在加载最新数据..."
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
         </h2>
 
         <div class="flex flex-wrap items-center gap-3">
