@@ -115,7 +115,7 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 				if offset+12 > ret {
 					break // 数据不足以解析 FILE_NOTIFY_INFORMATION 头部
 				}
-				info := (*windows.FileNotifyInformation)(unsafe.Pointer(uintptr(unsafe.Pointer(bufPtr)) + uintptr(offset)))
+				info := (*windows.FileNotifyInformation)(unsafe.Add(unsafe.Pointer(bufPtr), offset))
 				nameLen := info.FileNameLength / 2
 				if offset+12+info.FileNameLength > ret {
 					break // 防止越界
