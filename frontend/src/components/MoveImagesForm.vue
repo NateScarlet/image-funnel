@@ -31,7 +31,9 @@
         class="rounded-xl bg-primary-900/40 border border-primary-800/30 p-4 text-sm text-primary-200 leading-relaxed"
       >
         <span class="font-medium text-secondary-400">待移动图片：</span>
-        <span class="font-bold">{{ matchCount }} 张</span>
+        <span class="font-bold"
+          >{{ isApproximate ? "> " : "" }}{{ matchCount }} 张</span
+        >
         <p class="mt-1 text-xs text-primary-400 leading-relaxed">
           提示：图片对应的配套伴随文件（如同名
           .txt，.json，或者带有当前图片完整名称及额外扩展名的文件）也将同步移动。
@@ -114,6 +116,7 @@ const props = defineProps<{
   directoryId: string;
   filterBy: ImageFiltersInput;
   matchCount: number;
+  isApproximate?: boolean;
 }>();
 
 const emit = defineEmits<(e: "close") => void>();

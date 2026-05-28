@@ -367,6 +367,7 @@
         :directory-id="directoryId"
         :filter-by="moveImagesFilterBy"
         :match-count="moveImagesMatchCount"
+        :is-approximate="!isBulkMode && hasNextPage"
         @close="handleMoveClose"
       />
     </moveImagesDialog.component>
