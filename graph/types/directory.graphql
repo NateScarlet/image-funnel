@@ -13,7 +13,13 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
   "目录统计信息（图片数量、子目录数、评分分布等）"
   stats: DirectoryStats
   "子目录列表"
-  directories: [Directory!]! @goField(forceResolver: true)
+  directories: [Directory!]! @deprecated(reason: "use directoriesV2") @goField(forceResolver: true)
+  "子目录列表，支持筛选与分页"
+  directoriesV2(
+    filterBy: DirectoryFilters
+    first: Int
+    after: String
+  ): DirectoryConnection! @goField(forceResolver: true)
   "目录下的图片列表，支持筛选与分页"
   images(
     filterBy: ImageFiltersInput
@@ -30,6 +36,17 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
   lastSession: Session @goField(forceResolver: true)
 }
 
+type DirectoryConnection @goModel(model: "main/internal/shared.DirectoryConnectionDTO") {
+  edges: [DirectoryEdge!]!
+  nodes: [Directory!]!
+  pageInfo: PageInfo!
+}
+
+type DirectoryEdge @goModel(model: "main/internal/shared.DirectoryEdgeDTO") {
+  node: Directory!
+  cursor: String!
+}
+
 type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
   edges: [ImageEdge!]!
   nodes: [Image!]!
@@ -40,6 +57,7 @@ type ImageEdge @goModel(model: "main/internal/shared.ImageEdgeDTO") {
   node: Image!
   cursor: String!
 }
+
 
 type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
   "是否有下一页"

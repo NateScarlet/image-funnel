@@ -119,6 +119,19 @@ type MemoEdgeDTO struct {
 	Cursor string
 }
 
+// DirectoryConnectionDTO 目录连接数据传输对象
+type DirectoryConnectionDTO struct {
+	Edges    []*DirectoryEdgeDTO
+	Nodes    []*DirectoryDTO
+	PageInfo *PageInfoDTO
+}
+
+// DirectoryEdgeDTO 目录边数据传输对象
+type DirectoryEdgeDTO struct {
+	Node   *DirectoryDTO
+	Cursor string
+}
+
 // ImageConnectionDTO 图片连接数据传输对象
 type ImageConnectionDTO struct {
 	Edges    []*ImageEdgeDTO

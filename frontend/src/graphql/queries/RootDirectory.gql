@@ -1,8 +1,5 @@
 query RootDirectory {
   rootDirectory {
     ...Directory
-    directories {
-      ...Directory
-    }
   }
 }

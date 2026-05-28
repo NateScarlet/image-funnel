@@ -55,8 +55,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { mdiFolderOpen } from "@mdi/js";
-import useQuery from "../graphql/utils/useQuery";
-import { DirectoriesDocument } from "../graphql/generated";
+import useDirectories from "@/composables/useDirectories";
 
 // #region 组件属性与事件定义
 const props = defineProps<{
@@ -68,25 +67,15 @@ const emit = defineEmits<(e: "navigate", id: string) => void>();
 // #endregion
 
 // #region 目录数据查询与解析
-// 仅在 directoryId 有效时发起 GraphQL 查询
-const { data } = useQuery(DirectoriesDocument, {
-  variables: () => {
-    if (!props.directoryId) return undefined;
-    return {
-      id: props.directoryId,
-    };
-  },
-});
+// 查询当前目录自身元数据
+const { currentDirectory: myDirectory } = useDirectories(() => ({
+  id: props.directoryId,
+  first: 0,
+}));
 
 // 计算当前加载中的状态
 const loading = computed(() => {
-  return data.value === undefined;
-});
-
-// 提取当前级目录对象
-const myDirectory = computed(() => {
-  const node = data.value?.node;
-  return node?.__typename === "Directory" ? node : undefined;
+  return myDirectory.value === undefined;
 });
 
 // 是否是相对路径根目录

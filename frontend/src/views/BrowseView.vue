@@ -228,8 +228,7 @@
     >
       <!-- 子目录容器区 -->
       <SubdirectoryGrid
-        v-if="subDirectories.length > 0"
-        :directories="subDirectories"
+        :directory-id="currentDirectoryId"
         :filter-rating="filterRating"
         @navigate="navigateToDir"
       />
@@ -258,7 +257,8 @@ import {
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
-import { DirectoriesDocument, MetaDocument } from "../graphql/generated";
+import { MetaDocument } from "../graphql/generated";
+import useDirectories from "@/composables/useDirectories";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
@@ -295,10 +295,6 @@ function goToLastSession() {
 // #region 过滤器与多选状态
 const { filterRating, lastSession } = useDirectoryState(currentDirectoryId);
 
-const subDirectories = computed(() => {
-  return currentDirectory.value?.directories || [];
-});
-
 // 判断当前是否可以返回上一级目录（存在当前目录且不是根目录）
 const canGoToParent = computed(() => {
   return !!currentDirectory.value && !currentDirectory.value.root;
@@ -316,50 +312,29 @@ function goToParent() {
 // #region 目录与子目录查询
 const loadingCount = ref(0);
 
-const { data: directoriesData } = useQuery(DirectoriesDocument, {
-  variables: () => ({
+// 查询当前目录自身元数据
+const { currentDirectory } = useDirectories(
+  () => ({
     id: currentDirectoryId.value,
+    first: 0,
   }),
-  loadingCount,
-});
-
-const currentDirectory = computed(() => {
-  const node = directoriesData.value?.node;
-  return node?.__typename === "Directory" ? node : undefined;
-});
+  { loadingCount },
+);
 
 // #region 同级目录切换逻辑
-import useFilteredDirectories from "@/composables/useFilteredDirectories";
-
 // 推导父目录 ID。若当前已经在根目录，则不加载父目录
 const parentDirectoryId = computed(() => {
   if (!currentDirectoryId.value) return undefined;
   return currentDirectory.value?.parentId || "";
 });
 
-// 构建查询父目录下所有子目录的 GraphQL 变量，若 parentDirectoryId 未就绪则跳过查询
-const parentDirectoriesVariables = computed(() => {
-  if (parentDirectoryId.value === undefined) {
-    return undefined;
+// 查询并排序的同级目录列表（当 parentDirectoryId 为空或 undefined 时跳过）
+const { sortedDirectories: sortedSiblings } = useDirectories(() => {
+  if (!parentDirectoryId.value) {
+    return { id: "" };
   }
-  return {
-    id: parentDirectoryId.value,
-  };
+  return { id: parentDirectoryId.value };
 });
-
-const { data: parentDirectoriesData } = useQuery(DirectoriesDocument, {
-  variables: parentDirectoriesVariables,
-});
-
-// 父目录下的所有原始子目录列表
-const parentSubDirectories = computed(() => {
-  const node = parentDirectoriesData.value?.node;
-  return node?.__typename === "Directory" ? node.directories || [] : [];
-});
-
-// 排序后的同级目录
-const { sortedDirectories: sortedSiblings } =
-  useFilteredDirectories(parentSubDirectories);
 
 // 当前目录在排序后同级目录中的索引位置
 const currentSiblingIndex = computed(() => {

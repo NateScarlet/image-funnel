@@ -7,7 +7,9 @@ package graphql
 
 import (
 	"context"
+	"main/internal/pagination"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // Stats is the resolver for the stats field.
@@ -17,7 +19,16 @@ func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO)
 
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error) {
-	return r.app.Directories(ctx, obj.ID)
+	conn, err := r.app.Directories(ctx, obj.ID, shared.DirectoryFilters{}, &pagination.MaxPageSize, nil)
+	if err != nil {
+		return nil, err
+	}
+	return conn.Nodes, nil
+}
+
+// DirectoriesV2 is the resolver for the directoriesV2 field.
+func (r *directoryResolver) DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string) (*shared.DirectoryConnectionDTO, error) {
+	return r.app.Directories(ctx, obj.ID, util.UnwrapPointer(filterBy), first, after)
 }
 
 // Images is the resolver for the images field.

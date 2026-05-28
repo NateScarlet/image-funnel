@@ -1,5 +1,6 @@
 <template>
   <section
+    v-if="sortedDirectories.length > 0"
     class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
   >
     <div
@@ -58,7 +59,6 @@
     </div>
     <div class="max-h-[40vh] overflow-y-auto pr-1">
       <div
-        v-if="sortedDirectories.length > 0"
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
         <button
@@ -82,8 +82,17 @@
           </DirectoryDisplay>
         </button>
       </div>
-      <div v-else class="py-6 text-center text-primary-500 text-sm italic">
-        无符合筛选条件的子目录
+      <!-- 加载更多分页控制 -->
+      <div
+        v-if="hasNextPage"
+        class="mt-4 flex justify-center border-t border-primary-700/30 pt-3"
+      >
+        <button
+          class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer"
+          @click="fetchMore"
+        >
+          加载更多子目录...
+        </button>
       </div>
     </div>
   </section>
@@ -94,12 +103,11 @@ import { ref } from "vue";
 import { mdiFolder, mdiMagnify, mdiClose } from "@mdi/js";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
-import type { DirectoryFragment } from "@/graphql/generated";
-import useFilteredDirectories from "@/composables/useFilteredDirectories";
+import useDirectories from "@/composables/useDirectories";
 
 // #region 属性与事件定义
-const { directories, filterRating } = defineProps<{
-  directories: DirectoryFragment[];
+const { directoryId, filterRating } = defineProps<{
+  directoryId: string;
   filterRating: readonly number[];
 }>();
 
@@ -109,14 +117,16 @@ const emit = defineEmits<(e: "navigate", id: string) => void>();
 // 搜索关键字响应式变量
 const searchQuery = ref("");
 
-// 使用新提取的 composable，共享子目录过滤与排序状态
+// 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
 const {
   maxUnratedCount,
   showLargeUnrated,
   largeUnratedCount,
   sortedDirectories,
   loading,
-} = useFilteredDirectories(() => directories, searchQuery);
+  hasNextPage,
+  fetchMore,
+} = useDirectories(() => ({ id: directoryId }), { query: searchQuery });
 
 // #region 目录名解析
 function getDirName(relPath: string): string {

@@ -73,8 +73,8 @@
 
       <div
         v-if="items.length > 0"
+        ref="containerRef"
         class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
-        @scroll="handleScroll"
       >
         <template v-for="item in visibleFilteredItems" :key="item.key">
           <DirectoryItem
@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, useTemplateRef } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
@@ -116,19 +116,14 @@ import useAsyncTask from "../composables/useAsyncTask";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
-import type { DirectoryFragment } from "../graphql/generated";
+import useDirectories from "../composables/useDirectories";
+import useInfiniteScroll from "../composables/useInfiniteScroll";
 
-const { currentDirectory, directories, loading, filterRating, targetKeep } =
-  defineProps<{
-    currentDirectory: DirectoryFragment | null | undefined;
-    directories: DirectoryFragment[];
-    loading: boolean;
-    filterRating: readonly number[];
-    targetKeep: number;
-    rootPath: string;
-  }>();
-
-const emit = defineEmits<(e: "go-to-parent") => void>();
+const { filterRating, targetKeep } = defineProps<{
+  filterRating: readonly number[];
+  targetKeep: number;
+  rootPath: string;
+}>();
 
 const selectedId = defineModel<string>();
 
@@ -157,11 +152,25 @@ const { getCachedStats, refetchStats } = useDirectoryStats();
 
 const backgroundLoadingCount = ref(0);
 
+// 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页
+const {
+  sortedDirectories: directories,
+  currentDirectory,
+  loading,
+  hasNextPage,
+  fetchMore,
+} = useDirectories(
+  () => ({
+    id: selectedId.value || "",
+  }),
+  { loadingCount: backgroundLoadingCount },
+);
+
 // 在后台批量加载未获取统计信息的目录，避免同时发起大量查询
 useAsyncTask({
   loadingCount: backgroundLoadingCount,
   args() {
-    const toLoad = directories.map((d) => d.id);
+    const toLoad = directories.value.map((d) => d.id);
     return toLoad.length > 0 ? [toLoad] : undefined;
   },
   async task(toLoad, ctx) {
@@ -171,7 +180,7 @@ useAsyncTask({
 
 const items = computed(() => {
   return sortBy(
-    directories.map((dir) => {
+    directories.value.map((dir) => {
       const stats = getCachedStats(dir.id);
       const keepCount =
         stats?.ratingCounts.reduce(
@@ -227,11 +236,14 @@ const searchState = ref({ query: "", directoryId: "" });
 
 const searchQuery = computed({
   get: () =>
-    searchState.value.directoryId === (currentDirectory?.id ?? "")
+    searchState.value.directoryId === (currentDirectory.value?.id ?? "")
       ? searchState.value.query
       : "",
   set: (val: string) => {
-    searchState.value = { query: val, directoryId: currentDirectory?.id ?? "" };
+    searchState.value = {
+      query: val,
+      directoryId: currentDirectory.value?.id ?? "",
+    };
   },
 });
 
@@ -269,20 +281,22 @@ const visibleFilteredItems = computed(() => {
 });
 
 watch(
-  () => currentDirectory?.id,
+  () => currentDirectory.value?.id,
   () => {
     renderLimit.value = 40;
   },
 );
 
-function handleScroll(e: Event) {
-  const target = e.target as HTMLElement;
-  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 100) {
-    if (renderLimit.value < displayedFilteredItems.value.length) {
-      renderLimit.value += 40;
-    }
+const containerRef = useTemplateRef<HTMLElement>("containerRef");
+
+useInfiniteScroll(containerRef, async () => {
+  if (renderLimit.value < displayedFilteredItems.value.length) {
+    renderLimit.value += 40;
   }
-}
+  if (hasNextPage.value && !loading.value) {
+    await fetchMore();
+  }
+});
 
 const completedCount = computed(() => {
   return items.value.filter((item) => item.isCompleted).length;
@@ -299,14 +313,18 @@ watch(
       .filter((item) => item.keepCount > targetKeep)
       .map((item) => item.dir.id);
 
-    if (currentDirectory) {
-      recordDirectoryOrder(currentDirectory.id, navigableDirectoryIds);
+    if (currentDirectory.value) {
+      recordDirectoryOrder(currentDirectory.value.id, navigableDirectoryIds);
     }
   },
   { immediate: true },
 );
 
 function goToParent() {
-  emit("go-to-parent");
+  if (!currentDirectory.value || !currentDirectory.value.parentId) {
+    selectedId.value = "";
+    return;
+  }
+  selectedId.value = currentDirectory.value.parentId;
 }
 </script>

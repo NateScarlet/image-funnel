@@ -45,13 +45,9 @@
 
     <DirectorySelector
       v-model="selectedDirectoryId"
-      :current-directory="currentDirectory"
-      :directories="directories"
-      :loading="loading"
       :filter-rating="filterRating"
       :target-keep="targetKeep"
       :root-path="rootPath"
-      @go-to-parent="goToParent"
     />
 
     <div class="flex gap-4">
@@ -93,7 +89,6 @@ import useQuery from "../graphql/utils/useQuery";
 import mutate from "../graphql/utils/mutate";
 import {
   CreateSessionDocument,
-  DirectoriesDocument,
   MetaDocument,
   RootDirectoryDocument,
 } from "../graphql/generated";
@@ -139,35 +134,11 @@ const selectedDirectoryId = computed({
   },
 });
 
-const { data: directoriesData } = useQuery(DirectoriesDocument, {
-  variables: () => ({
-    id: selectedDirectoryId.value,
-  }),
-  fetchPolicy: "no-cache",
-  loadingCount,
-});
-
-const loading = computed(() => loadingCount.value > 0);
-const currentDirectory = computed(() => {
-  const node = directoriesData.value?.node;
-  return node?.__typename === "Directory" ? node : undefined;
-});
-const directories = computed(() => currentDirectory.value?.directories || []);
 const rootPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
 
 const canCreate = computed(() => {
   return (filterRating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;
 });
-
-function goToParent() {
-  const currentDir = currentDirectory.value;
-  if (!currentDir || !currentDir.parentId) {
-    selectedDirectoryId.value = "";
-    return;
-  }
-
-  selectedDirectoryId.value = currentDir.parentId || "";
-}
 
 async function handleCreate() {
   creatingSession.value = true;
