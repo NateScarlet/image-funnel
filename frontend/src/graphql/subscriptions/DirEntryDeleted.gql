@@ -1,0 +1,5 @@
+subscription DirEntryDeleted($directoryId: ID) {
+  dirEntryDeleted(directoryId: $directoryId) {
+    relPath
+  }
+}

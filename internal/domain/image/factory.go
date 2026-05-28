@@ -44,7 +44,7 @@ func (f *Factory) Create(ctx context.Context, relPath string, directoryID scalar
 		return nil, nil
 	}
 
-	if !f.isSupportedImage(info.Name()) {
+	if !f.IsSupportedImage(info.Name()) {
 		return nil, nil
 	}
 
@@ -58,7 +58,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, relPath 
 		return nil, fmt.Errorf("absolute path not allowed: %s", relPath)
 	}
 
-	if info.IsDir() || !f.isSupportedImage(info.Name()) {
+	if info.IsDir() || !f.IsSupportedImage(info.Name()) {
 		return nil, nil
 	}
 
@@ -90,7 +90,7 @@ func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, relPath 
 	), nil
 }
 
-func (f *Factory) isSupportedImage(filename string) bool {
+func (f *Factory) IsSupportedImage(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp" || ext == ".avif"
 }

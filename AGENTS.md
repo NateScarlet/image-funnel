@@ -147,6 +147,8 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **Schema 变更后**: 运行 `pwsh scripts/generate-graphql.ps1`，然后更新 resolvers
 - **废弃字段**: GraphQL 不允许删除字段，只能标记 `@deprecated`。如需从 DTO 移除对应字段，gqlgen 重新生成后会自动为该字段生成 resolver stub（无需手动添加 `@goField(forceResolver: true)`），在 resolver 中实现原有的计算逻辑以保持向后兼容，不可随意返回空值
 - **自动 resolver**: 当 `@goModel` 绑定的 Go 结构体缺少 schema 中的某个字段时，gqlgen 会自动生成 resolver，多此一举添加 `@goField(forceResolver: true)` 是冗余操作
+- **零拷贝 DTO 绑定**: 在 GraphQL Subscription 等复杂返回类型的 schema 定义中，优先使用 `@goModel` 将 GraphQL 类型直接绑定到后端的 `shared.*DTO` 结构体，使得生成的 resolver 签名能够直接传递 DTO 通道，避免在 resolver 中编写额外的映射循环与通道中转代码。
+- **通用文件删除订阅**: 由于文件被删除或移走后其修改时间与属性均不可读，订阅删除事件时应使用通用的、仅提供相对路径的订阅（如 `dirEntryDeleted`）而非特定类型且包含 ID 的删除订阅（如 `imageDeleted`），以便前端统一基于相对路径比对从列表/缓存中移除对应的实体。
 - **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 

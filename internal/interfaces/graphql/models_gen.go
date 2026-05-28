@@ -56,7 +56,7 @@ type CreateSessionPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
-// 图片删除事件载体，仅保留图片ID（原文件已不存在，无法获取其他字段）
+// 图片删除事件载体，仅保留图片ID
 type DeletedImage struct {
 	ID scalar.ID `json:"id"`
 }

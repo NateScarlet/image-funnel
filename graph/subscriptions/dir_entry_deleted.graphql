@@ -1,0 +1,10 @@
+extend type Subscription {
+  "订阅目录内文件或子目录删除或移走事件（文件被移除或重命名时触发），支持按目录ID过滤"
+  dirEntryDeleted(directoryId: ID): DirEntryDeleted!
+}
+
+"目录项删除事件载体，包含删除的文件或目录相对路径"
+type DirEntryDeleted @goModel(model: "main/internal/shared.DirEntryDeletedDTO") {
+  "被删除的目录项的相对路径，用于前端匹配并移除"
+  relPath: String!
+}

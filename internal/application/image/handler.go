@@ -32,6 +32,7 @@ type Handler struct {
 	imageFilterBuilder *image.FilterBuilder
 	logger             *zap.Logger
 	rootDir            string
+	imgFactory         *image.Factory
 }
 
 func NewHandler(
@@ -44,6 +45,7 @@ func NewHandler(
 	imageFilterBuilder *image.FilterBuilder,
 	logger *zap.Logger,
 	rootDir string,
+	imgFactory *image.Factory,
 ) *Handler {
 	return &Handler{
 		imageService:       imageService,
@@ -55,6 +57,7 @@ func NewHandler(
 		imageFilterBuilder: imageFilterBuilder,
 		logger:             logger,
 		rootDir:            rootDir,
+		imgFactory:         imgFactory,
 	}
 }
 
@@ -167,42 +170,6 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 					return yield(nil, err)
 				}
 				return yield(dto, nil)
-			}() {
-				return
-			}
-		}
-	}
-}
-
-// ImageDeleted 订阅目录内图片删除/移走事件（REMOVE/RENAME）
-// 文件消失时，返回原来的图片 ID 以便前端从列表中移除
-func (h *Handler) ImageDeleted(ctx context.Context, filter *shared.ImageFilters) iter.Seq2[scalar.ID, error] {
-	return func(yield func(scalar.ID, error) bool) {
-		var allowedDirectoryIDs util.Set[scalar.ID]
-		if filter != nil && len(filter.DirectoryID) > 0 {
-			allowedDirectoryIDs = util.AddToSet(nil, filter.DirectoryID...)
-		}
-		imageFilter := h.imageFilterBuilder.Build(util.UnwrapPointer(filter))
-
-		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
-			if !func() bool {
-				if err != nil {
-					return yield(scalar.ToID(""), err)
-				}
-				if event.Action != shared.FileActionRemove && event.Action != shared.FileActionRename {
-					return true
-				}
-				if allowedDirectoryIDs != nil && !allowedDirectoryIDs.Has(event.DirectoryID) {
-					return true
-				}
-				img, err := h.imgRepo.Get(ctx, event.RelPath)
-				if err != nil || img == nil {
-					return true
-				}
-				if !imageFilter(img) {
-					return true
-				}
-				return yield(img.ID(), nil)
 			}() {
 				return
 			}

@@ -157,7 +157,7 @@ func main() {
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir)
+	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
 

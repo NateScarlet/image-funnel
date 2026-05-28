@@ -35,6 +35,11 @@ type DirectoryStatsDTO struct {
 	RatingCounts      map[int]int
 }
 
+// DirEntryDeletedDTO 被删除或移走的文件/目录数据传输对象
+type DirEntryDeletedDTO struct {
+	RelPath string
+}
+
 // ImageDTO 图片数据传输对象
 type ImageDTO struct {
 	ID            scalar.ID

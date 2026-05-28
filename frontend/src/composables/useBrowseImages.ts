@@ -6,7 +6,7 @@ import useLiveConnection from "./useLiveConnection";
 import {
   BrowseImagesDocument,
   ImageSavedDocument,
-  ImageDeletedDocument,
+  DirEntryDeletedDocument,
   ImageFragmentDoc,
   type BrowseImagesQueryVariables,
   type ImageFragment,
@@ -98,16 +98,21 @@ export default function useBrowseImages(
     },
   });
 
-  // 订阅图片的删除事件
-  useSubscription(ImageDeletedDocument, {
+  // 订阅文件/目录的删除事件
+  useSubscription(DirEntryDeletedDocument, {
     variables: () => {
-      const filterBy = directoryId.value
-        ? { directoryId: [directoryId.value] }
-        : undefined; // 避免返回 null，使用 undefined 代替
-      return { filterBy };
+      return { directoryId: directoryId.value || undefined };
     },
     onNext: (result) => {
-      onDeleted(result.data?.imageDeleted);
+      const deletedEntry = result.data?.dirEntryDeleted;
+      if (deletedEntry) {
+        const match = images.value.find(
+          (i) => i.relPath === deletedEntry.relPath,
+        );
+        if (match) {
+          onDeleted({ id: match.id });
+        }
+      }
     },
   });
 

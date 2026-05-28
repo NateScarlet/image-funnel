@@ -70,6 +70,10 @@ type ComplexityRoot struct {
 		ID func(childComplexity int) int
 	}
 
+	DirEntryDeleted struct {
+		RelPath func(childComplexity int) int
+	}
+
 	Directory struct {
 		Directories func(childComplexity int) int
 		ID          func(childComplexity int) int
@@ -228,6 +232,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
+		DirEntryDeleted  func(childComplexity int, directoryID *scalar.ID) int
 		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
 		ImageDeleted     func(childComplexity int, filterBy *shared.ImageFilters) int
 		ImageSaved       func(childComplexity int, filterBy *shared.ImageFilters) int
@@ -302,6 +307,7 @@ type SessionResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
+	DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan *shared.DirEntryDeletedDTO, error)
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
 	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
@@ -366,6 +372,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DeletedImage.ID(childComplexity), true
+
+	case "DirEntryDeleted.relPath":
+		if e.complexity.DirEntryDeleted.RelPath == nil {
+			break
+		}
+
+		return e.complexity.DirEntryDeleted.RelPath(childComplexity), true
 
 	case "Directory.directories":
 		if e.complexity.Directory.Directories == nil {
@@ -1071,6 +1084,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.SessionStats.TotalShelved(childComplexity), true
 
+	case "Subscription.dirEntryDeleted":
+		if e.complexity.Subscription.DirEntryDeleted == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_dirEntryDeleted_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.DirEntryDeleted(childComplexity, args["directoryId"].(*scalar.ID)), true
 	case "Subscription.directoryChanged":
 		if e.complexity.Subscription.DirectoryChanged == nil {
 			break
@@ -1638,6 +1662,17 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   "通过 ID 获取会话，不存在时返回 null"
   session(id: ID!): Session
 }`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/dir_entry_deleted.graphql", Input: `extend type Subscription {
+  "订阅目录内文件或子目录删除或移走事件（文件被移除或重命名时触发），支持按目录ID过滤"
+  dirEntryDeleted(directoryId: ID): DirEntryDeleted!
+}
+
+"目录项删除事件载体，包含删除的文件或目录相对路径"
+type DirEntryDeleted @goModel(model: "main/internal/shared.DirEntryDeletedDTO") {
+  "被删除的目录项的相对路径，用于前端匹配并移除"
+  relPath: String!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/directory_changed.graphql", Input: `extend type Subscription {
   """
   订阅目录变更事件。变更发生时推送完整的目录对象。
@@ -1658,10 +1693,10 @@ input DirectoryFilters
   imageSaved(filterBy: ImageFiltersInput): Image!
 
   "订阅图片删除或移走事件（文件被移除或重命名时触发），支持按筛选条件过滤"
-  imageDeleted(filterBy: ImageFiltersInput): DeletedImage!
+  imageDeleted(filterBy: ImageFiltersInput): DeletedImage! @deprecated(reason: "use dirEntryDeleted instead")
 }
 
-"图片删除事件载体，仅保留图片ID（原文件已不存在，无法获取其他字段）"
+"图片删除事件载体，仅保留图片ID"
 type DeletedImage {
   id: ID!
 }`, BuiltIn: false},
@@ -2096,6 +2131,17 @@ func (ec *executionContext) field_Session_nextImages_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Subscription_dirEntryDeleted_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "directoryId", ec.unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["directoryId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Subscription_directoryChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2455,6 +2501,35 @@ func (ec *executionContext) fieldContext_DeletedImage_id(_ context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirEntryDeleted_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.DirEntryDeletedDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirEntryDeleted_relPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirEntryDeleted_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirEntryDeleted",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6540,6 +6615,51 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_dirEntryDeleted(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_dirEntryDeleted,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().DirEntryDeleted(ctx, fc.Args["directoryId"].(*scalar.ID))
+		},
+		nil,
+		ec.marshalNDirEntryDeleted2ᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_dirEntryDeleted(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "relPath":
+				return ec.fieldContext_DirEntryDeleted_relPath(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DirEntryDeleted", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_dirEntryDeleted_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_directoryChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -9226,6 +9346,45 @@ func (ec *executionContext) _DeletedImage(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var dirEntryDeletedImplementors = []string{"DirEntryDeleted"}
+
+func (ec *executionContext) _DirEntryDeleted(ctx context.Context, sel ast.SelectionSet, obj *shared.DirEntryDeletedDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dirEntryDeletedImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirEntryDeleted")
+		case "relPath":
+			out.Values[i] = ec._DirEntryDeleted_relPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var directoryImplementors = []string{"Directory", "Node"}
 
 func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryDTO) graphql.Marshaler {
@@ -10976,6 +11135,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionUpdated":
 		return ec._Subscription_sessionUpdated(ctx, fields[0])
+	case "dirEntryDeleted":
+		return ec._Subscription_dirEntryDeleted(ctx, fields[0])
 	case "directoryChanged":
 		return ec._Subscription_directoryChanged(ctx, fields[0])
 	case "imageSaved":
@@ -11525,6 +11686,20 @@ func (ec *executionContext) marshalNDeletedImage2ᚖmainᚋinternalᚋinterfaces
 		return graphql.Null
 	}
 	return ec._DeletedImage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDirEntryDeleted2mainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirEntryDeletedDTO) graphql.Marshaler {
+	return ec._DirEntryDeleted(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDirEntryDeleted2ᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirEntryDeletedDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DirEntryDeleted(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDirectory2mainᚋinternalᚋsharedᚐDirectoryDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirectoryDTO) graphql.Marshaler {
@@ -12543,6 +12718,22 @@ func (ec *executionContext) marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx c
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(scalar.ID)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v *scalar.ID) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO(ctx context.Context, sel ast.SelectionSet, v *shared.ImageDTO) graphql.Marshaler {

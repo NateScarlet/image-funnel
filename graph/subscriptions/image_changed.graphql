@@ -3,10 +3,10 @@ extend type Subscription {
   imageSaved(filterBy: ImageFiltersInput): Image!
 
   "订阅图片删除或移走事件（文件被移除或重命名时触发），支持按筛选条件过滤"
-  imageDeleted(filterBy: ImageFiltersInput): DeletedImage!
+  imageDeleted(filterBy: ImageFiltersInput): DeletedImage! @deprecated(reason: "use dirEntryDeleted instead")
 }
 
-"图片删除事件载体，仅保留图片ID（原文件已不存在，无法获取其他字段）"
+"图片删除事件载体，仅保留图片ID"
 type DeletedImage {
   id: ID!
 }

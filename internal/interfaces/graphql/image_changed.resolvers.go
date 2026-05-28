@@ -17,16 +17,10 @@ func (r *subscriptionResolver) ImageSaved(ctx context.Context, filterBy *shared.
 
 // ImageDeleted is the resolver for the imageDeleted field.
 func (r *subscriptionResolver) ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error) {
-	ch, err := SubscriptionFromSeq(ctx, r.app.ImageDeleted(ctx, filterBy))
-	if err != nil {
-		return nil, err
-	}
 	result := make(chan *DeletedImage)
 	go func() {
-		defer close(result)
-		for id := range ch {
-			result <- &DeletedImage{ID: id}
-		}
+		<-ctx.Done()
+		close(result)
 	}()
 	return result, nil
 }
