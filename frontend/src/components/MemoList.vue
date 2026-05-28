@@ -45,11 +45,9 @@
         v-for="memoItem in memos"
         :key="memoItem.id"
         class="flex items-center justify-between p-3 rounded-xl bg-primary-800/20 hover:bg-primary-800/60 border border-primary-800/40 hover:border-secondary-500/30 transition-all duration-200 group cursor-pointer"
+        @click="editMemo(memoItem)"
       >
-        <div
-          class="flex items-center gap-3 min-w-0 flex-1"
-          @click="editMemo(memoItem)"
-        >
+        <div class="flex items-center gap-3 min-w-0 flex-1">
           <svg
             class="w-4 h-4 text-primary-400 group-hover:text-secondary-400 transition-colors shrink-0"
             viewBox="0 0 24 24"
@@ -75,7 +73,7 @@
             class="px-1.5 py-0.5 text-[10px] bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
             title="此笔记已通过 frontmatter 隐藏"
           >
-            <svg class="w-3 h-3" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
               <path :d="mdiEyeOff" fill="currentColor" />
             </svg>
             已隐藏
@@ -97,7 +95,6 @@
           </button>
           <div
             class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1 cursor-pointer"
-            @click="editMemo(memoItem)"
           >
             <span>编辑</span>
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
