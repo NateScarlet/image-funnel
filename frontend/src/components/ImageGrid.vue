@@ -37,11 +37,11 @@
           <!-- 移动匹配图片按钮 -->
           <button
             v-if="images.length > 0 && !isBulkMode"
-            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200 cursor-pointer select-none"
+            class="px-3 h-8 text-xs border rounded-lg transition-all flex items-center gap-1 bg-primary-800 hover:bg-primary-700 border-primary-700 text-primary-200 cursor-pointer select-none"
             title="将当前过滤匹配的图片移动到新目录"
             @click="moveImagesDialog.open()"
           >
-            <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
               <path :d="mdiFolderMove" fill="currentColor" />
             </svg>
             <span>移动匹配图片</span>
@@ -50,11 +50,11 @@
           <!-- 批量管理按钮 -->
           <button
             v-if="images.length > 0"
-            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 cursor-pointer select-none"
+            class="px-3 h-8 text-xs border rounded-lg transition-all flex items-center gap-1 cursor-pointer select-none"
             :class="[
               isBulkMode
                 ? 'bg-secondary-600 hover:bg-secondary-700 border-secondary-500 text-white shadow-[0_0_10px_rgba(235,94,85,0.3)] font-semibold'
-                : 'bg-primary-800 hover:bg-primary-750 border-primary-700 text-primary-200',
+                : 'bg-primary-800 hover:bg-primary-700 border-primary-700 text-primary-200',
             ]"
             :title="
               isBulkMode
@@ -63,7 +63,7 @@
             "
             @click="toggleBulkMode"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiCheckboxMultipleMarkedOutline" fill="currentColor" />
             </svg>
             <span>{{ isBulkMode ? "退出批量" : "批量管理" }}</span>
@@ -72,10 +72,10 @@
           <!-- 当用户激活了任何过滤器时，在最左侧显示一键清除筛选按钮 -->
           <button
             v-if="hasActiveFilters"
-            class="px-2.5 h-8.5 text-xs border rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer"
+            class="px-3 h-8 text-xs border rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border-red-900/50 text-red-300 cursor-pointer"
             @click="clearFilters"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiFilterOff" fill="currentColor" />
             </svg>
             <span>清除筛选</span>
@@ -90,14 +90,14 @@
               class="w-full pl-8 pr-8 h-8 bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all"
             />
             <svg
-              class="w-3.5 h-3.5 text-primary-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              class="w-4 h-4 text-primary-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
               viewBox="0 0 24 24"
             >
               <path :d="mdiMagnify" fill="currentColor" />
             </svg>
             <button
               v-if="searchQuery"
-              class="absolute right-2.5 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-200 transition-colors p-0.5 rounded-full hover:bg-primary-700/50 cursor-pointer"
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-200 transition-colors p-0.5 rounded-full hover:bg-primary-700/50 cursor-pointer"
               title="清空"
               @click="searchQuery = ''"
             >
@@ -112,14 +112,14 @@
 
           <!-- 颜色标签过滤器 -->
           <div
-            class="flex items-center gap-1.5 bg-primary-800 border border-primary-700 px-3 h-8.5 rounded-lg overflow-x-auto"
+            class="flex items-center gap-2 bg-primary-800 border border-primary-700 px-3 h-8 rounded-lg overflow-x-auto"
           >
             <span class="text-xs text-primary-400 select-none">标签:</span>
             <div class="flex items-center gap-1">
               <button
                 v-for="(colorHex, colorName) in PRESET_COLORS"
                 :key="colorName"
-                class="w-3.5 h-3.5 rounded-full transition-all border border-white/20 relative"
+                class="w-3 h-3 rounded-full transition-all border border-white/20 relative"
                 :style="{
                   backgroundColor: colorHex,
                   borderColor: filterLabels.includes(colorName)
@@ -137,7 +137,7 @@
                 <!-- 选中指示点 -->
                 <span
                   v-if="filterLabels.includes(colorName)"
-                  class="absolute inset-0.5 rounded-full border border-black/30"
+                  class="absolute inset-px rounded-full border border-black/30"
                 ></span>
               </button>
             </div>
@@ -165,7 +165,7 @@
           class="flex flex-col items-center justify-center py-20 text-primary-500 gap-2"
         >
           <svg
-            class="w-12 h-12 stroke-[1.5]"
+            class="w-12 h-12 stroke-2"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -202,19 +202,19 @@
               <!-- 左上角勾选徽章 -->
               <div
                 v-if="isBulkMode"
-                class="absolute top-2 left-2 z-10 w-5.5 h-5.5 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
+                class="absolute top-2 left-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
                 :class="[
                   selectedImageIds.includes(img.id)
                     ? 'bg-secondary-500 border-secondary-400 text-white shadow-[0_2px_8px_rgba(235,94,85,0.4)] scale-110'
                     : 'bg-black/40 border-white/20 text-white/50 opacity-0 group-hover:opacity-100 hover:scale-105',
                 ]"
               >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <svg class="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     :d="mdiCheck"
                     fill="currentColor"
                     stroke="currentColor"
-                    stroke-width="1.5"
+                    stroke-width="2"
                   />
                 </svg>
               </div>
@@ -240,7 +240,7 @@
                 <!-- 颜色标签 -->
                 <span
                   v-if="img.label"
-                  class="w-3.5 h-3.5 rounded-full shadow-md border border-white/20 ml-auto"
+                  class="w-3 h-3 rounded-full shadow-md border border-white/20 ml-auto"
                   :style="{
                     backgroundColor: PRESET_COLORS[img.label] || '#94a3b8',
                   }"
@@ -267,7 +267,7 @@
         <div v-if="hasNextPage" class="flex justify-center pt-2">
           <button
             :disabled="loading"
-            class="px-6 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
+            class="px-6 py-2 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
             @click="fetchMore"
           >
             <!-- 加载中动画 -->
@@ -393,7 +393,7 @@
                 >张图片已选中</span
               >
             </div>
-            <div class="h-4 w-px bg-primary-750 hidden md:block"></div>
+            <div class="h-4 w-px bg-primary-700 hidden md:block"></div>
             <div class="flex items-center gap-2">
               <button
                 class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
@@ -421,7 +421,7 @@
             <!-- 批量评分 -->
             <div class="relative group/rating">
               <button
-                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
                 :disabled="selectedImageIds.length === 0 || isUpdating"
                 :class="
                   selectedImageIds.length === 0
@@ -438,7 +438,7 @@
               <!-- 评分悬浮窗 -->
               <div
                 v-if="selectedImageIds.length > 0"
-                class="absolute bottom-full right-0 mb-2 invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2.5 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
+                class="absolute bottom-full right-0 mb-2 invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
               >
                 <button
                   class="px-2 py-1 text-xs hover:bg-red-950/40 border border-transparent hover:border-red-900/50 rounded-lg text-red-400 transition-colors cursor-pointer select-none"
@@ -446,7 +446,7 @@
                 >
                   无评分
                 </button>
-                <div class="w-px h-4 bg-primary-750"></div>
+                <div class="w-px h-4 bg-primary-700"></div>
                 <button
                   v-for="r in [1, 2, 3, 4, 5]"
                   :key="r"
@@ -464,7 +464,7 @@
             <!-- 批量标签 -->
             <div class="relative group/label">
               <button
-                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
                 :disabled="selectedImageIds.length === 0 || isUpdating"
                 :class="
                   selectedImageIds.length === 0
@@ -481,18 +481,18 @@
               <!-- 标签悬浮窗 -->
               <div
                 v-if="selectedImageIds.length > 0"
-                class="absolute bottom-full right-0 mb-2 invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2.5 rounded-xl shadow-xl z-60 w-max"
+                class="absolute bottom-full right-0 mb-2 invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-max"
               >
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-2">
                   <button
                     v-for="(colorHex, colorName) in PRESET_COLORS"
                     :key="colorName"
-                    class="w-5.5 h-5.5 rounded-full transition-all border border-white/20 hover:scale-120 cursor-pointer relative"
+                    class="w-6 h-6 rounded-full transition-all border border-white/20 hover:scale-120 cursor-pointer relative"
                     :style="{ backgroundColor: colorHex }"
                     :title="colorName"
                     @click="bulkSetLabel(colorName)"
                   ></button>
-                  <div class="w-px h-5 bg-primary-750 mx-1"></div>
+                  <div class="w-px h-5 bg-primary-700 mx-1"></div>
                   <button
                     class="px-2 py-1 text-xs hover:bg-primary-800 border border-primary-700/60 hover:text-white rounded-lg text-primary-300 transition-colors cursor-pointer select-none"
                     @click="bulkSetLabel('')"
@@ -505,7 +505,7 @@
 
             <!-- 批量移动 -->
             <button
-              class="px-3.5 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-750 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer hover:border-secondary-500/50 select-none"
+              class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
               :disabled="selectedImageIds.length === 0 || isUpdating"
               :class="
                 selectedImageIds.length === 0
@@ -520,7 +520,7 @@
               <span>批量移动</span>
             </button>
 
-            <div class="h-5 w-px bg-primary-750"></div>
+            <div class="h-5 w-px bg-primary-700"></div>
 
             <!-- 关闭批量管理模式 -->
             <button

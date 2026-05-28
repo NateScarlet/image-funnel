@@ -9,12 +9,12 @@
           </svg>
           移动匹配图片
         </h2>
-        <p class="mt-1.5 text-xs text-primary-400">
+        <p class="mt-2 text-xs text-primary-400">
           将当前筛选匹配的图片及其配套伴随文件移动到新目录
         </p>
       </div>
       <button
-        class="text-primary-400 hover:text-primary-200 transition-colors p-1.5 rounded-lg hover:bg-primary-700/50 cursor-pointer"
+        class="text-primary-400 hover:text-primary-200 transition-colors p-2 rounded-lg hover:bg-primary-700/50 cursor-pointer"
         type="button"
         @click="$emit('close')"
       >
@@ -49,7 +49,7 @@
           v-model="targetDirInput"
           type="text"
           placeholder="例如：selected 或 ../sibling-dir"
-          class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-850 px-4 py-2.5 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all"
+          class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-800 px-4 py-2 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all"
           :disabled="moving"
           @keyup.enter="handleMoveImages"
         />
@@ -67,7 +67,7 @@
     <!-- 操作按钮区 -->
     <div class="mt-6 flex justify-end gap-3 shrink-0">
       <button
-        class="rounded-xl bg-primary-750 px-4 py-2 text-xs text-primary-200 hover:text-white transition-colors hover:bg-primary-700 cursor-pointer"
+        class="rounded-xl bg-primary-700 px-4 py-2 text-xs text-primary-200 hover:text-white transition-colors hover:bg-primary-600 cursor-pointer"
         type="button"
         :disabled="moving"
         @click="$emit('close')"
@@ -82,7 +82,7 @@
       >
         <svg
           v-if="moving"
-          class="w-4.5 h-4.5 animate-spin text-white"
+          class="w-4 h-4 animate-spin text-white"
           viewBox="0 0 24 24"
           fill="none"
         >

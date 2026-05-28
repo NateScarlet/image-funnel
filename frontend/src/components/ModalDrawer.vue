@@ -31,7 +31,7 @@
       <!-- 移动端顶部关闭按钮 -->
       <div class="w-full sticky p-1 top-0 text-right lg:hidden">
         <button
-          class="text-primary-400 hover:text-primary-200 transition-colors p-1.5 rounded-lg hover:bg-primary-700/50 cursor-pointer"
+          class="text-primary-400 hover:text-primary-200 transition-colors p-2 rounded-lg hover:bg-primary-700/50 cursor-pointer"
           type="button"
           @click="close()"
         >

@@ -40,7 +40,7 @@
 
           <!-- 磨砂面包屑路径 -->
           <div
-            class="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
+            class="flex flex-wrap items-center gap-2 px-3 py-1 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
           >
             <DirectoryBreadcrumb
               v-if="currentDirectoryId"
@@ -65,7 +65,7 @@
           <!-- 上次会话按钮 -->
           <button
             v-if="lastSession"
-            class="flex items-center gap-2 px-3 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium"
+            class="flex items-center gap-2 px-3 py-1 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium"
             title="返回最近会话"
             @click="goToLastSession"
           >
@@ -211,7 +211,7 @@
 
         <!-- 第二行：面包屑路径 -->
         <div
-          class="flex flex-wrap items-center gap-1.5 px-3 py-1.5 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
+          class="flex flex-wrap items-center gap-2 px-3 py-1 bg-black/20 rounded-lg border border-white/5 text-sm break-all"
         >
           <DirectoryBreadcrumb
             v-if="currentDirectoryId"

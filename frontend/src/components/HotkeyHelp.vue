@@ -11,7 +11,7 @@
         <span>快捷键说明</span>
       </h3>
       <button
-        class="text-primary-400 hover:text-primary-200 transition-colors p-1.5 rounded-lg hover:bg-primary-750 cursor-pointer"
+        class="text-primary-400 hover:text-primary-200 transition-colors p-2 rounded-lg hover:bg-primary-700 cursor-pointer"
         type="button"
         @click="$emit('close')"
       >
@@ -30,7 +30,7 @@
         <div
           v-for="group in groupedHotkeys"
           :key="group.name"
-          class="space-y-2.5"
+          class="space-y-2"
         >
           <!-- 分组标题 -->
           <h4
@@ -43,13 +43,13 @@
             <div
               v-for="item in group.items"
               :key="item.id"
-              class="flex items-center justify-between py-2 px-3.5 bg-primary-900/40 hover:bg-primary-900/80 border border-primary-800/30 hover:border-primary-700/40 rounded-xl transition-all duration-200"
+              class="flex items-center justify-between py-2 px-4 bg-primary-900/40 hover:bg-primary-900/80 border border-primary-800/30 hover:border-primary-700/40 rounded-xl transition-all duration-200"
             >
               <span
                 class="text-xs md:text-sm text-primary-200 font-medium mr-4"
                 >{{ item.description }}</span
               >
-              <div class="flex items-center gap-1.5 flex-wrap justify-end">
+              <div class="flex items-center gap-2 flex-wrap justify-end">
                 <div
                   v-for="(combo, comboIdx) in item.keys"
                   :key="comboIdx"

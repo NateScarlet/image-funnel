@@ -1,12 +1,12 @@
 <template>
   <div
-    class="flex items-center gap-2 bg-primary-800 border border-primary-700 px-3 h-8.5 rounded-lg select-none"
+    class="flex items-center gap-2 bg-primary-800 border border-primary-700 px-3 h-8 rounded-lg select-none"
   >
     <span class="text-xs text-primary-400">评分:</span>
 
     <!-- 操作符切换按钮 -->
     <button
-      class="w-7 h-6 bg-primary-750 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded flex items-center justify-center text-xs font-bold text-secondary-400 hover:text-secondary-300 transition-all cursor-pointer"
+      class="w-7 h-6 bg-primary-700 hover:bg-primary-600 border border-primary-700 hover:border-primary-600 rounded flex items-center justify-center text-xs font-bold text-secondary-400 hover:text-secondary-300 transition-all cursor-pointer"
       :title="configs[currentOperator].title"
       @click="cycleOperator"
     >
@@ -29,7 +29,7 @@
 
         <!-- 悬浮微型文字指示，特别是非等号模式时提示范围 -->
         <span
-          class="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-1.5 py-0.5 bg-black/80 backdrop-blur-md border border-white/10 text-[9px] text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
+          class="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-black/80 backdrop-blur-md border border-white/10 text-[9px] text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50"
         >
           {{ getStarTooltip(star) }}
         </span>

@@ -85,7 +85,7 @@
         </button>
         <button
           type="button"
-          class="flex items-center gap-1.5 px-5 py-2 text-sm font-semibold rounded-xl bg-secondary-500 hover:bg-secondary-600 text-white shadow-lg shadow-secondary-500/20 active:scale-95 transition-all cursor-pointer"
+          class="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-secondary-500 hover:bg-secondary-600 text-white shadow-lg shadow-secondary-500/20 active:scale-95 transition-all cursor-pointer"
           :disabled="isSaving"
           @click="saveMemo"
         >

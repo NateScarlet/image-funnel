@@ -54,7 +54,7 @@
             <a
               :href="image.rawURL"
               download
-              class="flex items-center justify-center gap-2 w-full py-1.5 bg-white/10 hover:bg-white/20 active:bg-white/30 text-xs text-white rounded transition-colors backdrop-blur-sm"
+              class="flex items-center justify-center gap-2 w-full py-2 bg-white/10 hover:bg-white/20 active:bg-white/30 text-xs text-white rounded transition-colors backdrop-blur-sm"
               @click.stop
             >
               <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

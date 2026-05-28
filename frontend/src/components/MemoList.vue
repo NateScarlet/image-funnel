@@ -17,7 +17,7 @@
       <!-- 按钮区，包含新建按钮和切换开关 -->
       <div class="flex items-center gap-4">
         <button
-          class="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-secondary-500/30 hover:border-secondary-500/60 bg-secondary-500/10 hover:bg-secondary-500/20 text-secondary-400 hover:text-secondary-300 transition-all duration-200 active:scale-95 cursor-pointer"
+          class="flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg border border-secondary-500/30 hover:border-secondary-500/60 bg-secondary-500/10 hover:bg-secondary-500/20 text-secondary-400 hover:text-secondary-300 transition-all duration-200 active:scale-95 cursor-pointer"
           title="新建笔记"
           @click="openCreateDialog"
         >
@@ -56,7 +56,7 @@
           </svg>
           <!-- 文件名按钮，点击打开对应图片查看器 -->
           <span
-            class="text-[10px] text-primary-400 shrink-0 bg-primary-800/60 px-1.5 py-0.5 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
+            class="text-[10px] text-primary-400 shrink-0 bg-primary-800/60 px-2 py-1 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
             title="打开关联图片"
             @click.stop="openImageViewerForMemo(memoItem)"
           >
@@ -70,7 +70,7 @@
           <!-- 如果是隐藏笔记，显示标记 -->
           <span
             v-if="memoItem.hidden"
-            class="px-1.5 py-0.5 text-[10px] bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
+            class="px-2 py-1 text-[10px] bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
             title="此笔记已通过 frontmatter 隐藏"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -82,7 +82,7 @@
         <div class="flex items-center gap-2 shrink-0">
           <!-- 一键切换隐藏状态按钮 -->
           <button
-            class="p-1.5 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
+            class="p-2 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
             :title="memoItem.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
             @click.stop="toggleMemoHidden(memoItem)"
           >

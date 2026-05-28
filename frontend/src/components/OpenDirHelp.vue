@@ -32,14 +32,14 @@
         资源管理器中打开当前目录，或定位文件并聚焦，您需要安装一个轻量级的注册表及协议插件。
       </p>
       <div
-        class="bg-black/30 border border-white/5 rounded-xl p-3.5 space-y-2 text-xs text-primary-300"
+        class="bg-black/30 border border-white/5 rounded-xl p-4 space-y-2 text-xs text-primary-300"
       >
-        <p class="font-bold text-white mb-1.5 select-none">安装指南：</p>
-        <p class="flex gap-1.5">
+        <p class="font-bold text-white mb-2 select-none">安装指南：</p>
+        <p class="flex gap-2">
           <span class="text-secondary-400 font-bold">1.</span>
           点击下方按钮下载插件压缩包；
         </p>
-        <p class="flex gap-1.5">
+        <p class="flex gap-2">
           <span class="text-secondary-400 font-bold">2.</span>
           <span
             ><span class="text-secondary-400 font-semibold"
@@ -48,7 +48,7 @@
             后再运行，不支持在压缩包内直接安装；</span
           >
         </p>
-        <p class="flex gap-1.5">
+        <p class="flex gap-2">
           <span class="text-secondary-400 font-bold">3.</span>
           <span
             >双击运行
@@ -67,13 +67,13 @@
       <a
         href="/static/open-dir/windows/setup.zip"
         download="本地路径插件.zip"
-        class="flex-1 py-2.5 bg-secondary-600 hover:bg-secondary-500 text-white text-center rounded-xl text-sm font-semibold transition-all active:scale-98 shadow-lg shadow-secondary-900/20"
+        class="flex-1 py-2 bg-secondary-600 hover:bg-secondary-500 text-white text-center rounded-xl text-sm font-semibold transition-all active:scale-98 shadow-lg shadow-secondary-900/20"
         @click="$emit('close')"
       >
         下载插件 (.zip)
       </a>
       <button
-        class="px-4 py-2.5 bg-primary-800 hover:bg-primary-700 border border-primary-700 text-primary-200 hover:text-white rounded-xl text-sm font-semibold transition-all cursor-pointer"
+        class="px-4 py-2 bg-primary-800 hover:bg-primary-700 border border-primary-700 text-primary-200 hover:text-white rounded-xl text-sm font-semibold transition-all cursor-pointer"
         type="button"
         @click="$emit('close')"
       >

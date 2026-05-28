@@ -48,7 +48,7 @@
           <div class="text-sm font-medium">{{ notification.message }}</div>
           <div v-if="notification.action" class="mt-2">
             <button
-              class="px-2.5 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer"
+              class="px-2 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer"
               @click.stop="triggerAction(notification)"
             >
               {{ notification.action.text }}

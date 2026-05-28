@@ -112,7 +112,7 @@
 
       <!-- 复制按钮 -->
       <button
-        class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        class="flex items-center gap-2 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
         title="复制"
         @click="handleCopy"
       >
@@ -125,7 +125,7 @@
 
       <!-- 打开文件按钮 (在资源管理器中定位并聚焦) -->
       <button
-        class="flex items-center gap-1.5 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        class="flex items-center gap-2 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
         title="在资源管理器中定位此文件"
         @click="revealInExplorer(fullFilePath)"
       >
@@ -154,7 +154,7 @@
       >
         <!-- 触发按钮 -->
         <button
-          class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1.5 transition-all active:scale-95 z-40"
+          class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 z-40"
           title="设置标签"
           @click="showPopover = !showPopover"
         >
@@ -162,13 +162,13 @@
             <!-- 标准预设色：渲染为发光彩色圆点 -->
             <span
               v-if="isPresetColor"
-              class="w-3.5 h-3.5 rounded-full inline-block shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-transform duration-300"
+              class="w-4 h-4 rounded-full inline-block shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-transform duration-300"
               :style="{ backgroundColor: currentLabelColor }"
             ></span>
             <!-- 自定义文本标签：渲染为气泡 -->
             <span
               v-else
-              class="px-2 py-0.5 rounded-full text-xs font-bold bg-white/20 text-white max-w-24 truncate transition-all duration-300 shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
+              class="px-2 py-1 rounded-full text-xs font-bold bg-white/20 text-white max-w-24 truncate transition-all duration-300 shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
             >
               {{ currentLabel }}
             </span>
@@ -176,7 +176,7 @@
           <template v-else>
             <!-- 空白标签态 -->
             <svg
-              class="w-3.5 h-3.5 text-white/50 hover:text-white transition-colors"
+              class="w-4 h-4 text-white/50 hover:text-white transition-colors"
               viewBox="0 0 24 24"
               fill="currentColor"
             >
@@ -197,7 +197,7 @@
         >
           <div
             v-if="showPopover"
-            class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-52 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2.5 pointer-events-auto"
+            class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-52 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
           >
             <div
               class="text-xs font-bold text-white/40 tracking-wider uppercase select-none text-left"
@@ -206,7 +206,7 @@
             </div>
 
             <!-- 颜色网格 -->
-            <div class="grid grid-cols-5 gap-1.5 justify-items-center">
+            <div class="grid grid-cols-5 gap-2 justify-items-center">
               <button
                 v-for="(color, name) in PRESET_COLORS"
                 :key="name"
@@ -223,7 +223,7 @@
                 <!-- 选中勾选标记 -->
                 <svg
                   v-if="currentLabel === name"
-                  class="w-3.5 h-3.5"
+                  class="w-4 h-4"
                   :class="name === 'White' ? 'text-black' : 'text-white'"
                   viewBox="0 0 24 24"
                   fill="currentColor"
@@ -247,7 +247,7 @@
                   v-model="customLabelInput"
                   type="text"
                   placeholder="文字..."
-                  class="flex-1 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-xs md:text-sm text-white placeholder-white/30 focus:outline-none focus:border-secondary-500 transition-colors w-0"
+                  class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs md:text-sm text-white placeholder-white/30 focus:outline-none focus:border-secondary-500 transition-colors w-0"
                   @keydown.enter="saveCustomLabel"
                 />
                 <button
@@ -262,10 +262,10 @@
             <!-- 清除标签按钮 -->
             <button
               v-if="currentLabel"
-              class="border-t border-white/10 pt-1.5 text-center text-xs md:text-sm text-red-400 hover:text-red-300 transition-colors flex items-center justify-center gap-1 w-full"
+              class="border-t border-white/10 pt-2 text-center text-xs md:text-sm text-red-400 hover:text-red-300 transition-colors flex items-center justify-center gap-1 w-full"
               @click="setLabel('')"
             >
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                 <path :d="mdiDeleteOutline" />
               </svg>
               清除标签
@@ -277,7 +277,7 @@
 
       <!-- 备注按钮 -->
       <button
-        class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1.5 transition-all active:scale-95 text-white/50 hover:text-white shrink-0 cursor-pointer"
+        class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 text-white/50 hover:text-white shrink-0 cursor-pointer"
         :class="
           image.memo.content
             ? 'text-secondary-400 hover:text-secondary-300'
@@ -286,7 +286,7 @@
         :title="image.memo.content ? '编辑备注' : '添加备注'"
         @click="memoDialog.open()"
       >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiNoteTextOutline" />
         </svg>
         <span class="truncate max-w-24 md:max-w-36 text-xs">{{
@@ -352,7 +352,7 @@
               <input
                 v-model="useRawImage"
                 type="checkbox"
-                class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-3.5 h-3.5"
+                class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-4 h-4"
               />
               <span class="text-xs">原图</span>
             </label>
