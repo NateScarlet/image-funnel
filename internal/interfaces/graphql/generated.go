@@ -1420,7 +1420,8 @@ directive @goField(
 	{Name: "../../../graph/types/directory.graphql", Input: `"""
 目录节点，表示文件系统中的一个子目录。根目录的 relPath 为空字符串。
 """
-type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDTO") {
+type Directory implements Node
+  @goModel(model: "main/internal/shared.DirectoryDTO") {
   id: ID!
   "上级目录ID，根目录此值为null"
   parentId: ID
@@ -1432,7 +1433,9 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
   "目录统计信息（图片数量、子目录数、评分分布等）"
   stats: DirectoryStats
   "子目录列表"
-  directories: [Directory!]! @deprecated(reason: "use directoriesV2") @goField(forceResolver: true)
+  directories: [Directory!]!
+    @deprecated(reason: "use directoriesV2")
+    @goField(forceResolver: true)
   "子目录列表，支持筛选与分页"
   directoriesV2(
     filterBy: DirectoryFilters
@@ -1446,16 +1449,26 @@ type Directory implements Node @goModel(model: "main/internal/shared.DirectoryDT
     after: String
   ): ImageConnection! @goField(forceResolver: true)
   "目录下的备忘录列表，支持筛选与分页"
-  memos(
-    filterBy: MemoFiltersInput
-    first: Int
-    after: String
-  ): MemoConnection! @goField(forceResolver: true)
+  memos(filterBy: MemoFiltersInput, first: Int, after: String): MemoConnection!
+    @goField(forceResolver: true)
   "该目录下最后活跃的会话，无历史会话时返回null"
   lastSession: Session @goField(forceResolver: true)
 }
 
-type DirectoryConnection @goModel(model: "main/internal/shared.DirectoryConnectionDTO") {
+input DirectoryFilters
+  @goModel(model: "main/internal/shared.DirectoryFilters") {
+  """
+  目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录
+  """
+  id: [ID!]
+  """
+  按目录名模糊搜索（忽略大小写，包含即匹配）
+  """
+  query: String
+}
+
+type DirectoryConnection
+  @goModel(model: "main/internal/shared.DirectoryConnectionDTO") {
   edges: [DirectoryEdge!]!
   nodes: [Directory!]!
   pageInfo: PageInfo!
@@ -1466,7 +1479,8 @@ type DirectoryEdge @goModel(model: "main/internal/shared.DirectoryEdgeDTO") {
   cursor: String!
 }
 
-type ImageConnection @goModel(model: "main/internal/shared.ImageConnectionDTO") {
+type ImageConnection
+  @goModel(model: "main/internal/shared.ImageConnectionDTO") {
   edges: [ImageEdge!]!
   nodes: [Image!]!
   pageInfo: PageInfo!
@@ -1477,7 +1491,6 @@ type ImageEdge @goModel(model: "main/internal/shared.ImageEdgeDTO") {
   cursor: String!
 }
 
-
 type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
   "是否有下一页"
   hasNextPage: Boolean!
@@ -1487,7 +1500,8 @@ type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
   startCursor: String
   "当前页结束游标，末页为null"
   endCursor: String
-}`, BuiltIn: false},
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
 type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
   "图片数量"
@@ -1753,14 +1767,7 @@ type DirEntryDeleted @goModel(model: "main/internal/shared.DirEntryDeletedDTO") 
   """
   directoryChanged(filterBy: DirectoryFilters): Directory!
 }
-
-input DirectoryFilters
-  @goModel(model: "main/internal/shared.DirectoryFilters") {
-  """
-  目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录
-  """
-  id: [ID!]
-}`, BuiltIn: false},
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/image_changed.graphql", Input: `extend type Subscription {
   "订阅图片新增或更新事件（文件被创建或写入时触发），支持按筛选条件过滤"
   imageSaved(filterBy: ImageFiltersInput): Image!
@@ -9165,7 +9172,7 @@ func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id"}
+	fieldsInOrder := [...]string{"id", "query"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -9179,6 +9186,13 @@ func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, 
 				return it, err
 			}
 			it.ID = data
+		case "query":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("query"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Query = data
 		}
 	}
 

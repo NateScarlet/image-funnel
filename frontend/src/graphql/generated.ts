@@ -60,6 +60,8 @@ export type CreateSessionInput = {
 export type DirectoryFilters = {
   /** 目录ID列表，为null表示订阅所有目录，空数组表示不订阅任何目录 */
   id?: InputMaybe<Array<Scalars['ID']['input']>>;
+  /** 按目录名模糊搜索（忽略大小写，包含即匹配） */
+  query?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** 图片筛选操作类型，对应三态分类决策。 */

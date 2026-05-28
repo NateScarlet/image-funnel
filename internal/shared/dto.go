@@ -16,7 +16,8 @@ type FileChangedEvent struct {
 
 // DirectoryFilters 目录查询过滤器
 type DirectoryFilters struct {
-	ID []scalar.ID // 目录ID列表，空表示所有目录
+	ID    []scalar.ID // 目录ID列表，空表示所有目录
+	Query string      // 按目录名模糊搜索（忽略大小写，包含即匹配）
 }
 
 // DirectoryDTO 目录数据传输对象

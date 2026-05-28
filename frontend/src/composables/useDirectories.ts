@@ -29,8 +29,20 @@ export default function useDirectories(
     query?: MaybeRefOrGetter<string | undefined>;
   },
 ) {
-  const resolvedVariables = computed(() => toValue(variables));
-  const directoryId = computed(() => resolvedVariables.value.id);
+  const resolvedVariables = computed(() => {
+    const vars = toValue(variables);
+    const queryVal = options?.query
+      ? toValue(options.query)?.trim()
+      : undefined;
+    return {
+      ...vars,
+      filterBy: {
+        ...vars.filterBy,
+        query: queryVal || undefined,
+      },
+    };
+  });
+  const directoryId = computed(() => toValue(variables).id);
 
   // 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
   const { model: maxUnratedCount } = useStorage<number>(
@@ -168,9 +180,6 @@ export default function useDirectories(
   // 排序并过滤后的目录列表
   const sortedDirectories = computed(() => {
     const dirs = liveDirectories.value;
-    const queryStr = options?.query
-      ? toValue(options.query)?.trim().toLowerCase()
-      : "";
 
     const items = dirs.map((dir) => {
       const stats = getCachedStats(dir.id);
@@ -189,13 +198,6 @@ export default function useDirectories(
       // 过滤大量未评级目录
       if (!showLargeUnrated.value && item.isLargeUnrated) {
         return false;
-      }
-      // 过滤搜索关键字
-      if (queryStr) {
-        const dirName = getDirName(item.dir.relPath).toLowerCase();
-        if (!dirName.includes(queryStr)) {
-          return false;
-        }
       }
       return true;
     });
@@ -224,8 +226,3 @@ export default function useDirectories(
 
 // 用来兼容可能的 GraphQL 导出的 Fragment 名称变动
 const ImageFunnelDirectoryFragmentDoc = DirectoryFragmentDoc;
-
-function getDirName(relPath: string): string {
-  if (!relPath) return "";
-  return relPath.split(/[/\\]/).pop() || "";
-}
