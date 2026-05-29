@@ -3,7 +3,6 @@ package directory
 import (
 	appimage "main/internal/application/image"
 	"main/internal/domain/directory"
-	"main/internal/scalar"
 	"main/internal/shared"
 )
 
@@ -17,12 +16,12 @@ func NewDTOFactory(imageDTOFactory *appimage.DTOFactory) *DTOFactory {
 	}
 }
 
-func (f *DTOFactory) New(dirInfo *directory.Directory, parentID scalar.ID, isRoot bool) *shared.DirectoryDTO {
+func (f *DTOFactory) New(dirInfo *directory.Directory) *shared.DirectoryDTO {
 	return &shared.DirectoryDTO{
 		ID:       dirInfo.ID(),
-		ParentID: parentID,
+		ParentID: dirInfo.ParentID(),
 		RelPath:  dirInfo.RelPath(),
-		Root:     isRoot,
+		Root:     dirInfo.IsRoot(),
 	}
 }
 

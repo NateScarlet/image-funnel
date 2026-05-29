@@ -123,6 +123,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.Service.GetDirectory` 转为领域对象再获取 `RelPath()`），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
 - **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，备忘录列表查询应放在 `application/memo.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
 - **DTO 跨领域引用**: `shared/*DTO` 中不应嵌入其他领域的 DTO 字段（如 `SessionDTO.CurrentImage *ImageDTO`），这会迫使 DTO 工厂导入其他应用层包造成跨领域耦合。改为存储 `scalar.ID`（如 `CurrentImageID scalar.ID`），零值即表示该关联不存在，GraphQL 层通过自动生成的 resolver 按 ID 查询完整对象。参照 `SessionDTO.CurrentImageID` 与 `session.resolvers.go` 中的 `CurrentImage` resolver
+- **DTO 构造与职责边界**: `DTOFactory` 是唯一负责将领域对象（或基础设施层数据）转换为 DTO 的组件。禁止由 `DTOFactory` 以外的层级或组件直接控制 DTO 字段的生成或传递额外参数。`DTOFactory` 的 `New` 方法应仅接收领域实体本身，其派生的上下文状态（如 `parentID`、`isRoot` 等）应在领域对象被构造时自动计算并内置于实体中，由 DTOFactory 自动读取以完成映射。这可以避免外部调用层（如 Handler 或事件订阅）重复计算或越权传递参数，从而防止 Bug 引入。
 
 
 ### Vue / TypeScript

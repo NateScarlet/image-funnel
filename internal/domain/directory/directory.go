@@ -3,6 +3,7 @@ package directory
 import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
+	"path/filepath"
 )
 
 type Stats struct {
@@ -38,16 +39,23 @@ func (s *Stats) RatingCounts() map[int]int {
 }
 
 type Directory struct {
-	id      scalar.ID
-	relPath string
+	id       scalar.ID
+	parentID scalar.ID
+	relPath  string
 }
 
 // FromRepository 从仓库创建目录，根据相对路径生成 ID
 // 不要用作构建函数
 func FromRepository(relPath string) *Directory {
+	var parentID scalar.ID
+	if relPath != "." && relPath != "" {
+		parentPath := filepath.Dir(relPath)
+		parentID = encodeID(parentPath)
+	}
 	return &Directory{
-		id:      encodeID(relPath),
-		relPath: relPath,
+		id:       encodeID(relPath),
+		parentID: parentID,
+		relPath:  relPath,
 	}
 }
 
@@ -55,6 +63,15 @@ func (d *Directory) ID() scalar.ID {
 	return d.id
 }
 
+func (d *Directory) ParentID() scalar.ID {
+	return d.parentID
+}
+
+func (d *Directory) IsRoot() bool {
+	return d.relPath == "."
+}
+
 func (d *Directory) RelPath() string {
 	return d.relPath
 }
+

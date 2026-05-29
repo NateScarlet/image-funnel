@@ -8,7 +8,6 @@ import (
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"path/filepath"
 )
 
 // Handler 目录应用层处理器
@@ -47,27 +46,7 @@ func (h *Handler) Directory(ctx context.Context, id scalar.ID) (*shared.Director
 	if err != nil {
 		return nil, err
 	}
-
-	relPath := dirInfo.RelPath()
-	var parentID scalar.ID
-	if relPath != "." {
-		parentPath := filepath.Dir(relPath)
-		if parentPath != "." {
-			parentDir, err := h.repo.Get(ctx, parentPath)
-			if err != nil {
-				return nil, err
-			}
-			parentID = parentDir.ID()
-		} else {
-			rootDir, err := h.repo.Get(ctx, ".")
-			if err != nil {
-				return nil, err
-			}
-			parentID = rootDir.ID()
-		}
-	}
-
-	return h.dtoFactory.New(dirInfo, parentID, relPath == "."), nil
+	return h.dtoFactory.New(dirInfo), nil
 }
 
 // RootDirectory 查询根目录信息
@@ -158,7 +137,7 @@ func (h *Handler) Directories(
 			if !dirFilter(dir) {
 				continue
 			}
-			dto := h.dtoFactory.New(dir, parentID, false)
+			dto := h.dtoFactory.New(dir)
 			if !yield(dto, nil) {
 				return
 			}
@@ -188,7 +167,7 @@ func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.Directory
 					return yield(nil, err)
 				}
 				if filter(dir) {
-					return yield(h.dtoFactory.New(dir, event.DirectoryID, false), nil)
+					return yield(h.dtoFactory.New(dir), nil)
 				}
 				return true
 			}() {
