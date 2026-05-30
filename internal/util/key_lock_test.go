@@ -3,7 +3,6 @@ package util
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -71,29 +70,45 @@ func TestKeyLock_DuplicateUnlock(t *testing.T) {
 func TestKeyLock_Concurrency(t *testing.T) {
 	kl := &KeyLock{}
 	var wg sync.WaitGroup
-	var counter int64
 
+	const numKeys = 50
 	const goroutines = 100
 	const iterations = 1000
-	const key = "concurrency_key"
+
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = "key_" + itoa(i)
+	}
+
+	// 每个 key 对应一个独立的计数器
+	counters := make([]int, numKeys)
 
 	for i := 0; i < goroutines; i++ {
 		wg.Add(1)
-		go func() {
+		go func(gID int) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
+				// 均匀分布地选择 key
+				kIdx := (gID + j) % numKeys
+				key := keys[kIdx]
+
 				kl.Lock(key)
-				// 临界区逻辑
-				atomic.AddInt64(&counter, 1)
+				// 临界区逻辑：不使用 atomic，如果锁失效，`go test -race` 能够捕获到这里的并发读写冲突
+				counters[kIdx]++
 				runtime.Gosched() // 略微让出 CPU
 				kl.Unlock(key)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()
-	if counter != goroutines*iterations {
-		t.Errorf("expected counter %d, got %d", goroutines*iterations, counter)
+	
+	var total int
+	for _, c := range counters {
+		total += c
+	}
+	if total != goroutines*iterations {
+		t.Errorf("expected total %d, got %d", goroutines*iterations, total)
 	}
 }
 
