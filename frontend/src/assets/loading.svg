@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" preserveAspectRatio="xMidYMid meet" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #0f172a; z-index: 9999; user-select: none;">
+  <!-- 内嵌样式，避免对外部应用样式造成污染 -->
+  <style>
+    /* 旋转的外环动画 */
+    .ifs-rotating-ring {
+      transform-origin: 50px 50px;
+      animation: ifs-rotate-ring 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    
+    /* 掉落的漏斗微粒动画 */
+    .ifs-falling-dot {
+      animation: ifs-fall-dot 1.8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    
+    /* 渐变标题字样式 */
+    .ifs-loader-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      fill: url(#ifs-title-grad);
+      text-anchor: middle;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    
+    /* 状态副标题样式 */
+    .ifs-loader-subtitle {
+      font-size: 14px;
+      fill: #94a3b8;
+      letter-spacing: 0.02em;
+      text-anchor: middle;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    
+    /* 进度条循环滑动动画 */
+    .ifs-loader-bar {
+      fill: url(#ifs-bar-grad);
+      animation: ifs-loading-progress 1.6s ease-in-out infinite;
+    }
+
+    @keyframes ifs-rotate-ring {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes ifs-fall-dot {
+      0% {
+        transform: translateY(-16px);
+        opacity: 0;
+      }
+      30% {
+        opacity: 1;
+      }
+      70% {
+        transform: translateY(16px);
+        opacity: 0.2;
+      }
+      100% {
+        transform: translateY(22px);
+        opacity: 0;
+      }
+    }
+
+    @keyframes ifs-loading-progress {
+      0% {
+        transform: translateX(-60px);
+      }
+      50% {
+        transform: translateX(160px);
+      }
+      100% {
+        transform: translateX(160px);
+      }
+    }
+  </style>
+
+  <defs>
+    <!-- 圆环渐变色 -->
+    <linearGradient id="ifs-funnel-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+    
+    <!-- 漏斗主体渐变色 -->
+    <linearGradient id="ifs-glow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#fdba74" />
+    </linearGradient>
+    
+    <!-- 标题文字渐变色 -->
+    <linearGradient id="ifs-title-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#fdba74" />
+    </linearGradient>
+    
+    <!-- 进度滑动块渐变色 -->
+    <linearGradient id="ifs-bar-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#fdba74" />
+    </linearGradient>
+    
+    <!-- 进度条圆角剪裁路径 -->
+    <clipPath id="ifs-bar-clip">
+      <rect x="0" y="0" width="160" height="3" rx="1.5" ry="1.5" />
+    </clipPath>
+  </defs>
+
+  <!-- 居中视窗内容组 -->
+  <g transform="translate(0, 0)">
+    <!-- 漏斗 Logo 区域 (中心定位在 200, 180) -->
+    <g transform="translate(160, 140)">
+      <!-- 外围背景圆环 -->
+      <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(249, 115, 22, 0.12)" stroke-width="2" />
+      
+      <!-- 动态旋转圆环 -->
+      <circle cx="50" cy="50" r="44" fill="none" stroke="url(#ifs-funnel-grad)" stroke-width="2.5" stroke-dasharray="276" stroke-dashoffset="80" class="ifs-rotating-ring" />
+      
+      <!-- 漏斗图标形状 -->
+      <path d="M30 32 C30 30, 70 30, 70 32 L58 54 C57 56, 56.5 58, 56.5 60 L56.5 70 C56.5 72, 54.5 74, 52.5 74 L47.5 74 C45.5 74, 43.5 72, 43.5 70 L43.5 60 C43.5 58, 43 56, 42 54 Z" fill="url(#ifs-glow-grad)" />
+      
+      <!-- 掉落的微粒 -->
+      <circle cx="50" cy="22" r="3.5" fill="#fdba74" class="ifs-falling-dot" />
+    </g>
+
+    <!-- 应用名标题 -->
+    <text x="200" y="275" class="ifs-loader-title">ImageFunnel</text>
+
+    <!-- 加载状态提示语 -->
+    <text x="200" y="310" class="ifs-loader-subtitle">正在准备您的图片筛选工作流...</text>
+
+    <!-- 进度条轨道与滑块 -->
+    <g transform="translate(120, 345)">
+      <!-- 轨道背景 -->
+      <rect x="0" y="0" width="160" height="3" rx="1.5" ry="1.5" fill="rgba(249, 115, 22, 0.1)" />
+      <!-- 被圆角裁剪的滑块 -->
+      <g clip-path="url(#ifs-bar-clip)">
+        <rect x="0" y="0" width="60" height="3" class="ifs-loader-bar" />
+      </g>
+    </g>
+  </g>
+</svg>
