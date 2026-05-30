@@ -1,6 +1,7 @@
 package util
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -84,7 +85,7 @@ func TestKeyLock_Concurrency(t *testing.T) {
 				kl.Lock(key)
 				// 临界区逻辑
 				atomic.AddInt64(&counter, 1)
-				time.Sleep(time.Nanosecond) // 略微让出 CPU
+				runtime.Gosched() // 略微让出 CPU
 				kl.Unlock(key)
 			}
 		}()
