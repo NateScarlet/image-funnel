@@ -21,28 +21,28 @@ func (fb *FilterBuilder) Build(filter shared.ImageFilters) func(*Image) bool {
 		return img != nil
 	})
 
-	if v := filter.ID; len(v) > 0 {
+	if v := filter.ID; v != nil {
 		m := util.AddToSet(nil, v...)
 		b.Add(func(img *Image) bool {
 			return m.Has(img.ID())
 		})
 	}
 
-	if v := filter.DirectoryID; len(v) > 0 {
+	if v := filter.DirectoryID; v != nil {
 		m := util.AddToSet(nil, v...)
 		b.Add(func(img *Image) bool {
 			return m.Has(img.DirectoryID())
 		})
 	}
 
-	if v := filter.Rating; len(v) > 0 {
+	if v := filter.Rating; v != nil {
 		m := util.AddToSet(nil, v...)
 		b.Add(func(img *Image) bool {
 			return m.Has(img.Rating())
 		})
 	}
 
-	if v := filter.Label; len(v) > 0 {
+	if v := filter.Label; v != nil {
 		labels := make(map[string]bool, len(v))
 		for _, l := range v {
 			labels[strings.ToLower(l)] = true

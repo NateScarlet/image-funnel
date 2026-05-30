@@ -129,7 +129,7 @@ func (h *Handler) MemoSaved(ctx context.Context, filter *shared.MemoFilters) ite
 		}
 
 		var allowedDirectoryIDs util.Set[scalar.ID]
-		if len(filters.DirectoryID) > 0 {
+		if filters.DirectoryID != nil {
 			allowedDirectoryIDs = util.AddToSet(nil, filters.DirectoryID...)
 		}
 

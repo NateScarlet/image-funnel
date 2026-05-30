@@ -62,7 +62,7 @@ func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
 	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
 	filtered := filterImages(images, filterFunc)
 
-	assert.Equal(t, 6, len(filtered), "Should include all images when rating is empty")
+	assert.Equal(t, 0, len(filtered), "Should match no images when rating is empty slice (zero length)")
 }
 
 func TestBuildImageFilter_WithSingleRating(t *testing.T) {
