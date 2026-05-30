@@ -81,6 +81,18 @@
             <span>清除筛选</span>
           </button>
 
+          <!-- 重新筛选本地已修改且不再满足筛选条件的图片 -->
+          <button
+            v-if="outOfFilterImageIds.size > 0"
+            class="px-3 h-8 text-xs border rounded-lg transition-all flex items-center gap-2 bg-amber-950/40 hover:bg-amber-900/40 border-amber-900/50 text-amber-300 cursor-pointer animate-pulse"
+            title="隐藏不再符合当前过滤条件的图片"
+            @click="handleApplyLocalFilter"
+          >
+            <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24">
+              <path :d="mdiRefresh" fill="currentColor" />
+            </svg>
+            <span>重新筛选 ({{ outOfFilterImageIds.size }}张已改)</span>
+          </button>
           <!-- 搜索输入框 -->
           <div class="relative min-w-36 max-w-60 flex-1 sm:flex-none">
             <input
@@ -195,6 +207,9 @@
               isBulkMode && selectedImageIds.includes(img.id)
                 ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-[1.02]'
                 : 'border-primary-800 hover:border-primary-600/80',
+              outOfFilterImageIds.has(img.id)
+                ? 'border-yellow-600 border-2 border-dashed'
+                : '',
             ]"
             @click="handleImageClick(img)"
           >
@@ -564,6 +579,7 @@ import {
   mdiCheck,
   mdiCheckboxMultipleMarkedOutline,
   mdiStar,
+  mdiRefresh,
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
@@ -584,6 +600,7 @@ import useModalDialog from "@/composables/useModalDialog";
 import useModalFullscreen from "@/composables/useModalFullscreen";
 import { openImageViewerByFilename } from "@/events";
 import useLocationHash from "@/composables/useLocationHash";
+import optionalArray from "@/utils/optionalArray.ts";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -611,9 +628,9 @@ onMounted(() => {
 // 构建图片查询 variables
 const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
   const filterBy: ImageFiltersInput = {
-    rating: filterRating.value,
-    label: filterLabels.value.length > 0 ? filterLabels.value : null,
-    query: searchQuery.value || null,
+    rating: optionalArray(filterRating.value),
+    label: optionalArray(filterLabels.value),
+    query: searchQuery.value || undefined,
   };
   return {
     id: props.directoryId,
@@ -626,7 +643,13 @@ const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
 const loading = computed(() => loadingCount.value > 0);
 
 // 调用 useBrowseImages 获取图片列表
-const { images, hasNextPage, fetchMore } = useBrowseImages(imagesVariables, {
+const {
+  images,
+  hasNextPage,
+  fetchMore,
+  outOfFilterImageIds,
+  applyLocalFilter,
+} = useBrowseImages(imagesVariables, {
   loadingCount,
 });
 
@@ -686,6 +709,16 @@ function handleImageClick(img: ImageFragment) {
   } else {
     openViewer(img);
   }
+}
+
+// 重新应用本地筛选，并过滤掉不再可见的图片已选中的批量 ID
+function handleApplyLocalFilter() {
+  if (isBulkMode.value) {
+    selectedImageIds.value = selectedImageIds.value.filter(
+      (id) => !outOfFilterImageIds.value.has(id),
+    );
+  }
+  applyLocalFilter();
 }
 // #endregion
 // #endregion

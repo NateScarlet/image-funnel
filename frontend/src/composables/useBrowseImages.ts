@@ -1,4 +1,4 @@
-import { computed, toValue, type MaybeRefOrGetter, type Ref } from "vue";
+import { computed, toValue, ref, type MaybeRefOrGetter, type Ref } from "vue";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import useRelayConnection from "./useRelayConnection";
@@ -116,8 +116,79 @@ export default function useBrowseImages(
     },
   });
 
+  // #region 本地筛选状态与声明式过滤逻辑
+  // 记录已被手动筛选排除的图片 ID 集合
+  const excludedImageIds = ref<Set<string>>(new Set());
+
+  // 本地过滤判断函数
+  const matchesFilters = (img: ImageFragment) => {
+    const filterBy = resolvedVariables.value.filterBy;
+    if (!filterBy) return true;
+
+    // 1. 评分过滤
+    if (filterBy.rating != null) {
+      if (!filterBy.rating.includes(img.currentRating ?? 0)) {
+        return false;
+      }
+    }
+    // 2. 标签过滤
+    if (filterBy.label != null) {
+      if (!img.label || !filterBy.label.includes(img.label)) {
+        return false;
+      }
+    }
+    // 3. 搜索过滤
+    if (filterBy.query) {
+      const q = filterBy.query.toLowerCase();
+      if (!img.filename.toLowerCase().includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // 在一次原始数组迭代中同时计算：可见图片列表、已显示但不合规 ID、以及待排除不合规 ID
+  const filterStates = computed(() => {
+    const visibleImages: ImageFragment[] = [];
+    const mismatchedIds = new Set<string>();
+    const nextExcludedIds = new Set<string>();
+
+    images.value.forEach((img) => {
+      const isMatched = matchesFilters(img);
+      const isExcluded = excludedImageIds.value.has(img.id);
+
+      // 被隐藏的条件：已被排除，且目前依然不满足筛选
+      const shouldHide = isExcluded && !isMatched;
+
+      if (!shouldHide) {
+        visibleImages.push(img);
+        if (!isMatched) {
+          mismatchedIds.add(img.id);
+        }
+      }
+
+      if (!isMatched) {
+        nextExcludedIds.add(img.id);
+      }
+    });
+
+    return {
+      visibleImages,
+      mismatchedIds,
+      nextExcludedIds,
+    };
+  });
+
+  // 应用本地筛选，直接将最新计算的待排除 ID 集合赋值给排除列表
+  function applyLocalFilter() {
+    excludedImageIds.value = filterStates.value.nextExcludedIds;
+  }
+  // #endregion
+
   return {
-    images,
+    images: computed(() => filterStates.value.visibleImages),
+    outOfFilterImageIds: computed(() => filterStates.value.mismatchedIds),
+    applyLocalFilter,
     hasNextPage: computed(() => imageConnection.pageInfo.value.hasNextPage),
     fetchMore: imageConnection.fetchMore,
   };
