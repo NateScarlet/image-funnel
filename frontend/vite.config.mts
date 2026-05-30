@@ -3,6 +3,7 @@ import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import fs from "fs";
+import { optimize } from "svgo";
 
 // 构建和开发阶段注入首屏 Loading SVG 的插件
 function injectLoadingSvg(): Plugin {
@@ -12,7 +13,12 @@ function injectLoadingSvg(): Plugin {
       const svgPath = path.resolve(__dirname, "./src/assets/loading.svg");
       if (fs.existsSync(svgPath)) {
         const svgContent = fs.readFileSync(svgPath, "utf-8");
-        return html.replace("<!-- INJECT_LOADING_SVG -->", svgContent);
+        // 压缩 Loading SVG 以减小首屏 HTML 的体积，提高首屏加载速度
+        const optimized = optimize(svgContent, {
+          path: svgPath,
+          multipass: true,
+        });
+        return html.replace("<!-- INJECT_LOADING_SVG -->", optimized.data);
       }
       return html;
     },

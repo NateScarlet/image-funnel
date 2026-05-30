@@ -47,6 +47,7 @@
     "fflate": "^0.8.2",
     "jiti": "^2.6.1",
     "prettier": "^3.8.1",
+    "svgo": "^4.0.1",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.22.3",
     "typescript": "^5.9.3",
