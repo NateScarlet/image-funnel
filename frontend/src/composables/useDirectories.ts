@@ -115,7 +115,10 @@ export default function useDirectories(
           fragmentName: "Directory",
           data: savedDir,
         });
-        onSaved(savedDir);
+        // 只有当变更的目录是当前目录的子目录时才加入/更新到列表中
+        if (savedDir.parentId === directoryId.value) {
+          onSaved(savedDir);
+        }
       }
     },
   });
