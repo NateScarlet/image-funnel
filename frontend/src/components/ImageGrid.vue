@@ -353,6 +353,7 @@
         <!-- 图像查看器组件 -->
         <ImageViewer
           :image="currentImage"
+          :next-images="images.slice(currentImageIndex + 1)"
           class="w-full h-full flex-1"
           @request-next="nextImage"
         >

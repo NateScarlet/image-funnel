@@ -445,12 +445,12 @@ const emit = defineEmits<{
 const {
   image,
   sessionId = undefined,
-  nextImages = [],
+  nextImages,
   allowPan = () => true,
 } = defineProps<{
   image: ImageFragment;
   sessionId?: string;
-  nextImages?: ImageFragment[];
+  nextImages: ImageFragment[];
   allowPan?: (e: PointerEvent) => boolean;
 }>();
 
