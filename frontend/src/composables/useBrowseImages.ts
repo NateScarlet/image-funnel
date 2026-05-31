@@ -127,7 +127,7 @@ export default function useBrowseImages(
 
     // 1. 评分过滤
     if (filterBy.rating != null) {
-      if (!filterBy.rating.includes(img.currentRating ?? 0)) {
+      if (!filterBy.rating.includes(img.currentRating)) {
         return false;
       }
     }

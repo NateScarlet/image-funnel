@@ -568,7 +568,7 @@ const { setRating } = useImageRating(() => image);
 
 const ratingModel = computed({
   get() {
-    return image.currentRating || 0;
+    return image.currentRating;
   },
   set(value) {
     setRating(value);

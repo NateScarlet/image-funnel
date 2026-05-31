@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strconv"
@@ -1533,7 +1534,7 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   "图片像素高度"
   height: Int!
   "当前 XMP 评分（0-5），无 sidecar 文件时返回 0"
-  currentRating: Int
+  currentRating: Int!
   "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
   "关联的备忘信息，无备忘文件时返回空备忘对象"
@@ -3698,9 +3699,9 @@ func (ec *executionContext) _Image_currentRating(ctx context.Context, field grap
 			return obj.CurrentRating, nil
 		},
 		nil,
-		ec.marshalOInt2int,
+		ec.marshalNInt2int,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -10315,6 +10316,9 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "currentRating":
 			out.Values[i] = ec._Image_currentRating(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "xmpExists":
 			out.Values[i] = ec._Image_xmpExists(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -12399,13 +12403,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -13320,18 +13324,6 @@ func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsha
 	}
 	res, err := ec.unmarshalInputImageFiltersInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) unmarshalOInt2int(ctx context.Context, v any) (int, error) {
-	res, err := graphql.UnmarshalInt(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
-	_ = sel
-	_ = ctx
-	res := graphql.MarshalInt(v)
-	return res
 }
 
 func (ec *executionContext) unmarshalOInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {

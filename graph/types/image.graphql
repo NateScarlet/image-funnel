@@ -18,7 +18,7 @@ type Image @goModel(model: "main/internal/shared.ImageDTO") {
   "图片像素高度"
   height: Int!
   "当前 XMP 评分（0-5），无 sidecar 文件时返回 0"
-  currentRating: Int
+  currentRating: Int!
   "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
   "关联的备忘信息，无备忘文件时返回空备忘对象"
