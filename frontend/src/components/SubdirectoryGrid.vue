@@ -61,11 +61,14 @@
         v-if="sortedDirectories.length > 0"
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
-        <button
+        <RouterLink
           v-for="subDir in sortedDirectories"
           :key="subDir.id"
-          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-secondary-500/50 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20"
-          @click="emit('navigate', subDir.id)"
+          :to="{
+            path: '/browse',
+            query: { dir: subDir.id },
+          }"
+          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-secondary-500/50 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
         >
           <DirectoryDisplay
             :directory="{ id: subDir.id }"
@@ -80,7 +83,7 @@
               </span>
             </template>
           </DirectoryDisplay>
-        </button>
+        </RouterLink>
       </div>
 
       <!-- 搜索无结果或加载中的提示 -->
@@ -161,9 +164,6 @@ const { directoryId, filterRating } = defineProps<{
   directoryId: string;
   filterRating: readonly number[];
 }>();
-
-const emit = defineEmits<(e: "navigate", id: string) => void>();
-// #endregion
 
 // 搜索关键字响应式变量
 const searchQuery = ref("");

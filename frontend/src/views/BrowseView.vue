@@ -11,32 +11,31 @@
         <!-- 路径面包屑与返回上级 -->
         <div class="flex items-center gap-3 flex-1 min-w-0">
           <!-- 返回主页 -->
-          <button
-            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer"
+          <RouterLink
+            to="/"
+            class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer no-underline"
             title="返回主页"
-            @click="navigateToHome"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiHome" fill="currentColor" />
             </svg>
-          </button>
+          </RouterLink>
 
           <!-- 返回上一级 -->
-          <button
-            :disabled="!canGoToParent"
-            class="p-2 rounded-lg border transition-all flex-none flex items-center justify-center"
+          <RouterLink
+            :to="parentTo"
+            class="p-2 rounded-lg border transition-all flex-none flex items-center justify-center no-underline"
             :class="
               canGoToParent
                 ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white cursor-pointer'
-                : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed'
+                : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed pointer-events-none'
             "
             title="返回上一级"
-            @click="goToParent"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiArrowUp" fill="currentColor" />
             </svg>
-          </button>
+          </RouterLink>
 
           <!-- 磨砂面包屑路径 -->
           <div
@@ -46,7 +45,6 @@
               v-if="currentDirectoryId"
               :directory-id="currentDirectoryId"
               :is-current="true"
-              @navigate="navigateToDir"
             />
           </div>
 
@@ -63,59 +61,60 @@
           </button>
 
           <!-- 上次会话按钮 -->
-          <button
+          <RouterLink
             v-if="lastSession"
-            class="flex items-center gap-2 px-3 py-1 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium"
+            :to="{
+              name: 'session',
+              params: { id: lastSession.id },
+            }"
+            class="flex items-center gap-2 px-3 py-1 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none text-sm font-medium no-underline"
             title="返回最近会话"
-            @click="goToLastSession"
           >
             <svg class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiHistory" fill="currentColor" />
             </svg>
             <span>上次会话：{{ formatDate(lastSession.updatedAt) }}</span>
-          </button>
+          </RouterLink>
         </div>
 
         <!-- 同级目录导航按钮组 -->
         <div class="flex items-center gap-1 flex-none">
-          <button
-            :disabled="!prevSibling"
-            class="p-2 rounded-lg border transition-all flex items-center justify-center"
+          <RouterLink
+            :to="prevSiblingTo"
+            class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
             :class="
               prevSibling
                 ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
             "
             :title="
               prevSibling
                 ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
                 : '没有上一个目录'
             "
-            @click="prevSibling && navigateToDir(prevSibling.id)"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiChevronLeft" fill="currentColor" />
             </svg>
-          </button>
-          <button
-            :disabled="!nextSibling"
-            class="p-2 rounded-lg border transition-all flex items-center justify-center"
+          </RouterLink>
+          <RouterLink
+            :to="nextSiblingTo"
+            class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
             :class="
               nextSibling
                 ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+                : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
             "
             :title="
               nextSibling
                 ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
                 : '没有下一个目录'
             "
-            @click="nextSibling && navigateToDir(nextSibling.id)"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiChevronRight" fill="currentColor" />
             </svg>
-          </button>
+          </RouterLink>
         </div>
       </div>
 
@@ -126,86 +125,86 @@
           <!-- 左侧按钮组 -->
           <div class="flex items-center gap-2">
             <!-- 返回主页 -->
-            <button
-              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center cursor-pointer"
+            <RouterLink
+              to="/"
+              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center cursor-pointer no-underline"
               title="返回主页"
-              @click="navigateToHome"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path :d="mdiHome" fill="currentColor" />
               </svg>
-            </button>
+            </RouterLink>
 
             <!-- 返回上一级 -->
-            <button
-              :disabled="!canGoToParent"
-              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+            <RouterLink
+              :to="parentTo"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
               :class="
                 canGoToParent
                   ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white cursor-pointer'
-                  : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed'
+                  : 'bg-primary-800/40 border-primary-700/50 text-primary-500 cursor-not-allowed pointer-events-none'
               "
               title="返回上一级"
-              @click="goToParent"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path :d="mdiArrowUp" fill="currentColor" />
               </svg>
-            </button>
+            </RouterLink>
 
             <!-- 上次会话按钮 - 仅显示图标 -->
-            <button
+            <RouterLink
               v-if="lastSession"
-              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center"
+              :to="{
+                name: 'session',
+                params: { id: lastSession.id },
+              }"
+              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center no-underline"
               title="返回最近会话"
-              @click="goToLastSession"
             >
               <svg class="w-4 h-4" viewBox="0 0 24 24">
                 <path :d="mdiHistory" fill="currentColor" />
               </svg>
-            </button>
+            </RouterLink>
           </div>
 
           <!-- 右侧同级目录导航按钮组 -->
           <div class="flex items-center gap-1">
-            <button
-              :disabled="!prevSibling"
-              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+            <RouterLink
+              :to="prevSiblingTo"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
               :class="
                 prevSibling
                   ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
               "
               :title="
                 prevSibling
                   ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
                   : '没有上一个目录'
               "
-              @click="prevSibling && navigateToDir(prevSibling.id)"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path :d="mdiChevronLeft" fill="currentColor" />
               </svg>
-            </button>
-            <button
-              :disabled="!nextSibling"
-              class="p-2 rounded-lg border transition-all flex items-center justify-center"
+            </RouterLink>
+            <RouterLink
+              :to="nextSiblingTo"
+              class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
               :class="
                 nextSibling
                   ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40'
+                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
               "
               :title="
                 nextSibling
                   ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
                   : '没有下一个目录'
               "
-              @click="nextSibling && navigateToDir(nextSibling.id)"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path :d="mdiChevronRight" fill="currentColor" />
               </svg>
-            </button>
+            </RouterLink>
           </div>
         </div>
 
@@ -217,7 +216,6 @@
             v-if="currentDirectoryId"
             :directory-id="currentDirectoryId"
             :is-current="true"
-            @navigate="navigateToDir"
           />
         </div>
       </div>
@@ -230,7 +228,6 @@
       <SubdirectoryGrid
         :directory-id="currentDirectoryId"
         :filter-rating="filterRating"
-        @navigate="navigateToDir"
       />
 
       <!-- 笔记列表容器区 -->
@@ -271,24 +268,32 @@ const router = useRouter();
 // 目录ID，默认从路由 query 中获取，否则为空字符串（即代表根目录）
 const currentDirectoryId = computed(() => (route.query.dir as string) || "");
 
+const parentTo = computed(() => {
+  if (currentDirectory.value?.parentId) {
+    return { path: "/browse", query: { dir: currentDirectory.value.parentId } };
+  }
+  return { path: "/browse", query: {} };
+});
+
+const prevSiblingTo = computed(() => {
+  if (prevSibling.value) {
+    return { path: "/browse", query: { dir: prevSibling.value.id } };
+  }
+  return {};
+});
+
+const nextSiblingTo = computed(() => {
+  if (nextSibling.value) {
+    return { path: "/browse", query: { dir: nextSibling.value.id } };
+  }
+  return {};
+});
+
 function navigateToDir(id: string) {
   router.push({
     path: "/browse",
     query: id ? { dir: id } : {},
   });
-}
-
-function navigateToHome() {
-  router.push("/");
-}
-
-function goToLastSession() {
-  if (lastSession.value) {
-    router.push({
-      name: "session",
-      params: { id: lastSession.value.id },
-    });
-  }
 }
 // #endregion
 

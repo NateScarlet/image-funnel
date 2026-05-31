@@ -4,14 +4,19 @@
     data-no-gesture
   >
     <div class="max-w-7xl mx-auto flex items-center justify-between">
-      <div
-        class="cursor-pointer p-1 hover:bg-primary-700 rounded-lg transition-colors mr-2"
-        @click="goHome"
+      <RouterLink
+        :to="{
+          path: '/',
+          query: props.session?.directory?.id
+            ? { dir: props.session.directory.id }
+            : undefined,
+        }"
+        class="text-primary-100 hover:text-white p-1 hover:bg-primary-700 rounded-lg transition-colors mr-2 flex items-center"
       >
         <svg class="w-6 h-6" viewBox="0 0 24 24">
           <path :d="mdiHome" fill="currentColor" />
         </svg>
-      </div>
+      </RouterLink>
 
       <div class="flex-1 min-w-0 mr-4">
         <div class="text-xs md:text-sm text-primary-400 truncate">
@@ -130,7 +135,6 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from "vue-router";
 import {
   mdiMenu,
   mdiUndo,
@@ -144,16 +148,6 @@ import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
 import useModalDialog from "@/composables/useModalDialog";
-
-const router = useRouter();
-
-function goHome() {
-  const dir = props.session?.directory?.id;
-  router.push({
-    path: "/",
-    query: dir ? { dir } : undefined,
-  });
-}
 
 const props = defineProps<{
   session: SessionFragment | null | undefined;

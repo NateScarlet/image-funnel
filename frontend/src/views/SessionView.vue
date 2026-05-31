@@ -124,15 +124,15 @@
             <div class="text-4xl mb-4">🔍</div>
             <h2 class="text-2xl font-bold mb-2">会话不存在</h2>
             <p class="text-primary-400 mb-4">找不到指定的筛选会话</p>
-            <button
-              class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto"
-              @click="router.push('/')"
+            <RouterLink
+              to="/"
+              class="px-6 py-3 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap mx-auto text-white no-underline"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
                 <path :d="mdiHome" fill="currentColor" />
               </svg>
               返回主页
-            </button>
+            </RouterLink>
           </div>
         </template>
         <template v-else>
@@ -248,7 +248,7 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, computed, useTemplateRef } from "vue";
-import { useRouter } from "vue-router";
+
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument, ImageAction } from "../graphql/generated";
 import ImageViewer from "../components/ImageViewer.vue";
@@ -271,7 +271,6 @@ import useMarkImage from "@/composables/useMarkImage";
 import Time from "@/utils/Time";
 
 const rendererEl = useFullscreenRendererElement();
-const router = useRouter();
 
 const props = defineProps<{
   id: string;

@@ -3,7 +3,6 @@
     <DirectoryBreadcrumbContent
       :directory-id="directoryId"
       :is-current="isCurrent"
-      @navigate="emit('navigate', $event)"
     />
   </div>
 </template>
@@ -16,7 +15,5 @@ defineProps<{
   directoryId: string;
   isCurrent?: boolean;
 }>();
-
-const emit = defineEmits<(e: "navigate", id: string) => void>();
 // #endregion
 </script>

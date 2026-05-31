@@ -141,6 +141,8 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **缓存策略优先**: 对于已提供 GraphQL 查询的数据（如工作流数据），应直接查询并依赖 Apollo Client 缓存，（可配置 `cache-first` 策略避免重复查询）避免在组件内声明多余的本地响应式状态进行二次缓存。这可以规避组件复用但 Prop（如 ID）切换时，本地状态未及时清理导致显示/复制旧数据的问题。
 - **通知机制**: 成功和出错通知优先使用全局通知组件（如 `useNotification`），避免通过临时修改按钮文本等零散状态做交互，或仅用 `console.error` 打印错误。
 - **Tailwind 样式规范**: 没有特殊理由，不得使用带有 `.5`（如 `gap-1.5`、`p-2.5` 等）的间距/尺寸值或非标准的 `X50` 色彩数值（如 `bg-primary-750`、`bg-primary-850` 等）。应该默认使用基本单位的整数倍数（如 `gap-2`、`p-3`、`bg-primary-700` 等），保持样式尺度的统一。
+- **导航组件统一**: 前端中静态且直接的页面导航，应该统一并尽可能使用 `<RouterLink>` 组件，而不是通过 JS 编程式触发（`router.push`），以保留浏览器原生的超链接体验（如支持 Ctrl+点击 和右键在新标签页中打开）。
+- **导航禁用规范**: 当需要禁用某个导航项时，不应在 `RouterLink` 与 `button/div` 之间切换标签类型，应保持 `<RouterLink>` 的语义，并通过 CSS 样式类（如 `pointer-events-none opacity-40 cursor-not-allowed`）从浏览器层面对其禁用。同时，已被 `pointer-events-none` 禁用的元素上不得添加额外的 `@click` 防御性事件阻止逻辑，避免过度防御。
 
 ### GraphQL
 

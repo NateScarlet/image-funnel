@@ -51,17 +51,19 @@
     />
 
     <div class="flex gap-4">
-      <button
-        type="button"
+      <RouterLink
+        :to="{
+          path: '/browse',
+          query: { dir: selectedDirectoryId },
+        }"
         title="浏览该目录下的图片"
-        class="py-3 px-5 bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors flex items-center justify-center gap-2 border border-primary-600 text-primary-300 hover:text-white"
-        @click="handleBrowse"
+        class="py-3 px-5 bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors flex items-center justify-center gap-2 border border-primary-600 text-primary-300 hover:text-white no-underline"
       >
         <svg class="w-5 h-5" viewBox="0 0 24 24">
           <path :d="mdiFolder" fill="currentColor" />
         </svg>
         <span>浏览</span>
-      </button>
+      </RouterLink>
 
       <button
         :disabled="!canCreate || creatingSession"
@@ -166,12 +168,5 @@ async function handleCreate() {
   } finally {
     creatingSession.value = false;
   }
-}
-
-function handleBrowse() {
-  router.push({
-    path: "/browse",
-    query: { dir: selectedDirectoryId.value },
-  });
 }
 </script>

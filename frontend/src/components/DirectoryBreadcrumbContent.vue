@@ -1,10 +1,7 @@
 <template>
   <!-- #region 递归渲染父级目录 -->
   <template v-if="parentID">
-    <DirectoryBreadcrumbContent
-      :directory-id="parentID"
-      @navigate="emit('navigate', $event)"
-    />
+    <DirectoryBreadcrumbContent :directory-id="parentID" />
     <!-- 仅当当前节点不是 Root 且父节点不是 Root 时渲染分隔符 -->
     <span
       v-if="needsSeparatorBefore"
@@ -17,38 +14,42 @@
   <!-- #region 渲染当前目录节点 -->
   <!-- 根目录渲染为文件夹图标按钮，后面紧跟分隔符 -->
   <template v-if="isRoot">
-    <button
-      class="px-1 py-0.5 rounded transition-all flex items-center shrink-0"
+    <RouterLink
+      :to="{
+        path: '/browse',
+        query: myDirectory ? { dir: myDirectory.id } : {},
+      }"
+      class="px-1 py-0.5 rounded transition-all flex items-center shrink-0 no-underline"
       :class="[
         isCurrent
-          ? 'pointer-events-none text-primary-400'
+          ? 'text-primary-400 font-semibold pointer-events-none'
           : 'text-primary-300 hover:text-white hover:bg-white/10 cursor-pointer',
       ]"
-      :disabled="loading"
       title="Root"
-      @click="myDirectory && emit('navigate', myDirectory.id)"
     >
       <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
         <path :d="mdiFolderOpen" fill="currentColor" />
       </svg>
-    </button>
+    </RouterLink>
     <span class="text-primary-600 select-none mx-0.5">/</span>
   </template>
   <!-- 子目录展示最后一级目录名 -->
-  <button
+  <RouterLink
     v-else
-    class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0 select-all"
+    :to="{
+      path: '/browse',
+      query: myDirectory ? { dir: myDirectory.id } : {},
+    }"
+    class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0 select-all no-underline"
     :class="[
       isCurrent
-        ? 'text-white font-semibold'
+        ? 'text-white font-semibold pointer-events-none'
         : 'text-primary-300 hover:text-white hover:bg-white/10 cursor-pointer',
     ]"
-    :disabled="loading"
     :title="myDirectory?.relPath || '加载中...'"
-    @click="myDirectory && emit('navigate', myDirectory.id)"
   >
     {{ displayName }}
-  </button>
+  </RouterLink>
   <!-- #endregion -->
 </template>
 
@@ -63,7 +64,6 @@ const props = defineProps<{
   isCurrent?: boolean;
 }>();
 
-const emit = defineEmits<(e: "navigate", id: string) => void>();
 // #endregion
 
 // #region 目录数据查询与解析
@@ -72,11 +72,6 @@ const { currentDirectory: myDirectory } = useDirectories(() => ({
   id: props.directoryId,
   first: 0,
 }));
-
-// 计算当前加载中的状态
-const loading = computed(() => {
-  return myDirectory.value === undefined;
-});
 
 // 是否是相对路径根目录
 const isRoot = computed(() => {
