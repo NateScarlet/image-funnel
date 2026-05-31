@@ -1,14 +1,4 @@
 {
-  "compilerOptions": {
-    "module": "ESNext",
-    "target": "ESNext",
-    "moduleResolution": "Bundler",
-    "forceConsistentCasingInFileNames": true,
-    "esModuleInterop": true,
-    "allowJs": true,
-    "resolveJsonModule": true,
-    "noEmit": true,
-    "types": ["node"]
-  },
-  "include": ["*.ts", "*.mts", "*.cjs", "scripts/*.ts"]
+  "files": [],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./src" }]
 }

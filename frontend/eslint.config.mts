@@ -42,7 +42,7 @@ export default defineConfig(
       },
       parser: tseslint.parser,
       parserOptions: {
-        project: "./src/tsconfig.json",
+        project: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -73,9 +73,9 @@ export default defineConfig(
       parser: vueParser,
       parserOptions: {
         parser: tseslint.parser,
-        project: "./src/tsconfig.json",
-        extraFileExtensions: [".vue"],
+        project: true,
         tsconfigRootDir: import.meta.dirname,
+        extraFileExtensions: [".vue"],
       },
     },
     rules: {},
