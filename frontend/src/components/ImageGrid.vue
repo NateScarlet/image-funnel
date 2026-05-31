@@ -353,7 +353,7 @@
         <!-- 图像查看器组件 -->
         <ImageViewer
           :image="currentImage"
-          :next-images="images.slice(currentImageIndex + 1)"
+          :preload-images="preloadImages"
           class="w-full h-full flex-1"
           @request-next="nextImage"
         >
@@ -748,6 +748,29 @@ const currentImage = computed(() => {
 const currentImageIndex = computed(() => {
   if (currentImageId.value === undefined) return -1;
   return images.value.findIndex((img) => img.id === currentImageId.value);
+});
+
+// 构造交替预载图片列表（后1张、前1张、后2张、前2张……）以支持反向预载
+const preloadImages = computed(() => {
+  const index = currentImageIndex.value;
+  if (index === -1) return [];
+
+  const list: ImageFragment[] = [];
+  const len = images.value.length;
+  const maxOffset = Math.max(index, len - 1 - index);
+
+  for (let offset = 1; offset <= maxOffset; offset++) {
+    const nextIdx = index + offset;
+    const prevIdx = index - offset;
+
+    if (nextIdx < len) {
+      list.push(images.value[nextIdx]);
+    }
+    if (prevIdx >= 0) {
+      list.push(images.value[prevIdx]);
+    }
+  }
+  return list;
 });
 
 function prevImage() {

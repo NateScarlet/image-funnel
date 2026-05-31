@@ -445,12 +445,12 @@ const emit = defineEmits<{
 const {
   image,
   sessionId = undefined,
-  nextImages,
+  preloadImages,
   allowPan = () => true,
 } = defineProps<{
   image: ImageFragment;
   sessionId?: string;
-  nextImages: ImageFragment[];
+  preloadImages: ImageFragment[];
   allowPan?: (e: PointerEvent) => boolean;
 }>();
 
@@ -675,7 +675,7 @@ useAsyncTask({
         useRawImage.value
           ? image.rawURL || image.url
           : getImageUrlByZoom(image, zoom.zoom.value),
-        ...nextImages.map((img) =>
+        ...preloadImages.map((img) =>
           useRawImage.value
             ? img.rawURL || img.url
             : getImageUrlByZoom(img, zoom.zoom.value),

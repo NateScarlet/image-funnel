@@ -47,7 +47,7 @@
           class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
           :image="currentImage"
           :session-id="sessionId"
-          :next-images="session?.nextImages ?? []"
+          :preload-images="session?.nextImages ?? []"
           :allow-pan="handleAllowPan"
           @image-loaded="(e) => (lastImageLoadedEvent = e)"
         >
