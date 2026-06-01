@@ -114,7 +114,6 @@ func (r *MemoRepository) Find(ctx context.Context, relPath string) iter.Seq2[*me
 
 func (r *MemoRepository) absPath(relPath string) string {
 	return filepath.Join(r.rootDir, relPath)
-
 }
 
 var _ memo.Repository = (*MemoRepository)(nil)

@@ -14,3 +14,4 @@ type Repository interface {
 	// Find 迭代扫描目录下所有的备忘录信息
 	Find(ctx context.Context, relPath string) iter.Seq2[*Memo, error]
 }
+

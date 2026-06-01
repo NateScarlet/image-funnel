@@ -3,14 +3,12 @@ package memo
 import (
 	"context"
 	"iter"
-	"main/internal/apperror"
 	"main/internal/domain/directory"
 	"main/internal/domain/memo"
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
-	"path/filepath"
 	"strings"
 )
 
@@ -67,23 +65,13 @@ func (h *Handler) Memo(ctx context.Context, id scalar.ID) (*shared.MemoDTO, erro
 
 // MemoByRelPath 根据相对路径获取备忘录内容
 func (h *Handler) MemoByRelPath(ctx context.Context, relPath string) (*shared.MemoDTO, error) {
-	m, err := h.repo.Read(ctx, relPath)
+	m, err := h.service.ReadByRelPath(ctx, relPath)
 	if err != nil {
-		// 若读取到了非文本文件，则视同文件不存在进行降级处理，返回空备忘对象
-		if apperror.ErrCode(err) == "NOT_TEXT" {
-			absPath := filepath.Join(h.dtoFactory.rootDir, relPath)
-			m = memo.NewEmpty(relPath, absPath)
-			return h.dtoFactory.New(m), nil
-		}
 		return nil, err
-	}
-	if m == nil {
-		// 返回一个空的 MemoDTO 以支持 GraphQL Schema 中的 Memo! 约束
-		absPath := filepath.Join(h.dtoFactory.rootDir, relPath)
-		m = memo.NewEmpty(relPath, absPath)
 	}
 	return h.dtoFactory.New(m), nil
 }
+
 
 // #region 订阅逻辑
 
