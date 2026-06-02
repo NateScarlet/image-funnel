@@ -73,17 +73,55 @@
       <div
         v-if="items.length > 0"
         ref="containerRef"
-        class="max-h-[60vh] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"
+        class="max-h-[60vh] overflow-y-auto pr-1"
       >
-        <template v-for="item in visibleFilteredItems" :key="item.key">
-          <DirectoryItem
-            v-model="selectedId"
-            :directory="item.dir"
-            :filter-rating="filterRating"
-            :target-keep="targetKeep"
-            :filtered-out="item.filteredOut"
-          />
-        </template>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <template v-for="item in visibleFilteredItems" :key="item.key">
+            <DirectoryItem
+              v-model="selectedId"
+              :directory="item.dir"
+              :filter-rating="filterRating"
+              :target-keep="targetKeep"
+              :filtered-out="item.filteredOut"
+            />
+          </template>
+        </div>
+
+        <!-- 加载更多分页控制 -->
+        <div
+          v-if="hasNextPage"
+          class="mt-4 flex justify-center border-t border-primary-600/30 pt-3"
+        >
+          <button
+            :disabled="loading"
+            class="px-4 py-1.5 bg-primary-800 hover:bg-primary-600 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-600 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            @click="fetchMore"
+          >
+            <!-- 加载中动画 -->
+            <svg
+              v-if="loading"
+              class="w-3.5 h-3.5 animate-spin text-secondary-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
+            </svg>
+            <span>{{ loading ? "正在加载..." : "加载更多子目录" }}</span>
+          </button>
+        </div>
       </div>
 
       <div v-else-if="loading" class="space-y-4">
@@ -142,6 +180,21 @@ const { model: showSmallUnrated } = useStorage<boolean>(
   () => false,
 );
 
+const searchState = ref({ query: "", directoryId: "" });
+
+const searchQuery = computed({
+  get: () =>
+    searchState.value.directoryId === (selectedId.value ?? "")
+      ? searchState.value.query
+      : "",
+  set: (val: string) => {
+    searchState.value = {
+      query: val,
+      directoryId: selectedId.value ?? "",
+    };
+  },
+});
+
 const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
@@ -149,7 +202,7 @@ const { getCachedStats } = useDirectoryStats();
 
 const backgroundLoadingCount = ref(0);
 
-// 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页
+// 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页，传入 searchQuery 以在后端进行搜索过滤
 const {
   sortedDirectories: directories,
   currentDirectory,
@@ -159,7 +212,10 @@ const {
   () => ({
     id: selectedId.value || "",
   }),
-  { loadingCount: backgroundLoadingCount },
+  {
+    loadingCount: backgroundLoadingCount,
+    query: searchQuery,
+  },
 );
 
 const loading = computed(() => backgroundLoadingCount.value > 0);
@@ -216,21 +272,6 @@ const isVisible = (item: (typeof items.value)[number]) => {
 
 const searchableItems = computed(() => {
   return items.value.filter(isVisible);
-});
-
-const searchState = ref({ query: "", directoryId: "" });
-
-const searchQuery = computed({
-  get: () =>
-    searchState.value.directoryId === (currentDirectory.value?.id ?? "")
-      ? searchState.value.query
-      : "",
-  set: (val: string) => {
-    searchState.value = {
-      query: val,
-      directoryId: currentDirectory.value?.id ?? "",
-    };
-  },
 });
 
 const filteredItems = computed(() => {
