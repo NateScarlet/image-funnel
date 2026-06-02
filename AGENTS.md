@@ -132,7 +132,15 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 
 ### Vue / TypeScript
 
-- **声明式优先**: 使用 `computed` 而非 `watch` 维护状态
+- **声明式优先**: 使用 `computed` 而非 `watch` 维护状态。
+  - *示例*：在切换目录时重置并隔离搜索词。避免使用命令式的 `watch(() => id, () => query.value = "")`，而是定义一个包含 `{ id, query }` 的局部缓冲区 `ref`，并利用带有 `get` 和 `set` 的 `computed` 属性声明式地处理状态：
+    ```typescript
+    const queryBuffer = ref({ id, query: "" });
+    const query = computed({
+      get: () => queryBuffer.value.id === id ? queryBuffer.value.query : "",
+      set: (val) => { queryBuffer.value = { id, query: val }; }
+    });
+    ```
 - **模板引用**: 使用 `useTemplateRef`（单个）或 `@/composables/useTemplateRefs`（数组）
 - **Composable 参数**: 使用 `MaybeRefOrGetter` 除非有特殊理由
 - **null vs undefined**: 返回值使用 `undefined`，参数接受 `null`

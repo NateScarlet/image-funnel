@@ -165,8 +165,21 @@ const { directoryId, filterRating } = defineProps<{
   filterRating: readonly number[];
 }>();
 
-// 搜索关键字响应式变量
-const searchQuery = ref("");
+// 搜索关键字缓冲区，保存搜索词与对应的目录 ID，实现声明式目录切换与状态保留
+const searchQueryBuffer = ref({ id: directoryId, query: "" });
+const searchQuery = computed({
+  get() {
+    return searchQueryBuffer.value.id === directoryId
+      ? searchQueryBuffer.value.query
+      : "";
+  },
+  set(val) {
+    searchQueryBuffer.value = {
+      id: directoryId,
+      query: val,
+    };
+  },
+});
 
 // 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
 const { model: maxUnratedCount } = useStorage<number>(
