@@ -61,7 +61,8 @@
         :target-keep="targetKeep"
       />
 
-      <div v-if="searchableItems.length > 5" class="mb-4">
+      <!-- 当有搜索关键字或可选目录大于5个时显示搜索框，防止输入过程中因结果变少导致搜索框消失 -->
+      <div v-if="searchQuery || searchableItems.length > 5" class="mb-4">
         <input
           v-model="searchQuery"
           type="search"
