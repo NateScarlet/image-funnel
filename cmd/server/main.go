@@ -89,6 +89,7 @@ func main() {
 	imageFilterBuilder := image.NewFilterBuilder()
 	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
+	singleFlightDirAnalyzer := concurrency.NewSingleFlightDirectoryAnalyzer(dirAnalyzerImpl)
 
 	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
 	sessionDTOFactory := appsession.NewDTOFactory()
@@ -97,10 +98,10 @@ func main() {
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
 	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, sessionDTOFactory)
 
-	var dirAnalyzer domdirectory.Analyzer = dirAnalyzerImpl
+	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer
 	var statsCache *inmem.DirectoryStatsCache
 	if cfg.EnableDirectoryStatsCache {
-		var cache = inmem.NewDirectoryStatsCache(dirAnalyzerImpl, logger)
+		var cache = inmem.NewDirectoryStatsCache(singleFlightDirAnalyzer, logger)
 		statsCache = cache
 		dirAnalyzer = cache
 	}
