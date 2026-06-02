@@ -155,7 +155,6 @@ const backgroundLoadingCount = ref(0);
 const {
   sortedDirectories: directories,
   currentDirectory,
-  loading,
   hasNextPage,
   fetchMore,
 } = useDirectories(
@@ -164,6 +163,8 @@ const {
   }),
   { loadingCount: backgroundLoadingCount },
 );
+
+const loading = computed(() => backgroundLoadingCount.value > 0);
 
 const items = computed(() => {
   return sortBy(

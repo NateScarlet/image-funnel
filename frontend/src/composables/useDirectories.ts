@@ -1,4 +1,4 @@
-import { computed, ref, toValue, type MaybeRefOrGetter, type Ref } from "vue";
+import { computed, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import useRelayConnection from "./useRelayConnection";
@@ -47,8 +47,7 @@ export default function useDirectories(
   const maxUnratedCountVal = computed(() => toValue(options?.maxUnratedCount));
 
   const { getCachedStats, refetchStats } = useDirectoryStats();
-  const internalLoadingCount = ref(0);
-  const loadingCount = options?.loadingCount ?? internalLoadingCount;
+  const loadingCount = options?.loadingCount;
 
   // 执行 GraphQL 查询获取目录的分页数据
   const { data: directoriesData, query: directoriesQuery } = useQuery(
@@ -212,7 +211,6 @@ export default function useDirectories(
     sortedDirectories,
     hasNextPage: computed(() => directoryConnection.pageInfo.value.hasNextPage),
     fetchMore: directoryConnection.fetchMore,
-    loading: computed(() => loadingCount.value > 0),
   };
 }
 
