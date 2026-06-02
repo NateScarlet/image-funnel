@@ -129,37 +129,40 @@ export default function useDirectoryStats() {
     directoryIds: string[],
     signal?: AbortSignal,
   ): Promise<void> {
-    const queue = [...directoryIds];
-    while (queue.length > 0) {
-      const batch = queue.splice(0, 5);
-      if (signal?.aborted) return;
+    // 立即增加所有传入目录的加载计数，使其尽早显示加载状态
+    directoryIds.forEach((id) => {
+      loadingStates[id] = (loadingStates[id] || 0) + 1;
+    });
 
-      // 增加加载计数
-      batch.forEach((id) => {
-        loadingStates[id] = (loadingStates[id] || 0) + 1;
+    using stack = new DisposableStack();
+    // 使用 adopt 注册并返回 queue，在函数退出（如 aborted 或正常结束）时自动还原未处理目录的加载计数
+    const queue = stack.adopt([...directoryIds], (q) => {
+      q.forEach((id) => {
+        loadingStates[id] = (loadingStates[id] || 0) - 1;
       });
+    });
 
-      try {
-        await Promise.allSettled(
-          batch.map(async (id) => {
-            try {
-              await client.query({
-                query: DirectoryStatsDocument,
-                variables: { id },
-                fetchPolicy: "network-only",
-                context: {
-                  transport: "batch-http:direcotry-stats",
-                },
-              });
-            } finally {
-              // 无论查询成功还是失败，均减少加载计数
-              loadingStates[id] = (loadingStates[id] || 0) - 1;
-            }
-          }),
-        );
-      } catch (e) {
-        console.error(e);
-      }
+    while (queue.length > 0) {
+      if (signal?.aborted) return;
+      const batch = queue.splice(0, 5);
+
+      await Promise.allSettled(
+        batch.map(async (id) => {
+          try {
+            await client.query({
+              query: DirectoryStatsDocument,
+              variables: { id },
+              fetchPolicy: "network-only",
+              context: {
+                transport: "batch-http:direcotry-stats",
+              },
+            });
+          } finally {
+            // 无论查询成功还是失败，均减少已处理目录的加载计数
+            loadingStates[id] = (loadingStates[id] || 0) - 1;
+          }
+        }),
+      );
     }
   }
 
