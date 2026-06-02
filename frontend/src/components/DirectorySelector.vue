@@ -59,7 +59,6 @@
         :directory="currentDirectory"
         :filter-rating="filterRating"
         :target-keep="targetKeep"
-        :loading="backgroundLoadingCount > 0"
       />
 
       <div v-if="searchableItems.length > 5" class="mb-4">
@@ -82,7 +81,6 @@
             :directory="item.dir"
             :filter-rating="filterRating"
             :target-keep="targetKeep"
-            :loading="backgroundLoadingCount > 0"
             :filtered-out="item.filteredOut"
           />
         </template>

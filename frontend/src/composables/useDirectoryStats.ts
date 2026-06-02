@@ -19,11 +19,21 @@ import type {
 import { client } from "../graphql/client";
 import toStableValue from "@/utils/toStableValue";
 
+// 记录各个目录的加载计数，用于追踪单个目录的加载状态
+const loadingStates = shallowReactive<Record<string, number>>({});
+
 /**
  * 目录统计信息的 composable
  * 提供全局缓存和响应式访问
  */
 export default function useDirectoryStats() {
+  /**
+   * 判断指定目录是否正在加载/更新统计信息
+   */
+  function isStatsLoading(directoryId: string): boolean {
+    return (loadingStates[directoryId] || 0) > 0;
+  }
+
   /**
    * 获取指定目录的统计信息（自动查询和缓存）
    * @param directoryId 目录 ID
@@ -123,18 +133,29 @@ export default function useDirectoryStats() {
     while (queue.length > 0) {
       const batch = queue.splice(0, 5);
       if (signal?.aborted) return;
+
+      // 增加加载计数
+      batch.forEach((id) => {
+        loadingStates[id] = (loadingStates[id] || 0) + 1;
+      });
+
       try {
         await Promise.allSettled(
-          batch.map((id) =>
-            client.query({
-              query: DirectoryStatsDocument,
-              variables: { id },
-              fetchPolicy: "network-only",
-              context: {
-                transport: "batch-http:direcotry-stats",
-              },
-            }),
-          ),
+          batch.map(async (id) => {
+            try {
+              await client.query({
+                query: DirectoryStatsDocument,
+                variables: { id },
+                fetchPolicy: "network-only",
+                context: {
+                  transport: "batch-http:direcotry-stats",
+                },
+              });
+            } finally {
+              // 无论查询成功还是失败，均减少加载计数
+              loadingStates[id] = (loadingStates[id] || 0) - 1;
+            }
+          }),
         );
       } catch (e) {
         console.error(e);
@@ -146,5 +167,6 @@ export default function useDirectoryStats() {
     useStats,
     getCachedStats,
     refetchStats,
+    isStatsLoading,
   };
 }

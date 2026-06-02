@@ -104,20 +104,15 @@ interface Directory {
   id: string;
 }
 
-const {
-  directory,
-  filterRating = [],
-  loading: externalLoading,
-} = defineProps<{
+const { directory, filterRating = [] } = defineProps<{
   directory: Directory;
   filterRating?: readonly number[];
-  loading?: boolean;
 }>();
 
 const loadingCount = ref(0);
 
 // 使用 useStats 自动查询和缓存
-const { useStats } = useDirectoryStats();
+const { useStats, isStatsLoading } = useDirectoryStats();
 const data = useStats(() => directory.id, loadingCount);
 
 const directoryData = computed(() => {
@@ -125,7 +120,9 @@ const directoryData = computed(() => {
   return node?.__typename === "Directory" ? node : undefined;
 });
 const stats = computed(() => directoryData.value?.stats);
-const loading = computed(() => loadingCount.value > 0 || !!externalLoading);
+const loading = computed(
+  () => loadingCount.value > 0 || isStatsLoading(directory.id),
+);
 const directoryPath = computed(() => directoryData.value?.relPath ?? "");
 
 function sortedRatingCounts(

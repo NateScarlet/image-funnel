@@ -12,7 +12,6 @@
     <DirectoryDisplay
       :directory="{ id: directory.id }"
       :filter-rating="filterRating"
-      :loading="loading"
     >
       <template #badge>
         <div
@@ -69,13 +68,11 @@ const {
   directory,
   filterRating,
   targetKeep,
-  loading,
   filteredOut = false,
 } = defineProps<{
   directory: DirectoryFragment;
   filterRating: readonly number[];
   targetKeep: number;
-  loading?: boolean;
   // 标记目录是否因为不匹配全局筛选条件（如已达标、小未评级等）而被过滤隐藏
   filteredOut?: boolean;
 }>();
