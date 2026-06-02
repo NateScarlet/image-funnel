@@ -142,7 +142,6 @@ export default function useDirectories(
 
   // 在后台批量加载未获取统计信息的目录，避免同时发起大量查询
   useAsyncTask({
-    loadingCount,
     args() {
       const dirs = liveDirectories.value;
       const toLoad = dirs.map((d) => d.id);
