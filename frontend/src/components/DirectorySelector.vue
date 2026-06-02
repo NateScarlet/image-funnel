@@ -112,7 +112,6 @@ import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import useStorage from "../composables/useStorage";
-import useAsyncTask from "../composables/useAsyncTask";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
@@ -148,7 +147,7 @@ const { model: showSmallUnrated } = useStorage<boolean>(
 const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
-const { getCachedStats, refetchStats } = useDirectoryStats();
+const { getCachedStats } = useDirectoryStats();
 
 const backgroundLoadingCount = ref(0);
 
@@ -165,18 +164,6 @@ const {
   }),
   { loadingCount: backgroundLoadingCount },
 );
-
-// 在后台批量加载未获取统计信息的目录，避免同时发起大量查询
-useAsyncTask({
-  loadingCount: backgroundLoadingCount,
-  args() {
-    const toLoad = directories.value.map((d) => d.id);
-    return toLoad.length > 0 ? [toLoad] : undefined;
-  },
-  async task(toLoad, ctx) {
-    await refetchStats(toLoad, ctx.signal());
-  },
-});
 
 const items = computed(() => {
   return sortBy(
