@@ -191,11 +191,18 @@ const subdirectoryLoadingCount = ref(0);
 
 // 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
 const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } =
-  useDirectories(() => ({ id: directoryId }), {
-    loadingCount: subdirectoryLoadingCount,
-    query: searchQuery,
-    maxUnratedCount: effectiveMaxUnratedCount,
-  });
+  useDirectories(
+    () => ({
+      id: directoryId,
+      filterBy: {
+        query: searchQuery.value || undefined,
+      },
+    }),
+    {
+      loadingCount: subdirectoryLoadingCount,
+      maxUnratedCount: effectiveMaxUnratedCount,
+    },
+  );
 
 const loading = computed(() => subdirectoryLoadingCount.value > 0);
 

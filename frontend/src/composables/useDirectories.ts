@@ -16,32 +16,13 @@ import {
 } from "@/graphql/generated";
 import client from "@/graphql/client";
 
-/**
- * useDirectories 提供子目录的查询、本地排序与过滤、实时增量订阅及分页功能
- * @param variables 查询变量，支持响应式对象或其 Getter
- * @param options 可选配置，支持本地搜索 query 以及全局的 loadingCount
- */
 export default function useDirectories(
   variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables>,
   options?: {
     loadingCount?: Ref<number>;
-    query?: MaybeRefOrGetter<string | undefined>;
     maxUnratedCount?: MaybeRefOrGetter<number | undefined>;
   },
 ) {
-  const resolvedVariables = computed(() => {
-    const vars = toValue(variables);
-    const queryVal = options?.query
-      ? toValue(options.query)?.trim()
-      : undefined;
-    return {
-      ...vars,
-      filterBy: {
-        ...vars.filterBy,
-        query: queryVal || undefined,
-      },
-    };
-  });
   const directoryId = computed(() => toValue(variables).id);
 
   const maxUnratedCountVal = computed(() => toValue(options?.maxUnratedCount));
@@ -53,7 +34,7 @@ export default function useDirectories(
   const { data: directoriesData, query: directoriesQuery } = useQuery(
     BrowseDirectoriesDocument,
     {
-      variables: () => resolvedVariables.value,
+      variables,
       loadingCount,
     },
   );

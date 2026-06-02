@@ -202,7 +202,7 @@ const { getCachedStats } = useDirectoryStats();
 
 const backgroundLoadingCount = ref(0);
 
-// 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页，传入 searchQuery 以在后端进行搜索过滤
+// 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页，在 variables 中传递 searchQuery 以在后端进行搜索过滤
 const {
   sortedDirectories: directories,
   currentDirectory,
@@ -211,10 +211,12 @@ const {
 } = useDirectories(
   () => ({
     id: selectedId.value || "",
+    filterBy: {
+      query: searchQuery.value || undefined,
+    },
   }),
   {
     loadingCount: backgroundLoadingCount,
-    query: searchQuery,
   },
 );
 
