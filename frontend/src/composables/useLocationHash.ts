@@ -8,30 +8,23 @@ export default function useLocationHash({
   const location = useLocation();
   const value = computed({
     get() {
-      const v = location.value.hash;
-      if (v) {
-        const raw = v.slice(1); // 去掉开头的 '#'
-        try {
-          return decodeURIComponent(raw);
-        } catch {
-          // 解码失败时返回原始字符串
-          return raw;
-        }
+      const h = location.value.hash.slice(1);
+      try {
+        return decodeURIComponent(h); // 去掉开头的 '#'
+      } catch {
+        return h;
       }
-      return "";
     },
     set(v: string) {
       if (value.value === v) {
         return;
       }
       const newURL = new URL(location.value.href);
-      // 对输入进行 URL 编码
-      const encoded = v ? encodeURIComponent(v) : "";
-      newURL.hash = encoded ? `#${encoded}` : "";
+      newURL.hash = v ? `#${v}` : "";
       if (pushHistory) {
-        window.history.pushState(null, "", newURL);
+        window.history.pushState(window.history.state, "", newURL);
       } else {
-        window.history.replaceState(null, "", newURL);
+        window.history.replaceState(window.history.state, "", newURL);
       }
       triggerRef(location);
     },
