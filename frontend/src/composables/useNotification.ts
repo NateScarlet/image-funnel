@@ -8,7 +8,7 @@ export interface NotificationAction {
 }
 
 export interface Notification {
-  id: string;
+  id: number;
   type: NotificationType;
   message: string;
   duration?: number;
@@ -17,6 +17,7 @@ export interface Notification {
 
 const notifications = ref<Notification[]>([]);
 
+let nextId = 0;
 export default function useNotification() {
   function show(
     message: string,
@@ -24,7 +25,8 @@ export default function useNotification() {
     duration = 3000,
     action?: NotificationAction,
   ) {
-    const id = Date.now().toString();
+    const id = nextId;
+    nextId++;
     const notification: Notification = {
       id,
       type,
@@ -60,7 +62,7 @@ export default function useNotification() {
     return show(message, "warning", duration);
   }
 
-  function remove(id: string) {
+  function remove(id: number) {
     const index = notifications.value.findIndex((n) => n.id === id);
     if (index !== -1) {
       notifications.value.splice(index, 1);
