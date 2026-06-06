@@ -1,0 +1,5 @@
+type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
+  code: String!
+  createdAt: Time!
+  status: PairingRequestStatus!
+}

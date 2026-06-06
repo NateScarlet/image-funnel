@@ -11,6 +11,7 @@
       <OpenDirHelp @close="openDirHelpDialog.close" />
     </openDirHelpDialog.component>
   </Teleport>
+  <DeviceManager />
 </template>
 
 <script setup lang="ts">
@@ -22,6 +23,7 @@ import useFullscreenRendererElement from "./composables/useFullscreenRendererEle
 import useHotkey from "./composables/useHotkey";
 import { useOpenDir } from "./composables/useOpenDir";
 import useModalDialog from "./composables/useModalDialog";
+import DeviceManager from "./components/DeviceManager.vue";
 
 const rendererEl = useFullscreenRendererElement();
 const { showOpenDirHelp } = useOpenDir();

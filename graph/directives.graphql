@@ -10,3 +10,4 @@ directive @goField(
   omittable: Boolean
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
+directive @public on FIELD_DEFINITION

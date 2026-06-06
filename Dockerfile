@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.pnpm-store \
     rm -rf node_modules/ frontend/node_modules/
 
 # 阶段 2：构建后端
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
 
 # 支持替换 Alpine 的源地址以加速 apk 包安装
 ARG ALPINE_MIRROR_URL
@@ -96,6 +96,7 @@ RUN apk add --no-cache \
 # 设置应用默认环境变量
 ENV IMAGE_FUNNEL_PORT=80 \
     IMAGE_FUNNEL_ROOT_DIR=/app/workspace \
+    IMAGE_FUNNEL_DATA_DIR=/app/data \
     IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE=false
 
 # 从前序构建阶段拷贝产物和执行脚本

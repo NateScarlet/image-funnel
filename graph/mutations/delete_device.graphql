@@ -1,0 +1,7 @@
+extend type Mutation {
+  deleteDevice(input: DeleteDeviceInput!): Boolean!
+}
+
+input DeleteDeviceInput {
+  id: ID!
+}

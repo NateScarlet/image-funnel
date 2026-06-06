@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,6 +23,12 @@ type Config struct {
 	MagickConcurrency         int64
 	EnableDirectoryStatsCache bool
 	IdleThreshold             time.Duration
+	TrustedIPs                []netip.Prefix
+	TrustedProxies            []netip.Prefix
+	DataDir                   string
+	WebAuthnRPID              string
+	WebAuthnRPOrigins         []string
+	BaseURL                   string
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -97,6 +105,97 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		}
 	}
 
+	var trustedIPs []netip.Prefix
+	trustedIPStr := os.Getenv("IMAGE_FUNNEL_TRUSTED_IP")
+	if trustedIPStr == "" {
+		trustedIPs = append(trustedIPs, netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128"))
+	} else {
+		for _, v := range strings.Split(trustedIPStr, ",") {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if !strings.Contains(v, "/") {
+				// Assume single IP, try to parse and add /32 or /128
+				if addr, err := netip.ParseAddr(v); err == nil {
+					trustedIPs = append(trustedIPs, netip.PrefixFrom(addr, addr.BitLen()))
+					continue
+				}
+			}
+			if prefix, err := netip.ParsePrefix(v); err == nil {
+				trustedIPs = append(trustedIPs, prefix)
+			} else {
+				logger.Warn("invalid IMAGE_FUNNEL_TRUSTED_IP segment", zap.String("value", v), zap.Error(err))
+			}
+		}
+	}
+
+	dataDir := os.Getenv("IMAGE_FUNNEL_DATA_DIR")
+	if dataDir == "" {
+		userConfigDir, err := os.UserConfigDir()
+		if err != nil {
+			logger.Warn("failed to get UserConfigDir, fallback to current dir", zap.Error(err))
+			userConfigDir = "."
+		}
+		dataDir = filepath.Join(userConfigDir, "io.github.natescarlet.image-funnel")
+	}
+
+	baseURL := os.Getenv("IMAGE_FUNNEL_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:" + port
+	}
+
+	webauthnRPID := os.Getenv("IMAGE_FUNNEL_WEBAUTHN_RPID")
+	if webauthnRPID == "" {
+		if baseURL != "" {
+			if u, err := url.Parse(baseURL); err == nil {
+				webauthnRPID = u.Hostname()
+			}
+		}
+		if webauthnRPID == "" {
+			webauthnRPID = "localhost"
+		}
+	}
+	webauthnRPOriginsStr := os.Getenv("IMAGE_FUNNEL_WEBAUTHN_RP_ORIGINS")
+	var webauthnRPOrigins []string
+	if webauthnRPOriginsStr != "" {
+		webauthnRPOrigins = strings.Split(webauthnRPOriginsStr, ",")
+	} else {
+		// Default to BaseURL, and if it's localhost, add 127.0.0.1 for convenience
+		webauthnRPOrigins = []string{baseURL}
+		if u, err := url.Parse(baseURL); err == nil && u.Hostname() == "localhost" {
+			u.Host = strings.Replace(u.Host, "localhost", "127.0.0.1", 1)
+			webauthnRPOrigins = append(webauthnRPOrigins, u.String())
+		}
+	}
+	trustedProxiesStr := os.Getenv("IMAGE_FUNNEL_TRUSTED_PROXY")
+	var trustedProxies []netip.Prefix
+	if trustedProxiesStr == "" {
+		trustedProxies = []netip.Prefix{
+			netip.MustParsePrefix("127.0.0.0/8"),
+			netip.MustParsePrefix("::1/128"),
+		}
+	} else {
+		for _, p := range strings.Split(trustedProxiesStr, ",") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if !strings.Contains(p, "/") {
+				if strings.Contains(p, ":") {
+					p += "/128"
+				} else {
+					p += "/32"
+				}
+			}
+			if prefix, err := netip.ParsePrefix(p); err == nil {
+				trustedProxies = append(trustedProxies, prefix)
+			} else {
+				logger.Warn("invalid IMAGE_FUNNEL_TRUSTED_PROXY segment", zap.String("value", p), zap.Error(err))
+			}
+		}
+	}
+
 	return &Config{
 		Port:                      port,
 		RootDir:                   rootDir,
@@ -108,5 +207,11 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		MagickConcurrency:         magickConcurrency,
 		EnableDirectoryStatsCache: enableDirectoryStatsCache,
 		IdleThreshold:             idleThreshold,
+		TrustedIPs:                trustedIPs,
+		TrustedProxies:            trustedProxies,
+		DataDir:                   dataDir,
+		WebAuthnRPID:              webauthnRPID,
+		WebAuthnRPOrigins:         webauthnRPOrigins,
+		BaseURL:                   baseURL,
 	}, nil
 }

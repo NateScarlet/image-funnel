@@ -1,0 +1,33 @@
+extend type Mutation {
+  finishWebAuthnRegistration(input: FinishWebAuthnRegistrationInput!): FinishWebAuthnRegistrationPayload! @public
+}
+
+input FinishWebAuthnRegistrationInput {
+  sessionKey: String!
+  response: String!
+  setupToken: String
+}
+
+type FinishWebAuthnRegistrationPayload {
+  """
+  访问令牌引用（注册成功后返回）
+  """
+  accessToken: String
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int
+  """
+  刷新令牌引用（注册成功后返回）
+  """
+  refreshToken: String
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int
+  """
+  注册成功时返回已创建的设备信息
+  """
+  device: Device
+  pairingRequest: PairingRequest
+}

@@ -1,6 +1,6 @@
 <template>
   <header
-    class="bg-primary-800 border-b border-primary-700 p-2 md:p-4 shrink-0"
+    class="bg-primary-800 border-b border-primary-700 p-2 md:p-4 shrink-0 relative"
     data-no-gesture
   >
     <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -86,6 +86,7 @@
     </div>
     <menuDialog.component container-class="p-6 sm:max-w-sm">
       <div class="space-y-3">
+        <DeviceManagerButton variant="menu-item" @click="menuDialog.close()" />
         <button
           :disabled="!session?.canUndo || undoing"
           class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 disabled:bg-primary-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-3 whitespace-nowrap"
@@ -131,6 +132,10 @@
         </button>
       </div>
     </menuDialog.component>
+
+    <div class="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2">
+      <DeviceManagerButton />
+    </div>
   </header>
 </template>
 
@@ -148,6 +153,7 @@ import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
 import useModalDialog from "@/composables/useModalDialog";
+import DeviceManagerButton from "./DeviceManagerButton.vue";
 
 const props = defineProps<{
   session: SessionFragment | null | undefined;

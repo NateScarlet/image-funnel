@@ -12,6 +12,34 @@ import (
 type Node interface {
 }
 
+type ApprovePairingRequestInput struct {
+	Code string `json:"code"`
+}
+
+type AuthStatus struct {
+	IsTrustedDevice bool `json:"isTrustedDevice"`
+	IsTrustedIP     bool `json:"isTrustedIP"`
+	CanAccess       bool `json:"canAccess"`
+}
+
+type BeginWebAuthnLoginInput struct {
+	Dummy *bool `json:"dummy,omitempty"`
+}
+
+type BeginWebAuthnLoginPayload struct {
+	Options    any    `json:"options"`
+	SessionKey string `json:"sessionKey"`
+}
+
+type BeginWebAuthnRegistrationInput struct {
+	SetupToken *string `json:"setupToken,omitempty"`
+}
+
+type BeginWebAuthnRegistrationPayload struct {
+	Options    any    `json:"options"`
+	SessionKey string `json:"sessionKey"`
+}
+
 // 提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
 // 已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
 type CommitChangesInput struct {
@@ -56,9 +84,51 @@ type CreateSessionPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+type DeleteDeviceInput struct {
+	ID scalar.ID `json:"id"`
+}
+
 // 图片删除事件载体，仅保留图片ID
 type DeletedImage struct {
 	ID scalar.ID `json:"id"`
+}
+
+type FinishWebAuthnLoginInput struct {
+	SessionKey string `json:"sessionKey"`
+	Response   string `json:"response"`
+}
+
+type FinishWebAuthnLoginPayload struct {
+	// 访问令牌引用
+	AccessToken string `json:"accessToken"`
+	// 访问令牌的有效秒数（相对时间）
+	AccessTokenExpiresIn int `json:"accessTokenExpiresIn"`
+	// 刷新令牌引用
+	RefreshToken string `json:"refreshToken"`
+	// 刷新令牌的有效秒数（相对时间）
+	RefreshTokenExpiresIn int `json:"refreshTokenExpiresIn"`
+	// 登录成功后返回当前设备信息
+	Device *shared.DeviceDTO `json:"device"`
+}
+
+type FinishWebAuthnRegistrationInput struct {
+	SessionKey string  `json:"sessionKey"`
+	Response   string  `json:"response"`
+	SetupToken *string `json:"setupToken,omitempty"`
+}
+
+type FinishWebAuthnRegistrationPayload struct {
+	// 访问令牌引用（注册成功后返回）
+	AccessToken *string `json:"accessToken,omitempty"`
+	// 访问令牌的有效秒数（相对时间）
+	AccessTokenExpiresIn *int `json:"accessTokenExpiresIn,omitempty"`
+	// 刷新令牌引用（注册成功后返回）
+	RefreshToken *string `json:"refreshToken,omitempty"`
+	// 刷新令牌的有效秒数（相对时间）
+	RefreshTokenExpiresIn *int `json:"refreshTokenExpiresIn,omitempty"`
+	// 注册成功时返回已创建的设备信息
+	Device         *shared.DeviceDTO         `json:"device,omitempty"`
+	PairingRequest *shared.PairingRequestDTO `json:"pairingRequest,omitempty"`
 }
 
 // 对当前图片执行分类操作（保留/搁置/排除）
@@ -87,6 +157,8 @@ type Meta struct {
 	RootPath    string `json:"rootPath"`
 	// 当前应用版本号
 	Version string `json:"version"`
+	// 配置的基础URL
+	BaseURL string `json:"baseURL"`
 }
 
 // 将符合条件的图片移动到指定子目录
@@ -120,6 +192,28 @@ type RatingCount struct {
 	Rating int `json:"rating"`
 	// 持有该评分的图片数量
 	Count int `json:"count"`
+}
+
+// 刷新 Token 的输入参数
+type RefreshTokenInput struct {
+	// 刷新令牌引用
+	RefreshToken string `json:"refreshToken"`
+}
+
+// 刷新 Token 的响应数据
+type RefreshTokenPayload struct {
+	// 新的访问令牌引用（如果是 Cookie 模式，则为引用字符串；如果是 Inline 模式，则为 JWT 字符串）
+	AccessToken string `json:"accessToken"`
+	// 访问令牌的有效秒数（相对时间）
+	AccessTokenExpiresIn int `json:"accessTokenExpiresIn"`
+	// 新的刷新令牌引用
+	RefreshToken string `json:"refreshToken"`
+	// 刷新令牌的有效秒数（相对时间）
+	RefreshTokenExpiresIn int `json:"refreshTokenExpiresIn"`
+}
+
+type RejectPairingRequestInput struct {
+	Code string `json:"code"`
 }
 
 type Subscription struct {

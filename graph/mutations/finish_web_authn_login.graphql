@@ -1,0 +1,31 @@
+extend type Mutation {
+  finishWebAuthnLogin(input: FinishWebAuthnLoginInput!): FinishWebAuthnLoginPayload! @public
+}
+
+input FinishWebAuthnLoginInput {
+  sessionKey: String!
+  response: String!
+}
+
+type FinishWebAuthnLoginPayload {
+  """
+  访问令牌引用
+  """
+  accessToken: String!
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int!
+  """
+  刷新令牌引用
+  """
+  refreshToken: String!
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int!
+  """
+  登录成功后返回当前设备信息
+  """
+  device: Device!
+}

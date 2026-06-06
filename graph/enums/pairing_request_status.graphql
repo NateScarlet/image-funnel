@@ -1,0 +1,5 @@
+enum PairingRequestStatus @goModel(model: "main/internal/shared.PairingRequestStatus") {
+  PENDING
+  APPROVED
+  REJECTED
+}

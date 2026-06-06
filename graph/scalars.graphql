@@ -4,5 +4,6 @@ scalar Time
 scalar URI
 "文件上传类型"
 scalar Upload
+scalar Any
 "时长值（毫秒），用于记录用户操作耗时"
 scalar Duration

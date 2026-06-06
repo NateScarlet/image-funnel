@@ -25,7 +25,7 @@ function injectLoadingSvg(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig((env) => ({
   plugins: [vue(), tailwindcss(), injectLoadingSvg()],
   resolve: {
     alias: {
@@ -33,7 +33,10 @@ export default defineConfig({
     },
   },
   esbuild: {
-    pure: ["console.log", "console.info", "console.debug", "console.warn"],
+    pure:
+      env.mode === "production"
+        ? ["console.log", "console.info", "console.debug", "console.warn"]
+        : [],
   },
   server: {
     port: 8080,
@@ -53,4 +56,4 @@ export default defineConfig({
     include: ["@apollo/client"],
   },
   assetsInclude: ["**/*.gql"],
-});
+}));

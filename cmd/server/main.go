@@ -2,25 +2,34 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"main/internal/apperror"
 	"main/internal/application"
+	appdevice "main/internal/application/device"
 	appdirectory "main/internal/application/directory"
 	appimage "main/internal/application/image"
 	appmemo "main/internal/application/memo"
+	apppairing "main/internal/application/pairing"
 	appsession "main/internal/application/session"
+	ddevice "main/internal/domain/device"
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/memo"
+	"main/internal/domain/pairing"
 	"main/internal/domain/session"
 	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
 	"main/internal/infrastructure/inmem"
+	"main/internal/infrastructure/jwt"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/stdimage"
@@ -32,6 +41,7 @@ import (
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/tokenrw"
 
 	gql "github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -94,9 +104,25 @@ func main() {
 	imageDTOFactory := appimage.NewDTOFactory(signer, cfg.AbsRootDir)
 	sessionDTOFactory := appsession.NewDTOFactory()
 
+	deviceDTOFactory := appdevice.NewDTOFactory()
+
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
-	eventBus := ebus.NewEventBus(sessionTopic, fileChangedTopic, sessionRepo, sessionDTOFactory)
+	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
+	prUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
+	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO](pubsub.InMemoryTopicWithCapacity(1024))
+	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(1024))
+	eventBus := ebus.NewEventBus(
+		sessionTopic,
+		fileChangedTopic,
+		prCreatedTopic,
+		prUpdatedTopic,
+		deviceSavedTopic,
+		deviceDeletedTopic,
+		sessionRepo,
+		sessionDTOFactory,
+		deviceDTOFactory,
+	)
 
 	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer
 	var statsCache *inmem.DirectoryStatsCache
@@ -160,11 +186,69 @@ func main() {
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, cfg.AbsRootDir), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
 	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory)
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler)
+	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
+	if err != nil {
+		logger.Fatal("failed to create auth repository", zap.Error(err))
+	}
+	authRepo, err := inmem.NewDeviceRepository(context.Background(), rawAuthRepo)
+	if err != nil {
+		logger.Fatal("failed to create cached device repository", zap.Error(err))
+	}
+	pairingRepo := inmem.NewPairingRequestRepository()
+	pairingService := pairing.NewService(pairingRepo, eventBus)
+	revocationRepo, err := localfs.NewRevocationRepository(cfg.DataDir)
+	if err != nil {
+		logger.Fatal("failed to create revocation repository", zap.Error(err))
+	}
+	deviceFactory := ddevice.NewFactory()
+	revocationList, err := localfs.NewCachedRevocationList(context.Background(), revocationRepo)
+	if err != nil {
+		logger.Fatal("failed to create cached revocation list", zap.Error(err))
+	}
+	authService, err := ddevice.NewService(authRepo, pairingService, logger, cfg.WebAuthnRPID, cfg.WebAuthnRPOrigins, eventBus, revocationList, deviceFactory)
+	if err != nil {
+		logger.Fatal("Failed to initialize auth service", zap.Error(err))
+	}
+	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
+	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, eventBus)
+	pairingDTOFactory := apppairing.NewDTOFactory()
+	pairingHandler := apppairing.NewHandler(authService, pairingService, pairingDTOFactory)
 
-	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler, deviceHandler, pairingHandler)
 
-	srv := handler.New(graphql.NewExecutableSchema(graphql.Config{Resolvers: resolver}))
+	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL)
+
+	// 首次启动时自动拉起浏览器
+	go func() {
+		count, err := authService.Count(context.Background())
+		if err == nil && count == 0 {
+			setupToken := authService.SetupToken()
+			if setupToken != "" {
+				url := fmt.Sprintf("%s/auth?setup_token=%s", cfg.BaseURL, setupToken)
+				logger.Info("First launch detected, opening browser for registration", zap.String("url", url))
+				// 简单的各平台打开浏览器命令
+				var cmd *exec.Cmd
+				switch runtime.GOOS {
+				case "windows":
+					cmd = exec.Command("cmd", "/c", "start", url)
+				case "darwin":
+					cmd = exec.Command("open", url)
+				default:
+					cmd = exec.Command("xdg-open", url)
+				}
+				cmd.Start()
+			}
+		}
+	}()
+
+	srv := handler.New(graphql.NewExecutableSchema(graphql.Config{
+		Resolvers: resolver,
+		Directives: graphql.DirectiveRoot{
+			Public: func(ctx context.Context, obj any, next gql.Resolver) (res any, err error) {
+				return next(ctx)
+			},
+		},
+	}))
 
 	srv.AddTransport(transport.Websocket{
 		KeepAlivePingInterval: 10 * time.Second,
@@ -172,6 +256,17 @@ func main() {
 			CheckOrigin: func(r *http.Request) bool {
 				return true // Actual check is done in cors middleware
 			},
+		},
+		InitFunc: func(ctx context.Context, initPayload transport.InitPayload) (context.Context, *transport.InitPayload, error) {
+			if authHeader, ok := initPayload["Authorization"].(string); ok {
+				if tokenStr, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+					if deviceID, err := deviceHandler.ValidateToken(ctx, tokenStr); err == nil {
+						ctx = appdevice.WithTrustedDevice(ctx, deviceID)
+					}
+				}
+
+			}
+			return ctx, nil, nil
 		},
 	})
 
@@ -199,6 +294,24 @@ func main() {
 	})
 	srv.SetErrorPresenter(graphql.ErrorPresenter)
 	srv.AroundFields(func(ctx context.Context, next gql.Resolver) (res interface{}, err error) {
+		fc := gql.GetFieldContext(ctx)
+		if fc != nil && fc.Field.Definition != nil {
+			if fc.Object == "Mutation" || fc.Object == "Query" || fc.Object == "Subscription" {
+				isPublic := false
+				for _, d := range fc.Field.Definition.Directives {
+					if d.Name == "public" {
+						isPublic = true
+						break
+					}
+				}
+				if !isPublic && !appdevice.IsTrustedDevice(ctx) && !appdevice.IsTrustedIP(ctx) {
+					err := apperror.New("UNAUTHORIZED", "unauthorized access", "未授权访问")
+					gql.AddError(ctx, err)
+					return nil, err
+				}
+			}
+		}
+
 		res, err = next(ctx)
 		for i := range apperror.ExpandJoinError(err) {
 			gql.AddError(ctx, i)
@@ -216,15 +329,31 @@ func main() {
 
 	gui := playground.Handler("GraphQL Playground", "/graphql")
 
+	var graphqlHandler http.Handler = srv
+	graphqlHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		authHeader := r.Header.Get("Authorization")
+		if tokenStr, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+			if deviceID, err := deviceHandler.ValidateToken(ctx, tokenStr); err == nil {
+				ctx = appdevice.WithTrustedDevice(ctx, deviceID)
+			}
+		}
+		ctx = appdevice.WithUserAgent(ctx, r.Header.Get("User-Agent"))
+		srv.ServeHTTP(w, r.WithContext(ctx))
+	})
+	graphqlHandler = tokenrw.CookiesMiddleware(graphqlHandler)
+
 	httpServer := interfacehttp.NewServer(
 		logger,
 		signer,
 		imageProcessor,
-		srv,
+		graphqlHandler,
 		gui,
 		cfg.AbsRootDir,
 		cfg.FrontendDir,
 		cfg.CorsHosts,
+		cfg.TrustedIPs,
+		cfg.TrustedProxies,
 	)
 
 	logger.Fatal("start server", zap.Error(httpServer.Serve(":"+cfg.Port)))

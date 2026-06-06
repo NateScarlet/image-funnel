@@ -1,0 +1,6 @@
+extend type Subscription {
+  """
+  当设备被删除时触发，返回被删除设备的 ID
+  """
+  deviceDeleted: ID!
+}

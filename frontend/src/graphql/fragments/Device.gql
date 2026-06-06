@@ -1,0 +1,8 @@
+fragment Device on Device {
+  id
+  name
+  createdAt
+  lastLoginAt
+  lastLoginIp
+  isCurrent
+}

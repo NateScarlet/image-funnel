@@ -1,0 +1,38 @@
+extend type Mutation {
+  """
+  静默刷新当前设备的认证 Token。
+  """
+  refreshToken(input: RefreshTokenInput!): RefreshTokenPayload! @public
+}
+
+"""
+刷新 Token 的输入参数
+"""
+input RefreshTokenInput {
+  """
+  刷新令牌引用
+  """
+  refreshToken: String!
+}
+
+"""
+刷新 Token 的响应数据
+"""
+type RefreshTokenPayload {
+  """
+  新的访问令牌引用（如果是 Cookie 模式，则为引用字符串；如果是 Inline 模式，则为 JWT 字符串）
+  """
+  accessToken: String!
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int!
+  """
+  新的刷新令牌引用
+  """
+  refreshToken: String!
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int!
+}

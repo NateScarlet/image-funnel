@@ -41,6 +41,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Device() DeviceResolver
 	Directory() DirectoryResolver
 	DirectoryStats() DirectoryStatsResolver
 	Image() ImageResolver
@@ -52,9 +53,26 @@ type ResolverRoot interface {
 }
 
 type DirectiveRoot struct {
+	Public func(ctx context.Context, obj any, next graphql.Resolver) (res any, err error)
 }
 
 type ComplexityRoot struct {
+	AuthStatus struct {
+		CanAccess       func(childComplexity int) int
+		IsTrustedDevice func(childComplexity int) int
+		IsTrustedIP     func(childComplexity int) int
+	}
+
+	BeginWebAuthnLoginPayload struct {
+		Options    func(childComplexity int) int
+		SessionKey func(childComplexity int) int
+	}
+
+	BeginWebAuthnRegistrationPayload struct {
+		Options    func(childComplexity int) int
+		SessionKey func(childComplexity int) int
+	}
+
 	CommitChangesPayload struct {
 		ClientMutationID func(childComplexity int) int
 		Session          func(childComplexity int) int
@@ -68,6 +86,15 @@ type ComplexityRoot struct {
 
 	DeletedImage struct {
 		ID func(childComplexity int) int
+	}
+
+	Device struct {
+		CreatedAt   func(childComplexity int) int
+		ID          func(childComplexity int) int
+		IsCurrent   func(childComplexity int) int
+		LastLoginAt func(childComplexity int) int
+		LastLoginIP func(childComplexity int) int
+		Name        func(childComplexity int) int
 	}
 
 	DirEntryDeleted struct {
@@ -103,6 +130,23 @@ type ComplexityRoot struct {
 		LatestImage       func(childComplexity int) int
 		RatingCounts      func(childComplexity int) int
 		SubdirectoryCount func(childComplexity int) int
+	}
+
+	FinishWebAuthnLoginPayload struct {
+		AccessToken           func(childComplexity int) int
+		AccessTokenExpiresIn  func(childComplexity int) int
+		Device                func(childComplexity int) int
+		RefreshToken          func(childComplexity int) int
+		RefreshTokenExpiresIn func(childComplexity int) int
+	}
+
+	FinishWebAuthnRegistrationPayload struct {
+		AccessToken           func(childComplexity int) int
+		AccessTokenExpiresIn  func(childComplexity int) int
+		Device                func(childComplexity int) int
+		PairingRequest        func(childComplexity int) int
+		RefreshToken          func(childComplexity int) int
+		RefreshTokenExpiresIn func(childComplexity int) int
 	}
 
 	Image struct {
@@ -172,6 +216,7 @@ type ComplexityRoot struct {
 	}
 
 	Meta struct {
+		BaseURL     func(childComplexity int) int
 		RootAbsPath func(childComplexity int) int
 		RootPath    func(childComplexity int) int
 		Version     func(childComplexity int) int
@@ -184,15 +229,23 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		CommitChanges       func(childComplexity int, input CommitChangesInput) int
-		CreateMemo          func(childComplexity int, input CreateMemoInput) int
-		CreateSession       func(childComplexity int, input CreateSessionInput) int
-		MarkImage           func(childComplexity int, input MarkImageInput) int
-		MoveImages          func(childComplexity int, input MoveImagesInput) int
-		Undo                func(childComplexity int, input UndoInput) int
-		UpdateImageMetadata func(childComplexity int, input UpdateImageMetadataInput) int
-		UpdateMemo          func(childComplexity int, id scalar.ID, content string) int
-		UpdateSession       func(childComplexity int, input UpdateSessionInput) int
+		ApprovePairingRequest      func(childComplexity int, input ApprovePairingRequestInput) int
+		BeginWebAuthnLogin         func(childComplexity int, input BeginWebAuthnLoginInput) int
+		BeginWebAuthnRegistration  func(childComplexity int, input BeginWebAuthnRegistrationInput) int
+		CommitChanges              func(childComplexity int, input CommitChangesInput) int
+		CreateMemo                 func(childComplexity int, input CreateMemoInput) int
+		CreateSession              func(childComplexity int, input CreateSessionInput) int
+		DeleteDevice               func(childComplexity int, input DeleteDeviceInput) int
+		FinishWebAuthnLogin        func(childComplexity int, input FinishWebAuthnLoginInput) int
+		FinishWebAuthnRegistration func(childComplexity int, input FinishWebAuthnRegistrationInput) int
+		MarkImage                  func(childComplexity int, input MarkImageInput) int
+		MoveImages                 func(childComplexity int, input MoveImagesInput) int
+		RefreshToken               func(childComplexity int, input RefreshTokenInput) int
+		RejectPairingRequest       func(childComplexity int, input RejectPairingRequestInput) int
+		Undo                       func(childComplexity int, input UndoInput) int
+		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
+		UpdateMemo                 func(childComplexity int, id scalar.ID, content string) int
+		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
 	}
 
 	PageInfo struct {
@@ -202,10 +255,19 @@ type ComplexityRoot struct {
 		StartCursor     func(childComplexity int) int
 	}
 
+	PairingRequest struct {
+		Code      func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		Status    func(childComplexity int) int
+	}
+
 	Query struct {
+		AuthStatus      func(childComplexity int) int
 		ComfyUIWorkflow func(childComplexity int, id scalar.ID) int
+		Devices         func(childComplexity int) int
 		Meta            func(childComplexity int) int
 		Node            func(childComplexity int, id scalar.ID) int
+		PairingRequests func(childComplexity int) int
 		RootDirectory   func(childComplexity int) int
 		Session         func(childComplexity int, id scalar.ID) int
 	}
@@ -213,6 +275,13 @@ type ComplexityRoot struct {
 	RatingCount struct {
 		Count  func(childComplexity int) int
 		Rating func(childComplexity int) int
+	}
+
+	RefreshTokenPayload struct {
+		AccessToken           func(childComplexity int) int
+		AccessTokenExpiresIn  func(childComplexity int) int
+		RefreshToken          func(childComplexity int) int
+		RefreshTokenExpiresIn func(childComplexity int) int
 	}
 
 	Session struct {
@@ -244,13 +313,17 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		DirEntryDeleted  func(childComplexity int, directoryID *scalar.ID) int
-		DirectoryChanged func(childComplexity int, filterBy *shared.DirectoryFilters) int
-		ImageDeleted     func(childComplexity int, filterBy *shared.ImageFilters) int
-		ImageSaved       func(childComplexity int, filterBy *shared.ImageFilters) int
-		MemoSaved        func(childComplexity int, filterBy *shared.MemoFilters) int
-		MemoUpdated      func(childComplexity int, id scalar.ID) int
-		SessionUpdated   func(childComplexity int, id scalar.ID) int
+		DeviceDeleted         func(childComplexity int) int
+		DeviceSaved           func(childComplexity int) int
+		DirEntryDeleted       func(childComplexity int, directoryID *scalar.ID) int
+		DirectoryChanged      func(childComplexity int, filterBy *shared.DirectoryFilters) int
+		ImageDeleted          func(childComplexity int, filterBy *shared.ImageFilters) int
+		ImageSaved            func(childComplexity int, filterBy *shared.ImageFilters) int
+		MemoSaved             func(childComplexity int, filterBy *shared.MemoFilters) int
+		MemoUpdated           func(childComplexity int, id scalar.ID) int
+		PairingRequestCreated func(childComplexity int) int
+		PairingRequestUpdated func(childComplexity int, code string) int
+		SessionUpdated        func(childComplexity int, id scalar.ID) int
 	}
 
 	UndoPayload struct {
@@ -270,6 +343,9 @@ type ComplexityRoot struct {
 	}
 }
 
+type DeviceResolver interface {
+	IsCurrent(ctx context.Context, obj *shared.DeviceDTO) (bool, error)
+}
 type DirectoryResolver interface {
 	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
@@ -292,10 +368,18 @@ type MemoResolver interface {
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
+	ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (bool, error)
+	BeginWebAuthnLogin(ctx context.Context, input BeginWebAuthnLoginInput) (*BeginWebAuthnLoginPayload, error)
+	BeginWebAuthnRegistration(ctx context.Context, input BeginWebAuthnRegistrationInput) (*BeginWebAuthnRegistrationPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
+	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
+	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
+	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
+	RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenPayload, error)
+	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
@@ -303,8 +387,11 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id scalar.ID) (Node, error)
+	AuthStatus(ctx context.Context) (*AuthStatus, error)
 	ComfyUIWorkflow(ctx context.Context, id scalar.ID) (*string, error)
+	Devices(ctx context.Context) ([]*shared.DeviceDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
+	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
 }
@@ -320,12 +407,16 @@ type SessionResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
+	DeviceDeleted(ctx context.Context) (<-chan *scalar.ID, error)
+	DeviceSaved(ctx context.Context) (<-chan *shared.DeviceDTO, error)
 	DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan *shared.DirEntryDeletedDTO, error)
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
 	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
 	MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error)
 	MemoSaved(ctx context.Context, filterBy *shared.MemoFilters) (<-chan *shared.MemoDTO, error)
+	PairingRequestCreated(ctx context.Context) (<-chan *shared.PairingRequestDTO, error)
+	PairingRequestUpdated(ctx context.Context, code string) (<-chan *shared.PairingRequestDTO, error)
 }
 
 type executableSchema struct {
@@ -346,6 +437,51 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AuthStatus.canAccess":
+		if e.complexity.AuthStatus.CanAccess == nil {
+			break
+		}
+
+		return e.complexity.AuthStatus.CanAccess(childComplexity), true
+	case "AuthStatus.isTrustedDevice":
+		if e.complexity.AuthStatus.IsTrustedDevice == nil {
+			break
+		}
+
+		return e.complexity.AuthStatus.IsTrustedDevice(childComplexity), true
+	case "AuthStatus.isTrustedIP":
+		if e.complexity.AuthStatus.IsTrustedIP == nil {
+			break
+		}
+
+		return e.complexity.AuthStatus.IsTrustedIP(childComplexity), true
+
+	case "BeginWebAuthnLoginPayload.options":
+		if e.complexity.BeginWebAuthnLoginPayload.Options == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnLoginPayload.Options(childComplexity), true
+	case "BeginWebAuthnLoginPayload.sessionKey":
+		if e.complexity.BeginWebAuthnLoginPayload.SessionKey == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnLoginPayload.SessionKey(childComplexity), true
+
+	case "BeginWebAuthnRegistrationPayload.options":
+		if e.complexity.BeginWebAuthnRegistrationPayload.Options == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnRegistrationPayload.Options(childComplexity), true
+	case "BeginWebAuthnRegistrationPayload.sessionKey":
+		if e.complexity.BeginWebAuthnRegistrationPayload.SessionKey == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnRegistrationPayload.SessionKey(childComplexity), true
 
 	case "CommitChangesPayload.clientMutationId":
 		if e.complexity.CommitChangesPayload.ClientMutationID == nil {
@@ -385,6 +521,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DeletedImage.ID(childComplexity), true
+
+	case "Device.createdAt":
+		if e.complexity.Device.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.Device.CreatedAt(childComplexity), true
+	case "Device.id":
+		if e.complexity.Device.ID == nil {
+			break
+		}
+
+		return e.complexity.Device.ID(childComplexity), true
+	case "Device.isCurrent":
+		if e.complexity.Device.IsCurrent == nil {
+			break
+		}
+
+		return e.complexity.Device.IsCurrent(childComplexity), true
+	case "Device.lastLoginAt":
+		if e.complexity.Device.LastLoginAt == nil {
+			break
+		}
+
+		return e.complexity.Device.LastLoginAt(childComplexity), true
+	case "Device.lastLoginIp":
+		if e.complexity.Device.LastLoginIP == nil {
+			break
+		}
+
+		return e.complexity.Device.LastLoginIP(childComplexity), true
+	case "Device.name":
+		if e.complexity.Device.Name == nil {
+			break
+		}
+
+		return e.complexity.Device.Name(childComplexity), true
 
 	case "DirEntryDeleted.relPath":
 		if e.complexity.DirEntryDeleted.RelPath == nil {
@@ -525,6 +698,74 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DirectoryStats.SubdirectoryCount(childComplexity), true
+
+	case "FinishWebAuthnLoginPayload.accessToken":
+		if e.complexity.FinishWebAuthnLoginPayload.AccessToken == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.AccessToken(childComplexity), true
+	case "FinishWebAuthnLoginPayload.accessTokenExpiresIn":
+		if e.complexity.FinishWebAuthnLoginPayload.AccessTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.AccessTokenExpiresIn(childComplexity), true
+	case "FinishWebAuthnLoginPayload.device":
+		if e.complexity.FinishWebAuthnLoginPayload.Device == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.Device(childComplexity), true
+	case "FinishWebAuthnLoginPayload.refreshToken":
+		if e.complexity.FinishWebAuthnLoginPayload.RefreshToken == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.RefreshToken(childComplexity), true
+	case "FinishWebAuthnLoginPayload.refreshTokenExpiresIn":
+		if e.complexity.FinishWebAuthnLoginPayload.RefreshTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.RefreshTokenExpiresIn(childComplexity), true
+
+	case "FinishWebAuthnRegistrationPayload.accessToken":
+		if e.complexity.FinishWebAuthnRegistrationPayload.AccessToken == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.AccessToken(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.accessTokenExpiresIn":
+		if e.complexity.FinishWebAuthnRegistrationPayload.AccessTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.AccessTokenExpiresIn(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.device":
+		if e.complexity.FinishWebAuthnRegistrationPayload.Device == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.Device(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.pairingRequest":
+		if e.complexity.FinishWebAuthnRegistrationPayload.PairingRequest == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.PairingRequest(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.refreshToken":
+		if e.complexity.FinishWebAuthnRegistrationPayload.RefreshToken == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.RefreshToken(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.refreshTokenExpiresIn":
+		if e.complexity.FinishWebAuthnRegistrationPayload.RefreshTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.RefreshTokenExpiresIn(childComplexity), true
 
 	case "Image.currentRating":
 		if e.complexity.Image.CurrentRating == nil {
@@ -774,6 +1015,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.MemoFilters.ID(childComplexity), true
 
+	case "Meta.baseURL":
+		if e.complexity.Meta.BaseURL == nil {
+			break
+		}
+
+		return e.complexity.Meta.BaseURL(childComplexity), true
 	case "Meta.rootAbsPath":
 		if e.complexity.Meta.RootAbsPath == nil {
 			break
@@ -812,6 +1059,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.MoveImagesPayload.TargetAbsoluteDirectory(childComplexity), true
 
+	case "Mutation.approvePairingRequest":
+		if e.complexity.Mutation.ApprovePairingRequest == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_approvePairingRequest_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ApprovePairingRequest(childComplexity, args["input"].(ApprovePairingRequestInput)), true
+	case "Mutation.beginWebAuthnLogin":
+		if e.complexity.Mutation.BeginWebAuthnLogin == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_beginWebAuthnLogin_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BeginWebAuthnLogin(childComplexity, args["input"].(BeginWebAuthnLoginInput)), true
+	case "Mutation.beginWebAuthnRegistration":
+		if e.complexity.Mutation.BeginWebAuthnRegistration == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_beginWebAuthnRegistration_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BeginWebAuthnRegistration(childComplexity, args["input"].(BeginWebAuthnRegistrationInput)), true
 	case "Mutation.commitChanges":
 		if e.complexity.Mutation.CommitChanges == nil {
 			break
@@ -845,6 +1125,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CreateSession(childComplexity, args["input"].(CreateSessionInput)), true
+	case "Mutation.deleteDevice":
+		if e.complexity.Mutation.DeleteDevice == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteDevice_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeleteDevice(childComplexity, args["input"].(DeleteDeviceInput)), true
+	case "Mutation.finishWebAuthnLogin":
+		if e.complexity.Mutation.FinishWebAuthnLogin == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_finishWebAuthnLogin_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.FinishWebAuthnLogin(childComplexity, args["input"].(FinishWebAuthnLoginInput)), true
+	case "Mutation.finishWebAuthnRegistration":
+		if e.complexity.Mutation.FinishWebAuthnRegistration == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_finishWebAuthnRegistration_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.FinishWebAuthnRegistration(childComplexity, args["input"].(FinishWebAuthnRegistrationInput)), true
 	case "Mutation.markImage":
 		if e.complexity.Mutation.MarkImage == nil {
 			break
@@ -867,6 +1180,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.MoveImages(childComplexity, args["input"].(MoveImagesInput)), true
+	case "Mutation.refreshToken":
+		if e.complexity.Mutation.RefreshToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_refreshToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RefreshToken(childComplexity, args["input"].(RefreshTokenInput)), true
+	case "Mutation.rejectPairingRequest":
+		if e.complexity.Mutation.RejectPairingRequest == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_rejectPairingRequest_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RejectPairingRequest(childComplexity, args["input"].(RejectPairingRequestInput)), true
 	case "Mutation.undo":
 		if e.complexity.Mutation.Undo == nil {
 			break
@@ -937,6 +1272,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.PageInfo.StartCursor(childComplexity), true
 
+	case "PairingRequest.code":
+		if e.complexity.PairingRequest.Code == nil {
+			break
+		}
+
+		return e.complexity.PairingRequest.Code(childComplexity), true
+	case "PairingRequest.createdAt":
+		if e.complexity.PairingRequest.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.PairingRequest.CreatedAt(childComplexity), true
+	case "PairingRequest.status":
+		if e.complexity.PairingRequest.Status == nil {
+			break
+		}
+
+		return e.complexity.PairingRequest.Status(childComplexity), true
+
+	case "Query.authStatus":
+		if e.complexity.Query.AuthStatus == nil {
+			break
+		}
+
+		return e.complexity.Query.AuthStatus(childComplexity), true
 	case "Query.comfyUIWorkflow":
 		if e.complexity.Query.ComfyUIWorkflow == nil {
 			break
@@ -948,6 +1308,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ComfyUIWorkflow(childComplexity, args["id"].(scalar.ID)), true
+	case "Query.devices":
+		if e.complexity.Query.Devices == nil {
+			break
+		}
+
+		return e.complexity.Query.Devices(childComplexity), true
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
 			break
@@ -965,6 +1331,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Node(childComplexity, args["id"].(scalar.ID)), true
+	case "Query.pairingRequests":
+		if e.complexity.Query.PairingRequests == nil {
+			break
+		}
+
+		return e.complexity.Query.PairingRequests(childComplexity), true
 	case "Query.rootDirectory":
 		if e.complexity.Query.RootDirectory == nil {
 			break
@@ -995,6 +1367,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RatingCount.Rating(childComplexity), true
+
+	case "RefreshTokenPayload.accessToken":
+		if e.complexity.RefreshTokenPayload.AccessToken == nil {
+			break
+		}
+
+		return e.complexity.RefreshTokenPayload.AccessToken(childComplexity), true
+	case "RefreshTokenPayload.accessTokenExpiresIn":
+		if e.complexity.RefreshTokenPayload.AccessTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.RefreshTokenPayload.AccessTokenExpiresIn(childComplexity), true
+	case "RefreshTokenPayload.refreshToken":
+		if e.complexity.RefreshTokenPayload.RefreshToken == nil {
+			break
+		}
+
+		return e.complexity.RefreshTokenPayload.RefreshToken(childComplexity), true
+	case "RefreshTokenPayload.refreshTokenExpiresIn":
+		if e.complexity.RefreshTokenPayload.RefreshTokenExpiresIn == nil {
+			break
+		}
+
+		return e.complexity.RefreshTokenPayload.RefreshTokenExpiresIn(childComplexity), true
 
 	case "Session.canCommit":
 		if e.complexity.Session.CanCommit == nil {
@@ -1140,6 +1537,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.SessionStats.TotalShelved(childComplexity), true
 
+	case "Subscription.deviceDeleted":
+		if e.complexity.Subscription.DeviceDeleted == nil {
+			break
+		}
+
+		return e.complexity.Subscription.DeviceDeleted(childComplexity), true
+	case "Subscription.deviceSaved":
+		if e.complexity.Subscription.DeviceSaved == nil {
+			break
+		}
+
+		return e.complexity.Subscription.DeviceSaved(childComplexity), true
 	case "Subscription.dirEntryDeleted":
 		if e.complexity.Subscription.DirEntryDeleted == nil {
 			break
@@ -1206,6 +1615,23 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.MemoUpdated(childComplexity, args["id"].(scalar.ID)), true
+	case "Subscription.pairingRequestCreated":
+		if e.complexity.Subscription.PairingRequestCreated == nil {
+			break
+		}
+
+		return e.complexity.Subscription.PairingRequestCreated(childComplexity), true
+	case "Subscription.pairingRequestUpdated":
+		if e.complexity.Subscription.PairingRequestUpdated == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_pairingRequestUpdated_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.PairingRequestUpdated(childComplexity, args["code"].(string)), true
 	case "Subscription.sessionUpdated":
 		if e.complexity.Subscription.SessionUpdated == nil {
 			break
@@ -1271,14 +1697,22 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputApprovePairingRequestInput,
+		ec.unmarshalInputBeginWebAuthnLoginInput,
+		ec.unmarshalInputBeginWebAuthnRegistrationInput,
 		ec.unmarshalInputCommitChangesInput,
 		ec.unmarshalInputCreateMemoInput,
 		ec.unmarshalInputCreateSessionInput,
+		ec.unmarshalInputDeleteDeviceInput,
 		ec.unmarshalInputDirectoryFilters,
+		ec.unmarshalInputFinishWebAuthnLoginInput,
+		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMemoFiltersInput,
 		ec.unmarshalInputMoveImagesInput,
+		ec.unmarshalInputRefreshTokenInput,
+		ec.unmarshalInputRejectPairingRequestInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateSessionInput,
@@ -1403,6 +1837,7 @@ scalar Time
 scalar URI
 "文件上传类型"
 scalar Upload
+scalar Any
 "时长值（毫秒），用于记录用户操作耗时"
 scalar Duration`, BuiltIn: false},
 	{Name: "../../../graph/directives.graphql", Input: `directive @goModel(
@@ -1417,6 +1852,40 @@ directive @goField(
   omittable: Boolean
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
+directive @public on FIELD_DEFINITION
+`, BuiltIn: false},
+	{Name: "../../../graph/types/auth_status.graphql", Input: `type AuthStatus {
+  isTrustedDevice: Boolean!
+  isTrustedIP: Boolean!
+  canAccess: Boolean!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/device.graphql", Input: `type Device @goModel(model: "main/internal/shared.DeviceDTO") {
+  """
+  设备的唯一标识符
+  """
+  id: ID!
+  """
+  基于设备登录时的 User-Agent 生成的有意义的友好名称
+  """
+  name: String!
+  """
+  设备注册时间
+  """
+  createdAt: Time!
+  """
+  最后一次登录时间
+  """
+  lastLoginAt: Time!
+  """
+  最后一次登录的 IP 地址
+  """
+  lastLoginIp: String!
+  """
+  是否是当前正在发起请求的设备
+  """
+  isCurrent: Boolean!
+}
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory.graphql", Input: `"""
 目录节点，表示文件系统中的一个子目录。根目录的 relPath 为空字符串。
@@ -1625,6 +2094,8 @@ type Meta {
   rootPath: String! @deprecated(reason: "use rootAbsPath")
   "当前应用版本号"
   version: String!
+  "配置的基础URL"
+  baseURL: String!
 }`, BuiltIn: false},
 	{Name: "../../../graph/types/node.graphql", Input: `"""
 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
@@ -1633,6 +2104,12 @@ interface Node {
   "全局唯一标识符，格式为 {类型前缀}:{编码信息}，客户端不应解析其内部结构"
   id: ID!
 }`, BuiltIn: false},
+	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
+  code: String!
+  createdAt: Time!
+  status: PairingRequestStatus!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/rating_count.graphql", Input: `"图片评分分布统计"
 type RatingCount {
   "XMP 评分值"
@@ -1723,6 +2200,16 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   """
   REJECT
 }`, BuiltIn: false},
+	{Name: "../../../graph/enums/pairing_request_status.graphql", Input: `enum PairingRequestStatus @goModel(model: "main/internal/shared.PairingRequestStatus") {
+  PENDING
+  APPROVED
+  REJECTED
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/queries/auth_status.graphql", Input: `extend type Query {
+  authStatus: AuthStatus! @public
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/queries/comfy_ui_workflow.graphql", Input: `extend type Query {
   """
   通过图片 ID 获取嵌入在 PNG 文件 tEXt 块中的 ComfyUI 工作流 JSON。
@@ -1730,6 +2217,10 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   """
   comfyUIWorkflow(id: ID!): String
 }`, BuiltIn: false},
+	{Name: "../../../graph/queries/devices.graphql", Input: `extend type Query {
+  devices: [Device!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/queries/meta.graphql", Input: `extend type Query {
   "获取应用元信息（版本号、根目录路径）"
   meta: Meta!
@@ -1742,6 +2233,14 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   """
   node(id: ID!): Node
 }`, BuiltIn: false},
+	{Name: "../../../graph/queries/pairing_requests.graphql", Input: `extend type Query {
+  """
+  获取当前所有待批准的配对请求。
+  仅在接收端已认证为信任设备或处于可信 IP 访问的情况下才能查询。
+  """
+  pairingRequests: [PairingRequest!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/queries/root_directory.graphql", Input: `extend type Query {
   "获取根目录节点，relPath 为空字符串"
   rootDirectory: Directory!
@@ -1750,6 +2249,20 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   "通过 ID 获取会话，不存在时返回 null"
   session(id: ID!): Session
 }`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/device_deleted.graphql", Input: `extend type Subscription {
+  """
+  当设备被删除时触发，返回被删除设备的 ID
+  """
+  deviceDeleted: ID!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/device_saved.graphql", Input: `extend type Subscription {
+  """
+  当设备被创建、批准配对或有登录更新时触发
+  """
+  deviceSaved: Device!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/dir_entry_deleted.graphql", Input: `extend type Subscription {
   "订阅目录内文件或子目录删除或移走事件（文件被移除或重命名时触发），支持按目录ID过滤"
   dirEntryDeleted(directoryId: ID): DirEntryDeleted!
@@ -1794,10 +2307,52 @@ type DeletedImage {
   """
   memoSaved(filterBy: MemoFiltersInput): Memo!
 }`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/pairing_request_created.graphql", Input: `extend type Subscription {
+  pairingRequestCreated: PairingRequest!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/pairing_request_updated.graphql", Input: `extend type Subscription {
+  pairingRequestUpdated(code: String!): PairingRequest @public
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/session_updated.graphql", Input: `type Subscription {
   "订阅指定会话的变更事件。会话状态变更时（标记、撤销、提交、更新配置）推送完整的会话对象。"
   sessionUpdated(id: ID!): Session!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/approve_pairing_request.graphql", Input: `extend type Mutation {
+  approvePairingRequest(input: ApprovePairingRequestInput!): Boolean!
+}
+
+input ApprovePairingRequestInput {
+  code: String!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/begin_web_authn_login.graphql", Input: `extend type Mutation {
+  beginWebAuthnLogin(input: BeginWebAuthnLoginInput!): BeginWebAuthnLoginPayload! @public
+}
+
+input BeginWebAuthnLoginInput {
+  dummy: Boolean
+}
+
+type BeginWebAuthnLoginPayload {
+  options: Any!
+  sessionKey: String!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/begin_web_authn_registration.graphql", Input: `extend type Mutation {
+  beginWebAuthnRegistration(input: BeginWebAuthnRegistrationInput!): BeginWebAuthnRegistrationPayload! @public
+}
+
+input BeginWebAuthnRegistrationInput {
+  setupToken: String
+}
+
+type BeginWebAuthnRegistrationPayload {
+  options: Any!
+  sessionKey: String!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/commit_changes.graphql", Input: `"""
 提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
 已提交过的图片在后续提交中会跳过（避免重复写入），但符合 filter 的图片会继续参与后续筛选。
@@ -1866,6 +2421,80 @@ type CreateSessionPayload {
 type Mutation {
   createSession(input: CreateSessionInput!): CreateSessionPayload!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/delete_device.graphql", Input: `extend type Mutation {
+  deleteDevice(input: DeleteDeviceInput!): Boolean!
+}
+
+input DeleteDeviceInput {
+  id: ID!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/finish_web_authn_login.graphql", Input: `extend type Mutation {
+  finishWebAuthnLogin(input: FinishWebAuthnLoginInput!): FinishWebAuthnLoginPayload! @public
+}
+
+input FinishWebAuthnLoginInput {
+  sessionKey: String!
+  response: String!
+}
+
+type FinishWebAuthnLoginPayload {
+  """
+  访问令牌引用
+  """
+  accessToken: String!
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int!
+  """
+  刷新令牌引用
+  """
+  refreshToken: String!
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int!
+  """
+  登录成功后返回当前设备信息
+  """
+  device: Device!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/finish_web_authn_registration.graphql", Input: `extend type Mutation {
+  finishWebAuthnRegistration(input: FinishWebAuthnRegistrationInput!): FinishWebAuthnRegistrationPayload! @public
+}
+
+input FinishWebAuthnRegistrationInput {
+  sessionKey: String!
+  response: String!
+  setupToken: String
+}
+
+type FinishWebAuthnRegistrationPayload {
+  """
+  访问令牌引用（注册成功后返回）
+  """
+  accessToken: String
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int
+  """
+  刷新令牌引用（注册成功后返回）
+  """
+  refreshToken: String
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int
+  """
+  注册成功时返回已创建的设备信息
+  """
+  device: Device
+  pairingRequest: PairingRequest
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/mark_image.graphql", Input: `"对当前图片执行分类操作（保留/搁置/排除）"
 input MarkImageInput {
   "会话ID"
@@ -1910,6 +2539,53 @@ type MoveImagesPayload {
 extend type Mutation {
   moveImages(input: MoveImagesInput!): MoveImagesPayload!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/refresh_token.graphql", Input: `extend type Mutation {
+  """
+  静默刷新当前设备的认证 Token。
+  """
+  refreshToken(input: RefreshTokenInput!): RefreshTokenPayload! @public
+}
+
+"""
+刷新 Token 的输入参数
+"""
+input RefreshTokenInput {
+  """
+  刷新令牌引用
+  """
+  refreshToken: String!
+}
+
+"""
+刷新 Token 的响应数据
+"""
+type RefreshTokenPayload {
+  """
+  新的访问令牌引用（如果是 Cookie 模式，则为引用字符串；如果是 Inline 模式，则为 JWT 字符串）
+  """
+  accessToken: String!
+  """
+  访问令牌的有效秒数（相对时间）
+  """
+  accessTokenExpiresIn: Int!
+  """
+  新的刷新令牌引用
+  """
+  refreshToken: String!
+  """
+  刷新令牌的有效秒数（相对时间）
+  """
+  refreshTokenExpiresIn: Int!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/reject_pairing_request.graphql", Input: `extend type Mutation {
+  rejectPairingRequest(input: RejectPairingRequestInput!): Boolean!
+}
+
+input RejectPairingRequestInput {
+  code: String!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/undo.graphql", Input: `"撤销上一次标记操作，支持跨轮撤销"
 input UndoInput {
   "会话ID"
@@ -2058,6 +2734,39 @@ func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs ma
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_approvePairingRequest_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNApprovePairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_beginWebAuthnLogin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBeginWebAuthnLoginInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_beginWebAuthnRegistration_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBeginWebAuthnRegistrationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnRegistrationInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_commitChanges_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2091,6 +2800,39 @@ func (ec *executionContext) field_Mutation_createSession_args(ctx context.Contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_deleteDevice_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDeleteDeviceInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDeviceInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_finishWebAuthnLogin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNFinishWebAuthnLoginInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnLoginInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_finishWebAuthnRegistration_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNFinishWebAuthnRegistrationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnRegistrationInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_markImage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2106,6 +2848,28 @@ func (ec *executionContext) field_Mutation_moveImages_args(ctx context.Context, 
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMoveImagesInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐMoveImagesInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_refreshToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRefreshTokenInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRefreshTokenInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_rejectPairingRequest_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRejectPairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestInput)
 	if err != nil {
 		return nil, err
 	}
@@ -2299,6 +3063,17 @@ func (ec *executionContext) field_Subscription_memoUpdated_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Subscription_pairingRequestUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "code", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["code"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Subscription_sessionUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2361,6 +3136,209 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AuthStatus_isTrustedDevice(ctx context.Context, field graphql.CollectedField, obj *AuthStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AuthStatus_isTrustedDevice,
+		func(ctx context.Context) (any, error) {
+			return obj.IsTrustedDevice, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AuthStatus_isTrustedDevice(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AuthStatus_isTrustedIP(ctx context.Context, field graphql.CollectedField, obj *AuthStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AuthStatus_isTrustedIP,
+		func(ctx context.Context) (any, error) {
+			return obj.IsTrustedIP, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AuthStatus_isTrustedIP(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AuthStatus_canAccess(ctx context.Context, field graphql.CollectedField, obj *AuthStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AuthStatus_canAccess,
+		func(ctx context.Context) (any, error) {
+			return obj.CanAccess, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AuthStatus_canAccess(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeginWebAuthnLoginPayload_options(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnLoginPayload_options,
+		func(ctx context.Context) (any, error) {
+			return obj.Options, nil
+		},
+		nil,
+		ec.marshalNAny2interface,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnLoginPayload_options(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Any does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeginWebAuthnLoginPayload_sessionKey(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnLoginPayload_sessionKey,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionKey, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnLoginPayload_sessionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeginWebAuthnRegistrationPayload_options(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnRegistrationPayload_options,
+		func(ctx context.Context) (any, error) {
+			return obj.Options, nil
+		},
+		nil,
+		ec.marshalNAny2interface,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnRegistrationPayload_options(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Any does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeginWebAuthnRegistrationPayload_sessionKey(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnRegistrationPayload_sessionKey,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionKey, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnRegistrationPayload_sessionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _CommitChangesPayload_written(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -2603,6 +3581,180 @@ func (ec *executionContext) fieldContext_DeletedImage_id(_ context.Context, fiel
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_id(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_name(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_createdAt(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_lastLoginAt(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_lastLoginAt,
+		func(ctx context.Context) (any, error) {
+			return obj.LastLoginAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_lastLoginAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_lastLoginIp(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_lastLoginIp,
+		func(ctx context.Context) (any, error) {
+			return obj.LastLoginIP, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_lastLoginIp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_isCurrent(ctx context.Context, field graphql.CollectedField, obj *shared.DeviceDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_isCurrent,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().IsCurrent(ctx, obj)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_isCurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3440,6 +4592,361 @@ func (ec *executionContext) fieldContext_DirectoryStats_ratingCounts(_ context.C
 				return ec.fieldContext_RatingCount_count(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RatingCount", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload_accessToken(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_accessToken,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessToken, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_accessToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload_accessTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_accessTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_accessTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload_refreshToken(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_refreshToken,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshToken, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_refreshToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload_refreshTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_refreshTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_refreshTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload_device(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_device,
+		func(ctx context.Context) (any, error) {
+			return obj.Device, nil
+		},
+		nil,
+		ec.marshalNDevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_device(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "lastLoginAt":
+				return ec.fieldContext_Device_lastLoginAt(ctx, field)
+			case "lastLoginIp":
+				return ec.fieldContext_Device_lastLoginIp(ctx, field)
+			case "isCurrent":
+				return ec.fieldContext_Device_isCurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_accessToken(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_accessToken,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessToken, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_accessToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_accessTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_accessTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_accessTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_refreshToken(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_refreshToken,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshToken, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_refreshToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_refreshTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_refreshTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_refreshTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_device(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_device,
+		func(ctx context.Context) (any, error) {
+			return obj.Device, nil
+		},
+		nil,
+		ec.marshalODevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_device(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "lastLoginAt":
+				return ec.fieldContext_Device_lastLoginAt(ctx, field)
+			case "lastLoginIp":
+				return ec.fieldContext_Device_lastLoginIp(ctx, field)
+			case "isCurrent":
+				return ec.fieldContext_Device_isCurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_pairingRequest(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_pairingRequest,
+		func(ctx context.Context) (any, error) {
+			return obj.PairingRequest, nil
+		},
+		nil,
+		ec.marshalOPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_pairingRequest(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_PairingRequest_code(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_PairingRequest_createdAt(ctx, field)
+			case "status":
+				return ec.fieldContext_PairingRequest_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
 		},
 	}
 	return fc, nil
@@ -4841,6 +6348,35 @@ func (ec *executionContext) fieldContext_Meta_version(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Meta_baseURL(ctx context.Context, field graphql.CollectedField, obj *Meta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Meta_baseURL,
+		func(ctx context.Context) (any, error) {
+			return obj.BaseURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Meta_baseURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Meta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MoveImagesPayload_movedCount(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4975,6 +6511,167 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_approvePairingRequest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_approvePairingRequest,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ApprovePairingRequest(ctx, fc.Args["input"].(ApprovePairingRequestInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_approvePairingRequest(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_approvePairingRequest_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_beginWebAuthnLogin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_beginWebAuthnLogin,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BeginWebAuthnLogin(ctx, fc.Args["input"].(BeginWebAuthnLoginInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *BeginWebAuthnLoginPayload
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBeginWebAuthnLoginPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_beginWebAuthnLogin(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "options":
+				return ec.fieldContext_BeginWebAuthnLoginPayload_options(ctx, field)
+			case "sessionKey":
+				return ec.fieldContext_BeginWebAuthnLoginPayload_sessionKey(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BeginWebAuthnLoginPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_beginWebAuthnLogin_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_beginWebAuthnRegistration(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_beginWebAuthnRegistration,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BeginWebAuthnRegistration(ctx, fc.Args["input"].(BeginWebAuthnRegistrationInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *BeginWebAuthnRegistrationPayload
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNBeginWebAuthnRegistrationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnRegistrationPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_beginWebAuthnRegistration(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "options":
+				return ec.fieldContext_BeginWebAuthnRegistrationPayload_options(ctx, field)
+			case "sessionKey":
+				return ec.fieldContext_BeginWebAuthnRegistrationPayload_sessionKey(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BeginWebAuthnRegistrationPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_beginWebAuthnRegistration_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_commitChanges(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5079,6 +6776,181 @@ func (ec *executionContext) fieldContext_Mutation_createMemo(ctx context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_deleteDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteDevice,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().DeleteDevice(ctx, fc.Args["input"].(DeleteDeviceInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteDevice(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteDevice_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_finishWebAuthnLogin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_finishWebAuthnLogin,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().FinishWebAuthnLogin(ctx, fc.Args["input"].(FinishWebAuthnLoginInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *FinishWebAuthnLoginPayload
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNFinishWebAuthnLoginPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnLoginPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_finishWebAuthnLogin(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "accessToken":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_accessToken(ctx, field)
+			case "accessTokenExpiresIn":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_accessTokenExpiresIn(ctx, field)
+			case "refreshToken":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_refreshToken(ctx, field)
+			case "refreshTokenExpiresIn":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_refreshTokenExpiresIn(ctx, field)
+			case "device":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_device(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FinishWebAuthnLoginPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_finishWebAuthnLogin_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_finishWebAuthnRegistration(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_finishWebAuthnRegistration,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().FinishWebAuthnRegistration(ctx, fc.Args["input"].(FinishWebAuthnRegistrationInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *FinishWebAuthnRegistrationPayload
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNFinishWebAuthnRegistrationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnRegistrationPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_finishWebAuthnRegistration(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "accessToken":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_accessToken(ctx, field)
+			case "accessTokenExpiresIn":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_accessTokenExpiresIn(ctx, field)
+			case "refreshToken":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_refreshToken(ctx, field)
+			case "refreshTokenExpiresIn":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_refreshTokenExpiresIn(ctx, field)
+			case "device":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_device(ctx, field)
+			case "pairingRequest":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_pairingRequest(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FinishWebAuthnRegistrationPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_finishWebAuthnRegistration_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_markImage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5169,6 +7041,111 @@ func (ec *executionContext) fieldContext_Mutation_moveImages(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_moveImages_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_refreshToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_refreshToken,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RefreshToken(ctx, fc.Args["input"].(RefreshTokenInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *RefreshTokenPayload
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNRefreshTokenPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRefreshTokenPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_refreshToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "accessToken":
+				return ec.fieldContext_RefreshTokenPayload_accessToken(ctx, field)
+			case "accessTokenExpiresIn":
+				return ec.fieldContext_RefreshTokenPayload_accessTokenExpiresIn(ctx, field)
+			case "refreshToken":
+				return ec.fieldContext_RefreshTokenPayload_refreshToken(ctx, field)
+			case "refreshTokenExpiresIn":
+				return ec.fieldContext_RefreshTokenPayload_refreshTokenExpiresIn(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RefreshTokenPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_refreshToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_rejectPairingRequest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_rejectPairingRequest,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RejectPairingRequest(ctx, fc.Args["input"].(RejectPairingRequestInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_rejectPairingRequest(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_rejectPairingRequest_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5509,6 +7486,93 @@ func (ec *executionContext) fieldContext_PageInfo_endCursor(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _PairingRequest_code(ctx context.Context, field graphql.CollectedField, obj *shared.PairingRequestDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PairingRequest_code,
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PairingRequest_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PairingRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PairingRequest_createdAt(ctx context.Context, field graphql.CollectedField, obj *shared.PairingRequestDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PairingRequest_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PairingRequest_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PairingRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PairingRequest_status(ctx context.Context, field graphql.CollectedField, obj *shared.PairingRequestDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PairingRequest_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNPairingRequestStatus2mainᚋinternalᚋenumᚐEnum,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PairingRequest_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PairingRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type PairingRequestStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_node(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5546,6 +7610,56 @@ func (ec *executionContext) fieldContext_Query_node(ctx context.Context, field g
 	if fc.Args, err = ec.field_Query_node_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_authStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_authStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().AuthStatus(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *AuthStatus
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalNAuthStatus2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAuthStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_authStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isTrustedDevice":
+				return ec.fieldContext_AuthStatus_isTrustedDevice(ctx, field)
+			case "isTrustedIP":
+				return ec.fieldContext_AuthStatus_isTrustedIP(ctx, field)
+			case "canAccess":
+				return ec.fieldContext_AuthStatus_canAccess(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AuthStatus", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -5591,6 +7705,49 @@ func (ec *executionContext) fieldContext_Query_comfyUIWorkflow(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_devices(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_devices,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().Devices(ctx)
+		},
+		nil,
+		ec.marshalNDevice2ᚕᚖmainᚋinternalᚋsharedᚐDeviceDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "lastLoginAt":
+				return ec.fieldContext_Device_lastLoginAt(ctx, field)
+			case "lastLoginIp":
+				return ec.fieldContext_Device_lastLoginIp(ctx, field)
+			case "isCurrent":
+				return ec.fieldContext_Device_isCurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_meta(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5621,8 +7778,47 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 				return ec.fieldContext_Meta_rootPath(ctx, field)
 			case "version":
 				return ec.fieldContext_Meta_version(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_Meta_baseURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_pairingRequests(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_pairingRequests,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().PairingRequests(ctx)
+		},
+		nil,
+		ec.marshalNPairingRequest2ᚕᚖmainᚋinternalᚋsharedᚐPairingRequestDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_pairingRequests(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_PairingRequest_code(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_PairingRequest_createdAt(ctx, field)
+			case "status":
+				return ec.fieldContext_PairingRequest_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
 		},
 	}
 	return fc, nil
@@ -5914,6 +8110,122 @@ func (ec *executionContext) _RatingCount_count(ctx context.Context, field graphq
 func (ec *executionContext) fieldContext_RatingCount_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RatingCount",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RefreshTokenPayload_accessToken(ctx context.Context, field graphql.CollectedField, obj *RefreshTokenPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RefreshTokenPayload_accessToken,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessToken, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RefreshTokenPayload_accessToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RefreshTokenPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RefreshTokenPayload_accessTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *RefreshTokenPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RefreshTokenPayload_accessTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RefreshTokenPayload_accessTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RefreshTokenPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RefreshTokenPayload_refreshToken(ctx context.Context, field graphql.CollectedField, obj *RefreshTokenPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RefreshTokenPayload_refreshToken,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshToken, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RefreshTokenPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RefreshTokenPayload_refreshTokenExpiresIn(ctx context.Context, field graphql.CollectedField, obj *RefreshTokenPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RefreshTokenPayload_refreshTokenExpiresIn,
+		func(ctx context.Context) (any, error) {
+			return obj.RefreshTokenExpiresIn, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshTokenExpiresIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RefreshTokenPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -6981,6 +9293,78 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdated(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_deviceDeleted(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_deviceDeleted,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().DeviceDeleted(ctx)
+		},
+		nil,
+		ec.marshalNID2ᚖmainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_deviceDeleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_deviceSaved(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_deviceSaved,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().DeviceSaved(ctx)
+		},
+		nil,
+		ec.marshalNDevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_deviceSaved(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "lastLoginAt":
+				return ec.fieldContext_Device_lastLoginAt(ctx, field)
+			case "lastLoginIp":
+				return ec.fieldContext_Device_lastLoginIp(ctx, field)
+			case "isCurrent":
+				return ec.fieldContext_Device_isCurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_dirEntryDeleted(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -7309,6 +9693,105 @@ func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_memoSaved_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_pairingRequestCreated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_pairingRequestCreated,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().PairingRequestCreated(ctx)
+		},
+		nil,
+		ec.marshalNPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_pairingRequestCreated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_PairingRequest_code(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_PairingRequest_createdAt(ctx, field)
+			case "status":
+				return ec.fieldContext_PairingRequest_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_pairingRequestUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_pairingRequestUpdated,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().PairingRequestUpdated(ctx, fc.Args["code"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Public == nil {
+					var zeroVal *shared.PairingRequestDTO
+					return zeroVal, errors.New("directive public is not implemented")
+				}
+				return ec.directives.Public(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		ec.marshalOPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_pairingRequestUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_PairingRequest_code(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_PairingRequest_createdAt(ctx, field)
+			case "status":
+				return ec.fieldContext_PairingRequest_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_pairingRequestUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9036,6 +11519,87 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputApprovePairingRequestInput(ctx context.Context, obj any) (ApprovePairingRequestInput, error) {
+	var it ApprovePairingRequestInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"code"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "code":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("code"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Code = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBeginWebAuthnLoginInput(ctx context.Context, obj any) (BeginWebAuthnLoginInput, error) {
+	var it BeginWebAuthnLoginInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"dummy"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "dummy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("dummy"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Dummy = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBeginWebAuthnRegistrationInput(ctx context.Context, obj any) (BeginWebAuthnRegistrationInput, error) {
+	var it BeginWebAuthnRegistrationInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"setupToken"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "setupToken":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("setupToken"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SetupToken = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCommitChangesInput(ctx context.Context, obj any) (CommitChangesInput, error) {
 	var it CommitChangesInput
 	asMap := map[string]any{}
@@ -9166,6 +11730,33 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDeleteDeviceInput(ctx context.Context, obj any) (DeleteDeviceInput, error) {
+	var it DeleteDeviceInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, obj any) (shared.DirectoryFilters, error) {
 	var it shared.DirectoryFilters
 	asMap := map[string]any{}
@@ -9194,6 +11785,81 @@ func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, 
 				return it, err
 			}
 			it.Query = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.Context, obj any) (FinishWebAuthnLoginInput, error) {
+	var it FinishWebAuthnLoginInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionKey", "response"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionKey = data
+		case "response":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("response"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Response = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputFinishWebAuthnRegistrationInput(ctx context.Context, obj any) (FinishWebAuthnRegistrationInput, error) {
+	var it FinishWebAuthnRegistrationInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionKey", "response", "setupToken"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionKey = data
+		case "response":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("response"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Response = data
+		case "setupToken":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("setupToken"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SetupToken = data
 		}
 	}
 
@@ -9399,6 +12065,60 @@ func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, o
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputRefreshTokenInput(ctx context.Context, obj any) (RefreshTokenInput, error) {
+	var it RefreshTokenInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"refreshToken"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "refreshToken":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("refreshToken"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RefreshToken = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.Context, obj any) (RejectPairingRequestInput, error) {
+	var it RejectPairingRequestInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"code"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "code":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("code"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Code = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUndoInput(ctx context.Context, obj any) (UndoInput, error) {
 	var it UndoInput
 	asMap := map[string]any{}
@@ -9598,6 +12318,143 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 
 // region    **************************** object.gotpl ****************************
 
+var authStatusImplementors = []string{"AuthStatus"}
+
+func (ec *executionContext) _AuthStatus(ctx context.Context, sel ast.SelectionSet, obj *AuthStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, authStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AuthStatus")
+		case "isTrustedDevice":
+			out.Values[i] = ec._AuthStatus_isTrustedDevice(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isTrustedIP":
+			out.Values[i] = ec._AuthStatus_isTrustedIP(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canAccess":
+			out.Values[i] = ec._AuthStatus_canAccess(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var beginWebAuthnLoginPayloadImplementors = []string{"BeginWebAuthnLoginPayload"}
+
+func (ec *executionContext) _BeginWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, obj *BeginWebAuthnLoginPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, beginWebAuthnLoginPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BeginWebAuthnLoginPayload")
+		case "options":
+			out.Values[i] = ec._BeginWebAuthnLoginPayload_options(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionKey":
+			out.Values[i] = ec._BeginWebAuthnLoginPayload_sessionKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var beginWebAuthnRegistrationPayloadImplementors = []string{"BeginWebAuthnRegistrationPayload"}
+
+func (ec *executionContext) _BeginWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, obj *BeginWebAuthnRegistrationPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, beginWebAuthnRegistrationPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BeginWebAuthnRegistrationPayload")
+		case "options":
+			out.Values[i] = ec._BeginWebAuthnRegistrationPayload_options(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionKey":
+			out.Values[i] = ec._BeginWebAuthnRegistrationPayload_sessionKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var commitChangesPayloadImplementors = []string{"CommitChangesPayload"}
 
 func (ec *executionContext) _CommitChangesPayload(ctx context.Context, sel ast.SelectionSet, obj *CommitChangesPayload) graphql.Marshaler {
@@ -9698,6 +12555,101 @@ func (ec *executionContext) _DeletedImage(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var deviceImplementors = []string{"Device"}
+
+func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, obj *shared.DeviceDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, deviceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Device")
+		case "id":
+			out.Values[i] = ec._Device_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "name":
+			out.Values[i] = ec._Device_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "createdAt":
+			out.Values[i] = ec._Device_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "lastLoginAt":
+			out.Values[i] = ec._Device_lastLoginAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "lastLoginIp":
+			out.Values[i] = ec._Device_lastLoginIp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "isCurrent":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_isCurrent(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -10178,6 +13130,111 @@ func (ec *executionContext) _DirectoryStats(ctx context.Context, sel ast.Selecti
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var finishWebAuthnLoginPayloadImplementors = []string{"FinishWebAuthnLoginPayload"}
+
+func (ec *executionContext) _FinishWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, obj *FinishWebAuthnLoginPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, finishWebAuthnLoginPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FinishWebAuthnLoginPayload")
+		case "accessToken":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_accessToken(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "accessTokenExpiresIn":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_accessTokenExpiresIn(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refreshToken":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_refreshToken(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refreshTokenExpiresIn":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_refreshTokenExpiresIn(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "device":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_device(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var finishWebAuthnRegistrationPayloadImplementors = []string{"FinishWebAuthnRegistrationPayload"}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, obj *FinishWebAuthnRegistrationPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, finishWebAuthnRegistrationPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FinishWebAuthnRegistrationPayload")
+		case "accessToken":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_accessToken(ctx, field, obj)
+		case "accessTokenExpiresIn":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_accessTokenExpiresIn(ctx, field, obj)
+		case "refreshToken":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_refreshToken(ctx, field, obj)
+		case "refreshTokenExpiresIn":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_refreshTokenExpiresIn(ctx, field, obj)
+		case "device":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_device(ctx, field, obj)
+		case "pairingRequest":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_pairingRequest(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -10822,6 +13879,11 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "baseURL":
+			out.Values[i] = ec._Meta_baseURL(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -10917,6 +13979,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "approvePairingRequest":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_approvePairingRequest(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "beginWebAuthnLogin":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_beginWebAuthnLogin(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "beginWebAuthnRegistration":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_beginWebAuthnRegistration(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "commitChanges":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_commitChanges(ctx, field)
@@ -10931,6 +14014,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "deleteDevice":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteDevice(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "finishWebAuthnLogin":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_finishWebAuthnLogin(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "finishWebAuthnRegistration":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_finishWebAuthnRegistration(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "markImage":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_markImage(ctx, field)
@@ -10941,6 +14045,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "moveImages":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_moveImages(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refreshToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_refreshToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rejectPairingRequest":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_rejectPairingRequest(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -11041,6 +14159,55 @@ func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var pairingRequestImplementors = []string{"PairingRequest"}
+
+func (ec *executionContext) _PairingRequest(ctx context.Context, sel ast.SelectionSet, obj *shared.PairingRequestDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, pairingRequestImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PairingRequest")
+		case "code":
+			out.Values[i] = ec._PairingRequest_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._PairingRequest_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._PairingRequest_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -11079,6 +14246,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "authStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_authStatus(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "comfyUIWorkflow":
 			field := field
 
@@ -11098,6 +14287,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "devices":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_devices(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "meta":
 			field := field
 
@@ -11108,6 +14319,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_meta(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "pairingRequests":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_pairingRequests(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -11210,6 +14443,60 @@ func (ec *executionContext) _RatingCount(ctx context.Context, sel ast.SelectionS
 			}
 		case "count":
 			out.Values[i] = ec._RatingCount_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var refreshTokenPayloadImplementors = []string{"RefreshTokenPayload"}
+
+func (ec *executionContext) _RefreshTokenPayload(ctx context.Context, sel ast.SelectionSet, obj *RefreshTokenPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, refreshTokenPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RefreshTokenPayload")
+		case "accessToken":
+			out.Values[i] = ec._RefreshTokenPayload_accessToken(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "accessTokenExpiresIn":
+			out.Values[i] = ec._RefreshTokenPayload_accessTokenExpiresIn(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refreshToken":
+			out.Values[i] = ec._RefreshTokenPayload_refreshToken(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "refreshTokenExpiresIn":
+			out.Values[i] = ec._RefreshTokenPayload_refreshTokenExpiresIn(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -11642,6 +14929,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionUpdated":
 		return ec._Subscription_sessionUpdated(ctx, fields[0])
+	case "deviceDeleted":
+		return ec._Subscription_deviceDeleted(ctx, fields[0])
+	case "deviceSaved":
+		return ec._Subscription_deviceSaved(ctx, fields[0])
 	case "dirEntryDeleted":
 		return ec._Subscription_dirEntryDeleted(ctx, fields[0])
 	case "directoryChanged":
@@ -11654,6 +14945,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_memoUpdated(ctx, fields[0])
 	case "memoSaved":
 		return ec._Subscription_memoSaved(ctx, fields[0])
+	case "pairingRequestCreated":
+		return ec._Subscription_pairingRequestCreated(ctx, fields[0])
+	case "pairingRequestUpdated":
+		return ec._Subscription_pairingRequestUpdated(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -12122,6 +15417,85 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) unmarshalNAny2interface(ctx context.Context, v any) (any, error) {
+	res, err := graphql.UnmarshalAny(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAny2interface(ctx context.Context, sel ast.SelectionSet, v any) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	_ = sel
+	res := graphql.MarshalAny(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) unmarshalNApprovePairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestInput(ctx context.Context, v any) (ApprovePairingRequestInput, error) {
+	res, err := ec.unmarshalInputApprovePairingRequestInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAuthStatus2mainᚋinternalᚋinterfacesᚋgraphqlᚐAuthStatus(ctx context.Context, sel ast.SelectionSet, v AuthStatus) graphql.Marshaler {
+	return ec._AuthStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAuthStatus2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAuthStatus(ctx context.Context, sel ast.SelectionSet, v *AuthStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AuthStatus(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNBeginWebAuthnLoginInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginInput(ctx context.Context, v any) (BeginWebAuthnLoginInput, error) {
+	res, err := ec.unmarshalInputBeginWebAuthnLoginInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBeginWebAuthnLoginPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, v BeginWebAuthnLoginPayload) graphql.Marshaler {
+	return ec._BeginWebAuthnLoginPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBeginWebAuthnLoginPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, v *BeginWebAuthnLoginPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BeginWebAuthnLoginPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNBeginWebAuthnRegistrationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnRegistrationInput(ctx context.Context, v any) (BeginWebAuthnRegistrationInput, error) {
+	res, err := ec.unmarshalInputBeginWebAuthnRegistrationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBeginWebAuthnRegistrationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, v BeginWebAuthnRegistrationPayload) graphql.Marshaler {
+	return ec._BeginWebAuthnRegistrationPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBeginWebAuthnRegistrationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, v *BeginWebAuthnRegistrationPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BeginWebAuthnRegistrationPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -12181,6 +15555,11 @@ func (ec *executionContext) marshalNCreateSessionPayload2ᚖmainᚋinternalᚋin
 	return ec._CreateSessionPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNDeleteDeviceInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDeviceInput(ctx context.Context, v any) (DeleteDeviceInput, error) {
+	res, err := ec.unmarshalInputDeleteDeviceInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNDeletedImage2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeletedImage(ctx context.Context, sel ast.SelectionSet, v DeletedImage) graphql.Marshaler {
 	return ec._DeletedImage(ctx, sel, &v)
 }
@@ -12193,6 +15572,64 @@ func (ec *executionContext) marshalNDeletedImage2ᚖmainᚋinternalᚋinterfaces
 		return graphql.Null
 	}
 	return ec._DeletedImage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDevice2mainᚋinternalᚋsharedᚐDeviceDTO(ctx context.Context, sel ast.SelectionSet, v shared.DeviceDTO) graphql.Marshaler {
+	return ec._Device(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDevice2ᚕᚖmainᚋinternalᚋsharedᚐDeviceDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.DeviceDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNDevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DeviceDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Device(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDirEntryDeleted2mainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirEntryDeletedDTO) graphql.Marshaler {
@@ -12335,6 +15772,44 @@ func (ec *executionContext) marshalNDirectoryEdge2ᚖmainᚋinternalᚋsharedᚐ
 	return ec._DirectoryEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNFinishWebAuthnLoginInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnLoginInput(ctx context.Context, v any) (FinishWebAuthnLoginInput, error) {
+	res, err := ec.unmarshalInputFinishWebAuthnLoginInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFinishWebAuthnLoginPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, v FinishWebAuthnLoginPayload) graphql.Marshaler {
+	return ec._FinishWebAuthnLoginPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNFinishWebAuthnLoginPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnLoginPayload(ctx context.Context, sel ast.SelectionSet, v *FinishWebAuthnLoginPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FinishWebAuthnLoginPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNFinishWebAuthnRegistrationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnRegistrationInput(ctx context.Context, v any) (FinishWebAuthnRegistrationInput, error) {
+	res, err := ec.unmarshalInputFinishWebAuthnRegistrationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFinishWebAuthnRegistrationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, v FinishWebAuthnRegistrationPayload) graphql.Marshaler {
+	return ec._FinishWebAuthnRegistrationPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNFinishWebAuthnRegistrationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐFinishWebAuthnRegistrationPayload(ctx context.Context, sel ast.SelectionSet, v *FinishWebAuthnRegistrationPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FinishWebAuthnRegistrationPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {
 	var res scalar.ID
 	err := res.UnmarshalGQL(v)
@@ -12342,6 +15817,22 @@ func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx conte
 }
 
 func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
+	var res = new(scalar.ID)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v *scalar.ID) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
 	return v
 }
 
@@ -12775,6 +16266,74 @@ func (ec *executionContext) marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageI
 	return ec._PageInfo(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNPairingRequest2mainᚋinternalᚋsharedᚐPairingRequestDTO(ctx context.Context, sel ast.SelectionSet, v shared.PairingRequestDTO) graphql.Marshaler {
+	return ec._PairingRequest(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNPairingRequest2ᚕᚖmainᚋinternalᚋsharedᚐPairingRequestDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.PairingRequestDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PairingRequestDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PairingRequest(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNPairingRequestStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.PairingRequestStatusMeta], error) {
+	var res enum.Enum[shared.PairingRequestStatusMeta]
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNPairingRequestStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.PairingRequestStatusMeta]) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*RatingCount) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -12827,6 +16386,30 @@ func (ec *executionContext) marshalNRatingCount2ᚖmainᚋinternalᚋinterfaces�
 		return graphql.Null
 	}
 	return ec._RatingCount(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRefreshTokenInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRefreshTokenInput(ctx context.Context, v any) (RefreshTokenInput, error) {
+	res, err := ec.unmarshalInputRefreshTokenInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRefreshTokenPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐRefreshTokenPayload(ctx context.Context, sel ast.SelectionSet, v RefreshTokenPayload) graphql.Marshaler {
+	return ec._RefreshTokenPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRefreshTokenPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRefreshTokenPayload(ctx context.Context, sel ast.SelectionSet, v *RefreshTokenPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RefreshTokenPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRejectPairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestInput(ctx context.Context, v any) (RejectPairingRequestInput, error) {
+	res, err := ec.unmarshalInputRejectPairingRequestInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSession2mainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v shared.SessionDTO) graphql.Marshaler {
@@ -13218,6 +16801,13 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) marshalODevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DeviceDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Device(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalODirectoryFilters2ᚖmainᚋinternalᚋsharedᚐDirectoryFilters(ctx context.Context, v any) (*shared.DirectoryFilters, error) {
 	if v == nil {
 		return nil, nil
@@ -13393,6 +16983,13 @@ func (ec *executionContext) marshalONode2mainᚋinternalᚋinterfacesᚋgraphql�
 		return graphql.Null
 	}
 	return ec._Node(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PairingRequestDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._PairingRequest(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOSession2ᚖmainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.SessionDTO) graphql.Marshaler {

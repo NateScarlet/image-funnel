@@ -15,5 +15,6 @@ func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
 		RootAbsPath: r.rootDir,
 		RootPath:    r.rootDir,
 		Version:     r.version,
+		BaseURL:     r.baseURL,
 	}, nil
 }

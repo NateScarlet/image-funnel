@@ -1,13 +1,11 @@
 {
   "folders": [
     {
-      "path": "."
-    }
+      "path": ".",
+    },
   ],
   "settings": {
-    "eslint.workingDirectories": [
-      "./frontend"
-    ]
+    "eslint.workingDirectories": ["${workspaceFolder}/frontend"],
   },
   "launch": {
     "version": "0.2.0",
@@ -21,12 +19,11 @@
         "envFile": "${workspaceFolder}/.env",
         "cwd": "${workspaceFolder}",
         "preLaunchTask": "serve:web",
-        "dlvFlags": [
-          "--check-go-version=false"
-        ],
+        "dlvFlags": ["--check-go-version=false"],
         "output": "${workspaceFolder}/main_debug.exe",
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
+          "IMAGE_FUNNEL_BASE_URL": "http://localhost:8080",
           "IMAGE_FUNNEL_PORT": "8000",
           "IMAGE_FUNNEL_SECRET_KEY": "insecure_development_key_919fdbdadd3d",
         },
@@ -42,35 +39,27 @@
         "type": "shell",
         "group": {
           "kind": "build",
-          "isDefault": true
+          "isDefault": true,
         },
         "command": "pwsh",
-        "args": [
-          "./scripts/build.ps1"
-        ],
-        "problemMatcher": []
+        "args": ["./scripts/build.ps1"],
+        "problemMatcher": [],
       },
       {
         "label": "build:frontend",
         "type": "shell",
         "group": "build",
         "command": "pwsh",
-        "args": [
-          "./scripts/build.ps1",
-          "-Frontend"
-        ],
-        "problemMatcher": []
+        "args": ["./scripts/build.ps1", "-Frontend"],
+        "problemMatcher": [],
       },
       {
         "label": "build:backend",
         "type": "shell",
         "group": "build",
         "command": "pwsh",
-        "args": [
-          "./scripts/build.ps1",
-          "-Backend"
-        ],
-        "problemMatcher": []
+        "args": ["./scripts/build.ps1", "-Backend"],
+        "problemMatcher": [],
       },
       {
         "label": "serve:web",
@@ -78,22 +67,20 @@
         "isBackground": true,
         "command": "pnpm",
         "options": {
-          "cwd": "${workspaceFolder}/frontend"
+          "cwd": "${workspaceFolder}/frontend",
         },
-        "args": [
-          "dev"
-        ],
+        "args": ["dev"],
         "problemMatcher": [
           {
             "pattern": {
-              "regexp": ""
+              "regexp": "",
             },
             "background": {
               "activeOnStart": true,
               "beginsPattern": "restarting server...$",
-              "endsPattern": "\\s*ready in|server restarted."
-            }
-          }
+              "endsPattern": "\\s*ready in|server restarted.",
+            },
+          },
         ],
         "presentation": {
           "echo": true,
@@ -101,9 +88,9 @@
           "focus": false,
           "panel": "shared",
           "showReuseMessage": true,
-          "clear": false
-        }
-      }
+          "clear": false,
+        },
+      },
     ],
   },
 }

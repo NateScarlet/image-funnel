@@ -26,3 +26,14 @@ var (
 )
 
 type FileAction = enum.Enum[FileActionMeta]
+
+type PairingRequestStatusMeta struct{}
+
+var pairingRequestStatus = enum.New[PairingRequestStatusMeta]()
+var (
+	PairingRequestStatusPending  = pairingRequestStatus.Define("PENDING")
+	PairingRequestStatusApproved = pairingRequestStatus.Define("APPROVED")
+	PairingRequestStatusRejected = pairingRequestStatus.Define("REJECTED")
+)
+
+type PairingRequestStatus = enum.Enum[PairingRequestStatusMeta]

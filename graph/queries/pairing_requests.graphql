@@ -1,0 +1,7 @@
+extend type Query {
+  """
+  获取当前所有待批准的配对请求。
+  仅在接收端已认证为信任设备或处于可信 IP 访问的情况下才能查询。
+  """
+  pairingRequests: [PairingRequest!]!
+}

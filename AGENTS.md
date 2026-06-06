@@ -125,6 +125,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **仓库接口极简设计**: `Repository` 接口必须保持极简且高度专注于数据的核心持久化（如 CRUD）。禁止为了计算物理绝对路径或辅助其他层创建空对象等非持久化行为而在接口中强行添加辅助方法。任何物理基准路径（如 `rootDir`）等硬件细节应通过依赖注入传入对应的领域服务（`Service`）或相关组件内部，由其内部自行处理。
 - **空实体回退机制内聚**: 当部分接口为了支持 GraphQL 等层级的非空约束（如 `NonNull!`）需要对缺失的数据进行“空实体”回退（Fallback）时，空实体的构造和物理绝对路径计算应属于领域层 Service 的内聚职责（通常由 Service 的私有方法如 `newEmpty` 统一创建）。应用层禁止获取物理路径属性后手动拼装实体，以避免职责边界外泄与属性构建不一致。
 - **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，备忘录列表查询应放在 `application/memo.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
+- **应用层方法命名规范**: 属于特定领域 Handler 的方法，应当去除冗余的领域包名/实体名前后缀。例如，在 `device.Handler` 中，获取列表方法直接叫做 `List` 而非 `ListDevices` 或 `Devices`，删除方法直接叫做 `Delete` 而非 `DeleteDevice`。
 
 - **DTO 跨领域引用**: `shared/*DTO` 中不应嵌入其他领域的 DTO 字段（如 `SessionDTO.CurrentImage *ImageDTO`），这会迫使 DTO 工厂导入其他应用层包造成跨领域耦合。改为存储 `scalar.ID`（如 `CurrentImageID scalar.ID`），零值即表示该关联不存在，GraphQL 层通过自动生成的 resolver 按 ID 查询完整对象。参照 `SessionDTO.CurrentImageID` 与 `session.resolvers.go` 中的 `CurrentImage` resolver
 - **DTO 构造与职责边界**: `DTOFactory` 是唯一负责将领域对象（或基础设施层数据）转换为 DTO 的组件。禁止由 `DTOFactory` 以外的层级或组件直接控制 DTO 字段的生成或传递额外参数。`DTOFactory` 的 `New` 方法应仅接收领域实体本身，其派生的上下文状态（如 `parentID`、`isRoot` 等）应在领域对象被构造时自动计算并内置于实体中，由 DTOFactory 自动读取以完成映射。这可以避免外部调用层（如 Handler 或事件订阅）重复计算或越权传递参数，从而防止 Bug 引入。
@@ -163,7 +164,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **Schema 变更后**: 运行 `pwsh scripts/generate-graphql.ps1`，然后更新 resolvers
 - **废弃字段**: GraphQL 不允许删除字段，只能标记 `@deprecated`。如需从 DTO 移除对应字段，gqlgen 重新生成后会自动为该字段生成 resolver stub（无需手动添加 `@goField(forceResolver: true)`），在 resolver 中实现原有的计算逻辑以保持向后兼容，不可随意返回空值
 - **自动 resolver**: 当 `@goModel` 绑定的 Go 结构体缺少 schema 中的某个字段时，gqlgen 会自动生成 resolver，多此一举添加 `@goField(forceResolver: true)` 是冗余操作
-- **零拷贝 DTO 绑定**: 在 GraphQL Subscription 等复杂返回类型的 schema 定义中，优先使用 `@goModel` 将 GraphQL 类型直接绑定到后端的 `shared.*DTO` 结构体，使得生成的 resolver 签名能够直接传递 DTO 通道，避免在 resolver 中编写额外的映射循环与通道中转代码。
+- **零拷贝 DTO 绑定**: 优先使用 `@goModel` 将 GraphQL 类型直接绑定到后端的 `shared.*DTO` 结构体（不仅限于 Subscription，包括常规 Query/Mutation 对应的类型），使得生成的 resolver 签名能够直接传递/返回 DTO 结构，避免在 resolver 中编写额外的映射循环与手工转换代码。对于在 DTO 结构中缺失但 Schema 要求的动态字段（如与当前 Session/Context 状态有关的 `isCurrent`），应交由自动生成的对应字段级 resolver 独立解析；而在 DTO 工厂构造时可以安全静态拼装的数据（如由 UserAgent 解析的 `Name` 属性），应直接在 DTO 结构与工厂中定义和生成。
 - **通用文件删除订阅**: 由于文件被删除或移走后其修改时间与属性均不可读，订阅删除事件时应使用通用的、仅提供相对路径的订阅（如 `dirEntryDeleted`）而非特定类型且包含 ID 的删除订阅（如 `imageDeleted`），以便前端统一基于相对路径比对从列表/缓存中移除对应的实体。
 - **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。

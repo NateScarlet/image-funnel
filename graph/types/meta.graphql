@@ -5,4 +5,6 @@ type Meta {
   rootPath: String! @deprecated(reason: "use rootAbsPath")
   "当前应用版本号"
   version: String!
+  "配置的基础URL"
+  baseURL: String!
 }

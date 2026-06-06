@@ -1,0 +1,6 @@
+extend type Subscription {
+  """
+  当设备被创建、批准配对或有登录更新时触发
+  """
+  deviceSaved: Device!
+}

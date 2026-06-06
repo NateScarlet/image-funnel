@@ -1,0 +1,50 @@
+mutation BeginWebAuthnRegistration($input: BeginWebAuthnRegistrationInput!) {
+  beginWebAuthnRegistration(input: $input) {
+    options
+    sessionKey
+  }
+}
+
+mutation FinishWebAuthnRegistration($input: FinishWebAuthnRegistrationInput!) {
+  finishWebAuthnRegistration(input: $input) {
+    accessToken
+    accessTokenExpiresIn
+    refreshToken
+    refreshTokenExpiresIn
+    device {
+      id
+    }
+    pairingRequest {
+      code
+      createdAt
+    }
+  }
+}
+
+mutation BeginWebAuthnLogin($input: BeginWebAuthnLoginInput!) {
+  beginWebAuthnLogin(input: $input) {
+    options
+    sessionKey
+  }
+}
+
+mutation FinishWebAuthnLogin($input: FinishWebAuthnLoginInput!) {
+  finishWebAuthnLogin(input: $input) {
+    accessToken
+    accessTokenExpiresIn
+    refreshToken
+    refreshTokenExpiresIn
+    device {
+      id
+    }
+  }
+}
+
+mutation RefreshToken($input: RefreshTokenInput!) {
+  refreshToken(input: $input) {
+    accessToken
+    accessTokenExpiresIn
+    refreshToken
+    refreshTokenExpiresIn
+  }
+}

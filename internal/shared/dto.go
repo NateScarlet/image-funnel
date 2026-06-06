@@ -154,3 +154,19 @@ type PageInfoDTO struct {
 	EndCursor       string
 }
 
+// PairingRequestDTO 配对请求数据传输对象
+type PairingRequestDTO struct {
+	Code      string
+	CreatedAt time.Time
+	Status    PairingRequestStatus
+}
+
+// DeviceDTO 设备数据传输对象
+type DeviceDTO struct {
+	ID          scalar.ID
+	Name        string
+	CreatedAt   time.Time
+	LastLoginAt time.Time
+	LastLoginIP string
+	UserAgent   string
+}

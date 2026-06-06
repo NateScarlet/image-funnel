@@ -1,4 +1,4 @@
-import { ApolloClient, ApolloLink } from "@apollo/client/core";
+import { ApolloClient, ApolloLink, Observable } from "@apollo/client/core";
 import { CombinedGraphQLErrors } from "@apollo/client/errors";
 import { BatchHttpLink } from "@apollo/client/link/batch-http";
 import { ErrorLink } from "@apollo/client/link/error";
@@ -15,6 +15,8 @@ import isAbortError from "@/utils/isAbortError";
 import OperationContext from "./OperationContext";
 export type { OperationContext };
 import WebSocketLink from "./WebsocketLink";
+import { getValidToken } from "./tokenManager";
+export { tokenStore } from "./tokenManager";
 
 function containsUpload(v: unknown): boolean {
   if (v == null) {
@@ -31,6 +33,7 @@ function containsUpload(v: unknown): boolean {
 
 const httpLink = new HttpLink({
   uri: "graphql",
+  credentials: "include",
 });
 
 const batchHttpLink = new BatchHttpLink({
@@ -41,6 +44,7 @@ const batchHttpLink = new BatchHttpLink({
     const ctx = operation.getContext() as OperationContext;
     return ctx.transport || "batch-http";
   },
+  credentials: "include",
 });
 
 const persistedQueryLink = new PersistedQueryLink({
@@ -52,6 +56,15 @@ wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
 const wsLink = new WebSocketLink({
   url: wsUrl.toString(),
+  connectionParams: async () => {
+    const token = await getValidToken();
+    if (token) {
+      return {
+        Authorization: `Bearer ${token}`,
+      };
+    }
+    return {};
+  },
 });
 
 const httpOrBatchLink = ApolloLink.split(
@@ -120,7 +133,13 @@ const errorLink = new ErrorLink(({ error, operation }) => {
       }
 
       graphQLErrors.forEach((i) => {
-        errorOnce(getGraphqlErrorMessage(i));
+        if (i.extensions?.code === "UNAUTHORIZED") {
+          if (window.location.pathname !== "/auth") {
+            window.location.href = `/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+          }
+        } else {
+          errorOnce(getGraphqlErrorMessage(i));
+        }
       });
     }
   }
@@ -148,8 +167,46 @@ const persistentCache = new PersistentCache(
 
 await persistentCache.load();
 
+const authLink = new ApolloLink((operation, forward) => {
+  return new Observable((observer) => {
+    let handle: { unsubscribe: () => void } | undefined;
+    Promise.resolve()
+      .then(async () => {
+        const ctx = operation.getContext() as OperationContext & {
+          anonymous?: boolean;
+        };
+        if (ctx.anonymous) {
+          return;
+        }
+        return getValidToken();
+      })
+      .then((token) => {
+        if (token) {
+          operation.setContext(({ headers = {} }) => ({
+            headers: {
+              ...headers,
+              Authorization: `Bearer ${token}`,
+            },
+          }));
+        }
+        handle = forward(operation).subscribe({
+          next: observer.next.bind(observer),
+          error: observer.error.bind(observer),
+          complete: observer.complete.bind(observer),
+        });
+      })
+      .catch(observer.error.bind(observer));
+
+    return () => {
+      if (handle) {
+        handle.unsubscribe();
+      }
+    };
+  });
+});
+
 export const client = new ApolloClient({
-  link: ApolloLink.from([errorLink, persistedQueryLink, link]),
+  link: ApolloLink.from([errorLink, persistedQueryLink, authLink, link]),
   cache: persistentCache,
   assumeImmutableResults: true,
   defaultOptions: {

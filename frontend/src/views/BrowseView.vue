@@ -4,7 +4,7 @@
   >
     <!-- 顶部导航栏 -->
     <header
-      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-10"
+      class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-10 relative"
     >
       <!-- 大屏布局：一行显示所有内容 -->
       <div class="hidden md:flex max-w-400 mx-auto items-center gap-3">
@@ -167,44 +167,61 @@
             </RouterLink>
           </div>
 
-          <!-- 右侧同级目录导航按钮组 -->
-          <div class="flex items-center gap-1">
-            <RouterLink
-              :to="prevSiblingTo"
-              class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
-              :class="
-                prevSibling
-                  ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
-              "
-              :title="
-                prevSibling
-                  ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
-                  : '没有上一个目录'
-              "
+          <!-- 右侧同级目录导航按钮组与更多操作 -->
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
+              <RouterLink
+                :to="prevSiblingTo"
+                class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
+                :class="
+                  prevSibling
+                    ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                    : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
+                "
+                :title="
+                  prevSibling
+                    ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
+                    : '没有上一个目录'
+                "
+              >
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                  <path :d="mdiChevronLeft" fill="currentColor" />
+                </svg>
+              </RouterLink>
+              <RouterLink
+                :to="nextSiblingTo"
+                class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
+                :class="
+                  nextSibling
+                    ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
+                    : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
+                "
+                :title="
+                  nextSibling
+                    ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
+                    : '没有下一个目录'
+                "
+              >
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                  <path :d="mdiChevronRight" fill="currentColor" />
+                </svg>
+              </RouterLink>
+            </div>
+
+            <!-- 更多操作按钮 -->
+            <button
+              class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center cursor-pointer relative"
+              title="更多操作"
+              @click="moreMenuDialog.open"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24">
-                <path :d="mdiChevronLeft" fill="currentColor" />
+                <path :d="mdiMenu" fill="currentColor" />
               </svg>
-            </RouterLink>
-            <RouterLink
-              :to="nextSiblingTo"
-              class="p-2 rounded-lg border transition-all flex items-center justify-center no-underline"
-              :class="
-                nextSibling
-                  ? 'bg-primary-800 hover:bg-primary-700 border-primary-700 hover:border-primary-600 text-primary-300 hover:text-white'
-                  : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
-              "
-              :title="
-                nextSibling
-                  ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
-                  : '没有下一个目录'
-              "
-            >
-              <svg class="w-5 h-5" viewBox="0 0 24 24">
-                <path :d="mdiChevronRight" fill="currentColor" />
-              </svg>
-            </RouterLink>
+              <span
+                v-if="pairingRequests.length > 0"
+                class="absolute -right-1 -top-1 flex h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse"
+              ></span>
+            </button>
           </div>
         </div>
 
@@ -218,6 +235,10 @@
             :is-current="true"
           />
         </div>
+      </div>
+
+      <div class="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2">
+        <DeviceManagerButton />
       </div>
     </header>
 
@@ -236,6 +257,31 @@
       <!-- 图片网格展示与筛选区 -->
       <ImageGrid :directory-id="currentDirectoryId" />
     </main>
+
+    <moreMenuDialog.component container-class="p-6 sm:max-w-sm">
+      <div class="space-y-3">
+        <!-- 移动端设备管理项 -->
+        <DeviceManagerButton
+          variant="menu-item"
+          @click="moreMenuDialog.close()"
+        />
+
+        <!-- 在资源管理器中打开当前目录 -->
+        <button
+          v-if="fullDirectoryPath"
+          class="w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-colors flex items-center gap-3 text-primary-200 hover:text-white cursor-pointer"
+          @click="
+            revealInExplorer(fullDirectoryPath);
+            moreMenuDialog.close();
+          "
+        >
+          <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+            <path :d="mdiOpenInNew" fill="currentColor" />
+          </svg>
+          <span class="text-left">在资源管理器中打开</span>
+        </button>
+      </div>
+    </moreMenuDialog.component>
   </div>
 </template>
 
@@ -251,6 +297,7 @@ import {
   mdiHistory,
   mdiOpenInNew,
   mdiArrowUp,
+  mdiMenu,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
@@ -260,6 +307,12 @@ import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
 import MemoList from "../components/MemoList.vue";
+import useModalDialog from "@/composables/useModalDialog";
+import DeviceManagerButton from "../components/DeviceManagerButton.vue";
+import { useDevices } from "@/composables/useDevices.ts";
+
+const { pairingRequests } = useDevices();
+const moreMenuDialog = useModalDialog();
 
 // #region 路由参数与导航
 const route = useRoute();

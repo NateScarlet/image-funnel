@@ -6,6 +6,7 @@ import "./main.tailwind.css";
 import HomeView from "./views/HomeView.vue";
 import SessionView from "./views/SessionView.vue";
 import BrowseView from "./views/BrowseView.vue";
+import AuthView from "./views/AuthView.vue";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", component: HomeView },
@@ -19,6 +20,11 @@ const routes: RouteRecordRaw[] = [
     name: "browse",
     path: "/browse",
     component: BrowseView,
+  },
+  {
+    name: "auth",
+    path: "/auth",
+    component: AuthView,
   },
 ];
 

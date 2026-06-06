@@ -1,0 +1,5 @@
+type AuthStatus {
+  isTrustedDevice: Boolean!
+  isTrustedIP: Boolean!
+  canAccess: Boolean!
+}

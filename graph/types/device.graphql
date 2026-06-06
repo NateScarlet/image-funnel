@@ -1,0 +1,26 @@
+type Device @goModel(model: "main/internal/shared.DeviceDTO") {
+  """
+  设备的唯一标识符
+  """
+  id: ID!
+  """
+  基于设备登录时的 User-Agent 生成的有意义的友好名称
+  """
+  name: String!
+  """
+  设备注册时间
+  """
+  createdAt: Time!
+  """
+  最后一次登录时间
+  """
+  lastLoginAt: Time!
+  """
+  最后一次登录的 IP 地址
+  """
+  lastLoginIp: String!
+  """
+  是否是当前正在发起请求的设备
+  """
+  isCurrent: Boolean!
+}

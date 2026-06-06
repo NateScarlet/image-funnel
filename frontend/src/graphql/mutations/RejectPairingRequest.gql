@@ -1,0 +1,3 @@
+mutation RejectPairingRequest($input: RejectPairingRequestInput!) {
+  rejectPairingRequest(input: $input)
+}

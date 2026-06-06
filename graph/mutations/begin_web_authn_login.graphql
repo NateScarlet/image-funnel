@@ -1,0 +1,12 @@
+extend type Mutation {
+  beginWebAuthnLogin(input: BeginWebAuthnLoginInput!): BeginWebAuthnLoginPayload! @public
+}
+
+input BeginWebAuthnLoginInput {
+  dummy: Boolean
+}
+
+type BeginWebAuthnLoginPayload {
+  options: Any!
+  sessionKey: String!
+}

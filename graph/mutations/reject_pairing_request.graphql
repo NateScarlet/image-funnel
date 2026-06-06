@@ -1,0 +1,7 @@
+extend type Mutation {
+  rejectPairingRequest(input: RejectPairingRequestInput!): Boolean!
+}
+
+input RejectPairingRequestInput {
+  code: String!
+}

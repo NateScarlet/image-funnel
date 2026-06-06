@@ -1,0 +1,6 @@
+subscription PairingRequestCreated {
+  pairingRequestCreated {
+    code
+    createdAt
+  }
+}

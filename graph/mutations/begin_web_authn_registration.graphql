@@ -1,0 +1,12 @@
+extend type Mutation {
+  beginWebAuthnRegistration(input: BeginWebAuthnRegistrationInput!): BeginWebAuthnRegistrationPayload! @public
+}
+
+input BeginWebAuthnRegistrationInput {
+  setupToken: String
+}
+
+type BeginWebAuthnRegistrationPayload {
+  options: Any!
+  sessionKey: String!
+}

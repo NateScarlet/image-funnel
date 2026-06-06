@@ -1,11 +1,15 @@
 package http
 
 import (
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
+	appdevice "main/internal/application/device"
 	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
+	"main/internal/tokenrw"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -21,6 +25,8 @@ type Server struct {
 	absRootDir     string
 	frontendDir    string
 	corsHosts      []string
+	trustedIPs     []netip.Prefix
+	trustedProxies []netip.Prefix
 }
 
 func NewServer(
@@ -32,6 +38,8 @@ func NewServer(
 	absRootDir string,
 	frontendDir string,
 	corsHosts []string,
+	trustedIPs []netip.Prefix,
+	trustedProxies []netip.Prefix,
 ) *Server {
 	return &Server{
 		logger:         logger,
@@ -42,6 +50,8 @@ func NewServer(
 		absRootDir:     absRootDir,
 		frontendDir:    frontendDir,
 		corsHosts:      corsHosts,
+		trustedIPs:     trustedIPs,
+		trustedProxies: trustedProxies,
 	}
 }
 
@@ -68,15 +78,73 @@ func (s *Server) Serve(addr string) error {
 			return isOriginAllowed(origin, "", s.corsHosts)
 		},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan", "Token-Transfer"},
 		AllowCredentials: true,
 	}).Handler(r)
+
+	// Real IP middleware
+	next := handler
+	handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		remoteIPStr := req.RemoteAddr
+		if host, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+			remoteIPStr = host
+		}
+
+		remoteIP, err := netip.ParseAddr(remoteIPStr)
+		if err == nil {
+			isTrustedProxy := false
+			for _, prefix := range s.trustedProxies {
+				if prefix.Contains(remoteIP) {
+					isTrustedProxy = true
+					break
+				}
+			}
+
+			if isTrustedProxy {
+				if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+					ips := strings.Split(xff, ",")
+					if len(ips) > 0 {
+						realIP := strings.TrimSpace(ips[0])
+						req.RemoteAddr = realIP
+					}
+				} else if xri := req.Header.Get("X-Real-IP"); xri != "" {
+					req.RemoteAddr = strings.TrimSpace(xri)
+				}
+
+				// Re-parse after overriding
+				if host, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+					remoteIPStr = host
+				} else {
+					remoteIPStr = req.RemoteAddr
+				}
+				remoteIP, err = netip.ParseAddr(remoteIPStr)
+			}
+
+			if err == nil {
+				isTrustedIP := false
+				for _, prefix := range s.trustedIPs {
+					if prefix.Contains(remoteIP) {
+						isTrustedIP = true
+						break
+					}
+				}
+				ctx := req.Context()
+				ctx = appdevice.WithTrustedIP(ctx, isTrustedIP)
+				ctx = appdevice.WithRemoteIP(ctx, remoteIPStr)
+				req = req.WithContext(ctx)
+			}
+		}
+
+		next.ServeHTTP(w, req)
+	})
 
 	s.logger.Info("starting server",
 		zap.String("addr", addr),
 		zap.String("rootDir", s.absRootDir),
 		zap.String("frontendDir", s.frontendDir),
 	)
+
+	handler = tokenrw.TransferMiddleware(handler)
 
 	return http.ListenAndServe(addr, handler)
 }

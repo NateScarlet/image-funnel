@@ -51,17 +51,49 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 
 可以通过环境变量调整应用行为：
 
+#### 基础配置
+
 - `IMAGE_FUNNEL_ROOT_DIR`: 待筛选图片的根目录。
 - `IMAGE_FUNNEL_PORT`: 服务器监听端口 (默认 34898)。
 - `IMAGE_FUNNEL_SECRET_KEY`: 用于签名 URL 的密钥。若不提供，将自动生成（重启后失效，建议生产环境固定）。
+- `IMAGE_FUNNEL_DATA_DIR`: 数据存储目录（设备注册信息、令牌吊销列表等）。默认使用系统用户配置目录下的 `io.github.natescarlet.image-funnel`。
+
+#### 网络与访问控制
+
+- `IMAGE_FUNNEL_BASE_URL`: 应用对外的访问地址，默认 `http://localhost:端口`。用于：
+  1. 首次启动时自动打开浏览器注册设备的 URL。
+  2. 提供给前端，当认证失败时提示用户通过正确的主域名访问。
+  3. 作为 `IMAGE_FUNNEL_WEBAUTHN_RPID` 和 `IMAGE_FUNNEL_WEBAUTHN_RP_ORIGINS` 的默认值推导来源。
+
+- `IMAGE_FUNNEL_TRUSTED_IP`: 受信任的 IP 或 CIDR 网段，多个用逗号分隔。默认仅包含 `127.0.0.0/8` 和 `::1/128`（本机回环地址）。**来自受信任 IP 的请求无需设备认证即可访问所有功能**，设备注册时也会跳过配对流程直接保存为可信设备。如果未配置域名和 HTTPS 但需要从局域网其他设备访问，必须将局域网网段（如 `192.168.1.0/24`）加入此变量，否则会提示未授权。
+
+- `IMAGE_FUNNEL_TRUSTED_PROXY`: 受信任的反向代理地址（CIDR 格式），默认 `127.0.0.0/8,::1/128`。当通过反向代理（如 Nginx）访问时，需将代理的 IP 加入此列表，服务才会从 `X-Forwarded-For` 或 `X-Real-IP` 头中提取真实客户端 IP。否则 `TRUSTED_IP` 检查的是代理的 IP 而非真实客户端 IP。
+
+- `IMAGE_FUNNEL_CORS_HOSTS`: CORS 允许的额外来源，多个用逗号分隔。当反向代理的域名与后端不一致时需要配置。
+
+#### 域名与 HTTPS 部署
+
+当通过反向代理配置域名和 HTTPS 时，需要额外设置以下变量：
+
+- `IMAGE_FUNNEL_WEBAUTHN_RPID`: WebAuthn 依赖方 ID，必须与访问域名一致（不含端口）。默认从 `IMAGE_FUNNEL_BASE_URL` 的主机名推导。
+
+- `IMAGE_FUNNEL_WEBAUTHN_RP_ORIGINS`: WebAuthn 允许的源，多个用逗号分隔。默认与 `IMAGE_FUNNEL_BASE_URL` 一致。若需同时支持多个域名或 IP 访问，需列出所有源。
+
+- `IMAGE_FUNNEL_TRUSTED_PROXY`: 需包含反向代理的 IP 地址，否则客户端 IP 无法正确识别，导致 `TRUSTED_IP` 检查失效。
+
+#### 性能与调优
+
+- `IMAGE_FUNNEL_MAGICK_CONCURRENCY`: ImageMagick 并发处理线程数（默认 4）。
+- `IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE`: 是否启用目录统计缓存（默认 `true`）。
+- `IMAGE_FUNNEL_IDLE_THRESHOLD`: 在用户操作后阻止系统休眠的时长（默认 `5m`）。
 
 ## 使用指南
 
 1. 打开应用（浏览器访问 `http://localhost:34898`）
 2. 选择根目录下包含图片的目录
 3. 开始筛选：
-   - **保留 (Keep)**: 选中 5 星
-   - **搁置 (Shelve)**: 对应 "稍后再看"，3 星，不参与当前会话后续统计，直至提交
+   - **保留 (Keep)**: 选中
+   - **搁置 (Shelve)**: 对应 "稍后再看"，不参与当前会话后续统计，直至提交
    - **排除 (Reject)**: 标记为 "排除"
 4. 完成会话：
    - 点击右上角提交按钮

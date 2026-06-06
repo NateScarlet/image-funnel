@@ -1,0 +1,7 @@
+subscription PairingRequestUpdated($code: String!) {
+  pairingRequestUpdated(code: $code) {
+    code
+    createdAt
+    status
+  }
+}
