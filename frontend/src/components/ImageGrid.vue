@@ -255,10 +255,10 @@
                   filled
                 />
 
-                <!-- 颜色标签 -->
+                <!-- 颜色标签：使用白色边框 + 黑色描边 ring 增强对比度，以防与图片背景颜色融为一体 -->
                 <span
                   v-if="img.label"
-                  class="w-3 h-3 rounded-full shadow-md border border-white/20 ml-auto"
+                  class="w-3 h-3 rounded-full shadow-md border border-white ml-auto ring-1 ring-black/30"
                   :style="{
                     backgroundColor: PRESET_COLORS[img.label] || '#94a3b8',
                   }"
