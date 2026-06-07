@@ -15,8 +15,8 @@ import isAbortError from "@/utils/isAbortError";
 import OperationContext from "./OperationContext";
 export type { OperationContext };
 import WebSocketLink from "./WebsocketLink";
-import { getValidToken } from "./tokenManager";
-export { tokenStore } from "./tokenManager";
+import { getValidToken, refreshToken, tokenStore } from "./tokenManager";
+export { tokenStore };
 
 function containsUpload(v: unknown): boolean {
   if (v == null) {
@@ -93,7 +93,7 @@ const link = ApolloLink.split(
   httpOrBatchLink,
 );
 
-const errorLink = new ErrorLink(({ error, operation }) => {
+const errorLink = new ErrorLink(({ error, operation, forward }) => {
   const knownMessages = new Set();
   const errorOnce = (msg: string) => {
     if (knownMessages.has(msg)) {
@@ -104,7 +104,10 @@ const errorLink = new ErrorLink(({ error, operation }) => {
     knownMessages.add(msg);
   };
 
-  const context = operation.getContext() as OperationContext;
+  const context = operation.getContext() as OperationContext & {
+    tokenRefreshed?: boolean;
+    anonymous?: boolean;
+  };
   const suppressError = context.suppressError;
 
   let graphQLErrors: readonly GraphQLFormattedError[] | undefined;
@@ -117,6 +120,50 @@ const errorLink = new ErrorLink(({ error, operation }) => {
   }
 
   if (graphQLErrors) {
+    const hasAuthError = graphQLErrors.some(
+      (i) =>
+        i.extensions?.code === "UNAUTHORIZED" ||
+        i.extensions?.code === "INVALID_TOKEN",
+    );
+
+    if (hasAuthError && !context.anonymous && !context.tokenRefreshed) {
+      operation.setContext({ tokenRefreshed: true });
+      return new Observable((observer) => {
+        let handle: { unsubscribe: () => void } | undefined;
+        refreshToken()
+          .then(() => {
+            const token = tokenStore.value?.accessToken;
+            if (token) {
+              operation.setContext(({ headers = {} }) => ({
+                headers: {
+                  ...headers,
+                  Authorization: `Bearer ${token}`,
+                },
+              }));
+            }
+            handle = forward(operation).subscribe({
+              next: observer.next.bind(observer),
+              error: observer.error.bind(observer),
+              complete: observer.complete.bind(observer),
+            });
+          })
+          .catch((err) => {
+            if (window.location.pathname !== "/auth") {
+              window.location.href = `/auth?redirect=${encodeURIComponent(
+                window.location.pathname + window.location.search,
+              )}`;
+            }
+            observer.error(err);
+          });
+
+        return () => {
+          if (handle) {
+            handle.unsubscribe();
+          }
+        };
+      });
+    }
+
     let shouldSuppress = false;
     if (typeof suppressError === "function") {
       shouldSuppress = suppressError({ graphQLErrors });
@@ -133,7 +180,8 @@ const errorLink = new ErrorLink(({ error, operation }) => {
       }
 
       graphQLErrors.forEach((i) => {
-        if (i.extensions?.code === "UNAUTHORIZED") {
+        const code = i.extensions?.code;
+        if (code === "UNAUTHORIZED" || code === "INVALID_TOKEN") {
           if (window.location.pathname !== "/auth") {
             window.location.href = `/auth?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
           }

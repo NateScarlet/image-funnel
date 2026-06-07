@@ -2,7 +2,10 @@ package device
 
 import (
 	"context"
+	"errors"
 	"iter"
+	"net/http"
+	"strings"
 	"time"
 
 	"main/internal/apperror"
@@ -60,11 +63,40 @@ func (h *Handler) GenerateToken(ctx context.Context, deviceID scalar.ID) (access
 	return accessTokenRef, refreshTokenRef, accessToken.Expire(), refreshToken.Expire(), nil
 }
 
-// ValidateToken 解析访问令牌，仅验证签名和有效期，不检查设备状态以降低性能开销
+// formatTokenReadError 将读取令牌时发生的底层错误（如 Cookie 缺失、Cookie 无法读取等）包装为前端可识别的无效令牌错误
+func (h *Handler) formatTokenReadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, http.ErrNoCookie) {
+		return apperror.New(
+			"INVALID_TOKEN",
+			"token cookie not present or expired",
+			"令牌已失效或过期",
+		)
+	}
+	if errors.Is(err, tokenrw.ErrCookiesUnavailable) {
+		return apperror.New(
+			"INVALID_TOKEN",
+			"cookies unavailable",
+			"无法读取 Cookie 令牌",
+		)
+	}
+	if strings.HasPrefix(err.Error(), "tokenrw:") {
+		return apperror.New(
+			"INVALID_TOKEN",
+			err.Error(),
+			"令牌读取失败",
+		)
+	}
+	return err
+}
+
+// ValidateToken 解析访问令牌，仅验证签名 and 有效期，不检查设备状态以降低性能开销
 func (h *Handler) ValidateToken(ctx context.Context, tokenStr string) (scalar.ID, error) {
 	rawToken, forget, err := tokenrw.Read(ctx, tokenStr)
 	if err != nil {
-		return scalar.ID{}, err
+		return scalar.ID{}, h.formatTokenReadError(err)
 	}
 
 	t, err := h.tokenSource.VerifyAccessToken(ctx, rawToken)
@@ -193,7 +225,7 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 	}
 	rawToken, forget, err := tokenrw.Read(ctx, tokenStr)
 	if err != nil {
-		return "", "", time.Time{}, time.Time{}, err
+		return "", "", time.Time{}, time.Time{}, h.formatTokenReadError(err)
 	}
 
 	// 吊销当前刷新令牌，防止重放攻击

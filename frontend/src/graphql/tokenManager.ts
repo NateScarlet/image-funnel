@@ -34,7 +34,7 @@ export async function getValidToken(): Promise<string | undefined> {
   return tokenStore.value.accessToken;
 }
 
-async function refreshToken() {
+export async function refreshToken() {
   const refreshToken = tokenStore.value?.refreshToken;
   if (!refreshToken) return;
 
