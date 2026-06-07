@@ -27,6 +27,7 @@ type Handler struct {
 	eventBus           EventBus
 	imgRepo            image.Repository
 	imgMover           image.Mover
+	imgTrasher         image.Trasher
 	dirSvc             *directory.Service
 	dtoFactory         *DTOFactory
 	imageFilterBuilder *image.FilterBuilder
@@ -40,6 +41,7 @@ func NewHandler(
 	eventBus EventBus,
 	imgRepo image.Repository,
 	imgMover image.Mover,
+	imgTrasher image.Trasher,
 	dirSvc *directory.Service,
 	dtoFactory *DTOFactory,
 	imageFilterBuilder *image.FilterBuilder,
@@ -52,6 +54,7 @@ func NewHandler(
 		eventBus:           eventBus,
 		imgRepo:            imgRepo,
 		imgMover:           imgMover,
+		imgTrasher:         imgTrasher,
 		dirSvc:             dirSvc,
 		dtoFactory:         dtoFactory,
 		imageFilterBuilder: imageFilterBuilder,
@@ -392,4 +395,175 @@ func (h *Handler) MoveImages(
 	)
 
 	return movedCount, targetAbsDir, nil
+}
+
+// TrashImages 将符合条件的图片移至隐藏的暂存垃圾箱内，并返回生成的历史ID与文件数
+func (h *Handler) TrashImages(
+	ctx context.Context,
+	directoryID scalar.ID,
+	filterBy shared.ImageFilters,
+) (historyId string, totalFileCount int, err error) {
+	startTime := time.Now()
+
+	dirInfo, err := h.dirSvc.GetDirectory(ctx, directoryID)
+	if err != nil {
+		return "", 0, err
+	}
+	relPath := dirInfo.RelPath()
+
+	h.logger.Info("will trash images",
+		zap.Stringer("directoryID", directoryID),
+		zap.String("fromDirectory", relPath),
+	)
+
+	historyId, totalFileCount, err = h.imgTrasher.Trash(ctx, relPath, filterBy)
+	if err != nil {
+		h.logger.Error("trash images failed",
+			zap.Stringer("directoryID", directoryID),
+			zap.String("fromDirectory", relPath),
+			zap.Duration("duration", time.Since(startTime)),
+			zap.Error(err),
+		)
+		return "", 0, err
+	}
+
+	h.logger.Info("did trash images",
+		zap.Stringer("directoryID", directoryID),
+		zap.String("fromDirectory", relPath),
+		zap.String("historyId", historyId),
+		zap.Int("totalFileCount", totalFileCount),
+		zap.Duration("duration", time.Since(startTime)),
+	)
+
+	return historyId, totalFileCount, nil
+}
+
+// UndoTrash 撤销指定的暂存垃圾箱移动操作，还原文件
+func (h *Handler) UndoTrash(
+	ctx context.Context,
+	historyId string,
+) (restoredCount int, err error) {
+	startTime := time.Now()
+
+	h.logger.Info("will undo trash", zap.String("historyId", historyId))
+
+	restoredCount, err = h.imgTrasher.UndoTrash(ctx, historyId)
+	if err != nil {
+		h.logger.Error("undo trash failed",
+			zap.String("historyId", historyId),
+			zap.Duration("duration", time.Since(startTime)),
+			zap.Error(err),
+		)
+		return 0, err
+	}
+
+	h.logger.Info("did undo trash",
+		zap.String("historyId", historyId),
+		zap.Int("restoredCount", restoredCount),
+		zap.Duration("duration", time.Since(startTime)),
+	)
+
+	return restoredCount, nil
+}
+
+// EmptyTrash 手动清空早于指定保留期限的暂存记录，移入系统回收站
+func (h *Handler) EmptyTrash(
+	ctx context.Context,
+	minAge scalar.Duration,
+) (clearedCount int, err error) {
+	startTime := time.Now()
+
+	stdDuration, err := minAge.Standard()
+	if err != nil {
+		return 0, err
+	}
+
+	h.logger.Info("will empty trash", zap.Duration("minAge", stdDuration))
+
+	clearedCount, err = h.imgTrasher.EmptyTrash(ctx, stdDuration)
+	if err != nil {
+		h.logger.Error("empty trash failed",
+			zap.Duration("minAge", stdDuration),
+			zap.Duration("duration", time.Since(startTime)),
+			zap.Error(err),
+		)
+		return 0, err
+	}
+
+	h.logger.Info("did empty trash",
+		zap.Duration("minAge", stdDuration),
+		zap.Int("clearedCount", clearedCount),
+		zap.Duration("duration", time.Since(startTime)),
+	)
+
+	return clearedCount, nil
+}
+
+// TrashHistory 获取垃圾暂存历史记录，支持游标分页
+func (h *Handler) TrashHistory(
+	ctx context.Context,
+	first *int,
+	after *string,
+) (connection *shared.TrashHistoryConnectionDTO, err error) {
+	if first == nil {
+		defaultFirst := 100
+		first = &defaultFirst
+	}
+
+	builder := pagination.NewConnectionBufferBuilder[*shared.TrashHistoryItemDTO, *shared.TrashHistoryEdgeDTO, *shared.TrashHistoryConnectionDTO]()
+	buf := builder(
+		func(item *shared.TrashHistoryItemDTO, cursor string) (*shared.TrashHistoryEdgeDTO, error) {
+			return &shared.TrashHistoryEdgeDTO{
+				Node:   item,
+				Cursor: cursor,
+			}, nil
+		},
+		func(edges []*shared.TrashHistoryEdgeDTO, pageInfo pagination.PageInfo) (*shared.TrashHistoryConnectionDTO, error) {
+			var nodes = make([]*shared.TrashHistoryItemDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			var startCursor, endCursor string
+			if pageInfo.StartCursor != nil {
+				startCursor = *pageInfo.StartCursor
+			}
+			if pageInfo.EndCursor != nil {
+				endCursor = *pageInfo.EndCursor
+			}
+			return &shared.TrashHistoryConnectionDTO{
+				Edges: edges,
+				Nodes: nodes,
+				PageInfo: &shared.PageInfoDTO{
+					HasNextPage:     pageInfo.HasNextPage,
+					HasPreviousPage: pageInfo.HasPreviousPage,
+					StartCursor:     startCursor,
+					EndCursor:       endCursor,
+				},
+			}, nil
+		},
+	)
+
+	options := pagination.OptionFromInput(after, nil, first, nil)
+
+	filteredSeq := func(yield func(*shared.TrashHistoryItemDTO, error) bool) {
+		historySeq := h.imgTrasher.FindTrashHistory(ctx)
+		for item, err := range historySeq {
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			if !yield(item, nil) {
+				return
+			}
+		}
+	}
+
+	err = pagination.ByIndexE(filteredSeq, buf, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Value()
 }

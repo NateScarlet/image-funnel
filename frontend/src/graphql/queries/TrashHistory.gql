@@ -1,0 +1,37 @@
+query TrashHistory($first: Int, $after: String) {
+  trashHistory(first: $first, after: $after) {
+    edges {
+      node {
+        id
+        totalFileCount
+        totalFileSize
+        trashedAt
+        imageCount
+        associatedFileCount
+        coverImage {
+          id
+          url(width: 256)
+        }
+      }
+      cursor
+    }
+    nodes {
+      id
+      totalFileCount
+      totalFileSize
+      trashedAt
+      imageCount
+      associatedFileCount
+      coverImage {
+        id
+        url(width: 256)
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+  }
+}

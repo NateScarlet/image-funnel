@@ -1,0 +1,20 @@
+mutation TrashImages($input: TrashImagesInput!) {
+  trashImages(input: $input) {
+    historyId
+    movedCount
+  }
+}
+
+mutation UndoTrash($input: UndoTrashInput!) {
+  undoTrash(input: $input) {
+    success
+    restoredCount
+  }
+}
+
+mutation EmptyTrash($minAge: Duration!) {
+  emptyTrash(minAge: $minAge) {
+    success
+    clearedCount
+  }
+}

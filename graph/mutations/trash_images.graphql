@@ -1,0 +1,75 @@
+"暂存垃圾箱历史记录"
+type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
+  id: ID!
+  "移入垃圾箱的文件总数（包括图片与伴随文件）"
+  totalFileCount: Int!
+  "占用空间大小（字节数）"
+  totalFileSize: Int!
+  "移入的时间"
+  trashedAt: Time!
+  "包含的图片文件数"
+  imageCount: Int!
+  "配套伴随文件数（totalFileCount - imageCount）"
+  associatedFileCount: Int!
+  "最新一张图片的封面"
+  coverImage: Image
+}
+
+type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
+  node: TrashHistoryItem!
+  cursor: String!
+}
+
+type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryConnectionDTO") {
+  edges: [TrashHistoryEdge!]!
+  nodes: [TrashHistoryItem!]!
+  pageInfo: PageInfo!
+}
+
+"将符合条件的图片及其配套文件移到暂存垃圾箱"
+input TrashImagesInput {
+  directoryId: ID!
+  filterBy: ImageFiltersInput!
+  clientMutationId: String
+}
+
+type TrashImagesPayload {
+  historyId: ID!
+  movedCount: Int!
+  clientMutationId: String
+}
+
+"撤销暂存垃圾箱的删除操作，将文件移回原处"
+input UndoTrashInput {
+  historyId: ID!
+  clientMutationId: String
+}
+
+type UndoTrashPayload {
+  success: Boolean!
+  restoredCount: Int!
+  clientMutationId: String
+}
+
+"手动清空暂存垃圾箱，将所有暂存文件移到系统回收站"
+type EmptyTrashPayload {
+  success: Boolean!
+  "此次被真正清理进系统回收站的历史数量"
+  clearedCount: Int!
+  clientMutationId: String
+}
+
+extend type Query {
+  "获取垃圾暂存历史记录，支持基于 Relay 规范的分页"
+  trashHistory(
+    first: Int
+    after: String
+  ): TrashHistoryConnection!
+}
+
+extend type Mutation {
+  trashImages(input: TrashImagesInput!): TrashImagesPayload!
+  undoTrash(input: UndoTrashInput!): UndoTrashPayload!
+  "清空垃圾暂存箱中早于指定存留期 (Duration) 的历史记录"
+  emptyTrash(minAge: Duration!): EmptyTrashPayload!
+}

@@ -237,7 +237,10 @@
         </div>
       </div>
 
-      <div class="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2">
+      <div
+        class="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 items-center gap-3"
+      >
+        <TrashHistoryButton />
         <DeviceManagerButton />
       </div>
     </header>
@@ -309,6 +312,7 @@ import ImageGrid from "../components/ImageGrid.vue";
 import MemoList from "../components/MemoList.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
+import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
 
 const { pairingRequests } = useDevices();

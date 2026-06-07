@@ -170,3 +170,28 @@ type DeviceDTO struct {
 	LastLoginIP string
 	UserAgent   string
 }
+
+// TrashHistoryItemDTO 垃圾箱历史记录数据传输对象
+type TrashHistoryItemDTO struct {
+	ID                  scalar.ID
+	TotalFileCount      int
+	TotalFileSize       int64
+	TrashedAt           time.Time
+	ImageCount          int
+	AssociatedFileCount int
+	CoverImageAbsPath   string
+}
+
+// TrashHistoryConnectionDTO 垃圾箱历史连接数据传输对象
+type TrashHistoryConnectionDTO struct {
+	Edges    []*TrashHistoryEdgeDTO
+	Nodes    []*TrashHistoryItemDTO
+	PageInfo *PageInfoDTO
+}
+
+// TrashHistoryEdgeDTO 垃圾箱历史边数据传输对象
+type TrashHistoryEdgeDTO struct {
+	Node   *TrashHistoryItemDTO
+	Cursor string
+}
+

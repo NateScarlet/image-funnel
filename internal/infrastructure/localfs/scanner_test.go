@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -198,4 +199,101 @@ func TestImageRepository_AbsolutePaths(t *testing.T) {
 	}
 	require.Error(t, findErr)
 	assert.Contains(t, findErr.Error(), "absolute path not allowed")
+}
+
+func TestTrashAndUndo(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// 创建源子目录
+	srcDir := "source-dir"
+	err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+	require.NoError(t, err)
+
+	// 写入测试图片与伴随文件
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1"), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.txt"), []byte("prompt1"), 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img2.jpg"), []byte("img2"), 0644)
+	require.NoError(t, err)
+
+	filter := shared.ImageFilters{
+		Rating: []int{0},
+	}
+
+	// 1. 测试 Trash 暂存
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	require.NoError(t, err)
+	assert.NotEmpty(t, historyId)
+	assert.Equal(t, 3, fileCount) // img1.jpg, img1.txt, img2.jpg
+
+	// 验证原路径不存在这些文件了
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.txt"))
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+
+	// 验证暂存区有这些文件
+	trashDir := filepath.Join(ctx.rootDir, trashDirName, historyId)
+	assert.FileExists(t, filepath.Join(trashDir, "meta.json"))
+	assert.FileExists(t, filepath.Join(trashDir, "files", "img1.jpg"))
+	assert.FileExists(t, filepath.Join(trashDir, "files", "img1.txt"))
+	assert.FileExists(t, filepath.Join(trashDir, "files", "img2.jpg"))
+
+	// 2. 测试 FindTrashHistory
+	var historyList []*shared.TrashHistoryItemDTO
+	for h, err := range ctx.imageMover.FindTrashHistory(context.Background()) {
+		require.NoError(t, err)
+		historyList = append(historyList, h)
+	}
+	require.Len(t, historyList, 1)
+	assert.Equal(t, historyId, historyList[0].ID.String())
+	assert.Equal(t, 3, historyList[0].TotalFileCount)
+	assert.True(t, historyList[0].TotalFileSize > 0)
+
+	// 3. 测试 UndoTrash 还原
+	restored, err := ctx.imageMover.UndoTrash(context.Background(), historyId)
+	require.NoError(t, err)
+	assert.Equal(t, 3, restored)
+
+	// 验证原路径重新出现了文件
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.txt"))
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+
+	// 验证暂存区已被删除
+	assert.NoFileExists(t, trashDir)
+}
+
+func TestEmptyTrash(t *testing.T) {
+	ctx := newTestContext(t)
+
+	srcDir := "source-dir"
+	err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1"), 0644)
+	require.NoError(t, err)
+
+	filter := shared.ImageFilters{
+		Rating: []int{0},
+	}
+
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	require.NoError(t, err)
+	assert.Equal(t, 1, fileCount)
+
+	// 1. 测试 EmptyTrash，设置保留期为 10 分钟，此时刚删的文件不应该被清理
+	cleared, err := ctx.imageMover.EmptyTrash(context.Background(), 10*time.Minute)
+	require.NoError(t, err)
+	assert.Equal(t, 0, cleared)
+	assert.FileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId, "meta.json"))
+
+	// 2. 测试 EmptyTrash，设置保留期为 0 秒（或负值，强制清空）
+	cleared, err = ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleared)
+
+	// 验证暂存区已清空
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId))
 }

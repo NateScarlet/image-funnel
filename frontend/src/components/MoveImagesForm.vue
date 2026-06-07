@@ -48,11 +48,32 @@
         <input
           v-model="targetDirInput"
           type="text"
-          placeholder="例如：selected 或 ../sibling-dir"
-          class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-800 px-4 py-2 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all"
-          :disabled="moving"
+          :placeholder="
+            toTrash
+              ? '已选择移动到暂存垃圾箱'
+              : '例如：selected 或 ../sibling-dir'
+          "
+          class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-800 px-4 py-2 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          :disabled="moving || toTrash"
           @keyup.enter="handleMoveImages"
         />
+      </div>
+
+      <!-- 移至系统回收站选项 -->
+      <div class="flex items-center gap-2 select-none py-1">
+        <input
+          id="toTrash"
+          v-model="toTrash"
+          type="checkbox"
+          class="w-4 h-4 rounded border-primary-700 bg-primary-800 text-secondary-500 focus:ring-secondary-500/30 cursor-pointer"
+          :disabled="moving"
+        />
+        <label
+          for="toTrash"
+          class="text-xs text-primary-200 cursor-pointer select-none"
+        >
+          移至暂存垃圾箱 (支持撤销，可在回收站历史中随时清空)
+        </label>
       </div>
 
       <!-- 错误信息提示 -->
@@ -77,7 +98,7 @@
       <button
         class="rounded-xl bg-secondary-600 hover:bg-secondary-700 px-5 py-2 text-xs text-white transition-colors disabled:cursor-not-allowed disabled:bg-primary-700 flex items-center gap-2 cursor-pointer font-semibold"
         type="button"
-        :disabled="moving || !targetDirInput.trim()"
+        :disabled="moving || (!toTrash && !targetDirInput.trim())"
         @click="handleMoveImages"
       >
         <svg
@@ -106,10 +127,12 @@ import { mdiFolderMove, mdiClose, mdiLoading } from "@mdi/js";
 import mutate from "@/graphql/utils/mutate";
 import {
   MoveImagesDocument,
+  TrashImagesDocument,
   type ImageFiltersInput,
 } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
+import useTrashHistory from "@/composables/useTrashHistory";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -124,56 +147,92 @@ const emit = defineEmits<(e: "close") => void>();
 
 // #region 内部状态管理
 const targetDirInput = ref("");
+const toTrash = ref(false);
 const moving = ref(false);
 const moveError = ref("");
 
 const { show: showNotification } = useNotification();
 const { revealInExplorer } = useOpenDir();
+const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
 // #endregion
 
 // #region 执行移动图片操作
 async function handleMoveImages() {
   const dirName = targetDirInput.value.trim();
-  if (!dirName || moving.value) return;
+  if (!toTrash.value && !dirName) return;
+  if (moving.value) return;
 
   moving.value = true;
   moveError.value = "";
 
   try {
-    const result = await mutate(MoveImagesDocument, {
-      variables: {
-        input: {
-          directoryId: props.directoryId,
-          filterBy: props.filterBy,
-          toDirectoryRelPath: dirName,
+    if (toTrash.value) {
+      const result = await mutate(TrashImagesDocument, {
+        variables: {
+          input: {
+            directoryId: props.directoryId,
+            filterBy: props.filterBy,
+          },
         },
-      },
-    });
+      });
 
-    const movedCount = result.data?.moveImages.movedCount ?? 0;
-    const targetAbsoluteDirectory =
-      result.data?.moveImages.targetAbsoluteDirectory;
+      const movedCount = result.data?.trashImages.movedCount ?? 0;
+      const historyId = result.data?.trashImages.historyId;
 
-    emit("close");
+      emit("close");
+      void refreshTrashHistory();
 
-    // 弹出成功通知，带有触发用户手势的打开资源管理器按钮
-    showNotification(
-      `成功移动了 ${movedCount} 张图片及其配套文件`,
-      "success",
-      8000,
-      targetAbsoluteDirectory
-        ? {
-            text: "在资源管理器中打开",
-            onClick: (closeNotification) => {
-              revealInExplorer(targetAbsoluteDirectory);
-              closeNotification();
-            },
-          }
-        : undefined,
-    );
+      // 弹出成功通知，带有撤销按钮
+      showNotification(
+        `成功将 ${movedCount} 张图片及其配套文件移到暂存区`,
+        "success",
+        10000,
+        historyId
+          ? {
+              text: "撤销",
+              onClick: (closeNotification) => {
+                undoTrash(historyId);
+                closeNotification();
+              },
+            }
+          : undefined,
+      );
+    } else {
+      const result = await mutate(MoveImagesDocument, {
+        variables: {
+          input: {
+            directoryId: props.directoryId,
+            filterBy: props.filterBy,
+            toDirectoryRelPath: dirName,
+          },
+        },
+      });
+
+      const movedCount = result.data?.moveImages.movedCount ?? 0;
+      const targetAbsoluteDirectory =
+        result.data?.moveImages.targetAbsoluteDirectory;
+
+      emit("close");
+
+      // 弹出成功通知，带有触发用户手势的打开资源管理器按钮
+      showNotification(
+        `成功移动了 ${movedCount} 张图片及其配套文件`,
+        "success",
+        8000,
+        targetAbsoluteDirectory
+          ? {
+              text: "在资源管理器中打开",
+              onClick: (closeNotification) => {
+                revealInExplorer(targetAbsoluteDirectory);
+                closeNotification();
+              },
+            }
+          : undefined,
+      );
+    }
   } catch (err: unknown) {
     moveError.value =
-      err instanceof Error ? err.message : "移动图片失败，请检查路径或权限";
+      err instanceof Error ? err.message : "操作失败，请检查路径或文件冲突";
   } finally {
     moving.value = false;
   }

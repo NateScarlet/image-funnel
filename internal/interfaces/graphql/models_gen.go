@@ -93,6 +93,14 @@ type DeletedImage struct {
 	ID scalar.ID `json:"id"`
 }
 
+// 手动清空暂存垃圾箱，将所有暂存文件移到系统回收站
+type EmptyTrashPayload struct {
+	Success bool `json:"success"`
+	// 此次被真正清理进系统回收站的历史数量
+	ClearedCount     int     `json:"clearedCount"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 type FinishWebAuthnLoginInput struct {
 	SessionKey string `json:"sessionKey"`
 	Response   string `json:"response"`
@@ -219,6 +227,19 @@ type RejectPairingRequestInput struct {
 type Subscription struct {
 }
 
+// 将符合条件的图片及其配套文件移到暂存垃圾箱
+type TrashImagesInput struct {
+	DirectoryID      scalar.ID            `json:"directoryId"`
+	FilterBy         *shared.ImageFilters `json:"filterBy"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
+}
+
+type TrashImagesPayload struct {
+	HistoryID        scalar.ID `json:"historyId"`
+	MovedCount       int       `json:"movedCount"`
+	ClientMutationID *string   `json:"clientMutationId,omitempty"`
+}
+
 // 撤销上一次标记操作，支持跨轮撤销
 type UndoInput struct {
 	// 会话ID
@@ -230,6 +251,18 @@ type UndoPayload struct {
 	// 撤销后的会话对象，无操作可撤销时返回null
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
+}
+
+// 撤销暂存垃圾箱的删除操作，将文件移回原处
+type UndoTrashInput struct {
+	HistoryID        scalar.ID `json:"historyId"`
+	ClientMutationID *string   `json:"clientMutationId,omitempty"`
+}
+
+type UndoTrashPayload struct {
+	Success          bool    `json:"success"`
+	RestoredCount    int     `json:"restoredCount"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type UpdateImageMetadataInput struct {

@@ -184,7 +184,7 @@ func main() {
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, cfg.AbsRootDir), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory)
+	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {
