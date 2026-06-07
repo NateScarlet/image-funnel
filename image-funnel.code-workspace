@@ -23,6 +23,7 @@
         "output": "${workspaceFolder}/main_debug.exe",
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
+          "IMAGE_FUNNEL_DATA_DIR": "${workspaceFolder}/config.local",
           "IMAGE_FUNNEL_BASE_URL": "http://localhost:8080",
           "IMAGE_FUNNEL_PORT": "8000",
           "IMAGE_FUNNEL_SECRET_KEY": "insecure_development_key_919fdbdadd3d",
