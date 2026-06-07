@@ -27,17 +27,13 @@ const init = once(() => {
   // 查询当前登录认证状态
   const { data: authData, refresh: refreshAuthStatus } = useQuery(
     AuthStatusDocument,
-    {
-      fetchPolicy: "cache-and-network",
-    },
+    { fetchPolicy: "network-only" },
   );
 
   // 查询所有已连接/配对的设备列表
   const { data: devicesData, refresh: refreshDevices } = useQuery(
     DevicesDocument,
-    {
-      fetchPolicy: "cache-and-network",
-    },
+    { fetchPolicy: "network-only" },
   );
 
   // 当前客户端是否为受信任设备
