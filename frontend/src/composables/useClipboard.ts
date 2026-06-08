@@ -16,7 +16,7 @@ const { model: lastUnsupportedServerStartTime } = useStorage<
 >(localStorage, "last_unsupported_start_time_u2h8a9", () => undefined);
 
 export function useClipboard() {
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
 
   // 将文本（和可选的 HTML）写入剪贴板
@@ -42,6 +42,48 @@ export function useClipboard() {
     }
   }
 
+  // 处理单张图片的复制操作（优先尝试只复制 ComfyUI 工作流，如果不存在或失败再复制文件）
+  async function copyWorkflowOrFile(filePath: string, imageId: string) {
+    if (!filePath || !imageId) return;
+
+    let workflow: string | null | undefined = undefined;
+    try {
+      // 优先获取图片的 ComfyUI 工作流数据
+      const result = await query(ComfyUiWorkflowDocument, {
+        variables: { id: imageId },
+        fetchPolicy: "cache-first",
+      });
+      workflow = result.data?.comfyUIWorkflow;
+    } catch (err) {
+      console.error("获取工作流数据失败", err);
+    }
+
+    if (workflow) {
+      const ok = await writeToClipboard(workflow);
+      if (ok) {
+        showSuccess("已复制 ComfyUI 工作流数据!");
+        return;
+      }
+    }
+
+    // 无法获取或复制工作流时，降级为复制图片文件
+    if (isServerKnownUnsupported()) {
+      await writeToClipboard(filePath);
+      showSuccess("已复制图片路径!");
+      return;
+    }
+
+    // 尝试增强剪贴板文件复制
+    const supported = await tryAttachFiles([filePath]);
+    if (supported) {
+      showSuccess("已复制图片文件!");
+    } else {
+      // 增强复制失败时，降级复制为绝对路径文本
+      await writeToClipboard(filePath);
+      showSuccess("已复制图片路径!");
+    }
+  }
+
   // 判断当前连接的服务器是否已知不支持剪贴板增强
   function isServerKnownUnsupported(): boolean {
     const serverStartTime = metaData.value?.meta?.serverStartTime;
@@ -59,15 +101,11 @@ export function useClipboard() {
   }
 
   // 尝试向服务器申请文件增强，返回是否附加成功
-  async function tryAttachFiles(
-    filePaths: string[],
-    customText?: string,
-  ): Promise<boolean> {
+  async function tryAttachFiles(filePaths: string[]): Promise<boolean> {
     if (filePaths.length === 0) return false;
 
     const nonce = randomUUID();
-    const textToCopy =
-      customText !== undefined ? customText : filePaths.join("\r\n");
+    const textToCopy = filePaths.join("\r\n");
     const escapedText = textToCopy
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -98,49 +136,6 @@ export function useClipboard() {
     } catch (err) {
       console.error("增强剪贴板失败", err);
       return false;
-    }
-  }
-
-  // 处理单张图片的复制操作 (总是尝试写入 workflow，即使可以复制文件)
-  async function copyWorkflowOrFile(filePath: string, imageId: string) {
-    if (!filePath || !imageId) return;
-
-    // 获取工作流数据（如果获取不到则回退到路径）
-    let textToCopy = filePath;
-    let isWorkflow = false;
-    try {
-      const result = await query(ComfyUiWorkflowDocument, {
-        variables: { id: imageId },
-        fetchPolicy: "cache-first",
-      });
-      if (result.data?.comfyUIWorkflow) {
-        textToCopy = result.data.comfyUIWorkflow;
-        isWorkflow = true;
-      }
-    } catch {
-      showError("获取工作流数据失败");
-    }
-
-    if (isServerKnownUnsupported()) {
-      await writeToClipboard(textToCopy);
-      showSuccess(
-        isWorkflow ? "已复制 ComfyUI 工作流数据!" : "已复制图片路径!",
-      );
-      return;
-    }
-
-    // 尝试文件增强复制
-    const supported = await tryAttachFiles([filePath], textToCopy);
-    if (supported) {
-      showSuccess(
-        isWorkflow ? "已复制图片文件和工作流数据!" : "已复制图片文件!",
-      );
-    } else {
-      // 降级：由于增强失败，重新写入纯文本剪贴板
-      await writeToClipboard(textToCopy);
-      showSuccess(
-        isWorkflow ? "已复制 ComfyUI 工作流数据!" : "已复制图片路径!",
-      );
     }
   }
 
