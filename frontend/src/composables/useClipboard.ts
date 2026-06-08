@@ -4,8 +4,6 @@ import useQuery from "@/graphql/utils/useQuery";
 import query from "@/graphql/utils/query";
 import mutate from "@/graphql/utils/mutate";
 import randomUUID from "@/utils/randomUUID";
-import { toValue } from "vue";
-import type { MaybeRefOrGetter } from "vue";
 import {
   MetaDocument,
   ComfyUiWorkflowDocument,
@@ -17,11 +15,7 @@ const { model: lastUnsupportedServerStartTime } = useStorage<
   string | undefined
 >(localStorage, "last_unsupported_start_time_u2h8a9", () => undefined);
 
-export function useClipboard(options: {
-  fullFilePath: MaybeRefOrGetter<string>;
-  imageId: MaybeRefOrGetter<string>;
-}) {
-  const { fullFilePath, imageId } = options;
+export function useClipboard() {
   const { showSuccess, showError } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
 
@@ -48,32 +42,6 @@ export function useClipboard(options: {
     }
   }
 
-  // 降级文本复制：获取并复制 ComfyUI 工作流（没有则复制路径）
-  async function copyWorkflowOrPath(
-    filePath: string,
-    id: string,
-    defaultSuccessMessage = "已复制图片路径!",
-  ) {
-    let textToCopy = filePath;
-    let successMessage = defaultSuccessMessage;
-
-    try {
-      const result = await query(ComfyUiWorkflowDocument, {
-        variables: { id },
-        fetchPolicy: "cache-first",
-      });
-      if (result.data?.comfyUIWorkflow) {
-        textToCopy = result.data.comfyUIWorkflow;
-        successMessage = "已复制 ComfyUI 工作流数据!";
-      }
-    } catch {
-      showError("获取工作流数据失败");
-    }
-
-    await writeToClipboard(textToCopy);
-    showSuccess(successMessage);
-  }
-
   // 判断当前连接的服务器是否已知不支持剪贴板增强
   function isServerKnownUnsupported(): boolean {
     const serverStartTime = metaData.value?.meta?.serverStartTime;
@@ -91,25 +59,30 @@ export function useClipboard(options: {
   }
 
   // 尝试向服务器申请文件增强，返回是否附加成功
-  async function tryAttachFile(filePath: string): Promise<boolean> {
-    if (!filePath) return false;
+  async function tryAttachFiles(
+    filePaths: string[],
+    customText?: string,
+  ): Promise<boolean> {
+    if (filePaths.length === 0) return false;
 
     const nonce = randomUUID();
-    const escapedText = filePath
+    const textToCopy =
+      customText !== undefined ? customText : filePaths.join("\r\n");
+    const escapedText = textToCopy
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
     const html = `<html><head><meta name="io.github.natescarlet.image-funnel.nonce" content="${nonce}"/></head><body><pre>${escapedText}</pre></body></html>`;
 
-    // 先写入绝对路径和含随机数的 HTML
-    const writeOk = await writeToClipboard(filePath, html);
+    // 先写入绝对路径文本和含随机数的 HTML
+    const writeOk = await writeToClipboard(textToCopy, html);
     if (!writeOk) return false;
 
     try {
       const res = await mutate(AttachFileToClipboardDocument, {
         variables: {
           input: {
-            paths: [filePath],
+            paths: filePaths,
             nonce,
           },
         },
@@ -128,51 +101,73 @@ export function useClipboard(options: {
     }
   }
 
-  // 处理复制操作 (优先使用增强文件附加，如果成功则不提取工作流)
-  async function handleCopy() {
-    const filePath = toValue(fullFilePath);
-    const id = toValue(imageId);
+  // 处理单张图片的复制操作 (总是尝试写入 workflow，即使可以复制文件)
+  async function copyWorkflowOrFile(filePath: string, imageId: string) {
+    if (!filePath || !imageId) return;
 
-    // 如果已知不支持，直接获取并复制工作流（如果获取不到则复制路径）
+    // 获取工作流数据（如果获取不到则回退到路径）
+    let textToCopy = filePath;
+    let isWorkflow = false;
+    try {
+      const result = await query(ComfyUiWorkflowDocument, {
+        variables: { id: imageId },
+        fetchPolicy: "cache-first",
+      });
+      if (result.data?.comfyUIWorkflow) {
+        textToCopy = result.data.comfyUIWorkflow;
+        isWorkflow = true;
+      }
+    } catch {
+      showError("获取工作流数据失败");
+    }
+
     if (isServerKnownUnsupported()) {
-      await copyWorkflowOrPath(filePath, id);
+      await writeToClipboard(textToCopy);
+      showSuccess(
+        isWorkflow ? "已复制 ComfyUI 工作流数据!" : "已复制图片路径!",
+      );
       return;
     }
 
     // 尝试文件增强复制
-    const supported = await tryAttachFile(filePath);
+    const supported = await tryAttachFiles([filePath], textToCopy);
     if (supported) {
-      showSuccess("已复制图片文件!");
+      showSuccess(
+        isWorkflow ? "已复制图片文件和工作流数据!" : "已复制图片文件!",
+      );
     } else {
-      // 降级：由于增强失败，拉取工作流数据并重新写入剪贴板
-      await copyWorkflowOrPath(filePath, id);
+      // 降级：由于增强失败，重新写入纯文本剪贴板
+      await writeToClipboard(textToCopy);
+      showSuccess(
+        isWorkflow ? "已复制 ComfyUI 工作流数据!" : "已复制图片路径!",
+      );
     }
   }
 
-  // 总是直接复制路径 (成功附加时提示复制文件，降级时提示已复制绝对路径)
-  async function copyAbsoluteFilePath() {
-    const filePath = toValue(fullFilePath);
-    if (!filePath) return;
+  // 复制多个文件：如果支持复制文件就复制文件，否则复制绝对路径每行一个
+  async function copyFiles(...filePaths: string[]) {
+    const validPaths = filePaths.filter((p) => !!p);
+    if (validPaths.length === 0) return;
 
     if (isServerKnownUnsupported()) {
-      await writeToClipboard(filePath);
+      await writeToClipboard(validPaths.join("\r\n"));
       showSuccess("已复制绝对路径!");
       return;
     }
 
     // 尝试文件增强复制
-    const supported = await tryAttachFile(filePath);
+    const supported = await tryAttachFiles(validPaths);
     if (supported) {
       showSuccess("已复制图片文件!");
     } else {
       // 降级：仅复制绝对路径
-      await writeToClipboard(filePath);
+      await writeToClipboard(validPaths.join("\r\n"));
       showSuccess("已复制绝对路径!");
     }
   }
 
   return {
-    handleCopy,
-    copyAbsoluteFilePath,
+    copyWorkflowOrFile,
+    copyFiles,
   };
 }

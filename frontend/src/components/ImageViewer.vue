@@ -476,10 +476,15 @@ useClickOutside(overflowMenuRef, () => {
   showOverflowMenu.value = false;
 });
 
-const { handleCopy, copyAbsoluteFilePath } = useClipboard({
-  fullFilePath,
-  imageId: computed(() => image.id),
-});
+const { copyWorkflowOrFile, copyFiles } = useClipboard();
+
+async function handleCopy() {
+  await copyWorkflowOrFile(fullFilePath.value, image.id);
+}
+
+async function copyAbsoluteFilePath() {
+  await copyFiles(fullFilePath.value);
+}
 
 // #region 快捷键复制
 

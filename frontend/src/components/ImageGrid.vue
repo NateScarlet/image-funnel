@@ -211,7 +211,7 @@
                 ? 'border-yellow-600 border-2 border-dashed'
                 : '',
             ]"
-            @click="handleImageClick(img)"
+            @click="handleImageClick(img, $event)"
           >
             <!-- 缩略图加载 -->
             <div
@@ -539,6 +539,23 @@
               <span>批量移动</span>
             </button>
 
+            <!-- 批量复制 -->
+            <button
+              class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
+              :disabled="selectedImageIds.length === 0"
+              :class="
+                selectedImageIds.length === 0
+                  ? 'opacity-40 cursor-not-allowed'
+                  : ''
+              "
+              @click="copySelectedImages"
+            >
+              <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
+                <path :d="mdiContentCopy" fill="currentColor" />
+              </svg>
+              <span>复制图片</span>
+            </button>
+
             <div class="h-5 w-px bg-primary-700"></div>
 
             <!-- 关闭批量管理模式 -->
@@ -581,6 +598,7 @@ import {
   mdiCheckboxMultipleMarkedOutline,
   mdiStar,
   mdiRefresh,
+  mdiContentCopy,
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
@@ -602,6 +620,9 @@ import useModalFullscreen from "@/composables/useModalFullscreen";
 import { openImageViewerByFilename } from "@/events";
 import useLocationHash from "@/composables/useLocationHash";
 import optionalArray from "@/utils/optionalArray.ts";
+import useQuery from "@/graphql/utils/useQuery";
+import { MetaDocument } from "@/graphql/generated";
+import { useClipboard } from "@/composables/useClipboard";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -675,6 +696,43 @@ const {
   bulkSetLabel,
 } = useBulkOperations(images);
 
+// 获取服务器元数据，用于解析物理绝对路径
+const metaLoadingCount = ref(0);
+const { data: metaData } = useQuery(MetaDocument, {
+  loadingCount: metaLoadingCount,
+});
+
+// 计算所有选中图片的物理绝对路径
+const selectedImagePaths = computed(() => {
+  const rootPath = metaData.value?.meta?.rootAbsPath;
+  if (!rootPath) return [];
+
+  const isWindows = rootPath.includes("\\");
+
+  return selectedImageIds.value
+    .map((id) => {
+      const img = images.value.find((i) => i.id === id);
+      if (!img) return null;
+      const relPath = img.relPath;
+      if (!relPath) return null;
+
+      if (isWindows) {
+        return rootPath + "\\" + relPath.replace(/\//g, "\\");
+      }
+      return rootPath + "/" + relPath.replace(/\\/g, "/");
+    })
+    .filter((p): p is string => p !== null);
+});
+
+const { copyFiles } = useClipboard();
+
+// 复制所有选中的图片到剪贴板
+async function copySelectedImages() {
+  const paths = selectedImagePaths.value;
+  if (paths.length === 0) return;
+  await copyFiles(...paths);
+}
+
 // 在批量模式下，根据选中的图片 ID 动态生成 filterBy 和匹配图片数量
 const moveImagesFilterBy = computed<ImageFiltersInput>(() => {
   if (isBulkMode.value) {
@@ -703,9 +761,16 @@ function handleMoveClose() {
   }
 }
 
-// 批量模式下点击图片执行选择，正常模式打开大图查看器
-function handleImageClick(img: ImageFragment) {
-  if (isBulkMode.value) {
+// 批量模式下点击图片执行选择，或者按下 Ctrl/Meta 键点击图片自动进入批量模式并选中该图片。正常模式打开大图查看器
+function handleImageClick(img: ImageFragment, event?: MouseEvent) {
+  const isCtrlPressed = event ? event.ctrlKey || event.metaKey : false;
+
+  if (isCtrlPressed) {
+    if (!isBulkMode.value) {
+      isBulkMode.value = true;
+    }
+    toggleSelectImage(img.id);
+  } else if (isBulkMode.value) {
     toggleSelectImage(img.id);
   } else {
     openViewer(img);
@@ -870,6 +935,52 @@ useHotkey(
     description: "自动向后加载并切换到最后一张图片",
     enabled: isViewerOpen,
     category: "图片浏览",
+  },
+);
+useHotkey(
+  "ctrl+a",
+  (e) => {
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isBulkMode.value) {
+      isBulkMode.value = true;
+    }
+    selectAll();
+  },
+  {
+    preventDefault: false,
+    stopPropagation: false,
+    description: "全选所有图片",
+    enabled: computed(() => !isViewerOpen.value),
+    category: "批量操作",
+  },
+);
+useHotkey(
+  "ctrl+c",
+  (e) => {
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    copySelectedImages();
+  },
+  {
+    preventDefault: false,
+    stopPropagation: false,
+    description: "复制选中的图片文件",
+    enabled: computed(
+      () =>
+        isBulkMode.value &&
+        selectedImageIds.value.length > 0 &&
+        !isViewerOpen.value,
+    ),
+    category: "批量操作",
   },
 );
 // #endregion
