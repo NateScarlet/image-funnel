@@ -19,28 +19,18 @@ type Memo struct {
 	hidden     bool   // 是否被隐藏
 }
 
-// newMemo 创建一个新的备忘信息，仅供 package 内部使用
-// absPath 必须是绝对路径，content 为包含 frontmatter 的完整内容
-func newMemo(id scalar.ID, relPath string, absPath string, content string) *Memo {
+// FromRepository 从仓库加载备忘信息，ID 由领域层根据相对路径自动生成
+// 仅由 Repository 实现调用，外部不得直接构造。此处直接通过结构体字面量实例化，信任持久层数据。
+func FromRepository(relPath string, absPath string, content string) *Memo {
 	hidden, parsedContent := ParseContent(content)
-	if !strings.HasSuffix(absPath, ".md") {
-		// TODO: 改成报错
-		absPath = absPath + ".md"
-	}
 	return &Memo{
-		id:         id,
+		id:         encodeID(relPath),
 		relPath:    relPath,
 		absPath:    absPath,
 		content:    parsedContent,
 		rawContent: content,
 		hidden:     hidden,
 	}
-}
-
-// FromRepository 从仓库加载备忘信息，ID 由领域层根据相对路径自动生成
-// 仅由 Repository 实现调用，外部不得直接构造
-func FromRepository(relPath string, absPath string, content string) *Memo {
-	return newMemo(encodeID(relPath), relPath, absPath, content)
 }
 
 

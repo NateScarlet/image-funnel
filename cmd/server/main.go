@@ -184,7 +184,7 @@ func main() {
 		dirSvc,
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, cfg.AbsRootDir), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
+	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, memo.NewFactory(cfg.AbsRootDir)), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
 	clipboard := clipboard.NewClipboard()
 	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
 

@@ -11,14 +11,14 @@ import (
 // Service 备忘录领域服务，负责处理更新等业务逻辑
 type Service struct {
 	repo    Repository
-	rootDir string
+	factory *Factory
 }
 
 // NewService 创建一个新的备忘录服务
-func NewService(repo Repository, rootDir string) *Service {
+func NewService(repo Repository, factory *Factory) *Service {
 	return &Service{
 		repo:    repo,
-		rootDir: rootDir,
+		factory: factory,
 	}
 }
 
@@ -98,8 +98,11 @@ func (s *Service) ReadByRelPath(ctx context.Context, relPath string) (*Memo, err
 
 // newEmpty 创建一个未在磁盘中持久化的空备忘实体，仅供内部使用。
 func (s *Service) newEmpty(relPath string) *Memo {
-	absPath := filepath.Join(s.rootDir, relPath)
-	return newMemo(encodeID(relPath), relPath, absPath, "")
+	m, err := s.factory.New(relPath, "")
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 
