@@ -263,7 +263,7 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 	}
 
 	// 将新刷新令牌的 JTI 写入设备，确保设备移除时可自动吊销
-	if updateErr := h.service.UpdateRefreshToken(ctx, deviceID, refreshToken.JTI(), refreshToken.Expire()); updateErr != nil {
+	if updateErr := h.service.UpdateRefreshToken(ctx, deviceID, refreshToken.JTI(), refreshToken.Expire(), RemoteIP(ctx), UserAgent(ctx)); updateErr != nil {
 		h.logger.Warn("failed to update device refresh token id", zap.Error(updateErr))
 	}
 

@@ -407,14 +407,20 @@ func (s *Service) Exists(ctx context.Context, id scalar.ID) (bool, error) {
 	return true, nil
 }
 
-// UpdateRefreshToken 更新设备关联的刷新令牌信息
-func (s *Service) UpdateRefreshToken(ctx context.Context, deviceID scalar.ID, jti string, expiresAt time.Time) error {
+// UpdateRefreshToken 更新设备关联的刷新令牌信息，并更新设备信息和最后登录状态
+func (s *Service) UpdateRefreshToken(ctx context.Context, deviceID scalar.ID, jti string, expiresAt time.Time, ip string, userAgent string) error {
 	device, err := s.repo.Get(ctx, deviceID)
 	if err != nil {
 		return err
 	}
 	device.UpdateRefreshToken(jti, expiresAt)
-	return s.repo.Save(ctx, device)
+	device.UpdateLogin(ip, userAgent, time.Now())
+	err = s.repo.Save(ctx, device)
+	if err != nil {
+		return err
+	}
+	s.ebus.PublishDeviceSaved(ctx, device)
+	return nil
 }
 
 func (s *Service) GetPairingRequest(ctx context.Context, code string) *pairing.Request {
