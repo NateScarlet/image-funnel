@@ -285,13 +285,11 @@ const commitDialog = useModalDialog();
 const updateSessionDialog = useModalDialog();
 const undoing = ref(false);
 
-// TODO: refactor to touchStart touchEnd
-// TODO: 移除多余的类型标注
-const touchStartX = ref<number>(0);
-const touchStartY = ref<number>(0);
-const touchEndX = ref<number>(0);
-const touchEndY = ref<number>(0);
-const swiping = ref<boolean>(false);
+const touchStartX = ref(0);
+const touchStartY = ref(0);
+const touchEndX = ref(0);
+const touchEndY = ref(0);
+const swiping = ref(false);
 
 const SWIPE_THRESHOLD = 50;
 
