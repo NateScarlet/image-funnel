@@ -3,5 +3,6 @@ query Meta {
     rootAbsPath
     version
     baseURL
+    serverStartTime
   }
 }

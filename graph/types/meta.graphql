@@ -7,4 +7,6 @@ type Meta {
   version: String!
   "配置的基础URL"
   baseURL: String!
+  "服务启动时间"
+  serverStartTime: Time!
 }

@@ -6,6 +6,7 @@ import (
 	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"time"
 )
 
 // 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
@@ -14,6 +15,21 @@ type Node interface {
 
 type ApprovePairingRequestInput struct {
 	Code string `json:"code"`
+}
+
+// 将文件附加到系统剪贴板，使剪贴板内容可直接粘贴为文件
+type AttachFileToClipboardInput struct {
+	// 要附加到剪贴板的文件路径列表，可以是绝对路径或相对于根目录的路径
+	Paths []string `json:"paths"`
+	// 随机数，用于验证剪贴板数据来源。客户端需先在本地写入包含此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以验证操作发自本机客户端。
+	Nonce            string  `json:"nonce"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type AttachFileToClipboardPayload struct {
+	// 剪贴板增强功能是否受支持
+	Supported        bool    `json:"supported"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type AuthStatus struct {
@@ -167,6 +183,8 @@ type Meta struct {
 	Version string `json:"version"`
 	// 配置的基础URL
 	BaseURL string `json:"baseURL"`
+	// 服务启动时间
+	ServerStartTime time.Time `json:"serverStartTime"`
 }
 
 // 将符合条件的图片移动到指定子目录

@@ -1,0 +1,20 @@
+"将文件附加到系统剪贴板，使剪贴板内容可直接粘贴为文件"
+input AttachFileToClipboardInput {
+  "要附加到剪贴板的文件路径列表，可以是绝对路径或相对于根目录的路径"
+  paths: [String!]!
+  """
+  随机数，用于验证剪贴板数据来源。客户端需先在本地写入 meta[name="io.github.natescarlet.image-funnel.nonce"] 为此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以判断操作是否发自本机客户端。
+  """
+  nonce: String!
+  clientMutationId: String
+}
+
+type AttachFileToClipboardPayload {
+  "剪贴板增强功能是否受支持"
+  supported: Boolean!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  attachFileToClipboard(input: AttachFileToClipboardInput!): AttachFileToClipboardPayload!
+}

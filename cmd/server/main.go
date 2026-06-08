@@ -30,6 +30,7 @@ import (
 	"main/internal/infrastructure/ebus"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/jwt"
+	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/stdimage"
@@ -184,7 +185,8 @@ func main() {
 	)
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, cfg.AbsRootDir), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
-	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory)
+	clipboard := clipboard.NewClipboard()
+	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {

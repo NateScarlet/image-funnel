@@ -1,0 +1,5 @@
+mutation AttachFileToClipboard($input: AttachFileToClipboardInput!) {
+  attachFileToClipboard(input: $input) {
+    supported
+  }
+}

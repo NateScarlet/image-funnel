@@ -424,17 +424,15 @@ import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useQuery from "@/graphql/utils/useQuery";
-import query from "@/graphql/utils/query";
-import { MetaDocument, ComfyUiWorkflowDocument } from "@/graphql/generated";
+import { MetaDocument } from "@/graphql/generated";
 import useHotkey from "@/composables/useHotkey";
 import { useOpenDir } from "@/composables/useOpenDir";
 import MemoForm from "./MemoForm.vue";
 import useMemo from "@/composables/useMemo";
 import useModalDialog from "@/composables/useModalDialog";
-import useNotification from "@/composables/useNotification";
+import { useClipboard } from "@/composables/useClipboard";
 
 const { revealInExplorer } = useOpenDir();
-const { showSuccess, showError } = useNotification();
 
 const emit = defineEmits<{
   (e: "image-loaded", payload: { id: string; time: Time }): void;
@@ -478,47 +476,12 @@ useClickOutside(overflowMenuRef, () => {
   showOverflowMenu.value = false;
 });
 
-// 处理复制操作
-async function handleCopy() {
-  // 优先获取并复制 ComfyUI 工作流数据，若无则复制图片文件的绝对路径
-  let textToCopy = fullFilePath.value;
-  let successMessage = "已复制图片路径!";
-
-  try {
-    const result = await query(ComfyUiWorkflowDocument, {
-      variables: { id: image.id },
-      fetchPolicy: "cache-first",
-    });
-    if (result.data?.comfyUIWorkflow) {
-      textToCopy = result.data.comfyUIWorkflow;
-      successMessage = "已复制 ComfyUI 工作流数据!";
-    }
-  } catch {
-    showError("获取工作流数据失败");
-  }
-
-  try {
-    await window.navigator.clipboard.writeText(textToCopy);
-    showSuccess(successMessage);
-  } catch {
-    showError("复制失败");
-  }
-}
+const { handleCopy, copyAbsoluteFilePath } = useClipboard({
+  fullFilePath,
+  imageId: computed(() => image.id),
+});
 
 // #region 快捷键复制
-// 复制绝对路径
-async function copyAbsoluteFilePath() {
-  const textToCopy = fullFilePath.value;
-  if (!textToCopy) {
-    return;
-  }
-  try {
-    await window.navigator.clipboard.writeText(textToCopy);
-    showSuccess("已复制绝对路径!");
-  } catch {
-    showError("复制绝对路径失败");
-  }
-}
 
 // 绑定快捷键 Ctrl+C 改为与界面复制相同的逻辑（优先复制工作流，没有则复制绝对路径）
 useHotkey(

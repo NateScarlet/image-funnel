@@ -94,5 +94,3 @@ func (r *trashHistoryItemResolver) CoverImage(ctx context.Context, obj *shared.T
 func (r *Resolver) TrashHistoryItem() TrashHistoryItemResolver { return &trashHistoryItemResolver{r} }
 
 type trashHistoryItemResolver struct{ *Resolver }
-
-

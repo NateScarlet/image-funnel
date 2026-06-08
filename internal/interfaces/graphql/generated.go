@@ -58,6 +58,11 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AttachFileToClipboardPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Supported        func(childComplexity int) int
+	}
+
 	AuthStatus struct {
 		CanAccess       func(childComplexity int) int
 		IsTrustedDevice func(childComplexity int) int
@@ -223,10 +228,11 @@ type ComplexityRoot struct {
 	}
 
 	Meta struct {
-		BaseURL     func(childComplexity int) int
-		RootAbsPath func(childComplexity int) int
-		RootPath    func(childComplexity int) int
-		Version     func(childComplexity int) int
+		BaseURL         func(childComplexity int) int
+		RootAbsPath     func(childComplexity int) int
+		RootPath        func(childComplexity int) int
+		ServerStartTime func(childComplexity int) int
+		Version         func(childComplexity int) int
 	}
 
 	MoveImagesPayload struct {
@@ -237,6 +243,7 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		ApprovePairingRequest      func(childComplexity int, input ApprovePairingRequestInput) int
+		AttachFileToClipboard      func(childComplexity int, input AttachFileToClipboardInput) int
 		BeginWebAuthnLogin         func(childComplexity int, input BeginWebAuthnLoginInput) int
 		BeginWebAuthnRegistration  func(childComplexity int, input BeginWebAuthnRegistrationInput) int
 		CommitChanges              func(childComplexity int, input CommitChangesInput) int
@@ -413,6 +420,7 @@ type MemoResolver interface {
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
 	ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (bool, error)
+	AttachFileToClipboard(ctx context.Context, input AttachFileToClipboardInput) (*AttachFileToClipboardPayload, error)
 	BeginWebAuthnLogin(ctx context.Context, input BeginWebAuthnLoginInput) (*BeginWebAuthnLoginPayload, error)
 	BeginWebAuthnRegistration(ctx context.Context, input BeginWebAuthnRegistrationInput) (*BeginWebAuthnRegistrationPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
@@ -488,6 +496,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AttachFileToClipboardPayload.clientMutationId":
+		if e.complexity.AttachFileToClipboardPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.AttachFileToClipboardPayload.ClientMutationID(childComplexity), true
+	case "AttachFileToClipboardPayload.supported":
+		if e.complexity.AttachFileToClipboardPayload.Supported == nil {
+			break
+		}
+
+		return e.complexity.AttachFileToClipboardPayload.Supported(childComplexity), true
 
 	case "AuthStatus.canAccess":
 		if e.complexity.AuthStatus.CanAccess == nil {
@@ -1103,6 +1124,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Meta.RootPath(childComplexity), true
+	case "Meta.serverStartTime":
+		if e.complexity.Meta.ServerStartTime == nil {
+			break
+		}
+
+		return e.complexity.Meta.ServerStartTime(childComplexity), true
 	case "Meta.version":
 		if e.complexity.Meta.Version == nil {
 			break
@@ -1140,6 +1167,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ApprovePairingRequest(childComplexity, args["input"].(ApprovePairingRequestInput)), true
+	case "Mutation.attachFileToClipboard":
+		if e.complexity.Mutation.AttachFileToClipboard == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_attachFileToClipboard_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AttachFileToClipboard(childComplexity, args["input"].(AttachFileToClipboardInput)), true
 	case "Mutation.beginWebAuthnLogin":
 		if e.complexity.Mutation.BeginWebAuthnLogin == nil {
 			break
@@ -1925,6 +1963,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputApprovePairingRequestInput,
+		ec.unmarshalInputAttachFileToClipboardInput,
 		ec.unmarshalInputBeginWebAuthnLoginInput,
 		ec.unmarshalInputBeginWebAuthnRegistrationInput,
 		ec.unmarshalInputCommitChangesInput,
@@ -2325,6 +2364,8 @@ type Meta {
   version: String!
   "配置的基础URL"
   baseURL: String!
+  "服务启动时间"
+  serverStartTime: Time!
 }`, BuiltIn: false},
 	{Name: "../../../graph/types/node.graphql", Input: `"""
 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
@@ -2556,6 +2597,24 @@ input ApprovePairingRequestInput {
   code: String!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/attach_file_to_clipboard.graphql", Input: `"将文件附加到系统剪贴板，使剪贴板内容可直接粘贴为文件"
+input AttachFileToClipboardInput {
+  "要附加到剪贴板的文件路径列表，可以是绝对路径或相对于根目录的路径"
+  paths: [String!]!
+  "随机数，用于验证剪贴板数据来源。客户端需先在本地写入包含此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以验证操作发自本机客户端。"
+  nonce: String!
+  clientMutationId: String
+}
+
+type AttachFileToClipboardPayload {
+  "剪贴板增强功能是否受支持"
+  supported: Boolean!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  attachFileToClipboard(input: AttachFileToClipboardInput!): AttachFileToClipboardPayload!
+}`, BuiltIn: false},
 	{Name: "../../../graph/mutations/begin_web_authn_login.graphql", Input: `extend type Mutation {
   beginWebAuthnLogin(input: BeginWebAuthnLoginInput!): BeginWebAuthnLoginPayload! @public
 }
@@ -3050,6 +3109,17 @@ func (ec *executionContext) field_Mutation_approvePairingRequest_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_attachFileToClipboard_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNAttachFileToClipboardInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_beginWebAuthnLogin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3490,6 +3560,64 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AttachFileToClipboardPayload_supported(ctx context.Context, field graphql.CollectedField, obj *AttachFileToClipboardPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AttachFileToClipboardPayload_supported,
+		func(ctx context.Context) (any, error) {
+			return obj.Supported, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AttachFileToClipboardPayload_supported(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AttachFileToClipboardPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AttachFileToClipboardPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *AttachFileToClipboardPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AttachFileToClipboardPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AttachFileToClipboardPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AttachFileToClipboardPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _AuthStatus_isTrustedDevice(ctx context.Context, field graphql.CollectedField, obj *AuthStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -6818,6 +6946,35 @@ func (ec *executionContext) fieldContext_Meta_baseURL(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Meta_serverStartTime(ctx context.Context, field graphql.CollectedField, obj *Meta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Meta_serverStartTime,
+		func(ctx context.Context) (any, error) {
+			return obj.ServerStartTime, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Meta_serverStartTime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Meta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MoveImagesPayload_movedCount(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6987,6 +7144,53 @@ func (ec *executionContext) fieldContext_Mutation_approvePairingRequest(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_approvePairingRequest_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_attachFileToClipboard(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_attachFileToClipboard,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AttachFileToClipboard(ctx, fc.Args["input"].(AttachFileToClipboardInput))
+		},
+		nil,
+		ec.marshalNAttachFileToClipboardPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_attachFileToClipboard(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "supported":
+				return ec.fieldContext_AttachFileToClipboardPayload_supported(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_AttachFileToClipboardPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AttachFileToClipboardPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_attachFileToClipboard_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8368,6 +8572,8 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 				return ec.fieldContext_Meta_version(ctx, field)
 			case "baseURL":
 				return ec.fieldContext_Meta_baseURL(ctx, field)
+			case "serverStartTime":
+				return ec.fieldContext_Meta_serverStartTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
 		},
@@ -12781,6 +12987,47 @@ func (ec *executionContext) unmarshalInputApprovePairingRequestInput(ctx context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputAttachFileToClipboardInput(ctx context.Context, obj any) (AttachFileToClipboardInput, error) {
+	var it AttachFileToClipboardInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"paths", "nonce", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "paths":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("paths"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Paths = data
+		case "nonce":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nonce"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Nonce = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputBeginWebAuthnLoginInput(ctx context.Context, obj any) (BeginWebAuthnLoginInput, error) {
 	var it BeginWebAuthnLoginInput
 	asMap := map[string]any{}
@@ -13627,6 +13874,47 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
+
+var attachFileToClipboardPayloadImplementors = []string{"AttachFileToClipboardPayload"}
+
+func (ec *executionContext) _AttachFileToClipboardPayload(ctx context.Context, sel ast.SelectionSet, obj *AttachFileToClipboardPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, attachFileToClipboardPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AttachFileToClipboardPayload")
+		case "supported":
+			out.Values[i] = ec._AttachFileToClipboardPayload_supported(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._AttachFileToClipboardPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
 
 var authStatusImplementors = []string{"AuthStatus"}
 
@@ -15240,6 +15528,11 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "serverStartTime":
+			out.Values[i] = ec._Meta_serverStartTime(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -15338,6 +15631,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "approvePairingRequest":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_approvePairingRequest(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "attachFileToClipboard":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_attachFileToClipboard(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17125,6 +17425,25 @@ func (ec *executionContext) unmarshalNApprovePairingRequestInput2mainᚋinternal
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNAttachFileToClipboardInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardInput(ctx context.Context, v any) (AttachFileToClipboardInput, error) {
+	res, err := ec.unmarshalInputAttachFileToClipboardInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAttachFileToClipboardPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardPayload(ctx context.Context, sel ast.SelectionSet, v AttachFileToClipboardPayload) graphql.Marshaler {
+	return ec._AttachFileToClipboardPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAttachFileToClipboardPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardPayload(ctx context.Context, sel ast.SelectionSet, v *AttachFileToClipboardPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AttachFileToClipboardPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNAuthStatus2mainᚋinternalᚋinterfacesᚋgraphqlᚐAuthStatus(ctx context.Context, sel ast.SelectionSet, v AuthStatus) graphql.Marshaler {
 	return ec._AuthStatus(ctx, sel, &v)
 }
@@ -17599,13 +17918,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -18155,6 +18474,36 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
