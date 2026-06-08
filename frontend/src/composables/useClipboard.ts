@@ -66,20 +66,11 @@ export function useClipboard() {
       }
     }
 
-    // 无法获取或复制工作流时，降级为复制图片文件
-    if (isServerKnownUnsupported()) {
-      await writeToClipboard(filePath);
-      showSuccess("已复制图片路径!");
-      return;
-    }
-
-    // 尝试增强剪贴板文件复制
+    // 无法获取或复制工作流时，降级为复制图片文件/路径
     const supported = await tryAttachFiles([filePath]);
     if (supported) {
       showSuccess("已复制图片文件!");
     } else {
-      // 增强复制失败时，降级复制为绝对路径文本
-      await writeToClipboard(filePath);
       showSuccess("已复制图片路径!");
     }
   }
@@ -104,8 +95,15 @@ export function useClipboard() {
   async function tryAttachFiles(filePaths: string[]): Promise<boolean> {
     if (filePaths.length === 0) return false;
 
-    const nonce = randomUUID();
     const textToCopy = filePaths.join("\r\n");
+
+    // 如果已知服务器不支持，直接写入绝对路径文本并返回不支持
+    if (isServerKnownUnsupported()) {
+      await writeToClipboard(textToCopy);
+      return false;
+    }
+
+    const nonce = randomUUID();
     const escapedText = textToCopy
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -144,19 +142,11 @@ export function useClipboard() {
     const validPaths = filePaths.filter((p) => !!p);
     if (validPaths.length === 0) return;
 
-    if (isServerKnownUnsupported()) {
-      await writeToClipboard(validPaths.join("\r\n"));
-      showSuccess("已复制绝对路径!");
-      return;
-    }
-
     // 尝试文件增强复制
     const supported = await tryAttachFiles(validPaths);
     if (supported) {
       showSuccess("已复制图片文件!");
     } else {
-      // 降级：仅复制绝对路径
-      await writeToClipboard(validPaths.join("\r\n"));
       showSuccess("已复制绝对路径!");
     }
   }
