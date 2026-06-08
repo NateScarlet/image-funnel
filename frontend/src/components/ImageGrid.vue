@@ -197,7 +197,7 @@
         <!-- 网格列表 -->
         <div
           v-else
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 py-2"
         >
           <div
             v-for="img in images"
@@ -213,6 +213,11 @@
             ]"
             @click="handleImageClick(img, $event)"
           >
+            <!-- 选中态的整体外框 overlay，防止被 overflow-hidden 裁剪或子元素遮挡 -->
+            <div
+              v-if="isBulkMode && selectedImageIds.includes(img.id)"
+              class="absolute inset-0 border-2 border-secondary-500 rounded-xl pointer-events-none z-10"
+            ></div>
             <!-- 缩略图加载 -->
             <div
               class="w-full h-full relative overflow-hidden bg-black/10 flex items-center justify-center"
