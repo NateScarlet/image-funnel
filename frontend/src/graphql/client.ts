@@ -148,11 +148,8 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
             });
           })
           .catch((err) => {
-            if (window.location.pathname !== "/auth") {
-              window.location.href = `/auth?redirect=${encodeURIComponent(
-                window.location.pathname + window.location.search,
-              )}`;
-            }
+            // 不在此处盲目重定向至登录页。对于因网络波动引发的刷新失败，此处仅传播错误，
+            // 确保用户不会因为网络抖动被强制退出。真正的认证失效（如 INVALID_TOKEN）已由 tokenManager.ts 的错误拦截处理。
             observer.error(err);
           });
 

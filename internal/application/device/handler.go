@@ -228,11 +228,7 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 		return "", "", time.Time{}, time.Time{}, h.formatTokenReadError(err)
 	}
 
-	// 吊销当前刷新令牌，防止重放攻击
-	if revokeErr := h.tokenSource.RevokeRefreshToken(ctx, rawToken); revokeErr != nil {
-		h.logger.Warn("failed to revoke refresh token", zap.Error(revokeErr))
-	}
-
+	// 校验刷新令牌的有效性（包括签名、有效期和当时的吊销状态）
 	t, err := h.tokenSource.VerifyRefreshToken(ctx, rawToken)
 	if err != nil {
 		forget()
@@ -241,11 +237,17 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 
 	deviceID := t.UserID()
 
-	// 仅在刷新时检查设备是否仍为可信设备
+	// 仅在刷新时检查设备是否仍为可信设备。如果设备已被删除，后续校验都会直接因设备不存在而失败，
+	// 此时无需将令牌加入吊销列表，以避免往吊销列表中写入已删除设备关联的无效数据。
 	hasDevice, err := h.service.Exists(ctx, deviceID)
 	if err != nil || !hasDevice {
 		forget()
 		return "", "", time.Time{}, time.Time{}, apperror.New("UNAUTHORIZED", "device deleted", "设备已被删除")
+	}
+
+	// 校验成功且设备存在后，吊销当前刷新令牌，防止此令牌被二次重放攻击
+	if revokeErr := h.tokenSource.RevokeRefreshToken(ctx, rawToken); revokeErr != nil {
+		h.logger.Warn("failed to revoke refresh token", zap.Error(revokeErr))
 	}
 
 	// 签发新令牌对
