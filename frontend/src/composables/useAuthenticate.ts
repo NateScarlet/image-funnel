@@ -62,7 +62,7 @@ function setTokens(
 
 // 纯登录流程（验证已有凭证），不回退
 // 返回 true 表示登录成功，false 表示失败
-async function doLogin(): Promise<boolean> {
+async function login(): Promise<boolean> {
   const beginRes = await mutate(BeginWebAuthnLoginDocument, {
     variables: { input: {} },
   });
@@ -103,7 +103,7 @@ async function doLogin(): Promise<boolean> {
 
 // 注册流程（创建新凭证）
 // 返回 true 表示注册成功（设置了 token），false 表示需要等待配对审批
-async function doRegister(
+async function register(
   setupToken: string | null,
   pairingCode: ReturnType<typeof ref<string>>,
 ): Promise<boolean> {
@@ -121,14 +121,8 @@ async function doRegister(
       >[0]["optionsJSON"],
     });
   } catch (err) {
-    // 如果注册失败（凭证已存在），尝试纯登录
-    if (
-      err instanceof Error &&
-      err.message.includes("The authenticator was previously registered")
-    ) {
-      return doLogin();
-    }
-    throw err;
+    console.error("regisration failed, try login", err);
+    return login();
   }
 
   const finishRes = await mutate(FinishWebAuthnRegistrationDocument, {
@@ -176,10 +170,10 @@ async function tryLogin(
   pairingCode: ReturnType<typeof ref<string>>,
 ): Promise<boolean> {
   try {
-    return await doLogin();
+    return await login();
   } catch {
     // 登录失败，回退到注册
-    return doRegister(setupToken, pairingCode);
+    return register(setupToken, pairingCode);
   }
 }
 
@@ -204,7 +198,7 @@ export function useAuthenticate() {
 
       const success = shouldTryLogin
         ? await tryLogin(setupToken, pairingCode)
-        : await doRegister(setupToken, pairingCode);
+        : await register(setupToken, pairingCode);
 
       if (success && onSuccess) {
         await onSuccess();
