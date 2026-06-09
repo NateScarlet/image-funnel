@@ -5,29 +5,33 @@
   >
     <slot name="progress"></slot>
     <div
-      ref="containerRef"
-      class="relative flex-1 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
+      class="relative flex-1 w-full min-h-0"
       :class="[
-        locked ? 'pointer-events-none' : '',
         // 修复火狐全屏时竖屏高度计算错误
         isFullscreen
           ? 'portrait:order-1 portrait:max-h-[calc(100dvh-var(--spacing)*14)]'
           : '',
       ]"
-      v-bind="!locked ? containerAttrs : {}"
     >
-      <!-- zoom -->
-      <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
-        <img
-          ref="imgEl"
-          :src="src"
-          :alt="image.filename"
-          :data-image-id="image.id"
-          class="object-contain w-full h-full"
-          @loadstart="onLoadStart"
-          @load="updateLoaded"
-          @error="updateLoaded"
-        />
+      <div
+        ref="containerRef"
+        class="absolute inset-0 w-full flex items-center [scrollbar-gutter:stable] overflow-auto"
+        :class="locked ? 'pointer-events-none' : ''"
+        v-bind="!locked ? containerAttrs : {}"
+      >
+        <!-- zoom -->
+        <div v-bind="zoomAttrs" class="contain-layout m-auto flex-none">
+          <img
+            ref="imgEl"
+            :src="src"
+            :alt="image.filename"
+            :data-image-id="image.id"
+            class="object-contain w-full h-full"
+            @loadstart="onLoadStart"
+            @load="updateLoaded"
+            @error="updateLoaded"
+          />
+        </div>
       </div>
       <!-- 加载提示 -->
       <Transition
