@@ -699,7 +699,7 @@ const {
   deselectAll,
   bulkSetRating,
   bulkSetLabel,
-} = useBulkOperations(images);
+} = useBulkOperations(images, () => props.directoryId);
 
 // 获取服务器元数据，用于解析物理绝对路径
 const metaLoadingCount = ref(0);
@@ -988,6 +988,25 @@ useHotkey(
     category: "批量操作",
   },
 );
+
+useHotkey(
+  "escape",
+  () => {
+    isBulkMode.value = false;
+  },
+  {
+    allowInInputs: false,
+    description: "退出批量模式",
+    enabled: computed(
+      () =>
+        isBulkMode.value &&
+        !isViewerOpen.value &&
+        !moveImagesDialog.visible.value,
+    ),
+    category: "批量操作",
+  },
+);
+
 // #endregion
 
 // #region 移动匹配图片模块

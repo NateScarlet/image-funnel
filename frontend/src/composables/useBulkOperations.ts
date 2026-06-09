@@ -1,4 +1,4 @@
-import { ref, toValue, type MaybeRefOrGetter } from "vue";
+import { ref, computed, toValue, type MaybeRefOrGetter } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
 import { UpdateImageMetadataDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
@@ -7,16 +7,48 @@ import useNotification from "@/composables/useNotification";
 /**
  * useBulkOperations 提供批量管理图片的操作逻辑与状态
  * @param images 当前展现的图片列表或其 Getter
+ * @param directoryId 当前目录 ID 或其 Getter
  * @param onSuccess 操作成功后的回调，通常用于清理选中状态或退出批量模式
  */
 export default function useBulkOperations(
   images: MaybeRefOrGetter<ImageFragment[]>,
+  directoryId: MaybeRefOrGetter<string>,
   onSuccess?: () => void,
 ) {
-  // 记录是否开启批量管理模式
-  const isBulkMode = ref(false);
-  // 存储当前选中的图片 ID 列表
-  const selectedImageIds = ref<string[]>([]);
+  // 记录是否开启批量管理模式，并使用目录 ID 进行缓冲隔离以实现声明式重置
+  const bulkModeBuffer = ref({ directoryId: "", enabled: false });
+  const isBulkMode = computed({
+    get: () => {
+      const dirId = toValue(directoryId);
+      return bulkModeBuffer.value.directoryId === dirId
+        ? bulkModeBuffer.value.enabled
+        : false;
+    },
+    set: (val) => {
+      bulkModeBuffer.value = {
+        directoryId: toValue(directoryId),
+        enabled: val,
+      };
+    },
+  });
+
+  // 存储当前选中的图片 ID 列表，并使用目录 ID 进行缓冲隔离以实现声明式重置
+  const selectedBuffer = ref({ directoryId: "", ids: [] as string[] });
+  const selectedImageIds = computed<string[]>({
+    get: () => {
+      const dirId = toValue(directoryId);
+      return selectedBuffer.value.directoryId === dirId
+        ? selectedBuffer.value.ids
+        : [];
+    },
+    set: (val) => {
+      selectedBuffer.value = {
+        directoryId: toValue(directoryId),
+        ids: val,
+      };
+    },
+  });
+
   // 标记批量操作是否正在提交中
   const isUpdating = ref(false);
 
@@ -25,20 +57,18 @@ export default function useBulkOperations(
   // 切换批量模式
   function toggleBulkMode() {
     isBulkMode.value = !isBulkMode.value;
-    if (!isBulkMode.value) {
-      // 退出批量模式时，自动清空已选中的图片
-      selectedImageIds.value = [];
-    }
   }
 
   // 切换单张图片的选中状态
   function toggleSelectImage(id: string) {
-    const index = selectedImageIds.value.indexOf(id);
+    const current = [...selectedImageIds.value];
+    const index = current.indexOf(id);
     if (index >= 0) {
-      selectedImageIds.value.splice(index, 1);
+      current.splice(index, 1);
     } else {
-      selectedImageIds.value.push(id);
+      current.push(id);
     }
+    selectedImageIds.value = current;
   }
 
   // 选中当前列表的所有图片
