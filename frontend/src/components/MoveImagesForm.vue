@@ -40,40 +40,79 @@
         </p>
       </div>
 
-      <!-- 目标目录输入 -->
+      <!-- 操作模式选择 -->
       <div>
+        <label class="mb-2 block text-xs font-semibold text-primary-300">
+          操作模式
+        </label>
+        <div
+          class="grid grid-cols-2 gap-2 bg-primary-900/50 p-1 rounded-xl border border-primary-800"
+        >
+          <button
+            type="button"
+            class="py-2 text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+            :class="
+              !toTrash
+                ? 'bg-primary-700 text-white shadow'
+                : 'text-primary-400 hover:text-primary-200'
+            "
+            :disabled="moving"
+            @click="toTrash = false"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path :d="mdiFolderMove" fill="currentColor" />
+            </svg>
+            移动到新目录
+          </button>
+          <button
+            type="button"
+            class="py-2 text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+            :class="
+              toTrash
+                ? 'bg-primary-700 text-white shadow'
+                : 'text-primary-400 hover:text-primary-200'
+            "
+            :disabled="moving"
+            @click="toTrash = true"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path :d="mdiDelete" fill="currentColor" />
+            </svg>
+            移至暂存垃圾箱
+          </button>
+        </div>
+      </div>
+
+      <!-- 目标目录输入 -->
+      <div v-if="!toTrash">
         <label class="mb-2 block text-xs font-semibold text-primary-300">
           目标目录名称（相对于当前目录）
         </label>
         <input
           v-model="targetDirInput"
           type="text"
-          :placeholder="
-            toTrash
-              ? '已选择移动到暂存垃圾箱'
-              : '例如：selected 或 ../sibling-dir'
-          "
+          placeholder="例如：selected 或 ../sibling-dir"
           class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-800 px-4 py-2 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="moving || toTrash"
+          :disabled="moving"
           @keyup.enter="handleMoveImages"
         />
       </div>
 
-      <!-- 移至系统回收站选项 -->
-      <div class="flex items-center gap-2 select-none py-1">
-        <input
-          id="toTrash"
-          v-model="toTrash"
-          type="checkbox"
-          class="w-4 h-4 rounded border-primary-700 bg-primary-800 text-secondary-500 focus:ring-secondary-500/30 cursor-pointer"
-          :disabled="moving"
-        />
-        <label
-          for="toTrash"
-          class="text-xs text-primary-200 cursor-pointer select-none"
+      <!-- 移至系统回收站说明 -->
+      <div
+        v-else
+        class="rounded-xl bg-primary-900/20 border border-primary-800/20 p-4 text-xs text-primary-300 leading-relaxed flex gap-2 items-start"
+      >
+        <svg
+          class="w-4 h-4 text-secondary-400 shrink-0 mt-0.5"
+          viewBox="0 0 24 24"
         >
-          移至暂存垃圾箱 (支持撤销，可在回收站历史中随时清空)
-        </label>
+          <path :d="mdiDelete" fill="currentColor" />
+        </svg>
+        <div>
+          <span class="font-medium text-primary-200">说明：</span>
+          图片及其配套的伴随文件将被移动到暂存目录中。此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
+        </div>
       </div>
 
       <!-- 错误信息提示 -->
@@ -123,7 +162,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { mdiFolderMove, mdiClose, mdiLoading } from "@mdi/js";
+import { mdiFolderMove, mdiClose, mdiLoading, mdiDelete } from "@mdi/js";
 import mutate from "@/graphql/utils/mutate";
 import {
   MoveImagesDocument,
