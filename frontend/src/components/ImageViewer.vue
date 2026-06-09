@@ -112,14 +112,19 @@
 
       <!-- 复制按钮 -->
       <button
-        class="flex items-center gap-2 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        class="flex items-center gap-2 cursor-pointer select-none transition-colors"
+        :class="
+          isCopied
+            ? 'text-secondary-400 hover:text-secondary-300'
+            : 'text-white/50 hover:text-white'
+        "
         title="复制"
         @click="handleCopy"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">复制</span>
+        <span class="text-xs">{{ isCopied ? "已复制" : "复制" }}</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
@@ -476,7 +481,9 @@ useClickOutside(overflowMenuRef, () => {
   showOverflowMenu.value = false;
 });
 
-const { copyWorkflowOrFile, copyFiles } = useClipboard();
+const { copyWorkflowOrFile, copyFiles, copiedImageIds } = useClipboard();
+
+const isCopied = computed(() => copiedImageIds.value.includes(image.id));
 
 async function handleCopy() {
   await copyWorkflowOrFile(fullFilePath.value, image.id);

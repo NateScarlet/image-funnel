@@ -15,6 +15,11 @@ const { model: lastUnsupportedServerStartTime } = useStorage<
   string | undefined
 >(localStorage, "last_unsupported_start_time_u2h8a9", () => undefined);
 
+// 模块级保存当前会话曾复制过的图片 ID 列表，以实现跨组件、跨查看周期的共享状态
+const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<
+  string[]
+>(sessionStorage, "copied_image_ids_s7f8g9", () => []);
+
 export function useClipboard() {
   const { showSuccess } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
@@ -42,6 +47,14 @@ export function useClipboard() {
     }
   }
 
+  function addCopiedImageId(id: string) {
+    if (!id) return;
+    if (!copiedImageIds.value.includes(id)) {
+      copiedImageIds.value.push(id);
+      flushCopiedImageIds();
+    }
+  }
+
   // 处理单张图片的复制操作（优先尝试只复制 ComfyUI 工作流，如果不存在或失败再复制文件）
   async function copyWorkflowOrFile(filePath: string, imageId: string) {
     if (!filePath || !imageId) return;
@@ -62,6 +75,7 @@ export function useClipboard() {
       const ok = await writeToClipboard(workflow);
       if (ok) {
         showSuccess("已复制 ComfyUI 工作流数据!");
+        addCopiedImageId(imageId);
         return;
       }
     }
@@ -73,6 +87,7 @@ export function useClipboard() {
     } else {
       showSuccess("已复制图片路径!");
     }
+    addCopiedImageId(imageId);
   }
 
   // 判断当前连接的服务器是否已知不支持剪贴板增强
@@ -154,5 +169,6 @@ export function useClipboard() {
   return {
     copyWorkflowOrFile,
     copyFiles,
+    copiedImageIds,
   };
 }
