@@ -41,10 +41,6 @@ func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image
 	}
 
 	dirRelPath := filepath.Dir(relPath)
-	if dirRelPath == "." {
-		dirRelPath = ""
-	}
-
 	dir, err := r.dirRepo.Get(ctx, dirRelPath)
 	if err != nil {
 		return nil, err

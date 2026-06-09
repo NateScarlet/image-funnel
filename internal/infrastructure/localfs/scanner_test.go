@@ -297,3 +297,4 @@ func TestEmptyTrash(t *testing.T) {
 	// 验证暂存区已清空
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId))
 }
+

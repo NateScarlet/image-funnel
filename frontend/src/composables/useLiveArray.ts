@@ -94,7 +94,12 @@ export default function useLiveArray<T extends { id: string }>(
     const merged = uniqBy([...liveItems.value, ...v], (i) => identity(i));
     const mapped = merged.map((item) => {
       const activeItem = itemByKey.get(identity(item));
-      return activeItem || item;
+      // 仅当原始查询里的项没有被标记逻辑删除时，才使用其更完整的原始数据进行合并覆盖。
+      // 否则说明原始数据已被逻辑删除（属于失效历史数据），应直接保留代表最新还原或创建的当前活跃项，避免被屏蔽过滤。
+      if (activeItem && !liveDeletedID.has(activeItem.id)) {
+        return activeItem;
+      }
+      return item;
     });
 
     return mapped

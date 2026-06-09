@@ -47,8 +47,12 @@ type Directory struct {
 // FromRepository 从仓库创建目录，根据相对路径生成 ID
 // 不要用作构建函数
 func FromRepository(relPath string) *Directory {
+	// 统一防御性规整：如果传入的相对路径为空字符串，则规范为代表当前目录的 "."
+	if relPath == "" {
+		relPath = "."
+	}
 	var parentID scalar.ID
-	if relPath != "." && relPath != "" {
+	if relPath != "." {
 		parentPath := filepath.Dir(relPath)
 		parentID = encodeID(parentPath)
 	}

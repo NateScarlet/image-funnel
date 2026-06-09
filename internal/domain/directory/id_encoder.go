@@ -12,6 +12,10 @@ import (
 const idPrefix = "dir:"
 
 func encodeID(relPath string) scalar.ID {
+	// 统一防御性规整：如果目录相对路径为空字符串，则规范为代表当前目录的 "."
+	if relPath == "" {
+		relPath = "."
+	}
 	return scalar.ToID(idPrefix + relPath)
 }
 
