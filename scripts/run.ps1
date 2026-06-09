@@ -1,3 +1,5 @@
+# LLM_NOTICE: 这里是生产环境启动脚本，开发环境在 pnpm dev，不要尝试运行此脚本来调试
+
 # #region 常量定义
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ROOT_DIR = Split-Path -Parent $SCRIPT_DIR
