@@ -425,7 +425,7 @@ import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument } from "@/graphql/generated";
-import useHotkey from "@/composables/useHotkey";
+import { useHotkeys } from "@/composables/useHotkeys";
 import { useOpenDir } from "@/composables/useOpenDir";
 import MemoForm from "./MemoForm.vue";
 import useMemo from "@/composables/useMemo";
@@ -489,17 +489,18 @@ async function copyAbsoluteFilePath() {
 // #region 快捷键复制
 
 // 绑定快捷键 Ctrl+C 改为与界面复制相同的逻辑（优先复制工作流，没有则复制绝对路径）
-useHotkey(
-  "ctrl+c",
-  async (e) => {
-    // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
-    const selection = window.getSelection()?.toString();
-    if (selection) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    await handleCopy();
+useHotkeys(
+  {
+    "ctrl+c": async (e) => {
+      // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      await handleCopy();
+    },
   },
   {
     preventDefault: false,
@@ -510,17 +511,18 @@ useHotkey(
 );
 
 // 绑定快捷键 Ctrl+Shift+C 总是直接复制路径
-useHotkey(
-  "ctrl+shift+c",
-  async (e) => {
-    // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
-    const selection = window.getSelection()?.toString();
-    if (selection) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    await copyAbsoluteFilePath();
+useHotkeys(
+  {
+    "ctrl+shift+c": async (e) => {
+      // 若页面上有文本处于被选中状态，则不拦截，走浏览器原生的复制行为
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      await copyAbsoluteFilePath();
+    },
   },
   {
     preventDefault: false,
@@ -545,12 +547,13 @@ const ratingModel = computed({
 
 // 绑定快捷键 Ctrl+0~5 用于直接修改评分
 for (let r = 0; r <= 5; r++) {
-  useHotkey(
-    `ctrl+digit${r}`,
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setRating(r);
+  useHotkeys(
+    {
+      [`ctrl+digit${r}`]: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setRating(r);
+      },
     },
     {
       description: `设置评分为 ${r} 星`,
@@ -561,13 +564,14 @@ for (let r = 0; r <= 5; r++) {
 
 // 绑定小键盘 0-5 快捷键用于标记评分并切换到下一张
 for (let r = 0; r <= 5; r++) {
-  useHotkey(
-    `numpad${r}`,
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setRating(r);
-      emit("request-next");
+  useHotkeys(
+    {
+      [`numpad${r}`]: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setRating(r);
+        emit("request-next");
+      },
     },
     {
       description: `标记评分为 ${r} 星并切换到下一张`,
@@ -823,10 +827,11 @@ const memoDialogRef =
 useMemo(() => image.memo.id);
 
 // 绑定快捷键 m 或 shift+m 来编辑备注
-useHotkey(
-  ["m", "shift+m"],
-  () => {
-    memoDialog.open();
+useHotkeys(
+  {
+    "m, shift+m": () => {
+      memoDialog.open();
+    },
   },
   {
     description: "编辑图片备注",
@@ -835,32 +840,34 @@ useHotkey(
 );
 
 // 当备注编辑器打开时，启用 escape 键以关闭备注框，同时阻断外层查看器关闭的快捷键
-useHotkey(
-  "escape",
-  () => {
-    memoDialog.close();
+useHotkeys(
+  {
+    escape: () => {
+      memoDialog.close();
+    },
   },
   {
     allowInInputs: true,
     preventDefault: true,
     stopPropagation: true,
     description: "关闭备注",
-    enabled: memoDialog.visible,
+    scope: memoDialog.scopeId,
     category: "图片操作",
   },
 );
 
 // 当备注编辑器打开时，阻断 arrowleft 和 arrowright 的快捷键处理，避免光标移动误触发图片切换
-useHotkey(
-  ["arrowleft", "arrowright"],
-  () => {
-    // 仅用于在此上下文拦截左右方向键分发，保留默认光标移动
+useHotkeys(
+  {
+    "arrowleft, arrowright": () => {
+      // 仅用于在此上下文拦截左右方向键分发，保留默认光标移动
+    },
   },
   {
     allowInInputs: true,
     preventDefault: false,
     stopPropagation: true,
-    enabled: memoDialog.visible,
+    scope: memoDialog.scopeId,
   },
 );
 

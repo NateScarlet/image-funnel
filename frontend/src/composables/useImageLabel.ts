@@ -2,7 +2,7 @@ import { ref, computed, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
 import { UpdateImageMetadataDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
-import useHotkey from "./useHotkey";
+import { useHotkeys } from "./useHotkeys";
 
 // 预设的图片标签颜色映射
 export const PRESET_COLORS: Record<string, string> = {
@@ -96,10 +96,11 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
   for (let i = 0; i < 9; i++) {
     const colorName = colorNames[i];
     const colorCn = colorNamesCn[colorName] || colorName;
-    useHotkey(
-      `ctrl+shift+${i + 1}`,
-      () => {
-        setLabel(colorName);
+    useHotkeys(
+      {
+        [`ctrl+shift+${i + 1}`]: () => {
+          setLabel(colorName);
+        },
       },
       {
         description: `设置标签为 ${colorCn}`,
@@ -108,10 +109,11 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
     );
   }
   // Ctrl+Shift+0 清除标签
-  useHotkey(
-    "ctrl+shift+0",
-    () => {
-      setLabel("");
+  useHotkeys(
+    {
+      "ctrl+shift+0": () => {
+        setLabel("");
+      },
     },
     {
       description: "清除图片标签",

@@ -262,7 +262,7 @@ import UpdateSessionForm from "../components/UpdateSessionForm.vue";
 import SessionProgressBar from "../components/SessionProgressBar.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import useEventListeners from "../composables/useEventListeners";
-import useHotkey from "../composables/useHotkey";
+import { useHotkeys } from "@/composables/useHotkeys";
 import { formatDate } from "../utils/date";
 import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
@@ -325,58 +325,34 @@ const swipeEl = useTemplateRef("swipeEl");
 // #region 快捷键注册
 const isSessionImageActive = computed(() => !!currentImage.value);
 
-useHotkey(
-  "ArrowDown",
-  () => {
-    const imageId = currentImageId.value;
-    if (imageId) {
-      markImage(imageId, ImageAction.REJECT);
-    }
+useHotkeys(
+  {
+    ArrowDown: () => {
+      const imageId = currentImageId.value;
+      if (imageId) {
+        markImage(imageId, ImageAction.REJECT);
+      }
+    },
+    ArrowUp: () => {
+      const imageId = currentImageId.value;
+      if (imageId) {
+        markImage(imageId, ImageAction.SHELVE);
+      }
+    },
+    ArrowRight: () => {
+      const imageId = currentImageId.value;
+      if (imageId) {
+        markImage(imageId, ImageAction.KEEP);
+      }
+    },
+    ArrowLeft: () => {
+      const imageId = currentImageId.value;
+      if (imageId) {
+        undo();
+      }
+    },
   },
   {
-    description: "排除图片",
-    enabled: isSessionImageActive,
-    category: "筛选会话",
-  },
-);
-useHotkey(
-  "ArrowUp",
-  () => {
-    const imageId = currentImageId.value;
-    if (imageId) {
-      markImage(imageId, ImageAction.SHELVE);
-    }
-  },
-  {
-    description: "搁置图片",
-    enabled: isSessionImageActive,
-    category: "筛选会话",
-  },
-);
-useHotkey(
-  "ArrowRight",
-  () => {
-    const imageId = currentImageId.value;
-    if (imageId) {
-      markImage(imageId, ImageAction.KEEP);
-    }
-  },
-  {
-    description: "保留图片",
-    enabled: isSessionImageActive,
-    category: "筛选会话",
-  },
-);
-useHotkey(
-  "ArrowLeft",
-  () => {
-    const imageId = currentImageId.value;
-    if (imageId) {
-      undo();
-    }
-  },
-  {
-    description: "撤销操作",
     enabled: isSessionImageActive,
     category: "筛选会话",
   },

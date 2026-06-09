@@ -21,7 +21,12 @@
 </template>
 
 <script setup lang="ts">
-import useHotkey from "@/composables/useHotkey";
+import { computed, useId } from "vue";
+import { useHotkeys } from "@/composables/useHotkeys";
+
+const props = defineProps<{
+  scopeId?: string | undefined;
+}>();
 
 const visibleModel = defineModel<boolean>("visible", { required: true });
 
@@ -31,10 +36,17 @@ const close = () => {
   visibleModel.value = false;
 };
 
-// 全屏弹窗在激活时，拦截 Escape 键执行关闭操作
-useHotkey("Escape", close, {
-  enabled: visibleModel,
-  description: "关闭查看器",
-  category: "查看器",
-});
+// 全屏弹窗在激活时，使用 useHotkeys 声明 scope 和 Escape 键
+const defaultScopeId = useId();
+const resolvedScopeId = computed(() => props.scopeId || defaultScopeId);
+useHotkeys(
+  {
+    Escape: close,
+  },
+  {
+    defineScope: () => (visibleModel.value ? resolvedScopeId.value : undefined),
+    description: "关闭查看器",
+    category: "查看器",
+  },
+);
 </script>

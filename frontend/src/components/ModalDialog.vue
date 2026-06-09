@@ -40,15 +40,18 @@
 </template>
 
 <script setup lang="ts">
-import useHotkey from "@/composables/useHotkey";
+import { computed, useId } from "vue";
+import { useHotkeys } from "@/composables/useHotkeys";
 
 // #region 属性与事件定义
-withDefaults(
+const props = withDefaults(
   defineProps<{
     containerClass?: string | undefined;
+    scopeId?: string | undefined;
   }>(),
   {
     containerClass: () => "sm:max-w-md",
+    scopeId: undefined,
   },
 );
 
@@ -67,15 +70,15 @@ const onMaskClick = () => {
 };
 // #endregion
 
-// #region 快捷键监听
-useHotkey(
-  "Escape",
-  () => {
-    console.log("[ModalDialog] Escape hotkey triggered");
-    close();
+// #region 快捷键与 Scope 声明
+const defaultScopeId = useId();
+const resolvedScopeId = computed(() => props.scopeId || defaultScopeId);
+useHotkeys(
+  {
+    Escape: close,
   },
   {
-    enabled: visibleModel,
+    defineScope: () => (visibleModel.value ? resolvedScopeId.value : undefined),
     description: "关闭对话框",
     category: "对话框",
   },

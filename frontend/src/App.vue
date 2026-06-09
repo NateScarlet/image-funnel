@@ -20,8 +20,8 @@ import NotificationList from "./components/NotificationList.vue";
 import HotkeyHelp from "./components/HotkeyHelp.vue";
 import OpenDirHelp from "./components/OpenDirHelp.vue";
 import useFullscreenRendererElement from "./composables/useFullscreenRendererElement";
-import useHotkey from "./composables/useHotkey";
 import { useOpenDir } from "./composables/useOpenDir";
+import { useHotkeys } from "./composables/useHotkeys";
 import useModalDialog from "./composables/useModalDialog";
 import DeviceManager from "./components/DeviceManager.vue";
 
@@ -43,18 +43,20 @@ watch(showOpenDirHelp, (val) => {
   }
 });
 
-useHotkey(
-  ["?", "shift+?"],
-  () => {
-    if (hotkeyHelpDialog.visible.value) {
-      hotkeyHelpDialog.close();
-    } else {
-      hotkeyHelpDialog.open();
-    }
+useHotkeys(
+  {
+    "?, shift+?": () => {
+      if (hotkeyHelpDialog.visible.value) {
+        hotkeyHelpDialog.close();
+      } else {
+        hotkeyHelpDialog.open();
+      }
+    },
   },
   {
     description: "显示/隐藏快捷键帮助",
     category: "全局",
+    global: true,
   },
 );
 </script>

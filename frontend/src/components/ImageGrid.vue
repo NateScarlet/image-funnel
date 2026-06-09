@@ -610,7 +610,7 @@ import RatingIcon from "./RatingIcon.vue";
 import useBulkOperations from "@/composables/useBulkOperations";
 import RatingFilter from "./RatingFilter.vue";
 import ImageViewer from "./ImageViewer.vue";
-import useHotkey from "@/composables/useHotkey";
+import { useHotkeys } from "@/composables/useHotkeys";
 import { useDirectoryState } from "@/composables/useDirectoryState";
 import useBrowseImages from "@/composables/useBrowseImages";
 import { formatSize } from "@/utils/formatSize";
@@ -865,154 +865,120 @@ function nextImage() {
   }
 }
 
-// 查看器打开时：左右方向键切换图片，Esc 关闭查看器
-const isViewerOpen = computed(() => currentImageId.value !== undefined);
+// #region 移动匹配图片模块
+const moveImagesDialog = useModalDialog();
+const imageViewerDialog = useModalFullscreen();
+// #endregion
 
-useHotkey(
-  "arrowleft",
-  () => {
-    prevImage();
-  },
+// 查看器打开时：左右方向键切换图片，Esc 关闭查看器
+
+useHotkeys(
   {
-    allowInInputs: true,
-    description: "上一张图片",
-    enabled: isViewerOpen,
-    category: "图片浏览",
-  },
-);
-useHotkey(
-  "arrowright",
-  () => {
-    nextImage();
-  },
-  {
-    allowInInputs: true,
-    description: "下一张图片",
-    enabled: isViewerOpen,
-    category: "图片浏览",
-  },
-);
-useHotkey(
-  "home",
-  () => {
-    if (images.value.length > 0) {
-      const img = images.value[0];
-      currentImageId.value = img.id;
-      viewerHash.value = img.filename;
-    }
-  },
-  {
-    allowInInputs: true,
-    description: "切换到第一张图片",
-    enabled: isViewerOpen,
-    category: "图片浏览",
-  },
-);
-useHotkey(
-  "end",
-  async () => {
-    let pageCount = 0;
-    while (hasNextPage.value) {
-      if (pageCount > 0 && pageCount % 10 === 0) {
-        const shouldContinue = confirm(
-          `已经自动加载了 ${pageCount} 页图片，是否继续加载？`,
-        );
-        if (!shouldContinue) {
+    arrowleft: () => {
+      prevImage();
+    },
+    arrowright: () => {
+      nextImage();
+    },
+    home: () => {
+      if (images.value.length > 0) {
+        const img = images.value[0];
+        currentImageId.value = img.id;
+        viewerHash.value = img.filename;
+      }
+    },
+    end: async () => {
+      let pageCount = 0;
+      while (hasNextPage.value) {
+        if (pageCount > 0 && pageCount % 10 === 0) {
+          const shouldContinue = confirm(
+            `已经自动加载了 ${pageCount} 页图片，是否继续加载？`,
+          );
+          if (!shouldContinue) {
+            break;
+          }
+        }
+        const prevLength = images.value.length;
+        await fetchMore();
+        await nextTick();
+        if (images.value.length <= prevLength) {
           break;
         }
+        pageCount++;
       }
-      const prevLength = images.value.length;
-      await fetchMore();
-      await nextTick();
-      if (images.value.length <= prevLength) {
-        break;
+      if (images.value.length > 0) {
+        const img = images.value[images.value.length - 1];
+        currentImageId.value = img.id;
+        viewerHash.value = img.filename;
       }
-      pageCount++;
-    }
-    if (images.value.length > 0) {
-      const img = images.value[images.value.length - 1];
-      currentImageId.value = img.id;
-      viewerHash.value = img.filename;
-    }
+    },
   },
   {
     allowInInputs: true,
-    description: "自动向后加载并切换到最后一张图片",
-    enabled: isViewerOpen,
+    scope: imageViewerDialog.scopeId,
     category: "图片浏览",
   },
 );
-useHotkey(
-  "ctrl+a",
-  (e) => {
-    const selection = window.getSelection()?.toString();
-    if (selection) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isBulkMode.value) {
-      isBulkMode.value = true;
-    }
-    selectAll();
+
+useHotkeys(
+  {
+    "ctrl+a": (e) => {
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isBulkMode.value) {
+        isBulkMode.value = true;
+      }
+      selectAll();
+    },
   },
   {
     preventDefault: false,
     stopPropagation: false,
     description: "全选所有图片",
-    enabled: computed(() => !isViewerOpen.value),
     category: "批量操作",
   },
 );
-useHotkey(
-  "ctrl+c",
-  (e) => {
-    const selection = window.getSelection()?.toString();
-    if (selection) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    copySelectedImages();
+
+useHotkeys(
+  {
+    "ctrl+c": (e) => {
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      copySelectedImages();
+    },
   },
   {
     preventDefault: false,
     stopPropagation: false,
     description: "复制选中的图片文件",
     enabled: computed(
-      () =>
-        isBulkMode.value &&
-        selectedImageIds.value.length > 0 &&
-        !isViewerOpen.value,
+      () => isBulkMode.value && selectedImageIds.value.length > 0,
     ),
     category: "批量操作",
   },
 );
 
-useHotkey(
-  "escape",
-  () => {
-    isBulkMode.value = false;
+useHotkeys(
+  {
+    escape: () => {
+      isBulkMode.value = false;
+    },
   },
   {
     allowInInputs: false,
     description: "退出批量模式",
-    enabled: computed(
-      () =>
-        isBulkMode.value &&
-        !isViewerOpen.value &&
-        !moveImagesDialog.visible.value,
-    ),
+    enabled: isBulkMode,
     category: "批量操作",
   },
 );
-
-// #endregion
-
-// #region 移动匹配图片模块
-const moveImagesDialog = useModalDialog();
-const imageViewerDialog = useModalFullscreen();
-// #endregion
 
 // #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
 const viewerHash = useLocationHash();

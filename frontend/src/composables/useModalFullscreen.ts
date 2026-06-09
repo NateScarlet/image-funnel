@@ -1,5 +1,5 @@
 import type { FunctionalComponent, TeleportProps } from "vue";
-import { h, ref } from "vue";
+import { h, ref, useId } from "vue";
 import ModalFullscreen from "@/components/ModalFullscreen.vue";
 import useModal from "./useModal";
 
@@ -22,6 +22,8 @@ export default function useModalFullscreen({
   const modal = useModal();
   const visible = ref(false);
 
+  const scopeId = useId();
+
   // 包装后的全屏对话框组件，内部渲染 ModalFullscreen 并传递事件与属性
   const component: FunctionalComponent<
     {
@@ -42,6 +44,7 @@ export default function useModalFullscreen({
           {
             ...ctx.attrs,
             visible: visible.value,
+            scopeId,
             onAfterLeave: () => {
               modal.hide();
               onDidClose?.();
@@ -90,5 +93,6 @@ export default function useModalFullscreen({
     open,
     close,
     visible,
+    scopeId,
   };
 }

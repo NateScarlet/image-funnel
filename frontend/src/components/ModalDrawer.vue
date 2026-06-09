@@ -46,18 +46,21 @@
 </template>
 
 <script setup lang="ts">
-import useHotkey from "@/composables/useHotkey";
+import { computed, useId } from "vue";
+import { useHotkeys } from "@/composables/useHotkeys";
 import { mdiClose } from "@mdi/js";
 
 // #region 属性与事件定义
-withDefaults(
+const props = withDefaults(
   defineProps<{
     visible?: boolean;
     containerClass?: string;
+    scopeId?: string | undefined;
   }>(),
   {
     containerClass: () =>
       "bg-primary-800 border-l border-primary-700 p-6 overflow-y-auto overflow-x-hidden shadow-2xl flex flex-col h-full w-full max-w-md text-left",
+    scopeId: undefined,
   },
 );
 
@@ -73,11 +76,18 @@ const close = () => {
 };
 // #endregion
 
-// #region 快捷键监听
-useHotkey("Escape", close, {
-  enabled: visibleModel,
-  description: "关闭抽屉",
-  category: "抽屉",
-});
+// #region 快捷键与 Scope 声明
+const defaultScopeId = useId();
+const resolvedScopeId = computed(() => props.scopeId || defaultScopeId);
+useHotkeys(
+  {
+    Escape: close,
+  },
+  {
+    defineScope: () => (visibleModel.value ? resolvedScopeId.value : undefined),
+    description: "关闭抽屉",
+    category: "抽屉",
+  },
+);
 // #endregion
 </script>

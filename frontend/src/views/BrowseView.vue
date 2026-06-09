@@ -290,7 +290,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import useHotkey from "@/composables/useHotkey";
+import { useHotkeys } from "@/composables/useHotkeys";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -459,30 +459,33 @@ const fullDirectoryPath = computed(() => {
 // #region 同级目录切换快捷键
 
 // 返回上一级目录
-useHotkey(
-  "backspace",
-  () => {
-    if (canGoToParent.value) {
-      goToParent();
-    }
+useHotkeys(
+  {
+    backspace: () => {
+      if (canGoToParent.value) {
+        goToParent();
+      }
+    },
   },
   { description: "返回上一级目录", category: "目录导航" },
 );
 
 // 切换到上一个同级目录
-useHotkey(
-  "[",
-  () => {
-    if (prevSibling.value) navigateToDir(prevSibling.value.id);
+useHotkeys(
+  {
+    "[": () => {
+      if (prevSibling.value) navigateToDir(prevSibling.value.id);
+    },
   },
   { description: "上一个目录", category: "目录导航" },
 );
 
 // 切换到下一个同级目录
-useHotkey(
-  "]",
-  () => {
-    if (nextSibling.value) navigateToDir(nextSibling.value.id);
+useHotkeys(
+  {
+    "]": () => {
+      if (nextSibling.value) navigateToDir(nextSibling.value.id);
+    },
   },
   { description: "下一个目录", category: "目录导航" },
 );

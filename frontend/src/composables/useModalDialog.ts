@@ -1,5 +1,5 @@
 import type { FunctionalComponent, TeleportProps } from "vue";
-import { h, ref } from "vue";
+import { h, ref, useId } from "vue";
 import ModalDialog from "@/components/ModalDialog.vue";
 import useModal from "./useModal";
 
@@ -23,6 +23,8 @@ export default function useModalDialog({
   const modal = useModal();
   const visible = ref(false);
 
+  const scopeId = useId();
+
   // 包装后的对话框组件，内部渲染 ModalDialog 并传递事件与属性
   const component: FunctionalComponent<
     {
@@ -44,6 +46,7 @@ export default function useModalDialog({
           {
             ...ctx.attrs,
             visible: visible.value,
+            scopeId,
             containerClass: props.containerClass,
             onAfterLeave: () => {
               modal.hide();
@@ -93,6 +96,7 @@ export default function useModalDialog({
     open,
     close,
     visible,
+    scopeId,
   };
 }
 // #endregion

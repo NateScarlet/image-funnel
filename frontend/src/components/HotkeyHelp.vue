@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { activeHotkeys } from "../composables/useHotkey";
+import { activeHotkeys } from "../composables/useHotkeys";
 import { mdiKeyboardOutline, mdiClose } from "@mdi/js";
 import { computed, toValue } from "vue";
 
