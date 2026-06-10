@@ -58,17 +58,25 @@
     </div>
     <div ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
       <div
-        v-if="sortedDirectories.length > 0"
+        v-if="processedSubdirectories.length > 0"
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
       >
         <RouterLink
-          v-for="subDir in sortedDirectories"
+          v-for="{
+            dir: subDir,
+            isFilteredOutButShown,
+          } in processedSubdirectories"
           :key="subDir.id"
           :to="{
             path: '/browse',
             query: { dir: subDir.id },
           }"
-          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 border border-primary-800 hover:border-secondary-500/50 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
+          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
+          :class="[
+            isFilteredOutButShown
+              ? 'border-2 border-dashed border-yellow-600 hover:border-yellow-500'
+              : 'border border-primary-800 hover:border-secondary-500/50',
+          ]"
         >
           <DirectoryDisplay
             :directory="{ id: subDir.id }"
@@ -153,11 +161,13 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from "vue";
 import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
+import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import useStorage from "@/composables/useStorage";
 import useDirectories from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
+import useDirectoryStats from "@/composables/useDirectoryStats";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{
@@ -218,6 +228,37 @@ const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } =
   );
 
 const loading = computed(() => subdirectoryLoadingCount.value > 0);
+
+const { getCachedStats } = useDirectoryStats();
+
+const processedSubdirectories = computed(() => {
+  const dirs = sortedDirectories.value;
+  const limit = effectiveMaxUnratedCount.value;
+
+  const items = dirs.map((dir) => {
+    const stats = getCachedStats(dir.id);
+    const unratedCount =
+      stats?.ratingCounts.find(
+        (rc: { rating: number; count: number }) => rc.rating === 0,
+      )?.count ?? 0;
+
+    // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
+    // 说明它本来该被过滤掉，但因为有子目录而被保留显示。
+    const isFilteredOutButShown =
+      limit !== undefined &&
+      stats &&
+      stats.subdirectoryCount > 0 &&
+      unratedCount > limit;
+
+    return {
+      dir,
+      isFilteredOutButShown,
+    };
+  });
+
+  // 把 isFilteredOutButShown 的排在最后
+  return sortBy(items, [(item) => (item.isFilteredOutButShown ? 1 : 0)]);
+});
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 

@@ -3,9 +3,13 @@
     :class="[
       'p-4 rounded-lg cursor-pointer transition-all border-2 bg-primary-600',
       selected
-        ? ' border-secondary-500 shadow-lg shadow-secondary-500/30'
-        : ' border-primary-500 hover:border-primary-400 hover:bg-primary-550',
-      filteredOut ? 'opacity-50' : '',
+        ? 'border-secondary-500 shadow-lg shadow-secondary-500/30'
+        : [
+            filteredOut
+              ? 'border-dashed border-yellow-600 hover:border-yellow-500'
+              : 'border-primary-500 hover:border-primary-400',
+            'hover:bg-primary-550',
+          ],
     ]"
     @click="select"
   >
