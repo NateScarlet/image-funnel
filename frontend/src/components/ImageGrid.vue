@@ -345,12 +345,30 @@
 
         <!-- 下一张按钮 -->
         <button
-          v-if="currentImageIndex >= 0 && currentImageIndex < images.length - 1"
+          v-if="
+            currentImageIndex >= 0 &&
+            (currentImageIndex < images.length - 1 || hasNextPage)
+          "
           class="absolute right-4 top-1/2 -translate-y-1/2 z-60 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
           title="下一张图片 (ArrowRight)"
           @click="nextImage"
         >
-          <svg class="w-8 h-8" viewBox="0 0 24 24">
+          <!-- 浏览至当前页最后一张图且在加载下一页数据时，显示旋转加载提示 -->
+          <svg
+            v-if="currentImageIndex === images.length - 1 && loading"
+            class="w-8 h-8 animate-spin text-secondary-500"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg v-else class="w-8 h-8" viewBox="0 0 24 24">
             <path :d="mdiChevronRight" fill="currentColor" />
           </svg>
         </button>
@@ -854,13 +872,43 @@ function prevImage() {
   }
 }
 
-function nextImage() {
+// 预载下一页：若目标图片是当前列表的最后一张，且有后续页面未加载，则在后台静默发起加载请求
+function checkAndFetchMore(index: number) {
+  if (
+    index !== -1 &&
+    index === images.value.length - 1 &&
+    hasNextPage.value &&
+    !loading.value
+  ) {
+    fetchMore();
+  }
+}
+
+async function nextImage() {
   const index = currentImageIndex.value;
-  if (index !== -1 && index < images.value.length - 1) {
-    const img = images.value[index + 1];
+  if (index === -1) return;
+
+  if (index < images.value.length - 1) {
+    const nextIdx = index + 1;
+    const img = images.value[nextIdx];
     if (img) {
       currentImageId.value = img.id;
       viewerHash.value = img.filename;
+      checkAndFetchMore(nextIdx);
+    }
+  } else if (hasNextPage.value && !loading.value) {
+    // 浏览到当前页最后一张且还有下一页时，触发分页加载并等待数据追加
+    const prevLength = images.value.length;
+    await fetchMore();
+    await nextTick();
+    // 确保有新图片加载进来后，自动过渡跳转到新页面的第一张图片
+    if (images.value.length > prevLength) {
+      const img = images.value[prevLength];
+      if (img) {
+        currentImageId.value = img.id;
+        viewerHash.value = img.filename;
+        checkAndFetchMore(prevLength);
+      }
     }
   }
 }
@@ -987,6 +1035,10 @@ function openViewer(image: ImageFragment) {
   currentImageId.value = image.id;
   viewerHash.value = image.filename;
   imageViewerDialog.open();
+
+  // 开启查看器时，检查目标图片是否为当前列表的最后一张
+  const index = images.value.findIndex((img) => img.id === image.id);
+  checkAndFetchMore(index);
 }
 
 function closeViewer() {
