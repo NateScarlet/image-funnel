@@ -30,6 +30,7 @@ export default function useModalDialog({
     {
       containerClass?: string;
       teleport?: TeleportProps;
+      overflowVisible?: boolean;
     },
     {
       afterLeave(): void;
@@ -48,6 +49,7 @@ export default function useModalDialog({
             visible: visible.value,
             scopeId,
             containerClass: props.containerClass,
+            overflowVisible: props.overflowVisible,
             onAfterLeave: () => {
               modal.hide();
               onDidClose?.();
@@ -67,7 +69,7 @@ export default function useModalDialog({
   };
 
   component.inheritAttrs = false;
-  component.props = ["containerClass", "teleport"];
+  component.props = ["containerClass", "teleport", "overflowVisible"];
   component.emits = ["afterLeave"];
 
   async function open() {

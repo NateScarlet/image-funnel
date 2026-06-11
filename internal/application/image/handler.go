@@ -366,12 +366,12 @@ func (h *Handler) Images(
 
 // #endregion
 
-// MoveImages 移动当前目录中筛选匹配的图片及其配套文件至目标相对目录中（相对于当前目录）
+// MoveImages 移动当前目录中筛选匹配的图片及其配套文件至目标目录中
 func (h *Handler) MoveImages(
 	ctx context.Context,
 	directoryID scalar.ID,
 	filterBy shared.ImageFilters,
-	toDirectoryRelPath string,
+	toDirectory shared.PathInput,
 ) (movedCount int, targetAbsDir string, err error) {
 	startTime := time.Now()
 
@@ -381,18 +381,24 @@ func (h *Handler) MoveImages(
 	}
 	relPath := dirInfo.RelPath()
 
+	// 使用领域服务解析并校验输入路径
+	targetRelPath, err := h.dirSvc.ResolvePathInput(ctx, relPath, toDirectory)
+	if err != nil {
+		return 0, "", err
+	}
+
 	h.logger.Info("will move images",
 		zap.Stringer("directoryID", directoryID),
 		zap.String("fromDirectory", relPath),
-		zap.String("toDirectoryRelPath", toDirectoryRelPath),
+		zap.String("targetRelPath", targetRelPath),
 	)
 
-	movedCount, targetAbsDir, err = h.imgMover.Move(ctx, relPath, filterBy, toDirectoryRelPath)
+	movedCount, targetAbsDir, err = h.imgMover.Move(ctx, relPath, filterBy, targetRelPath)
 	if err != nil {
 		h.logger.Error("move images failed",
 			zap.Stringer("directoryID", directoryID),
 			zap.String("fromDirectory", relPath),
-			zap.String("toDirectoryRelPath", toDirectoryRelPath),
+			zap.String("targetRelPath", targetRelPath),
 			zap.Duration("duration", time.Since(startTime)),
 			zap.Error(err),
 		)
@@ -402,7 +408,7 @@ func (h *Handler) MoveImages(
 	h.logger.Info("did move images",
 		zap.Stringer("directoryID", directoryID),
 		zap.String("fromDirectory", relPath),
-		zap.String("toDirectoryRelPath", toDirectoryRelPath),
+		zap.String("targetRelPath", targetRelPath),
 		zap.Int("movedCount", movedCount),
 		zap.String("targetAbsDir", targetAbsDir),
 		zap.Duration("duration", time.Since(startTime)),

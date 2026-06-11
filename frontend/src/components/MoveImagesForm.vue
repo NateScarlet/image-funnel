@@ -84,19 +84,13 @@
       </div>
 
       <!-- 目标目录输入 -->
-      <div v-if="!toTrash">
-        <label class="mb-2 block text-xs font-semibold text-primary-300">
-          目标目录名称（相对于当前目录）
-        </label>
-        <input
-          v-model="targetDirInput"
-          type="text"
-          placeholder="例如：selected 或 ../sibling-dir"
-          class="w-full rounded-xl border border-primary-700 hover:border-primary-600 bg-primary-800 px-4 py-2 text-xs text-white placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 focus:border-secondary-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="moving"
-          @keyup.enter="handleMoveImages"
-        />
-      </div>
+      <PathSelector
+        v-if="!toTrash"
+        v-model="pathInput"
+        :directory-id="directoryId"
+        :disabled="moving"
+        @submit="handleMoveImages"
+      />
 
       <!-- 移至系统回收站说明 -->
       <div
@@ -111,7 +105,8 @@
         </svg>
         <div>
           <span class="font-medium text-primary-200">说明：</span>
-          图片及其配套的伴随文件将被移动到暂存目录中。此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
+          图片及其配套的伴随文件将被移动 to
+          暂存目录中。此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
         </div>
       </div>
 
@@ -137,7 +132,7 @@
       <button
         class="rounded-xl bg-secondary-600 hover:bg-secondary-700 px-5 py-2 text-xs text-white transition-colors disabled:cursor-not-allowed disabled:bg-primary-700 flex items-center gap-2 cursor-pointer font-semibold"
         type="button"
-        :disabled="moving || (!toTrash && !targetDirInput.trim())"
+        :disabled="moving || (!toTrash && !pathInput)"
         @click="handleMoveImages"
       >
         <svg
@@ -168,10 +163,12 @@ import {
   MoveImagesDocument,
   TrashImagesDocument,
   type ImageFiltersInput,
+  type PathInput,
 } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
 import useTrashHistory from "@/composables/useTrashHistory";
+import PathSelector from "./PathSelector.vue";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -185,7 +182,7 @@ const emit = defineEmits<(e: "close") => void>();
 // #endregion
 
 // #region 内部状态管理
-const targetDirInput = ref("");
+const pathInput = ref<PathInput | null>(null);
 const toTrash = ref(false);
 const moving = ref(false);
 const moveError = ref("");
@@ -197,8 +194,7 @@ const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
 
 // #region 执行移动图片操作
 async function handleMoveImages() {
-  const dirName = targetDirInput.value.trim();
-  if (!toTrash.value && !dirName) return;
+  if (!toTrash.value && !pathInput.value) return;
   if (moving.value) return;
 
   moving.value = true;
@@ -237,12 +233,15 @@ async function handleMoveImages() {
           : undefined,
       );
     } else {
+      const toDir = pathInput.value;
+      if (!toDir) return;
+
       const result = await mutate(MoveImagesDocument, {
         variables: {
           input: {
             directoryId: props.directoryId,
             filterBy: props.filterBy,
-            toDirectoryRelPath: dirName,
+            toDirectory: toDir,
           },
         },
       });

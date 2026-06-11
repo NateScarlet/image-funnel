@@ -1,0 +1,6 @@
+query SuggestDirectories($directoryId: ID!, $input: PathInput!) {
+  suggestDirectories(directoryId: $directoryId, input: $input) {
+    id
+    relPath
+  }
+}

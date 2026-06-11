@@ -1,0 +1,11 @@
+"""
+路径输入类型，支持多种格式。使用 @oneOf 约束，必须且只能指定其中一个字段。
+"""
+input PathInput @oneOf @goModel(model: "main/internal/shared.PathInput") {
+  "绝对物理路径"
+  absolute: String
+  "相对于根目录的路径"
+  relativeToRoot: String
+  "相对于当前目录的路径"
+  relativeToCurrent: String
+}

@@ -65,8 +65,8 @@ func (s *ImageMover) Move(
 	filterBy shared.ImageFilters,
 	toDirRelPath string,
 ) (movedCount int, targetAbsDir string, err error) {
-	// 拼接并清理目标目录的相对路径，以支持基于当前目录的相对定位
-	finalRelPath := filepath.Clean(filepath.Join(relPath, toDirRelPath))
+	// 目标目录已经是相对于项目根目录的路径，进行规范化
+	finalRelPath := filepath.Clean(toDirRelPath)
 
 	// 计算目标物理目录的绝对路径，用于创建和返回
 	targetAbsDir = filepath.Join(s.rootDir, finalRelPath)

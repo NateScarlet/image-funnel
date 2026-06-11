@@ -26,11 +26,15 @@
   >
     <template v-if="visibleModel">
       <div
-        class="absolute inset-x-0 bottom-0 sm:inset-0 flex flex-col justify-end sm:items-center sm:justify-center short:justify-start overflow-hidden max-h-full pointer-events-none p-0 sm:p-4"
+        class="absolute inset-x-0 bottom-0 sm:inset-0 flex flex-col justify-end sm:items-center sm:justify-center short:justify-start max-h-full pointer-events-none p-0 sm:p-4"
+        :class="overflowVisible ? 'overflow-visible' : 'overflow-hidden'"
       >
         <div
-          class="relative w-full pointer-events-auto bg-primary-900 border-t border-x sm:border border-primary-700 rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95dvh] sm:max-h-[85vh] short:max-h-dvh text-left"
-          :class="containerClass"
+          class="relative w-full pointer-events-auto bg-primary-900 border-t border-x sm:border border-primary-700 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[95dvh] sm:max-h-[85vh] short:max-h-dvh text-left"
+          :class="[
+            containerClass,
+            overflowVisible ? 'overflow-visible' : 'overflow-hidden',
+          ]"
         >
           <slot></slot>
         </div>
@@ -48,10 +52,12 @@ const props = withDefaults(
   defineProps<{
     containerClass?: string | undefined;
     scopeId?: string | undefined;
+    overflowVisible?: boolean;
   }>(),
   {
     containerClass: () => "sm:max-w-md",
     scopeId: undefined,
+    overflowVisible: false,
   },
 );
 

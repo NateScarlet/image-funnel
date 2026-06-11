@@ -21,7 +21,7 @@ type ApprovePairingRequestInput struct {
 type AttachFileToClipboardInput struct {
 	// 要附加到剪贴板的文件路径列表，可以是绝对路径或相对于根目录的路径
 	Paths []string `json:"paths"`
-	// 随机数，用于验证剪贴板数据来源。客户端需先在本地写入包含此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以验证操作发自本机客户端。
+	// 随机数，用于验证剪贴板数据来源。客户端需先在本地写入 meta[name="io.github.natescarlet.image-funnel.nonce"] 为此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以判断操作是否发自本机客户端。
 	Nonce            string  `json:"nonce"`
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
@@ -193,9 +193,9 @@ type MoveImagesInput struct {
 	DirectoryID scalar.ID `json:"directoryId"`
 	// 需要移动的图片筛选条件
 	FilterBy *shared.ImageFilters `json:"filterBy"`
-	// 目标目录相对路径，相对于当前所在的目录（支持 ..）
-	ToDirectoryRelPath string  `json:"toDirectoryRelPath"`
-	ClientMutationID   *string `json:"clientMutationId,omitempty"`
+	// 目标目录
+	ToDirectory      *shared.PathInput `json:"toDirectory"`
+	ClientMutationID *string           `json:"clientMutationId,omitempty"`
 }
 
 type MoveImagesPayload struct {

@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // MoveImages is the resolver for the moveImages field.
@@ -17,7 +18,9 @@ func (r *mutationResolver) MoveImages(ctx context.Context, input MoveImagesInput
 		filter = *input.FilterBy
 	}
 
-	movedCount, targetAbsDir, err := r.app.MoveImages(ctx, input.DirectoryID, filter, input.ToDirectoryRelPath)
+	toDir := util.UnwrapPointer(input.ToDirectory)
+
+	movedCount, targetAbsDir, err := r.app.MoveImages(ctx, input.DirectoryID, filter, toDir)
 	if err != nil {
 		return nil, err
 	}

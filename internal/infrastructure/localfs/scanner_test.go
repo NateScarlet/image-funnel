@@ -149,8 +149,8 @@ func TestMoveImages(t *testing.T) {
 		Rating: []int{0},
 	}
 
-	// 移动到同级下的新目录
-	moved, targetAbsDir, err := ctx.imageMover.Move(context.Background(), srcDir, filter, "../target-dir")
+	// 移动到相对于根目录的新目录
+	moved, targetAbsDir, err := ctx.imageMover.Move(context.Background(), srcDir, filter, "target-dir")
 	require.NoError(t, err)
 	assert.Equal(t, 2, moved) // 应该移动了 img1.jpg 和 img2.jpg 两张图片
 
@@ -169,7 +169,7 @@ func TestMoveImages(t *testing.T) {
 	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "other.txt"))
 
 	// 测试二：安全边界校验越界（尝试移动到根目录外部）
-	_, _, err = ctx.imageMover.Move(context.Background(), srcDir, filter, "../../outside")
+	_, _, err = ctx.imageMover.Move(context.Background(), srcDir, filter, "../outside")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes root directory")
 }

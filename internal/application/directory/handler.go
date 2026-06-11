@@ -152,6 +152,27 @@ func (h *Handler) Directories(
 	return buf.Value()
 }
 
+// SuggestDirectories 获取用于自动完成的目录建议列表，限制返回前 50 条并转换为 DTO
+func (h *Handler) SuggestDirectories(ctx context.Context, directoryID scalar.ID, input shared.PathInput) ([]*shared.DirectoryDTO, error) {
+	dir, err := h.dirSvc.GetDirectory(ctx, directoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []*shared.DirectoryDTO
+	for matchedDir, err := range h.dirSvc.SuggestDirectories(ctx, dir.RelPath(), input) {
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, h.dtoFactory.New(matchedDir))
+		if len(results) >= 50 {
+			break
+		}
+	}
+
+	return results, nil
+}
+
 // DirectoryChanged 订阅目录变更事件
 // 根据过滤器返回变更的目录信息
 func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.DirectoryFilters) iter.Seq2[*shared.DirectoryDTO, error] {

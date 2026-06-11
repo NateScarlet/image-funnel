@@ -279,15 +279,16 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		AuthStatus      func(childComplexity int) int
-		ComfyUIWorkflow func(childComplexity int, id scalar.ID) int
-		Devices         func(childComplexity int) int
-		Meta            func(childComplexity int) int
-		Node            func(childComplexity int, id scalar.ID) int
-		PairingRequests func(childComplexity int) int
-		RootDirectory   func(childComplexity int) int
-		Session         func(childComplexity int, id scalar.ID) int
-		TrashHistory    func(childComplexity int, first *int, after *string) int
+		AuthStatus         func(childComplexity int) int
+		ComfyUIWorkflow    func(childComplexity int, id scalar.ID) int
+		Devices            func(childComplexity int) int
+		Meta               func(childComplexity int) int
+		Node               func(childComplexity int, id scalar.ID) int
+		PairingRequests    func(childComplexity int) int
+		RootDirectory      func(childComplexity int) int
+		Session            func(childComplexity int, id scalar.ID) int
+		SuggestDirectories func(childComplexity int, directoryID scalar.ID, input shared.PathInput) int
+		TrashHistory       func(childComplexity int, first *int, after *string) int
 	}
 
 	RatingCount struct {
@@ -449,6 +450,7 @@ type QueryResolver interface {
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
+	SuggestDirectories(ctx context.Context, directoryID scalar.ID, input shared.PathInput) ([]*shared.DirectoryDTO, error)
 	TrashHistory(ctx context.Context, first *int, after *string) (*shared.TrashHistoryConnectionDTO, error)
 }
 type SessionResolver interface {
@@ -1495,6 +1497,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Session(childComplexity, args["id"].(scalar.ID)), true
+	case "Query.suggestDirectories":
+		if e.complexity.Query.SuggestDirectories == nil {
+			break
+		}
+
+		args, err := ec.field_Query_suggestDirectories_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.SuggestDirectories(childComplexity, args["directoryId"].(scalar.ID), args["input"].(shared.PathInput)), true
 	case "Query.trashHistory":
 		if e.complexity.Query.TrashHistory == nil {
 			break
@@ -1977,6 +1990,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMemoFiltersInput,
 		ec.unmarshalInputMoveImagesInput,
+		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
 		ec.unmarshalInputTrashImagesInput,
@@ -2121,6 +2135,9 @@ directive @goField(
 ) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
 
 directive @public on FIELD_DEFINITION
+
+directive @oneOf on INPUT_OBJECT
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/auth_status.graphql", Input: `type AuthStatus {
   isTrustedDevice: Boolean!
@@ -2380,6 +2397,18 @@ interface Node {
   status: PairingRequestStatus!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/types/path_input.graphql", Input: `"""
+路径输入类型，支持多种格式。使用 @oneOf 约束，必须且只能指定其中一个字段。
+"""
+input PathInput @oneOf @goModel(model: "main/internal/shared.PathInput") {
+  "绝对物理路径"
+  absolute: String
+  "相对于根目录的路径"
+  relativeToRoot: String
+  "相对于当前目录的路径"
+  relativeToCurrent: String
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/rating_count.graphql", Input: `"图片评分分布统计"
 type RatingCount {
   "XMP 评分值"
@@ -2519,6 +2548,16 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   "通过 ID 获取会话，不存在时返回 null"
   session(id: ID!): Session
 }`, BuiltIn: false},
+	{Name: "../../../graph/queries/suggest_directories.graphql", Input: `extend type Query {
+  "根据当前输入模式和路径前缀，建议匹配的直接子目录列表"
+  suggestDirectories(
+    "当前所在目录ID，一律由客户端提供"
+    directoryId: ID!
+    "用户当前的路径输入，可能包含不完整的层级和搜索前缀"
+    input: PathInput!
+  ): [Directory!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/device_deleted.graphql", Input: `extend type Subscription {
   """
   当设备被删除时触发，返回被删除设备的 ID
@@ -2601,7 +2640,9 @@ input ApprovePairingRequestInput {
 input AttachFileToClipboardInput {
   "要附加到剪贴板的文件路径列表，可以是绝对路径或相对于根目录的路径"
   paths: [String!]!
-  "随机数，用于验证剪贴板数据来源。客户端需先在本地写入包含此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以验证操作发自本机客户端。"
+  """
+  随机数，用于验证剪贴板数据来源。客户端需先在本地写入 meta[name="io.github.natescarlet.image-funnel.nonce"] 为此随机数的 HTML 格式剪贴板内容，服务端通过读取本地剪贴板以判断操作是否发自本机客户端。
+  """
   nonce: String!
   clientMutationId: String
 }
@@ -2614,7 +2655,8 @@ type AttachFileToClipboardPayload {
 
 extend type Mutation {
   attachFileToClipboard(input: AttachFileToClipboardInput!): AttachFileToClipboardPayload!
-}`, BuiltIn: false},
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/begin_web_authn_login.graphql", Input: `extend type Mutation {
   beginWebAuthnLogin(input: BeginWebAuthnLoginInput!): BeginWebAuthnLoginPayload! @public
 }
@@ -2811,8 +2853,8 @@ input MoveImagesInput {
   directoryId: ID!
   "需要移动的图片筛选条件"
   filterBy: ImageFiltersInput!
-  "目标目录相对路径，相对于当前所在的目录（支持 ..）"
-  toDirectoryRelPath: String!
+  "目标目录"
+  toDirectory: PathInput!
   clientMutationId: String
 }
 
@@ -3375,6 +3417,22 @@ func (ec *executionContext) field_Query_session_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_suggestDirectories_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "directoryId", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["directoryId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNPathInput2mainᚋinternalᚋsharedᚐPathInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -8748,6 +8806,71 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_suggestDirectories(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_suggestDirectories,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().SuggestDirectories(ctx, fc.Args["directoryId"].(scalar.ID), fc.Args["input"].(shared.PathInput))
+		},
+		nil,
+		ec.marshalNDirectory2ᚕᚖmainᚋinternalᚋsharedᚐDirectoryDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_suggestDirectories(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			case "directoriesV2":
+				return ec.fieldContext_Directory_directoriesV2(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_suggestDirectories_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_trashHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13506,7 +13629,7 @@ func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"directoryId", "filterBy", "toDirectoryRelPath", "clientMutationId"}
+	fieldsInOrder := [...]string{"directoryId", "filterBy", "toDirectory", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13527,13 +13650,13 @@ func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, o
 				return it, err
 			}
 			it.FilterBy = data
-		case "toDirectoryRelPath":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("toDirectoryRelPath"))
-			data, err := ec.unmarshalNString2string(ctx, v)
+		case "toDirectory":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("toDirectory"))
+			data, err := ec.unmarshalNPathInput2ᚖmainᚋinternalᚋsharedᚐPathInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ToDirectoryRelPath = data
+			it.ToDirectory = data
 		case "clientMutationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -13541,6 +13664,47 @@ func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, o
 				return it, err
 			}
 			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputPathInput(ctx context.Context, obj any) (shared.PathInput, error) {
+	var it shared.PathInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"absolute", "relativeToRoot", "relativeToCurrent"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "absolute":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("absolute"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Absolute = data
+		case "relativeToRoot":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("relativeToRoot"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RelativeToRoot = data
+		case "relativeToCurrent":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("relativeToCurrent"))
+			data, err := ec.unmarshalOString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RelativeToCurrent = data
 		}
 	}
 
@@ -16071,6 +16235,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "suggestDirectories":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_suggestDirectories(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "trashHistory":
 			field := field
 
@@ -17918,13 +18104,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -18356,6 +18542,16 @@ func (ec *executionContext) unmarshalNPairingRequestStatus2mainᚋinternalᚋenu
 
 func (ec *executionContext) marshalNPairingRequestStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.PairingRequestStatusMeta]) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNPathInput2mainᚋinternalᚋsharedᚐPathInput(ctx context.Context, v any) (shared.PathInput, error) {
+	res, err := ec.unmarshalInputPathInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNPathInput2ᚖmainᚋinternalᚋsharedᚐPathInput(ctx context.Context, v any) (*shared.PathInput, error) {
+	res, err := ec.unmarshalInputPathInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNRatingCount2ᚕᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRatingCountᚄ(ctx context.Context, sel ast.SelectionSet, v []*RatingCount) graphql.Marshaler {

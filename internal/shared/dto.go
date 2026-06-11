@@ -14,6 +14,13 @@ type FileChangedEvent struct {
 	OccurredAt  time.Time
 }
 
+// PathInput 支持多种格式的路径输入
+type PathInput struct {
+	Absolute          string
+	RelativeToRoot    string
+	RelativeToCurrent string
+}
+
 // DirectoryFilters 目录查询过滤器
 type DirectoryFilters struct {
 	ID    []scalar.ID // 目录ID列表，空表示所有目录

@@ -2,9 +2,13 @@ package directory
 
 import (
 	"context"
+	"iter"
+	"main/internal/apperror"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -92,4 +96,114 @@ func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, e
 		return nil, err
 	}
 	return s.repo.Get(ctx, relPath)
+}
+
+// ResolvePathInput 解析并校验 PathInput，返回相对于根目录的规范化相对路径。
+// 若解析失败或路径逃逸根目录，则返回错误。
+func (s *Service) ResolvePathInput(ctx context.Context, currentRelPath string, input shared.PathInput) (string, error) {
+	var resolvedRelPath string
+	var modeCount int
+
+	if input.Absolute != "" {
+		rel, err := filepath.Rel(s.rootDir, input.Absolute)
+		if err != nil {
+			return "", apperror.New("PATH_INVALID", "invalid absolute path", "无效的绝对路径")
+		}
+		resolvedRelPath = rel
+		modeCount++
+	}
+	if input.RelativeToRoot != "" {
+		resolvedRelPath = input.RelativeToRoot
+		modeCount++
+	}
+	if input.RelativeToCurrent != "" {
+		resolvedRelPath = filepath.Join(currentRelPath, input.RelativeToCurrent)
+		modeCount++
+	}
+
+	if modeCount == 0 {
+		return "", apperror.New("PATH_INVALID", "path input is empty", "路径输入不能为空")
+	}
+	if modeCount > 1 {
+		return "", apperror.New("PATH_INVALID", "multiple path modes specified", "只能指定一种路径模式")
+	}
+
+	resolvedRelPath = filepath.Clean(resolvedRelPath)
+
+	// 安全校验：确保最终目标路径在配置的根目录范围内，防止目录穿越
+	if err := util.EnsurePathInRoot(s.rootDir, resolvedRelPath); err != nil {
+		return "", apperror.New("PATH_INVALID", "path escapes root directory", "路径超出项目根目录范围")
+	}
+
+	return resolvedRelPath, nil
+}
+
+// SuggestDirectories 根据当前所在目录的相对路径和用户当前的路径输入，智能建议匹配的子目录迭代器
+func (s *Service) SuggestDirectories(ctx context.Context, currentRelPath string, input shared.PathInput) iter.Seq2[*Directory, error] {
+	return func(yield func(*Directory, error) bool) {
+		var rawInput string
+		var testInput shared.PathInput
+
+		if input.Absolute != "" {
+			rawInput = input.Absolute
+			basePath, _ := splitPathForSuggest(rawInput)
+			if basePath == "" {
+				// 绝对路径若没有斜杠，则不具备合法前缀，无法提供联想，直接返回
+				return
+			}
+			testInput.Absolute = basePath
+		} else if input.RelativeToRoot != "" {
+			rawInput = input.RelativeToRoot
+			basePath, _ := splitPathForSuggest(rawInput)
+			if basePath == "" {
+				basePath = "."
+			}
+			testInput.RelativeToRoot = basePath
+		} else {
+			rawInput = input.RelativeToCurrent
+			basePath, _ := splitPathForSuggest(rawInput)
+			if basePath == "" {
+				basePath = "."
+			}
+			testInput.RelativeToCurrent = basePath
+		}
+
+		_, searchTerm := splitPathForSuggest(rawInput)
+
+		baseRelPath, err := s.ResolvePathInput(ctx, currentRelPath, testInput)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+
+		searchTermLower := strings.ToLower(searchTerm)
+
+		for dir, err := range s.repo.Find(ctx, baseRelPath) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+
+			name := filepath.Base(dir.RelPath())
+			// 过滤隐藏目录
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+
+			// 忽略大小写的子串包含匹配（同级模糊匹配）
+			if searchTermLower == "" || strings.Contains(strings.ToLower(name), searchTermLower) {
+				if !yield(dir, nil) {
+					return
+				}
+			}
+		}
+	}
+}
+
+func splitPathForSuggest(p string) (basePath, searchTerm string) {
+	i := strings.LastIndexAny(p, "/\\")
+	if i < 0 {
+		return "", p
+	}
+	return p[:i], p[i+1:]
 }

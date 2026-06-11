@@ -1,0 +1,9 @@
+extend type Query {
+  "根据当前输入模式和路径前缀，建议匹配的直接子目录列表"
+  suggestDirectories(
+    "当前所在目录ID，一律由客户端提供"
+    directoryId: ID!
+    "用户当前的路径输入，可能包含不完整的层级和搜索前缀"
+    input: PathInput!
+  ): [Directory!]!
+}

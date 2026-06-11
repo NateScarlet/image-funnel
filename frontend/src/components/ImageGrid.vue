@@ -404,7 +404,10 @@
     </imageViewerDialog.component>
 
     <!-- 移动图片模态框 -->
-    <moveImagesDialog.component container-class="sm:max-w-md p-6">
+    <moveImagesDialog.component
+      container-class="sm:max-w-md p-6"
+      overflow-visible
+    >
       <MoveImagesForm
         :directory-id="directoryId"
         :filter-by="moveImagesFilterBy"
