@@ -247,6 +247,7 @@
 </template>
 
 <script setup lang="ts">
+import "core-js/actual/disposable-stack";
 import { ref, shallowRef, computed, useTemplateRef } from "vue";
 
 import mutate from "../graphql/utils/mutate";
@@ -269,6 +270,7 @@ import useFullscreenRendererElement from "@/composables/useFullscreenRendererEle
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
 import Time from "@/utils/Time";
+import useNotification from "@/composables/useNotification";
 
 const rendererEl = useFullscreenRendererElement();
 
@@ -497,18 +499,30 @@ function handleCommit() {
   }
 }
 
+const { show: showNotification, remove: removeNotification } =
+  useNotification();
+
 const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
   if (!canUndo.value) return;
   undoing.value = true;
 
-  try {
-    await mutate(UndoDocument, {
-      variables: { input: { sessionId: sessionId.value } },
-    });
-  } finally {
+  using stack = new DisposableStack();
+  stack.defer(() => {
     undoing.value = false;
-  }
+  });
+
+  stack.adopt(
+    setTimeout(() => {
+      const id = showNotification("正在撤销，请稍候...", "info", 0);
+      stack.adopt(id, removeNotification);
+    }, 800),
+    clearTimeout,
+  );
+
+  await mutate(UndoDocument, {
+    variables: { input: { sessionId: sessionId.value } },
+  });
 }
 
 function insideSwipeArea(e: { clientX: number; clientY: number }) {

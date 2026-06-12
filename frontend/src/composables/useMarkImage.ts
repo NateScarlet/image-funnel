@@ -1,9 +1,11 @@
+import "core-js/actual/disposable-stack";
 import { ref, shallowRef, type MaybeRefOrGetter, toValue } from "vue";
 import Time from "@/utils/Time";
 import useDocumentVisibility from "@/composables/useDocumentVisibility";
 import mutate from "@/graphql/utils/mutate";
 import { MarkImageDocument, ImageAction } from "@/graphql/generated";
 import Duration from "@/utils/Duration";
+import useNotification from "@/composables/useNotification";
 
 export default function useMarkImage(
   sessionId: MaybeRefOrGetter<string>,
@@ -12,6 +14,7 @@ export default function useMarkImage(
   const marking = ref(false);
   const lastMarkedAt = shallowRef(Time.now());
   const { lastBecameVisibleAt } = useDocumentVisibility();
+  const { show, remove } = useNotification();
 
   function getDuration(): Duration {
     const now = Time.now();
@@ -32,24 +35,36 @@ export default function useMarkImage(
   }
 
   async function mark(imageId: string, action: ImageAction) {
+    if (marking.value) {
+      return;
+    }
     marking.value = true;
     const duration = getDuration();
     lastMarkedAt.value = Time.now();
 
-    try {
-      await mutate(MarkImageDocument, {
-        variables: {
-          input: {
-            sessionId: toValue(sessionId),
-            imageId,
-            action,
-            duration: duration.toISOString(),
-          },
-        },
-      });
-    } finally {
+    using stack = new DisposableStack();
+    stack.defer(() => {
       marking.value = false;
-    }
+    });
+
+    stack.adopt(
+      setTimeout(() => {
+        const id = show("正在保存标记，请稍候...", "info", 0);
+        stack.adopt(id, remove);
+      }, 800),
+      clearTimeout,
+    );
+
+    await mutate(MarkImageDocument, {
+      variables: {
+        input: {
+          sessionId: toValue(sessionId),
+          imageId,
+          action,
+          duration: duration.toISOString(),
+        },
+      },
+    });
   }
 
   return {
