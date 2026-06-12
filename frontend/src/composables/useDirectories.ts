@@ -21,6 +21,7 @@ export default function useDirectories(
   options?: {
     loadingCount?: Ref<number>;
     maxUnratedCount?: MaybeRefOrGetter<number | undefined>;
+    showLargeUnrated?: MaybeRefOrGetter<boolean | undefined>;
   },
 ) {
   const directoryId = computed(() => toValue(variables).id);
@@ -147,16 +148,17 @@ export default function useDirectories(
     }).length;
   });
 
-  // 排序并过滤后的目录列表
   const sortedDirectories = computed(() => {
     const dirs = liveDirectories.value;
     const limit = maxUnratedCountVal.value;
+    const showLarge = toValue(options?.showLargeUnrated) ?? false;
 
     const items = dirs.map((dir) => {
       const stats = getCachedStats(dir.id);
       const unratedCount =
         stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       const isLargeUnrated =
+        !showLarge &&
         limit !== undefined &&
         stats?.subdirectoryCount === 0 &&
         unratedCount > limit;

@@ -205,11 +205,6 @@ const { model: showLargeUnrated } = useStorage<boolean>(
   () => false,
 );
 
-// 只有在 !showLargeUnrated 时才需要限制最大未评级数量，否则传 undefined 表示不限制
-const effectiveMaxUnratedCount = computed(() => {
-  return showLargeUnrated.value ? undefined : maxUnratedCount.value;
-});
-
 const subdirectoryLoadingCount = ref(0);
 
 // 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
@@ -223,7 +218,8 @@ const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } =
     }),
     {
       loadingCount: subdirectoryLoadingCount,
-      maxUnratedCount: effectiveMaxUnratedCount,
+      maxUnratedCount: maxUnratedCount,
+      showLargeUnrated,
     },
   );
 
@@ -233,7 +229,8 @@ const { getCachedStats } = useDirectoryStats();
 
 const processedSubdirectories = computed(() => {
   const dirs = sortedDirectories.value;
-  const limit = effectiveMaxUnratedCount.value;
+  const limit = maxUnratedCount.value;
+  const showLarge = showLargeUnrated.value;
 
   const items = dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
@@ -245,6 +242,7 @@ const processedSubdirectories = computed(() => {
     // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
     // 说明它本来该被过滤掉，但因为有子目录而被保留显示。
     const isFilteredOutButShown =
+      !showLarge &&
       limit !== undefined &&
       stats &&
       stats.subdirectoryCount > 0 &&
