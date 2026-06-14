@@ -556,13 +556,16 @@ func (s *inMemorySubscription[T]) more(topic *InMemoryTopic[T]) iter.Seq2[T, err
 		var err error
 		if index > after+1 {
 			// 有事件丢失，重置指针到最早可用事件
-			cursor, index, value = topic.earliestEvent(after)
+			newCursor, newIndex, newValue := topic.earliestEvent(after)
 			// 由于订阅时获取 after 和 cursor 不是原子操作，所以可能重置后发现没丢失
-			if index > after+1 {
+			if newIndex > after+1 {
+				cursor = newCursor
+				index = newIndex
+				value = newValue
 				var dropped = index - after - 1
 				err = fmt.Errorf("%w (%d dropped)", ErrUndeliveredEvents, dropped)
+				after = index - 1
 			}
-			after = index - 1
 		}
 		// 获取所有连续新事件
 		for index == after+1 {
