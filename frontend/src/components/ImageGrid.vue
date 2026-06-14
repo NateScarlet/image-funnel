@@ -44,14 +44,14 @@
           <button
             v-if="deleteUnmatchedInfo"
             :disabled="isDeletingUnmatched"
-            class="px-3 py-1 text-xs rounded-lg transition-all flex items-center gap-2 bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 cursor-pointer select-none hover:text-white"
+            class="px-3 h-8 text-xs font-normal rounded-lg transition-all flex items-center gap-1 bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 cursor-pointer select-none hover:text-white"
             :class="isDeletingUnmatched ? 'opacity-50 cursor-not-allowed' : ''"
             :title="`删除该目录下所有评分在 ${deleteUnmatchedInfo.maxUnmatched} 星及以下的图片`"
             @click="handleDeleteUnmatched"
           >
             <svg
               v-if="isDeletingUnmatched"
-              class="w-4 h-4 animate-spin text-red-400"
+              class="w-4 h-4 animate-spin"
               viewBox="0 0 24 24"
               fill="none"
             >
@@ -63,7 +63,7 @@
                 stroke-linecap="round"
               />
             </svg>
-            <svg v-else class="w-4 h-4 text-red-400" viewBox="0 0 24 24">
+            <svg v-else class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiDelete" fill="currentColor" />
             </svg>
             <span>删除{{ deleteUnmatchedInfo.maxUnmatched }}星以下的图片</span>
