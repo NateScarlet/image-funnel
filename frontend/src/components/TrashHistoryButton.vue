@@ -6,7 +6,7 @@
       <svg class="w-4 h-4 text-red-400 animate-pulse" viewBox="0 0 24 24">
         <path :d="mdiDelete" fill="currentColor" />
       </svg>
-      <span>回收站历史 ({{ trashHistoryNodes.length }})</span>
+      <span>回收站历史 ({{ formatTrashSize(totalTrashSize) }})</span>
     </button>
 
     <!-- 气泡内容面板 -->
@@ -16,9 +16,9 @@
       <div
         class="flex justify-between items-center border-b border-primary-800/50 pb-2"
       >
-        <h4 class="text-xs font-bold text-primary-200">回收站暂存区</h4>
+        <h4 class="text-xs font-bold text-primary-200">回收站</h4>
         <span class="text-[10px] text-primary-500 font-mono">
-          共占用 {{ formatTrashSize(totalTrashSize) }}
+          {{ formatTrashSize(totalTrashSize) }}
         </span>
       </div>
 
