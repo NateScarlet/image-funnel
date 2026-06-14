@@ -180,6 +180,10 @@ func (s *Service) SuggestDirectories(ctx context.Context, currentRelPath string,
 
 		for dir, err := range s.repo.Find(ctx, baseRelPath) {
 			if err != nil {
+				// 当父目录路径在磁盘上不存在时，作为未找到错误优雅忽略，返回空列表而非报错
+				if apperror.IsNotFound(err) {
+					return
+				}
 				yield(nil, err)
 				return
 			}
