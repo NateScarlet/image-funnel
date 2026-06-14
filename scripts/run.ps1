@@ -148,7 +148,8 @@ while ($true) {
         
         $process.StartInfo.FileName = $runBinary
         $process.StartInfo.Arguments = $args -join " "
-        $process.StartInfo.WorkingDirectory = $ROOT_DIR
+        # 保持使用当前 Shell 的工作目录，确保调用者传入的相对路径参数能被正确解析
+        $process.StartInfo.WorkingDirectory = (Get-Location).Path
         $process.StartInfo.CreateNoWindow = $true
         $process.StartInfo.RedirectStandardOutput = $true
         $process.StartInfo.RedirectStandardError = $true
