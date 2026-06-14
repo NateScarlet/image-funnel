@@ -17,7 +17,7 @@
       <!-- 加载提示：当显示缓存数据的同时正在后台更新时显示 -->
       <div
         v-if="loading && stats"
-        class="absolute right-0 top-0 z-10 rounded-bl bg-black/30 p-1 text-white backdrop-blur-[1px]"
+        class="absolute right-0 top-0 z-10 rounded-bl bg-black/30 p-1 text-white backdrop-blur-xs"
         title="正在刷新..."
       >
         <svg

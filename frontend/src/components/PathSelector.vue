@@ -6,7 +6,7 @@
 
     <!-- 路径输入模式选择 -->
     <div
-      class="mb-2 flex bg-primary-900/50 rounded-lg p-0.5 text-[10px] w-fit border border-primary-800"
+      class="mb-2 flex bg-primary-900/50 rounded-lg p-0.5 text-xs w-fit border border-primary-800"
     >
       <button
         type="button"
@@ -113,7 +113,7 @@
             >
               {{ item.relPath }}
             </div>
-            <div class="flex items-center gap-2 mt-0.5 text-[10px]">
+            <div class="flex items-center gap-2 mt-0.5 text-xs">
               <template v-if="getCachedStats(item.id)">
                 <span class="text-primary-300">
                   {{ getCachedStats(item.id)!.imageCount }} 张图片

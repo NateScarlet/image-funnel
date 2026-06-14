@@ -256,10 +256,10 @@
           <div
             v-for="img in images"
             :key="img.id"
-            class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
+            class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-105 hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
             :class="[
               isBulkMode && selectedImageIds.includes(img.id)
-                ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-[1.02]'
+                ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-105'
                 : 'border-primary-800 hover:border-primary-600/80',
               outOfFilterImageIds.has(img.id)
                 ? 'border-yellow-600 border-2 border-dashed'
@@ -331,7 +331,7 @@
               class="absolute inset-x-0 top-0 bg-linear-to-b from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
             >
               <p
-                class="text-[10px] text-white font-medium truncate"
+                class="text-xs text-white font-medium truncate"
                 :title="img.filename"
               >
                 {{ img.filename }}

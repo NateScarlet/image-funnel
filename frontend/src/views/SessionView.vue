@@ -149,7 +149,7 @@
       <div class="flex items-center gap-2 flex-wrap justify-center">
         <span class="flex items-center gap-1">
           <kbd
-            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-xs shadow-sm"
             >↓</kbd
           >
           排除
@@ -157,7 +157,7 @@
         <span class="text-primary-700">|</span>
         <span class="flex items-center gap-1">
           <kbd
-            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-xs shadow-sm"
             >↑</kbd
           >
           搁置
@@ -165,7 +165,7 @@
         <span class="text-primary-700">|</span>
         <span class="flex items-center gap-1">
           <kbd
-            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-xs shadow-sm"
             >→</kbd
           >
           保留
@@ -173,7 +173,7 @@
         <span class="text-primary-700">|</span>
         <span class="flex items-center gap-1">
           <kbd
-            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+            class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-xs shadow-sm"
             >←</kbd
           >
           撤销
@@ -183,7 +183,7 @@
       <div class="flex items-center gap-1">
         <span>按</span>
         <kbd
-          class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-[10px] shadow-sm"
+          class="px-2 py-1 bg-primary-950 text-primary-200 rounded border border-primary-800 font-mono text-xs shadow-sm"
           >?</kbd
         >
         <span>查看所有快捷键</span>

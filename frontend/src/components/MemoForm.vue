@@ -45,7 +45,7 @@
           @input="handleInput"
         ></textarea>
         <div
-          class="absolute bottom-2 sm:bottom-6 right-3 sm:right-8 text-[10px] sm:text-sm uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-2"
+          class="absolute bottom-2 sm:bottom-6 right-3 sm:right-8 text-xs sm:text-sm uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-2"
           :class="{
             'text-secondary-400 opacity-100':
               currentStatus === SaveStatus.SAVING,

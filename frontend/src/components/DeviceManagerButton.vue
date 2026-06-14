@@ -52,7 +52,7 @@ const { devices, pairingRequests, open } = useDevices();
       v-if="pairingRequests.length > 0"
       :class="[
         variant === 'default'
-          ? 'absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-lg animate-pulse'
+          ? 'absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg animate-pulse'
           : 'flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg animate-pulse',
       ]"
     >

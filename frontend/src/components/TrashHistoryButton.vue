@@ -17,7 +17,7 @@
         class="flex justify-between items-center border-b border-primary-800/50 pb-2"
       >
         <h4 class="text-xs font-bold text-primary-200">回收站</h4>
-        <span class="text-[10px] text-primary-500 font-mono">
+        <span class="text-xs text-primary-500 font-mono">
           {{ formatTrashSize(totalTrashSize) }}
         </span>
       </div>
@@ -52,13 +52,13 @@
               <span>{{ item.imageCount }} 张图片</span>
               <span
                 v-if="item.associatedFileCount > 0"
-                class="text-[10px] text-primary-400 font-normal shrink-0"
+                class="text-xs text-primary-400 font-normal shrink-0"
               >
                 (+{{ item.associatedFileCount }} 伴随)
               </span>
             </div>
             <div
-              class="flex items-center justify-between text-[10px] text-primary-500 mt-0.5 font-mono"
+              class="flex items-center justify-between text-xs text-primary-500 mt-0.5 font-mono"
             >
               <span>{{ formatTrashSize(item.totalFileSize) }}</span>
               <span>{{ formatTime(item.trashedAt) }}</span>
@@ -67,7 +67,7 @@
 
           <!-- 撤销按钮 -->
           <button
-            class="px-2.5 py-1 text-[10px] font-semibold bg-secondary-600 hover:bg-secondary-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+            class="px-2.5 py-1 text-xs font-semibold bg-secondary-600 hover:bg-secondary-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
             title="撤销删除，将文件恢复原位"
             @click="undoTrashHistory(item.id)"
           >
@@ -79,12 +79,12 @@
       <!-- 清空与期限配置区 -->
       <div class="pt-2 border-t border-primary-800/50 space-y-2">
         <div class="flex items-center justify-between gap-2">
-          <label class="text-[10px] text-primary-400 select-none"
+          <label class="text-xs text-primary-400 select-none"
             >清空保留期:</label
           >
           <select
             v-model="trashMinAge"
-            class="bg-primary-800 border border-primary-700 text-[10px] text-primary-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-secondary-500"
+            class="bg-primary-800 border border-primary-700 text-xs text-primary-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-secondary-500"
             @change="saveMinAgeSetting"
           >
             <option value="PT0S">不保留（立即）</option>
@@ -97,7 +97,7 @@
         </div>
 
         <button
-          class="w-full py-1.5 text-[10px] font-bold bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+          class="w-full py-1.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
           @click="emptyTrashHistory"
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">

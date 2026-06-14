@@ -71,7 +71,7 @@
             path: '/browse',
             query: { dir: subDir.id },
           }"
-          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-[1.02] hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
+          class="p-4 bg-primary-800/40 hover:bg-primary-800/80 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-105 hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
           :class="[
             isFilteredOutButShown
               ? 'border-2 border-dashed border-yellow-600 hover:border-yellow-500'
