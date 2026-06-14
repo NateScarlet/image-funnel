@@ -66,7 +66,13 @@
             <svg v-else class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiDelete" fill="currentColor" />
             </svg>
-            <span>删除{{ deleteUnmatchedInfo.maxUnmatched }}星以下的图片</span>
+            <span>删除</span>
+            <RatingIcon
+              :rating="deleteUnmatchedInfo.maxUnmatched"
+              filled
+              class="w-4 h-4"
+            />
+            <span>以下的图片</span>
           </button>
 
           <!-- 加载中即使有缓存数据也显示旋转加载提示 -->
