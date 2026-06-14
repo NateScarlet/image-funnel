@@ -45,7 +45,7 @@ export default function useTrashHistory() {
     }
   }
 
-  // 清空垃圾暂存箱，移入系统回收站
+  // 清空回收站，移入系统回收站
   async function empty() {
     try {
       const res = await mutate(EmptyTrashDocument, {

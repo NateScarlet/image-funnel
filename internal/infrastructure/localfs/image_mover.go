@@ -149,7 +149,7 @@ func (s *ImageMover) Move(
 	return movedCount, targetAbsDir, nil
 }
 
-// Trash 将满足过滤条件的图片及其配套伴随文件移动到专属的暂存垃圾箱内，并保存 meta.json
+// Trash 将满足过滤条件的图片及其配套伴随文件移动到专属的回收站内，并保存 meta.json
 func (s *ImageMover) Trash(
 	ctx context.Context,
 	relPath string,
@@ -290,7 +290,7 @@ func (s *ImageMover) Trash(
 	return historyId, movedFilesCount, nil
 }
 
-// UndoTrash 撤销垃圾暂存，恢复文件，若冲突则抛错
+// UndoTrash 撤销回收站，恢复文件，若冲突则抛错
 func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (restoredCount int, err error) {
 	historyDir := filepath.Join(s.rootDir, trashDirName, historyId)
 	filesDir := filepath.Join(historyDir, "files")

@@ -2916,10 +2916,10 @@ input RejectPairingRequestInput {
   code: String!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"暂存垃圾箱历史记录"
+	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"回收站历史记录"
 type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
   id: ID!
-  "移入垃圾箱的文件总数（包括图片与伴随文件）"
+  "移入回收站的文件总数（包括图片与伴随文件）"
   totalFileCount: Int!
   "占用空间大小（字节数）"
   totalFileSize: Int!
@@ -2944,7 +2944,7 @@ type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryCo
   pageInfo: PageInfo!
 }
 
-"将符合条件的图片及其配套文件移到暂存垃圾箱"
+"将符合条件的图片及其配套文件移到回收站"
 input TrashImagesInput {
   directoryId: ID!
   filterBy: ImageFiltersInput!
@@ -2957,7 +2957,7 @@ type TrashImagesPayload {
   clientMutationId: String
 }
 
-"撤销暂存垃圾箱的删除操作，将文件移回原处"
+"撤销回收站的删除操作，将文件移回原处"
 input UndoTrashInput {
   historyId: ID!
   clientMutationId: String
@@ -2969,7 +2969,7 @@ type UndoTrashPayload {
   clientMutationId: String
 }
 
-"手动清空暂存垃圾箱，将所有暂存文件移到系统回收站"
+"手动清空回收站，将所有暂存文件移到系统回收站"
 type EmptyTrashPayload {
   success: Boolean!
   "此次被真正清理进系统回收站的历史数量"
@@ -2978,7 +2978,7 @@ type EmptyTrashPayload {
 }
 
 extend type Query {
-  "获取垃圾暂存历史记录，支持基于 Relay 规范的分页"
+  "获取回收站历史记录，支持基于 Relay 规范的分页"
   trashHistory(
     first: Int
     after: String
@@ -2988,7 +2988,7 @@ extend type Query {
 extend type Mutation {
   trashImages(input: TrashImagesInput!): TrashImagesPayload!
   undoTrash(input: UndoTrashInput!): UndoTrashPayload!
-  "清空垃圾暂存箱中早于指定存留期 (Duration) 的历史记录"
+  "清空回收站中早于指定存留期 (Duration) 的历史记录"
   emptyTrash(minAge: Duration!): EmptyTrashPayload!
 }
 `, BuiltIn: false},

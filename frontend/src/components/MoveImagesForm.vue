@@ -78,7 +78,7 @@
             <svg class="w-4 h-4" viewBox="0 0 24 24">
               <path :d="mdiDelete" fill="currentColor" />
             </svg>
-            移至暂存垃圾箱
+            删除
           </button>
         </div>
       </div>
@@ -105,8 +105,8 @@
         </svg>
         <div>
           <span class="font-medium text-primary-200">说明：</span>
-          图片及其配套的伴随文件将被移动 to
-          暂存目录中。此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
+          图片及其配套的伴随文件将被移动到根目录下的回收站目录中。
+          此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
         </div>
       </div>
 

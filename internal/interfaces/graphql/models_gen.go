@@ -109,7 +109,7 @@ type DeletedImage struct {
 	ID scalar.ID `json:"id"`
 }
 
-// 手动清空暂存垃圾箱，将所有暂存文件移到系统回收站
+// 手动清空回收站，将所有暂存文件移到系统回收站
 type EmptyTrashPayload struct {
 	Success bool `json:"success"`
 	// 此次被真正清理进系统回收站的历史数量
@@ -245,7 +245,7 @@ type RejectPairingRequestInput struct {
 type Subscription struct {
 }
 
-// 将符合条件的图片及其配套文件移到暂存垃圾箱
+// 将符合条件的图片及其配套文件移到回收站
 type TrashImagesInput struct {
 	DirectoryID      scalar.ID            `json:"directoryId"`
 	FilterBy         *shared.ImageFilters `json:"filterBy"`
@@ -271,7 +271,7 @@ type UndoPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
-// 撤销暂存垃圾箱的删除操作，将文件移回原处
+// 撤销回收站的删除操作，将文件移回原处
 type UndoTrashInput struct {
 	HistoryID        scalar.ID `json:"historyId"`
 	ClientMutationID *string   `json:"clientMutationId,omitempty"`

@@ -16,7 +16,7 @@
       <div
         class="flex justify-between items-center border-b border-primary-800/50 pb-2"
       >
-        <h4 class="text-xs font-bold text-primary-200">垃圾箱暂存区</h4>
+        <h4 class="text-xs font-bold text-primary-200">回收站暂存区</h4>
         <span class="text-[10px] text-primary-500 font-mono">
           共占用 {{ formatTrashSize(totalTrashSize) }}
         </span>
@@ -103,7 +103,7 @@
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
             <path :d="mdiDeleteSweep" fill="currentColor" />
           </svg>
-          <span>立即清空垃圾箱</span>
+          <span>立即清空回收站</span>
         </button>
       </div>
     </div>

@@ -65,19 +65,19 @@ type ImageDTO struct {
 
 // SessionDTO 会话数据传输对象
 type SessionDTO struct {
-	ID           scalar.ID
-	DirectoryID  scalar.ID
-	Filter       *ImageFilters
-	TargetKeep   int
-	Stats        *StatsDTO
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	CanCommit    bool
-	CanUndo      bool
-	CurrentIndex int
-	CurrentSize  int
-	CurrentRound int
-	CurrentImageID scalar.ID
+	ID                  scalar.ID
+	DirectoryID         scalar.ID
+	Filter              *ImageFilters
+	TargetKeep          int
+	Stats               *StatsDTO
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	CanCommit           bool
+	CanUndo             bool
+	CurrentIndex        int
+	CurrentSize         int
+	CurrentRound        int
+	CurrentImageID      scalar.ID
 	CurrentRoundActions []ImageAction
 }
 
@@ -178,7 +178,7 @@ type DeviceDTO struct {
 	UserAgent   string
 }
 
-// TrashHistoryItemDTO 垃圾箱历史记录数据传输对象
+// TrashHistoryItemDTO 回收站历史记录数据传输对象
 type TrashHistoryItemDTO struct {
 	ID                  scalar.ID
 	TotalFileCount      int
@@ -189,16 +189,15 @@ type TrashHistoryItemDTO struct {
 	CoverImageAbsPath   string
 }
 
-// TrashHistoryConnectionDTO 垃圾箱历史连接数据传输对象
+// TrashHistoryConnectionDTO 回收站历史连接数据传输对象
 type TrashHistoryConnectionDTO struct {
 	Edges    []*TrashHistoryEdgeDTO
 	Nodes    []*TrashHistoryItemDTO
 	PageInfo *PageInfoDTO
 }
 
-// TrashHistoryEdgeDTO 垃圾箱历史边数据传输对象
+// TrashHistoryEdgeDTO 回收站历史边数据传输对象
 type TrashHistoryEdgeDTO struct {
 	Node   *TrashHistoryItemDTO
 	Cursor string
 }
-

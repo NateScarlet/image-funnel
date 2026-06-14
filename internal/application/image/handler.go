@@ -417,7 +417,7 @@ func (h *Handler) MoveImages(
 	return movedCount, targetAbsDir, nil
 }
 
-// TrashImages 将符合条件的图片移至隐藏的暂存垃圾箱内，并返回生成的历史ID与文件数
+// TrashImages 将符合条件的图片移至隐藏的回收站内，并返回生成的历史ID与文件数
 func (h *Handler) TrashImages(
 	ctx context.Context,
 	directoryID scalar.ID,
@@ -458,7 +458,7 @@ func (h *Handler) TrashImages(
 	return historyId, totalFileCount, nil
 }
 
-// UndoTrash 撤销指定的暂存垃圾箱移动操作，还原文件
+// UndoTrash 撤销指定的回收站移动操作，还原文件
 func (h *Handler) UndoTrash(
 	ctx context.Context,
 	historyId string,
@@ -519,7 +519,7 @@ func (h *Handler) EmptyTrash(
 	return clearedCount, nil
 }
 
-// TrashHistory 获取垃圾暂存历史记录，支持游标分页
+// TrashHistory 获取回收站历史记录，支持游标分页
 func (h *Handler) TrashHistory(
 	ctx context.Context,
 	first *int,
