@@ -6,7 +6,7 @@
     >
       <!-- 图片列表标题与图片专用的筛选过滤条件 -->
       <div
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary-700/50 pb-3"
+        class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-primary-700/50 pb-3"
       >
         <h2
           class="text-base font-bold text-primary-200 tracking-wider flex flex-wrap items-center gap-2 select-none"
@@ -147,6 +147,7 @@
             </svg>
             <span>重新筛选 ({{ outOfFilterImageIds.size }}张已改)</span>
           </button>
+
           <!-- 搜索输入框 -->
           <div class="relative min-w-36 max-w-60 flex-1 sm:flex-none">
             <input
