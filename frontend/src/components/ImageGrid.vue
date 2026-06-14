@@ -9,12 +9,31 @@
         class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-primary-700/50 pb-3"
       >
         <h2
-          class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
+          class="text-base font-bold text-primary-200 tracking-wider flex flex-wrap items-center gap-2 select-none"
         >
           <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
             <path :d="mdiImage" fill="currentColor" />
           </svg>
-          <span>图片列表 ({{ images.length }} 张)</span>
+          <span>图片列表</span>
+
+          <!-- 评星统计 -->
+          <div
+            v-if="stats && stats.ratingCounts.length > 0"
+            class="flex items-center gap-2 ml-2 text-xs font-normal"
+          >
+            <div
+              v-for="rc in sortedRatingCounts"
+              :key="rc.rating"
+              class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50"
+            >
+              <RatingIcon
+                :rating="rc.rating"
+                :filled="filterRating.includes(rc.rating)"
+              />
+              <span class="text-xs">{{ rc.count }}</span>
+            </div>
+          </div>
+
           <!-- 加载中即使有缓存数据也显示旋转加载提示 -->
           <svg
             v-if="loading"
@@ -634,6 +653,7 @@ import ImageViewer from "./ImageViewer.vue";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useDirectoryState } from "@/composables/useDirectoryState";
 import useBrowseImages from "@/composables/useBrowseImages";
+import useDirectoryStats from "@/composables/useDirectoryStats";
 import { formatSize } from "@/utils/formatSize";
 import type {
   BrowseImagesQueryVariables,
@@ -664,6 +684,20 @@ const {
   hasActiveFilters,
   clearFilters,
 } = useDirectoryState(() => props.directoryId);
+
+// 目录统计信息
+const { useStats } = useDirectoryStats();
+const statsData = useStats(() => props.directoryId);
+const stats = computed(() => {
+  const node = statsData.value?.node;
+  return node?.__typename === "Directory" ? node.stats : undefined;
+});
+
+// 对评分统计进行排序
+const sortedRatingCounts = computed(() => {
+  if (!stats.value?.ratingCounts) return [];
+  return [...stats.value.ratingCounts].sort((a, b) => a.rating - b.rating);
+});
 
 // 提取加载状态计数，以实现精细的骨架图切换与加载动画
 const loadingCount = ref(1);
