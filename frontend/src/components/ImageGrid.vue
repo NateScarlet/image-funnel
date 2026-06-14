@@ -40,6 +40,35 @@
             </button>
           </div>
 
+          <!-- 删除低星级图片按钮 -->
+          <button
+            v-if="deleteUnmatchedInfo"
+            :disabled="isDeletingUnmatched"
+            class="px-3 py-1 text-xs rounded-lg transition-all flex items-center gap-2 bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 cursor-pointer select-none hover:text-white"
+            :class="isDeletingUnmatched ? 'opacity-50 cursor-not-allowed' : ''"
+            :title="`删除该目录下所有评分在 ${deleteUnmatchedInfo.maxUnmatched} 星及以下的图片`"
+            @click="handleDeleteUnmatched"
+          >
+            <svg
+              v-if="isDeletingUnmatched"
+              class="w-4 h-4 animate-spin text-red-400"
+              viewBox="0 0 24 24"
+              fill="none"
+            >
+              <path
+                :d="mdiLoading"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </svg>
+            <svg v-else class="w-4 h-4 text-red-400" viewBox="0 0 24 24">
+              <path :d="mdiDelete" fill="currentColor" />
+            </svg>
+            <span>删除{{ deleteUnmatchedInfo.maxUnmatched }}星以下的图片</span>
+          </button>
+
           <!-- 加载中即使有缓存数据也显示旋转加载提示 -->
           <svg
             v-if="loading"
@@ -650,6 +679,7 @@ import {
   mdiStar,
   mdiRefresh,
   mdiContentCopy,
+  mdiDelete,
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
@@ -673,8 +703,11 @@ import { openImageViewerByFilename } from "@/events";
 import useLocationHash from "@/composables/useLocationHash";
 import optionalArray from "@/utils/optionalArray.ts";
 import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument } from "@/graphql/generated";
+import { MetaDocument, TrashImagesDocument } from "@/graphql/generated";
 import { useClipboard } from "@/composables/useClipboard";
+import useNotification from "@/composables/useNotification";
+import useTrashHistory from "@/composables/useTrashHistory";
+import mutate from "@/graphql/utils/mutate";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -714,6 +747,102 @@ const sortedRatingCounts = computed(() => {
   if (!stats.value?.ratingCounts) return [];
   return [...stats.value.ratingCounts].sort((a, b) => a.rating - b.rating);
 });
+
+// #region 删除低星级图片功能
+const { show: showNotification } = useNotification();
+const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
+const isDeletingUnmatched = ref(false);
+
+const deleteUnmatchedInfo = computed(() => {
+  if (!stats.value?.ratingCounts || filterRating.value.length === 0)
+    return null;
+
+  // 过滤出该目录下 count > 0 的星级
+  const existingRatingsWithCount = stats.value.ratingCounts.filter(
+    (rc) => rc.count > 0,
+  );
+  if (existingRatingsWithCount.length === 0) return null;
+
+  const existingRatings = existingRatingsWithCount.map((rc) => rc.rating);
+  const matchedRatings = existingRatings.filter((r) =>
+    filterRating.value.includes(r),
+  );
+  const unmatchedRatings = existingRatings.filter(
+    (r) => !filterRating.value.includes(r),
+  );
+
+  if (matchedRatings.length === 0 || unmatchedRatings.length === 0) return null;
+
+  const minMatched = Math.min(...matchedRatings);
+  const maxUnmatched = Math.max(...unmatchedRatings);
+
+  // 在所有不符合筛选的图片星级都小于筛选匹配图片中最低星时满足条件
+  if (maxUnmatched < minMatched) {
+    const totalCount = existingRatingsWithCount
+      .filter((rc) => unmatchedRatings.includes(rc.rating))
+      .reduce((sum, rc) => sum + rc.count, 0);
+
+    return {
+      maxUnmatched,
+      totalCount,
+    };
+  }
+
+  return null;
+});
+
+async function handleDeleteUnmatched() {
+  const info = deleteUnmatchedInfo.value;
+  if (!info || isDeletingUnmatched.value) return;
+
+  isDeletingUnmatched.value = true;
+  try {
+    // 构造不符合筛选的星级列表 [0, 1, ..., maxUnmatched]
+    const ratingsToDelete = Array.from(
+      { length: info.maxUnmatched + 1 },
+      (_, i) => i,
+    );
+
+    const result = await mutate(TrashImagesDocument, {
+      variables: {
+        input: {
+          directoryId: props.directoryId,
+          filterBy: {
+            rating: ratingsToDelete,
+          },
+        },
+      },
+    });
+
+    const movedCount = result.data?.trashImages.movedCount ?? 0;
+    const historyId = result.data?.trashImages.historyId;
+
+    void refreshTrashHistory();
+
+    showNotification(
+      `成功将 ${movedCount} 张图片及其配套文件移到暂存区`,
+      "success",
+      10000,
+      historyId
+        ? {
+            text: "撤销",
+            onClick: (closeNotification: () => void) => {
+              undoTrash(historyId);
+              closeNotification();
+            },
+          }
+        : undefined,
+    );
+  } catch (err) {
+    showNotification(
+      err instanceof Error ? err.message : "删除图片失败",
+      "error",
+    );
+  } finally {
+    isDeletingUnmatched.value = false;
+  }
+}
+// #endregion
 
 // 提取加载状态计数，以实现精细的骨架图切换与加载动画
 const loadingCount = ref(1);
