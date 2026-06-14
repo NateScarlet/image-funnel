@@ -11,6 +11,8 @@ type Directory implements Node
   path: String! @deprecated(reason: "use relPath") @goField(name: "RelPath")
   "是否为根目录"
   root: Boolean!
+  "目录存储的自定义状态数据，若文件不存在则返回 null"
+  state: DirectoryState
   "目录统计信息（图片数量、子目录数、评分分布等）"
   stats: DirectoryStats
   "子目录列表"

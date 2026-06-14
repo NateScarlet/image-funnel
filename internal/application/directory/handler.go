@@ -223,3 +223,18 @@ func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) i
 		}
 	}
 }
+
+// State 获取目录自定义状态
+func (h *Handler) State(ctx context.Context, id scalar.ID) (*shared.DirectoryStateDTO, error) {
+	return h.dirSvc.ReadState(ctx, id)
+}
+
+// SetState 设置目录自定义状态
+func (h *Handler) SetState(ctx context.Context, id scalar.ID, state *shared.DirectoryStateDTO) (*shared.DirectoryDTO, error) {
+	err := h.dirSvc.WriteState(ctx, id, state)
+	if err != nil {
+		return nil, err
+	}
+	return h.Directory(ctx, id)
+}
+

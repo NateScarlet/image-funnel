@@ -117,6 +117,7 @@ type ComplexityRoot struct {
 		ParentID      func(childComplexity int) int
 		RelPath       func(childComplexity int) int
 		Root          func(childComplexity int) int
+		State         func(childComplexity int) int
 		Stats         func(childComplexity int) int
 	}
 
@@ -129,6 +130,23 @@ type ComplexityRoot struct {
 	DirectoryEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
+	}
+
+	DirectoryState struct {
+		Browse      func(childComplexity int) int
+		LastSession func(childComplexity int) int
+		UpdatedAt   func(childComplexity int) int
+	}
+
+	DirectoryStateBrowse struct {
+		FilterBy     func(childComplexity int) int
+		FilterMemoBy func(childComplexity int) int
+	}
+
+	DirectoryStateLastSession struct {
+		Filter     func(childComplexity int) int
+		ID         func(childComplexity int) int
+		TargetKeep func(childComplexity int) int
 	}
 
 	DirectoryStats struct {
@@ -257,6 +275,7 @@ type ComplexityRoot struct {
 		MoveImages                 func(childComplexity int, input MoveImagesInput) int
 		RefreshToken               func(childComplexity int, input RefreshTokenInput) int
 		RejectPairingRequest       func(childComplexity int, input RejectPairingRequestInput) int
+		SetDirectoryState          func(childComplexity int, input SetDirectoryStateInput) int
 		TrashImages                func(childComplexity int, input TrashImagesInput) int
 		Undo                       func(childComplexity int, input UndoInput) int
 		UndoTrash                  func(childComplexity int, input UndoTrashInput) int
@@ -399,6 +418,7 @@ type DeviceResolver interface {
 	IsCurrent(ctx context.Context, obj *shared.DeviceDTO) (bool, error)
 }
 type DirectoryResolver interface {
+	State(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStateDTO, error)
 	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 	DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string) (*shared.DirectoryConnectionDTO, error)
@@ -433,6 +453,7 @@ type MutationResolver interface {
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenPayload, error)
 	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
+	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*UndoTrashPayload, error)
 	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
@@ -709,6 +730,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.Root(childComplexity), true
+	case "Directory.state":
+		if e.complexity.Directory.State == nil {
+			break
+		}
+
+		return e.complexity.Directory.State(childComplexity), true
 	case "Directory.stats":
 		if e.complexity.Directory.Stats == nil {
 			break
@@ -747,6 +774,57 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DirectoryEdge.Node(childComplexity), true
+
+	case "DirectoryState.browse":
+		if e.complexity.DirectoryState.Browse == nil {
+			break
+		}
+
+		return e.complexity.DirectoryState.Browse(childComplexity), true
+	case "DirectoryState.lastSession":
+		if e.complexity.DirectoryState.LastSession == nil {
+			break
+		}
+
+		return e.complexity.DirectoryState.LastSession(childComplexity), true
+	case "DirectoryState.updatedAt":
+		if e.complexity.DirectoryState.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.DirectoryState.UpdatedAt(childComplexity), true
+
+	case "DirectoryStateBrowse.filterBy":
+		if e.complexity.DirectoryStateBrowse.FilterBy == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateBrowse.FilterBy(childComplexity), true
+	case "DirectoryStateBrowse.filterMemoBy":
+		if e.complexity.DirectoryStateBrowse.FilterMemoBy == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateBrowse.FilterMemoBy(childComplexity), true
+
+	case "DirectoryStateLastSession.filter":
+		if e.complexity.DirectoryStateLastSession.Filter == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateLastSession.Filter(childComplexity), true
+	case "DirectoryStateLastSession.id":
+		if e.complexity.DirectoryStateLastSession.ID == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateLastSession.ID(childComplexity), true
+	case "DirectoryStateLastSession.targetKeep":
+		if e.complexity.DirectoryStateLastSession.TargetKeep == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateLastSession.TargetKeep(childComplexity), true
 
 	case "DirectoryStats.imageCount":
 		if e.complexity.DirectoryStats.ImageCount == nil {
@@ -1323,6 +1401,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RejectPairingRequest(childComplexity, args["input"].(RejectPairingRequestInput)), true
+	case "Mutation.setDirectoryState":
+		if e.complexity.Mutation.SetDirectoryState == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setDirectoryState_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SetDirectoryState(childComplexity, args["input"].(SetDirectoryStateInput)), true
 	case "Mutation.trashImages":
 		if e.complexity.Mutation.TrashImages == nil {
 			break
@@ -1984,6 +2073,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateSessionInput,
 		ec.unmarshalInputDeleteDeviceInput,
 		ec.unmarshalInputDirectoryFilters,
+		ec.unmarshalInputDirectoryStateBrowseInput,
+		ec.unmarshalInputDirectoryStateInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputImageFiltersInput,
@@ -1993,6 +2084,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
+		ec.unmarshalInputSetDirectoryStateInput,
 		ec.unmarshalInputTrashImagesInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUndoTrashInput,
@@ -2185,6 +2277,8 @@ type Directory implements Node
   path: String! @deprecated(reason: "use relPath") @goField(name: "RelPath")
   "是否为根目录"
   root: Boolean!
+  "目录存储的自定义状态数据，若文件不存在则返回 null"
+  state: DirectoryState
   "目录统计信息（图片数量、子目录数、评分分布等）"
   stats: DirectoryStats
   "子目录列表"
@@ -2255,6 +2349,47 @@ type PageInfo @goModel(model: "main/internal/shared.PageInfoDTO") {
   startCursor: String
   "当前页结束游标，末页为null"
   endCursor: String
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/directory_state.graphql", Input: `"""
+目录的自定义状态数据，用于保存用户的过滤条件和上次会话信息。
+"""
+type DirectoryState @goModel(model: "main/internal/shared.DirectoryStateDTO") {
+  "浏览/过滤配置"
+  browse: DirectoryStateBrowse
+  "上一次活跃会话的历史配置（客户端只读，服务端自动同步）"
+  lastSession: DirectoryStateLastSession
+  "最后更新时间"
+  updatedAt: Time!
+}
+
+type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
+  "上一次会话的ID"
+  id: ID!
+  "会话图片过滤器"
+  filter: ImageFilters!
+  "目标保留数量"
+  targetKeep: Int!
+}
+
+"""
+目录状态中的浏览过滤配置。
+"""
+type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
+  "图片过滤配置"
+  filterBy: ImageFilters
+  "备忘录过滤配置"
+  filterMemoBy: MemoFilters
+}
+
+input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
+  "浏览/过滤配置"
+  browse: DirectoryStateBrowseInput
+}
+
+input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
+  filterBy: ImageFiltersInput
+  filterMemoBy: MemoFiltersInput
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
@@ -2916,6 +3051,18 @@ input RejectPairingRequestInput {
   code: String!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/set_directory_state.graphql", Input: `input SetDirectoryStateInput {
+  "目录的ID"
+  id: ID!
+  "目录的新状态数据"
+  state: DirectoryStateInput!
+}
+
+extend type Mutation {
+  "设置目录的自定义状态数据"
+  setDirectoryState(input: SetDirectoryStateInput!): Directory!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"回收站历史记录"
 type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
   id: ID!
@@ -3298,6 +3445,17 @@ func (ec *executionContext) field_Mutation_rejectPairingRequest_args(ctx context
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRejectPairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setDirectoryState_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSetDirectoryStateInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStateInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4474,6 +4632,43 @@ func (ec *executionContext) fieldContext_Directory_root(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Directory_state(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Directory_state,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Directory().State(ctx, obj)
+		},
+		nil,
+		ec.marshalODirectoryState2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Directory_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Directory",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "browse":
+				return ec.fieldContext_DirectoryState_browse(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_DirectoryState_lastSession(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_DirectoryState_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DirectoryState", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Directory_stats(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4547,6 +4742,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -4847,6 +5044,8 @@ func (ec *executionContext) fieldContext_DirectoryConnection_nodes(_ context.Con
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -4939,6 +5138,8 @@ func (ec *executionContext) fieldContext_DirectoryEdge_node(_ context.Context, f
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -4982,6 +5183,284 @@ func (ec *executionContext) fieldContext_DirectoryEdge_cursor(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryState_browse(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryState_browse,
+		func(ctx context.Context) (any, error) {
+			return obj.Browse, nil
+		},
+		nil,
+		ec.marshalODirectoryStateBrowse2ᚖmainᚋinternalᚋsharedᚐDirectoryStateBrowseDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryState_browse(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryState",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "filterBy":
+				return ec.fieldContext_DirectoryStateBrowse_filterBy(ctx, field)
+			case "filterMemoBy":
+				return ec.fieldContext_DirectoryStateBrowse_filterMemoBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DirectoryStateBrowse", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryState_lastSession(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryState_lastSession,
+		func(ctx context.Context) (any, error) {
+			return obj.LastSession, nil
+		},
+		nil,
+		ec.marshalODirectoryStateLastSession2ᚖmainᚋinternalᚋsharedᚐDirectoryStateLastSessionDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryState_lastSession(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryState",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_DirectoryStateLastSession_id(ctx, field)
+			case "filter":
+				return ec.fieldContext_DirectoryStateLastSession_filter(ctx, field)
+			case "targetKeep":
+				return ec.fieldContext_DirectoryStateLastSession_targetKeep(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DirectoryStateLastSession", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryState_updatedAt(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryState_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryState_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryState",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateBrowse_filterBy(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateBrowseDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateBrowse_filterBy,
+		func(ctx context.Context) (any, error) {
+			return obj.FilterBy, nil
+		},
+		nil,
+		ec.marshalOImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateBrowse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ImageFilters_id(ctx, field)
+			case "directoryId":
+				return ec.fieldContext_ImageFilters_directoryId(ctx, field)
+			case "rating":
+				return ec.fieldContext_ImageFilters_rating(ctx, field)
+			case "label":
+				return ec.fieldContext_ImageFilters_label(ctx, field)
+			case "query":
+				return ec.fieldContext_ImageFilters_query(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ImageFilters", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateBrowse_filterMemoBy(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateBrowseDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateBrowse_filterMemoBy,
+		func(ctx context.Context) (any, error) {
+			return obj.FilterMemoBy, nil
+		},
+		nil,
+		ec.marshalOMemoFilters2ᚖmainᚋinternalᚋsharedᚐMemoFilters,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterMemoBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateBrowse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_MemoFilters_id(ctx, field)
+			case "directoryId":
+				return ec.fieldContext_MemoFilters_directoryId(ctx, field)
+			case "hidden":
+				return ec.fieldContext_MemoFilters_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MemoFilters", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateLastSession_id(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateLastSessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateLastSession_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateLastSession_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateLastSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateLastSession_filter(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateLastSessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateLastSession_filter,
+		func(ctx context.Context) (any, error) {
+			return obj.Filter, nil
+		},
+		nil,
+		ec.marshalNImageFilters2mainᚋinternalᚋsharedᚐImageFilters,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateLastSession_filter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateLastSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ImageFilters_id(ctx, field)
+			case "directoryId":
+				return ec.fieldContext_ImageFilters_directoryId(ctx, field)
+			case "rating":
+				return ec.fieldContext_ImageFilters_rating(ctx, field)
+			case "label":
+				return ec.fieldContext_ImageFilters_label(ctx, field)
+			case "query":
+				return ec.fieldContext_ImageFilters_query(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ImageFilters", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateLastSession_targetKeep(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateLastSessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateLastSession_targetKeep,
+		func(ctx context.Context) (any, error) {
+			return obj.TargetKeep, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateLastSession_targetKeep(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateLastSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -7855,6 +8334,73 @@ func (ec *executionContext) fieldContext_Mutation_rejectPairingRequest(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_setDirectoryState(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setDirectoryState,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().SetDirectoryState(ctx, fc.Args["input"].(SetDirectoryStateInput))
+		},
+		nil,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setDirectoryState(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			case "directoriesV2":
+				return ec.fieldContext_Directory_directoriesV2(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
+			case "memos":
+				return ec.fieldContext_Directory_memos(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setDirectoryState_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_trashImages(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8710,6 +9256,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -8841,6 +9389,8 @@ func (ec *executionContext) fieldContext_Query_suggestDirectories(ctx context.Co
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -9265,6 +9815,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -10411,6 +10963,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_path(ctx, field)
 			case "root":
 				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
 			case "stats":
 				return ec.fieldContext_Directory_stats(ctx, field)
 			case "directories":
@@ -13396,6 +13950,67 @@ func (ec *executionContext) unmarshalInputDirectoryFilters(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDirectoryStateBrowseInput(ctx context.Context, obj any) (shared.DirectoryStateBrowseDTO, error) {
+	var it shared.DirectoryStateBrowseDTO
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"filterBy", "filterMemoBy"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "filterBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterBy"))
+			data, err := ec.unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilterBy = data
+		case "filterMemoBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterMemoBy"))
+			data, err := ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilterMemoBy = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Context, obj any) (shared.DirectoryStateDTO, error) {
+	var it shared.DirectoryStateDTO
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"browse"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "browse":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("browse"))
+			data, err := ec.unmarshalODirectoryStateBrowseInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateBrowseDTO(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Browse = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.Context, obj any) (FinishWebAuthnLoginInput, error) {
 	var it FinishWebAuthnLoginInput
 	asMap := map[string]any{}
@@ -13759,6 +14374,40 @@ func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.
 				return it, err
 			}
 			it.Code = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSetDirectoryStateInput(ctx context.Context, obj any) (SetDirectoryStateInput, error) {
+	var it SetDirectoryStateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "state"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "state":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("state"))
+			data, err := ec.unmarshalNDirectoryStateInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDTO(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.State = data
 		}
 	}
 
@@ -14507,6 +15156,39 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "state":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Directory_state(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "stats":
 			field := field
 
@@ -14807,6 +15489,136 @@ func (ec *executionContext) _DirectoryEdge(ctx context.Context, sel ast.Selectio
 			}
 		case "cursor":
 			out.Values[i] = ec._DirectoryEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var directoryStateImplementors = []string{"DirectoryState"}
+
+func (ec *executionContext) _DirectoryState(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStateDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directoryStateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectoryState")
+		case "browse":
+			out.Values[i] = ec._DirectoryState_browse(ctx, field, obj)
+		case "lastSession":
+			out.Values[i] = ec._DirectoryState_lastSession(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._DirectoryState_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var directoryStateBrowseImplementors = []string{"DirectoryStateBrowse"}
+
+func (ec *executionContext) _DirectoryStateBrowse(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStateBrowseDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directoryStateBrowseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectoryStateBrowse")
+		case "filterBy":
+			out.Values[i] = ec._DirectoryStateBrowse_filterBy(ctx, field, obj)
+		case "filterMemoBy":
+			out.Values[i] = ec._DirectoryStateBrowse_filterMemoBy(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var directoryStateLastSessionImplementors = []string{"DirectoryStateLastSession"}
+
+func (ec *executionContext) _DirectoryStateLastSession(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStateLastSessionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directoryStateLastSessionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectoryStateLastSession")
+		case "id":
+			out.Values[i] = ec._DirectoryStateLastSession_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filter":
+			out.Values[i] = ec._DirectoryStateLastSession_filter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targetKeep":
+			out.Values[i] = ec._DirectoryStateLastSession_targetKeep(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -15879,6 +16691,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "rejectPairingRequest":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_rejectPairingRequest(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setDirectoryState":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setDirectoryState(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17958,6 +18777,11 @@ func (ec *executionContext) marshalNDirectoryEdge2ᚖmainᚋinternalᚋsharedᚐ
 	return ec._DirectoryEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNDirectoryStateInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDTO(ctx context.Context, v any) (*shared.DirectoryStateDTO, error) {
+	res, err := ec.unmarshalInputDirectoryStateInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration(ctx context.Context, v any) (scalar.Duration, error) {
 	var res scalar.Duration
 	err := res.UnmarshalGQL(v)
@@ -18104,13 +18928,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -18239,6 +19063,10 @@ func (ec *executionContext) marshalNImageEdge2ᚖmainᚋinternalᚋsharedᚐImag
 		return graphql.Null
 	}
 	return ec._ImageEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNImageFilters2mainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v shared.ImageFilters) graphql.Marshaler {
+	return ec._ImageFilters(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *shared.ImageFilters) graphql.Marshaler {
@@ -18654,6 +19482,11 @@ func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋsharedᚐS
 		return graphql.Null
 	}
 	return ec._SessionStats(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSetDirectoryStateInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStateInput(ctx context.Context, v any) (SetDirectoryStateInput, error) {
+	res, err := ec.unmarshalInputSetDirectoryStateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
@@ -19226,6 +20059,35 @@ func (ec *executionContext) unmarshalODirectoryFilters2ᚖmainᚋinternalᚋshar
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalODirectoryState2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStateDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectoryState(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalODirectoryStateBrowse2ᚖmainᚋinternalᚋsharedᚐDirectoryStateBrowseDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStateBrowseDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectoryStateBrowse(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalODirectoryStateBrowseInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateBrowseDTO(ctx context.Context, v any) (*shared.DirectoryStateBrowseDTO, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputDirectoryStateBrowseInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODirectoryStateLastSession2ᚖmainᚋinternalᚋsharedᚐDirectoryStateLastSessionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStateLastSessionDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectoryStateLastSession(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStatsDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -19318,6 +20180,13 @@ func (ec *executionContext) marshalOImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalOImageFilters2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, sel ast.SelectionSet, v *shared.ImageFilters) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ImageFilters(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx context.Context, v any) (*shared.ImageFilters, error) {
 	if v == nil {
 		return nil, nil
@@ -19378,6 +20247,13 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOMemoFilters2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx context.Context, sel ast.SelectionSet, v *shared.MemoFilters) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._MemoFilters(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx context.Context, v any) (*shared.MemoFilters, error) {

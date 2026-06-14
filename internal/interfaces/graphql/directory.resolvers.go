@@ -12,6 +12,11 @@ import (
 	"main/internal/util"
 )
 
+// State is the resolver for the state field.
+func (r *directoryResolver) State(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStateDTO, error) {
+	return r.app.State(ctx, obj.ID)
+}
+
 // Stats is the resolver for the stats field.
 func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error) {
 	return r.app.DirectoryStats(ctx, obj.ID)

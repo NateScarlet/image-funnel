@@ -1,159 +1,200 @@
 import { computed, toValue, ref, type MaybeRefOrGetter } from "vue";
-import useStorage from "./useStorage";
 import useQuery from "../graphql/utils/useQuery";
+import mutate from "../graphql/utils/mutate";
 import {
   DirectoryLastSessionDocument,
-  SessionDocument,
+  DirectoryStateDocument,
+  SetDirectoryStateDocument,
   type ImageFiltersInput,
   type MemoFiltersInput,
   type SessionFragment,
+  type DirectoryStateInput,
 } from "../graphql/generated";
 import optionalArray from "../utils/optionalArray";
+import { debounce } from "es-toolkit";
 
 // #region 类型定义
 export interface DirectoryState {
-  browse?: {
-    filterBy?: ImageFiltersInput;
-    filterMemoBy?: MemoFiltersInput;
-  };
-  lastSession?: {
-    id: string;
-    filter: ImageFiltersInput;
-    targetKeep: number;
-  };
-  updatedAt: number;
+  filterBy?: ImageFiltersInput;
+  filterMemoBy?: MemoFiltersInput;
 }
 // #endregion
 
-const MAX_STATES_COUNT = 50;
+// 暂存当前激活目录的局部临时编辑（如点击星级等暂存值），以规避防抖网络同步期间的 UI 闪烁。
+const currentBrowseBuffer = ref<{ id: string; browse: DirectoryState }>({
+  id: "",
+  browse: {},
+});
 
-// 共享的 LocalStorage 状态模型
-export const { model: states, flush: commitState } = useStorage<
-  Record<string, DirectoryState | undefined>
->(localStorage, "directory_state_f6857b6e8ad4", () => ({}));
-
-// #region 内部辅助方法
-/**
- * 统一更新目录状态
- */
-function updateDirectoryState(
-  dirId: string,
-  edit: (e: DirectoryState) => void,
-) {
-  const currentStates = states.value || {};
-  const dirState = currentStates[dirId] || {
-    updatedAt: Date.now(),
-  };
-
-  // 执行调用方提供的修改逻辑
-  edit(dirState);
-
-  // 统一整理与压缩空对象状态
-  compactDirectoryState(dirState);
-
-  dirState.updatedAt = Date.now();
-  currentStates[dirId] = dirState;
-
-  // 若无 browse 且无 lastSession，则彻底移除该目录的记录
-  if (!dirState.browse && !dirState.lastSession) {
-    currentStates[dirId] = undefined;
-  }
-
-  // 限制保留状态的上限，保持存储空间精简
-  const entries = Object.entries(currentStates).filter(
-    ([, v]) => v !== undefined,
-  ) as [string, DirectoryState][];
-  if (entries.length > MAX_STATES_COUNT) {
-    entries.sort((a, b) => b[1].updatedAt - a[1].updatedAt);
-    for (let i = MAX_STATES_COUNT; i < entries.length; i++) {
-      currentStates[entries[i][0]] = undefined;
-    }
-  }
-
-  commitState();
-}
+const debouncers = new Map<string, ReturnType<typeof debounce>>();
 
 /**
- * 整理目录状态中的空对象，节省 LocalStorage 空间
- */
-function compactDirectoryState(state: DirectoryState) {
-  if (state.browse) {
-    if (state.browse.filterBy) {
-      // 检查 filterBy 对象的属性值中是否存在有效筛选值
-      const hasFilter = Object.values(state.browse.filterBy).some(
-        (v) => v !== undefined,
-      );
-      if (!hasFilter) {
-        // 无有效值时，如果有 lastSession，保留空对象以防止回退到上次会话的默认值；
-        // 若无 lastSession，则彻底置为 undefined
-        state.browse.filterBy = state.lastSession ? {} : undefined;
-      }
-    }
-
-    // 若图片筛选与备忘录筛选均空，则清除整个 browse 对象
-    if (
-      state.browse.filterBy === undefined &&
-      state.browse.filterMemoBy === undefined
-    ) {
-      state.browse = undefined;
-    }
-  }
-}
-
-/**
- * 更新上一次会话信息，对外公开
+ * 更新上一次会话信息，由于由服务端进行会话生命周期托管，此接口为空实现
  */
 export function updateLastSession(session: SessionFragment) {
-  const dirId = session.directory.id;
-  updateDirectoryState(dirId, (state) => {
-    const ratingVal = optionalArray(session.filter?.rating);
-    const labelVal = optionalArray(session.filter?.label);
-    const queryVal = session.filter?.query || undefined;
-
-    state.lastSession = {
-      id: session.id,
-      filter: {
-        rating: ratingVal,
-        label: labelVal,
-        query: queryVal,
-      },
-      targetKeep: session.targetKeep,
-    };
-
-    // 创建或更新会话时，清除本地图片筛选缓存，使其能够继承最新会话配置
-    if (state.browse) {
-      state.browse.filterBy = undefined;
-      if (state.browse.filterMemoBy === undefined) {
-        state.browse = undefined;
-      }
-    }
-  });
+  void session;
 }
-// #endregion
 
 // #region 主钩子导出
 export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
-  function getDirState() {
-    const dirId = toValue(directoryId);
-    return states.value?.[dirId];
+  const dirIdRef = computed(() => toValue(directoryId));
+
+  // 声明式获取/重置当前激活目录的暂存值，取代命令式的 watch 目录切换
+  const currentBrowse = computed({
+    get(): DirectoryState {
+      return currentBrowseBuffer.value.id === dirIdRef.value
+        ? currentBrowseBuffer.value.browse
+        : {};
+    },
+    set(val: DirectoryState) {
+      currentBrowseBuffer.value = {
+        id: dirIdRef.value,
+        browse: val,
+      };
+    },
+  });
+
+  // 异步查询服务端中当前目录的状态
+  const { data: stateData } = useQuery(DirectoryStateDocument, {
+    variables: () => {
+      const id = dirIdRef.value;
+      return id ? { id } : undefined;
+    },
+  });
+
+  const serverState = computed(() => {
+    const node = stateData.value?.node;
+    return node?.__typename === "Directory" ? node.state : undefined;
+  });
+
+  // 从服务器异步查询当前目录的最新会话信息
+  const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
+    variables: () => {
+      const id = dirIdRef.value;
+      return id ? { id } : undefined;
+    },
+  });
+
+  const lastSession = computed(() => {
+    const node = lastSessionData.value?.node;
+    const activeSession =
+      node?.__typename === "Directory" ? node.lastSession : undefined;
+    if (activeSession) {
+      return activeSession;
+    }
+    const stateSession = serverState.value?.lastSession;
+    if (stateSession) {
+      return {
+        id: stateSession.id,
+        filter: {
+          id: "",
+          directoryId: dirIdRef.value,
+          rating: stateSession.filter.rating,
+          label: stateSession.filter.label,
+          query: stateSession.filter.query || undefined,
+        },
+        targetKeep: stateSession.targetKeep,
+        updatedAt: serverState.value?.updatedAt || "",
+      };
+    }
+    return undefined;
+  });
+
+  /**
+   * 统一更新暂存状态
+   */
+  function updateDirectoryState(edit: (e: DirectoryState) => void) {
+    const dirState = { ...currentBrowse.value };
+    edit(dirState);
+    compactDirectoryState(dirState);
+    currentBrowse.value = dirState;
+    triggerSaveState(dirIdRef.value);
+  }
+
+  /**
+   * 整理暂存中的空对象
+   */
+  function compactDirectoryState(state: DirectoryState) {
+    if (state.filterBy) {
+      const hasFilter = Object.values(state.filterBy).some(
+        (v) => v !== undefined,
+      );
+      if (!hasFilter) {
+        state.filterBy = undefined;
+      }
+    }
+  }
+
+  /**
+   * 触发防抖同步到服务端
+   */
+  function triggerSaveState(dirId: string) {
+    let fn = debouncers.get(dirId);
+    if (!fn) {
+      fn = debounce(async (stateToSave: DirectoryState) => {
+        const inputState: DirectoryStateInput = {
+          browse:
+            stateToSave.filterBy || stateToSave.filterMemoBy
+              ? {
+                  filterBy: stateToSave.filterBy
+                    ? {
+                        rating: stateToSave.filterBy.rating,
+                        label: stateToSave.filterBy.label,
+                        query: stateToSave.filterBy.query,
+                      }
+                    : undefined,
+                  filterMemoBy: stateToSave.filterMemoBy
+                    ? {
+                        hidden: stateToSave.filterMemoBy.hidden,
+                      }
+                    : undefined,
+                }
+              : undefined,
+        };
+
+        try {
+          await mutate(SetDirectoryStateDocument, {
+            variables: {
+              input: {
+                id: dirId,
+                state: inputState,
+              },
+            },
+          });
+        } catch (err) {
+          console.error(
+            `Failed to sync directory state to server for ${dirId}:`,
+            err,
+          );
+        }
+      }, 500);
+      debouncers.set(dirId, fn);
+    }
+    fn(currentBrowse.value);
   }
 
   /**
    * 获取当前生效的图片筛选配置。
-   * 1. 本地临时编辑中的筛选（browse.filterBy，即使是空对象）优先级最高。
-   * 2. 本地记录的上次会话 filter 优先级第二。
-   * 3. 服务端查询到的最新会话 filter 优先级第三（多一级回退）。
+   * 1. 本地临时编辑暂存中的筛选（browse.filterBy，即使是空对象）优先级最高。
+   * 2. 服务端查询到的最新配置优先级第二。
+   * 3. 服务端查询到的最新会话 filter 优先级第三（回退）。
    */
   function getImageFilters(): ImageFiltersInput | undefined {
-    const dirState = getDirState();
-    if (dirState?.browse?.filterBy) {
-      return dirState.browse.filterBy;
-    }
-    if (dirState?.lastSession?.filter) {
-      return dirState.lastSession.filter;
+    const dirState = currentBrowse.value;
+    if (dirState.filterBy) {
+      return dirState.filterBy;
     }
 
-    const serverSess = serverLastSession.value;
+    const sState = serverState.value;
+    if (sState?.browse?.filterBy) {
+      return {
+        rating: optionalArray(sState.browse.filterBy.rating),
+        label: optionalArray(sState.browse.filterBy.label),
+        query: sState.browse.filterBy.query || undefined,
+      };
+    }
+
+    const serverSess = lastSession.value;
     if (serverSess?.filter) {
       return {
         rating: optionalArray(serverSess.filter.rating),
@@ -171,14 +212,11 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       return getImageFilters()?.rating || [];
     },
     set(val) {
-      updateDirectoryState(toValue(directoryId), (state) => {
-        if (!state.browse) {
-          state.browse = {};
-        }
-        state.browse.filterBy = {
+      updateDirectoryState((state) => {
+        state.filterBy = {
           rating: optionalArray(val),
-          label: optionalArray(state.browse.filterBy?.label),
-          query: state.browse.filterBy?.query || undefined,
+          label: optionalArray(state.filterBy?.label),
+          query: state.filterBy?.query || undefined,
         };
       });
     },
@@ -190,14 +228,11 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       return getImageFilters()?.label || [];
     },
     set(val) {
-      updateDirectoryState(toValue(directoryId), (state) => {
-        if (!state.browse) {
-          state.browse = {};
-        }
-        state.browse.filterBy = {
-          rating: optionalArray(state.browse.filterBy?.rating),
+      updateDirectoryState((state) => {
+        state.filterBy = {
+          rating: optionalArray(state.filterBy?.rating),
           label: optionalArray(val),
-          query: state.browse.filterBy?.query || undefined,
+          query: state.filterBy?.query || undefined,
         };
       });
     },
@@ -209,13 +244,10 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       return getImageFilters()?.query || "";
     },
     set(val) {
-      updateDirectoryState(toValue(directoryId), (state) => {
-        if (!state.browse) {
-          state.browse = {};
-        }
-        state.browse.filterBy = {
-          rating: optionalArray(state.browse.filterBy?.rating),
-          label: optionalArray(state.browse.filterBy?.label),
+      updateDirectoryState((state) => {
+        state.filterBy = {
+          rating: optionalArray(state.filterBy?.rating),
+          label: optionalArray(state.filterBy?.label),
           query: val || undefined,
         };
       });
@@ -225,21 +257,19 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   // 备忘录是否显示隐藏项，默认值为 false
   const showHiddenMemos = computed<boolean>({
     get() {
-      const dirState = getDirState();
-      return dirState?.browse?.filterMemoBy?.hidden === true;
+      const dirState = currentBrowse.value;
+      if (dirState.filterMemoBy) {
+        return dirState.filterMemoBy.hidden === true;
+      }
+      const sState = serverState.value;
+      if (sState?.browse?.filterMemoBy) {
+        return sState.browse.filterMemoBy.hidden === true;
+      }
+      return false;
     },
     set(val) {
-      updateDirectoryState(toValue(directoryId), (state) => {
-        if (val) {
-          if (!state.browse) {
-            state.browse = {};
-          }
-          state.browse.filterMemoBy = { hidden: true };
-        } else {
-          if (state.browse) {
-            state.browse.filterMemoBy = undefined;
-          }
-        }
+      updateDirectoryState((state) => {
+        state.filterMemoBy = val ? { hidden: true } : undefined;
       });
     },
   });
@@ -253,74 +283,10 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   });
 
   function clearFilters() {
-    updateDirectoryState(toValue(directoryId), (state) => {
-      if (!state.browse) {
-        state.browse = {};
-      }
-      state.browse.filterBy = {};
+    updateDirectoryState((state) => {
+      state.filterBy = {};
     });
   }
-
-  // #region 上次会话校验与回退机制
-  // 1. 本地会话的加载状态计数
-  const localSessionLoadingCount = ref(0);
-
-  // 2. 优先对本地存储的会话发起网络校验以确认其存在性
-  const { data: localSessionCheckData } = useQuery(SessionDocument, {
-    variables: () => {
-      const id = getDirState()?.lastSession?.id;
-      if (!id) {
-        return undefined;
-      }
-      return { id };
-    },
-    loadingCount: localSessionLoadingCount,
-  });
-
-  // 3. 从服务器异步查询当前目录的最新会话信息（仅在本地无会话或本地会话已被删除时发起查询）
-  const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
-    variables: () => {
-      const id = toValue(directoryId);
-      if (!id) {
-        return undefined;
-      }
-      // 如果处于本地查询校验中，则挂起服务端上次会话的查询
-      if (localSessionLoadingCount.value > 0) {
-        return undefined;
-      }
-      // 如果本地会话校验通过并存在，则不需要查询服务端上次会话
-      if (localSessionCheckData.value?.session) {
-        return undefined;
-      }
-      return { id };
-    },
-  });
-
-  const serverLastSession = computed(() => {
-    const node = lastSessionData.value?.node;
-    return node?.__typename === "Directory" ? node.lastSession : undefined;
-  });
-
-  // 4. 校验通过的本地上次会话
-  const verifiedLocalSession = computed(() => {
-    const localSess = getDirState()?.lastSession;
-    if (!localSess) {
-      return undefined;
-    }
-    if (localSessionCheckData.value?.session?.id === localSess.id) {
-      return localSessionCheckData.value.session;
-    }
-    return undefined;
-  });
-
-  // 5. 最终合并的上次会话，优先本地，回退服务端
-  const lastSession = computed(() => {
-    if (verifiedLocalSession.value) {
-      return verifiedLocalSession.value;
-    }
-    return serverLastSession.value;
-  });
-  // #endregion
 
   return {
     filterRating,
@@ -332,4 +298,3 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     lastSession,
   };
 }
-// #endregion

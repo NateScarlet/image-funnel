@@ -1,0 +1,32 @@
+query DirectoryState($id: ID!) {
+  node(id: $id) {
+    ... on Directory {
+      id
+      state {
+        browse {
+          filterBy {
+            id
+            rating
+            label
+            query
+          }
+          filterMemoBy {
+            id
+            hidden
+          }
+        }
+        lastSession {
+          id
+          filter {
+            id
+            rating
+            label
+            query
+          }
+          targetKeep
+        }
+        updatedAt
+      }
+    }
+  }
+}

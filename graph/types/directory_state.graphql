@@ -1,0 +1,40 @@
+"""
+目录的自定义状态数据，用于保存用户的过滤条件和上次会话信息。
+"""
+type DirectoryState @goModel(model: "main/internal/shared.DirectoryStateDTO") {
+  "浏览/过滤配置"
+  browse: DirectoryStateBrowse
+  "上一次活跃会话的历史配置（客户端只读，服务端自动同步）"
+  lastSession: DirectoryStateLastSession
+  "最后更新时间"
+  updatedAt: Time!
+}
+
+type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
+  "上一次会话的ID"
+  id: ID!
+  "会话图片过滤器"
+  filter: ImageFilters!
+  "目标保留数量"
+  targetKeep: Int!
+}
+
+"""
+目录状态中的浏览过滤配置。
+"""
+type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
+  "图片过滤配置"
+  filterBy: ImageFilters
+  "备忘录过滤配置"
+  filterMemoBy: MemoFilters
+}
+
+input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
+  "浏览/过滤配置"
+  browse: DirectoryStateBrowseInput
+}
+
+input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
+  filterBy: ImageFiltersInput
+  filterMemoBy: MemoFiltersInput
+}

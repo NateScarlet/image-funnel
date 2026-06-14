@@ -141,7 +141,7 @@ import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
-import { states, updateLastSession } from "../composables/useDirectoryState";
+import { useDirectoryState } from "../composables/useDirectoryState";
 
 const { session } = defineProps<{
   session: SessionFragment;
@@ -158,6 +158,10 @@ const nextDirectoryId = computed(() => {
     session.directory.id,
   );
 });
+
+const { lastSession: nextDirLastSession } = useDirectoryState(
+  () => nextDirectoryId.value ?? "",
+);
 
 const commitForm =
   useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
@@ -195,10 +199,9 @@ async function handleCommitted() {
   const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
-    const nextDirState = states.value?.[nextDirectoryIdValue];
     const nextRating =
-      nextDirState?.lastSession?.filter?.rating ?? filter.rating ?? [];
-    const nextTargetKeep = nextDirState?.lastSession?.targetKeep ?? targetKeep;
+      nextDirLastSession.value?.filter?.rating ?? filter.rating ?? [];
+    const nextTargetKeep = nextDirLastSession.value?.targetKeep ?? targetKeep;
 
     const { data } = await mutate(CreateSessionDocument, {
       variables: {
@@ -214,7 +217,6 @@ async function handleCommitted() {
 
     if (data?.createSession) {
       const nextSession = data.createSession.session;
-      updateLastSession(nextSession);
 
       await router.push({
         name: "session",

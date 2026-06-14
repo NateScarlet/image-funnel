@@ -172,9 +172,6 @@ func main() {
 	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
 	filterBuilder := domdirectory.NewFilterBuilder()
 
-	sessionHandler := appsession.NewHandler(sessionService, eventBus, sessionDTOFactory, imageDTOFactory, logger)
-	memoDTOFactory := appmemo.NewDTOFactory(cfg.AbsRootDir)
-	memoFilterBuilder := memo.NewFilterBuilder()
 	directoryHandler := appdirectory.NewHandler(
 		dirAnalyzer,
 		eventBus,
@@ -183,6 +180,17 @@ func main() {
 		dirRepo,
 		dirSvc,
 	)
+
+	sessionHandler := appsession.NewHandler(
+		sessionService,
+		eventBus,
+		sessionDTOFactory,
+		imageDTOFactory,
+		logger,
+		dirSvc,
+	)
+	memoDTOFactory := appmemo.NewDTOFactory(cfg.AbsRootDir)
+	memoFilterBuilder := memo.NewFilterBuilder()
 	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
 	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, memo.NewFactory(cfg.AbsRootDir)), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
 	clipboard := clipboard.NewClipboard()

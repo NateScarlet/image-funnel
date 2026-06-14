@@ -43,6 +43,14 @@ func (m *mockRepository) Find(ctx context.Context, relPath string) iter.Seq2[*Di
 	}
 }
 
+func (m *mockRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
+	return nil, nil
+}
+
+func (m *mockRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
+	return nil
+}
+
 func TestService_SuggestDirectories_IgnoreNotExist(t *testing.T) {
 	ctx := context.Background()
 	logger := zap.NewNop()

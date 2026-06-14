@@ -2,9 +2,11 @@ package inmem
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"iter"
 	"main/internal/domain/directory"
+	"main/internal/shared"
 	"main/internal/util"
 	"os"
 	"path/filepath"
@@ -71,4 +73,50 @@ func (d *DirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq
 	}
 }
 
+// ReadState implements [directory.Repository].
+func (d *DirectoryRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
+	err := util.EnsurePathInRoot(d.rootDir, relPath)
+	if err != nil {
+		return nil, err
+	}
+	absPath := filepath.Join(d.rootDir, relPath, ".io.github.natescarlet.image-funnel.state.json")
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var state shared.DirectoryStateDTO
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
+	}
+	return &state, nil
+}
+
+// WriteState implements [directory.Repository].
+func (d *DirectoryRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
+	err := util.EnsurePathInRoot(d.rootDir, relPath)
+	if err != nil {
+		return err
+	}
+	absPath := filepath.Join(d.rootDir, relPath, ".io.github.natescarlet.image-funnel.state.json")
+
+	if state == nil {
+		if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+
+	state.Version = 1
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(absPath, data, 0644)
+}
+
 var _ directory.Repository = (*DirectoryRepository)(nil)
+

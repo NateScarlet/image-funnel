@@ -9,6 +9,7 @@ import (
 	"main/internal/util"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -211,3 +212,65 @@ func splitPathForSuggest(p string) (basePath, searchTerm string) {
 	}
 	return p[:i], p[i+1:]
 }
+
+// ReadState 读取指定目录的状态配置
+func (s *Service) ReadState(ctx context.Context, id scalar.ID) (*shared.DirectoryStateDTO, error) {
+	dir, err := s.GetDirectory(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ReadState(ctx, dir.RelPath())
+}
+
+// WriteState 写入指定目录的状态配置并更新更新时间
+func (s *Service) WriteState(ctx context.Context, id scalar.ID, state *shared.DirectoryStateDTO) error {
+	dir, err := s.GetDirectory(ctx, id)
+	if err != nil {
+		return err
+	}
+	if state != nil {
+		state.UpdatedAt = time.Now()
+	}
+	return s.repo.WriteState(ctx, dir.RelPath(), state)
+}
+
+// SaveLastSession 保存上一次活跃会话的历史配置到该目录的持久化状态文件中
+func (s *Service) SaveLastSession(
+	ctx context.Context,
+	directoryID scalar.ID,
+	sessionID scalar.ID,
+	filter *shared.ImageFilters,
+	targetKeep int,
+) error {
+	dir, err := s.GetDirectory(ctx, directoryID)
+	if err != nil {
+		return err
+	}
+	state, err := s.repo.ReadState(ctx, dir.RelPath())
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		state = &shared.DirectoryStateDTO{}
+	}
+	var ratingVal []int
+	var labelVal []string
+	var queryVal string
+	if filter != nil {
+		ratingVal = filter.Rating
+		labelVal = filter.Label
+		queryVal = filter.Query
+	}
+	state.LastSession = &shared.DirectoryStateLastSessionDTO{
+		ID: sessionID,
+		Filter: shared.ImageFilters{
+			Rating: ratingVal,
+			Label:  labelVal,
+			Query:  queryVal,
+		},
+		TargetKeep: targetKeep,
+	}
+	state.UpdatedAt = time.Now()
+	return s.repo.WriteState(ctx, dir.RelPath(), state)
+}
+

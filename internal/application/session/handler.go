@@ -13,12 +13,24 @@ import (
 	"go.uber.org/zap"
 )
 
+// LastSessionSaver 定义了保存目录最后一次活跃会话历史的本地接口，不限定具体的存储实现与存储位置
+type LastSessionSaver interface {
+	SaveLastSession(
+		ctx context.Context,
+		directoryID scalar.ID,
+		sessionID scalar.ID,
+		filter *shared.ImageFilters,
+		targetKeep int,
+	) error
+}
+
 type Handler struct {
 	sessionService  *session.Service
 	eventBus        EventBus
 	dtoFactory      *DTOFactory
 	imageDTOFactory *appimage.DTOFactory
 	logger          *zap.Logger
+	lastSessionSaver LastSessionSaver
 }
 
 func NewHandler(
@@ -27,6 +39,7 @@ func NewHandler(
 	dtoFactory *DTOFactory,
 	imageDTOFactory *appimage.DTOFactory,
 	logger *zap.Logger,
+	lastSessionSaver LastSessionSaver,
 ) *Handler {
 	return &Handler{
 		sessionService:  sessionService,
@@ -34,6 +47,7 @@ func NewHandler(
 		dtoFactory:      dtoFactory,
 		imageDTOFactory: imageDTOFactory,
 		logger:          logger,
+		lastSessionSaver: lastSessionSaver,
 	}
 }
 
@@ -60,7 +74,17 @@ func (h *Handler) CreateSession(
 		}
 	}()
 
-	return h.sessionService.Create(ctx, directoryId, filter, target_keep)
+	sessionID, err = h.sessionService.Create(ctx, directoryId, filter, target_keep)
+	if err != nil {
+		return sessionID, err
+	}
+
+	// 自动同步新建会话配置到历史存储中，用作下次创建会话时的回退配置
+	if h.lastSessionSaver != nil {
+		_ = h.lastSessionSaver.SaveLastSession(ctx, directoryId, sessionID, filter, target_keep)
+	}
+
+	return sessionID, nil
 }
 
 func (h *Handler) MarkImage(

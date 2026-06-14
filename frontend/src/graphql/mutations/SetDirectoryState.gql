@@ -1,0 +1,20 @@
+mutation SetDirectoryState($input: SetDirectoryStateInput!) {
+  setDirectoryState(input: $input) {
+    id
+    state {
+      browse {
+        filterBy {
+          id
+          rating
+          label
+          query
+        }
+        filterMemoBy {
+          id
+          hidden
+        }
+      }
+      updatedAt
+    }
+  }
+}

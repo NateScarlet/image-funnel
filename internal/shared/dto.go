@@ -201,3 +201,25 @@ type TrashHistoryEdgeDTO struct {
 	Node   *TrashHistoryItemDTO
 	Cursor string
 }
+
+// DirectoryStateDTO 目录状态数据传输对象
+type DirectoryStateDTO struct {
+	Version     int                           `json:"version"`
+	Browse      *DirectoryStateBrowseDTO      `json:"browse,omitempty"`
+	LastSession *DirectoryStateLastSessionDTO `json:"lastSession,omitempty"`
+	UpdatedAt   time.Time                     `json:"updatedAt"`
+}
+
+// DirectoryStateBrowseDTO 状态中的图片与备忘录过滤条件配置
+type DirectoryStateBrowseDTO struct {
+	FilterBy     *ImageFilters `json:"filterBy,omitempty"`
+	FilterMemoBy *MemoFilters  `json:"filterMemoBy,omitempty"`
+}
+
+// DirectoryStateLastSessionDTO 状态中的最近会话配置
+type DirectoryStateLastSessionDTO struct {
+	ID         scalar.ID    `json:"id"`
+	Filter     ImageFilters `json:"filter"`
+	TargetKeep int          `json:"targetKeep"`
+}
+

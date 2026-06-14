@@ -242,6 +242,13 @@ type RejectPairingRequestInput struct {
 	Code string `json:"code"`
 }
 
+type SetDirectoryStateInput struct {
+	// 目录的ID
+	ID scalar.ID `json:"id"`
+	// 目录的新状态数据
+	State *shared.DirectoryStateDTO `json:"state"`
+}
+
 type Subscription struct {
 }
 

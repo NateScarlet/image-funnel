@@ -1,0 +1,11 @@
+input SetDirectoryStateInput {
+  "目录的ID"
+  id: ID!
+  "目录的新状态数据"
+  state: DirectoryStateInput!
+}
+
+extend type Mutation {
+  "设置目录的自定义状态数据"
+  setDirectoryState(input: SetDirectoryStateInput!): Directory!
+}
