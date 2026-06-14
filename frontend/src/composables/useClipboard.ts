@@ -1,3 +1,4 @@
+import { type Ref } from "vue";
 import useStorage from "./useStorage";
 import useNotification from "./useNotification";
 import useQuery from "@/graphql/utils/useQuery";
@@ -20,7 +21,7 @@ const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<
   string[]
 >(sessionStorage, "copied_image_ids_s7f8g9", () => []);
 
-export function useClipboard() {
+export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   const { showSuccess } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
 
@@ -59,35 +60,47 @@ export function useClipboard() {
   async function copyWorkflowOrFile(filePath: string, imageId: string) {
     if (!filePath || !imageId) return;
 
-    let workflow: string | null | undefined = undefined;
-    try {
-      // 优先获取图片的 ComfyUI 工作流数据
-      const result = await query(ComfyUiWorkflowDocument, {
-        variables: { id: imageId },
-        fetchPolicy: "cache-first",
-      });
-      workflow = result.data?.comfyUIWorkflow;
-    } catch (err) {
-      console.error("获取工作流数据失败", err);
+    // 防止并发重复操作
+    if (options?.loadingCount) {
+      if (options.loadingCount.value > 0) return;
+      options.loadingCount.value++;
     }
 
-    if (workflow) {
-      const ok = await writeToClipboard(workflow);
-      if (ok) {
-        showSuccess("已复制 ComfyUI 工作流数据!");
-        addCopiedImageId(imageId);
-        return;
+    try {
+      let workflow: string | null | undefined = undefined;
+      try {
+        // 优先获取图片的 ComfyUI 工作流数据
+        const result = await query(ComfyUiWorkflowDocument, {
+          variables: { id: imageId },
+          fetchPolicy: "cache-first",
+        });
+        workflow = result.data?.comfyUIWorkflow;
+      } catch (err) {
+        console.error("获取工作流数据失败", err);
+      }
+
+      if (workflow) {
+        const ok = await writeToClipboard(workflow);
+        if (ok) {
+          showSuccess("已复制 ComfyUI 工作流数据!");
+          addCopiedImageId(imageId);
+          return;
+        }
+      }
+
+      // 无法获取或复制工作流时，降级为复制图片文件/路径
+      const supported = await tryAttachFiles([filePath]);
+      if (supported) {
+        showSuccess("已复制图片文件!");
+      } else {
+        showSuccess("已复制图片路径!");
+      }
+      addCopiedImageId(imageId);
+    } finally {
+      if (options?.loadingCount) {
+        options.loadingCount.value--;
       }
     }
-
-    // 无法获取或复制工作流时，降级为复制图片文件/路径
-    const supported = await tryAttachFiles([filePath]);
-    if (supported) {
-      showSuccess("已复制图片文件!");
-    } else {
-      showSuccess("已复制图片路径!");
-    }
-    addCopiedImageId(imageId);
   }
 
   // 判断当前连接的服务器是否已知不支持剪贴板增强
@@ -157,12 +170,24 @@ export function useClipboard() {
     const validPaths = filePaths.filter((p) => !!p);
     if (validPaths.length === 0) return;
 
-    // 尝试文件增强复制
-    const supported = await tryAttachFiles(validPaths);
-    if (supported) {
-      showSuccess("已复制图片文件!");
-    } else {
-      showSuccess("已复制绝对路径!");
+    // 防止并发重复操作
+    if (options?.loadingCount) {
+      if (options.loadingCount.value > 0) return;
+      options.loadingCount.value++;
+    }
+
+    try {
+      // 尝试文件增强复制
+      const supported = await tryAttachFiles(validPaths);
+      if (supported) {
+        showSuccess("已复制图片文件!");
+      } else {
+        showSuccess("已复制绝对路径!");
+      }
+    } finally {
+      if (options?.loadingCount) {
+        options.loadingCount.value--;
+      }
     }
   }
 

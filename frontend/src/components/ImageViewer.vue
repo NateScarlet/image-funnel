@@ -116,19 +116,32 @@
 
       <!-- 复制按钮 -->
       <button
-        class="flex items-center gap-2 cursor-pointer select-none transition-colors"
-        :class="
-          isCopied
-            ? 'text-secondary-400 hover:text-secondary-300'
-            : 'text-white/50 hover:text-white'
-        "
+        class="flex items-center gap-2 select-none transition-colors"
+        :class="[
+          isCopying
+            ? 'text-white/50 opacity-40 cursor-not-allowed'
+            : isCopied
+              ? 'text-secondary-400 hover:text-secondary-300 cursor-pointer'
+              : 'text-white/50 hover:text-white cursor-pointer',
+        ]"
+        :disabled="isCopying"
         title="复制"
         @click="handleCopy"
       >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <svg
+          v-if="isCopying"
+          class="w-4 h-4 animate-spin"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path :d="mdiLoading" />
+        </svg>
+        <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ isCopied ? "已复制" : "复制" }}</span>
+        <span class="text-xs">{{
+          isCopying ? "正在复制..." : isCopied ? "已复制" : "复制"
+        }}</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
@@ -485,15 +498,21 @@ useClickOutside(overflowMenuRef, () => {
   showOverflowMenu.value = false;
 });
 
-const { copyWorkflowOrFile, copyFiles, copiedImageIds } = useClipboard();
+const copyLoadingCount = ref(0);
+const { copyWorkflowOrFile, copyFiles, copiedImageIds } = useClipboard({
+  loadingCount: copyLoadingCount,
+});
 
+const isCopying = computed(() => copyLoadingCount.value > 0);
 const isCopied = computed(() => copiedImageIds.value.includes(image.id));
 
 async function handleCopy() {
+  if (isCopying.value) return;
   await copyWorkflowOrFile(fullFilePath.value, image.id);
 }
 
 async function copyAbsoluteFilePath() {
+  if (isCopying.value) return;
   await copyFiles(fullFilePath.value);
 }
 
@@ -510,6 +529,7 @@ useHotkeys(
       }
       e.preventDefault();
       e.stopPropagation();
+      if (isCopying.value) return;
       await handleCopy();
     },
   },
@@ -532,6 +552,7 @@ useHotkeys(
       }
       e.preventDefault();
       e.stopPropagation();
+      if (isCopying.value) return;
       await copyAbsoluteFilePath();
     },
   },

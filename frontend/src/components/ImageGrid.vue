@@ -622,19 +622,30 @@
 
             <!-- 批量复制 -->
             <button
-              class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="selectedImageIds.length === 0"
+              class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
+              :disabled="selectedImageIds.length === 0 || isCopying"
               :class="
-                selectedImageIds.length === 0
+                selectedImageIds.length === 0 || isCopying
                   ? 'opacity-40 cursor-not-allowed'
-                  : ''
+                  : 'cursor-pointer hover:border-secondary-500/50'
               "
               @click="copySelectedImages"
             >
-              <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
+              <svg
+                v-if="isCopying"
+                class="w-4 h-4 text-secondary-400 animate-spin"
+                viewBox="0 0 24 24"
+              >
+                <path :d="mdiLoading" fill="currentColor" />
+              </svg>
+              <svg
+                v-else
+                class="w-4 h-4 text-secondary-400"
+                viewBox="0 0 24 24"
+              >
                 <path :d="mdiContentCopy" fill="currentColor" />
               </svg>
-              <span>复制图片</span>
+              <span>{{ isCopying ? "正在复制..." : "复制图片" }}</span>
             </button>
 
             <div class="h-5 w-px bg-primary-700"></div>
@@ -930,10 +941,16 @@ const selectedImagePaths = computed(() => {
     .filter((p): p is string => p !== null);
 });
 
-const { copyFiles } = useClipboard();
+const copyLoadingCount = ref(0);
+const { copyFiles } = useClipboard({
+  loadingCount: copyLoadingCount,
+});
+
+const isCopying = computed(() => copyLoadingCount.value > 0);
 
 // 复制所有选中的图片到剪贴板
 async function copySelectedImages() {
+  if (isCopying.value) return;
   const paths = selectedImagePaths.value;
   if (paths.length === 0) return;
   await copyFiles(...paths);
