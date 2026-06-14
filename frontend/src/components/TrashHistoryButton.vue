@@ -6,7 +6,7 @@
       <svg class="w-4 h-4 text-red-400 animate-pulse" viewBox="0 0 24 24">
         <path :d="mdiDelete" fill="currentColor" />
       </svg>
-      <span>回收站历史 ({{ formatTrashSize(totalTrashSize) }})</span>
+      <span>回收站 ({{ formatTrashSize(totalTrashSize) }})</span>
     </button>
 
     <!-- 气泡内容面板 -->
