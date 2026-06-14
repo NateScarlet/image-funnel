@@ -3,7 +3,9 @@ package localfs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"math/rand"
 	"os"
@@ -19,6 +21,45 @@ import (
 )
 
 const trashDirName = ".io.github.natescarlet.image-funnel.trash"
+
+// dirEntries 分批流式读取目录下的文件，避免在大量文件目录下导致内存暴涨
+func dirEntries(ctx context.Context, dirAbsPath string) iter.Seq2[os.DirEntry, error] {
+	const batchSize = 256
+	return func(yield func(os.DirEntry, error) bool) {
+		f, err := os.Open(dirAbsPath)
+		if os.IsNotExist(err) {
+			return
+		}
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer f.Close()
+		for {
+			if ctx.Err() != nil {
+				yield(nil, ctx.Err())
+				return
+			}
+			// 每次读取 batchSize 个条目
+			entries, err := f.ReadDir(batchSize)
+			for _, entry := range entries {
+				// 忽略以点开头的隐藏文件或目录
+				if strings.HasPrefix(entry.Name(), ".") {
+					continue
+				}
+				if !yield(entry, nil) {
+					return
+				}
+			}
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(nil, err)
+				}
+				return
+			}
+		}
+	}
+}
 
 // 生成基于时间的可排序 ID，格式为 "trash_<timestamp_ns>_<random_suffix>"
 // 时间戳部分固定 19 位补零以确保排序稳定，随机后缀保持原样
@@ -79,19 +120,20 @@ func (s *ImageMover) Move(
 	// 构造过滤器以对图片进行多维度条件筛选
 	imgFilter := s.imageFilterBuilder.Build(filterBy)
 
-	// 扫描当前目录并收集满足过滤条件的所有图片的绝对路径
-	var matchingPaths []string
+	// 第一阶段：流式扫描图片，仅保存需要处理的图片的文件名及实体引用
+	toMoveImages := make(map[string]*domainimage.Image)
 	for img, scanErr := range s.imageRepo.Find(ctx, relPath) {
 		if scanErr != nil {
 			return 0, "", scanErr
 		}
 		if imgFilter(img) {
-			matchingPaths = append(matchingPaths, filepath.Join(s.rootDir, img.RelPath()))
+			imgName := filepath.Base(img.RelPath())
+			toMoveImages[imgName] = img
 		}
 	}
 
 	// 若无可移动图片，快速返回
-	if len(matchingPaths) == 0 {
+	if len(toMoveImages) == 0 {
 		return 0, targetAbsDir, nil
 	}
 
@@ -100,50 +142,58 @@ func (s *ImageMover) Move(
 		return 0, "", fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	// 遍历符合条件的图片，识别并物理移动该图片及所有的相关伴随文件
-	for _, imgAbsPath := range matchingPaths {
-		srcAbsDir := filepath.Dir(imgAbsPath)
-		imgName := filepath.Base(imgAbsPath)
+	srcAbsDir := filepath.Join(s.rootDir, relPath)
 
-		// 扫描图片所在物理目录的所有文件以抓取配套伴随文件
-		entries, err := os.ReadDir(srcAbsDir)
+	// 第二阶段：流式扫描源目录并移动匹配的文件及其伴随文件
+	for entry, err := range dirEntries(ctx, srcAbsDir) {
 		if err != nil {
-			return movedCount, "", fmt.Errorf("failed to read source directory: %w", err)
+			return 0, "", err
+		}
+		if entry.IsDir() {
+			continue
 		}
 
-		imgExt := filepath.Ext(imgName)
-		imgBase := strings.TrimSuffix(imgName, imgExt)
+		checkName := entry.Name()
+		var associatedImg *domainimage.Image
+		var isImageBody bool
 
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			checkName := entry.Name()
-			checkExt := filepath.Ext(checkName)
-			checkBase := strings.TrimSuffix(checkName, checkExt)
-
-			// 配套文件判断逻辑：
-			// 1. 文件名完全一致（图片本体本身）
-			// 2. 以当前图片名加点为前缀的文件（例如 aaa.png.json, aaa.png.txt）
-			// 3. 主文件名完全相同的文件（例如 aaa.json, aaa.txt，通常为 Prompt 描述或伴随元数据）
-			isAssociated := checkName == imgName ||
-				strings.HasPrefix(checkName, imgName+".") ||
-				(imgBase != "" && checkBase == imgBase)
-
-			if isAssociated {
-				srcFilePath := filepath.Join(srcAbsDir, checkName)
-				targetFilePath := filepath.Join(targetAbsDir, checkName)
-
-				if err := os.Rename(srcFilePath, targetFilePath); err != nil {
-					// 容错处理：若伴随文件由于之前的图片移动已被先行移走，允许直接跳过
-					if os.IsNotExist(err) && checkName != imgName {
-						continue
-					}
-					return movedCount, "", fmt.Errorf("failed to move file %s to %s: %w", srcFilePath, targetFilePath, err)
+		// 1. 优先精准匹配文件名本身
+		if img, ok := toMoveImages[checkName]; ok {
+			associatedImg = img
+			isImageBody = true
+		} else {
+			// 2. 剥离后缀匹配伴随文件
+			curr := checkName
+			for {
+				ext := filepath.Ext(curr)
+				if ext == "" {
+					break
+				}
+				curr = strings.TrimSuffix(curr, ext)
+				if img, ok := toMoveImages[curr]; ok {
+					associatedImg = img
+					break
 				}
 			}
 		}
-		movedCount++
+
+		if associatedImg != nil {
+			srcFilePath := filepath.Join(srcAbsDir, checkName)
+			targetFilePath := filepath.Join(targetAbsDir, checkName)
+
+			if err := os.Rename(srcFilePath, targetFilePath); err != nil {
+				// 容错处理：若伴随文件已被先行移走，且其不是图片本体，则允许跳过
+				if os.IsNotExist(err) && !isImageBody {
+					continue
+				}
+				return movedCount, "", fmt.Errorf("failed to move file %s to %s: %w", srcFilePath, targetFilePath, err)
+			}
+
+			// 仅当移动的是图片文件本身时，增加计数
+			if isImageBody {
+				movedCount++
+			}
+		}
 	}
 
 	return movedCount, targetAbsDir, nil
@@ -157,102 +207,102 @@ func (s *ImageMover) Trash(
 ) (historyId string, totalFileCount int, err error) {
 	imgFilter := s.imageFilterBuilder.Build(filterBy)
 
-	var matchingImages []*domainimage.Image
+	// 第一阶段：流式扫描图片，仅保存需要处理的图片的文件名及实体引用
+	toDeleteImages := make(map[string]*domainimage.Image)
 	for img, scanErr := range s.imageRepo.Find(ctx, relPath) {
 		if scanErr != nil {
 			return "", 0, scanErr
 		}
 		if imgFilter(img) {
-			matchingImages = append(matchingImages, img)
+			imgName := filepath.Base(img.RelPath())
+			toDeleteImages[imgName] = img
 		}
 	}
 
-	if len(matchingImages) == 0 {
+	if len(toDeleteImages) == 0 {
 		return "", 0, nil
 	}
 
 	historyId = newTrashHistoryID()
 	historyDir := filepath.Join(s.rootDir, trashDirName, historyId)
 	filesDir := filepath.Join(historyDir, "files")
+	var historyDirCreated bool
 
 	var totalSize int64
 	var movedFilesCount int
 	var trashedImages []trashedImageMeta
 
-	for _, img := range matchingImages {
-		imgAbsPath := filepath.Join(s.rootDir, img.RelPath())
-		srcAbsDir := filepath.Dir(imgAbsPath)
-		imgName := filepath.Base(imgAbsPath)
+	srcAbsDir := filepath.Join(s.rootDir, relPath)
 
-		entries, err := os.ReadDir(srcAbsDir)
+	// 第二阶段：流式分批读取目录下的所有文件并匹配移动
+	for entry, err := range dirEntries(ctx, srcAbsDir) {
 		if err != nil {
-			return "", 0, fmt.Errorf("failed to read source directory: %w", err)
+			return "", 0, err
+		}
+		if entry.IsDir() {
+			continue
 		}
 
-		imgExt := filepath.Ext(imgName)
-		imgBase := strings.TrimSuffix(imgName, imgExt)
+		checkName := entry.Name()
+		var associatedImg *domainimage.Image
+		var isImageBody bool
 
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+		// 1. 优先精准匹配文件名本身
+		if img, ok := toDeleteImages[checkName]; ok {
+			associatedImg = img
+			isImageBody = true
+		} else {
+			// 2. 剥离后缀匹配伴随文件
+			curr := checkName
+			for {
+				ext := filepath.Ext(curr)
+				if ext == "" {
+					break
+				}
+				curr = strings.TrimSuffix(curr, ext)
+				if img, ok := toDeleteImages[curr]; ok {
+					associatedImg = img
+					break
+				}
 			}
-			checkName := entry.Name()
-			checkExt := filepath.Ext(checkName)
-			checkBase := strings.TrimSuffix(checkName, checkExt)
+		}
 
-			isAssociated := checkName == imgName ||
-				strings.HasPrefix(checkName, imgName+".") ||
-				(imgBase != "" && checkBase == imgBase)
+		if associatedImg != nil {
+			srcFilePath := filepath.Join(srcAbsDir, checkName)
+			targetFilePath := filepath.Join(filesDir, checkName)
 
-			if isAssociated {
-				srcFilePath := filepath.Join(srcAbsDir, checkName)
+			// 获取文件属性用于统计总大小
+			info, err := entry.Info()
+			if err != nil {
+				if os.IsNotExist(err) && !isImageBody {
+					continue
+				}
+				return "", 0, err
+			}
 
-				// 获取相对于项目根目录的相对路径
-				srcRel, err := filepath.Rel(s.rootDir, srcFilePath)
-				if err != nil {
+			// 延迟创建暂存目录，防止空操作产生空目录
+			if !historyDirCreated {
+				if err := os.MkdirAll(filesDir, 0755); err != nil {
 					return "", 0, err
 				}
+				historyDirCreated = true
+			}
 
-				// 剥离当前删除操作所在的“共同前缀（操作目录相对路径）”
-				srcRelClean := filepath.ToSlash(srcRel)
-				prefixClean := filepath.ToSlash(relPath)
-				tempRelPath := srcRelClean
-				if prefixClean != "" && prefixClean != "." {
-					tempRelPath = strings.TrimPrefix(srcRelClean, prefixClean)
-					tempRelPath = strings.TrimPrefix(tempRelPath, "/")
+			if err := os.Rename(srcFilePath, targetFilePath); err != nil {
+				if os.IsNotExist(err) && !isImageBody {
+					continue
 				}
+				return "", 0, fmt.Errorf("failed to stash file %s to %s: %w", srcFilePath, targetFilePath, err)
+			}
 
-				targetFilePath := filepath.Join(filesDir, filepath.FromSlash(tempRelPath))
+			totalSize += info.Size()
+			movedFilesCount++
 
-				// 获取文件属性用于统计总大小
-				info, err := os.Stat(srcFilePath)
-				if err != nil {
-					if os.IsNotExist(err) && checkName != imgName {
-						continue
-					}
-					return "", 0, err
-				}
-
-				if err := os.MkdirAll(filepath.Dir(targetFilePath), 0755); err != nil {
-					return "", 0, err
-				}
-
-				if err := os.Rename(srcFilePath, targetFilePath); err != nil {
-					if os.IsNotExist(err) && checkName != imgName {
-						continue
-					}
-					return "", 0, fmt.Errorf("failed to stash file %s to %s: %w", srcFilePath, targetFilePath, err)
-				}
-
-				totalSize += info.Size()
-				movedFilesCount++
-
-				if checkName == imgName {
-					trashedImages = append(trashedImages, trashedImageMeta{
-						RelPath: filepath.ToSlash(tempRelPath),
-						ModTime: img.ModTime(),
-					})
-				}
+			if isImageBody {
+				trashedImages = append(trashedImages, trashedImageMeta{
+					RelPath: filepath.ToSlash(checkName),
+					ModTime: associatedImg.ModTime(),
+				})
 			}
 		}
 	}
