@@ -94,7 +94,7 @@ func main() {
 	imageProcessor := concurrency.NewSingleFlightImageProcessor(retryProcessor)
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor, cfg.AbsRootDir)
-	dirRepo := inmem.NewDirectoryRepository(cfg.AbsRootDir)
+	dirRepo := localfs.NewDirectoryRepository(cfg.AbsRootDir)
 
 	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()

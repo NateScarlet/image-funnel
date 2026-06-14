@@ -5,7 +5,6 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
-	"main/internal/infrastructure/inmem"
 	"main/internal/shared"
 	"os"
 	"path/filepath"
@@ -28,7 +27,7 @@ type testContext struct {
 func newTestContext(t *testing.T) *testContext {
 	rootDir := t.TempDir()
 	factory := domainimage.NewFactory(newMockMetadataRepository(), nil, rootDir)
-	dirRepo := inmem.NewDirectoryRepository(rootDir)
+	dirRepo := NewDirectoryRepository(rootDir)
 	imgRepo := NewImageRepository(rootDir, factory, dirRepo)
 	return &testContext{
 		rootDir:     rootDir,
