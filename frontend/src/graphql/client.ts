@@ -68,9 +68,14 @@ const wsLink = new WebSocketLink({
 });
 
 const httpOrBatchLink = ApolloLink.split(
-  ({ variables, getContext }) => {
+  ({ query, variables, getContext }) => {
+    const definition = getMainDefinition(query);
+    const isMutation =
+      definition.kind === "OperationDefinition" &&
+      definition.operation === "mutation";
     return (
       (getContext() as OperationContext).transport === "http" ||
+      isMutation ||
       containsUpload(variables)
     );
   },
