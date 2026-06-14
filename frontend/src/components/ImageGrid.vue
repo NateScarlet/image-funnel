@@ -21,17 +21,23 @@
             v-if="stats && stats.ratingCounts.length > 0"
             class="flex items-center gap-2 ml-2 text-xs font-normal"
           >
-            <div
+            <button
               v-for="rc in sortedRatingCounts"
               :key="rc.rating"
-              class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50"
+              class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50 hover:bg-primary-600/80 transition-colors cursor-pointer select-none"
+              :title="
+                filterRating.includes(rc.rating)
+                  ? `取消筛选 ${rc.rating === 0 ? '无评分' : rc.rating + '星'}`
+                  : `筛选 ${rc.rating === 0 ? '无评分' : rc.rating + '星'}`
+              "
+              @click="toggleRatingFilter(rc.rating)"
             >
               <RatingIcon
                 :rating="rc.rating"
                 :filled="filterRating.includes(rc.rating)"
               />
               <span class="text-xs">{{ rc.count }}</span>
-            </div>
+            </button>
           </div>
 
           <!-- 加载中即使有缓存数据也显示旋转加载提示 -->
@@ -684,6 +690,16 @@ const {
   hasActiveFilters,
   clearFilters,
 } = useDirectoryState(() => props.directoryId);
+
+// 切换特定星级的筛选状态
+function toggleRatingFilter(rating: number) {
+  const index = filterRating.value.indexOf(rating);
+  if (index >= 0) {
+    filterRating.value = filterRating.value.filter((r) => r !== rating);
+  } else {
+    filterRating.value = [...filterRating.value, rating].sort((a, b) => a - b);
+  }
+}
 
 // 目录统计信息
 const { useStats } = useDirectoryStats();
