@@ -1,7 +1,7 @@
 <template>
   <div v-if="trashHistoryNodes.length > 0" class="relative group/trash-history">
     <button
-      class="px-3 h-8 text-xs border rounded-lg transition-all flex items-center gap-1.5 bg-primary-800/80 hover:bg-primary-700/80 border-primary-700 text-primary-200 cursor-pointer select-none hover:border-red-500/30"
+      class="px-4 py-2 text-sm font-medium border rounded-lg transition-all flex items-center gap-2 bg-primary-800/80 hover:bg-primary-700/80 border-primary-700 text-primary-200 hover:text-white cursor-pointer select-none hover:border-red-500/30 active:scale-95"
     >
       <svg class="w-4 h-4 text-red-400 animate-pulse" viewBox="0 0 24 24">
         <path :d="mdiDelete" fill="currentColor" />

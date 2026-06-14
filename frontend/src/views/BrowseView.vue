@@ -116,6 +116,12 @@
             </svg>
           </RouterLink>
         </div>
+
+        <!-- 回收站与设备管理 -->
+        <div class="flex items-center gap-3 flex-none">
+          <TrashHistoryButton />
+          <DeviceManagerButton />
+        </div>
       </div>
 
       <!-- 小屏布局：两行显示 -->
@@ -235,13 +241,6 @@
             :is-current="true"
           />
         </div>
-      </div>
-
-      <div
-        class="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 items-center gap-3"
-      >
-        <TrashHistoryButton />
-        <DeviceManagerButton />
       </div>
     </header>
 
