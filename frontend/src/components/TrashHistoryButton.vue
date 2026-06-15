@@ -100,7 +100,6 @@
             class="bg-primary-800 border border-primary-700 text-xs text-primary-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-secondary-500"
             @change="saveMinAgeSetting"
           >
-            <option value="PT0S">不保留（立即）</option>
             <option value="PT5M">5 分钟</option>
             <option value="PT1H">1 小时</option>
             <option value="P1D">1 天</option>
@@ -116,7 +115,7 @@
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
             <path :d="mdiDeleteSweep" fill="currentColor" />
           </svg>
-          <span>立即清空回收站</span>
+          <span>清理超过保留期的文件</span>
         </button>
       </div>
     </div>
