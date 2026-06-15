@@ -24,6 +24,21 @@ func NewFileChange(absPath string, action shared.FileAction, occurredAt time.Tim
 	}
 }
 
+// AbsPath 获取文件绝对路径
+func (f *FileChange) AbsPath() string {
+	return f.absPath
+}
+
+// Action 获取文件操作类型
+func (f *FileChange) Action() shared.FileAction {
+	return f.action
+}
+
+// OccurredAt 获取变更发生时间
+func (f *FileChange) OccurredAt() time.Time {
+	return f.occurredAt
+}
+
 // Watcher 文件系统监控器接口
 // FileChange 是专门为 Watcher 设计的领域对象
 type Watcher interface {

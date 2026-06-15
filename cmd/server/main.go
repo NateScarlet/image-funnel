@@ -133,7 +133,8 @@ func main() {
 		dirAnalyzer = cache
 	}
 
-	fileWatcher := localfs.NewWatcher(logger)
+	rawFileWatcher := localfs.NewWatcher(logger)
+	fileWatcher := inmem.NewDebouncedWatcher(rawFileWatcher, 300*time.Millisecond)
 	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 

@@ -39,9 +39,9 @@ export default function useLiveArray<T extends { id: string }>(
   };
 
   if (subscribe) {
-    const subs = new Map<string, () => void>();
+    const subs = new Map<string, { unsubscribe: () => void; id: string }>();
     onScopeDispose(() => {
-      subs.values().forEach((i) => i());
+      subs.values().forEach((i) => i.unsubscribe());
       subs.clear();
     }, true);
     watch(
@@ -50,19 +50,23 @@ export default function useLiveArray<T extends { id: string }>(
         const incoming = new Map(items.map((i) => [identity(i), i]));
 
         for (const [k, v] of incoming) {
-          if (!subs.has(k)) {
+          const currentSub = subs.get(k);
+          if (!currentSub || currentSub.id !== v.id) {
+            if (currentSub) {
+              currentSub.unsubscribe();
+            }
+
             let skipOnce = true;
-            subs.set(
-              k,
-              subscribe(v, (newValue) => {
-                if (skipOnce && isEqual(newValue, v)) {
-                  // 订阅可能立即返回当前值，没必要插入
-                  skipOnce = false;
-                  return;
-                }
-                addItem(newValue);
-              }),
-            );
+            const unsubscribe = subscribe(v, (newValue) => {
+              if (skipOnce && isEqual(newValue, v)) {
+                // 订阅可能立即返回当前值，没必要插入
+                skipOnce = false;
+                return;
+              }
+              addItem(newValue);
+            });
+
+            subs.set(k, { unsubscribe, id: v.id });
             skipOnce = false;
           }
         }
@@ -70,7 +74,7 @@ export default function useLiveArray<T extends { id: string }>(
           for (const i of oldItems) {
             const k = identity(i);
             if (!incoming.has(k)) {
-              subs.get(k)?.();
+              subs.get(k)?.unsubscribe();
               subs.delete(k);
             }
           }
@@ -94,9 +98,13 @@ export default function useLiveArray<T extends { id: string }>(
     const merged = uniqBy([...liveItems.value, ...v], (i) => identity(i));
     const mapped = merged.map((item) => {
       const activeItem = itemByKey.get(identity(item));
-      // 仅当原始查询里的项没有被标记逻辑删除时，才使用其更完整的原始数据进行合并覆盖。
-      // 否则说明原始数据已被逻辑删除（属于失效历史数据），应直接保留代表最新还原或创建的当前活跃项，避免被屏蔽过滤。
-      if (activeItem && !liveDeletedID.has(activeItem.id)) {
+      // 仅当原始查询项存在、其 ID 与实时最新项的 ID 完全一致，且未被逻辑删除时，才使用原始查询数据覆盖。
+      // 如果 ID 不一致，说明原始查询已过时（例如还停留在旧的修改时间戳 ID），必须直接返回代表实时最新版本的 item。
+      if (
+        activeItem &&
+        activeItem.id === item.id &&
+        !liveDeletedID.has(activeItem.id)
+      ) {
         return activeItem;
       }
       return item;

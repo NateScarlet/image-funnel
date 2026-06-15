@@ -43,6 +43,7 @@ func NewService(watcher Watcher, eventBus EventBus, rootDir string, repo Reposit
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.watchAndTransform(ctx)
 
+
 	cleanup := func() {
 		cancel()
 	}
@@ -89,6 +90,7 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		s.eventBus.PublishFileChanged(ctx, event)
 	}
 }
+
 
 // GetDirectory 根据目录 ID 获取目录实体，由领域层内部解码 ID
 func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, error) {
