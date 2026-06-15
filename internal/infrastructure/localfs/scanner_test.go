@@ -250,6 +250,7 @@ func TestTrashAndUndo(t *testing.T) {
 	assert.Equal(t, historyId, historyList[0].ID.String())
 	assert.Equal(t, 3, historyList[0].TotalFileCount)
 	assert.True(t, historyList[0].TotalFileSize > 0)
+	assert.Equal(t, srcDir, historyList[0].SrcRelPath)
 
 	// 3. 测试 UndoTrash 还原
 	restored, err := ctx.imageMover.UndoTrash(context.Background(), historyId)

@@ -45,7 +45,7 @@
           </div>
 
           <!-- 详细信息 -->
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 space-y-0.5">
             <div
               class="text-primary-200 font-medium truncate flex items-center gap-1"
             >
@@ -57,8 +57,21 @@
                 (+{{ item.associatedFileCount }} 伴随)
               </span>
             </div>
+            <!-- 原目录路径 -->
             <div
-              class="flex items-center justify-between text-xs text-primary-500 mt-0.5 font-mono"
+              class="text-primary-400 truncate flex items-center gap-1"
+              :title="item.srcRelPath || '根目录'"
+            >
+              <svg
+                class="w-3.5 h-3.5 text-primary-500 shrink-0"
+                viewBox="0 0 24 24"
+              >
+                <path :d="mdiFolder" fill="currentColor" />
+              </svg>
+              <span class="truncate">{{ item.srcRelPath || "/" }}</span>
+            </div>
+            <div
+              class="flex items-center justify-between text-primary-500 font-mono"
             >
               <span>{{ formatTrashSize(item.totalFileSize) }}</span>
               <span>{{ formatTime(item.trashedAt) }}</span>
@@ -112,7 +125,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { mdiDelete, mdiDeleteSweep, mdiFileImage } from "@mdi/js";
+import { mdiDelete, mdiDeleteSweep, mdiFileImage, mdiFolder } from "@mdi/js";
 import useTrashHistory, {
   trashMinAge,
   saveMinAge,

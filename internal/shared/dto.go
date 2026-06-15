@@ -187,6 +187,7 @@ type TrashHistoryItemDTO struct {
 	ImageCount          int
 	AssociatedFileCount int
 	CoverImageAbsPath   string
+	SrcRelPath          string
 }
 
 // TrashHistoryConnectionDTO 回收站历史连接数据传输对象

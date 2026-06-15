@@ -591,6 +591,7 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 				ImageCount:          imageCount,
 				AssociatedFileCount: associatedCount,
 				CoverImageAbsPath:   coverImageAbsPath,
+				SrcRelPath:          meta.SrcRelPath,
 			}
 
 			if !yield(item, nil) {

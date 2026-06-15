@@ -380,6 +380,7 @@ type ComplexityRoot struct {
 		CoverImage          func(childComplexity int) int
 		ID                  func(childComplexity int) int
 		ImageCount          func(childComplexity int) int
+		SrcRelPath          func(childComplexity int) int
 		TotalFileCount      func(childComplexity int) int
 		TotalFileSize       func(childComplexity int) int
 		TrashedAt           func(childComplexity int) int
@@ -1954,6 +1955,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.TrashHistoryItem.ImageCount(childComplexity), true
+	case "TrashHistoryItem.srcRelPath":
+		if e.complexity.TrashHistoryItem.SrcRelPath == nil {
+			break
+		}
+
+		return e.complexity.TrashHistoryItem.SrcRelPath(childComplexity), true
 	case "TrashHistoryItem.totalFileCount":
 		if e.complexity.TrashHistoryItem.TotalFileCount == nil {
 			break
@@ -3078,6 +3085,8 @@ type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO"
   associatedFileCount: Int!
   "最新一张图片的封面"
   coverImage: Image
+  "删除（移入回收站）前的源目录相对路径"
+  srcRelPath: String!
 }
 
 type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
@@ -11391,6 +11400,8 @@ func (ec *executionContext) fieldContext_TrashHistoryConnection_nodes(_ context.
 				return ec.fieldContext_TrashHistoryItem_associatedFileCount(ctx, field)
 			case "coverImage":
 				return ec.fieldContext_TrashHistoryItem_coverImage(ctx, field)
+			case "srcRelPath":
+				return ec.fieldContext_TrashHistoryItem_srcRelPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TrashHistoryItem", field.Name)
 		},
@@ -11475,6 +11486,8 @@ func (ec *executionContext) fieldContext_TrashHistoryEdge_node(_ context.Context
 				return ec.fieldContext_TrashHistoryItem_associatedFileCount(ctx, field)
 			case "coverImage":
 				return ec.fieldContext_TrashHistoryItem_coverImage(ctx, field)
+			case "srcRelPath":
+				return ec.fieldContext_TrashHistoryItem_srcRelPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TrashHistoryItem", field.Name)
 		},
@@ -11737,6 +11750,35 @@ func (ec *executionContext) fieldContext_TrashHistoryItem_coverImage(_ context.C
 				return ec.fieldContext_Image_relPath(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TrashHistoryItem_srcRelPath(ctx context.Context, field graphql.CollectedField, obj *shared.TrashHistoryItemDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TrashHistoryItem_srcRelPath,
+		func(ctx context.Context) (any, error) {
+			return obj.SrcRelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TrashHistoryItem_srcRelPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TrashHistoryItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -17825,6 +17867,11 @@ func (ec *executionContext) _TrashHistoryItem(ctx context.Context, sel ast.Selec
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "srcRelPath":
+			out.Values[i] = ec._TrashHistoryItem_srcRelPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

@@ -8,6 +8,7 @@ query TrashHistory($first: Int, $after: String) {
         trashedAt
         imageCount
         associatedFileCount
+        srcRelPath
         coverImage {
           id
           url(width: 256)
@@ -22,6 +23,7 @@ query TrashHistory($first: Int, $after: String) {
       trashedAt
       imageCount
       associatedFileCount
+      srcRelPath
       coverImage {
         id
         url(width: 256)

@@ -13,6 +13,8 @@ type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO"
   associatedFileCount: Int!
   "最新一张图片的封面"
   coverImage: Image
+  "删除（移入回收站）前的源目录相对路径"
+  srcRelPath: String!
 }
 
 type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
