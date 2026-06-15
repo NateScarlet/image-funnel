@@ -248,15 +248,43 @@ func (s *ImageMover) Trash(
 	historyId = newTrashHistoryID()
 	historyDir := filepath.Join(s.rootDir, trashDirName, historyId)
 	filesDir := filepath.Join(historyDir, "files")
-	var historyDirCreated bool
+	metaPath := filepath.Join(historyDir, "meta.json")
+
+	// 1. 写入占位 meta.json
+	placeholderMeta := trashMeta{
+		ID:             historyId,
+		TrashedAt:      time.Now(),
+		TotalFileCount: -1,
+		TotalFileSize:  -1,
+		SrcRelPath:     relPath,
+		Images:         nil,
+	}
+
+	metaBytes, err := json.MarshalIndent(placeholderMeta, "", "  ")
+	if err != nil {
+		return "", 0, err
+	}
+
+	if err := os.MkdirAll(historyDir, 0755); err != nil {
+		return "", 0, fmt.Errorf("failed to create history directory: %w", err)
+	}
+
+	err = util.AtomicSave(metaPath, func(f *os.File) error {
+		_, err := f.Write(metaBytes)
+		return err
+	})
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to write placeholder meta.json: %w", err)
+	}
 
 	var totalSize int64
 	var movedFilesCount int
 	var trashedImages []trashedImageMeta
+	var filesDirCreated bool
 
 	srcAbsDir := filepath.Join(s.rootDir, relPath)
 
-	// 匹配并移动到回收暂存目录
+	// 2. 匹配并移动到回收暂存目录
 	err = s.matchAssociatedFiles(ctx, srcAbsDir, toDeleteImages, func(entry os.DirEntry, checkName string, img *domainimage.Image, isImageBody bool) error {
 		srcFilePath := filepath.Join(srcAbsDir, checkName)
 		targetFilePath := filepath.Join(filesDir, checkName)
@@ -271,11 +299,11 @@ func (s *ImageMover) Trash(
 		}
 
 		// 延迟创建暂存目录，防止空操作产生空目录
-		if !historyDirCreated {
+		if !filesDirCreated {
 			if err := os.MkdirAll(filesDir, 0755); err != nil {
 				return err
 			}
-			historyDirCreated = true
+			filesDirCreated = true
 		}
 
 		if err := os.Rename(srcFilePath, targetFilePath); err != nil {
@@ -300,6 +328,12 @@ func (s *ImageMover) Trash(
 		return "", 0, err
 	}
 
+	// 防御性处理：如果实际没有移动任何文件，清理暂存历史目录并返回
+	if movedFilesCount == 0 {
+		os.RemoveAll(historyDir)
+		return "", 0, nil
+	}
+
 	// 按更新时间降序排序，最新的图片排在最前面
 	slices.SortFunc(trashedImages, func(a, b trashedImageMeta) int {
 		if a.ModTime.After(b.ModTime) {
@@ -311,7 +345,7 @@ func (s *ImageMover) Trash(
 		return 0
 	})
 
-	// 写入 meta.json
+	// 3. 重写完整的 meta.json
 	meta := trashMeta{
 		ID:             historyId,
 		TrashedAt:      time.Now(),
@@ -321,13 +355,17 @@ func (s *ImageMover) Trash(
 		Images:         trashedImages,
 	}
 
-	metaBytes, err := json.MarshalIndent(meta, "", "  ")
+	metaBytes, err = json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return "", 0, err
 	}
 
-	if err := os.WriteFile(filepath.Join(historyDir, "meta.json"), metaBytes, 0644); err != nil {
-		return "", 0, err
+	err = util.AtomicSave(metaPath, func(f *os.File) error {
+		_, err := f.Write(metaBytes)
+		return err
+	})
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to write final meta.json: %w", err)
 	}
 
 	return historyId, movedFilesCount, nil
@@ -350,17 +388,21 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (restoredC
 
 	// 遍历 filesDir
 	var tempFiles []string
-	err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	if _, err := os.Stat(filesDir); err == nil {
+		err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if !info.IsDir() {
+				tempFiles = append(tempFiles, path)
+			}
+			return nil
+		})
+		if err != nil {
+			return 0, fmt.Errorf("failed to walk files directory: %w", err)
 		}
-		if !info.IsDir() {
-			tempFiles = append(tempFiles, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to walk files directory: %w", err)
+	} else if !os.IsNotExist(err) {
+		return 0, fmt.Errorf("failed to stat files directory: %w", err)
 	}
 
 	type moveTask struct {
@@ -456,16 +498,20 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 		}
 
 		var tempFiles []string
-		err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		if _, err := os.Stat(filesDir); err == nil {
+			err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if !info.IsDir() {
+					tempFiles = append(tempFiles, path)
+				}
+				return nil
+			})
+			if err != nil {
+				return clearedCount, err
 			}
-			if !info.IsDir() {
-				tempFiles = append(tempFiles, path)
-			}
-			return nil
-		})
-		if err != nil {
+		} else if !os.IsNotExist(err) {
 			return clearedCount, err
 		}
 

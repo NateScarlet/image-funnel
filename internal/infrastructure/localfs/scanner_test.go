@@ -2,6 +2,7 @@ package localfs
 
 import (
 	"context"
+	"encoding/json"
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
@@ -349,5 +350,113 @@ func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {
 	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg.xmp"))
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.png"))
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.png.xmp"))
+}
+
+func TestIncompleteTrashRecovery(t *testing.T) {
+	ctx := newTestContext(t)
+
+	srcDir := "source-dir"
+	err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+	require.NoError(t, err)
+
+	// 写入测试文件
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1"), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img2.jpg"), []byte("img2"), 0644)
+	require.NoError(t, err)
+
+	// 模拟断电场景 1：写入了占位 meta.json，但 filesDir 甚至还没被创建就断电了
+	historyId1 := "trash_incomplete_1"
+	historyDir1 := filepath.Join(ctx.rootDir, trashDirName, historyId1)
+	err = os.MkdirAll(historyDir1, 0755)
+	require.NoError(t, err)
+
+	meta1 := trashMeta{
+		ID:             historyId1,
+		TrashedAt:      time.Now().Add(-1 * time.Hour), // 设为 1 小时前
+		TotalFileCount: -1,
+		TotalFileSize:  -1,
+		SrcRelPath:     srcDir,
+	}
+	metaBytes1, err := json.Marshal(meta1)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(historyDir1, "meta.json"), metaBytes1, 0644)
+	require.NoError(t, err)
+
+	// 尝试 UndoTrash，它应该允许 filesDir 缺失，静默删除该历史目录并返回 0
+	restoredCount, err := ctx.imageMover.UndoTrash(context.Background(), historyId1)
+	require.NoError(t, err)
+	assert.Equal(t, 0, restoredCount)
+	assert.NoFileExists(t, historyDir1)
+
+	// 模拟断电场景 2：写入了占位 meta.json，开始移入文件，移走了 img1.jpg，但在移 img2.jpg 前断电了
+	historyId2 := "trash_incomplete_2"
+	historyDir2 := filepath.Join(ctx.rootDir, trashDirName, historyId2)
+	filesDir2 := filepath.Join(historyDir2, "files")
+	err = os.MkdirAll(filesDir2, 0755)
+	require.NoError(t, err)
+
+	meta2 := trashMeta{
+		ID:             historyId2,
+		TrashedAt:      time.Now().Add(-1 * time.Hour),
+		TotalFileCount: -1,
+		TotalFileSize:  -1,
+		SrcRelPath:     srcDir,
+	}
+	metaBytes2, err := json.Marshal(meta2)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(historyDir2, "meta.json"), metaBytes2, 0644)
+	require.NoError(t, err)
+
+	// 手动把 img1.jpg 移入 filesDir2 以模拟它已经被成功 stashed 了
+	err = os.Rename(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), filepath.Join(filesDir2, "img1.jpg"))
+	require.NoError(t, err)
+
+	// 此时，源目录里仅存在 img2.jpg。filesDir2 里有 img1.jpg
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+	assert.FileExists(t, filepath.Join(filesDir2, "img1.jpg"))
+
+	// 尝试 UndoTrash。它应当只还原移到暂存区的文件，并且不会因为源目录有 img2.jpg 而产生冲突
+	restoredCount, err = ctx.imageMover.UndoTrash(context.Background(), historyId2)
+	require.NoError(t, err)
+	assert.Equal(t, 1, restoredCount) // 成功还原 1 个文件
+	assert.NoFileExists(t, historyDir2)
+
+	// 验证最终两个文件都在源目录处
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+
+	// 模拟断电场景 3：已移走 img1.jpg，但随后要测试 EmptyTrash（清空回收站）
+	historyId3 := "trash_incomplete_3"
+	historyDir3 := filepath.Join(ctx.rootDir, trashDirName, historyId3)
+	filesDir3 := filepath.Join(historyDir3, "files")
+	err = os.MkdirAll(filesDir3, 0755)
+	require.NoError(t, err)
+
+	meta3 := trashMeta{
+		ID:             historyId3,
+		TrashedAt:      time.Now().Add(-1 * time.Hour), // 设为 1 小时前
+		TotalFileCount: -1,
+		TotalFileSize:  -1,
+		SrcRelPath:     srcDir,
+	}
+	metaBytes3, err := json.Marshal(meta3)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(historyDir3, "meta.json"), metaBytes3, 0644)
+	require.NoError(t, err)
+
+	// 手动移入 img1.jpg 到 filesDir3，img2.jpg 留在源目录
+	err = os.Rename(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), filepath.Join(filesDir3, "img1.jpg"))
+	require.NoError(t, err)
+
+	// 尝试 EmptyTrash
+	cleared, err := ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleared)
+	assert.NoFileExists(t, historyDir3)
+
+	// 验证被移入 filesDir 的文件被清理了，而之前留在源目录的文件依然完好
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
 }
 
