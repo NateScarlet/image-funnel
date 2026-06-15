@@ -196,7 +196,7 @@ while ($true) {
                         Write-Host ("`n[自动更新] 检测到服务端日志已闲置超过 {0} 分钟，且代码仓库有新提交。正在重启服务..." -f $IDLE_TIMEOUT_MINUTES) -ForegroundColor Yellow
                         try {
                             $process.Kill()
-                            $process.WaitForExit(5000)
+                            $null = $process.WaitForExit(5000)
                         } catch {}
                         $shouldRestart = $true
                         break
@@ -227,7 +227,7 @@ while ($true) {
             if (-not $process.HasExited) {
                 try {
                     $process.Kill()
-                    $process.WaitForExit(5000)
+                    $null = $process.WaitForExit(5000)
                 } catch {}
             }
             try { $process.Dispose() } catch {}
