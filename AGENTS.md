@@ -168,6 +168,8 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **通用文件删除订阅**: 由于文件被删除或移走后其修改时间与属性均不可读，订阅删除事件时应使用通用的、仅提供相对路径的订阅（如 `dirEntryDeleted`）而非特定类型且包含 ID 的删除订阅（如 `imageDeleted`），以便前端统一基于相对路径比对从列表/缓存中移除对应的实体。
 - **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
+- **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
+- **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
 
 ### 通用
 

@@ -229,7 +229,6 @@ type UndoTrashResultDTO struct {
 	RestoredCount    int
 	ConflictCount    int
 	ConflictDirName  string
-	Success          bool
 	ClientMutationID *string
 }
 

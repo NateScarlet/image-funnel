@@ -32,7 +32,7 @@ export default function useTrashHistory() {
           input: { historyId },
         },
       });
-      if (res?.data?.undoTrash.success) {
+      if (res?.data?.undoTrash) {
         const { restoredCount, conflictCount, conflictDirName } =
           res.data.undoTrash;
         if (conflictCount > 0) {
@@ -59,7 +59,7 @@ export default function useTrashHistory() {
           minAge: trashMinAge.value,
         },
       });
-      if (res?.data?.emptyTrash.success) {
+      if (res?.data?.emptyTrash) {
         const clearedCount = res.data.emptyTrash.clearedCount;
         showSuccess(
           `已成功清理 ${clearedCount} 项历史图片及其伴随文件至系统回收站`,

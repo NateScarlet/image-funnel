@@ -9,8 +9,6 @@ import (
 	"context"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"os"
-	"path/filepath"
 )
 
 // TrashImages is the resolver for the trashImages field.
@@ -31,63 +29,3 @@ func (r *mutationResolver) TrashImages(ctx context.Context, input TrashImagesInp
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }
-
-// UndoTrash is the resolver for the undoTrash field.
-func (r *mutationResolver) UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error) {
-	res, err := r.app.UndoTrash(ctx, input.HistoryID.String())
-	if err != nil {
-		return nil, err
-	}
-	res.Success = true
-	res.ClientMutationID = input.ClientMutationID
-	return res, nil
-}
-
-// EmptyTrash is the resolver for the emptyTrash field.
-func (r *mutationResolver) EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error) {
-	clearedCount, err := r.app.EmptyTrash(ctx, minAge)
-	if err != nil {
-		return nil, err
-	}
-
-	return &EmptyTrashPayload{
-		Success:      true,
-		ClearedCount: clearedCount,
-	}, nil
-}
-
-// TrashHistory is the resolver for the trashHistory field.
-func (r *queryResolver) TrashHistory(ctx context.Context, first *int, after *string) (*shared.TrashHistoryConnectionDTO, error) {
-	return r.app.TrashHistory(ctx, first, after)
-}
-
-// CoverImage is the resolver for the coverImage field.
-func (r *trashHistoryItemResolver) CoverImage(ctx context.Context, obj *shared.TrashHistoryItemDTO) (*shared.ImageDTO, error) {
-	if obj.CoverImageAbsPath == "" {
-		return nil, nil
-	}
-	info, err := os.Stat(obj.CoverImageAbsPath)
-	if err != nil {
-		return nil, nil
-	}
-
-	filename := filepath.Base(obj.CoverImageAbsPath)
-	relPath, err := filepath.Rel(r.rootDir, obj.CoverImageAbsPath)
-	if err != nil {
-		relPath = ""
-	}
-
-	return &shared.ImageDTO{
-		ID:       scalar.ToID("trash-cover:" + obj.ID.String()),
-		Filename: filename,
-		Size:     info.Size(),
-		AbsPath:  obj.CoverImageAbsPath,
-		RelPath:  filepath.ToSlash(relPath),
-		ModTime:  info.ModTime(),
-	}, nil
-}
-
-// TrashHistoryItem returns TrashHistoryItemResolver implementation.
-func (r *Resolver) TrashHistoryItem() TrashHistoryItemResolver { return &trashHistoryItemResolver{r} }
-
-type trashHistoryItemResolver struct{ *Resolver }

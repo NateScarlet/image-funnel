@@ -1,0 +1,18 @@
+"撤销回收站的删除操作，将文件移回原处"
+input UndoTrashInput {
+  historyId: ID!
+  clientMutationId: String
+}
+
+type UndoTrashPayload @goModel(model: "main/internal/shared.UndoTrashResultDTO") {
+  restoredCount: Int!
+  "冲突的文件数量"
+  conflictCount: Int!
+  "冲突文件被暂存的冲突目录名称"
+  conflictDirName: String
+  clientMutationId: String
+}
+
+extend type Mutation {
+  undoTrash(input: UndoTrashInput!): UndoTrashPayload!
+}

@@ -1,0 +1,5 @@
+mutation EmptyTrash($minAge: Duration!) {
+  emptyTrash(minAge: $minAge) {
+    clearedCount
+  }
+}

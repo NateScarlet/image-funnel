@@ -1,0 +1,29 @@
+"回收站历史记录"
+type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
+  id: ID!
+  "移入回收站的文件总数（包括图片与伴随文件）"
+  totalFileCount: Int!
+  "占用空间大小（字节数）"
+  totalFileSize: Int!
+  "移入的时间"
+  trashedAt: Time!
+  "包含的图片文件数"
+  imageCount: Int!
+  "配套伴随文件数（totalFileCount - imageCount）"
+  associatedFileCount: Int!
+  "最新一张图片的封面"
+  coverImage: Image
+  "删除（移入回收站）前的源目录相对路径"
+  srcRelPath: String!
+}
+
+type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
+  node: TrashHistoryItem!
+  cursor: String!
+}
+
+type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryConnectionDTO") {
+  edges: [TrashHistoryEdge!]!
+  nodes: [TrashHistoryItem!]!
+  pageInfo: PageInfo!
+}

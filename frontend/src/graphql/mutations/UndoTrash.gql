@@ -1,0 +1,7 @@
+mutation UndoTrash($input: UndoTrashInput!) {
+  undoTrash(input: $input) {
+    restoredCount
+    conflictCount
+    conflictDirName
+  }
+}

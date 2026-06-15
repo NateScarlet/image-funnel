@@ -159,7 +159,6 @@ type ComplexityRoot struct {
 	EmptyTrashPayload struct {
 		ClearedCount     func(childComplexity int) int
 		ClientMutationID func(childComplexity int) int
-		Success          func(childComplexity int) int
 	}
 
 	FinishWebAuthnLoginPayload struct {
@@ -402,7 +401,6 @@ type ComplexityRoot struct {
 		ConflictCount    func(childComplexity int) int
 		ConflictDirName  func(childComplexity int) int
 		RestoredCount    func(childComplexity int) int
-		Success          func(childComplexity int) int
 	}
 
 	UpdateSessionPayload struct {
@@ -450,6 +448,7 @@ type MutationResolver interface {
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
+	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
@@ -458,9 +457,8 @@ type MutationResolver interface {
 	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
 	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
-	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
-	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
+	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
@@ -866,12 +864,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.EmptyTrashPayload.ClientMutationID(childComplexity), true
-	case "EmptyTrashPayload.success":
-		if e.complexity.EmptyTrashPayload.Success == nil {
-			break
-		}
-
-		return e.complexity.EmptyTrashPayload.Success(childComplexity), true
 
 	case "FinishWebAuthnLoginPayload.accessToken":
 		if e.complexity.FinishWebAuthnLoginPayload.AccessToken == nil {
@@ -2038,12 +2030,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UndoTrashPayload.RestoredCount(childComplexity), true
-	case "UndoTrashPayload.success":
-		if e.complexity.UndoTrashPayload.Success == nil {
-			break
-		}
-
-		return e.complexity.UndoTrashPayload.Success(childComplexity), true
 
 	case "UpdateSessionPayload.clientMutationId":
 		if e.complexity.UpdateSessionPayload.ClientMutationID == nil {
@@ -2629,6 +2615,36 @@ type SessionStats @goModel(model: "main/internal/shared.StatsDTO") {
   "会话是否已完成。条件：所有图片已处理 且 保留数不超过目标数"
   isCompleted: Boolean!
 }`, BuiltIn: false},
+	{Name: "../../../graph/types/trash_history_item.graphql", Input: `"回收站历史记录"
+type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
+  id: ID!
+  "移入回收站的文件总数（包括图片与伴随文件）"
+  totalFileCount: Int!
+  "占用空间大小（字节数）"
+  totalFileSize: Int!
+  "移入的时间"
+  trashedAt: Time!
+  "包含的图片文件数"
+  imageCount: Int!
+  "配套伴随文件数（totalFileCount - imageCount）"
+  associatedFileCount: Int!
+  "最新一张图片的封面"
+  coverImage: Image
+  "删除（移入回收站）前的源目录相对路径"
+  srcRelPath: String!
+}
+
+type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
+  node: TrashHistoryItem!
+  cursor: String!
+}
+
+type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryConnectionDTO") {
+  edges: [TrashHistoryEdge!]!
+  nodes: [TrashHistoryItem!]!
+  pageInfo: PageInfo!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/write_actions.graphql", Input: `"提交时将操作映射到 XMP 评分的配置"
 type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   "保留操作写入的评分值"
@@ -2712,6 +2728,14 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
     "用户当前的路径输入，可能包含不完整的层级和搜索前缀"
     input: PathInput!
   ): [Directory!]!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/queries/trash_history.graphql", Input: `extend type Query {
+  "获取回收站历史记录，支持基于 Relay 规范的分页"
+  trashHistory(
+    first: Int
+    after: String
+  ): TrashHistoryConnection!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/device_deleted.graphql", Input: `extend type Subscription {
@@ -2915,6 +2939,18 @@ input DeleteDeviceInput {
   id: ID!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站，将所有暂存文件移到系统回收站"
+type EmptyTrashPayload {
+  "此次被真正清理进系统回收站的历史数量"
+  clearedCount: Int!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  "清空回收站中早于指定存留期 (Duration) 的历史记录"
+  emptyTrash(minAge: Duration!): EmptyTrashPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/finish_web_authn_login.graphql", Input: `extend type Mutation {
   finishWebAuthnLogin(input: FinishWebAuthnLoginInput!): FinishWebAuthnLoginPayload! @public
 }
@@ -3084,37 +3120,7 @@ extend type Mutation {
   setDirectoryState(input: SetDirectoryStateInput!): Directory!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"回收站历史记录"
-type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO") {
-  id: ID!
-  "移入回收站的文件总数（包括图片与伴随文件）"
-  totalFileCount: Int!
-  "占用空间大小（字节数）"
-  totalFileSize: Int!
-  "移入的时间"
-  trashedAt: Time!
-  "包含的图片文件数"
-  imageCount: Int!
-  "配套伴随文件数（totalFileCount - imageCount）"
-  associatedFileCount: Int!
-  "最新一张图片的封面"
-  coverImage: Image
-  "删除（移入回收站）前的源目录相对路径"
-  srcRelPath: String!
-}
-
-type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
-  node: TrashHistoryItem!
-  cursor: String!
-}
-
-type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryConnectionDTO") {
-  edges: [TrashHistoryEdge!]!
-  nodes: [TrashHistoryItem!]!
-  pageInfo: PageInfo!
-}
-
-"将符合条件的图片及其配套文件移到回收站"
+	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"将符合条件的图片及其配套文件移到回收站"
 input TrashImagesInput {
   directoryId: ID!
   filterBy: ImageFiltersInput!
@@ -3127,44 +3133,8 @@ type TrashImagesPayload {
   clientMutationId: String
 }
 
-"撤销回收站的删除操作，将文件移回原处"
-input UndoTrashInput {
-  historyId: ID!
-  clientMutationId: String
-}
-
-type UndoTrashPayload @goModel(model: "main/internal/shared.UndoTrashResultDTO") {
-  success: Boolean!
-  restoredCount: Int!
-  "冲突的文件数量"
-  conflictCount: Int!
-  "冲突文件被暂存的冲突目录名称"
-  conflictDirName: String
-  clientMutationId: String
-}
-
-
-"手动清空回收站，将所有暂存文件移到系统回收站"
-type EmptyTrashPayload {
-  success: Boolean!
-  "此次被真正清理进系统回收站的历史数量"
-  clearedCount: Int!
-  clientMutationId: String
-}
-
-extend type Query {
-  "获取回收站历史记录，支持基于 Relay 规范的分页"
-  trashHistory(
-    first: Int
-    after: String
-  ): TrashHistoryConnection!
-}
-
 extend type Mutation {
   trashImages(input: TrashImagesInput!): TrashImagesPayload!
-  undoTrash(input: UndoTrashInput!): UndoTrashPayload!
-  "清空回收站中早于指定存留期 (Duration) 的历史记录"
-  emptyTrash(minAge: Duration!): EmptyTrashPayload!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/undo.graphql", Input: `"撤销上一次标记操作，支持跨轮撤销"
@@ -3183,6 +3153,25 @@ type UndoPayload {
 extend type Mutation {
   undo(input: UndoInput!): UndoPayload
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/undo_trash.graphql", Input: `"撤销回收站的删除操作，将文件移回原处"
+input UndoTrashInput {
+  historyId: ID!
+  clientMutationId: String
+}
+
+type UndoTrashPayload @goModel(model: "main/internal/shared.UndoTrashResultDTO") {
+  restoredCount: Int!
+  "冲突的文件数量"
+  conflictCount: Int!
+  "冲突文件被暂存的冲突目录名称"
+  conflictDirName: String
+  clientMutationId: String
+}
+
+extend type Mutation {
+  undoTrash(input: UndoTrashInput!): UndoTrashPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `extend type Mutation {
   """
   更新图片的评分和颜色标签。操作即时写入 XMP sidecar 文件，不参与会话提交。
@@ -5644,35 +5633,6 @@ func (ec *executionContext) fieldContext_DirectoryStats_ratingCounts(_ context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _EmptyTrashPayload_success(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_EmptyTrashPayload_success,
-		func(ctx context.Context) (any, error) {
-			return obj.Success, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_EmptyTrashPayload_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "EmptyTrashPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _EmptyTrashPayload_clearedCount(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8027,6 +7987,53 @@ func (ec *executionContext) fieldContext_Mutation_deleteDevice(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_emptyTrash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().EmptyTrash(ctx, fc.Args["minAge"].(scalar.Duration))
+		},
+		nil,
+		ec.marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "clearedCount":
+				return ec.fieldContext_EmptyTrashPayload_clearedCount(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_EmptyTrashPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EmptyTrashPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_emptyTrash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_finishWebAuthnLogin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8478,108 +8485,6 @@ func (ec *executionContext) fieldContext_Mutation_trashImages(ctx context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_undoTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_undoTrash,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UndoTrash(ctx, fc.Args["input"].(UndoTrashInput))
-		},
-		nil,
-		ec.marshalNUndoTrashPayload2ᚖmainᚋinternalᚋsharedᚐUndoTrashResultDTO,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_undoTrash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "success":
-				return ec.fieldContext_UndoTrashPayload_success(ctx, field)
-			case "restoredCount":
-				return ec.fieldContext_UndoTrashPayload_restoredCount(ctx, field)
-			case "conflictCount":
-				return ec.fieldContext_UndoTrashPayload_conflictCount(ctx, field)
-			case "conflictDirName":
-				return ec.fieldContext_UndoTrashPayload_conflictDirName(ctx, field)
-			case "clientMutationId":
-				return ec.fieldContext_UndoTrashPayload_clientMutationId(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type UndoTrashPayload", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_undoTrash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_emptyTrash,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().EmptyTrash(ctx, fc.Args["minAge"].(scalar.Duration))
-		},
-		nil,
-		ec.marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "success":
-				return ec.fieldContext_EmptyTrashPayload_success(ctx, field)
-			case "clearedCount":
-				return ec.fieldContext_EmptyTrashPayload_clearedCount(ctx, field)
-			case "clientMutationId":
-				return ec.fieldContext_EmptyTrashPayload_clientMutationId(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type EmptyTrashPayload", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_emptyTrash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_undo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8621,6 +8526,57 @@ func (ec *executionContext) fieldContext_Mutation_undo(ctx context.Context, fiel
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_undo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_undoTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_undoTrash,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UndoTrash(ctx, fc.Args["input"].(UndoTrashInput))
+		},
+		nil,
+		ec.marshalNUndoTrashPayload2ᚖmainᚋinternalᚋsharedᚐUndoTrashResultDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_undoTrash(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "restoredCount":
+				return ec.fieldContext_UndoTrashPayload_restoredCount(ctx, field)
+			case "conflictCount":
+				return ec.fieldContext_UndoTrashPayload_conflictCount(ctx, field)
+			case "conflictDirName":
+				return ec.fieldContext_UndoTrashPayload_conflictDirName(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UndoTrashPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoTrashPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_undoTrash_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -11983,35 +11939,6 @@ func (ec *executionContext) fieldContext_UndoPayload_clientMutationId(_ context.
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _UndoTrashPayload_success(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_UndoTrashPayload_success,
-		func(ctx context.Context) (any, error) {
-			return obj.Success, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_UndoTrashPayload_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "UndoTrashPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -15861,11 +15788,6 @@ func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.Sele
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("EmptyTrashPayload")
-		case "success":
-			out.Values[i] = ec._EmptyTrashPayload_success(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "clearedCount":
 			out.Values[i] = ec._EmptyTrashPayload_clearedCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -16776,6 +16698,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "emptyTrash":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_emptyTrash(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "finishWebAuthnLogin":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_finishWebAuthnLogin(ctx, field)
@@ -16832,6 +16761,10 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "undo":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_undo(ctx, field)
+			})
 		case "undoTrash":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_undoTrash(ctx, field)
@@ -16839,17 +16772,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "emptyTrash":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_emptyTrash(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "undo":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_undo(ctx, field)
-			})
 		case "updateImageMetadata":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateImageMetadata(ctx, field)
@@ -18071,11 +17993,6 @@ func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.Selec
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("UndoTrashPayload")
-		case "success":
-			out.Values[i] = ec._UndoTrashPayload_success(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "restoredCount":
 			out.Values[i] = ec._UndoTrashPayload_restoredCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -19063,13 +18980,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
