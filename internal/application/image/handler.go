@@ -172,10 +172,16 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 				if err != nil {
 					return yield(nil, err)
 				}
-				if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
+				isXMP := strings.HasSuffix(strings.ToLower(event.RelPath), ".xmp")
+				isTargetAction := event.Action == shared.FileActionCreate || event.Action == shared.FileActionWrite || (event.Action == shared.FileActionRemove && isXMP)
+				if !isTargetAction {
 					return true
 				}
-				img, err := h.imgRepo.Get(ctx, event.RelPath)
+				relPath := event.RelPath
+				if isXMP {
+					relPath = relPath[:len(relPath)-4]
+				}
+				img, err := h.imgRepo.Get(ctx, relPath)
 				if err != nil || img == nil {
 					return true
 				}
