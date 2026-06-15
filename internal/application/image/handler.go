@@ -468,29 +468,32 @@ func (h *Handler) TrashImages(
 func (h *Handler) UndoTrash(
 	ctx context.Context,
 	historyId string,
-) (restoredCount int, err error) {
+) (result *shared.UndoTrashResultDTO, err error) {
 	startTime := time.Now()
 
 	h.logger.Info("will undo trash", zap.String("historyId", historyId))
 
-	restoredCount, err = h.imgTrasher.UndoTrash(ctx, historyId)
+	result, err = h.imgTrasher.UndoTrash(ctx, historyId)
 	if err != nil {
 		h.logger.Error("undo trash failed",
 			zap.String("historyId", historyId),
 			zap.Duration("duration", time.Since(startTime)),
 			zap.Error(err),
 		)
-		return 0, err
+		return nil, err
 	}
 
 	h.logger.Info("did undo trash",
 		zap.String("historyId", historyId),
-		zap.Int("restoredCount", restoredCount),
+		zap.Int("restoredCount", result.RestoredCount),
+		zap.Int("conflictCount", result.ConflictCount),
+		zap.String("conflictDirName", result.ConflictDirName),
 		zap.Duration("duration", time.Since(startTime)),
 	)
 
-	return restoredCount, nil
+	return result, nil
 }
+
 
 // EmptyTrash 手动清空早于指定保留期限的暂存记录，移入系统回收站
 func (h *Handler) EmptyTrash(

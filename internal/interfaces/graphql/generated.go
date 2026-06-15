@@ -399,6 +399,8 @@ type ComplexityRoot struct {
 
 	UndoTrashPayload struct {
 		ClientMutationID func(childComplexity int) int
+		ConflictCount    func(childComplexity int) int
+		ConflictDirName  func(childComplexity int) int
 		RestoredCount    func(childComplexity int) int
 		Success          func(childComplexity int) int
 	}
@@ -456,7 +458,7 @@ type MutationResolver interface {
 	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
 	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
-	UndoTrash(ctx context.Context, input UndoTrashInput) (*UndoTrashPayload, error)
+	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
 	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
@@ -2018,6 +2020,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UndoTrashPayload.ClientMutationID(childComplexity), true
+	case "UndoTrashPayload.conflictCount":
+		if e.complexity.UndoTrashPayload.ConflictCount == nil {
+			break
+		}
+
+		return e.complexity.UndoTrashPayload.ConflictCount(childComplexity), true
+	case "UndoTrashPayload.conflictDirName":
+		if e.complexity.UndoTrashPayload.ConflictDirName == nil {
+			break
+		}
+
+		return e.complexity.UndoTrashPayload.ConflictDirName(childComplexity), true
 	case "UndoTrashPayload.restoredCount":
 		if e.complexity.UndoTrashPayload.RestoredCount == nil {
 			break
@@ -3119,11 +3133,16 @@ input UndoTrashInput {
   clientMutationId: String
 }
 
-type UndoTrashPayload {
+type UndoTrashPayload @goModel(model: "main/internal/shared.UndoTrashResultDTO") {
   success: Boolean!
   restoredCount: Int!
+  "冲突的文件数量"
+  conflictCount: Int!
+  "冲突文件被暂存的冲突目录名称"
+  conflictDirName: String
   clientMutationId: String
 }
+
 
 "手动清空回收站，将所有暂存文件移到系统回收站"
 type EmptyTrashPayload {
@@ -8470,7 +8489,7 @@ func (ec *executionContext) _Mutation_undoTrash(ctx context.Context, field graph
 			return ec.resolvers.Mutation().UndoTrash(ctx, fc.Args["input"].(UndoTrashInput))
 		},
 		nil,
-		ec.marshalNUndoTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUndoTrashPayload,
+		ec.marshalNUndoTrashPayload2ᚖmainᚋinternalᚋsharedᚐUndoTrashResultDTO,
 		true,
 		true,
 	)
@@ -8488,6 +8507,10 @@ func (ec *executionContext) fieldContext_Mutation_undoTrash(ctx context.Context,
 				return ec.fieldContext_UndoTrashPayload_success(ctx, field)
 			case "restoredCount":
 				return ec.fieldContext_UndoTrashPayload_restoredCount(ctx, field)
+			case "conflictCount":
+				return ec.fieldContext_UndoTrashPayload_conflictCount(ctx, field)
+			case "conflictDirName":
+				return ec.fieldContext_UndoTrashPayload_conflictDirName(ctx, field)
 			case "clientMutationId":
 				return ec.fieldContext_UndoTrashPayload_clientMutationId(ctx, field)
 			}
@@ -11965,7 +11988,7 @@ func (ec *executionContext) fieldContext_UndoPayload_clientMutationId(_ context.
 	return fc, nil
 }
 
-func (ec *executionContext) _UndoTrashPayload_success(ctx context.Context, field graphql.CollectedField, obj *UndoTrashPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _UndoTrashPayload_success(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -11994,7 +12017,7 @@ func (ec *executionContext) fieldContext_UndoTrashPayload_success(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _UndoTrashPayload_restoredCount(ctx context.Context, field graphql.CollectedField, obj *UndoTrashPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _UndoTrashPayload_restoredCount(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -12023,7 +12046,65 @@ func (ec *executionContext) fieldContext_UndoTrashPayload_restoredCount(_ contex
 	return fc, nil
 }
 
-func (ec *executionContext) _UndoTrashPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UndoTrashPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _UndoTrashPayload_conflictCount(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoTrashPayload_conflictCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ConflictCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoTrashPayload_conflictCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoTrashPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoTrashPayload_conflictDirName(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoTrashPayload_conflictDirName,
+		func(ctx context.Context) (any, error) {
+			return obj.ConflictDirName, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoTrashPayload_conflictDirName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoTrashPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoTrashPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *shared.UndoTrashResultDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -17981,7 +18062,7 @@ func (ec *executionContext) _UndoPayload(ctx context.Context, sel ast.SelectionS
 
 var undoTrashPayloadImplementors = []string{"UndoTrashPayload"}
 
-func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *UndoTrashPayload) graphql.Marshaler {
+func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *shared.UndoTrashResultDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, undoTrashPayloadImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -18000,6 +18081,13 @@ func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "conflictCount":
+			out.Values[i] = ec._UndoTrashPayload_conflictCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "conflictDirName":
+			out.Values[i] = ec._UndoTrashPayload_conflictDirName(ctx, field, obj)
 		case "clientMutationId":
 			out.Values[i] = ec._UndoTrashPayload_clientMutationId(ctx, field, obj)
 		default:
@@ -19765,11 +19853,11 @@ func (ec *executionContext) unmarshalNUndoTrashInput2mainᚋinternalᚋinterface
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUndoTrashPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUndoTrashPayload(ctx context.Context, sel ast.SelectionSet, v UndoTrashPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNUndoTrashPayload2mainᚋinternalᚋsharedᚐUndoTrashResultDTO(ctx context.Context, sel ast.SelectionSet, v shared.UndoTrashResultDTO) graphql.Marshaler {
 	return ec._UndoTrashPayload(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUndoTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUndoTrashPayload(ctx context.Context, sel ast.SelectionSet, v *UndoTrashPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNUndoTrashPayload2ᚖmainᚋinternalᚋsharedᚐUndoTrashResultDTO(ctx context.Context, sel ast.SelectionSet, v *shared.UndoTrashResultDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")

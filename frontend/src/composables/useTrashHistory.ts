@@ -33,9 +33,15 @@ export default function useTrashHistory() {
         },
       });
       if (res?.data?.undoTrash.success) {
-        showSuccess(
-          `成功还原了 ${res.data.undoTrash.restoredCount} 张图片及其配套文件`,
-        );
+        const { restoredCount, conflictCount, conflictDirName } =
+          res.data.undoTrash;
+        if (conflictCount > 0) {
+          showSuccess(
+            `成功还原了 ${restoredCount} 张图片，另有 ${conflictCount} 个文件存在冲突，已移入对应的 ${conflictDirName} 目录下，请手动处理`,
+          );
+        } else {
+          showSuccess(`成功还原了 ${restoredCount} 张图片及其配套文件`);
+        }
         void refresh();
       }
     } catch (err: unknown) {

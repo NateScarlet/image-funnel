@@ -371,86 +371,90 @@ func (s *ImageMover) Trash(
 	return historyId, movedFilesCount, nil
 }
 
-// UndoTrash 撤销回收站，恢复文件，若冲突则抛错
-func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (restoredCount int, err error) {
+// UndoTrash 撤销回收站，恢复文件，若冲突则移入 UNDO_TRASH_CONFLICT_<随机字符> 目录下
+func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.UndoTrashResultDTO, error) {
 	historyDir := filepath.Join(s.rootDir, trashDirName, historyId)
 	filesDir := filepath.Join(historyDir, "files")
 
 	metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
 	if err != nil {
-		return 0, fmt.Errorf("failed to read meta.json: %w", err)
+		return nil, fmt.Errorf("failed to read meta.json: %w", err)
 	}
 
 	var meta trashMeta
 	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	// 遍历 filesDir
-	var tempFiles []string
+	// 生成包含 6 位随机大写字符的冲突目录名
+	const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	conflictDirName := fmt.Sprintf("UNDO_TRASH_CONFLICT_%s", string(b))
+
+	var restoredCount int
+	var conflictCount int
+
 	if _, err := os.Stat(filesDir); err == nil {
 		err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if !info.IsDir() {
-				tempFiles = append(tempFiles, path)
+			if info.IsDir() {
+				return nil
+			}
+
+			rel, err := filepath.Rel(filesDir, path)
+			if err != nil {
+				return err
+			}
+			tempRelPath := filepath.ToSlash(rel)
+			srcRelPath := filepath.Clean(filepath.Join(meta.SrcRelPath, tempRelPath))
+			srcAbsPath := filepath.Join(s.rootDir, srcRelPath)
+
+			// 检查目标路径是否已存在同名文件
+			if _, statErr := os.Stat(srcAbsPath); statErr == nil {
+				// 冲突：放到目标父目录下的 UNDO_TRASH_CONFLICT_<随机字符> 目录中
+				conflictAbsDir := filepath.Join(filepath.Dir(srcAbsPath), conflictDirName)
+				if err := os.MkdirAll(conflictAbsDir, 0755); err != nil {
+					return err
+				}
+				conflictAbsPath := filepath.Join(conflictAbsDir, filepath.Base(srcAbsPath))
+				if err := os.Rename(path, conflictAbsPath); err != nil {
+					return fmt.Errorf("failed to move conflict file %s to %s: %w", path, conflictAbsPath, err)
+				}
+				conflictCount++
+			} else {
+				// 无冲突：还原到原位
+				if err := os.MkdirAll(filepath.Dir(srcAbsPath), 0755); err != nil {
+					return err
+				}
+				if err := os.Rename(path, srcAbsPath); err != nil {
+					return fmt.Errorf("failed to restore file %s to %s: %w", path, srcRelPath, err)
+				}
+				restoredCount++
 			}
 			return nil
 		})
 		if err != nil {
-			return 0, fmt.Errorf("failed to walk files directory: %w", err)
+			return nil, fmt.Errorf("failed to walk and restore files: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
-		return 0, fmt.Errorf("failed to stat files directory: %w", err)
+		return nil, fmt.Errorf("failed to stat files directory: %w", err)
 	}
 
-	type moveTask struct {
-		tempAbsPath string
-		srcAbsPath  string
-		srcRelPath  string
-	}
-	var tasks []moveTask
-
-	// 第一遍遍历：进行路径冲突检查
-	for _, tempAbsPath := range tempFiles {
-		rel, err := filepath.Rel(filesDir, tempAbsPath)
-		if err != nil {
-			return 0, err
-		}
-		tempRelPath := filepath.ToSlash(rel)
-		srcRelPath := filepath.Clean(filepath.Join(meta.SrcRelPath, tempRelPath))
-		srcAbsPath := filepath.Join(s.rootDir, srcRelPath)
-
-		if _, err := os.Stat(srcAbsPath); err == nil {
-			// 文件已存在，直接报错由用户手动处理
-			return 0, fmt.Errorf("conflict: target file already exists: %s", srcRelPath)
-		}
-
-		tasks = append(tasks, moveTask{
-			tempAbsPath: tempAbsPath,
-			srcAbsPath:  srcAbsPath,
-			srcRelPath:  srcRelPath,
-		})
-	}
-
-	// 第二遍遍历：执行还原移动
-	for _, task := range tasks {
-		if err := os.MkdirAll(filepath.Dir(task.srcAbsPath), 0755); err != nil {
-			return 0, err
-		}
-		if err := os.Rename(task.tempAbsPath, task.srcAbsPath); err != nil {
-			return 0, fmt.Errorf("failed to restore file to %s: %w", task.srcRelPath, err)
-		}
-		restoredCount++
-	}
-
-	// 清理已空的暂存文件夹
+	// 清理已空的暂存历史文件夹
 	if err := os.RemoveAll(historyDir); err != nil {
-		return restoredCount, err
+		return nil, err
 	}
 
-	return restoredCount, nil
+	return &shared.UndoTrashResultDTO{
+		RestoredCount:   restoredCount,
+		ConflictCount:   conflictCount,
+		ConflictDirName: conflictDirName,
+	}, nil
 }
 
 // EmptyTrash 清空早于指定存留期的暂存记录。先放回原位，然后系统级回收站删除，若冲突则报错

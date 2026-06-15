@@ -10,6 +10,7 @@ import (
 	"main/internal/shared"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -254,9 +255,10 @@ func TestTrashAndUndo(t *testing.T) {
 	assert.Equal(t, srcDir, historyList[0].SrcRelPath)
 
 	// 3. 测试 UndoTrash 还原
-	restored, err := ctx.imageMover.UndoTrash(context.Background(), historyId)
+	res, err := ctx.imageMover.UndoTrash(context.Background(), historyId)
 	require.NoError(t, err)
-	assert.Equal(t, 3, restored)
+	assert.Equal(t, 3, res.RestoredCount)
+	assert.Equal(t, 0, res.ConflictCount)
 
 	// 验证原路径重新出现了文件
 	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
@@ -384,9 +386,10 @@ func TestIncompleteTrashRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	// 尝试 UndoTrash，它应该允许 filesDir 缺失，静默删除该历史目录并返回 0
-	restoredCount, err := ctx.imageMover.UndoTrash(context.Background(), historyId1)
+	res1, err := ctx.imageMover.UndoTrash(context.Background(), historyId1)
 	require.NoError(t, err)
-	assert.Equal(t, 0, restoredCount)
+	assert.Equal(t, 0, res1.RestoredCount)
+	assert.Equal(t, 0, res1.ConflictCount)
 	assert.NoFileExists(t, historyDir1)
 
 	// 模拟断电场景 2：写入了占位 meta.json，开始移入文件，移走了 img1.jpg，但在移 img2.jpg 前断电了
@@ -418,9 +421,10 @@ func TestIncompleteTrashRecovery(t *testing.T) {
 	assert.FileExists(t, filepath.Join(filesDir2, "img1.jpg"))
 
 	// 尝试 UndoTrash。它应当只还原移到暂存区的文件，并且不会因为源目录有 img2.jpg 而产生冲突
-	restoredCount, err = ctx.imageMover.UndoTrash(context.Background(), historyId2)
+	res2, err := ctx.imageMover.UndoTrash(context.Background(), historyId2)
 	require.NoError(t, err)
-	assert.Equal(t, 1, restoredCount) // 成功还原 1 个文件
+	assert.Equal(t, 1, res2.RestoredCount) // 成功还原 1 个文件
+	assert.Equal(t, 0, res2.ConflictCount)
 	assert.NoFileExists(t, historyDir2)
 
 	// 验证最终两个文件都在源目录处
@@ -459,4 +463,61 @@ func TestIncompleteTrashRecovery(t *testing.T) {
 	// 验证被移入 filesDir 的文件被清理了，而之前留在源目录的文件依然完好
 	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
 }
+
+func TestUndoTrashConflict(t *testing.T) {
+	ctx := newTestContext(t)
+
+	srcDir := "source-dir"
+	err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1_original"), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img2.jpg"), []byte("img2_original"), 0644)
+	require.NoError(t, err)
+
+	filter := shared.ImageFilters{}
+
+	// 1. 将两个图片移入回收站
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	require.NoError(t, err)
+	assert.Equal(t, 2, fileCount)
+
+	// 2. 在源目录中写入一个全新的 img1.jpg 模拟文件冲突
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1_new_conflicting"), 0644)
+	require.NoError(t, err)
+
+	// 3. 执行 UndoTrash 还原
+	res, err := ctx.imageMover.UndoTrash(context.Background(), historyId)
+	require.NoError(t, err)
+
+	// 验证结果统计
+	assert.Equal(t, 1, res.RestoredCount) // img2.jpg 应当还原成功
+	assert.Equal(t, 1, res.ConflictCount) // img1.jpg 应当产生冲突
+	assert.True(t, strings.HasPrefix(res.ConflictDirName, "UNDO_TRASH_CONFLICT_"))
+
+	// 验证非冲突文件 img2.jpg 成功还原
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+	content2, err := os.ReadFile(filepath.Join(ctx.rootDir, srcDir, "img2.jpg"))
+	require.NoError(t, err)
+	assert.Equal(t, "img2_original", string(content2))
+
+	// 验证冲突的新文件 img1.jpg 依然留在原位且未被覆盖
+	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	content1New, err := os.ReadFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"))
+	require.NoError(t, err)
+	assert.Equal(t, "img1_new_conflicting", string(content1New))
+
+	// 验证原 img1.jpg 被成功移入 UNDO_TRASH_CONFLICT_<随机字符> 目录中
+	conflictDirAbs := filepath.Join(ctx.rootDir, srcDir, res.ConflictDirName)
+	assert.DirExists(t, conflictDirAbs)
+	assert.FileExists(t, filepath.Join(conflictDirAbs, "img1.jpg"))
+	content1Conflict, err := os.ReadFile(filepath.Join(conflictDirAbs, "img1.jpg"))
+	require.NoError(t, err)
+	assert.Equal(t, "img1_original", string(content1Conflict))
+
+	// 验证暂存历史目录被彻底清理
+	assert.NoFileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId))
+}
+
 

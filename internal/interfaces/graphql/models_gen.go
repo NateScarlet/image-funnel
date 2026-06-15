@@ -284,12 +284,6 @@ type UndoTrashInput struct {
 	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
-type UndoTrashPayload struct {
-	Success          bool    `json:"success"`
-	RestoredCount    int     `json:"restoredCount"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
-}
-
 type UpdateImageMetadataInput struct {
 	// 图片ID
 	ID scalar.ID `json:"id"`

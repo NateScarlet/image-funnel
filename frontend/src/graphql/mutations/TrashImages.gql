@@ -9,6 +9,8 @@ mutation UndoTrash($input: UndoTrashInput!) {
   undoTrash(input: $input) {
     success
     restoredCount
+    conflictCount
+    conflictDirName
   }
 }
 

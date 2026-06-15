@@ -33,17 +33,14 @@ func (r *mutationResolver) TrashImages(ctx context.Context, input TrashImagesInp
 }
 
 // UndoTrash is the resolver for the undoTrash field.
-func (r *mutationResolver) UndoTrash(ctx context.Context, input UndoTrashInput) (*UndoTrashPayload, error) {
-	restoredCount, err := r.app.UndoTrash(ctx, input.HistoryID.String())
+func (r *mutationResolver) UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error) {
+	res, err := r.app.UndoTrash(ctx, input.HistoryID.String())
 	if err != nil {
 		return nil, err
 	}
-
-	return &UndoTrashPayload{
-		Success:          true,
-		RestoredCount:    restoredCount,
-		ClientMutationID: input.ClientMutationID,
-	}, nil
+	res.Success = true
+	res.ClientMutationID = input.ClientMutationID
+	return res, nil
 }
 
 // EmptyTrash is the resolver for the emptyTrash field.

@@ -224,3 +224,13 @@ type DirectoryStateLastSessionDTO struct {
 	TargetKeep int          `json:"targetKeep"`
 }
 
+// UndoTrashResultDTO 撤销回收站的结果数据传输对象
+type UndoTrashResultDTO struct {
+	RestoredCount    int
+	ConflictCount    int
+	ConflictDirName  string
+	Success          bool
+	ClientMutationID *string
+}
+
+

@@ -47,11 +47,16 @@ input UndoTrashInput {
   clientMutationId: String
 }
 
-type UndoTrashPayload {
+type UndoTrashPayload @goModel(model: "main/internal/shared.UndoTrashResultDTO") {
   success: Boolean!
   restoredCount: Int!
+  "冲突的文件数量"
+  conflictCount: Int!
+  "冲突文件被暂存的冲突目录名称"
+  conflictDirName: String
   clientMutationId: String
 }
+
 
 "手动清空回收站，将所有暂存文件移到系统回收站"
 type EmptyTrashPayload {
