@@ -2413,7 +2413,7 @@ type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
 	{Name: "../../../graph/types/image.graphql", Input: `"""
 图片对象，核心实体之一。ID 基于绝对路径和修改时间编码，文件变更后 ID 会变化。
 """
-type Image @goModel(model: "main/internal/shared.ImageDTO") {
+type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
   "文件名（不含路径）"
   filename: String!
@@ -14718,6 +14718,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 			return graphql.Null
 		}
 		return ec._Memo(ctx, sel, obj)
+	case shared.ImageDTO:
+		return ec._Image(ctx, sel, &obj)
+	case *shared.ImageDTO:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Image(ctx, sel, obj)
 	case shared.DirectoryDTO:
 		return ec._Directory(ctx, sel, &obj)
 	case *shared.DirectoryDTO:
@@ -15923,7 +15930,7 @@ func (ec *executionContext) _FinishWebAuthnRegistrationPayload(ctx context.Conte
 	return out
 }
 
-var imageImplementors = []string{"Image"}
+var imageImplementors = []string{"Image", "Node"}
 
 func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, obj *shared.ImageDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, imageImplementors)

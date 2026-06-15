@@ -19,6 +19,9 @@ func (r *queryResolver) Node(ctx context.Context, id scalar.ID) (Node, error) {
 	if strings.HasPrefix(id.String(), "memo:") {
 		return r.app.Memo(ctx, id)
 	}
+	if strings.HasPrefix(id.String(), "img:") {
+		return r.app.Image(ctx, id)
+	}
 	return nil, nil
 }
 

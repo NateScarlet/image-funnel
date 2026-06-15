@@ -434,6 +434,7 @@ export type BrowseDirectoriesQueryVariables = Exact<{
 
 export type BrowseDirectoriesQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', parentId: string | null, relPath: string, root: boolean, id: string, directoriesV2: { __typename: 'DirectoryConnection', edges: Array<{ __typename: 'DirectoryEdge', cursor: string, node: { __typename: 'Directory', id: string, parentId: string | null, relPath: string, root: boolean } }>, nodes: Array<{ __typename: 'Directory', id: string, parentId: string | null, relPath: string, root: boolean }>, pageInfo: { __typename: 'PageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } }
+    | { __typename: 'Image', id: string }
     | { __typename: 'Memo', id: string }
    | null };
 
@@ -447,6 +448,7 @@ export type BrowseImagesQueryVariables = Exact<{
 
 export type BrowseImagesQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', id: string, images: { __typename: 'ImageConnection', edges: Array<{ __typename: 'ImageEdge', cursor: string, node: { __typename: 'Image', id: string, filename: string, url: string, rawURL: string, modTime: string, width: number, height: number, size: number, currentRating: number, label: string | null, relPath: string, url256: string, url512: string, url1024: string, url2048: string, url4096: string, memo: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } } }>, nodes: Array<{ __typename: 'Image', id: string, filename: string, url: string, rawURL: string, modTime: string, width: number, height: number, size: number, currentRating: number, label: string | null, relPath: string, url256: string, url512: string, url1024: string, url2048: string, url4096: string, memo: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } }>, pageInfo: { __typename: 'PageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } }
+    | { __typename: 'Image', id: string }
     | { __typename: 'Memo', id: string }
    | null };
 
@@ -460,6 +462,7 @@ export type BrowseMemosQueryVariables = Exact<{
 
 export type BrowseMemosQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', id: string, memos: { __typename: 'MemoConnection', edges: Array<{ __typename: 'MemoEdge', cursor: string, node: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } }>, nodes: Array<{ __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean }>, pageInfo: { __typename: 'PageInfo', hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null } } }
+    | { __typename: 'Image', id: string }
     | { __typename: 'Memo', id: string }
    | null };
 
@@ -482,6 +485,7 @@ export type DirectoryLastSessionQueryVariables = Exact<{
 
 export type DirectoryLastSessionQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', id: string, lastSession: { __typename: 'Session', id: string, targetKeep: number, createdAt: string, updatedAt: string, canCommit: boolean, canUndo: boolean, currentIndex: number, currentSize: number, currentRound: number, currentRoundActions: Array<ImageAction>, directory: { __typename: 'Directory', id: string, parentId: string | null, relPath: string, root: boolean }, filter: { __typename: 'ImageFilters', id: Array<string> | null, directoryId: Array<string> | null, rating: Array<number> | null, label: Array<string> | null, query: string | null }, stats: { __typename: 'SessionStats', totalCount: number, totalKept: number, totalShelved: number, totalRejected: number, currentRoundRemaining: number, isCompleted: boolean }, currentImage: { __typename: 'Image', id: string, filename: string, url: string, rawURL: string, modTime: string, width: number, height: number, size: number, currentRating: number, label: string | null, relPath: string, url256: string, url512: string, url1024: string, url2048: string, url4096: string, memo: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } } | null, nextImages: Array<{ __typename: 'Image', id: string, filename: string, url: string, rawURL: string, modTime: string, width: number, height: number, size: number, currentRating: number, label: string | null, relPath: string, url256: string, url512: string, url1024: string, url2048: string, url4096: string, memo: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } }> } | null }
+    | { __typename: 'Image' }
     | { __typename: 'Memo' }
    | null };
 
@@ -492,6 +496,7 @@ export type DirectoryStateQueryVariables = Exact<{
 
 export type DirectoryStateQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', id: string, state: { __typename: 'DirectoryState', updatedAt: string, browse: { __typename: 'DirectoryStateBrowse', filterBy: { __typename: 'ImageFilters', id: Array<string> | null, rating: Array<number> | null, label: Array<string> | null, query: string | null } | null, filterMemoBy: { __typename: 'MemoFilters', id: Array<string> | null, hidden: boolean | null } | null } | null, lastSession: { __typename: 'DirectoryStateLastSession', id: string, targetKeep: number, filter: { __typename: 'ImageFilters', id: Array<string> | null, rating: Array<number> | null, label: Array<string> | null, query: string | null } } | null } | null }
+    | { __typename: 'Image' }
     | { __typename: 'Memo' }
    | null };
 
@@ -502,6 +507,7 @@ export type DirectoryStatsQueryVariables = Exact<{
 
 export type DirectoryStatsQuery = { __typename: 'Query', node:
     | { __typename: 'Directory', id: string, parentId: string | null, relPath: string, root: boolean, stats: { __typename: 'DirectoryStats', imageCount: number, subdirectoryCount: number, latestImage: { __typename: 'Image', currentRating: number, xmpExists: boolean, id: string, filename: string, url: string, rawURL: string, modTime: string, width: number, height: number, size: number, label: string | null, relPath: string, url256: string, url512: string, url1024: string, url2048: string, url4096: string, memo: { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean } } | null, ratingCounts: Array<{ __typename: 'RatingCount', rating: number, count: number }> } | null }
+    | { __typename: 'Image' }
     | { __typename: 'Memo' }
    | null };
 
@@ -521,6 +527,7 @@ export type MemoQueryVariables = Exact<{
 
 export type MemoQuery = { __typename: 'Query', node:
     | { __typename: 'Directory' }
+    | { __typename: 'Image' }
     | { __typename: 'Memo', id: string, relPath: string, content: string, rawContent: string, hidden: boolean }
    | null };
 

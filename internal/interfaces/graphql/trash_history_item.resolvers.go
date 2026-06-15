@@ -7,9 +7,8 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
+	"main/internal/apperror"
 	"main/internal/shared"
-	"os"
 	"path/filepath"
 )
 
@@ -18,25 +17,14 @@ func (r *trashHistoryItemResolver) CoverImage(ctx context.Context, obj *shared.T
 	if obj.CoverImageAbsPath == "" {
 		return nil, nil
 	}
-	info, err := os.Stat(obj.CoverImageAbsPath)
-	if err != nil {
-		return nil, nil
-	}
 
-	filename := filepath.Base(obj.CoverImageAbsPath)
 	relPath, err := filepath.Rel(r.rootDir, obj.CoverImageAbsPath)
 	if err != nil {
-		relPath = ""
+		return nil, err
 	}
 
-	return &shared.ImageDTO{
-		ID:       scalar.ToID("trash-cover:" + obj.ID.String()),
-		Filename: filename,
-		Size:     info.Size(),
-		AbsPath:  obj.CoverImageAbsPath,
-		RelPath:  filepath.ToSlash(relPath),
-		ModTime:  info.ModTime(),
-	}, nil
+	img, err := r.app.ImageByRelPath(ctx, filepath.ToSlash(relPath))
+	return apperror.IgnoreNotFound(img, err)
 }
 
 // TrashHistoryItem returns TrashHistoryItemResolver implementation.

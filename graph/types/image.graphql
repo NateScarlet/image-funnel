@@ -1,7 +1,7 @@
 """
 图片对象，核心实体之一。ID 基于绝对路径和修改时间编码，文件变更后 ID 会变化。
 """
-type Image @goModel(model: "main/internal/shared.ImageDTO") {
+type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   id: ID!
   "文件名（不含路径）"
   filename: String!

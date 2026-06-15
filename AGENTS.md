@@ -129,6 +129,9 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 
 - **DTO 跨领域引用**: `shared/*DTO` 中不应嵌入其他领域的 DTO 字段（如 `SessionDTO.CurrentImage *ImageDTO`），这会迫使 DTO 工厂导入其他应用层包造成跨领域耦合。改为存储 `scalar.ID`（如 `CurrentImageID scalar.ID`），零值即表示该关联不存在，GraphQL 层通过自动生成的 resolver 按 ID 查询完整对象。参照 `SessionDTO.CurrentImageID` 与 `session.resolvers.go` 中的 `CurrentImage` resolver
 - **DTO 构造与职责边界**: `DTOFactory` 是唯一负责将领域对象（或基础设施层数据）转换为 DTO 的组件。禁止由 `DTOFactory` 以外的层级或组件直接控制 DTO 字段的生成或传递额外参数。`DTOFactory` 的 `New` 方法应仅接收领域实体本身，其派生的上下文状态（如 `parentID`、`isRoot` 等）应在领域对象被构造时自动计算并内置于实体中，由 DTOFactory 自动读取以完成映射。这可以避免外部调用层（如 Handler 或事件订阅）重复计算或越权传递参数，从而防止 Bug 引入。
+- **间接关联获取与内聚ID生成**: 对于非扫描得到的间接图片关联（如垃圾箱历史中的封面图 CoverImage），如果其对应的物理文件存在于特定子目录，接口层（Resolver）严禁在本地手动拼装非标 ID 或本地手造 `ImageDTO`。应当在领域服务中增加 `ImageByRelPath`（无 `Get` 前缀）查询方法，直接根据相对路径从仓库加载实体，让其内部自动通过领域模型内聚生成带有修改时间的安全 ID，最后通过 `DTOFactory` 转换为标准的 `ImageDTO`。对于文件不存在的情况，Resolver 应当使用 `apperror.IgnoreNotFound` 或 `apperror.IsNotFound` 优雅过滤错误并返回 `nil` 降级，避免直接使用底层的 `os.ErrNotExist`，以防阻塞上层列表查询。
+- **全局 Node 接口实现**: 任何具有全局唯一 ID 且需被客户端独立查询或被前端 Apollo Client 识别以进行缓存同步的实体（如 `Image` 实体），必须在 GraphQL Schema 中声明 `implements Node`，同时在 `node` 查询 Resolver 中补充其 ID 前缀的解析分支（如 `img:` 分发给 `r.app.Image`），保证能够被 `node(id)` 正确查询返回。
+
 
 
 ### Vue / TypeScript

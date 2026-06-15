@@ -46,6 +46,12 @@ func (s *Service) GetImage(ctx context.Context, id scalar.ID) (*Image, error) {
 	return img, nil
 }
 
+// ImageByRelPath 根据图片相对路径获取图片实体
+func (s *Service) ImageByRelPath(ctx context.Context, relPath string) (*Image, error) {
+	return s.imageRepo.Get(ctx, relPath)
+}
+
+
 // UpdateImageMetadata 更新单个图片的元数据（评星和颜色标签），操作即时写入 XMP 伴随文件
 func (s *Service) UpdateImageMetadata(
 	ctx context.Context,
