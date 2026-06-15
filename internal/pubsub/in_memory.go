@@ -56,10 +56,16 @@ type InMemoryTopic[T any] struct {
 }
 
 //go:norace
-func (t *InMemoryTopic[T]) earliestEvent(after uint64) (*ring.Ring[inMemoryTopicEvent[T]], uint64, T) {
+func (t *InMemoryTopic[T]) earliestEvent(after uint64) (*ring.Ring[inMemoryTopicEvent[T]], uint64, T, bool) {
 	// 只访问水位线上的元素，不存在并发缩容
 	var cursor = t.buf // 无并发发布时，主循环指针直接就是尾部
 	var index, value = cursor.Value.Read()
+	// 如果 t.buf 指向尚未写入最新事件的节点（其 index 必然小于或等于 after），
+	// 则真正的最新事件位于前一个节点（即 t.buf.Prev()）。
+	if index <= after {
+		cursor = cursor.Prev()
+		index, value = cursor.Value.Read()
+	}
 	for index > after+1 {
 		// 事件被并发覆盖(不再是尾部)，需要尝试向前回溯一整圈
 		// 因为只能访问水位线上的元素，所以虽然向后更近但是不能向后
@@ -73,7 +79,7 @@ func (t *InMemoryTopic[T]) earliestEvent(after uint64) (*ring.Ring[inMemoryTopic
 			break
 		}
 	}
-	return cursor, index, value
+	return cursor, index, value, index > after
 }
 
 // inMemoryTopicEvent 使用函数避免结构体的原子写入问题
@@ -556,14 +562,16 @@ func (s *inMemorySubscription[T]) more(topic *InMemoryTopic[T]) iter.Seq2[T, err
 		var err error
 		if index > after+1 {
 			// 有事件丢失，重置指针到最早可用事件
-			newCursor, newIndex, newValue := topic.earliestEvent(after)
-			// 由于订阅时获取 after 和 cursor 不是原子操作，所以可能重置后发现没丢失
-			if newIndex > after+1 {
+			newCursor, newIndex, newValue, ok := topic.earliestEvent(after)
+			if ok {
 				cursor = newCursor
 				index = newIndex
 				value = newValue
-				var dropped = index - after - 1
-				err = fmt.Errorf("%w (%d dropped)", ErrUndeliveredEvents, dropped)
+				// 由于订阅时获取 after 和 cursor 不是原子操作，所以可能重置后发现没丢失
+				if index > after+1 {
+					var dropped = index - after - 1
+					err = fmt.Errorf("%w (%d dropped)", ErrUndeliveredEvents, dropped)
+				}
 				after = index - 1
 			}
 		}
