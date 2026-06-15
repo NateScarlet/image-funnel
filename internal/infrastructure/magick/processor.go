@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	appimage "main/internal/application/image"
@@ -51,7 +52,7 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 		return nil, err
 	}
 
-	timestamp := fmt.Sprintf("%d", info.ModTime().Unix())
+	timestamp := fmt.Sprintf("%d", info.ModTime().UnixNano())
 	size := fmt.Sprintf("%d", info.Size())
 	wStr := ""
 	if width > 0 {
@@ -63,7 +64,8 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 	}
 
 	hash := sha256.New()
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s", absPath, timestamp, size, wStr, qStr)
+	// 使用文件名而非绝对路径，从而允许文件移动后复用已转码的缓存（只要文件名、修改时间和大小不变）
+	fmt.Fprintf(hash, "%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, qStr)
 
 	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
 
