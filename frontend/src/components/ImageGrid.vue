@@ -769,7 +769,22 @@ const sortedRatingCounts = computed(() => {
 // #region 删除低星级图片功能
 const { show: showNotification } = useNotification();
 const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
-const isDeletingUnmatched = ref(false);
+const deletingUnmatchedBuffer = ref({
+  directoryId: props.directoryId,
+  value: false,
+});
+const isDeletingUnmatched = computed({
+  get: () =>
+    deletingUnmatchedBuffer.value.directoryId === props.directoryId
+      ? deletingUnmatchedBuffer.value.value
+      : false,
+  set: (val) => {
+    deletingUnmatchedBuffer.value = {
+      directoryId: props.directoryId,
+      value: val,
+    };
+  },
+});
 
 const deleteUnmatchedInfo = computed(() => {
   if (!stats.value?.ratingCounts || filterRating.value.length === 0)
