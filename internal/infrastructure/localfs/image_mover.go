@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	domainimage "main/internal/domain/image"
+	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -85,17 +85,17 @@ type trashMeta struct {
 
 // ImageMover 专职处理图片及其同名或带有额外扩展名的配套伴随文件物理移动、暂存与回收站操作
 type ImageMover struct {
-	rootDir            string
-	imageRepo          domainimage.Repository
-	imageFilterBuilder *domainimage.FilterBuilder
+	rootDir       string
+	repo          image.Repository
+	filterBuilder *image.FilterBuilder
 }
 
 // NewImageMover 创建图片移动实现实例
-func NewImageMover(rootDir string, imageRepo domainimage.Repository, imageFilterBuilder *domainimage.FilterBuilder) *ImageMover {
+func NewImageMover(rootDir string, repo image.Repository, filterBuilder *image.FilterBuilder) *ImageMover {
 	return &ImageMover{
-		rootDir:            rootDir,
-		imageRepo:          imageRepo,
-		imageFilterBuilder: imageFilterBuilder,
+		rootDir:       rootDir,
+		repo:          repo,
+		filterBuilder: filterBuilder,
 	}
 }
 
@@ -104,10 +104,10 @@ func (s *ImageMover) findTargetImages(
 	ctx context.Context,
 	relPath string,
 	filterBy shared.ImageFilters,
-) (map[string]*domainimage.Image, error) {
-	imgFilter := s.imageFilterBuilder.Build(filterBy)
-	targetImages := make(map[string]*domainimage.Image)
-	for img, scanErr := range s.imageRepo.Find(ctx, relPath) {
+) (map[string]*image.Image, error) {
+	imgFilter := s.filterBuilder.Build(filterBy)
+	targetImages := make(map[string]*image.Image)
+	for img, scanErr := range s.repo.Find(ctx, relPath) {
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -123,8 +123,8 @@ func (s *ImageMover) findTargetImages(
 func (s *ImageMover) matchAssociatedFiles(
 	ctx context.Context,
 	srcAbsDir string,
-	targetImages map[string]*domainimage.Image,
-	onMatch func(entry os.DirEntry, checkName string, img *domainimage.Image, isImageBody bool) error,
+	targetImages map[string]*image.Image,
+	onMatch func(entry os.DirEntry, img *image.Image, isImageBody bool) error,
 ) error {
 	for entry, err := range dirEntries(ctx, srcAbsDir) {
 		if err != nil {
@@ -134,17 +134,16 @@ func (s *ImageMover) matchAssociatedFiles(
 			continue
 		}
 
-		checkName := entry.Name()
-		var associatedImg *domainimage.Image
+		var associatedImg *image.Image
 		var isImageBody bool
 
 		// 1. 优先进行文件名全匹配（对应图片本体）
-		if img, ok := targetImages[checkName]; ok {
+		if img, ok := targetImages[entry.Name()]; ok {
 			associatedImg = img
 			isImageBody = true
 		} else {
 			// 2. 逐步剥离扩展名，匹配同名伴随文件（如 XMP、RAW 关联文件等）
-			curr := checkName
+			curr := entry.Name()
 			for {
 				ext := filepath.Ext(curr)
 				if ext == "" {
@@ -159,7 +158,7 @@ func (s *ImageMover) matchAssociatedFiles(
 		}
 
 		if associatedImg != nil {
-			if err := onMatch(entry, checkName, associatedImg, isImageBody); err != nil {
+			if err := onMatch(entry, associatedImg, isImageBody); err != nil {
 				return err
 			}
 		}
@@ -204,9 +203,9 @@ func (s *ImageMover) Move(
 	srcAbsDir := filepath.Join(s.rootDir, relPath)
 
 	// 匹配并移动匹配的文件及其伴随文件
-	err = s.matchAssociatedFiles(ctx, srcAbsDir, toMoveImages, func(entry os.DirEntry, checkName string, img *domainimage.Image, isImageBody bool) error {
-		srcFilePath := filepath.Join(srcAbsDir, checkName)
-		targetFilePath := filepath.Join(targetAbsDir, checkName)
+	err = s.matchAssociatedFiles(ctx, srcAbsDir, toMoveImages, func(entry os.DirEntry, img *image.Image, isImageBody bool) error {
+		srcFilePath := filepath.Join(srcAbsDir, entry.Name())
+		targetFilePath := filepath.Join(targetAbsDir, entry.Name())
 
 		if err := os.Rename(srcFilePath, targetFilePath); err != nil {
 			// 容错处理：若伴随文件已被先行移走，且其不是图片本体，则允许跳过
@@ -285,9 +284,9 @@ func (s *ImageMover) Trash(
 	srcAbsDir := filepath.Join(s.rootDir, relPath)
 
 	// 2. 匹配并移动到回收暂存目录
-	err = s.matchAssociatedFiles(ctx, srcAbsDir, toDeleteImages, func(entry os.DirEntry, checkName string, img *domainimage.Image, isImageBody bool) error {
-		srcFilePath := filepath.Join(srcAbsDir, checkName)
-		targetFilePath := filepath.Join(filesDir, checkName)
+	err = s.matchAssociatedFiles(ctx, srcAbsDir, toDeleteImages, func(entry os.DirEntry, img *image.Image, isImageBody bool) error {
+		srcFilePath := filepath.Join(srcAbsDir, entry.Name())
+		targetFilePath := filepath.Join(filesDir, entry.Name())
 
 		// 获取文件属性用于统计总大小
 		info, err := entry.Info()
@@ -318,7 +317,7 @@ func (s *ImageMover) Trash(
 
 		if isImageBody {
 			trashedImages = append(trashedImages, trashedImageMeta{
-				RelPath: filepath.ToSlash(checkName),
+				RelPath: filepath.ToSlash(entry.Name()),
 				ModTime: img.ModTime(),
 			})
 		}
@@ -644,5 +643,5 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 	}
 }
 
-var _ domainimage.Mover = (*ImageMover)(nil)
-var _ domainimage.Trasher = (*ImageMover)(nil)
+var _ image.Mover = (*ImageMover)(nil)
+var _ image.Trasher = (*ImageMover)(nil)
