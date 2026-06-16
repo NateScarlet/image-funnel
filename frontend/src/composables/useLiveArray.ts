@@ -20,7 +20,10 @@ export default function useLiveArray<T extends { id: string }>(
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
     identity?: (i: T) => string;
-    subscribe?: (item: T, callback: (v: T) => void) => () => void;
+    subscribe?: (
+      item: T,
+      callback: (v: T) => void,
+    ) => Disposable | (() => void);
   } = {},
 ) {
   const liveDeletedID = shallowReactive(new Set<string>());
@@ -66,7 +69,13 @@ export default function useLiveArray<T extends { id: string }>(
               addItem(newValue);
             });
 
-            subs.set(k, { unsubscribe, id: v.id });
+            subs.set(k, {
+              unsubscribe:
+                Symbol.dispose in unsubscribe
+                  ? () => unsubscribe[Symbol.dispose]()
+                  : unsubscribe,
+              id: v.id,
+            });
             skipOnce = false;
           }
         }

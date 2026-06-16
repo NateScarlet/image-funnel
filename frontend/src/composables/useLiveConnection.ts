@@ -1,5 +1,5 @@
-import useLiveArray from "./useLiveArray";
 import stableComputed from "./stableComputed";
+import useLiveArrayV3 from "./useLiveArray";
 
 export default function useLiveConnection<
   T extends { id: string; isRedacted?: boolean },
@@ -16,11 +16,14 @@ export default function useLiveConnection<
     filter?: (i: T) => boolean;
     onNodeDidLeave?: (i: T) => void;
     identity?: (i: T) => string;
-    subscribe?: (item: T, callback: (v: T) => void) => () => void;
+    subscribe?: (
+      item: T,
+      callback: (v: T) => void,
+    ) => Disposable | (() => void);
   } = {},
 ) {
   const resolvedIdentity = identity ?? ((i: T) => i.id);
-  const { items, addItem, deleteItem, reset } = useLiveArray(nodes, {
+  const { items, addItem, deleteItem, reset } = useLiveArrayV3(nodes, {
     compare,
     filter,
     identity: resolvedIdentity,
