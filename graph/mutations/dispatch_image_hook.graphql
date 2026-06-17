@@ -1,0 +1,20 @@
+extend type Mutation {
+  "手动为一批图片批量触发特定的外部钩子"
+  dispatchImageHook(input: DispatchImageHookInput!): DispatchImageHookPayload!
+}
+
+"手动派发图片钩子的输入"
+input DispatchImageHookInput {
+  "图片 ID 列表"
+  ids: [ID!]!
+  "要触发的钩子 ID"
+  hookId: ID!
+  "客户端突变标识"
+  clientMutationId: String
+}
+
+"手动派发图片钩子的返回数据"
+type DispatchImageHookPayload {
+  "客户端突变标识"
+  clientMutationId: String
+}

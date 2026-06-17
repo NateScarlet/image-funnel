@@ -317,6 +317,87 @@
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
 
+      <!-- 动作按钮与下拉气泡 -->
+      <div
+        v-if="dispatchableHooks.length > 0"
+        ref="actionPopoverContainerRef"
+        class="relative flex items-center select-none"
+        data-no-gesture
+      >
+        <!-- 触发按钮 -->
+        <button
+          class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 z-40 text-white/50 hover:text-white cursor-pointer"
+          title="执行动作"
+          @click="showActionPopover = !showActionPopover"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path :d="mdiPlayOutline" />
+          </svg>
+          <span class="text-xs">动作</span>
+        </button>
+
+        <!-- 玻璃磨砂下拉气泡菜单 -->
+        <Transition
+          enter-active-class="transition duration-150 ease-out"
+          enter-from-class="opacity-0 translate-y-2 scale-95"
+          enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition duration-100 ease-in"
+          leave-from-class="opacity-100 translate-y-0 scale-100"
+          leave-to-class="opacity-0 translate-y-2 scale-95"
+        >
+          <div
+            v-if="showActionPopover"
+            class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-52 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
+          >
+            <div
+              class="text-xs font-bold text-white/40 tracking-wider uppercase select-none text-left"
+            >
+              执行动作
+            </div>
+
+            <!-- 动作列表 -->
+            <div class="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1">
+              <button
+                v-for="hook in dispatchableHooks"
+                :key="hook.id"
+                :disabled="isDispatching"
+                class="px-2 py-1.5 text-xs text-left text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed select-none cursor-pointer"
+                :title="hook.description || hook.name"
+                @click="handleDispatch(hook.id, hook.name)"
+              >
+                <span class="truncate pr-2">{{ hook.name }}</span>
+                <svg
+                  v-if="isDispatching && currentDispatchingHookId === hook.id"
+                  class="w-3.5 h-3.5 animate-spin shrink-0 text-secondary-400"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path
+                    :d="mdiLoading"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="w-3.5 h-3.5 shrink-0 text-white/40"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path :d="mdiPlayOutline" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </div>
+      <div
+        v-if="dispatchableHooks.length > 0"
+        class="w-px h-4 bg-white/30 mx-1"
+      ></div>
+
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
@@ -436,6 +517,7 @@ import {
   mdiDotsVertical,
   mdiOpenInNew,
   mdiNoteTextOutline,
+  mdiPlayOutline,
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
@@ -447,6 +529,7 @@ import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument } from "@/graphql/generated";
+import useImageHooks from "@/composables/useImageHooks";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useOpenDir } from "@/composables/useOpenDir";
 import MemoForm from "./MemoForm.vue";
@@ -838,6 +921,26 @@ useEventListeners(containerRef, ({ on }) => {
     }
   });
 });
+
+// #region 外部后置动作
+const { dispatchableHooks, isDispatching, currentDispatchingHookId, dispatch } =
+  useImageHooks({ imageIds: () => [image.id] });
+
+const showActionPopover = ref(false);
+const actionPopoverContainerRef = useTemplateRef<HTMLElement>(
+  "actionPopoverContainerRef",
+);
+useClickOutside(actionPopoverContainerRef, () => {
+  showActionPopover.value = false;
+});
+
+async function handleDispatch(hookId: string, hookName: string) {
+  await dispatch(hookId, hookName, [image.id]);
+  if (!isDispatching.value) {
+    showActionPopover.value = false;
+  }
+}
+// #endregion
 
 const memoDialog = useModalDialog({
   onDidOpen() {

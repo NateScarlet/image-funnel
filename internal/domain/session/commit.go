@@ -86,10 +86,29 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		xmpData := metadata.NewXMPData(rating, action.String(), time.Now(), currentImg.Label())
 
-		if err := s.metadataRepo.Write(filepath.Join(s.rootDir, img.RelPath()), xmpData); err != nil {
+		absPath := filepath.Join(s.rootDir, img.RelPath())
+		if err := s.metadataRepo.Write(absPath, xmpData); err != nil {
 			errs = append(errs, err)
 			continue
 		}
+
+		// 发布元数据更新事件
+		s.eventBus.PublishMetadataUpdated(ctx, &shared.MetadataUpdatedEvent{
+			ID:        currentImg.ID(),
+			Path:      absPath,
+			Rating:    rating,
+			Label:     currentImg.Label(),
+			Action:    action.String(),
+			OldRating: currentImg.Rating(),
+			OldLabel:  currentImg.Label(),
+			OldAction: func() string {
+				if currentImg.XMPData() != nil {
+					return currentImg.XMPData().Action()
+				}
+				return ""
+			}(),
+		})
+
 		successCount++
 
 		// 写入成功后，构建新的 Image 对象并直接更新内存

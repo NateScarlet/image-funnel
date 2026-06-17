@@ -81,6 +81,19 @@ export default function useBulkOperations(
     selectedImageIds.value = [];
   }
 
+  // 反选当前列表的图片
+  function invertSelection() {
+    const currentListIds = toValue(images).map((img) => img.id);
+    const selected = new Set(selectedImageIds.value);
+    const nextSelected: string[] = [];
+    for (const id of currentListIds) {
+      if (!selected.has(id)) {
+        nextSelected.push(id);
+      }
+    }
+    selectedImageIds.value = nextSelected;
+  }
+
   /**
    * 批量更新选中图片的星级评分
    * @param rating 星级分数（0-5），0 代表无评分
@@ -167,6 +180,7 @@ export default function useBulkOperations(
     toggleSelectImage,
     selectAll,
     deselectAll,
+    invertSelection,
     bulkSetRating,
     bulkSetLabel,
   };

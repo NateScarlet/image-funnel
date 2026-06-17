@@ -1,0 +1,8 @@
+"外部钩子配置"
+type Hook @goModel(model: "main/internal/shared.HookDTO") {
+  id: ID!
+  name: String!
+  description: String!
+  "是否支持按图片手动触发分发"
+  canDispatchByImage: Boolean!
+}

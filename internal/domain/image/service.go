@@ -5,24 +5,32 @@ import (
 	"main/internal/apperror"
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
+	"main/internal/shared"
 	"main/internal/util"
 	"path/filepath"
 	"time"
 )
+
+// EventBus 本地事件总线接口，避免循环导入
+type EventBus interface {
+	PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent)
+}
 
 // Service 图片领域服务
 type Service struct {
 	xmpRepo   metadata.Repository
 	imageRepo Repository
 	rootDir   string
+	eventBus  EventBus
 }
 
 // NewService 创建图片领域服务
-func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir string) *Service {
+func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir string, eventBus EventBus) *Service {
 	return &Service{
 		xmpRepo:   xmpRepo,
 		imageRepo: imageRepo,
 		rootDir:   rootDir,
+		eventBus:  eventBus,
 	}
 }
 
@@ -91,6 +99,27 @@ func (s *Service) UpdateImageMetadata(
 		labelVal = *label
 	}
 
+	oldRating := xmpData.Rating()
+	oldLabel := xmpData.Label()
+	oldAction := xmpData.Action()
+
 	newXMP := metadata.NewXMPData(ratingVal, xmpData.Action(), time.Now(), labelVal)
-	return s.xmpRepo.Write(absPath, newXMP)
+	err = s.xmpRepo.Write(absPath, newXMP)
+	if err != nil {
+		return err
+	}
+
+	// 写入成功后发布元数据更新事件
+	s.eventBus.PublishMetadataUpdated(ctx, &shared.MetadataUpdatedEvent{
+		ID:        id,
+		Path:      absPath,
+		Rating:    ratingVal,
+		Label:     labelVal,
+		Action:    xmpData.Action(),
+		OldRating: oldRating,
+		OldLabel:  oldLabel,
+		OldAction: oldAction,
+	})
+
+	return nil
 }

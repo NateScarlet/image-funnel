@@ -1,0 +1,5 @@
+mutation DispatchImageHook($input: DispatchImageHookInput!) {
+  dispatchImageHook(input: $input) {
+    clientMutationId
+  }
+}

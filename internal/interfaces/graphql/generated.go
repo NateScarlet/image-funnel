@@ -156,6 +156,10 @@ type ComplexityRoot struct {
 		SubdirectoryCount func(childComplexity int) int
 	}
 
+	DispatchImageHookPayload struct {
+		ClientMutationID func(childComplexity int) int
+	}
+
 	EmptyTrashPayload struct {
 		ClearedCount     func(childComplexity int) int
 		ClientMutationID func(childComplexity int) int
@@ -176,6 +180,13 @@ type ComplexityRoot struct {
 		PairingRequest        func(childComplexity int) int
 		RefreshToken          func(childComplexity int) int
 		RefreshTokenExpiresIn func(childComplexity int) int
+	}
+
+	Hook struct {
+		CanDispatchByImage func(childComplexity int) int
+		Description        func(childComplexity int) int
+		ID                 func(childComplexity int) int
+		Name               func(childComplexity int) int
 	}
 
 	Image struct {
@@ -267,6 +278,7 @@ type ComplexityRoot struct {
 		CreateMemo                 func(childComplexity int, input CreateMemoInput) int
 		CreateSession              func(childComplexity int, input CreateSessionInput) int
 		DeleteDevice               func(childComplexity int, input DeleteDeviceInput) int
+		DispatchImageHook          func(childComplexity int, input DispatchImageHookInput) int
 		EmptyTrash                 func(childComplexity int, minAge scalar.Duration) int
 		FinishWebAuthnLogin        func(childComplexity int, input FinishWebAuthnLoginInput) int
 		FinishWebAuthnRegistration func(childComplexity int, input FinishWebAuthnRegistrationInput) int
@@ -300,6 +312,7 @@ type ComplexityRoot struct {
 		AuthStatus         func(childComplexity int) int
 		ComfyUIWorkflow    func(childComplexity int, id scalar.ID) int
 		Devices            func(childComplexity int) int
+		Hooks              func(childComplexity int) int
 		Meta               func(childComplexity int) int
 		Node               func(childComplexity int, id scalar.ID) int
 		PairingRequests    func(childComplexity int) int
@@ -448,6 +461,7 @@ type MutationResolver interface {
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
 	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
+	DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error)
 	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
@@ -468,6 +482,7 @@ type QueryResolver interface {
 	AuthStatus(ctx context.Context) (*AuthStatus, error)
 	ComfyUIWorkflow(ctx context.Context, id scalar.ID) (*string, error)
 	Devices(ctx context.Context) ([]*shared.DeviceDTO, error)
+	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
@@ -852,6 +867,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.DirectoryStats.SubdirectoryCount(childComplexity), true
 
+	case "DispatchImageHookPayload.clientMutationId":
+		if e.complexity.DispatchImageHookPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.DispatchImageHookPayload.ClientMutationID(childComplexity), true
+
 	case "EmptyTrashPayload.clearedCount":
 		if e.complexity.EmptyTrashPayload.ClearedCount == nil {
 			break
@@ -932,6 +954,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FinishWebAuthnRegistrationPayload.RefreshTokenExpiresIn(childComplexity), true
+
+	case "Hook.canDispatchByImage":
+		if e.complexity.Hook.CanDispatchByImage == nil {
+			break
+		}
+
+		return e.complexity.Hook.CanDispatchByImage(childComplexity), true
+	case "Hook.description":
+		if e.complexity.Hook.Description == nil {
+			break
+		}
+
+		return e.complexity.Hook.Description(childComplexity), true
+	case "Hook.id":
+		if e.complexity.Hook.ID == nil {
+			break
+		}
+
+		return e.complexity.Hook.ID(childComplexity), true
+	case "Hook.name":
+		if e.complexity.Hook.Name == nil {
+			break
+		}
+
+		return e.complexity.Hook.Name(childComplexity), true
 
 	case "Image.currentRating":
 		if e.complexity.Image.CurrentRating == nil {
@@ -1319,6 +1366,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DeleteDevice(childComplexity, args["input"].(DeleteDeviceInput)), true
+	case "Mutation.dispatchImageHook":
+		if e.complexity.Mutation.DispatchImageHook == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_dispatchImageHook_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DispatchImageHook(childComplexity, args["input"].(DispatchImageHookInput)), true
 	case "Mutation.emptyTrash":
 		if e.complexity.Mutation.EmptyTrash == nil {
 			break
@@ -1541,6 +1599,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Devices(childComplexity), true
+	case "Query.hooks":
+		if e.complexity.Query.Hooks == nil {
+			break
+		}
+
+		return e.complexity.Query.Hooks(childComplexity), true
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
 			break
@@ -2082,6 +2146,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputDirectoryStateBrowseInput,
 		ec.unmarshalInputDirectoryStateInput,
+		ec.unmarshalInputDispatchImageHookInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputImageFiltersInput,
@@ -2410,6 +2475,15 @@ type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
   "各评分级别的图片数量分布"
   ratingCounts: [RatingCount!]!
 }`, BuiltIn: false},
+	{Name: "../../../graph/types/hook.graphql", Input: `"外部钩子配置"
+type Hook @goModel(model: "main/internal/shared.HookDTO") {
+  id: ID!
+  name: String!
+  description: String!
+  "是否支持按图片手动触发分发"
+  canDispatchByImage: Boolean!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/image.graphql", Input: `"""
 图片对象，核心实体之一。ID 基于绝对路径和修改时间编码，文件变更后 ID 会变化。
 """
@@ -2692,6 +2766,11 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   devices: [Device!]!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/queries/hooks.graphql", Input: `extend type Query {
+  "查询所有可用的外部钩子"
+  hooks: [Hook!]!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/queries/meta.graphql", Input: `extend type Query {
   "获取应用元信息（版本号、根目录路径）"
   meta: Meta!
@@ -2937,6 +3016,27 @@ type Mutation {
 
 input DeleteDeviceInput {
   id: ID!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/mutations/dispatch_image_hook.graphql", Input: `extend type Mutation {
+  "手动为一批图片批量触发特定的外部钩子"
+  dispatchImageHook(input: DispatchImageHookInput!): DispatchImageHookPayload!
+}
+
+"手动派发图片钩子的输入"
+input DispatchImageHookInput {
+  "图片 ID 列表"
+  ids: [ID!]!
+  "要触发的钩子 ID"
+  hookId: ID!
+  "客户端突变标识"
+  clientMutationId: String
+}
+
+"手动派发图片钩子的返回数据"
+type DispatchImageHookPayload {
+  "客户端突变标识"
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站，将所有暂存文件移到系统回收站"
@@ -3385,6 +3485,17 @@ func (ec *executionContext) field_Mutation_deleteDevice_args(ctx context.Context
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDeleteDeviceInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDeviceInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_dispatchImageHook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDispatchImageHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5633,6 +5744,35 @@ func (ec *executionContext) fieldContext_DirectoryStats_ratingCounts(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _DispatchImageHookPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *DispatchImageHookPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DispatchImageHookPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DispatchImageHookPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DispatchImageHookPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _EmptyTrashPayload_clearedCount(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6041,6 +6181,122 @@ func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_pairi
 				return ec.fieldContext_PairingRequest_status(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_id(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_name(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_description(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_canDispatchByImage(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_canDispatchByImage,
+		func(ctx context.Context) (any, error) {
+			return obj.CanDispatchByImage, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_canDispatchByImage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -7987,6 +8243,51 @@ func (ec *executionContext) fieldContext_Mutation_deleteDevice(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_dispatchImageHook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_dispatchImageHook,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().DispatchImageHook(ctx, fc.Args["input"].(DispatchImageHookInput))
+		},
+		nil,
+		ec.marshalNDispatchImageHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_dispatchImageHook(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "clientMutationId":
+				return ec.fieldContext_DispatchImageHookPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DispatchImageHookPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_dispatchImageHook_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9127,6 +9428,45 @@ func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field 
 				return ec.fieldContext_Device_isCurrent(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hooks(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hooks,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().Hooks(ctx)
+		},
+		nil,
+		ec.marshalNHook2ᚕᚖmainᚋinternalᚋsharedᚐHookDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hooks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Hook_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Hook_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Hook_description(ctx, field)
+			case "canDispatchByImage":
+				return ec.fieldContext_Hook_canDispatchByImage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Hook", field.Name)
 		},
 	}
 	return fc, nil
@@ -14061,6 +14401,47 @@ func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDispatchImageHookInput(ctx context.Context, obj any) (DispatchImageHookInput, error) {
+	var it DispatchImageHookInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"ids", "hookId", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "ids":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ids"))
+			data, err := ec.unmarshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Ids = data
+		case "hookId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hookId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HookID = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.Context, obj any) (FinishWebAuthnLoginInput, error) {
 	var it FinishWebAuthnLoginInput
 	asMap := map[string]any{}
@@ -15784,6 +16165,42 @@ func (ec *executionContext) _DirectoryStats(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var dispatchImageHookPayloadImplementors = []string{"DispatchImageHookPayload"}
+
+func (ec *executionContext) _DispatchImageHookPayload(ctx context.Context, sel ast.SelectionSet, obj *DispatchImageHookPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dispatchImageHookPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DispatchImageHookPayload")
+		case "clientMutationId":
+			out.Values[i] = ec._DispatchImageHookPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var emptyTrashPayloadImplementors = []string{"EmptyTrashPayload"}
 
 func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *EmptyTrashPayload) graphql.Marshaler {
@@ -15907,6 +16324,60 @@ func (ec *executionContext) _FinishWebAuthnRegistrationPayload(ctx context.Conte
 			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_device(ctx, field, obj)
 		case "pairingRequest":
 			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_pairingRequest(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hookImplementors = []string{"Hook"}
+
+func (ec *executionContext) _Hook(ctx context.Context, sel ast.SelectionSet, obj *shared.HookDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hookImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Hook")
+		case "id":
+			out.Values[i] = ec._Hook_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._Hook_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._Hook_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canDispatchByImage":
+			out.Values[i] = ec._Hook_canDispatchByImage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16705,6 +17176,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "dispatchImageHook":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_dispatchImageHook(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "emptyTrash":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_emptyTrash(ctx, field)
@@ -17009,6 +17487,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_devices(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hooks":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hooks(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -18841,6 +19341,25 @@ func (ec *executionContext) unmarshalNDirectoryStateInput2ᚖmainᚋinternalᚋs
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNDispatchImageHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookInput(ctx context.Context, v any) (DispatchImageHookInput, error) {
+	res, err := ec.unmarshalInputDispatchImageHookInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDispatchImageHookPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookPayload(ctx context.Context, sel ast.SelectionSet, v DispatchImageHookPayload) graphql.Marshaler {
+	return ec._DispatchImageHookPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDispatchImageHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookPayload(ctx context.Context, sel ast.SelectionSet, v *DispatchImageHookPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DispatchImageHookPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration(ctx context.Context, v any) (scalar.Duration, error) {
 	var res scalar.Duration
 	err := res.UnmarshalGQL(v)
@@ -18903,6 +19422,60 @@ func (ec *executionContext) marshalNFinishWebAuthnRegistrationPayload2ᚖmainᚋ
 	return ec._FinishWebAuthnRegistrationPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNHook2ᚕᚖmainᚋinternalᚋsharedᚐHookDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.HookDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNHook2ᚖmainᚋinternalᚋsharedᚐHookDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNHook2ᚖmainᚋinternalᚋsharedᚐHookDTO(ctx context.Context, sel ast.SelectionSet, v *shared.HookDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Hook(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {
 	var res scalar.ID
 	err := res.UnmarshalGQL(v)
@@ -18911,6 +19484,36 @@ func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx conte
 
 func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, sel ast.SelectionSet, v scalar.ID) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, v any) ([]*scalar.ID, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*scalar.ID, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []*scalar.ID) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
@@ -18987,13 +19590,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

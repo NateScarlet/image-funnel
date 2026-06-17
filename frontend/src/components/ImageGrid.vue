@@ -509,15 +509,9 @@
               </button>
               <button
                 class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
-                :disabled="selectedImageIds.length === 0"
-                :class="
-                  selectedImageIds.length === 0
-                    ? 'opacity-50 cursor-not-allowed'
-                    : ''
-                "
-                @click="deselectAll"
+                @click="invertSelection"
               >
-                取消全选
+                反选
               </button>
             </div>
           </div>
@@ -538,7 +532,7 @@
                 <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24">
                   <path :d="mdiStar" fill="currentColor" />
                 </svg>
-                <span>批量评星</span>
+                <span>评星</span>
               </button>
 
               <!-- 评分悬浮窗 -->
@@ -581,7 +575,7 @@
                 <span
                   class="w-3 h-3 rounded-full bg-linear-to-tr from-sky-400 via-green-400 to-yellow-400"
                 ></span>
-                <span>颜色标签</span>
+                <span>标签</span>
               </button>
 
               <!-- 标签悬浮窗 -->
@@ -623,7 +617,7 @@
               <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
                 <path :d="mdiFolderMove" fill="currentColor" />
               </svg>
-              <span>批量移动</span>
+              <span>移动</span>
             </button>
 
             <!-- 批量复制 -->
@@ -651,8 +645,74 @@
               >
                 <path :d="mdiContentCopy" fill="currentColor" />
               </svg>
-              <span>{{ isCopying ? "正在复制..." : "复制图片" }}</span>
+              <span>{{ isCopying ? "复制中" : "复制" }}</span>
             </button>
+
+            <!-- 批量动作 -->
+            <div
+              v-if="dispatchableHooks.length > 0"
+              class="relative group/hook"
+            >
+              <button
+                class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
+                :disabled="selectedImageIds.length === 0 || isBulkDispatching"
+                :class="
+                  selectedImageIds.length === 0 || isBulkDispatching
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'cursor-pointer hover:border-secondary-500/50'
+                "
+              >
+                <svg
+                  v-if="isBulkDispatching"
+                  class="w-4 h-4 text-secondary-400 animate-spin"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    :d="mdiLoading"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <svg
+                  v-else
+                  class="w-4 h-4 text-secondary-400"
+                  viewBox="0 0 24 24"
+                >
+                  <path :d="mdiPlayOutline" fill="currentColor" />
+                </svg>
+                <span>动作</span>
+              </button>
+
+              <!-- 动作悬浮窗 -->
+              <div
+                v-if="selectedImageIds.length > 0"
+                class="absolute bottom-full right-0 mb-2 invisible group-hover/hook:visible opacity-0 group-hover/hook:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-52 flex flex-col gap-1 text-left"
+              >
+                <div
+                  class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none px-2 py-1"
+                >
+                  选择执行动作
+                </div>
+                <button
+                  v-for="hook in dispatchableHooks"
+                  :key="hook.id"
+                  class="px-2 py-1 text-xs text-left text-primary-200 hover:text-white hover:bg-primary-800 rounded-lg transition-colors flex items-center justify-between cursor-pointer select-none"
+                  :title="hook.description || hook.name"
+                  @click="bulkDispatch(hook.id, hook.name)"
+                >
+                  <span class="truncate pr-2">{{ hook.name }}</span>
+                  <svg
+                    class="w-4 h-4 shrink-0 text-primary-500"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path :d="mdiPlayOutline" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
+            </div>
 
             <div class="h-5 w-px bg-primary-700"></div>
 
@@ -698,6 +758,7 @@ import {
   mdiRefresh,
   mdiContentCopy,
   mdiDelete,
+  mdiPlayOutline,
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
@@ -722,6 +783,7 @@ import useLocationHash from "@/composables/useLocationHash";
 import optionalArray from "@/utils/optionalArray.ts";
 import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, TrashImagesDocument } from "@/graphql/generated";
+import useImageHooks from "@/composables/useImageHooks";
 import { useClipboard } from "@/composables/useClipboard";
 import useNotification from "@/composables/useNotification";
 import useTrashHistory from "@/composables/useTrashHistory";
@@ -929,10 +991,22 @@ const {
   toggleBulkMode,
   toggleSelectImage,
   selectAll,
-  deselectAll,
+  invertSelection,
   bulkSetRating,
   bulkSetLabel,
 } = useBulkOperations(images, () => props.directoryId);
+
+// #region 批量触发动作
+const {
+  dispatchableHooks,
+  isDispatching: isBulkDispatching,
+  dispatch,
+} = useImageHooks({ imageIds: selectedImageIds });
+
+async function bulkDispatch(hookId: string, hookName: string) {
+  await dispatch(hookId, hookName, selectedImageIds.value);
+}
+// #endregion
 
 // 获取服务器元数据，用于解析物理绝对路径
 const metaLoadingCount = ref(0);

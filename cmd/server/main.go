@@ -16,6 +16,7 @@ import (
 	"main/internal/application"
 	appdevice "main/internal/application/device"
 	appdirectory "main/internal/application/directory"
+	apphook "main/internal/application/hook"
 	appimage "main/internal/application/image"
 	appmemo "main/internal/application/memo"
 	apppairing "main/internal/application/pairing"
@@ -26,11 +27,12 @@ import (
 	"main/internal/domain/memo"
 	"main/internal/domain/pairing"
 	"main/internal/domain/session"
+	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
+	infrahook "main/internal/infrastructure/hook"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/jwt"
-	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/stdimage"
@@ -111,8 +113,10 @@ func main() {
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
 	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
 	prUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
-	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO](pubsub.InMemoryTopicWithCapacity(1024))
-	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(1024))
+	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO]()
+	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
+	metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
+
 	eventBus := ebus.NewEventBus(
 		sessionTopic,
 		fileChangedTopic,
@@ -120,10 +124,25 @@ func main() {
 		prUpdatedTopic,
 		deviceSavedTopic,
 		deviceDeletedTopic,
+		metadataUpdatedTopic,
 		sessionRepo,
 		sessionDTOFactory,
 		deviceDTOFactory,
 	)
+
+	revocationRepo, err := localfs.NewRevocationRepository(cfg.DataDir)
+	if err != nil {
+		logger.Fatal("failed to create revocation repository", zap.Error(err))
+	}
+	revocationList, err := localfs.NewCachedRevocationList(context.Background(), revocationRepo)
+	if err != nil {
+		logger.Fatal("failed to create cached revocation list", zap.Error(err))
+	}
+	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
+
+	// 初始化外部钩子服务
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource, imageFilterBuilder)
+	defer hookRunner.Close()
 
 	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer
 	var statsCache *inmem.DirectoryStatsCache
@@ -168,7 +187,7 @@ func main() {
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir)
+	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir, eventBus)
 
 	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
 	filterBuilder := domdirectory.NewFilterBuilder()
@@ -207,25 +226,18 @@ func main() {
 	}
 	pairingRepo := inmem.NewPairingRequestRepository()
 	pairingService := pairing.NewService(pairingRepo, eventBus)
-	revocationRepo, err := localfs.NewRevocationRepository(cfg.DataDir)
-	if err != nil {
-		logger.Fatal("failed to create revocation repository", zap.Error(err))
-	}
 	deviceFactory := ddevice.NewFactory()
-	revocationList, err := localfs.NewCachedRevocationList(context.Background(), revocationRepo)
-	if err != nil {
-		logger.Fatal("failed to create cached revocation list", zap.Error(err))
-	}
 	authService, err := ddevice.NewService(authRepo, pairingService, logger, cfg.WebAuthnRPID, cfg.WebAuthnRPOrigins, eventBus, revocationList, deviceFactory)
 	if err != nil {
 		logger.Fatal("Failed to initialize auth service", zap.Error(err))
 	}
-	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
 	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, eventBus)
 	pairingDTOFactory := apppairing.NewDTOFactory()
 	pairingHandler := apppairing.NewHandler(authService, pairingService, pairingDTOFactory)
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler, deviceHandler, pairingHandler)
+	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
+
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler, deviceHandler, pairingHandler, hookHandler)
 
 	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL)
 
@@ -368,4 +380,27 @@ func main() {
 	)
 
 	logger.Fatal("start server", zap.Error(httpServer.Serve(":"+cfg.Port)))
+}
+
+type imageServiceWrapper struct {
+	svc     *image.Service
+	rootDir string
+}
+
+func (w *imageServiceWrapper) GetPaths(ctx context.Context, ids []string) ([]string, error) {
+	var paths []string
+	for _, idStr := range ids {
+		id, err := scalar.ParseID(idStr)
+		if err != nil {
+			return nil, err
+		}
+		img, err := w.svc.GetImage(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if img != nil {
+			paths = append(paths, filepath.Join(w.rootDir, img.RelPath()))
+		}
+	}
+	return paths, nil
 }

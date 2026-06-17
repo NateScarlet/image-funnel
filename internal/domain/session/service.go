@@ -21,6 +21,7 @@ type DirectoryResolver interface {
 // EventBus 事件总线接口
 type EventBus interface {
 	SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error]
+	PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent)
 }
 
 type Service struct {

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func filterImages(images []*Image, filterFunc func(*Image) bool) []*Image {
+func filterImages(images []*Image, filterFunc func(FilterableImage) bool) []*Image {
 	if filterFunc == nil {
 		return images
 	}

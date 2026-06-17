@@ -125,7 +125,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **仓库接口极简设计**: `Repository` 接口必须保持极简且高度专注于数据的核心持久化（如 CRUD）。禁止为了计算物理绝对路径或辅助其他层创建空对象等非持久化行为而在接口中强行添加辅助方法。任何物理基准路径（如 `rootDir`）等硬件细节应通过依赖注入传入对应的领域服务（`Service`）或相关组件内部，由其内部自行处理。
 - **空实体回退机制内聚**: 当部分接口为了支持 GraphQL 等层级的非空约束（如 `NonNull!`）需要对缺失的数据进行“空实体”回退（Fallback）时，空实体的构造和物理绝对路径计算应属于领域层 Service 的内聚职责（通常由 Service 的私有方法如 `newEmpty` 统一创建）。应用层禁止获取物理路径属性后手动拼装实体，以避免职责边界外泄与属性构建不一致。
 - **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，备忘录列表查询应放在 `application/memo.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
-- **应用层方法命名规范**: 属于特定领域 Handler 的方法，应当去除冗余的领域包名/实体名前后缀。例如，在 `device.Handler` 中，获取列表方法直接叫做 `List` 而非 `ListDevices` 或 `Devices`，删除方法直接叫做 `Delete` 而非 `DeleteDevice`。
+- **应用层方法命名规范**: 属于特定领域 Handler 的方法，在全局上绝对不应该重名（防止 `Root` 结构体在嵌入提升方法时发生重名选择器歧义）。例如，获取列表的方法不应命名为通用的 `List`，而应直接以返回类型的名词复数命名（如 `device.Handler` 中命名为 `Devices` 替代 `List`，`hook.Handler` 中命名为 `Hooks` 替代 `List`），其他方法也应避免全局冲突。
 
 - **DTO 跨领域引用**: `shared/*DTO` 中不应嵌入其他领域的 DTO 字段（如 `SessionDTO.CurrentImage *ImageDTO`），这会迫使 DTO 工厂导入其他应用层包造成跨领域耦合。改为存储 `scalar.ID`（如 `CurrentImageID scalar.ID`），零值即表示该关联不存在，GraphQL 层通过自动生成的 resolver 按 ID 查询完整对象。参照 `SessionDTO.CurrentImageID` 与 `session.resolvers.go` 中的 `CurrentImage` resolver
 - **DTO 构造与职责边界**: `DTOFactory` 是唯一负责将领域对象（或基础设施层数据）转换为 DTO 的组件。禁止由 `DTOFactory` 以外的层级或组件直接控制 DTO 字段的生成或传递额外参数。`DTOFactory` 的 `New` 方法应仅接收领域实体本身，其派生的上下文状态（如 `parentID`、`isRoot` 等）应在领域对象被构造时自动计算并内置于实体中，由 DTOFactory 自动读取以完成映射。这可以避免外部调用层（如 Handler 或事件订阅）重复计算或越权传递参数，从而防止 Bug 引入。

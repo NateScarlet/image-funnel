@@ -1,0 +1,4 @@
+extend type Query {
+  "查询所有可用的外部钩子"
+  hooks: [Hook!]!
+}

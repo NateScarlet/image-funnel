@@ -203,7 +203,8 @@ func (h *Handler) FinishWebAuthnLogin(ctx context.Context, sessionKey string, re
 	return accessTokenRef, refreshTokenRef, accessExpiresAt, refreshExpiresAt, device, nil
 }
 
-func (h *Handler) List(ctx context.Context) ([]*shared.DeviceDTO, error) {
+// Devices 获取已注册的设备列表
+func (h *Handler) Devices(ctx context.Context) ([]*shared.DeviceDTO, error) {
 	devices, err := h.service.List(ctx)
 	if err != nil {
 		return nil, err

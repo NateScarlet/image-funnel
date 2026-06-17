@@ -109,6 +109,22 @@ type DeletedImage struct {
 	ID scalar.ID `json:"id"`
 }
 
+// 手动派发图片钩子的输入
+type DispatchImageHookInput struct {
+	// 图片 ID 列表
+	Ids []*scalar.ID `json:"ids"`
+	// 要触发的钩子 ID
+	HookID scalar.ID `json:"hookId"`
+	// 客户端突变标识
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+// 手动派发图片钩子的返回数据
+type DispatchImageHookPayload struct {
+	// 客户端突变标识
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 // 手动清空回收站，将所有暂存文件移到系统回收站
 type EmptyTrashPayload struct {
 	// 此次被真正清理进系统回收站的历史数量

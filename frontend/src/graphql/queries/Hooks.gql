@@ -1,0 +1,8 @@
+query Hooks {
+  hooks {
+    id
+    name
+    description
+    canDispatchByImage
+  }
+}

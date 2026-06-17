@@ -232,4 +232,25 @@ type UndoTrashResultDTO struct {
 	ClientMutationID *string
 }
 
+// HookDTO 外部钩子配置数据传输对象
+type HookDTO struct {
+	ID                 scalar.ID
+	Name               string
+	Description        string
+	CanDispatchByImage bool
+}
+
+// MetadataUpdatedEvent 图片元数据更新事件
+type MetadataUpdatedEvent struct {
+	ID        scalar.ID
+	Path      string // 绝对物理路径
+	Rating    int
+	Label     string
+	Action    string
+	OldRating int
+	OldLabel  string
+	OldAction string
+}
+
+
 

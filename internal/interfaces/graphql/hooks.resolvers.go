@@ -10,7 +10,7 @@ import (
 	"main/internal/shared"
 )
 
-// Devices is the resolver for the devices field.
-func (r *queryResolver) Devices(ctx context.Context) ([]*shared.DeviceDTO, error) {
-	return r.app.Devices(ctx)
+// Hooks is the resolver for the hooks field.
+func (r *queryResolver) Hooks(ctx context.Context) ([]*shared.HookDTO, error) {
+	return r.app.Hooks(ctx)
 }

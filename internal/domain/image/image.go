@@ -22,6 +22,7 @@ type Image struct {
 	height      int
 }
 
+// TODO: 改为带校验 Factory 模式，不再允许外部直接构建
 // New 创建一个具有指定ID的图片对象，常用于会话中的图片重建或测试
 func New(id scalar.ID, filename, relPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{

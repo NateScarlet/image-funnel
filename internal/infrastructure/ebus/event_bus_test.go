@@ -24,11 +24,11 @@ func TestNewEventBus(t *testing.T) {
 	pairingRequestCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	pairingRequestUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO]()
-	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
+	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](); metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
 	factory := session.NewDTOFactory()
 	deviceFactory := appdevice.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
-	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, sessionRepo, factory, deviceFactory)
+	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, metadataUpdatedTopic, sessionRepo, factory, deviceFactory)
 
 	assert.NotNil(t, bus)
 }
@@ -39,11 +39,11 @@ func TestSubscribeSession(t *testing.T) {
 	pairingRequestCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	pairingRequestUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO]()
-	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
+	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](); metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
 	factory := session.NewDTOFactory()
 	deviceFactory := appdevice.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
-	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, sessionRepo, factory, deviceFactory)
+	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, metadataUpdatedTopic, sessionRepo, factory, deviceFactory)
 
 	sess := dsession.New(
 		scalar.ToID("test-id"),
@@ -88,11 +88,11 @@ func TestFileChanged(t *testing.T) {
 	pairingRequestCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	pairingRequestUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO]()
 	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO]()
-	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
+	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](); metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
 	factory := session.NewDTOFactory()
 	deviceFactory := appdevice.NewDTOFactory()
 	sessionRepo := inmem.NewSessionRepository()
-	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, sessionRepo, factory, deviceFactory)
+	bus := NewEventBus(sessionTopic, fileChangedTopic, pairingRequestCreatedTopic, pairingRequestUpdatedTopic, deviceSavedTopic, deviceDeletedTopic, metadataUpdatedTopic, sessionRepo, factory, deviceFactory)
 
 	event := &shared.FileChangedEvent{
 		DirectoryID: scalar.ToID("test-dir"),

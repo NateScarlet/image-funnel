@@ -28,6 +28,8 @@ type EventBus struct {
 	deviceSavedTopic   pubsub.Topic[*shared.DeviceDTO]
 	deviceDeletedTopic pubsub.Topic[scalar.ID]
 
+	metadataUpdatedTopic pubsub.Topic[*shared.MetadataUpdatedEvent]
+
 	sessionRepo    dsession.Repository
 	sessionFactory *appsession.DTOFactory
 	deviceFactory  *appdevice.DTOFactory
@@ -40,20 +42,22 @@ func NewEventBus(
 	prUpdatedTopic pubsub.Topic[*shared.PairingRequestDTO],
 	deviceSavedTopic pubsub.Topic[*shared.DeviceDTO],
 	deviceDeletedTopic pubsub.Topic[scalar.ID],
+	metadataUpdatedTopic pubsub.Topic[*shared.MetadataUpdatedEvent],
 	sessionRepo dsession.Repository,
 	sessionFactory *appsession.DTOFactory,
 	deviceFactory *appdevice.DTOFactory,
 ) *EventBus {
 	return &EventBus{
-		sessionTopic:       sessionTopic,
-		fileChangedTopic:   fileChangedTopic,
-		prCreatedTopic:     prCreatedTopic,
-		prUpdatedTopic:     prUpdatedTopic,
-		deviceSavedTopic:   deviceSavedTopic,
-		deviceDeletedTopic: deviceDeletedTopic,
-		sessionRepo:        sessionRepo,
-		sessionFactory:     sessionFactory,
-		deviceFactory:      deviceFactory,
+		sessionTopic:         sessionTopic,
+		fileChangedTopic:     fileChangedTopic,
+		prCreatedTopic:       prCreatedTopic,
+		prUpdatedTopic:       prUpdatedTopic,
+		deviceSavedTopic:     deviceSavedTopic,
+		deviceDeletedTopic:   deviceDeletedTopic,
+		metadataUpdatedTopic: metadataUpdatedTopic,
+		sessionRepo:          sessionRepo,
+		sessionFactory:       sessionFactory,
+		deviceFactory:        deviceFactory,
 	}
 }
 
@@ -122,6 +126,14 @@ func (b *EventBus) PublishDeviceDeleted(ctx context.Context, id scalar.ID) {
 
 func (b *EventBus) SubscribeDeviceDeleted(ctx context.Context) iter.Seq2[scalar.ID, error] {
 	return b.deviceDeletedTopic.Subscribe(ctx)
+}
+
+func (b *EventBus) PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent) {
+	b.metadataUpdatedTopic.Publish(ctx, event)
+}
+
+func (b *EventBus) SubscribeMetadataUpdated(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
+	return b.metadataUpdatedTopic.Subscribe(ctx)
 }
 
 // 确保实现接口

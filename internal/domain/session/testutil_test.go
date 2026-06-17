@@ -173,7 +173,7 @@ func (f *FakeSessionRepo) LastSession(ctx context.Context, directoryID scalar.ID
 }
 
 // FakeEventBus is a mock implementation of EventBus.
-type FakeEventBus struct{}
+type FakeEventBus struct{}; func (f *FakeEventBus) PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent) {}
 
 func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
 	return func(yield func(*shared.FileChangedEvent, error) bool) {}

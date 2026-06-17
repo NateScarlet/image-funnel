@@ -29,6 +29,7 @@ type Config struct {
 	WebAuthnRPID              string
 	WebAuthnRPOrigins         []string
 	BaseURL                   string
+	HooksDir                  string
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -196,6 +197,8 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		}
 	}
 
+	hooksDir := os.Getenv("IMAGE_FUNNEL_HOOK_DIR")
+
 	return &Config{
 		Port:                      port,
 		RootDir:                   rootDir,
@@ -213,5 +216,6 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		WebAuthnRPID:              webauthnRPID,
 		WebAuthnRPOrigins:         webauthnRPOrigins,
 		BaseURL:                   baseURL,
+		HooksDir:                  hooksDir,
 	}, nil
 }
