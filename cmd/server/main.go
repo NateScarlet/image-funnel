@@ -141,7 +141,7 @@ func main() {
 	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
 
 	// 初始化外部钩子服务
-	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource, imageFilterBuilder)
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource)
 	defer hookRunner.Close()
 
 	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer

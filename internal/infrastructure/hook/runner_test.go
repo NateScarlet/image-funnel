@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -70,7 +69,7 @@ label = [""]
 
 	ebus := &mockEventBus{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, image.NewFilterBuilder())
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil)
 	defer runner.Close()
 
 	hooks, err := runner.List(context.Background())
@@ -114,7 +113,7 @@ label = [""]
 
 	ebus := &mockEventBus{}
 	logger := zap.NewExample()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, image.NewFilterBuilder())
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil)
 	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
 	defer runner.Close()
 
@@ -205,7 +204,7 @@ TEST_VAR_TWO = "val2"
 
 	ebus := &mockEventBus{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, image.NewFilterBuilder())
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil)
 	defer runner.Close()
 
 	configs, err := runner.LoadHooks()
@@ -248,7 +247,7 @@ command = "echo test_error_out >&2 && exit 42"
 
 	ebus := &mockEventBus{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, image.NewFilterBuilder())
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil)
 	defer runner.Close()
 
 	// 触发成功钩子，应该同步等待并返回 nil

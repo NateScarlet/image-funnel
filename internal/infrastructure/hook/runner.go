@@ -10,13 +10,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"main/internal/domain/device"
 	domhook "main/internal/domain/hook"
-	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -36,8 +36,8 @@ type HookConfig struct {
 	Description string `toml:"description"`
 	Command     string `toml:"command"`
 	On          struct {
-		PostUpdateImageMetadata *shared.ImageFilters `toml:"post_update_image_metadata"`
-		ImageDispatch           *ImageDispatchTrigger           `toml:"image_dispatch"`
+		PostUpdateImageMetadata *Filters             `toml:"post_update_image_metadata"`
+		ImageDispatch           *ImageDispatchTrigger `toml:"image_dispatch"`
 	} `toml:"on"`
 	Env         map[string]string `toml:"env"` // 允许在 TOML 中配置自定义环境变量，键值对都为字符串
 	Dir         string            `toml:"-"`   // Hook 配置文件所在的父目录
@@ -119,33 +119,31 @@ var _ domhook.Runner = (*Runner)(nil)
 
 // Runner 外部钩子管理器（应用/基础设施适配器服务）
 type Runner struct {
-	rootDir       string
-	hooksDir      string
-	logger        *zap.Logger
-	ebus          EventBus
-	graphqlURL    string
-	tokenSource   device.TokenSource
-	filterBuilder *image.FilterBuilder
-	ch            chan HookExecutionTask
-	debouncer     *Debouncer
-	ctx           context.Context
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
+	rootDir     string
+	hooksDir    string
+	logger      *zap.Logger
+	ebus        EventBus
+	graphqlURL  string
+	tokenSource device.TokenSource
+	ch          chan HookExecutionTask
+	debouncer   *Debouncer
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
-func NewRunner(rootDir string, hooksDir string, logger *zap.Logger, ebus EventBus, graphqlURL string, tokenSource device.TokenSource, filterBuilder *image.FilterBuilder) *Runner {
+func NewRunner(rootDir string, hooksDir string, logger *zap.Logger, ebus EventBus, graphqlURL string, tokenSource device.TokenSource) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Runner{
-		rootDir:       rootDir,
-		hooksDir:      hooksDir,
-		logger:        logger,
-		ebus:          ebus,
-		graphqlURL:    graphqlURL,
-		tokenSource:   tokenSource,
-		filterBuilder: filterBuilder,
-		ch:            make(chan HookExecutionTask, 1024),
-		ctx:           ctx,
-		cancel:        cancel,
+		rootDir:     rootDir,
+		hooksDir:    hooksDir,
+		logger:      logger,
+		ebus:        ebus,
+		graphqlURL:  graphqlURL,
+		tokenSource: tokenSource,
+		ch:          make(chan HookExecutionTask, 1024),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 
 	r.debouncer = NewDebouncer(100*time.Millisecond, r.onDebounceTrigger)
@@ -271,9 +269,8 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 			continue
 		}
 
-		// 使用领域层的 Filter 匹配机制进行过滤
-		filterFunc := r.filterBuilder.Build(*trigger)
-		if !filterFunc(eventWrapper{event}) {
+		// 直接评估事件是否匹配钩子的过滤规则
+		if !trigger.Match(event) {
 			continue
 		}
 
@@ -291,28 +288,51 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 	}
 }
 
-type eventWrapper struct {
-	*shared.MetadataUpdatedEvent
+// Filters 元数据更新筛选条件，专门用于外部钩子中的事件过滤
+type Filters struct {
+	ID     []scalar.ID `toml:"id"`
+	Rating []int       `toml:"rating"`
+	Label  []string    `toml:"label"`
+	Query  string      `toml:"query"`
 }
 
-func (w eventWrapper) ID() scalar.ID {
-	return w.MetadataUpdatedEvent.ID
-}
+// Match 评估单个事件是否匹配当前的筛选条件
+func (f *Filters) Match(event *shared.MetadataUpdatedEvent) bool {
+	if f == nil {
+		return true
+	}
 
-func (w eventWrapper) DirectoryID() scalar.ID {
-	return scalar.ToID("")
-}
+	if len(f.ID) > 0 && !slices.Contains(f.ID, event.ID) {
+		return false
+	}
 
-func (w eventWrapper) Rating() int {
-	return w.MetadataUpdatedEvent.Rating
-}
+	if len(f.Rating) > 0 && !slices.Contains(f.Rating, event.Rating) {
+		return false
+	}
 
-func (w eventWrapper) Label() string {
-	return w.MetadataUpdatedEvent.Label
-}
+	if len(f.Label) > 0 {
+		matched := false
+		eventLabelLower := strings.ToLower(event.Label)
+		for _, l := range f.Label {
+			if strings.ToLower(l) == eventLabelLower {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
 
-func (w eventWrapper) Filename() string {
-	return filepath.Base(w.MetadataUpdatedEvent.Path)
+	if f.Query != "" {
+		queryLower := strings.ToLower(f.Query)
+		filename := filepath.Base(event.Path)
+		if !strings.Contains(strings.ToLower(filename), queryLower) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (r *Runner) LoadHooks() ([]HookConfig, error) {

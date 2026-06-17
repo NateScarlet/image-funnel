@@ -49,3 +49,29 @@ func (id *ID) UnmarshalGQL(v interface{}) error {
 		return fmt.Errorf("unexpected ID: %v", v)
 	}
 }
+
+// MarshalText 实现 encoding.TextMarshaler 接口以支持 TOML 序列化
+func (id ID) MarshalText() ([]byte, error) {
+	return []byte(id.str), nil
+}
+
+// UnmarshalText 实现 encoding.TextUnmarshaler 接口以支持 TOML 反序列化
+func (id *ID) UnmarshalText(text []byte) error {
+	id.str = string(text)
+	return nil
+}
+
+// MarshalJSON 实现 json.Marshaler 接口
+func (id ID) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, "%q", id.str), nil
+}
+
+// UnmarshalJSON 实现 json.Unmarshaler 接口
+func (id *ID) UnmarshalJSON(data []byte) error {
+	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' {
+		id.str = string(data[1 : len(data)-1])
+		return nil
+	}
+	id.str = string(data)
+	return nil
+}
