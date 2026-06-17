@@ -32,7 +32,7 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
 
   const isDispatching = ref(false);
   const currentDispatchingHookId = ref("");
-  const { showSuccess, showError } = useNotification();
+  const { showSuccess, showError, showInfo, remove } = useNotification();
 
   async function dispatch(
     hookId: string,
@@ -42,6 +42,9 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
     if (imageIds.length === 0 || isDispatching.value) return;
     isDispatching.value = true;
     currentDispatchingHookId.value = hookId;
+
+    // 显示“正在执行”提示通知，并将自动关闭时间设为 0，防止自动关闭
+    const infoNotificationId = showInfo(`正在执行动作 ${hookName}...`, 0);
 
     try {
       const { error } = await mutate(DispatchImageHookDocument, {
@@ -71,6 +74,8 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
         }`,
       );
     } finally {
+      // 移除“正在执行”的通知，恢复派发状态
+      remove(infoNotificationId);
       isDispatching.value = false;
       currentDispatchingHookId.value = "";
     }

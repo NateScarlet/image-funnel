@@ -214,3 +214,50 @@ TEST_VAR_TWO = "val2"
 	assert.Equal(t, "val1", configs[0].Env["TEST_VAR_ONE"])
 	assert.Equal(t, "val2", configs[0].Env["TEST_VAR_TWO"])
 }
+
+func TestRunner_Trigger_SyncAndError(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 1. 测试成功的外部钩子命令
+	successToml := `
+id = "success-test"
+name = "成功测试"
+command = "echo hello"
+
+[triggers.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(successToml), 0644)
+	assert.NoError(t, err)
+
+	// 2. 测试失败的外部钩子命令（会返回错误，并且 stderr 中有报错）
+	failToml := `
+id = "fail-test"
+name = "失败测试"
+command = "echo test_error_out >&2 && exit 42"
+
+[triggers.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(failToml), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockEventBus{}
+	logger := zap.NewNop()
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, image.NewFilterBuilder())
+	defer runner.Close()
+
+	// 触发成功钩子，应该同步等待并返回 nil
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{"a.png"}, scalar.ToID("hk:success-test"), "image_dispatch")
+	assert.NoError(t, err)
+
+	// 触发失败钩子，应该同步等待并返回错误，且错误信息中包含退出码和 stderr 输出
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{"a.png"}, scalar.ToID("hk:fail-test"), "image_dispatch")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "test_error_out")
+	assert.Contains(t, err.Error(), "exit status 42")
+}

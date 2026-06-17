@@ -64,6 +64,7 @@ type HookExecutionTask struct {
 	Events      []HookEvent
 	Dir         string            // 执行外部命令时的当前工作目录
 	Env         map[string]string // 传递给外部脚本的自定义环境变量集合
+	ResultChan  chan error        // 用于接收外部脚本执行结果的通道
 }
 
 // Debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件
@@ -222,6 +223,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		})
 	}
 
+	resChan := make(chan error, 1)
 	r.ch <- HookExecutionTask{
 		HookID:      targetHook.ID,
 		HookName:    targetHook.Name,
@@ -230,9 +232,16 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		Events:      events,
 		Dir:         targetHook.Dir,
 		Env:         targetHook.Env,
+		ResultChan:  resChan,
 	}
 
-	return nil
+	// 同步等待执行结果或 context 被取消
+	select {
+	case err := <-resChan:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // runListener 异步监听 EventBus 发来的元数据修改事件
@@ -489,6 +498,14 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 			zap.String("stdout", stdout.String()),
 			zap.String("stderr", stderr.String()),
 		)
+		if task.ResultChan != nil {
+			stderrStr := strings.TrimSpace(stderr.String())
+			if stderrStr != "" {
+				task.ResultChan <- fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)
+			} else {
+				task.ResultChan <- fmt.Errorf("hook script failed: %w", err)
+			}
+		}
 		return
 	}
 
@@ -497,6 +514,9 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		zap.Duration("duration", duration),
 		zap.String("stdout", stdout.String()),
 	)
+	if task.ResultChan != nil {
+		task.ResultChan <- nil
+	}
 }
 
 
