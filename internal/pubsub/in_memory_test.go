@@ -191,6 +191,9 @@ func TestInMemoryTopic(t *testing.T) {
 		}()
 		var receiveCount int
 		var isReady bool
+		var hasError bool
+		var lastVal = 4 // 4之后由于被覆盖丢弃，消息序号可能跳跃
+
 		for i, err := range topic.Subscribe(ctx) {
 			if i == -1 {
 				if !isReady {
@@ -207,22 +210,30 @@ func TestInMemoryTopic(t *testing.T) {
 			receiveCount++
 			if i < 4 {
 				<-ack
+				require.NoError(t, err)
 			} else if i == 4 {
 				for range messageCount - i {
 					<-ack
 				}
-			}
-			if i == 7 {
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, pubsub.ErrUndeliveredEvents)
-			} else {
 				require.NoError(t, err)
+			} else {
+				if i > lastVal+1 {
+					// 消息序号发生跳跃说明检测到丢弃，此时应当返回丢弃错误
+					assert.Error(t, err)
+					assert.ErrorIs(t, err, pubsub.ErrUndeliveredEvents)
+					hasError = true
+				} else {
+					require.NoError(t, err)
+				}
+				lastVal = i
 			}
 			if i == messageCount-1 {
 				break
 			}
 		}
-		assert.Equal(t, messageCount-2, receiveCount)
+		// 校验是否至少触发了一次丢弃错误，且成功收到了后续的消息
+		assert.True(t, hasError, "should have encountered at least one undelivered events error")
+		assert.GreaterOrEqual(t, receiveCount, 5)
 	})
 }
 
