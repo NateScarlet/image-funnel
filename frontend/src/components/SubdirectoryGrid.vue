@@ -59,7 +59,7 @@
     <div ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
       <div
         v-if="processedSubdirectories.length > 0"
-        class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4"
       >
         <RouterLink
           v-for="{

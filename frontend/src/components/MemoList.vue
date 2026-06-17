@@ -40,70 +40,68 @@
     </div>
 
     <!-- 笔记列表项 -->
-    <div
-      v-else
-      ref="containerRef"
-      class="space-y-2 max-h-[40vh] overflow-y-auto pr-1"
-    >
-      <div
-        v-for="memoItem in memos"
-        :key="memoItem.id"
-        class="flex items-center justify-between p-3 rounded-xl bg-primary-800/20 hover:bg-primary-800/60 border border-primary-800/40 hover:border-secondary-500/30 transition-all duration-200 group cursor-pointer"
-        @click="editMemo(memoItem)"
-      >
-        <div class="flex items-center gap-3 min-w-0 flex-1">
-          <svg
-            class="w-4 h-4 text-primary-400 group-hover:text-secondary-400 transition-colors shrink-0"
-            viewBox="0 0 24 24"
-          >
-            <path :d="mdiNoteTextOutline" fill="currentColor" />
-          </svg>
-          <!-- 文件名按钮，点击打开对应图片查看器 -->
-          <span
-            class="text-xs text-primary-400 shrink-0 bg-primary-800/60 px-2 py-1 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
-            title="打开关联图片"
-            @click.stop="openImageViewerForMemo(memoItem)"
-          >
-            {{ memoDisplayName(memoItem) }}
-          </span>
-          <span
-            class="text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium"
-          >
-            {{ memoItem.content || "（空白笔记内容，点击编辑）" }}
-          </span>
-          <!-- 如果是隐藏笔记，显示标记 -->
-          <span
-            v-if="memoItem.hidden"
-            class="px-2 py-1 text-xs bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
-            title="此笔记已通过 frontmatter 隐藏"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-              <path :d="mdiEyeOff" fill="currentColor" />
+    <div v-else ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
+      <div class="space-y-2 p-4">
+        <div
+          v-for="memoItem in memos"
+          :key="memoItem.id"
+          class="flex items-center justify-between p-3 rounded-xl bg-primary-800/20 hover:bg-primary-800/60 border border-primary-800/40 hover:border-secondary-500/30 transition-all duration-200 group cursor-pointer"
+          @click="editMemo(memoItem)"
+        >
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <svg
+              class="w-4 h-4 text-primary-400 group-hover:text-secondary-400 transition-colors shrink-0"
+              viewBox="0 0 24 24"
+            >
+              <path :d="mdiNoteTextOutline" fill="currentColor" />
             </svg>
-            已隐藏
-          </span>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <!-- 一键切换隐藏状态按钮 -->
-          <button
-            class="p-2 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
-            :title="memoItem.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
-            @click.stop="toggleMemoHidden(memoItem)"
-          >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-              <path
-                :d="memoItem.hidden ? mdiEye : mdiEyeOff"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-          <div
-            class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1 cursor-pointer"
-          >
-            <span>编辑</span>
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-              <path :d="mdiChevronRight" fill="currentColor" />
-            </svg>
+            <!-- 文件名按钮，点击打开对应图片查看器 -->
+            <span
+              class="text-xs text-primary-400 shrink-0 bg-primary-800/60 px-2 py-1 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
+              title="打开关联图片"
+              @click.stop="openImageViewerForMemo(memoItem)"
+            >
+              {{ memoDisplayName(memoItem) }}
+            </span>
+            <span
+              class="text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium"
+            >
+              {{ memoItem.content || "（空白笔记内容，点击编辑）" }}
+            </span>
+            <!-- 如果是隐藏笔记，显示标记 -->
+            <span
+              v-if="memoItem.hidden"
+              class="px-2 py-1 text-xs bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-0.5"
+              title="此笔记已通过 frontmatter 隐藏"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path :d="mdiEyeOff" fill="currentColor" />
+              </svg>
+              已隐藏
+            </span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <!-- 一键切换隐藏状态按钮 -->
+            <button
+              class="p-2 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center opacity-0 group-hover:opacity-100"
+              :title="memoItem.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
+              @click.stop="toggleMemoHidden(memoItem)"
+            >
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path
+                  :d="memoItem.hidden ? mdiEye : mdiEyeOff"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+            <div
+              class="text-xs text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none flex items-center gap-1 cursor-pointer"
+            >
+              <span>编辑</span>
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
+                <path :d="mdiChevronRight" fill="currentColor" />
+              </svg>
+            </div>
           </div>
         </div>
       </div>

@@ -226,7 +226,7 @@
         <!-- 骨架图加载指示，避免布局抖动 -->
         <div
           v-if="loading && images.length === 0"
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 animate-pulse"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 animate-pulse p-4"
         >
           <div
             v-for="n in 16"
@@ -258,7 +258,7 @@
         <!-- 网格列表 -->
         <div
           v-else
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 py-2"
+          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 p-4"
         >
           <div
             v-for="img in images"
