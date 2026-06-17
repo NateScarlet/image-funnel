@@ -4,6 +4,7 @@ import mutate from "@/graphql/utils/mutate";
 import useNotification from "@/composables/useNotification";
 import { HooksDocument, DispatchImageHookDocument } from "@/graphql/generated";
 import { useHotkeys } from "@/composables/useHotkeys";
+import useStorage from "@/composables/useStorage";
 
 interface LastHook {
   id: string;
@@ -11,7 +12,10 @@ interface LastHook {
 }
 
 // 全局记录上一次成功的动作，保证跨组件实例共享
-const lastDispatchedHook = ref<LastHook | undefined>(undefined);
+const { model: lastDispatchedHook } = useStorage<LastHook>(
+  localStorage,
+  "last_dispatched_hook_f3a2b",
+);
 
 export interface UseImageHooksOptions {
   imageIds?: MaybeRefOrGetter<string[]>;
