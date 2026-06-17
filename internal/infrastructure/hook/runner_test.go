@@ -58,11 +58,11 @@ name = "ComfyUI 测试"
 description = "ComfyUI 测试说明"
 command = "python test.py"
 
-[triggers.post_update_image_metadata]
+[on.post_update_image_metadata]
 rating = [4, 5]
 label = [""]
 
-[triggers.image_dispatch]
+[on.image_dispatch]
 `
 	tomlPath := filepath.Join(hooksDir, "comfyui.toml")
 	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
@@ -104,7 +104,7 @@ id = "exec-test"
 name = "执行测试"
 command = '` + cmdStr + `'
 
-[triggers.post_update_image_metadata]
+[on.post_update_image_metadata]
 rating = [4]
 label = [""]
 `
@@ -230,7 +230,7 @@ id = "success-test"
 name = "成功测试"
 command = "echo hello"
 
-[triggers.image_dispatch]
+[on.image_dispatch]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(successToml), 0644)
 	assert.NoError(t, err)
@@ -241,7 +241,7 @@ id = "fail-test"
 name = "失败测试"
 command = "echo test_error_out >&2 && exit 42"
 
-[triggers.image_dispatch]
+[on.image_dispatch]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(failToml), 0644)
 	assert.NoError(t, err)

@@ -35,10 +35,10 @@ type HookConfig struct {
 	Name        string `toml:"name"`
 	Description string `toml:"description"`
 	Command     string `toml:"command"`
-	Triggers    struct {
+	On          struct {
 		PostUpdateImageMetadata *shared.ImageFilters `toml:"post_update_image_metadata"`
 		ImageDispatch           *ImageDispatchTrigger           `toml:"image_dispatch"`
-	} `toml:"triggers"`
+	} `toml:"on"`
 	Env         map[string]string `toml:"env"` // 允许在 TOML 中配置自定义环境变量，键值对都为字符串
 	Dir         string            `toml:"-"`   // Hook 配置文件所在的父目录
 }
@@ -176,7 +176,7 @@ func (r *Runner) List(ctx context.Context) ([]*domhook.Hook, error) {
 	}
 	var res []*domhook.Hook
 	for _, h := range hooks {
-		res = append(res, domhook.FromRepository(h.ID, h.Name, h.Description, h.Triggers.ImageDispatch != nil))
+		res = append(res, domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil))
 	}
 	return res, nil
 }
@@ -189,7 +189,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 
 	var targetHook *HookConfig
 	for _, h := range hooks {
-		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.Triggers.ImageDispatch != nil)
+		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil)
 		if domH.ID() == hookID {
 			targetHook = &h
 			break
@@ -200,7 +200,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		return fmt.Errorf("hook %s not found", hookID.String())
 	}
 
-	if triggerName == "image_dispatch" && targetHook.Triggers.ImageDispatch == nil {
+	if triggerName == "image_dispatch" && targetHook.On.ImageDispatch == nil {
 		return fmt.Errorf("hook %s does not allow manual dispatch", hookID.String())
 	}
 
@@ -266,7 +266,7 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 	}
 
 	for _, h := range hooks {
-		trigger := h.Triggers.PostUpdateImageMetadata
+		trigger := h.On.PostUpdateImageMetadata
 		if trigger == nil {
 			continue
 		}
