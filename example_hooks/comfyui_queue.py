@@ -23,6 +23,9 @@ except ImportError:
     print("      pip install Pillow", file=sys.stderr)
     sys.exit(1)
 
+KNOWN_PRIMITIVE_TYPES = {"PrimitiveInt", "PrimitiveFloat", "PrimitiveString", "PrimitiveBoolean"}
+KNOWN_SWITCH_TYPES = {"Any Switch (rgthree)", "ComfySwitchNode"}
+
 def find_terminal_input(prompt: Dict[str, Any], node_id: str, input_key: str) -> Tuple[str, str]:
     """
     在 prompt 结构中顺着连接线递归向下追溯，直到找到直接存储具体数值的叶子节点输入。
@@ -40,19 +43,28 @@ def find_terminal_input(prompt: Dict[str, Any], node_id: str, input_key: str) ->
             target_node: Dict[str, Any] = prompt.get(target_node_id, {})
             target_class: str = target_node.get("class_type", "")
             
-            # 1. 针对常见的 PrimitiveNode，其真实值存储在 inputs.value 中
-            if "Primitive" in target_class:
+            # 1. 针对精确匹配的 Primitive 节点，其真实值存储在 inputs.value 中
+            if target_class in KNOWN_PRIMITIVE_TYPES:
                 return find_terminal_input(prompt, target_node_id, "value")
                 
-            # 2. 针对 Rgthree Switch 路由中转节点，我们追溯其连着的 any_xx 或 value 输入
-            elif "Switch" in target_class or "switch" in target_class.lower():
-                for ik, iv in target_node.get("inputs", {}).items():
-                    if ik.startswith("any_") or ik == "value":
-                        res: Tuple[str, str] = find_terminal_input(prompt, target_node_id, ik)
-                        if res:
-                            return res
-                            
-            # 3. 针对其他可能中转输入信号的普通自定义节点，我们追溯其第一个同样是连接的输入
+            # 2. 针对精确匹配的 Switch 路由中转节点，我们只追溯其有效的输入端口
+            elif target_class in KNOWN_SWITCH_TYPES:
+                if target_class == "ComfySwitchNode":
+                    # ComfySwitchNode 的输入中转端口是 on_false 和 on_true
+                    for ik in ["on_false", "on_true"]:
+                        if ik in target_node.get("inputs", {}):
+                            res: Tuple[str, str] = find_terminal_input(prompt, target_node_id, ik)
+                            if res:
+                                return res
+                elif target_class == "Any Switch (rgthree)":
+                    # Any Switch (rgthree) 的输入中转端口以 any_ 开头
+                    for ik, iv in target_node.get("inputs", {}).items():
+                        if ik.startswith("any_"):
+                            res: Tuple[str, str] = find_terminal_input(prompt, target_node_id, ik)
+                            if res:
+                                return res
+                                
+            # 3. 针对其他可能中转信号的自定义节点，我们继续追溯其列表型端口
             else:
                 for ik, iv in target_node.get("inputs", {}).items():
                     iv_list = cast(List[Any], iv) if isinstance(iv, list) else []
@@ -88,14 +100,38 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
     扫描 workflow 和 prompt 中的输出节点，如果发现使用了 %date:...% 占位符且在 prompt 中被写死为旧日期，
     将其更新为当前系统时间的日期静态值。
     """
-    if not workflow or "nodes" not in workflow:
+    if not workflow:
         return
 
-    date_patterns: Dict[str, Tuple[str, str]] = {}  # node_id_str -> (py_fmt, regex_pattern)
+    # 汇总所有待处理的节点（包含顶层节点和子图内部节点）
+    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str], str]] = []
     
-    nodes: List[Dict[str, Any]] = workflow.get("nodes", [])
-    for node in nodes:
-        node_id_str: str = str(node.get("id"))
+    # 1. 收集工作流顶层节点
+    for node in workflow.get("nodes", []):
+        candidate_nodes.append((
+            node,
+            str(node.get("id")),
+            False,
+            None,
+            node.get("type")
+        ))
+        
+    # 2. 收集各子图定义内部的节点
+    subgraphs: List[Dict[str, Any]] = workflow.get("definitions", {}).get("subgraphs", [])
+    for subgraph in subgraphs:
+        subgraph_id = subgraph.get("id")
+        for node in subgraph.get("nodes", []):
+            candidate_nodes.append((
+                node,
+                str(node.get("id")),
+                True,
+                subgraph_id,
+                f"{subgraph.get('name', 'Subgraph')}:{node.get('type')}"
+            ))
+
+    date_patterns: Dict[str, Tuple[str, str, bool, Optional[str]]] = {}  # node_id_str -> (py_fmt, regex_pattern, is_subgraph, subgraph_id)
+    
+    for node, node_id_str, is_subgraph, subgraph_id, node_type_for_log in candidate_nodes:
         widgets_values_raw: Any = node.get("widgets_values")
         if not isinstance(widgets_values_raw, list):
             continue
@@ -108,8 +144,8 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
                 if match:
                     comfy_fmt: str = match.group(1)
                     py_fmt, regex_pattern = convert_comfy_date_format_to_python(comfy_fmt)
-                    date_patterns[node_id_str] = (py_fmt, regex_pattern)
-                    _LOGGER.info(f"Workflow node {node_id_str} uses date template: {comfy_fmt}")
+                    date_patterns[node_id_str] = (py_fmt, regex_pattern, is_subgraph, subgraph_id)
+                    _LOGGER.info(f"Workflow node {node_id_str} ({node_type_for_log}) uses date template: {comfy_fmt}")
                     break
                     
     if not date_patterns:
@@ -117,25 +153,35 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
         
     now = datetime.datetime.now()
     
-    for node_id_str, (py_fmt, regex_pattern) in date_patterns.items():
-        if node_id_str in prompt:
-            inputs: Dict[str, Any] = prompt[node_id_str].get("inputs", {})
-            filename_prefix: Any = inputs.get("filename_prefix")
-            
-            if filename_prefix:
-                # 追溯 filename_prefix 端口的值源头
-                src_node_id: str
-                src_key: str
-                src_node_id, src_key = find_terminal_input(prompt, node_id_str, "filename_prefix")
-                if src_node_id in prompt:
-                    src_inputs = prompt[src_node_id].setdefault("inputs", {})
-                    prefix_val: Any = src_inputs.get(src_key)
-                    if isinstance(prefix_val, str):
-                        new_date_str: str = now.strftime(py_fmt)
-                        if re.search(regex_pattern, prefix_val):
-                            new_prefix: str = re.sub(regex_pattern, new_date_str, prefix_val)
-                            src_inputs[src_key] = new_prefix
-                            _LOGGER.info(f"Prompt node {src_node_id} (key {src_key}) filename_prefix updated: {prefix_val} -> {new_prefix}")
+    for node_id_str, (py_fmt, regex_pattern, is_subgraph, subgraph_id) in date_patterns.items():
+        # 映射到 API (prompt) 端节点 ID 列表。对于子图节点，需根据其所有顶层实例生成前缀 ID 列表。
+        api_node_ids: List[str] = []
+        if not is_subgraph:
+            api_node_ids = [node_id_str]
+        else:
+            for parent_node in workflow.get("nodes", []):
+                if parent_node.get("type") == subgraph_id:
+                    api_node_ids.append(f"{parent_node.get('id')}:{node_id_str}")
+
+        for api_node_id in api_node_ids:
+            if api_node_id in prompt:
+                inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
+                filename_prefix: Any = inputs.get("filename_prefix")
+                
+                if filename_prefix:
+                    # 追溯 filename_prefix 端口的值源头
+                    src_node_id: str
+                    src_key: str
+                    src_node_id, src_key = find_terminal_input(prompt, api_node_id, "filename_prefix")
+                    if src_node_id in prompt:
+                        src_inputs = prompt[src_node_id].setdefault("inputs", {})
+                        prefix_val: Any = src_inputs.get(src_key)
+                        if isinstance(prefix_val, str):
+                            new_date_str: str = now.strftime(py_fmt)
+                            if re.search(regex_pattern, prefix_val):
+                                new_prefix: str = re.sub(regex_pattern, new_date_str, prefix_val)
+                                src_inputs[src_key] = new_prefix
+                                _LOGGER.info(f"Prompt node {src_node_id} (key {src_key}) filename_prefix updated: {prefix_val} -> {new_prefix}")
 
 def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
     """
@@ -144,14 +190,39 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
     通过识别 workflow.nodes 中 widgets_values 的数组临接特征（[seed数值, 变化策略]）精准替换种子值。
     返回成功修改的种子总数。
     """
-    if not workflow or "nodes" not in workflow:
+    if not workflow:
         return 0
 
     modified_count: int = 0
-    # 1. 遍历 UI 端的工作流节点，精准定位包含种子的 Widget 并根据其设定的策略更新为当时生成所使用的数值
-    nodes: List[Dict[str, Any]] = workflow.get("nodes", [])
-    for node in nodes:
-        node_id_str: str = str(node.get("id"))
+    
+    # 汇总所有待处理的节点（包含顶层节点和子图内部节点）
+    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str], str]] = []
+    
+    # 1. 收集工作流顶层节点
+    for node in workflow.get("nodes", []):
+        candidate_nodes.append((
+            node,
+            str(node.get("id")),
+            False,
+            None,
+            node.get("type")
+        ))
+        
+    # 2. 收集各子图定义内部的节点
+    subgraphs: List[Dict[str, Any]] = workflow.get("definitions", {}).get("subgraphs", [])
+    for subgraph in subgraphs:
+        subgraph_id = subgraph.get("id")
+        for node in subgraph.get("nodes", []):
+            candidate_nodes.append((
+                node,
+                str(node.get("id")),
+                True,
+                subgraph_id,
+                f"{subgraph.get('name', 'Subgraph')}:{node.get('type')}"
+            ))
+
+    # 遍历所有候选节点，定位包含种子的 Widget 并更新
+    for node, node_id_str, is_subgraph, subgraph_id, node_type_for_log in candidate_nodes:
         widgets_values_raw: Any = node.get("widgets_values")
         if not isinstance(widgets_values_raw, list):
             continue
@@ -181,27 +252,38 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
                 # A. 尝试更新 workflow 中的数值，使用户用 Web UI 打开 workflow 即可重现生成数值
                 widgets_values[idx] = new_seed
                 modified_count += 1
-                _LOGGER.info(f"Workflow node {node_id_str} ({node.get('type')}) seed updated: {old_seed} -> {new_seed} (strategy: {strategy})")
+                _LOGGER.info(f"Workflow node {node_id_str} ({node_type_for_log}) seed updated: {old_seed} -> {new_seed} (strategy: {strategy})")
                 
-                # B. 同步修改 API 端 (prompt) 结构中对应的连接源头。
-                if node_id_str in prompt:
-                    inputs: Dict[str, Any] = prompt[node_id_str].get("inputs", {})
-                    # 遍历此节点在 prompt 中的所有 inputs，寻找和当前种子关联的端口并追溯修改其源头值
-                    for ik in list(inputs.keys()):
-                        src_node_id: str
-                        src_key: str
-                        src_node_id, src_key = find_terminal_input(prompt, node_id_str, ik)
-                        if src_node_id in prompt:
-                            src_node: Dict[str, Any] = prompt[src_node_id]
-                            src_inputs: Dict[str, Any] = src_node.get("inputs", {})
-                            current_val: Any = src_inputs.get(src_key)
-                            
-                            # 校验当前值是否等于 old_seed 且满足种子标识或 Primitive 属性
-                            if (current_val == old_seed or str(current_val) == str(old_seed)) and \
-                               ("seed" in ik or "seed" in src_key or "Primitive" in src_node.get("class_type", "")):
-                                src_inputs[src_key] = new_seed
-                                _LOGGER.info(f"  -> Prompt structure sync: updated source node {src_node_id} key {src_key} = {new_seed}")
+                # B. 映射到 API (prompt) 端节点 ID 列表。对于子图节点，需根据其所有顶层实例生成前缀 ID 列表。
+                api_node_ids: List[str] = []
+                if not is_subgraph:
+                    api_node_ids = [node_id_str]
+                else:
+                    for parent_node in workflow.get("nodes", []):
+                        if parent_node.get("type") == subgraph_id:
+                            api_node_ids.append(f"{parent_node.get('id')}:{node_id_str}")
+                
+                # 同步修改 API 端 (prompt) 结构中对应的连接源头。
+                for api_node_id in api_node_ids:
+                    if api_node_id in prompt:
+                        inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
+                        # 遍历此节点在 prompt 中的所有 inputs，寻找和当前种子关联的端口并追溯修改其源头值
+                        for ik in list(inputs.keys()):
+                            src_node_id: str
+                            src_key: str
+                            src_node_id, src_key = find_terminal_input(prompt, api_node_id, ik)
+                            if src_node_id in prompt:
+                                src_node: Dict[str, Any] = prompt[src_node_id]
+                                src_inputs: Dict[str, Any] = src_node.get("inputs", {})
+                                current_val: Any = src_inputs.get(src_key)
                                 
+                                # 校验当前值是否等于 old_seed 且满足种子标识或 Primitive 属性
+                                is_primitive = src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES
+                                if (current_val == old_seed or str(current_val) == str(old_seed)) and \
+                                   ("seed" in ik or "seed" in src_key or is_primitive):
+                                    src_inputs[src_key] = new_seed
+                                    _LOGGER.info(f"  -> Prompt structure sync: updated source node {src_node_id} key {src_key} = {new_seed}")
+                                    
     return modified_count
 
 def send_to_comfyui(comfyui_url: str, prompt: Dict[str, Any], workflow: Dict[str, Any]) -> bool:

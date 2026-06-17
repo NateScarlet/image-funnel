@@ -29,3 +29,4 @@ frontend/.vite/
 node_modules/
 frontend/public/static/open-dir/
 
+__pycache__
