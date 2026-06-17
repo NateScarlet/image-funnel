@@ -44,15 +44,18 @@ watch(showOpenDirHelp, (val) => {
 });
 
 useHotkeys(
-  {
-    "?, shift+?": () => {
-      if (hotkeyHelpDialog.visible.value) {
-        hotkeyHelpDialog.close();
-      } else {
-        hotkeyHelpDialog.open();
-      }
+  [
+    {
+      keys: ["?", "shift+?"],
+      handler: () => {
+        if (hotkeyHelpDialog.visible.value) {
+          hotkeyHelpDialog.close();
+        } else {
+          hotkeyHelpDialog.open();
+        }
+      },
     },
-  },
+  ],
   {
     description: "显示/隐藏快捷键帮助",
     category: "全局",
