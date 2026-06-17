@@ -164,8 +164,10 @@ import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
 import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
-import useStorage from "@/composables/useStorage";
-import useDirectories from "@/composables/useDirectories";
+import useDirectories, {
+  maxUnratedCount,
+  showLargeUnrated,
+} from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 
@@ -190,20 +192,6 @@ const searchQuery = computed({
     };
   },
 });
-
-// 从 localStorage 读取未评级过滤阈值，使用全局唯一的 Key
-const { model: maxUnratedCount } = useStorage<number>(
-  localStorage,
-  "max_unrated_count_sub_dir_bf16419b",
-  () => 0,
-);
-
-// 从 localStorage 读取是否显示大量未评级目录的开关
-const { model: showLargeUnrated } = useStorage<boolean>(
-  localStorage,
-  "show_large_unrated_sub_dir_3dfc6a37",
-  () => false,
-);
 
 const subdirectoryLoadingCount = ref(0);
 

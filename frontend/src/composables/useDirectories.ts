@@ -5,7 +5,21 @@ import useRelayConnection from "./useRelayConnection";
 import useLiveConnection from "./useLiveConnection";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useDirectoryStats from "@/composables/useDirectoryStats";
+import useStorage from "@/composables/useStorage";
 import { sortBy } from "es-toolkit";
+
+// 模块级全局状态，保证单例并避免重复 key
+export const { model: maxUnratedCount } = useStorage<number>(
+  localStorage,
+  "max_unrated_count_sub_dir_bf16419b",
+  () => 0,
+);
+
+export const { model: showLargeUnrated } = useStorage<boolean>(
+  localStorage,
+  "show_large_unrated_sub_dir_3dfc6a37",
+  () => false,
+);
 import {
   BrowseDirectoriesDocument,
   DirectoryChangedDocument,

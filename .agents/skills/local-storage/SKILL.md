@@ -25,3 +25,5 @@ const { model, flush, reload, clear } = useStorage(
 useStorage已经处理了响应式优化，对于复杂对象尽量原地修改然后调用flush而不是每次都重建
 
 localStorage应该用undefined代替null 节省空间
+
+全局状态不应该各处用同一个 key 调用 useStorage　而是应该直接定义在模块级　让所有共享方直接导入

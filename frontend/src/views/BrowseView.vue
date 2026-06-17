@@ -304,7 +304,10 @@ import {
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
 import { MetaDocument } from "../graphql/generated";
-import useDirectories from "@/composables/useDirectories";
+import useDirectories, {
+  maxUnratedCount,
+  showLargeUnrated,
+} from "@/composables/useDirectories";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
@@ -313,6 +316,8 @@ import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
+import useDirectoryStats from "@/composables/useDirectoryStats";
+import { sortBy } from "es-toolkit";
 
 const { pairingRequests } = useDevices();
 const moreMenuDialog = useModalDialog();
@@ -390,16 +395,58 @@ const parentDirectoryId = computed(() => {
 });
 
 // 查询并排序的同级目录列表（当 parentDirectoryId 为空或 undefined 时跳过）
-const { sortedDirectories: sortedSiblings } = useDirectories(() => {
-  if (!parentDirectoryId.value) {
-    return { id: "" };
-  }
-  return { id: parentDirectoryId.value };
+const { sortedDirectories: sortedSiblings } = useDirectories(
+  () => {
+    if (!parentDirectoryId.value) {
+      return { id: "" };
+    }
+    return { id: parentDirectoryId.value };
+  },
+  {
+    maxUnratedCount: maxUnratedCount,
+    showLargeUnrated,
+  },
+);
+
+const { getCachedStats } = useDirectoryStats();
+
+// 对同级目录进行与子目录列表一致的过滤和额外排序
+const processedSiblings = computed(() => {
+  const dirs = sortedSiblings.value;
+  const limit = maxUnratedCount.value;
+  const showLarge = showLargeUnrated.value;
+
+  const items = dirs.map((dir) => {
+    const stats = getCachedStats(dir.id);
+    const unratedCount =
+      stats?.ratingCounts.find(
+        (rc: { rating: number; count: number }) => rc.rating === 0,
+      )?.count ?? 0;
+
+    // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
+    // 说明它本来该被过滤掉，但因为有子目录而被保留显示。
+    const isFilteredOutButShown =
+      !showLarge &&
+      limit !== undefined &&
+      stats &&
+      stats.subdirectoryCount > 0 &&
+      unratedCount > limit;
+
+    return {
+      dir,
+      isFilteredOutButShown,
+    };
+  });
+
+  // 把 isFilteredOutButShown 的排在最后，以保持与 SubdirectoryGrid 一致
+  return sortBy(items, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map(
+    (item) => item.dir,
+  );
 });
 
 // 当前目录在排序后同级目录中的索引位置
 const currentSiblingIndex = computed(() => {
-  return sortedSiblings.value.findIndex(
+  return processedSiblings.value.findIndex(
     (dir) => dir.id === currentDirectoryId.value,
   );
 });
@@ -408,7 +455,7 @@ const currentSiblingIndex = computed(() => {
 const prevSibling = computed(() => {
   const idx = currentSiblingIndex.value;
   if (idx > 0) {
-    return sortedSiblings.value[idx - 1];
+    return processedSiblings.value[idx - 1];
   }
   return undefined;
 });
@@ -416,8 +463,8 @@ const prevSibling = computed(() => {
 // 下一个同级目录
 const nextSibling = computed(() => {
   const idx = currentSiblingIndex.value;
-  if (idx !== -1 && idx < sortedSiblings.value.length - 1) {
-    return sortedSiblings.value[idx + 1];
+  if (idx !== -1 && idx < processedSiblings.value.length - 1) {
+    return processedSiblings.value[idx + 1];
   }
   return undefined;
 });
