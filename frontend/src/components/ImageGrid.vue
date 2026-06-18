@@ -523,11 +523,15 @@
               <button
                 class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
                 :disabled="selectedImageIds.length === 0 || isUpdating"
-                :class="
+                :class="[
                   selectedImageIds.length === 0
                     ? 'opacity-40 cursor-not-allowed'
-                    : ''
-                "
+                    : '',
+                  activeDropdown === 'rating'
+                    ? 'border-secondary-500/50 text-white bg-primary-700'
+                    : '',
+                ]"
+                @click="toggleDropdown('rating', $event)"
               >
                 <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24">
                   <path :d="mdiStar" fill="currentColor" />
@@ -538,11 +542,17 @@
               <!-- 评分悬浮窗 -->
               <div
                 v-if="selectedImageIds.length > 0"
-                class="absolute bottom-full right-0 mb-2 invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
+                class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
+                :class="[
+                  activeDropdown === 'rating'
+                    ? 'visible opacity-100'
+                    : 'invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100',
+                ]"
+                @click.stop
               >
                 <button
                   class="px-2 py-1 text-xs hover:bg-red-950/40 border border-transparent hover:border-red-900/50 rounded-lg text-red-400 transition-colors cursor-pointer select-none"
-                  @click="bulkSetRating(0)"
+                  @click="handleBulkSetRating(0)"
                 >
                   无评分
                 </button>
@@ -552,7 +562,7 @@
                   :key="r"
                   class="p-1 text-primary-300 hover:text-yellow-400 transition-colors cursor-pointer"
                   :title="`设置为 ${r} 星`"
-                  @click="bulkSetRating(r)"
+                  @click="handleBulkSetRating(r)"
                 >
                   <svg class="w-5 h-5" viewBox="0 0 24 24">
                     <path :d="mdiStar" fill="currentColor" />
@@ -566,11 +576,15 @@
               <button
                 class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
                 :disabled="selectedImageIds.length === 0 || isUpdating"
-                :class="
+                :class="[
                   selectedImageIds.length === 0
                     ? 'opacity-40 cursor-not-allowed'
-                    : ''
-                "
+                    : '',
+                  activeDropdown === 'label'
+                    ? 'border-secondary-500/50 text-white bg-primary-700'
+                    : '',
+                ]"
+                @click="toggleDropdown('label', $event)"
               >
                 <span
                   class="w-3 h-3 rounded-full bg-linear-to-tr from-sky-400 via-green-400 to-yellow-400"
@@ -581,7 +595,13 @@
               <!-- 标签悬浮窗 -->
               <div
                 v-if="selectedImageIds.length > 0"
-                class="absolute bottom-full right-0 mb-2 invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-max"
+                class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-max"
+                :class="[
+                  activeDropdown === 'label'
+                    ? 'visible opacity-100'
+                    : 'invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100',
+                ]"
+                @click.stop
               >
                 <div class="flex items-center gap-2">
                   <button
@@ -590,12 +610,12 @@
                     class="w-6 h-6 rounded-full transition-all border border-white/20 hover:scale-120 cursor-pointer relative"
                     :style="{ backgroundColor: colorHex }"
                     :title="colorName"
-                    @click="bulkSetLabel(colorName)"
+                    @click="handleBulkSetLabel(colorName)"
                   ></button>
                   <div class="w-px h-5 bg-primary-700 mx-1"></div>
                   <button
                     class="px-2 py-1 text-xs hover:bg-primary-800 border border-primary-700/60 hover:text-white rounded-lg text-primary-300 transition-colors cursor-pointer select-none"
-                    @click="bulkSetLabel('')"
+                    @click="handleBulkSetLabel('')"
                   >
                     清除
                   </button>
@@ -656,11 +676,15 @@
               <button
                 class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
                 :disabled="selectedImageIds.length === 0 || isBulkDispatching"
-                :class="
+                :class="[
                   selectedImageIds.length === 0 || isBulkDispatching
                     ? 'opacity-40 cursor-not-allowed'
-                    : 'cursor-pointer hover:border-secondary-500/50'
-                "
+                    : 'cursor-pointer hover:border-secondary-500/50',
+                  activeDropdown === 'hook'
+                    ? 'border-secondary-500/50 text-white bg-primary-700'
+                    : '',
+                ]"
+                @click="toggleDropdown('hook', $event)"
               >
                 <svg
                   v-if="isBulkDispatching"
@@ -688,7 +712,13 @@
               <!-- 动作悬浮窗 -->
               <div
                 v-if="selectedImageIds.length > 0"
-                class="absolute bottom-full right-0 mb-2 invisible group-hover/hook:visible opacity-0 group-hover/hook:opacity-100 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-52 flex flex-col gap-1 text-left"
+                class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-52 flex flex-col gap-1 text-left"
+                :class="[
+                  activeDropdown === 'hook'
+                    ? 'visible opacity-100'
+                    : 'invisible group-hover/hook:visible opacity-0 group-hover/hook:opacity-100',
+                ]"
+                @click.stop
               >
                 <div
                   class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none px-2 py-1"
@@ -700,7 +730,7 @@
                   :key="hook.id"
                   class="px-2 py-1 text-xs text-left text-primary-200 hover:text-white hover:bg-primary-800 rounded-lg transition-colors flex items-center justify-between cursor-pointer select-none"
                   :title="hook.description || hook.name"
-                  @click="bulkDispatch(hook.id, hook.name)"
+                  @click="handleBulkDispatch(hook.id, hook.name)"
                 >
                   <span class="truncate pr-2">{{ hook.name }}</span>
                   <svg
@@ -741,8 +771,10 @@ import {
   onMounted,
   nextTick,
   useTemplateRef,
+  watch,
 } from "vue";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
+import useEventListeners from "@/composables/useEventListeners";
 import {
   mdiImage,
   mdiFilterOff,
@@ -1007,6 +1039,53 @@ async function bulkDispatch(hookId: string, hookName: string) {
   await dispatch(hookId, hookName, selectedImageIds.value);
 }
 // #endregion
+
+// 批量操作下拉菜单状态
+const activeDropdown = ref<"rating" | "label" | "hook" | null>(null);
+
+function toggleDropdown(menu: "rating" | "label" | "hook", event: Event) {
+  event.stopPropagation();
+  if (activeDropdown.value === menu) {
+    activeDropdown.value = null;
+  } else {
+    activeDropdown.value = menu;
+  }
+}
+
+function closeDropdowns() {
+  activeDropdown.value = null;
+}
+
+// 代理批量操作并自动关闭下拉菜单
+async function handleBulkSetRating(rating: number) {
+  await bulkSetRating(rating);
+  closeDropdowns();
+}
+
+async function handleBulkSetLabel(label: string) {
+  await bulkSetLabel(label);
+  closeDropdowns();
+}
+
+async function handleBulkDispatch(hookId: string, hookName: string) {
+  await bulkDispatch(hookId, hookName);
+  closeDropdowns();
+}
+
+useEventListeners(document, ({ on }) => {
+  on("click", closeDropdowns);
+});
+
+// 监听批量状态，如果退出批量模式或没有选中图片，则关闭下拉菜单
+watch(
+  [isBulkMode, selectedImageIds],
+  () => {
+    if (!isBulkMode.value || selectedImageIds.value.length === 0) {
+      closeDropdowns();
+    }
+  },
+  { deep: true },
+);
 
 // 获取服务器元数据，用于解析物理绝对路径
 const metaLoadingCount = ref(0);
