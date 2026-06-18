@@ -820,12 +820,13 @@ const {
   clearFilters,
 } = useDirectoryState(() => props.directoryId);
 
-// 切换特定星级的筛选状态
+// 切换特定星级的筛选状态（点击统计区评星时，清除其他筛选，仅保留当前星级）
 function toggleRatingFilter(rating: number) {
   const index = filterRating.value.indexOf(rating);
   if (index >= 0) {
     filterRating.value = filterRating.value.filter((r) => r !== rating);
   } else {
+    clearFilters();
     filterRating.value = [...filterRating.value, rating].sort((a, b) => a - b);
   }
 }
