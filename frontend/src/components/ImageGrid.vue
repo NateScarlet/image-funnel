@@ -550,24 +550,7 @@
                 ]"
                 @click.stop
               >
-                <button
-                  class="px-2 py-1 text-xs hover:bg-red-950/40 border border-transparent hover:border-red-900/50 rounded-lg text-red-400 transition-colors cursor-pointer select-none"
-                  @click="handleBulkSetRating(0)"
-                >
-                  无评分
-                </button>
-                <div class="w-px h-4 bg-primary-700"></div>
-                <button
-                  v-for="r in [1, 2, 3, 4, 5]"
-                  :key="r"
-                  class="p-1 text-primary-300 hover:text-yellow-400 transition-colors cursor-pointer"
-                  :title="`设置为 ${r} 星`"
-                  @click="handleBulkSetRating(r)"
-                >
-                  <svg class="w-5 h-5" viewBox="0 0 24 24">
-                    <path :d="mdiStar" fill="currentColor" />
-                  </svg>
-                </button>
+                <RatingSelector v-model="bulkRating" />
               </div>
             </div>
 
@@ -794,6 +777,7 @@ import {
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
+import RatingSelector from "./RatingSelector.vue";
 import useBulkOperations from "@/composables/useBulkOperations";
 import RatingFilter from "./RatingFilter.vue";
 import ImageViewer from "./ImageViewer.vue";
@@ -1055,6 +1039,27 @@ function toggleDropdown(menu: "rating" | "label" | "hook", event: Event) {
 function closeDropdowns() {
   activeDropdown.value = null;
 }
+
+// 批量评分计算属性，用于绑定 RatingSelector 组件
+const bulkRating = computed<number>({
+  get() {
+    if (selectedImageIds.value.length === 0) return 0;
+    const firstId = selectedImageIds.value[0];
+    const firstImg = images.value.find((img) => img.id === firstId);
+    if (!firstImg) return 0;
+    const rating = firstImg.currentRating || 0;
+    const allSame = selectedImageIds.value.every((id) => {
+      const img = images.value.find((i) => i.id === id);
+      return (img?.currentRating || 0) === rating;
+    });
+    return allSame ? rating : 0;
+  },
+  set(val) {
+    if (typeof val === "number") {
+      void handleBulkSetRating(val);
+    }
+  },
+});
 
 // 代理批量操作并自动关闭下拉菜单
 async function handleBulkSetRating(rating: number) {
