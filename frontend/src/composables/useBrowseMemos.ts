@@ -97,6 +97,7 @@ export default function useBrowseMemos(
   });
 
   // 解析并切换 frontmatter 中的隐藏状态值
+  // 取消隐藏时移除字段；若所有字段都移除则删除整个 frontmatter
   function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
     const isCRLF = raw.includes("\r\n");
     const normalized = raw.replace(/\r\n/g, "\n");
@@ -109,33 +110,55 @@ export default function useBrowseMemos(
 
         const lines = frontmatter.split("\n");
         let found = false;
-        const newLines = lines.map((line) => {
+        const newLines: string[] = [];
+
+        for (const line of lines) {
           const trimmed = line.trim();
           if (trimmed === "" || trimmed.startsWith("#")) {
-            return line;
+            newLines.push(line);
+            continue;
           }
           const colonIndex = line.indexOf(":");
           if (colonIndex !== -1) {
             const key = line.slice(0, colonIndex).trim().toLowerCase();
             if (key === "hidden" || key === "hide") {
               found = true;
-              const indent = line.slice(0, line.indexOf(line.trim()));
-              return `${indent}${line.slice(0, colonIndex).trim()}: ${newHidden}`;
+              if (newHidden) {
+                // 隐藏：更新字段值为 true
+                const indent = line.slice(0, line.indexOf(line.trim()));
+                newLines.push(
+                  `${indent}${line.slice(0, colonIndex).trim()}: true`,
+                );
+              }
+              // 取消隐藏：跳过该行，不添加
+              continue;
             }
           }
-          return line;
-        });
+          newLines.push(line);
+        }
 
         if (!found) {
-          if (
-            newLines.length > 0 &&
-            newLines[newLines.length - 1].trim() === ""
-          ) {
-            newLines[newLines.length - 1] = `hidden: ${newHidden}`;
-            newLines.push("");
+          if (newHidden) {
+            // 不存在 hidden 字段且需要隐藏，添加字段
+            if (
+              newLines.length > 0 &&
+              newLines[newLines.length - 1].trim() === ""
+            ) {
+              newLines[newLines.length - 1] = `hidden: true`;
+              newLines.push("");
+            } else {
+              newLines.push(`hidden: true`);
+            }
           } else {
-            newLines.push(`hidden: ${newHidden}`);
+            // 不存在 hidden 字段且不需要隐藏，无需修改
+            return raw;
           }
+        }
+
+        // 所有行都为空时，移除整个 frontmatter
+        if (newLines.every((l) => l.trim() === "")) {
+          const result = body;
+          return isCRLF ? result.replace(/\n/g, "\r\n") : result;
         }
 
         const newFrontmatter = newLines.join("\n");
@@ -144,7 +167,12 @@ export default function useBrowseMemos(
       }
     }
 
-    const newFrontmatter = `---\nhidden: ${newHidden}\n---\n`;
+    // 无 frontmatter：取消隐藏无需操作，隐藏则创建 frontmatter
+    if (!newHidden) {
+      return raw;
+    }
+
+    const newFrontmatter = `---\nhidden: true\n---\n`;
     const result = newFrontmatter + normalized;
     return isCRLF ? result.replace(/\n/g, "\r\n") : result;
   }
