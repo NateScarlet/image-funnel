@@ -6,9 +6,10 @@ command = "python comfyui.py remove"
 [directive]
 name = "remove"
 usage = """
-/remove [-S] [--raw] <prompt>
+/remove [-S] [--raw] <prompt>...
 给当前目录所有 4 星图片的 ComfyUI 工作流移除指定提示词后再将其入列生成。
 在会话提交后触发，也可以手动通过笔记触发。
+可传入多个提示词，多个提示词会以空格拼接为一个整体后再移除
 
 选项：
 -S --no-skip 没找到对应提示词也要执行，不指定时会跳过不存在对应提示词的图片

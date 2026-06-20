@@ -6,10 +6,11 @@ command = "python comfyui.py add"
 [directive]
 name = "add"
 usage = """
-/add [--no-skip] [--neg] [--raw] <prompt>
+/add [--no-skip] [--neg] [--raw] <prompt>...
 给当前目录所有 4 星图片的 ComfyUI 工作流添加提示词后再将其入列生成。
 在会话提交后触发，也可以手动通过笔记触发。
 插入位置默认为　Marker 标记的区域位置，如果没找到则尝试自动找到正向提示词位置的输入位置并添加标记，找不到则报错
+可传入多个提示词，多个提示词会以空格拼接为一个整体后再添加
 提示词单独一行
 
 选项：
