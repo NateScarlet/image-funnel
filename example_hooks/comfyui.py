@@ -745,8 +745,10 @@ def get_target_clip_node(prompt: Dict[str, Any], is_neg: bool) -> Optional[str]:
             node = cast(Dict[str, Any], prompt.get(nid, {}))
             text_val = cast(Dict[str, Any], node.get("inputs", {})).get("text", "")
             if isinstance(text_val, str):
-                text_lower = text_val.lower()
-                matches = sum(1 for kw in keywords if kw in text_lower)
+                text_normalized = text_val.lower().replace("_", " ")
+                matches = sum(
+                    1 for kw in keywords if kw.replace("_", " ") in text_normalized
+                )
 
                 # 优先匹配关键词数量最多的输入，相同时取最长文本
                 if matches > max_matches:

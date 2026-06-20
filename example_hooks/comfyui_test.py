@@ -398,6 +398,45 @@ class TestComfyUIHook(unittest.TestCase):
         finally:
             del os.environ["HOOK_POSITIVE_KEYWORDS"]
 
+        # 5. 测试空格与下划线等价性匹配
+        os.environ["HOOK_POSITIVE_KEYWORDS"] = "best quality, score_7"
+        prompt_eq = {
+            # 匹配 best quality (通过 best_quality) 和 score_7 (匹配 score_7) -> 匹配 2 个
+            "node_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece, best_quality, score_7"},
+            },
+            # 仅匹配 score_7 (通过 score 7) -> 匹配 1 个
+            "node_2": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "score 7, simple text"},
+            },
+        }
+        try:
+            target_eq = get_target_clip_node(prompt_eq, is_neg=False)
+            self.assertEqual(target_eq, "node_1")
+        finally:
+            del os.environ["HOOK_POSITIVE_KEYWORDS"]
+
+        os.environ["HOOK_NEGATIVE_KEYWORDS"] = "worst_quality, low quality"
+        prompt_eq_neg = {
+            # 仅匹配 low quality (通过 low_quality)
+            "node_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "low_quality, safe text"},
+            },
+            # 匹配 worst_quality (通过 worst quality) 和 low quality (通过 low quality) -> 匹配 2 个
+            "node_2": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "worst quality, low quality"},
+            },
+        }
+        try:
+            target_eq_neg = get_target_clip_node(prompt_eq_neg, is_neg=True)
+            self.assertEqual(target_eq_neg, "node_2")
+        finally:
+            del os.environ["HOOK_NEGATIVE_KEYWORDS"]
+
 
 if __name__ == "__main__":
     unittest.main()
