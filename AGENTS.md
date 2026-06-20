@@ -97,8 +97,18 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 
 ## 关键约定
 
+- **依赖注入：** 所有实现所需的依赖都应该显式注入而不是依赖自己尝试获取并尝试降级
+- **快速失败：**　逻辑不能正常进行应直接报错而不是尝试容错，禁止添加未要求的错误处理，忽略错误数据或调用必须先获得用户明确允许。
+- **调试友好：**　错误捕获禁止直接忽略任何错误，要么进行有意义的处理，要么只忽略具体的错误类型，禁止忽略错误，如果确定不可能出错应该添加panic。
+- **立即实现：**　立即实现所有用户要求的功能，不能偷懒用注释标记为以后实现
+
+### 术语
+
+- 配套文件：以图片文件名加上额外后缀的文件为配套文件，和图片 basename 相同但是后缀不同的文件**不是**配套文件，因为相同名称不同格式可能有多个图片，图片不能是另一个图片的配套文件。
+
 ### Go
 
+- **资源释放：**：局部资源比如锁或文件，尽量使用单独方法或IIFE搭配defer确保释放
 - **无 `Get` 前缀**: 查询方法直接使用大写名称，如 `Session()` 而非 `GetSession()`
 - **`iter.Seq` / `iter.Seq2[T, error]`**: 使用迭代器模式减少数组分配
 - **构造函数**: 使用 `New` 前缀，如需清理，将清理函数作为第二个返回值
@@ -132,17 +142,17 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **间接关联获取与内聚ID生成**: 对于非扫描得到的间接图片关联（如垃圾箱历史中的封面图 CoverImage），如果其对应的物理文件存在于特定子目录，接口层（Resolver）严禁在本地手动拼装非标 ID 或本地手造 `ImageDTO`。应当在领域服务中增加 `ImageByRelPath`（无 `Get` 前缀）查询方法，直接根据相对路径从仓库加载实体，让其内部自动通过领域模型内聚生成带有修改时间的安全 ID，最后通过 `DTOFactory` 转换为标准的 `ImageDTO`。对于文件不存在的情况，Resolver 应当使用 `apperror.IgnoreNotFound` 或 `apperror.IsNotFound` 优雅过滤错误并返回 `nil` 降级，避免直接使用底层的 `os.ErrNotExist`，以防阻塞上层列表查询。
 - **全局 Node 接口实现**: 任何具有全局唯一 ID 且需被客户端独立查询或被前端 Apollo Client 识别以进行缓存同步的实体（如 `Image` 实体），必须在 GraphQL Schema 中声明 `implements Node`，同时在 `node` 查询 Resolver 中补充其 ID 前缀的解析分支（如 `img:` 分发给 `r.app.Image`），保证能够被 `node(id)` 正确查询返回。
 
-
-
 ### Vue / TypeScript
 
 - **声明式优先**: 使用 `computed` 而非 `watch` 维护状态。
-  - *示例*：在切换目录时重置并隔离搜索词。避免使用命令式的 `watch(() => id, () => query.value = "")`，而是定义一个包含 `{ id, query }` 的局部缓冲区 `ref`，并利用带有 `get` 和 `set` 的 `computed` 属性声明式地处理状态：
+  - _示例_：在切换目录时重置并隔离搜索词。避免使用命令式的 `watch(() => id, () => query.value = "")`，而是定义一个包含 `{ id, query }` 的局部缓冲区 `ref`，并利用带有 `get` 和 `set` 的 `computed` 属性声明式地处理状态：
     ```typescript
     const queryBuffer = ref({ id, query: "" });
     const query = computed({
-      get: () => queryBuffer.value.id === id ? queryBuffer.value.query : "",
-      set: (val) => { queryBuffer.value = { id, query: val }; }
+      get: () => (queryBuffer.value.id === id ? queryBuffer.value.query : ""),
+      set: (val) => {
+        queryBuffer.value = { id, query: val };
+      },
     });
     ```
 - **模板引用**: 使用 `useTemplateRef`（单个）或 `@/composables/useTemplateRefs`（数组）
@@ -173,6 +183,11 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
+
+### Python
+
+- 标注所有参数类型，尽量避免 Any
+- 修改后使用 ./scripts/check-python.ps1 检查类型
 
 ### 通用
 

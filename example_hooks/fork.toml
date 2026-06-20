@@ -1,0 +1,19 @@
+id = "fork"
+name = "移动图片"
+description = "即时运行 /fork 笔记指令"
+command = "python fork.py"
+
+[directive]
+name = "fork"
+usage = """
+/fork <suffix>
+将图片和配套文件移动到当前目录同级的目录，目录名称为 `当前目录名称,<suffix>` ，suffix 为必填，根目录触发改为创建名称为 <suffix> 的子目录
+"""
+on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
+
+[on.post_update_memo]
+ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，备忘录中未含该指令也依然触发）
+
+[env]
+HOOK_IMAGE_SET_LABEL = "Yellow"
+

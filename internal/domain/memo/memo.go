@@ -53,8 +53,7 @@ func ParseContent(raw string) (hidden bool, body string) {
 	body = parts[2]
 
 	// 简单逐行解析 frontmatter
-	lines := strings.Split(frontmatter, "\n")
-	for _, line := range lines {
+	for line := range strings.SplitSeq(frontmatter, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

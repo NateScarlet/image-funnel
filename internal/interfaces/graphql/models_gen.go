@@ -125,6 +125,22 @@ type DispatchImageHookPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
+// 手动派发笔记钩子的输入
+type DispatchMemoHookInput struct {
+	// 笔记 ID
+	MemoID scalar.ID `json:"memoId"`
+	// 要触发的钩子 ID
+	HookID scalar.ID `json:"hookId"`
+	// 客户端突变标识
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+// 手动派发笔记钩子的返回数据
+type DispatchMemoHookPayload struct {
+	// 客户端突变标识
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 // 手动清空回收站，将所有暂存文件移到系统回收站
 type EmptyTrashPayload struct {
 	// 此次被真正清理进系统回收站的历史数量

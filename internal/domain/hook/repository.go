@@ -7,21 +7,45 @@ import (
 	"main/internal/scalar"
 )
 
+// Directive 钩子提供的笔记指令值对象
+type Directive struct {
+	Name            string // 指令名称，用于 slash command 匹配
+	Usage           string // 使用说明，包含参数格式和选项描述
+	OnSuccessAction string // 执行成功后的行为，如 COMMENT_OUT, REMOVE, KEEP
+	OnFailAction    string // 执行失败后的行为，如 COMMENT_OUT, REMOVE, KEEP
+}
+
 // Hook 外部钩子领域实体
 type Hook struct {
-	id                 scalar.ID
-	name               string
-	description        string
-	canDispatchByImage bool
+	id                           scalar.ID
+	name                         string
+	description                  string
+	canDispatchByImage           bool
+	canDispatchByMemo            bool
+	directive                    *Directive // nil 表示该 hook 不提供指令
+	hasPostUpdateMemo            bool
+	hasPostCommitSessionMemoScan bool
 }
 
 // FromRepository 从仓库构造外部钩子领域实体，进行安全隔离 ID 编码
-func FromRepository(rawID string, name, description string, canDispatchByImage bool) *Hook {
+func FromRepository(
+	rawID string,
+	name, description string,
+	canDispatchByImage bool,
+	canDispatchByMemo bool,
+	directive *Directive,
+	hasPostUpdateMemo bool,
+	hasPostCommitSessionMemoScan bool,
+) *Hook {
 	return &Hook{
-		id:                 encodeID(rawID),
-		name:               name,
-		description:        description,
-		canDispatchByImage: canDispatchByImage,
+		id:                           encodeID(rawID),
+		name:                         name,
+		description:                  description,
+		canDispatchByImage:           canDispatchByImage,
+		canDispatchByMemo:            canDispatchByMemo,
+		directive:                    directive,
+		hasPostUpdateMemo:            hasPostUpdateMemo,
+		hasPostCommitSessionMemoScan: hasPostCommitSessionMemoScan,
 	}
 }
 
@@ -36,10 +60,14 @@ func decodeID(id scalar.ID) string {
 	return strings.TrimPrefix(id.String(), "hk:")
 }
 
-func (h *Hook) ID() scalar.ID              { return h.id }
-func (h *Hook) Name() string               { return h.name }
-func (h *Hook) Description() string        { return h.description }
-func (h *Hook) CanDispatchByImage() bool   { return h.canDispatchByImage }
+func (h *Hook) ID() scalar.ID                            { return h.id }
+func (h *Hook) Name() string                             { return h.name }
+func (h *Hook) Description() string                      { return h.description }
+func (h *Hook) CanDispatchByImage() bool                  { return h.canDispatchByImage }
+func (h *Hook) CanDispatchByMemo() bool                   { return h.canDispatchByMemo }
+func (h *Hook) Directive() *Directive                     { return h.directive }
+func (h *Hook) HasPostUpdateMemo() bool                  { return h.hasPostUpdateMemo }
+func (h *Hook) HasPostCommitSessionMemoScan() bool        { return h.hasPostCommitSessionMemoScan }
 
 // Repository 钩子领域持久化层接口
 type Repository interface {
@@ -49,4 +77,8 @@ type Repository interface {
 // Runner 外部钩子执行器接口
 type Runner interface {
 	Trigger(ctx context.Context, ids []string, paths []string, hookID scalar.ID, triggerName string) error
+	OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error
+	TriggerForMemo(ctx context.Context, memoRelPath string, hookID scalar.ID) error
 }
+
+

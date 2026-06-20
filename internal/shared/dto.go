@@ -232,12 +232,26 @@ type UndoTrashResultDTO struct {
 	ClientMutationID *string
 }
 
+// HookDirectiveDTO 外部钩子提供的笔记指令数据传输对象
+type HookDirectiveDTO struct {
+	Name  string
+	Usage string
+}
+
 // HookDTO 外部钩子配置数据传输对象
 type HookDTO struct {
 	ID                 scalar.ID
 	Name               string
 	Description        string
 	CanDispatchByImage bool
+	CanDispatchByMemo  bool
+	Directive          *HookDirectiveDTO
+}
+
+// SessionCommittedEvent 会话提交事件
+type SessionCommittedEvent struct {
+	SessionID   scalar.ID
+	DirectoryID scalar.ID
 }
 
 // MetadataUpdatedEvent 图片元数据更新事件

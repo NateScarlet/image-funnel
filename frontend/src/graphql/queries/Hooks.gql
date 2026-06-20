@@ -4,5 +4,10 @@ query Hooks {
     name
     description
     canDispatchByImage
+    canDispatchByMemo
+    directive {
+      name
+      usage
+    }
   }
 }

@@ -135,5 +135,12 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	s.sessionSaved.Publish(ctx, session.ID())
 
+	dir, err := s.directoryResolver.GetDirectory(ctx, session.DirectoryID())
+	if err == nil && dir != nil {
+		if err := s.hookRunner.OnCommitSession(ctx, dir.ID(), dir.RelPath()); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	return successCount, errors.Join(errs...)
 }

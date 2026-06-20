@@ -10,4 +10,5 @@ type EventBus interface {
 	PublishFileChanged(ctx context.Context, event *shared.FileChangedEvent)
 	SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error]
 	SubscribeSession(ctx context.Context) iter.Seq2[*shared.SessionDTO, error]
+	PublishSessionCommitted(ctx context.Context, event *shared.SessionCommittedEvent)
 }

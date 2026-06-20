@@ -1,0 +1,5 @@
+mutation DispatchMemoHook($input: DispatchMemoHookInput!) {
+  dispatchMemoHook(input: $input) {
+    clientMutationId
+  }
+}

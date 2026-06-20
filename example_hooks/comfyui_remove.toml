@@ -1,0 +1,36 @@
+id = "comfyui-remove"
+name = "移除 ComfyUI 提示词"
+description = "在会话提交时运行 /remove 指令，"
+command = "python comfyui.py remove"
+
+[directive]
+name = "remove"
+usage = """
+/remove [-S] [--raw] <prompt>
+给当前目录所有 4 星图片的 ComfyUI 工作流移除指定提示词后再将其入列生成。
+在会话提交后触发，也可以手动通过笔记触发。
+
+选项：
+-S --no-skip 没找到对应提示词也要执行，不指定时会跳过不存在对应提示词的图片
+--raw 移除时不移除整句，而是精确只移除句子中的指定文本
+--neg 移除负面提示词而不是正面
+--hard 直接删除文本而不是注释对应文本，指定 --raw 的时候自动隐含
+"""
+on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remove ... %% 注释掉避免再次触发
+on_fail_action = "REMOVE"
+
+[on.post_commit_session.memo_scan] # 会话提交后，扫描目录内笔记，对每一个笔记触发钩子逻辑
+ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，备忘录中未含该指令也依然触发）
+
+[on.memo_dispatch]
+
+[env]
+HOOK_QUEUE_COUNT = "4"
+HOOK_IMAGE_RATING = "4"
+HOOK_POSITIVE_START_MARKER = "//#region hook-positive"
+HOOK_POSITIVE_END_MARKER = "//#endregion hook-positive"
+HOOK_NEGATIVE_START_MARKER = "//#region hook-negative"
+HOOK_NEGATIVE_END_MARKER = "//#endregion hook-negative"
+HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
+HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"
+

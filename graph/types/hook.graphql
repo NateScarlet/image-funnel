@@ -5,4 +5,8 @@ type Hook @goModel(model: "main/internal/shared.HookDTO") {
   description: String!
   "是否支持按图片手动触发分发"
   canDispatchByImage: Boolean!
+  "是否支持按笔记手动触发分发"
+  canDispatchByMemo: Boolean!
+  "笔记指令配置，如果为空则表示不支持通过该钩子触发指令"
+  directive: HookDirective
 }

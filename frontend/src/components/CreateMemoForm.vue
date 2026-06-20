@@ -65,13 +65,11 @@
         >
           笔记内容
         </label>
-        <textarea
-          ref="textarea"
+        <MemoEditor
+          ref="memoEditor"
           v-model="content"
-          class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl px-4 py-3 sm:px-8 sm:py-6 short:py-1 text-sm sm:text-xl text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none leading-relaxed min-h-30 sm:min-h-60 short:min-h-10 max-h-[50vh] short:max-h-none overflow-y-auto"
           placeholder="输入备注内容..."
-          data-no-gesture
-        ></textarea>
+        />
       </div>
 
       <!-- 操作按钮区 -->
@@ -104,9 +102,9 @@ import { ref, useTemplateRef, onMounted } from "vue";
 import type { MemoFragment } from "@/graphql/generated";
 import { CreateMemoDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
+import MemoEditor from "./MemoEditor.vue";
 import { mdiNoteTextOutline, mdiClose, mdiLoading } from "@mdi/js";
 import useNotification from "@/composables/useNotification";
-import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -121,13 +119,10 @@ const filename = ref("README");
 const content = ref("");
 
 const filenameInput = useTemplateRef<HTMLInputElement>("filenameInput");
-const textarea = useTemplateRef<HTMLTextAreaElement>("textarea");
+const memoEditorRef = useTemplateRef("memoEditor");
 const isSaving = ref(false);
 
 const { showError, showSuccess } = useNotification();
-
-// 自动调整高度
-useTextAreaAutoHeight(textarea, content);
 
 // 组件挂载后默认聚焦在文件名输入框上
 onMounted(() => {
@@ -136,7 +131,7 @@ onMounted(() => {
 
 // 在文件名输入框按回车时自动聚焦到内容框
 function focusContent() {
-  textarea.value?.focus();
+  memoEditorRef.value?.focus();
 }
 
 async function saveMemo() {

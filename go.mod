@@ -7,6 +7,7 @@ require (
 	github.com/NateScarlet/gqlgen-batching v1.0.1
 	github.com/NateScarlet/iso8601 v0.3.2
 	github.com/beevik/etree v1.6.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/golang-jwt/jwt/v5 v5.3.1

@@ -29,6 +29,7 @@ type EventBus struct {
 	deviceDeletedTopic pubsub.Topic[scalar.ID]
 
 	metadataUpdatedTopic pubsub.Topic[*shared.MetadataUpdatedEvent]
+	sessionCommittedTopic pubsub.Topic[*shared.SessionCommittedEvent]
 
 	sessionRepo    dsession.Repository
 	sessionFactory *appsession.DTOFactory
@@ -47,6 +48,7 @@ func NewEventBus(
 	sessionFactory *appsession.DTOFactory,
 	deviceFactory *appdevice.DTOFactory,
 ) *EventBus {
+	sessionCommittedTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionCommittedEvent](pubsub.InMemoryTopicWithCapacity(1024))
 	return &EventBus{
 		sessionTopic:         sessionTopic,
 		fileChangedTopic:     fileChangedTopic,
@@ -55,6 +57,7 @@ func NewEventBus(
 		deviceSavedTopic:     deviceSavedTopic,
 		deviceDeletedTopic:   deviceDeletedTopic,
 		metadataUpdatedTopic: metadataUpdatedTopic,
+		sessionCommittedTopic: sessionCommittedTopic,
 		sessionRepo:          sessionRepo,
 		sessionFactory:       sessionFactory,
 		deviceFactory:        deviceFactory,
@@ -134,6 +137,14 @@ func (b *EventBus) PublishMetadataUpdated(ctx context.Context, event *shared.Met
 
 func (b *EventBus) SubscribeMetadataUpdated(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
 	return b.metadataUpdatedTopic.Subscribe(ctx)
+}
+
+func (b *EventBus) PublishSessionCommitted(ctx context.Context, event *shared.SessionCommittedEvent) {
+	b.sessionCommittedTopic.Publish(ctx, event)
+}
+
+func (b *EventBus) SubscribeSessionCommitted(ctx context.Context) iter.Seq2[*shared.SessionCommittedEvent, error] {
+	return b.sessionCommittedTopic.Subscribe(ctx)
 }
 
 // 确保实现接口

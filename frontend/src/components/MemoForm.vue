@@ -36,14 +36,14 @@
       class="px-4 sm:px-10 py-4 sm:py-10 short:px-2 short:py-1 overflow-y-auto flex-1 min-h-0 text-left"
     >
       <div class="relative w-full group">
-        <textarea
-          ref="textarea"
+        <MemoEditor
+          ref="memoEditor"
           v-model="content"
-          class="w-full bg-primary-800/50 hover:bg-primary-800 focus:bg-primary-800 border border-primary-700 focus:border-secondary-500/50 rounded-xl px-4 py-3 sm:px-8 sm:py-6 short:py-1 text-sm sm:text-xl text-primary-100 placeholder-primary-500 outline-none transition-all duration-300 resize-none leading-relaxed min-h-30 sm:min-h-60 short:min-h-10 max-h-[50vh] short:max-h-none overflow-y-auto"
           placeholder="输入备注... (自动保存)"
-          data-no-gesture
+          :memo-id="props.memo.id"
+          :on-before-dispatch="flush"
           @input="handleInput"
-        ></textarea>
+        />
         <div
           class="absolute bottom-2 sm:bottom-6 right-3 sm:right-8 text-xs sm:text-sm uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-2"
           :class="{
@@ -77,7 +77,8 @@
       <p
         class="mt-3 sm:mt-8 short:hidden text-xs sm:text-base text-primary-500 italic leading-relaxed"
       >
-        备注信息将保存为同名的 .md 文件。内容为空时将自动删除备注文件。
+        修改内容将在关闭对话框时自动保存。备注信息将保存为同名的 .md
+        文件。内容为空时将自动删除备注文件。
       </p>
     </div>
   </div>
@@ -86,8 +87,8 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { MemoFragment as Memo } from "../graphql/generated";
-import { debounce } from "es-toolkit";
 import useMemo from "@/composables/useMemo";
+import MemoEditor from "./MemoEditor.vue";
 import {
   mdiNoteTextOutline,
   mdiClose,
@@ -96,7 +97,6 @@ import {
   mdiAlertCircleOutline,
 } from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
-import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -111,10 +111,10 @@ const displayTitle = computed(() => {
   return basename.replace(/\.md$/, "");
 });
 
-const textarea = useTemplateRef("textarea");
+const memoEditorRef = useTemplateRef("memoEditor");
 
 function focus() {
-  textarea.value?.focus();
+  memoEditorRef.value?.focus();
 }
 
 const { memo: serverMemo, updateMemo } = useMemo(() => props.memo.id);
@@ -133,8 +133,6 @@ const content = computed({
   },
 });
 
-useTextAreaAutoHeight(textarea, content);
-
 enum SaveStatus {
   IDLE,
   SAVING,
@@ -145,7 +143,11 @@ enum SaveStatus {
 const isSaving = ref(false);
 const lastSaved = ref<{ id: string; at: number }>();
 const lastError = ref<{ id: string; at: number }>();
-const isPending = ref(false);
+const isPending = computed(() => {
+  const currentVal = content.value;
+  const actualVal = serverMemo.value?.rawContent ?? props.memo.rawContent;
+  return currentVal !== actualVal;
+});
 
 // 声明式调度刷新，确保状态在超时后自动更新
 refreshOn(() => [lastSaved.value ? lastSaved.value.at + 2000 : undefined]);
@@ -194,24 +196,19 @@ const performSave = async (newContent: string, targetId: string) => {
     lastError.value = { id: targetId, at: Date.now() };
   } finally {
     isSaving.value = false;
-    isPending.value = false;
   }
 };
 
-const save = debounce(performSave, 500);
-
 function handleInput() {
-  isPending.value = true;
   // 输入时清除成功状态，但保留错误状态直到保存成功
   lastSaved.value = undefined;
-  save(content.value, props.memo.id);
 }
 
-function flush() {
+async function flush() {
   if (isPending.value) {
-    save.cancel();
-    performSave(content.value, props.memo.id);
+    await performSave(content.value, props.memo.id);
   }
+  contentBuffer.value = undefined;
 }
 
 defineExpose({ flush, focus });

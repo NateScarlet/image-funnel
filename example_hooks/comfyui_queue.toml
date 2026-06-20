@@ -1,11 +1,22 @@
 id = "comfyui-queue"
 name = "发送至 ComfyUI"
 description = "提取图片内置的工作流，更新随机种子并自动发送至 ComfyUI API 重新入列生成，如果配置了 HOOK_IMAGE_SET_LABEL 环境变量则自动更新图片颜色标签"
-command = "python comfyui_queue.py"
+command = "python comfyui.py queue"
+
+[directive]
+name = "queue"
+usage = """
+/queue
+和通过图片触发 `发送至 ComfyUI` 入列效果一致
+"""
+on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
 
 [on.post_update_image_metadata]
 rating = [4]
 label = [""]
+
+[on.post_update_memo]
+ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，备忘录中未含该指令也依然触发）
 
 [on.image_dispatch]
 

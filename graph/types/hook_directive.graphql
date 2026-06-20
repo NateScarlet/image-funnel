@@ -1,0 +1,7 @@
+"外部钩子提供的笔记指令配置"
+type HookDirective @goModel(model: "main/internal/shared.HookDirectiveDTO") {
+  "指令名称，例如 add"
+  name: String!
+  "使用说明，包含参数格式和选项描述"
+  usage: String!
+}

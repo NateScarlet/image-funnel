@@ -160,6 +160,10 @@ type ComplexityRoot struct {
 		ClientMutationID func(childComplexity int) int
 	}
 
+	DispatchMemoHookPayload struct {
+		ClientMutationID func(childComplexity int) int
+	}
+
 	EmptyTrashPayload struct {
 		ClearedCount     func(childComplexity int) int
 		ClientMutationID func(childComplexity int) int
@@ -184,9 +188,16 @@ type ComplexityRoot struct {
 
 	Hook struct {
 		CanDispatchByImage func(childComplexity int) int
+		CanDispatchByMemo  func(childComplexity int) int
 		Description        func(childComplexity int) int
+		Directive          func(childComplexity int) int
 		ID                 func(childComplexity int) int
 		Name               func(childComplexity int) int
+	}
+
+	HookDirective struct {
+		Name  func(childComplexity int) int
+		Usage func(childComplexity int) int
 	}
 
 	Image struct {
@@ -279,6 +290,7 @@ type ComplexityRoot struct {
 		CreateSession              func(childComplexity int, input CreateSessionInput) int
 		DeleteDevice               func(childComplexity int, input DeleteDeviceInput) int
 		DispatchImageHook          func(childComplexity int, input DispatchImageHookInput) int
+		DispatchMemoHook           func(childComplexity int, input DispatchMemoHookInput) int
 		EmptyTrash                 func(childComplexity int, minAge scalar.Duration) int
 		FinishWebAuthnLogin        func(childComplexity int, input FinishWebAuthnLoginInput) int
 		FinishWebAuthnRegistration func(childComplexity int, input FinishWebAuthnRegistrationInput) int
@@ -462,6 +474,7 @@ type MutationResolver interface {
 	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
 	DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error)
+	DispatchMemoHook(ctx context.Context, input DispatchMemoHookInput) (*DispatchMemoHookPayload, error)
 	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
@@ -874,6 +887,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.DispatchImageHookPayload.ClientMutationID(childComplexity), true
 
+	case "DispatchMemoHookPayload.clientMutationId":
+		if e.complexity.DispatchMemoHookPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.DispatchMemoHookPayload.ClientMutationID(childComplexity), true
+
 	case "EmptyTrashPayload.clearedCount":
 		if e.complexity.EmptyTrashPayload.ClearedCount == nil {
 			break
@@ -961,12 +981,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Hook.CanDispatchByImage(childComplexity), true
+	case "Hook.canDispatchByMemo":
+		if e.complexity.Hook.CanDispatchByMemo == nil {
+			break
+		}
+
+		return e.complexity.Hook.CanDispatchByMemo(childComplexity), true
 	case "Hook.description":
 		if e.complexity.Hook.Description == nil {
 			break
 		}
 
 		return e.complexity.Hook.Description(childComplexity), true
+	case "Hook.directive":
+		if e.complexity.Hook.Directive == nil {
+			break
+		}
+
+		return e.complexity.Hook.Directive(childComplexity), true
 	case "Hook.id":
 		if e.complexity.Hook.ID == nil {
 			break
@@ -979,6 +1011,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Hook.Name(childComplexity), true
+
+	case "HookDirective.name":
+		if e.complexity.HookDirective.Name == nil {
+			break
+		}
+
+		return e.complexity.HookDirective.Name(childComplexity), true
+	case "HookDirective.usage":
+		if e.complexity.HookDirective.Usage == nil {
+			break
+		}
+
+		return e.complexity.HookDirective.Usage(childComplexity), true
 
 	case "Image.currentRating":
 		if e.complexity.Image.CurrentRating == nil {
@@ -1377,6 +1422,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DispatchImageHook(childComplexity, args["input"].(DispatchImageHookInput)), true
+	case "Mutation.dispatchMemoHook":
+		if e.complexity.Mutation.DispatchMemoHook == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_dispatchMemoHook_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DispatchMemoHook(childComplexity, args["input"].(DispatchMemoHookInput)), true
 	case "Mutation.emptyTrash":
 		if e.complexity.Mutation.EmptyTrash == nil {
 			break
@@ -2147,6 +2203,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDirectoryStateBrowseInput,
 		ec.unmarshalInputDirectoryStateInput,
 		ec.unmarshalInputDispatchImageHookInput,
+		ec.unmarshalInputDispatchMemoHookInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputImageFiltersInput,
@@ -2482,6 +2539,18 @@ type Hook @goModel(model: "main/internal/shared.HookDTO") {
   description: String!
   "是否支持按图片手动触发分发"
   canDispatchByImage: Boolean!
+  "是否支持按笔记手动触发分发"
+  canDispatchByMemo: Boolean!
+  "笔记指令配置，如果为空则表示不支持通过该钩子触发指令"
+  directive: HookDirective
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/hook_directive.graphql", Input: `"外部钩子提供的笔记指令配置"
+type HookDirective @goModel(model: "main/internal/shared.HookDirectiveDTO") {
+  "指令名称，例如 add"
+  name: String!
+  "使用说明，包含参数格式和选项描述"
+  usage: String!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image.graphql", Input: `"""
@@ -3039,6 +3108,26 @@ type DispatchImageHookPayload {
   clientMutationId: String
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/dispatch_memo_hook.graphql", Input: `extend type Mutation {
+  "手动为笔记触发特定的外部钩子"
+  dispatchMemoHook(input: DispatchMemoHookInput!): DispatchMemoHookPayload!
+}
+
+"手动派发笔记钩子的输入"
+input DispatchMemoHookInput {
+  "笔记 ID"
+  memoId: ID!
+  "要触发的钩子 ID"
+  hookId: ID!
+  "客户端突变标识"
+  clientMutationId: String
+}
+
+"手动派发笔记钩子的返回数据"
+type DispatchMemoHookPayload {
+  "客户端突变标识"
+  clientMutationId: String
+}`, BuiltIn: false},
 	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站，将所有暂存文件移到系统回收站"
 type EmptyTrashPayload {
   "此次被真正清理进系统回收站的历史数量"
@@ -3496,6 +3585,17 @@ func (ec *executionContext) field_Mutation_dispatchImageHook_args(ctx context.Co
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDispatchImageHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchImageHookInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_dispatchMemoHook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDispatchMemoHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5773,6 +5873,35 @@ func (ec *executionContext) fieldContext_DispatchImageHookPayload_clientMutation
 	return fc, nil
 }
 
+func (ec *executionContext) _DispatchMemoHookPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *DispatchMemoHookPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DispatchMemoHookPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DispatchMemoHookPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DispatchMemoHookPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _EmptyTrashPayload_clearedCount(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6297,6 +6426,128 @@ func (ec *executionContext) fieldContext_Hook_canDispatchByImage(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_canDispatchByMemo(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_canDispatchByMemo,
+		func(ctx context.Context) (any, error) {
+			return obj.CanDispatchByMemo, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_canDispatchByMemo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Hook_directive(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_directive,
+		func(ctx context.Context) (any, error) {
+			return obj.Directive, nil
+		},
+		nil,
+		ec.marshalOHookDirective2ᚖmainᚋinternalᚋsharedᚐHookDirectiveDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_directive(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_HookDirective_name(ctx, field)
+			case "usage":
+				return ec.fieldContext_HookDirective_usage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type HookDirective", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HookDirective_name(ctx context.Context, field graphql.CollectedField, obj *shared.HookDirectiveDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HookDirective_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HookDirective_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HookDirective",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HookDirective_usage(ctx context.Context, field graphql.CollectedField, obj *shared.HookDirectiveDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HookDirective_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HookDirective_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HookDirective",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -8288,6 +8539,51 @@ func (ec *executionContext) fieldContext_Mutation_dispatchImageHook(ctx context.
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_dispatchMemoHook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_dispatchMemoHook,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().DispatchMemoHook(ctx, fc.Args["input"].(DispatchMemoHookInput))
+		},
+		nil,
+		ec.marshalNDispatchMemoHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_dispatchMemoHook(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "clientMutationId":
+				return ec.fieldContext_DispatchMemoHookPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DispatchMemoHookPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_dispatchMemoHook_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9465,6 +9761,10 @@ func (ec *executionContext) fieldContext_Query_hooks(_ context.Context, field gr
 				return ec.fieldContext_Hook_description(ctx, field)
 			case "canDispatchByImage":
 				return ec.fieldContext_Hook_canDispatchByImage(ctx, field)
+			case "canDispatchByMemo":
+				return ec.fieldContext_Hook_canDispatchByMemo(ctx, field)
+			case "directive":
+				return ec.fieldContext_Hook_directive(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Hook", field.Name)
 		},
@@ -14442,6 +14742,47 @@ func (ec *executionContext) unmarshalInputDispatchImageHookInput(ctx context.Con
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDispatchMemoHookInput(ctx context.Context, obj any) (DispatchMemoHookInput, error) {
+	var it DispatchMemoHookInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"memoId", "hookId", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "memoId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("memoId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MemoID = data
+		case "hookId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hookId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HookID = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.Context, obj any) (FinishWebAuthnLoginInput, error) {
 	var it FinishWebAuthnLoginInput
 	asMap := map[string]any{}
@@ -16201,6 +16542,42 @@ func (ec *executionContext) _DispatchImageHookPayload(ctx context.Context, sel a
 	return out
 }
 
+var dispatchMemoHookPayloadImplementors = []string{"DispatchMemoHookPayload"}
+
+func (ec *executionContext) _DispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, obj *DispatchMemoHookPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dispatchMemoHookPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DispatchMemoHookPayload")
+		case "clientMutationId":
+			out.Values[i] = ec._DispatchMemoHookPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var emptyTrashPayloadImplementors = []string{"EmptyTrashPayload"}
 
 func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *EmptyTrashPayload) graphql.Marshaler {
@@ -16375,6 +16752,57 @@ func (ec *executionContext) _Hook(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "canDispatchByImage":
 			out.Values[i] = ec._Hook_canDispatchByImage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canDispatchByMemo":
+			out.Values[i] = ec._Hook_canDispatchByMemo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "directive":
+			out.Values[i] = ec._Hook_directive(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var hookDirectiveImplementors = []string{"HookDirective"}
+
+func (ec *executionContext) _HookDirective(ctx context.Context, sel ast.SelectionSet, obj *shared.HookDirectiveDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, hookDirectiveImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("HookDirective")
+		case "name":
+			out.Values[i] = ec._HookDirective_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "usage":
+			out.Values[i] = ec._HookDirective_usage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -17179,6 +17607,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "dispatchImageHook":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_dispatchImageHook(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dispatchMemoHook":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_dispatchMemoHook(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -19360,6 +19795,25 @@ func (ec *executionContext) marshalNDispatchImageHookPayload2ᚖmainᚋinternal�
 	return ec._DispatchImageHookPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNDispatchMemoHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookInput(ctx context.Context, v any) (DispatchMemoHookInput, error) {
+	res, err := ec.unmarshalInputDispatchMemoHookInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDispatchMemoHookPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, v DispatchMemoHookPayload) graphql.Marshaler {
+	return ec._DispatchMemoHookPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDispatchMemoHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, v *DispatchMemoHookPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DispatchMemoHookPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration(ctx context.Context, v any) (scalar.Duration, error) {
 	var res scalar.Duration
 	err := res.UnmarshalGQL(v)
@@ -20771,6 +21225,13 @@ func (ec *executionContext) marshalODuration2ᚖmainᚋinternalᚋscalarᚐDurat
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) marshalOHookDirective2ᚖmainᚋinternalᚋsharedᚐHookDirectiveDTO(ctx context.Context, sel ast.SelectionSet, v *shared.HookDirectiveDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._HookDirective(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {

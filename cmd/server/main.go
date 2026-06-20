@@ -140,10 +140,6 @@ func main() {
 	}
 	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
 
-	// 初始化外部钩子服务
-	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource)
-	defer hookRunner.Close()
-
 	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer
 	var statsCache *inmem.DirectoryStatsCache
 	if cfg.EnableDirectoryStatsCache {
@@ -156,6 +152,10 @@ func main() {
 	fileWatcher := inmem.NewDebouncedWatcher(rawFileWatcher, 300*time.Millisecond)
 	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
+
+	// 初始化外部钩子服务
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource, imageRepo, dirSvc, dirRepo)
+	defer hookRunner.Close()
 
 	if cfg.EnableDirectoryStatsCache && statsCache != nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -180,7 +180,7 @@ func main() {
 		defer cancel()
 	}
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
