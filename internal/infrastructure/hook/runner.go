@@ -1233,6 +1233,13 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		zap.Duration("duration", duration),
 		zap.String("stdout", stdout.String()),
 	)
+	// 开发环境通过 Debug 级别输出 stderr，生产环境自动过滤
+	if stderrStr := stderr.String(); stderrStr != "" {
+		r.logger.Debug("external hook stderr",
+			zap.String("hook_id", task.HookID),
+			zap.String("stderr", stderrStr),
+		)
+	}
 	if task.ResultChan != nil {
 		task.ResultChan <- nil
 	}
