@@ -180,12 +180,12 @@ const dispatchableHooks = computed(() => {
     hooksData.value?.hooks.filter((h) => {
       if (!h.canDispatchByMemo) return false;
       if (!h.directive) return false;
-      // 检查当前笔记内容中是否包含该指令（要求前面有空格或处于行首，且指令后面有单词边界）
+      // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
       const escapedName = h.directive.name.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&",
       );
-      const regex = new RegExp(`(?:^|\\s)/${escapedName}\\b`);
+      const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
       return regex.test(model.value);
     }) || []
   );
@@ -277,8 +277,8 @@ function checkAutocomplete() {
   const text = model.value;
   const textBeforeCursor = text.slice(0, start);
 
-  // 仅在行首或空格后输入 '/' 时触发斜杠命令，避免干扰普通文本
-  const match = textBeforeCursor.match(/(?:^|\s)\/(\w*)$/);
+  // 仅在行首（前面可以有空格或制表符）输入 '/' 时触发斜杠命令，避免干扰普通文本
+  const match = textBeforeCursor.match(/(?:\r?\n|^)[ \t]*\/(\w*)$/);
   if (match) {
     const query = match[1];
     const matchedStr = match[0];
