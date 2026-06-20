@@ -568,6 +568,9 @@ def process_double_track(
             after_marker = workflow_text[end_idx + len(end_marker) :]
 
             if not contains_prompt(marker_content):
+                _LOGGER.debug(
+                    f"remove: prompt '{prompt_str_arg}' not found in marker region (has_marker=True)"
+                )
                 if not no_skip:
                     _LOGGER.info(
                         f"Prompt '{prompt_str_arg}' not found in marker region, skipping."
@@ -627,6 +630,9 @@ def process_double_track(
                     new_prompt_text = prompt_text
         else:
             if not contains_prompt(workflow_text):
+                _LOGGER.debug(
+                    f"remove: prompt '{prompt_str_arg}' not found in full text (has_marker=False)"
+                )
                 if not no_skip:
                     _LOGGER.info(f"Prompt '{prompt_str_arg}' not found, skipping.")
                     return None, None
@@ -1172,6 +1178,7 @@ def main() -> None:
                 remove_prompts: Set[str] = set()
                 for p in args.prompt:
                     remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
+                _LOGGER.info(f"Remove prompts (variants): {remove_prompts}")
 
                 for (
                     node_id,
@@ -1193,6 +1200,9 @@ def main() -> None:
                         prompt_text = ""
 
                     for prompt_str_arg in remove_prompts:
+                        _LOGGER.info(
+                            f"Trying to remove '{prompt_str_arg}' from node {node_id}"
+                        )
                         new_workflow_text, new_prompt_text = process_double_track(
                             workflow_text,
                             prompt_text,
@@ -1210,9 +1220,16 @@ def main() -> None:
                             new_workflow_text is not None
                             and new_prompt_text is not None
                         ):
+                            _LOGGER.info(
+                                f"Removed '{prompt_str_arg}' from node {node_id}"
+                            )
                             workflow_text = new_workflow_text
                             prompt_text = new_prompt_text
                             any_processed = True
+                        else:
+                            _LOGGER.info(
+                                f"Skipped '{prompt_str_arg}' in node {node_id} (not found or skipped)"
+                            )
 
                     # 所有提示词处理完毕后，写回实际结构
                     prompt[node_id]["inputs"]["text"] = prompt_text

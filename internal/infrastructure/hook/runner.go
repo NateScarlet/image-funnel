@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"main/internal/apperror"
@@ -88,7 +89,8 @@ type HookEvent struct {
 type HookExecutionTask struct {
 	HookID       string
 	HookName     string
-	Command      string
+	Command      string   // 基础命令（如 "python comfyui.py remove"）
+	ExtraArgs    []string // 额外参数，原样传递给命令
 	TriggerName  string
 	Events       []HookEvent
 	Dir          string            // 执行外部命令时的当前工作目录
@@ -888,6 +890,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 	}
 	resChan := make(chan error, 1)
 
+	// 构建完整命令行，对含空格/引号的参数用引号包裹
 	var cmdParts []string
 	cmdParts = append(cmdParts, hook.Command)
 	for _, arg := range extraArgs {
@@ -904,6 +907,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 		HookID:       hook.ID,
 		HookName:     hook.Name,
 		Command:      fullCommand,
+		ExtraArgs:    extraArgs,
 		TriggerName:  triggerName,
 		Events:       events,
 		Dir:          hook.Dir,
@@ -1132,7 +1136,10 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd.exe", "/c", task.Command)
+		cmd = exec.CommandContext(ctx, "cmd.exe")
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CmdLine: "cmd.exe /c " + task.Command,
+		}
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", task.Command)
 	}
