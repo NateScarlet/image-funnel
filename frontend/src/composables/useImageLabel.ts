@@ -17,6 +17,19 @@ export const PRESET_COLORS: Record<string, string> = {
   White: "#f8fafc",
 };
 
+// 预设的图片标签中文名称映射
+export const COLOR_NAMES_CN: Record<string, string> = {
+  Red: "红色",
+  Yellow: "黄色",
+  Green: "绿色",
+  Blue: "蓝色",
+  Purple: "紫色",
+  Orange: "橙色",
+  Grey: "灰色",
+  Black: "黑色",
+  White: "白色",
+};
+
 /**
  * useImageLabel 用于管理图片 XMP 标签的状态及修改逻辑
  * @param image 当前查看的图片对象或其 Getter
@@ -80,22 +93,11 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
 
   // #region 快捷键注册
   const colorNames = Object.keys(PRESET_COLORS);
-  const colorNamesCn: Record<string, string> = {
-    Red: "红色",
-    Yellow: "黄色",
-    Green: "绿色",
-    Blue: "蓝色",
-    Purple: "紫色",
-    Orange: "橙色",
-    Grey: "灰色",
-    Black: "黑色",
-    White: "白色",
-  };
 
   // Ctrl+Shift+1 ~ Ctrl+Shift+9 分别映射 9 个预设颜色标签
   for (let i = 0; i < 9; i++) {
     const colorName = colorNames[i];
-    const colorCn = colorNamesCn[colorName] || colorName;
+    const colorCn = COLOR_NAMES_CN[colorName] || colorName;
     useHotkeys(
       {
         [`ctrl+shift+${i + 1}`]: () => {

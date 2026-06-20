@@ -775,7 +775,7 @@ import {
   mdiDelete,
   mdiPlayOutline,
 } from "@mdi/js";
-import { PRESET_COLORS } from "@/composables/useImageLabel";
+import { PRESET_COLORS, COLOR_NAMES_CN } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
 import RatingSelector from "./RatingSelector.vue";
 import useBulkOperations from "@/composables/useBulkOperations";
@@ -1407,6 +1407,74 @@ useHotkeys(
     category: "批量操作",
   },
 );
+
+// #region 批量模式评分与标签快捷键
+const isBulkActionEnabled = computed(() => {
+  return (
+    isBulkMode.value &&
+    selectedImageIds.value.length > 0 &&
+    !imageViewerDialog.visible.value &&
+    !moveImagesDialog.visible.value
+  );
+});
+
+// 绑定快捷键 Ctrl+0~5 以及 小键盘 0~5 用于批量修改评分
+for (let r = 0; r <= 5; r++) {
+  useHotkeys(
+    [
+      {
+        keys: [`ctrl+digit${r}`, `numpad${r}`],
+        handler: (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          bulkSetRating(r);
+        },
+      },
+    ],
+    {
+      description: `批量设置评分为 ${r} 星`,
+      category: "批量操作",
+      enabled: isBulkActionEnabled,
+    },
+  );
+}
+
+// 批量设置颜色标签快捷键 Ctrl+Shift+1~9，以及清除标签 Ctrl+Shift+0
+const colorNames = Object.keys(PRESET_COLORS);
+for (let i = 0; i < 9; i++) {
+  const colorName = colorNames[i];
+  const colorCn = COLOR_NAMES_CN[colorName] || colorName;
+  useHotkeys(
+    {
+      [`ctrl+shift+${i + 1}`]: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        bulkSetLabel(colorName);
+      },
+    },
+    {
+      description: `批量设置标签为 ${colorCn}`,
+      category: "批量操作",
+      enabled: isBulkActionEnabled,
+    },
+  );
+}
+
+useHotkeys(
+  {
+    "ctrl+shift+0": (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      bulkSetLabel("");
+    },
+  },
+  {
+    description: "批量清除图片标签",
+    category: "批量操作",
+    enabled: isBulkActionEnabled,
+  },
+);
+// #endregion
 
 // #region URL Hash 状态持久化（文件名方式，便于跨筛选条件搜索）
 const viewerHash = useLocationHash();
