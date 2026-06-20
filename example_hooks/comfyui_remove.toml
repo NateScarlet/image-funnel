@@ -6,16 +6,20 @@ command = "python comfyui.py remove"
 [directive]
 name = "remove"
 usage = """
-/remove [-S] [--raw] <prompt>...
+/remove [-S] [--neg] [--raw] [--hard] [--all] [--region <name>]... [--node <node-id>]... <prompt>...
 给当前目录所有 4 星图片的 ComfyUI 工作流移除指定提示词后再将其入列生成。
 在会话提交后触发，也可以手动通过笔记触发。
 可传入多个提示词，多个提示词会以空格拼接为一个整体后再移除
 
 选项：
 -S --no-skip 没找到对应提示词也要执行，不指定时会跳过不存在对应提示词的图片
+--neg marker 和 node 都不匹配时，用关键词匹配负面提示词而不是正面
 --raw 移除时不移除整句，而是精确只移除句子中的指定文本
---neg 移除负面提示词而不是正面
 --hard 直接删除文本而不是注释对应文本，指定 --raw 的时候自动隐含
+--all 在所有 CLIP 输入节点中删除，不限于指定区域或节点
+--region <name> 指定查找区域，可多次指定；在所有指定区域中查找并删除
+--node <node-id> 指定查找节点，可多次指定；在所有指定节点中查找并删除
+未指定 --region 和 --node 时，默认使用 positive 区域（指定 --neg 时使用 negative 区域）
 """
 on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remove ... %% 注释掉避免再次触发
 on_fail_action = "REMOVE"
@@ -28,10 +32,8 @@ ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义�
 [env]
 HOOK_QUEUE_COUNT = "4"
 HOOK_IMAGE_RATING = "4"
-HOOK_POSITIVE_START_MARKER = "//#region hook-positive"
-HOOK_POSITIVE_END_MARKER = "//#endregion hook-positive"
-HOOK_NEGATIVE_START_MARKER = "//#region hook-negative"
-HOOK_NEGATIVE_END_MARKER = "//#endregion hook-negative"
+HOOK_START_REGION_PREFIX = "//#region "
+HOOK_END_REGION_PREFIX = "//#endregion "
 HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
 HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"
 

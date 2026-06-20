@@ -9,7 +9,7 @@ import uuid
 import datetime
 import re
 import urllib.request
-from typing import Dict, List, Tuple, Any, Optional, cast
+from typing import Dict, List, Tuple, Any, Optional, Set, cast
 import logging
 import argparse
 
@@ -390,6 +390,33 @@ def get_workflow_node_text(workflow: Dict[str, Any], node_id_str: str) -> Option
     return None
 
 
+def get_region_markers(region_name: str) -> Tuple[str, str]:
+    """
+    根据区域名称拼装 marker 字符串。
+    使用 HOOK_START_REGION_PREFIX / HOOK_END_REGION_PREFIX 环境变量作为前缀，追加区域名。
+    """
+    prefix_start = os.getenv("HOOK_START_REGION_PREFIX", "//#region hook-")
+    prefix_end = os.getenv("HOOK_END_REGION_PREFIX", "//#endregion hook-")
+    return prefix_start + region_name, prefix_end + region_name
+
+
+def find_nodes_with_region(
+    prompt: Dict[str, Any], workflow: Dict[str, Any], region_name: str
+) -> List[str]:
+    """
+    查找所有包含指定区域 marker 的 CLIPTextEncode 节点 ID。
+    """
+    start_marker, end_marker = get_region_markers(region_name)
+    result: List[str] = []
+    for nid, node in prompt.items():
+        node_dict = cast(Dict[str, Any], node)
+        if node_dict.get("class_type") == "CLIPTextEncode":
+            wf_text = get_workflow_node_text(workflow, nid)
+            if wf_text and start_marker in wf_text and end_marker in wf_text:
+                result.append(nid)
+    return result
+
+
 def strip_comments_for_prompt(text: str) -> str:
     """
     为 prompt 剥离注释行。如果一行去除首尾空白后以 '//' 开头，该整行将被完全过滤掉。
@@ -412,6 +439,7 @@ def process_double_track(
     raw: bool,
     no_skip: bool,
     hard: bool,
+    use_markers: bool = True,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     处理双轨道逻辑，输入 workflow_text 并执行 add/remove 动作，分别生成：
@@ -430,9 +458,14 @@ def process_double_track(
     is_equivalent = workflow_cleaned == prompt_cleaned
 
     # 在 workflow 文本中定位 marker 区域
-    start_idx = workflow_text.find(start_marker)
-    end_idx = workflow_text.find(end_marker)
-    has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
+    start_idx = -1
+    end_idx = -1
+    if use_markers:
+        start_idx = workflow_text.find(start_marker)
+        end_idx = workflow_text.find(end_marker)
+        has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
+    else:
+        has_marker = False
 
     # 校验提示词是否已存在
     def contains_prompt(area: str) -> bool:
@@ -514,13 +547,16 @@ def process_double_track(
             else:
                 new_content_prompt = f"{prompt_str_arg},"
 
-            # 第一次添加，双轨道组装：workflow 附加带 marker 区域，prompt 附加不带 marker 区域
-            new_workflow_text = (
-                workflow_text.rstrip()
-                + f"\n{start_marker}\n"
-                + new_content_prompt
-                + f"\n{end_marker}\n"
-            )
+            # 第一次添加，双轨道组装：workflow 附加带 marker 区域（如果 use_markers），prompt 附加不带 marker 区域
+            if use_markers:
+                new_workflow_text = (
+                    workflow_text.rstrip()
+                    + f"\n{start_marker}\n"
+                    + new_content_prompt
+                    + f"\n{end_marker}\n"
+                )
+            else:
+                new_workflow_text = workflow_text.rstrip() + "\n" + new_content_prompt
             # 对于无 marker，直接拼在尾部即可
             new_prompt_text = prompt_text.rstrip() + "\n" + new_content_prompt
 
@@ -837,6 +873,7 @@ def process_add_prompt(
         else:
             return appended
 
+
 def update_workflow_node_text(
     workflow: Dict[str, Any], node_id_str: str, new_text: str
 ) -> None:
@@ -891,18 +928,10 @@ def main() -> None:
     required_rating_str = os.getenv("HOOK_IMAGE_RATING")
     required_rating: Optional[int] = None
     if required_rating_str:
-        try:
-            required_rating = int(required_rating_str)
-        except ValueError:
-            pass
+        required_rating = int(required_rating_str)
 
     queue_count_env = os.getenv("HOOK_QUEUE_COUNT", "1")
-    try:
-        queue_count = int(queue_count_env)
-        if queue_count < 1:
-            queue_count = 1
-    except ValueError:
-        queue_count = 1
+    queue_count = int(queue_count_env)
 
     try:
         image_paths: List[str] = json.loads(image_paths_str) if image_paths_str else []
@@ -947,7 +976,7 @@ def main() -> None:
             _LOGGER.error(f"File does not exist: {path}")
             has_errors = True
             continue
-
+        print(path)
         _LOGGER.info(f"[{idx+1}/{len(targets)}] Processing image: {path}")
 
         prompt: Dict[str, Any]
@@ -993,64 +1022,203 @@ def main() -> None:
                     update_image_label(img_id, label_to_set)
 
         elif args.command in ["add", "remove"]:
-            prompt_str_arg = " ".join(args.prompt)
             is_neg = args.neg
 
-            target_node_id = get_target_clip_node(prompt, is_neg)
-            if not target_node_id:
-                _LOGGER.error("Failed to locate target CLIPTextEncode node in prompt.")
-                has_errors = True
-                continue
+            # 构建目标列表：(type, value)
+            raw_targets: List[Tuple[str, str]] = []
+            if args.node:
+                for nid in args.node:
+                    raw_targets.append(("node", nid))
+            if args.region:
+                for rname in args.region:
+                    raw_targets.append(("region", rname))
 
-            node = prompt[target_node_id]
-
-            # 必须从 workflow 获取含有 marker 的当前 text，作为定位和操作的基准。如果 workflow 中不存在该节点，则认为元数据损坏或不可读，报错并快速失败
-            workflow_text = get_workflow_node_text(workflow, target_node_id)
-            if workflow_text is None:
-                _LOGGER.error(
-                    f"Failed to locate target node {target_node_id} in workflow metadata."
-                )
-                has_errors = True
-                continue
-
-            prompt_text = node.setdefault("inputs", {}).setdefault("text", "")
-            if not isinstance(prompt_text, str):
-                prompt_text = ""
-
-            start_marker = (
-                os.getenv("HOOK_NEGATIVE_START_MARKER", "//#region hook-negative")
-                if is_neg
-                else os.getenv("HOOK_POSITIVE_START_MARKER", "//#region hook-positive")
-            )
-            end_marker = (
-                os.getenv("HOOK_NEGATIVE_END_MARKER", "//#endregion hook-negative")
-                if is_neg
-                else os.getenv("HOOK_POSITIVE_END_MARKER", "//#endregion hook-positive")
-            )
+            if not raw_targets:
+                default_region = "negative" if is_neg else "positive"
+                raw_targets.append(("region", default_region))
 
             hard = getattr(args, "hard", False)
-            new_workflow_text, new_prompt_text = process_double_track(
-                workflow_text,
-                prompt_text,
-                args.command,
-                prompt_str_arg,
-                start_marker,
-                end_marker,
-                args.raw,
-                args.no_skip,
-                hard,
-            )
+            any_processed = False
 
-            if new_workflow_text is None or new_prompt_text is None:
-                success_count += 1
-                continue
+            if args.command == "add":
+                prompt_str_arg = " ".join(args.prompt)
+                # 优先匹配 node，第一个成功即停止
+                for target_type, target_value in raw_targets:
+                    node_id: str
+                    start_marker: str
+                    end_marker: str
+                    use_markers: bool
 
-            # 更新 API 端 (prompt) 结构数据，不包含 marker
-            node["inputs"]["text"] = new_prompt_text
+                    if target_type == "node":
+                        if target_value not in prompt:
+                            _LOGGER.warning(
+                                f"Node {target_value} not found in prompt, skipping."
+                            )
+                            continue
+                        node_id = target_value
+                        start_marker = ""
+                        end_marker = ""
+                        use_markers = False
+                    else:  # region
+                        region_name = target_value
+                        start_marker, end_marker = get_region_markers(region_name)
+                        matching_nodes = find_nodes_with_region(
+                            prompt, workflow, region_name
+                        )
+                        if matching_nodes:
+                            node_id = matching_nodes[0]
+                            use_markers = True
+                        else:
+                            # 区域 marker 不存在，回退到自动定位节点再创建 marker
+                            fallback_nid = get_target_clip_node(prompt, is_neg)
+                            if fallback_nid:
+                                node_id = fallback_nid
+                                use_markers = True
+                            else:
+                                _LOGGER.error(
+                                    f"Failed to locate target node for region '{region_name}'"
+                                )
+                                continue
 
-            # 同步更新 UI 端 (workflow) 结构数据，包含 marker
-            update_workflow_node_text(workflow, target_node_id, new_workflow_text)
+                    workflow_text = get_workflow_node_text(workflow, node_id)
+                    if workflow_text is None:
+                        _LOGGER.error(
+                            f"Failed to locate target node {node_id} in workflow metadata."
+                        )
+                        continue
 
+                    prompt_text = (
+                        prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
+                    )
+                    if not isinstance(prompt_text, str):
+                        prompt_text = ""
+
+                    new_workflow_text, new_prompt_text = process_double_track(
+                        workflow_text,
+                        prompt_text,
+                        args.command,
+                        prompt_str_arg,
+                        start_marker,
+                        end_marker,
+                        args.raw,
+                        args.no_skip,
+                        hard,
+                        use_markers,
+                    )
+
+                    if new_workflow_text is None or new_prompt_text is None:
+                        any_processed = True  # 跳过也算成功
+                        continue
+
+                    prompt[node_id]["inputs"]["text"] = new_prompt_text
+                    update_workflow_node_text(workflow, node_id, new_workflow_text)
+                    any_processed = True
+                    break  # 第一个成功即停止
+
+                if not any_processed:
+                    has_errors = True
+                    _LOGGER.error("No target was successfully processed for add.")
+                    continue
+
+            else:  # remove
+                # 展开所有目标为具体节点列表
+                nodes_to_process: List[Tuple[str, str, str, bool]] = []
+
+                if args.all:
+                    clip_nodes = [
+                        nid
+                        for nid, node in prompt.items()
+                        if cast(Dict[str, Any], node).get("class_type")
+                        == "CLIPTextEncode"
+                    ]
+                    for nid in clip_nodes:
+                        nodes_to_process.append((nid, "", "", False))
+                else:
+                    for target_type, target_value in raw_targets:
+                        if target_type == "node":
+                            if target_value not in prompt:
+                                _LOGGER.warning(
+                                    f"Node {target_value} not found in prompt, skipping."
+                                )
+                                continue
+                            nodes_to_process.append((target_value, "", "", False))
+                        else:  # region
+                            region_name = target_value
+                            start_marker, end_marker = get_region_markers(region_name)
+                            matching_nodes = find_nodes_with_region(
+                                prompt, workflow, region_name
+                            )
+                            if matching_nodes:
+                                for nid in matching_nodes:
+                                    nodes_to_process.append(
+                                        (nid, start_marker, end_marker, True)
+                                    )
+                            elif args.no_skip:
+                                fallback_nid = get_target_clip_node(prompt, is_neg)
+                                if fallback_nid:
+                                    nodes_to_process.append(
+                                        (fallback_nid, start_marker, end_marker, True)
+                                    )
+                                else:
+                                    _LOGGER.warning(
+                                        f"No node found for region '{region_name}' and no fallback available."
+                                    )
+                            else:
+                                _LOGGER.info(
+                                    f"No node found with region '{region_name}', skipping."
+                                )
+
+                # 为每个提示词生成原始、下划线、空格三种变体，去重
+                remove_prompts: Set[str] = set()
+                for p in args.prompt:
+                    remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
+
+                for (
+                    node_id,
+                    start_marker,
+                    end_marker,
+                    use_markers,
+                ) in nodes_to_process:
+                    workflow_text = get_workflow_node_text(workflow, node_id)
+                    if workflow_text is None:
+                        _LOGGER.error(
+                            f"Failed to locate target node {node_id} in workflow metadata."
+                        )
+                        continue
+
+                    prompt_text = (
+                        prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
+                    )
+                    if not isinstance(prompt_text, str):
+                        prompt_text = ""
+
+                    for prompt_str_arg in remove_prompts:
+                        new_workflow_text, new_prompt_text = process_double_track(
+                            workflow_text,
+                            prompt_text,
+                            args.command,
+                            prompt_str_arg,
+                            start_marker,
+                            end_marker,
+                            args.raw,
+                            args.no_skip,
+                            hard,
+                            use_markers,
+                        )
+
+                        if (
+                            new_workflow_text is not None
+                            and new_prompt_text is not None
+                        ):
+                            workflow_text = new_workflow_text
+                            prompt_text = new_prompt_text
+                            any_processed = True
+
+                    # 所有提示词处理完毕后，写回实际结构
+                    prompt[node_id]["inputs"]["text"] = prompt_text
+                    update_workflow_node_text(workflow, node_id, workflow_text)
+
+            # 提交到 ComfyUI
             any_success = False
             for q_idx in range(queue_count):
                 update_seeds(prompt, workflow)
@@ -1092,10 +1260,26 @@ def parse_args():
         help="Do not skip if prompt already exists",
     )
     add_parser.add_argument(
-        "--neg", action="store_true", help="Add to negative prompt instead of positive"
+        "--neg",
+        action="store_true",
+        help="When no region or node matches, use negative keyword matching instead of positive",
     )
     add_parser.add_argument(
         "--raw", action="store_true", help="Add raw text without trailing comma"
+    )
+    add_parser.add_argument(
+        "--region",
+        action="append",
+        default=None,
+        metavar="name",
+        help="Target region name, can be specified multiple times; priority after node",
+    )
+    add_parser.add_argument(
+        "--node",
+        action="append",
+        default=None,
+        metavar="node-id",
+        help="Target node ID, can be specified multiple times; highest priority",
     )
     add_parser.add_argument("prompt", nargs="+", help="The prompt text to add")
 
@@ -1108,7 +1292,7 @@ def parse_args():
     remove_parser.add_argument(
         "--neg",
         action="store_true",
-        help="Remove from negative prompt instead of positive",
+        help="When no region or node matches, use negative keyword matching instead of positive",
     )
     remove_parser.add_argument(
         "--raw",
@@ -1119,6 +1303,25 @@ def parse_args():
         "--hard",
         action="store_true",
         help="Directly delete the text instead of commenting it out",
+    )
+    remove_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Remove from all CLIP input nodes, ignoring region/node constraints",
+    )
+    remove_parser.add_argument(
+        "--region",
+        action="append",
+        default=None,
+        metavar="name",
+        help="Target region name, can be specified multiple times; searches all matching areas",
+    )
+    remove_parser.add_argument(
+        "--node",
+        action="append",
+        default=None,
+        metavar="node-id",
+        help="Target node ID, can be specified multiple times; searches all matching nodes",
     )
     remove_parser.add_argument("prompt", nargs="+", help="The prompt text to remove")
 
