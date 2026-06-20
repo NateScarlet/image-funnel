@@ -9,14 +9,11 @@ import (
 	"maps"
 	"math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"main/internal/apperror"
@@ -1134,15 +1131,7 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		oldAction = task.Events[0].OldAction
 	}
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd.exe")
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			CmdLine: "cmd.exe /c " + task.Command,
-		}
-	} else {
-		cmd = exec.CommandContext(ctx, "sh", "-c", task.Command)
-	}
+	cmd := newHookCmd(ctx, task.Command)
 
 	cmd.Dir = task.Dir // 将脚本的工作目录设置为 Hook 配置文件所在的目录
 
