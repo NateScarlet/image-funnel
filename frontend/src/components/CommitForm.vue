@@ -184,6 +184,12 @@ const rejectRating = computed({
 });
 // #endregion
 
+function reset() {
+  keepRatingBuffer.value = undefined;
+  shelveRatingBuffer.value = undefined;
+  rejectRatingBuffer.value = undefined;
+}
+
 async function commit() {
   if (committing.value) return;
   committing.value = true;
@@ -202,6 +208,7 @@ async function commit() {
       },
       errorPolicy: "all",
     });
+    reset();
 
     let errors: string[] = [];
     if (CombinedGraphQLErrors.is(error)) {
@@ -238,5 +245,6 @@ async function commit() {
 
 defineExpose({
   commit,
+  reset,
 });
 </script>
