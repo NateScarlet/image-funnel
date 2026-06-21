@@ -1072,6 +1072,8 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		"IMAGE_FUNNEL_IMAGE_OLD_LABEL="+oldLabel,
 		"IMAGE_FUNNEL_IMAGE_OLD_ACTION="+oldAction,
 		"IMAGE_FUNNEL_ROOT_DIR="+r.rootDir,
+		"PYTHONIOENCODING=utf-8",
+		"PYTHONUTF8=1",
 	)
 
 	if task.MemoPath != "" {
