@@ -869,6 +869,13 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		finalContent = removeHookRunID(finalContent)
 
 		if finalContent != fileContent {
+			if finalContent == "" {
+				// 处理后的内容为空，直接删除文件
+				if err := os.Remove(p); err != nil {
+					r.logger.Error("failed to delete empty memo file after directive cleanup", zap.String("path", p), zap.Error(err))
+				}
+				continue
+			}
 			// 在写回磁盘前，计算 xxhash 并注册为忽略事件，自防循环
 			finalContentBytes := []byte(finalContent)
 			r.addWriteIgnore(p, r.hashContent(finalContentBytes), 10*time.Second)
@@ -1584,6 +1591,13 @@ func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, 
 	finalContent = removeHookRunID(finalContent)
 
 	if finalContent != fileContent {
+		if finalContent == "" {
+			// 处理后的内容为空，直接删除文件
+			if err := os.Remove(absPath); err != nil {
+				r.logger.Error("failed to delete empty memo file during late cleanup", zap.String("path", absPath), zap.Error(err))
+			}
+			return
+		}
 		finalContentBytes := []byte(finalContent)
 		r.addWriteIgnore(absPath, r.hashContent(finalContentBytes), 10*time.Second)
 		if err := os.WriteFile(absPath, finalContentBytes, 0644); err != nil {
