@@ -205,30 +205,40 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
                     api_node_ids.append(f"{parent_node.get('id')}:{node_id_str}")
 
         for api_node_id in api_node_ids:
-            if api_node_id in prompt:
-                inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
-                filename_prefix: Any = inputs.get("filename_prefix")
+            # api_node_id 必须存在于 prompt 结构中，若缺失直接报错以快速失败，避免数据不一致
+            if api_node_id not in prompt:
+                raise ValueError(
+                    f"Workflow output node {api_node_id} is missing in the prompt API structure."
+                )
 
-                if filename_prefix:
-                    # 追溯 filename_prefix 端口的值源头
-                    src_node_id: str
-                    src_key: str
-                    src_node_id, src_key = find_terminal_input(
-                        prompt, api_node_id, "filename_prefix"
+            inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
+            filename_prefix: Any = inputs.get("filename_prefix")
+
+            if filename_prefix:
+                # 追溯 filename_prefix 端口的值源头
+                src_node_id: str
+                src_key: str
+                src_node_id, src_key = find_terminal_input(
+                    prompt, api_node_id, "filename_prefix"
+                )
+                # 追溯到的源头节点必须存在于 prompt 结构中，若缺失直接报错以快速失败
+                if src_node_id not in prompt:
+                    raise ValueError(
+                        f"Source node {src_node_id} for filename_prefix is missing in the prompt API structure."
                     )
-                    if src_node_id in prompt:
-                        src_inputs = prompt[src_node_id].setdefault("inputs", {})
-                        prefix_val: Any = src_inputs.get(src_key)
-                        if isinstance(prefix_val, str):
-                            new_date_str: str = now.strftime(py_fmt)
-                            if re.search(regex_pattern, prefix_val):
-                                new_prefix: str = re.sub(
-                                    regex_pattern, new_date_str, prefix_val
-                                )
-                                src_inputs[src_key] = new_prefix
-                                _LOGGER.info(
-                                    f"Prompt node {src_node_id} (key {src_key}) filename_prefix updated: {prefix_val} -> {new_prefix}"
-                                )
+
+                src_inputs = prompt[src_node_id].setdefault("inputs", {})
+                prefix_val: Any = src_inputs.get(src_key)
+                if isinstance(prefix_val, str):
+                    new_date_str: str = now.strftime(py_fmt)
+                    if re.search(regex_pattern, prefix_val):
+                        new_prefix: str = re.sub(
+                            regex_pattern, new_date_str, prefix_val
+                        )
+                        src_inputs[src_key] = new_prefix
+                        _LOGGER.info(
+                            f"Prompt node {src_node_id} (key {src_key}) filename_prefix updated: {prefix_val} -> {new_prefix}"
+                        )
 
 
 def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
@@ -324,36 +334,42 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
                                 f"{parent_node.get('id')}:{node_id_str}"
                             )
 
-                # 同步修改 API 端 (prompt) 结构中对应的连接源头。
                 for api_node_id in api_node_ids:
-                    if api_node_id in prompt:
-                        inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
-                        # 遍历此节点在 prompt 中的所有 inputs，寻找和当前种子关联的端口并追溯修改其源头值
-                        for ik in list(inputs.keys()):
-                            src_node_id: str
-                            src_key: str
-                            src_node_id, src_key = find_terminal_input(
-                                prompt, api_node_id, ik
-                            )
-                            if src_node_id in prompt:
-                                src_node: Dict[str, Any] = prompt[src_node_id]
-                                src_inputs: Dict[str, Any] = src_node.get("inputs", {})
-                                current_val: Any = src_inputs.get(src_key)
+                    # api_node_id 必须存在于 prompt 结构中，若缺失直接报错以快速失败，避免数据不一致
+                    if api_node_id not in prompt:
+                        raise ValueError(
+                            f"Workflow seed node {api_node_id} is missing in the prompt API structure."
+                        )
 
-                                # 校验当前值是否等于 old_seed 且满足种子标识或 Primitive 属性
-                                is_primitive = (
-                                    src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES
-                                )
-                                if (
-                                    current_val == old_seed
-                                    or str(current_val) == str(old_seed)
-                                ) and (
-                                    "seed" in ik or "seed" in src_key or is_primitive
-                                ):
-                                    src_inputs[src_key] = new_seed
-                                    _LOGGER.info(
-                                        f"  -> Prompt structure sync: updated source node {src_node_id} key {src_key} = {new_seed}"
-                                    )
+                    inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
+                    # 遍历此节点在 prompt 中的所有 inputs，寻找和当前种子关联的端口并追溯修改其源头值
+                    for ik in list(inputs.keys()):
+                        src_node_id: str
+                        src_key: str
+                        src_node_id, src_key = find_terminal_input(
+                            prompt, api_node_id, ik
+                        )
+                        # 追溯到的源头节点必须存在于 prompt 结构中，若缺失直接报错以快速失败
+                        if src_node_id not in prompt:
+                            raise ValueError(
+                                f"Source node {src_node_id} for seed tracking is missing in the prompt API structure."
+                            )
+
+                        src_node: Dict[str, Any] = prompt[src_node_id]
+                        src_inputs: Dict[str, Any] = src_node.get("inputs", {})
+                        current_val: Any = src_inputs.get(src_key)
+
+                        # 校验当前值是否等于 old_seed 且满足种子标识或 Primitive 属性
+                        is_primitive = (
+                            src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES
+                        )
+                        if (
+                            current_val == old_seed or str(current_val) == str(old_seed)
+                        ) and ("seed" in ik or "seed" in src_key or is_primitive):
+                            src_inputs[src_key] = new_seed
+                            _LOGGER.info(
+                                f"  -> Prompt structure sync: updated source node {src_node_id} key {src_key} = {new_seed}"
+                            )
 
     return modified_count
 
@@ -1022,7 +1038,13 @@ def main() -> None:
                 if queue_count > 1:
                     _LOGGER.info(f"  -> Queueing run {q_idx+1}/{queue_count}")
 
-                update_seeds(prompt, workflow)
+                # 必须成功更新种子以避免重复生成，若无法更新则视为错误
+                if update_seeds(prompt, workflow) == 0:
+                    _LOGGER.error(
+                        f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
+                    )
+                    has_errors = True
+                    break
                 update_output_filenames(prompt, workflow)
                 success: bool = send_to_comfyui(comfyui_url, prompt, workflow)
                 if success:
@@ -1167,7 +1189,7 @@ def main() -> None:
                                     nodes_to_process.append(
                                         (nid, start_marker, end_marker, True)
                                     )
-                            elif args.no_skip:
+                            else:
                                 fallback_nid = get_target_clip_node(prompt, is_neg)
                                 if fallback_nid:
                                     nodes_to_process.append(
@@ -1177,10 +1199,6 @@ def main() -> None:
                                     _LOGGER.warning(
                                         f"No node found for region '{region_name}' and no fallback available."
                                     )
-                            else:
-                                _LOGGER.info(
-                                    f"No node found with region '{region_name}', skipping."
-                                )
 
                 # 为每个提示词生成原始、下划线、空格三种变体，去重
                 remove_prompts: Set[str] = set()
@@ -1243,10 +1261,20 @@ def main() -> None:
                     prompt[node_id]["inputs"]["text"] = prompt_text
                     update_workflow_node_text(workflow, node_id, workflow_text)
 
+                if not any_processed:
+                    _LOGGER.info("No prompts were removed, skipping submission.")
+                    continue
+
             # 提交到 ComfyUI
             any_success = False
             for q_idx in range(queue_count):
-                update_seeds(prompt, workflow)
+                # 必须成功更新种子以避免重复生成，若无法更新则视为错误
+                if update_seeds(prompt, workflow) == 0:
+                    _LOGGER.error(
+                        f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
+                    )
+                    has_errors = True
+                    break
                 update_output_filenames(prompt, workflow)
                 success: bool = send_to_comfyui(comfyui_url, prompt, workflow)
                 if success:
