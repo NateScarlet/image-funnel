@@ -21,5 +21,5 @@ ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义�
 [on.image_dispatch]
 
 [env]
-HOOK_QUEUE_COUNT = "4"
+HOOK_JOBS = "4"
 HOOK_IMAGE_SET_LABEL = "Red"

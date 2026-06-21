@@ -924,6 +924,84 @@ def update_workflow_node_text(
                             return
 
 
+def get_node_texts(
+    prompt: Dict[str, Any], workflow: Dict[str, Any], node_id: str
+) -> Tuple[Optional[str], str]:
+    """
+    获取指定节点的 workflow 文本和 prompt 文本。
+    返回 (workflow_text, prompt_text)，若节点在 workflow 中不存在则 workflow_text 为 None。
+    """
+    workflow_text = get_workflow_node_text(workflow, node_id)
+    if workflow_text is None:
+        return None, ""
+    prompt_text = prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
+    if not isinstance(prompt_text, str):
+        prompt_text = ""
+    return workflow_text, prompt_text
+
+
+def resolve_target_to_nodes(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    target_type: str,
+    target_value: str,
+    is_neg: bool,
+) -> List[Tuple[str, str, str, bool]]:
+    """
+    将单个目标（node 或 region）解析为具体的节点列表。
+    返回 [(node_id, start_marker, end_marker, use_markers), ...]。
+    """
+    if target_type == "node":
+        if target_value not in prompt:
+            _LOGGER.warning(f"Node {target_value} not found in prompt, skipping.")
+            return []
+        return [(target_value, "", "", False)]
+    else:  # region
+        start_marker, end_marker = get_region_markers(target_value)
+        matching_nodes = find_nodes_with_region(prompt, workflow, target_value)
+        if matching_nodes:
+            return [(nid, start_marker, end_marker, True) for nid in matching_nodes]
+        else:
+            fallback_nid = get_target_clip_node(prompt, is_neg)
+            if fallback_nid:
+                return [(fallback_nid, start_marker, end_marker, True)]
+            else:
+                _LOGGER.warning(
+                    f"Failed to locate target node for region '{target_value}'"
+                )
+                return []
+
+
+def submit_workflow(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    comfyui_url: str,
+    jobs: int,
+    image_path: str,
+) -> Tuple[bool, bool]:
+    """
+    更新种子和文件名后提交工作流到 ComfyUI。
+    返回 (any_success, has_error)。
+    """
+    any_success = False
+    has_error = False
+    for q_idx in range(jobs):
+        if jobs > 1:
+            _LOGGER.info(f"  -> Queueing run {q_idx+1}/{jobs}")
+        if update_seeds(prompt, workflow) == 0:
+            _LOGGER.error(
+                f"Failed to update any seeds for image: {image_path}. Cannot queue duplicate workflow without changing seeds."
+            )
+            has_error = True
+            break
+        update_output_filenames(prompt, workflow)
+        if send_to_comfyui(comfyui_url, prompt, workflow):
+            any_success = True
+        else:
+            has_error = True
+    return any_success, has_error
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -944,8 +1022,7 @@ def main() -> None:
     if required_rating_str:
         required_rating = int(required_rating_str)
 
-    queue_count_env = os.getenv("HOOK_QUEUE_COUNT", "1")
-    queue_count = int(queue_count_env)
+    jobs = args.jobs if args.jobs is not None else int(os.getenv("HOOK_JOBS", "1"))
 
     try:
         image_paths: List[str] = json.loads(image_paths_str) if image_paths_str else []
@@ -1033,25 +1110,11 @@ def main() -> None:
             continue
 
         if args.command == "queue":
-            any_success = False
-            for q_idx in range(queue_count):
-                if queue_count > 1:
-                    _LOGGER.info(f"  -> Queueing run {q_idx+1}/{queue_count}")
-
-                # 必须成功更新种子以避免重复生成，若无法更新则视为错误
-                if update_seeds(prompt, workflow) == 0:
-                    _LOGGER.error(
-                        f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
-                    )
-                    has_errors = True
-                    break
-                update_output_filenames(prompt, workflow)
-                success: bool = send_to_comfyui(comfyui_url, prompt, workflow)
-                if success:
-                    any_success = True
-                else:
-                    has_errors = True
-
+            any_success, submit_error = submit_workflow(
+                prompt, workflow, comfyui_url, jobs, path
+            )
+            if submit_error:
+                has_errors = True
             if any_success:
                 success_count += 1
                 if label_to_set and img_id:
@@ -1078,56 +1141,23 @@ def main() -> None:
 
             if args.command == "add":
                 prompt_str_arg = " ".join(args.prompt)
-                # 优先匹配 node，第一个成功即停止
                 for target_type, target_value in raw_targets:
-                    node_id: str
-                    start_marker: str
-                    end_marker: str
-                    use_markers: bool
+                    nodes = resolve_target_to_nodes(
+                        prompt, workflow, target_type, target_value, is_neg
+                    )
+                    if not nodes:
+                        continue
+                    # add 只取第一个匹配节点
+                    node_id, start_marker, end_marker, use_markers = nodes[0]
 
-                    if target_type == "node":
-                        if target_value not in prompt:
-                            _LOGGER.warning(
-                                f"Node {target_value} not found in prompt, skipping."
-                            )
-                            continue
-                        node_id = target_value
-                        start_marker = ""
-                        end_marker = ""
-                        use_markers = False
-                    else:  # region
-                        region_name = target_value
-                        start_marker, end_marker = get_region_markers(region_name)
-                        matching_nodes = find_nodes_with_region(
-                            prompt, workflow, region_name
-                        )
-                        if matching_nodes:
-                            node_id = matching_nodes[0]
-                            use_markers = True
-                        else:
-                            # 区域 marker 不存在，回退到自动定位节点再创建 marker
-                            fallback_nid = get_target_clip_node(prompt, is_neg)
-                            if fallback_nid:
-                                node_id = fallback_nid
-                                use_markers = True
-                            else:
-                                _LOGGER.error(
-                                    f"Failed to locate target node for region '{region_name}'"
-                                )
-                                continue
-
-                    workflow_text = get_workflow_node_text(workflow, node_id)
+                    workflow_text, prompt_text = get_node_texts(
+                        prompt, workflow, node_id
+                    )
                     if workflow_text is None:
                         _LOGGER.error(
                             f"Failed to locate target node {node_id} in workflow metadata."
                         )
                         continue
-
-                    prompt_text = (
-                        prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-                    )
-                    if not isinstance(prompt_text, str):
-                        prompt_text = ""
 
                     new_workflow_text, new_prompt_text = process_double_track(
                         workflow_text,
@@ -1171,34 +1201,11 @@ def main() -> None:
                         nodes_to_process.append((nid, "", "", False))
                 else:
                     for target_type, target_value in raw_targets:
-                        if target_type == "node":
-                            if target_value not in prompt:
-                                _LOGGER.warning(
-                                    f"Node {target_value} not found in prompt, skipping."
-                                )
-                                continue
-                            nodes_to_process.append((target_value, "", "", False))
-                        else:  # region
-                            region_name = target_value
-                            start_marker, end_marker = get_region_markers(region_name)
-                            matching_nodes = find_nodes_with_region(
-                                prompt, workflow, region_name
+                        nodes_to_process.extend(
+                            resolve_target_to_nodes(
+                                prompt, workflow, target_type, target_value, is_neg
                             )
-                            if matching_nodes:
-                                for nid in matching_nodes:
-                                    nodes_to_process.append(
-                                        (nid, start_marker, end_marker, True)
-                                    )
-                            else:
-                                fallback_nid = get_target_clip_node(prompt, is_neg)
-                                if fallback_nid:
-                                    nodes_to_process.append(
-                                        (fallback_nid, start_marker, end_marker, True)
-                                    )
-                                else:
-                                    _LOGGER.warning(
-                                        f"No node found for region '{region_name}' and no fallback available."
-                                    )
+                        )
 
                 # 为每个提示词生成原始、下划线、空格三种变体，去重
                 remove_prompts: Set[str] = set()
@@ -1206,24 +1213,15 @@ def main() -> None:
                     remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
                 _LOGGER.info(f"Remove prompts (variants): {remove_prompts}")
 
-                for (
-                    node_id,
-                    start_marker,
-                    end_marker,
-                    use_markers,
-                ) in nodes_to_process:
-                    workflow_text = get_workflow_node_text(workflow, node_id)
+                for node_id, start_marker, end_marker, use_markers in nodes_to_process:
+                    workflow_text, prompt_text = get_node_texts(
+                        prompt, workflow, node_id
+                    )
                     if workflow_text is None:
                         _LOGGER.error(
                             f"Failed to locate target node {node_id} in workflow metadata."
                         )
                         continue
-
-                    prompt_text = (
-                        prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-                    )
-                    if not isinstance(prompt_text, str):
-                        prompt_text = ""
 
                     for prompt_str_arg in remove_prompts:
                         _LOGGER.info(
@@ -1257,7 +1255,6 @@ def main() -> None:
                                 f"Skipped '{prompt_str_arg}' in node {node_id} (not found or skipped)"
                             )
 
-                    # 所有提示词处理完毕后，写回实际结构
                     prompt[node_id]["inputs"]["text"] = prompt_text
                     update_workflow_node_text(workflow, node_id, workflow_text)
 
@@ -1266,22 +1263,11 @@ def main() -> None:
                     continue
 
             # 提交到 ComfyUI
-            any_success = False
-            for q_idx in range(queue_count):
-                # 必须成功更新种子以避免重复生成，若无法更新则视为错误
-                if update_seeds(prompt, workflow) == 0:
-                    _LOGGER.error(
-                        f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
-                    )
-                    has_errors = True
-                    break
-                update_output_filenames(prompt, workflow)
-                success: bool = send_to_comfyui(comfyui_url, prompt, workflow)
-                if success:
-                    any_success = True
-                else:
-                    has_errors = True
-
+            any_success, submit_error = submit_workflow(
+                prompt, workflow, comfyui_url, jobs, path
+            )
+            if submit_error:
+                has_errors = True
             if any_success:
                 success_count += 1
                 if label_to_set and img_id:
@@ -1301,7 +1287,17 @@ def parse_args():
         dest="command", required=True, help="Sub-commands"
     )
 
-    subparsers.add_parser("queue", help="Queue the image back to ComfyUI")
+    queue_parser = subparsers.add_parser(
+        "queue", help="Queue the image back to ComfyUI"
+    )
+    queue_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
 
     add_parser = subparsers.add_parser(
         "add", help="Add prompt to image metadata and queue"
@@ -1311,6 +1307,14 @@ def parse_args():
         "-S",
         action="store_true",
         help="Do not skip if prompt already exists",
+    )
+    add_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
     )
     add_parser.add_argument(
         "--neg",
@@ -1341,6 +1345,14 @@ def parse_args():
     )
     remove_parser.add_argument(
         "--no-skip", "-S", action="store_true", help="Do not skip if prompt not found"
+    )
+    remove_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
     )
     remove_parser.add_argument(
         "--neg",
