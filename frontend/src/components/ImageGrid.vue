@@ -798,12 +798,11 @@ import { openImageViewerByFilename } from "@/events";
 import useLocationHash from "@/composables/useLocationHash";
 import optionalArray from "@/utils/optionalArray.ts";
 import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument, TrashImagesDocument } from "@/graphql/generated";
+import { MetaDocument } from "@/graphql/generated";
 import useImageHooks from "@/composables/useImageHooks";
 import { useClipboard } from "@/composables/useClipboard";
 import useNotification from "@/composables/useNotification";
-import useTrashHistory from "@/composables/useTrashHistory";
-import mutate from "@/graphql/utils/mutate";
+import useTrashImages from "@/composables/useTrashImages";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -847,7 +846,7 @@ const sortedRatingCounts = computed(() => {
 
 // #region 删除低星级图片功能
 const { show: showNotification } = useNotification();
-const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
+const { trashImages } = useTrashImages();
 const deletingUnmatchedBuffer = ref({
   directoryId: props.directoryId,
   value: false,
@@ -915,36 +914,9 @@ async function handleDeleteUnmatched() {
       (_, i) => i,
     );
 
-    const result = await mutate(TrashImagesDocument, {
-      variables: {
-        input: {
-          directoryId: props.directoryId,
-          filterBy: {
-            rating: ratingsToDelete,
-          },
-        },
-      },
+    await trashImages(props.directoryId, {
+      rating: ratingsToDelete,
     });
-
-    const movedCount = result.data?.trashImages.movedCount ?? 0;
-    const historyId = result.data?.trashImages.historyId;
-
-    void refreshTrashHistory();
-
-    showNotification(
-      `成功将 ${movedCount} 张图片及其配套文件移到暂存区`,
-      "success",
-      10000,
-      historyId
-        ? {
-            text: "撤销",
-            onClick: (closeNotification: () => void) => {
-              undoTrash(historyId);
-              closeNotification();
-            },
-          }
-        : undefined,
-    );
   } catch (err) {
     showNotification(
       err instanceof Error ? err.message : "删除图片失败",
@@ -1410,11 +1382,53 @@ useHotkeys(
   },
 );
 
-// #region 批量模式评分与标签快捷键
+// 批量模式下删除选中图片（Delete 键）
+const isBulkDeleting = ref(false);
+
+useHotkeys(
+  {
+    delete: async () => {
+      const ids = selectedImageIds.value;
+      if (ids.length === 0 || isBulkDeleting.value) return;
+
+      isBulkDeleting.value = true;
+      try {
+        await trashImages(props.directoryId, {
+          id: ids,
+        });
+        // 删除成功后取消选中，避免对已删除图片的后续操作
+        deselectAll();
+      } catch (err) {
+        showNotification(
+          err instanceof Error ? err.message : "批量删除图片失败",
+          "error",
+        );
+      } finally {
+        isBulkDeleting.value = false;
+      }
+    },
+  },
+  {
+    allowInInputs: false,
+    description: "删除选中的图片及其配套文件",
+    enabled: computed(
+      () =>
+        isBulkMode.value &&
+        selectedImageIds.value.length > 0 &&
+        !isBulkDeleting.value &&
+        !imageViewerDialog.visible.value &&
+        !moveImagesDialog.visible.value,
+    ),
+    category: "批量操作",
+  },
+);
+
+// 批量模式下 Delete 键删除的 loading 状态也纳入考量
 const isBulkActionEnabled = computed(() => {
   return (
     isBulkMode.value &&
     selectedImageIds.value.length > 0 &&
+    !isBulkDeleting.value &&
     !imageViewerDialog.visible.value &&
     !moveImagesDialog.visible.value
   );

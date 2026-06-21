@@ -161,13 +161,12 @@ import { mdiFolderMove, mdiClose, mdiLoading, mdiDelete } from "@mdi/js";
 import mutate from "@/graphql/utils/mutate";
 import {
   MoveImagesDocument,
-  TrashImagesDocument,
   type ImageFiltersInput,
   type PathInput,
 } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
-import useTrashHistory from "@/composables/useTrashHistory";
+import useTrashImages from "@/composables/useTrashImages";
 import PathSelector from "./PathSelector.vue";
 
 // #region 属性与事件定义
@@ -189,7 +188,7 @@ const moveError = ref("");
 
 const { show: showNotification } = useNotification();
 const { revealInExplorer } = useOpenDir();
-const { refresh: refreshTrashHistory, undo: undoTrash } = useTrashHistory();
+const { trashImages } = useTrashImages();
 // #endregion
 
 // #region 执行移动图片操作
@@ -202,36 +201,8 @@ async function handleMoveImages() {
 
   try {
     if (toTrash.value) {
-      const result = await mutate(TrashImagesDocument, {
-        variables: {
-          input: {
-            directoryId: props.directoryId,
-            filterBy: props.filterBy,
-          },
-        },
-      });
-
-      const movedCount = result.data?.trashImages.movedCount ?? 0;
-      const historyId = result.data?.trashImages.historyId;
-
+      await trashImages(props.directoryId, props.filterBy);
       emit("close");
-      void refreshTrashHistory();
-
-      // 弹出成功通知，带有撤销按钮
-      showNotification(
-        `成功将 ${movedCount} 张图片及其配套文件移到暂存区`,
-        "success",
-        10000,
-        historyId
-          ? {
-              text: "撤销",
-              onClick: (closeNotification) => {
-                undoTrash(historyId);
-                closeNotification();
-              },
-            }
-          : undefined,
-      );
     } else {
       const toDir = pathInput.value;
       if (!toDir) return;
