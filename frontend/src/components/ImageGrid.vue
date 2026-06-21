@@ -1008,6 +1008,7 @@ const {
   toggleBulkMode,
   toggleSelectImage,
   selectAll,
+  deselectAll,
   invertSelection,
   bulkSetRating,
   bulkSetLabel,
@@ -1170,6 +1171,7 @@ function handleImageClick(img: ImageFragment, event?: MouseEvent) {
 
   if (isCtrlPressed) {
     if (!isBulkMode.value) {
+      deselectAll(); // Ctrl+点击进入批量模式时先清空选择，确保只选中当前图片
       isBulkMode.value = true;
     }
     toggleSelectImage(img.id);
