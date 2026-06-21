@@ -121,8 +121,6 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
     扫描 workflow 和 prompt 中的输出节点，如果发现使用了 %date:...% 占位符且在 prompt 中被写死为旧日期，
     将其更新为当前系统时间的日期静态值。
     """
-    if not workflow:
-        return
 
     # 汇总所有待处理的节点（包含顶层节点和子图内部节点）
     candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str], str]] = []
@@ -240,8 +238,6 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
     通过识别 workflow.nodes 中 widgets_values 的数组临接特征（[seed数值, 变化策略]）精准替换种子值。
     返回成功修改的种子总数。
     """
-    if not workflow:
-        return 0
 
     modified_count: int = 0
 
@@ -366,8 +362,6 @@ def get_workflow_node_text(workflow: Dict[str, Any], node_id_str: str) -> Option
     """
     在 UI 结构 workflow 中获取特定节点的文本 widget 数值。
     """
-    if not workflow:
-        return None
 
     for node in workflow.get("nodes", []):
         if str(node.get("id")) == node_id_str:
@@ -886,8 +880,6 @@ def update_workflow_node_text(
     """
     在 UI 结构 workflow 中同步更新特定节点的文本 widget 数值。
     """
-    if not workflow:
-        return
 
     for node in workflow.get("nodes", []):
         if str(node.get("id")) == node_id_str:
@@ -1001,8 +993,24 @@ def main() -> None:
                     has_errors = True
                     continue
 
+                # 必须同时包含 prompt 且 workflow 有效，否则由于无法更新种子会导致重复生成
+                if not workflow_str:
+                    _LOGGER.error(
+                        f"This PNG image does not contain workflow metadata from ComfyUI: {path}"
+                    )
+                    has_errors = True
+                    continue
+
                 prompt = json.loads(prompt_str)
-                workflow = json.loads(workflow_str) if workflow_str else {}
+                workflow_data: Any = json.loads(workflow_str)
+
+                if not isinstance(workflow_data, dict) or "nodes" not in workflow_data:
+                    _LOGGER.error(
+                        f"This PNG image contains an invalid ComfyUI workflow (missing 'nodes'): {path}"
+                    )
+                    has_errors = True
+                    continue
+                workflow = cast(Dict[str, Any], workflow_data)
         except Exception as e:
             _LOGGER.error(f"Failed to read PNG properties: {e}")
             has_errors = True
