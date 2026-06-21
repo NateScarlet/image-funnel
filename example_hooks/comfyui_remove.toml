@@ -6,7 +6,7 @@ command = "python comfyui.py remove"
 [directive]
 name = "remove"
 usage = """
-/remove [-S] [--neg] [--raw] [--hard] [--all] [--region <name>]... [--node <node-id>]... <prompt>...
+/remove [-S] [--neg] [--raw] [--hard] [--all] [-j <N>] [--region <name>]... [--node <node-id>]... <prompt>...
 给当前目录所有 4 星图片的 ComfyUI 工作流移除指定提示词后再将其入列生成。
 在会话提交后触发，也可以手动通过笔记触发。
 可传入多个提示词，多个提示词会以空格拼接为一个整体后再移除
@@ -17,6 +17,7 @@ usage = """
 --raw 移除时不移除整句，而是精确只移除句子中的指定文本
 --hard 直接删除文本而不是注释对应文本，指定 --raw 的时候自动隐含
 --all 在所有 CLIP 输入节点中删除，不限于指定区域或节点
+-j --jobs <N> 发送工作流次数，默认使用 HOOK_JOBS 环境变量值
 --region <name> 指定查找区域，可多次指定；在所有指定区域中查找并删除
 --node <node-id> 指定查找节点，可多次指定；在所有指定节点中查找并删除
 未指定 --region 和 --node 时，默认使用 positive 区域（指定 --neg 时使用 negative 区域）

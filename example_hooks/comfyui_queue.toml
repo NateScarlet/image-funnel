@@ -6,8 +6,11 @@ command = "python comfyui.py queue"
 [directive]
 name = "queue"
 usage = """
-/queue
+/queue [-j <N>]
 和通过图片触发 `发送至 ComfyUI` 入列效果一致
+
+选项：
+-j --jobs <N> 发送工作流次数，默认使用 HOOK_JOBS 环境变量值
 """
 on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
 
