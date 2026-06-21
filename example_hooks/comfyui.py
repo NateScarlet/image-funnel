@@ -37,6 +37,14 @@ KNOWN_PRIMITIVE_TYPES = {
 KNOWN_SWITCH_TYPES = {"Any Switch (rgthree)", "ComfySwitchNode"}
 
 
+def is_node_disabled(node: Dict[str, Any]) -> bool:
+    """
+    检查节点是否被停用 (Mute/Bypass)。
+    mode 值为 2 (Never/Mute) 或 4 (Bypass)。
+    """
+    return node.get("mode") in (2, 4)
+
+
 def find_terminal_input(
     prompt: Dict[str, Any], node_id: str, input_key: str
 ) -> Tuple[str, str]:
@@ -127,6 +135,8 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
 
     # 1. 收集工作流顶层节点
     for node in workflow.get("nodes", []):
+        if is_node_disabled(node):
+            continue
         candidate_nodes.append(
             (node, str(node.get("id")), False, None, node.get("type"))
         )
@@ -138,6 +148,8 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
     for subgraph in subgraphs:
         subgraph_id = subgraph.get("id")
         for node in subgraph.get("nodes", []):
+            if is_node_disabled(node):
+                continue
             candidate_nodes.append(
                 (
                     node,
@@ -202,6 +214,8 @@ def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) ->
         else:
             for parent_node in workflow.get("nodes", []):
                 if parent_node.get("type") == subgraph_id:
+                    if is_node_disabled(parent_node):
+                        continue
                     api_node_ids.append(f"{parent_node.get('id')}:{node_id_str}")
 
         for api_node_id in api_node_ids:
@@ -256,6 +270,8 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
 
     # 1. 收集工作流顶层节点
     for node in workflow.get("nodes", []):
+        if is_node_disabled(node):
+            continue
         candidate_nodes.append(
             (node, str(node.get("id")), False, None, node.get("type"))
         )
@@ -267,6 +283,8 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
     for subgraph in subgraphs:
         subgraph_id = subgraph.get("id")
         for node in subgraph.get("nodes", []):
+            if is_node_disabled(node):
+                continue
             candidate_nodes.append(
                 (
                     node,
@@ -330,6 +348,8 @@ def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
                 else:
                     for parent_node in workflow.get("nodes", []):
                         if parent_node.get("type") == subgraph_id:
+                            if is_node_disabled(parent_node):
+                                continue
                             api_node_ids.append(
                                 f"{parent_node.get('id')}:{node_id_str}"
                             )
