@@ -349,20 +349,9 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 	}
 
 	// 寻找配套的图片
-	var ids []string
-	var paths []string
-	if imgRelPath, ok := associatedImageRelPath(memoRelPath); ok {
-		img, err := r.imgRepo.Get(ctx, imgRelPath)
-		if err != nil {
-			img, err = apperror.IgnoreNotFound(img, err)
-			if err != nil {
-				return fmt.Errorf("failed to get associated image for memo dispatch: %w", err)
-			}
-		}
-		if img != nil {
-			ids = append(ids, img.ID().String())
-			paths = append(paths, filepath.Join(r.rootDir, img.RelPath()))
-		}
+	events, err := r.findAssociatedImageEvents(ctx, memoRelPath)
+	if err != nil {
+		return fmt.Errorf("failed to get associated image for memo dispatch: %w", err)
 	}
 
 	dirRelPath := filepath.Dir(memoRelPath)
@@ -376,14 +365,6 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 		return fmt.Errorf("failed to get directory for memo dispatch: %w", err)
 	}
 	dirID := dir.ID()
-
-	var events []HookEvent
-	for i, id := range ids {
-		events = append(events, HookEvent{
-			ID:   id,
-			Path: paths[i],
-		})
-	}
 
 	if targetHook.Directive != nil && targetHook.Directive.Name != "" {
 		r.logger.Debug("TriggerForMemo directive matches, will execute directives", zap.String("directiveName", targetHook.Directive.Name))
@@ -495,28 +476,9 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	}
 
 	if len(noDirectiveHooks) > 0 {
-		var ids []string
-		var paths []string
-		if imgRelPath, ok := associatedImageRelPath(event.RelPath); ok {
-			img, err := r.imgRepo.Get(r.ctx, imgRelPath)
-			if err != nil {
-				img, err = apperror.IgnoreNotFound(img, err)
-				if err != nil {
-					r.logger.Error("failed to get associated image for memo update hook", zap.String("memo_path", event.RelPath), zap.String("image_path", imgRelPath), zap.Error(err))
-				}
-			}
-			if img != nil {
-				ids = append(ids, img.ID().String())
-				paths = append(paths, filepath.Join(r.rootDir, img.RelPath()))
-			}
-		}
-
-		var evs []HookEvent
-		for i, id := range ids {
-			evs = append(evs, HookEvent{
-				ID:   id,
-				Path: paths[i],
-			})
+		evs, err := r.findAssociatedImageEvents(r.ctx, event.RelPath)
+		if err != nil {
+			r.logger.Error("failed to get associated image for memo update hook", zap.String("memo_path", event.RelPath), zap.Error(err))
 		}
 
 		for _, h := range noDirectiveHooks {
@@ -617,8 +579,6 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		dirID       string
 		dirRelPath  string
 		failed      bool
-		trimmedLine string
-		newline     string
 	}
 
 	var pending []pendingHook
@@ -701,48 +661,16 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		}
 
 		// 寻找配套的图片
-		var ids []string
-		var paths []string
-		if imgRelPath, ok := associatedImageRelPath(relPath); ok {
-			img, err := r.imgRepo.Get(ctx, imgRelPath)
-			if err != nil {
-				img, err = apperror.IgnoreNotFound(img, err)
-				if err != nil {
-					r.logger.Error("failed to get associated image for memo directive", zap.String("memo_path", relPath), zap.String("image_path", imgRelPath), zap.Error(err))
-					continue
-				}
-			}
-			if img != nil {
-				ids = append(ids, img.ID().String())
-				paths = append(paths, filepath.Join(r.rootDir, img.RelPath()))
-				r.logger.Debug("executeMemoDirectives associated image found", zap.String("imgID", img.ID().String()))
-			} else {
-				r.logger.Debug("executeMemoDirectives associated image not found (ignored)")
-			}
+		evs, err := r.findAssociatedImageEvents(ctx, relPath)
+		if err != nil {
+			r.logger.Error("failed to get associated image for memo directive", zap.String("memo_path", relPath), zap.Error(err))
+			continue
 		}
 
 		var args []string
 		if cmdArgs != "" {
 			args = splitArgs(cmdArgs)
 		}
-
-		var evs []HookEvent
-		for i, id := range ids {
-			evs = append(evs, HookEvent{
-				ID:   id,
-				Path: paths[i],
-			})
-		}
-
-		var newline string
-		if strings.HasSuffix(matchedLine, "\r\n") {
-			newline = "\r\n"
-		} else if strings.HasSuffix(matchedLine, "\n") {
-			newline = "\n"
-		}
-
-		lineWithoutNL := strings.TrimSuffix(matchedLine, newline)
-		trimmed := strings.TrimSpace(lineWithoutNL)
 
 		r.logger.Debug("executeMemoDirectives appending pending directive",
 			zap.String("hookID", hookConfig.ID),
@@ -758,8 +686,6 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			relPath:     relPath,
 			dirID:       dirID.String(),
 			dirRelPath:  dirRelPath,
-			trimmedLine: trimmed,
-			newline:     newline,
 		})
 	}
 
@@ -773,8 +699,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 	newContent := setHookRunID(content, runID)
 	if newContent != content {
 		newContentBytes := []byte(newContent)
-		r.addWriteIgnore(memoAbsPath, r.hashContent(newContentBytes), 10*time.Second)
-		if err := os.WriteFile(memoAbsPath, newContentBytes, 0644); err != nil {
+		if err := r.writeFileWithIgnore(memoAbsPath, newContentBytes, 0644); err != nil {
 			r.logger.Error("failed to write hook-run-id to memo", zap.String("path", relPath), zap.Error(err))
 			return false, err
 		}
@@ -855,14 +780,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 				action = pTask.config.Directive.OnFailAction
 			}
 
-			switch action {
-			case "REMOVE":
-				return ""
-			case "KEEP":
-				return matchedLine
-			default:
-				return fmt.Sprintf("%%%% %s %%%%"+pTask.newline, pTask.trimmedLine)
-			}
+			return applyDirectiveAction(action, matchedLine)
 		})
 
 		// 擦除 hook-run-id
@@ -878,8 +796,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			}
 			// 在写回磁盘前，计算 xxhash 并注册为忽略事件，自防循环
 			finalContentBytes := []byte(finalContent)
-			r.addWriteIgnore(p, r.hashContent(finalContentBytes), 10*time.Second)
-			if err := os.WriteFile(p, finalContentBytes, 0644); err != nil {
+			if err := r.writeFileWithIgnore(p, finalContentBytes, 0644); err != nil {
 				r.logger.Error("failed to write clean content to memo file during cleanup", zap.String("path", p), zap.Error(err))
 			}
 		}
@@ -1318,28 +1235,9 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 		}
 
 		if len(noDirectiveMemoScanHooks) > 0 {
-			var ids []string
-			var paths []string
-			if imgRelPath, ok := associatedImageRelPath(memoRelPath); ok {
-				img, err := r.imgRepo.Get(ctx, imgRelPath)
-				if err != nil {
-					img, err = apperror.IgnoreNotFound(img, err)
-					if err != nil {
-						r.logger.Error("failed to get associated image for commit scan hook", zap.String("memo_path", memoRelPath), zap.String("image_path", imgRelPath), zap.Error(err))
-					}
-				}
-				if img != nil {
-					ids = append(ids, img.ID().String())
-					paths = append(paths, filepath.Join(r.rootDir, img.RelPath()))
-				}
-			}
-
-			var evs []HookEvent
-			for i, id := range ids {
-				evs = append(evs, HookEvent{
-					ID:   id,
-					Path: paths[i],
-				})
+			evs, err := r.findAssociatedImageEvents(ctx, memoRelPath)
+			if err != nil {
+				r.logger.Error("failed to get associated image for commit scan hook", zap.String("memo_path", memoRelPath), zap.Error(err))
 			}
 			for _, h := range noDirectiveMemoScanHooks {
 				err = r.executeHookSync(h, "post_commit_session", evs, nil, memoRelPath, dirID.String(), dirRelPath, "")
@@ -1350,6 +1248,26 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 		}
 	}
 	return nil
+}
+
+// applyDirectiveAction 根据指令动作（REMOVE/KEEP/COMMENT_OUT）返回替换后的文本行
+func applyDirectiveAction(action string, matchedLine string) string {
+	switch action {
+	case "REMOVE":
+		return ""
+	case "KEEP":
+		return matchedLine
+	default: // COMMENT_OUT
+		var newline string
+		if strings.HasSuffix(matchedLine, "\r\n") {
+			newline = "\r\n"
+		} else if strings.HasSuffix(matchedLine, "\n") {
+			newline = "\n"
+		}
+		lineWithoutNL := strings.TrimSuffix(matchedLine, newline)
+		trimmed := strings.TrimSpace(lineWithoutNL)
+		return fmt.Sprintf("%%%% %s %%%%"+newline, trimmed)
+	}
 }
 
 // splitArgs 按空白分割参数字符串，支持双引号包裹含空格的参数
@@ -1383,6 +1301,28 @@ func associatedImageRelPath(memoRelPath string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimSuffix(memoRelPath, ext), true
+}
+
+// findAssociatedImageEvents 查找备忘录配套的图片，构建对应的 HookEvent 列表
+func (r *Runner) findAssociatedImageEvents(ctx context.Context, memoRelPath string) ([]HookEvent, error) {
+	imgRelPath, ok := associatedImageRelPath(memoRelPath)
+	if !ok {
+		return nil, nil
+	}
+	img, err := r.imgRepo.Get(ctx, imgRelPath)
+	if err != nil {
+		img, err = apperror.IgnoreNotFound(img, err)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if img == nil {
+		return nil, nil
+	}
+	return []HookEvent{{
+		ID:   img.ID().String(),
+		Path: filepath.Join(r.rootDir, img.RelPath()),
+	}}, nil
 }
 
 // parseFrontmatter 提取文件的 frontmatter 和 body。
@@ -1539,6 +1479,12 @@ func (r *Runner) shouldIgnoreEvent(absPath string, content []byte) bool {
 	return item.contentHash == r.hashContent(content)
 }
 
+// writeFileWithIgnore 写入文件前注册防重入哈希，避免自身写入触发文件变更事件
+func (r *Runner) writeFileWithIgnore(absPath string, content []byte, perm os.FileMode) error {
+	r.addWriteIgnore(absPath, r.hashContent(content), 10*time.Second)
+	return os.WriteFile(absPath, content, perm)
+}
+
 func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]HookConfig, failedDirectives map[string]bool) {
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
@@ -1570,22 +1516,7 @@ func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, 
 		if failedDirectives != nil && failedDirectives[cmdName] {
 			action = hookConfig.Directive.OnFailAction
 		}
-		switch action {
-		case "REMOVE":
-			return ""
-		case "KEEP":
-			return matchedLine
-		default:
-			var newline string
-			if strings.HasSuffix(matchedLine, "\r\n") {
-				newline = "\r\n"
-			} else if strings.HasSuffix(matchedLine, "\n") {
-				newline = "\n"
-			}
-			lineWithoutNL := strings.TrimSuffix(matchedLine, newline)
-			trimmed := strings.TrimSpace(lineWithoutNL)
-			return fmt.Sprintf("%%%% %s %%%%"+newline, trimmed)
-		}
+		return applyDirectiveAction(action, matchedLine)
 	})
 
 	finalContent = removeHookRunID(finalContent)
@@ -1599,8 +1530,7 @@ func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, 
 			return
 		}
 		finalContentBytes := []byte(finalContent)
-		r.addWriteIgnore(absPath, r.hashContent(finalContentBytes), 10*time.Second)
-		if err := os.WriteFile(absPath, finalContentBytes, 0644); err != nil {
+		if err := r.writeFileWithIgnore(absPath, finalContentBytes, 0644); err != nil {
 			r.logger.Error("failed to write clean content to memo file during late cleanup", zap.String("path", absPath), zap.Error(err))
 		}
 	}
