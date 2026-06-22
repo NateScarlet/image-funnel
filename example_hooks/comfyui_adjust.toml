@@ -1,0 +1,37 @@
+id = "comfyui-adjust"
+name = "调整 ComfyUI 提示词或 Lora 权重"
+description = "在会话提交时运行 /adjust 指令"
+command = "python comfyui.py adjust"
+
+[directive]
+name = "adjust"
+usage = """
+/adjust lora <name> <weight> [-u] [-j <N>] [--no-skip]
+/adjust prompt <text> <weight> [-u] [-j <N>] [--skip-add] [--no-skip] [--neg] [--region <name>]... [--node <node-id>]...
+调整当前目录所有 4 星图片的 ComfyUI 工作流中的提示词权重或者 Lora 权重。
+权重（weight）可以是精确值（例如 0.8），也可以是范围（例如 0.5:1.0:0.1 或 0.5:1.0，步进值默认由 HOOK_WEIGHT_STEP 指定，无指定时为 0.1）。
+
+选项说明：
+--skip-add             提示词不存在时跳过添加，默认不存在时会添加
+--no-skip              即使没有任何修改也强制发送给 ComfyUI，默认如果没有修改则跳过发送
+-u --update-seed       强制启用随机种子更新（在生成多个 job 时会自动启用）
+-j --jobs <N>          每个权重版本发送工作流次数，默认使用 HOOK_JOBS 环境变量值
+--neg                  当没有 region 或 node 匹配时，提示词调整匹配负向区域而不是正向
+--region <name>        指定提示词目标区域，可多次指定
+--node <node-id>       指定提示词目标节点，可多次指定
+"""
+on_success_action = "COMMENT_OUT"
+
+[on.post_commit_session.memo_scan]
+ignore_directive = false
+
+[on.memo_dispatch]
+
+[env]
+HOOK_START_REGION_PREFIX = "//#region "
+HOOK_END_REGION_PREFIX = "//#endregion "
+HOOK_IMAGE_RATING = "4"
+HOOK_JOBS = "1"
+HOOK_WEIGHT_STEP = "0.1"
+HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
+HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"

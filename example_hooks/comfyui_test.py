@@ -16,6 +16,9 @@ from comfyui import (
     get_target_clip_node,
     process_double_track,
     strip_comments_for_prompt,
+    parse_weights,
+    modify_lora_weights,
+    modify_prompt_weights,
 )
 
 
@@ -436,6 +439,229 @@ class TestComfyUIHook(unittest.TestCase):
             self.assertEqual(target_eq_neg, "node_2")
         finally:
             del os.environ["HOOK_NEGATIVE_KEYWORDS"]
+
+    def test_parse_weights(self):
+        # 1. 单个数字
+        self.assertEqual(parse_weights("0.8"), [0.8])
+        self.assertEqual(parse_weights("-0.5"), [-0.5])
+
+        # 2. 范围带步长
+        self.assertEqual(parse_weights("0.5:0.7:0.1"), [0.5, 0.6, 0.7])
+        self.assertEqual(parse_weights("-0.5:0.5:0.5"), [-0.5, 0.0, 0.5])
+
+        # 3. 范围默认步长
+        os.environ["HOOK_WEIGHT_STEP"] = "0.2"
+        try:
+            self.assertEqual(parse_weights("0.5:0.9"), [0.5, 0.7, 0.9])
+        finally:
+            del os.environ["HOOK_WEIGHT_STEP"]
+
+        # 4. 异常格式
+        with self.assertRaises(ValueError):
+            parse_weights("abc")
+        with self.assertRaises(ValueError):
+            parse_weights("0.5:abc")
+
+    def test_adjust_lora_weights(self):
+        for png_path in self.png_files:
+            with self.subTest(png_path=png_path):
+                with Image.open(png_path) as img:
+                    prompt = json.loads(img.info["prompt"])
+                    workflow = json.loads(img.info["workflow"])
+
+                # 两张样本图片均包含 "Power Lora Loader (rgthree)"
+                lora_keywords = ["evanescia", "semi-nffa", "cunny_funky"]
+                target_keyword = None
+                for kw in lora_keywords:
+                    # 检查样本中是否含有该 lora
+                    for v in prompt.values():
+                        if isinstance(v, dict):
+                            v_dict = cast(Dict[str, Any], v)
+                            if (
+                                v_dict.get("class_type")
+                                == "Power Lora Loader (rgthree)"
+                            ):
+                                inputs = cast(Dict[str, Any], v_dict.get("inputs", {}))
+                                for k2, v2 in inputs.items():
+                                    if k2.startswith("lora_") and isinstance(v2, dict):
+                                        v2_dict = cast(Dict[str, Any], v2)
+                                        lora_val = v2_dict.get("lora", "")
+                                        if (
+                                            isinstance(lora_val, str)
+                                            and kw in lora_val.lower()
+                                        ):
+                                            target_keyword = kw
+                                            break
+
+                self.assertIsNotNone(
+                    target_keyword, f"No expected Lora keyword found in {png_path}"
+                )
+                assert target_keyword is not None
+
+                # 修改 Lora 权重
+                modified = modify_lora_weights(prompt, workflow, target_keyword, 0.99)
+                self.assertTrue(modified)
+
+                # 验证修改结果
+                found_prompt_updated = False
+                found_workflow_updated = False
+                for v in prompt.values():
+                    if isinstance(v, dict):
+                        v_dict = cast(Dict[str, Any], v)
+                        if v_dict.get("class_type") == "Power Lora Loader (rgthree)":
+                            inputs = cast(Dict[str, Any], v_dict.get("inputs", {}))
+                            for k2, v2 in inputs.items():
+                                if k2.startswith("lora_") and isinstance(v2, dict):
+                                    v2_dict = cast(Dict[str, Any], v2)
+                                    lora_val = v2_dict.get("lora", "")
+                                    if (
+                                        isinstance(lora_val, str)
+                                        and target_keyword in lora_val.lower()
+                                    ):
+                                        self.assertEqual(v2_dict.get("strength"), 0.99)
+                                        found_prompt_updated = True
+
+                for node in workflow.get("nodes", []):
+                    node_dict = cast(Dict[str, Any], node)
+                    if node_dict.get("type") == "Power Lora Loader (rgthree)":
+                        widgets_values = node_dict.get("widgets_values", [])
+                        if isinstance(widgets_values, list):
+                            widgets_values_list = cast(List[Any], widgets_values)
+                            for val in widgets_values_list:
+                                if isinstance(val, dict) and "lora" in val:
+                                    val_dict = cast(Dict[str, Any], val)
+                                    lora_val = val_dict.get("lora", "")
+                                    if (
+                                        isinstance(lora_val, str)
+                                        and target_keyword in lora_val.lower()
+                                    ):
+                                        self.assertEqual(val_dict.get("strength"), 0.99)
+                                        found_workflow_updated = True
+
+                self.assertTrue(found_prompt_updated)
+                self.assertTrue(found_workflow_updated)
+
+    def test_adjust_lora_weights_native_and_primitive(self):
+        # 伪造一个原生的 LoraLoader 节点，且其权重通过 PrimitiveFloat 连接
+        prompt: Dict[str, Any] = {
+            "node_lora": {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "lora_name": "style_test.safetensors",
+                    "strength_model": ["node_prim", 0],
+                    "strength_clip": ["node_prim", 0],
+                },
+            },
+            "node_prim": {"class_type": "PrimitiveFloat", "inputs": {"value": 1.0}},
+        }
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "node_lora",
+                    "type": "LoraLoader",
+                    "widgets_values": ["style_test.safetensors", 1.0, 1.0],
+                },
+                {"id": "node_prim", "type": "PrimitiveFloat", "widgets_values": [1.0]},
+            ]
+        }
+
+        modified = modify_lora_weights(prompt, workflow, "style_test", -0.75)
+        self.assertTrue(modified)
+
+        # 验证 prompt 侧被连接的 Primitive 节点值是否被修改为 -0.75
+        node_prim = cast(Dict[str, Any], prompt["node_prim"])
+        prim_inputs = cast(Dict[str, Any], node_prim["inputs"])
+        self.assertEqual(prim_inputs["value"], -0.75)
+        # 验证 workflow 侧的 Primitive 节点的 widgets_values[0] 是否被修改为 -0.75
+        nodes_list = cast(List[Dict[str, Any]], workflow["nodes"])
+        for node in nodes_list:
+            if node["id"] == "node_prim":
+                widgets_values = node["widgets_values"]
+                if isinstance(widgets_values, list):
+                    self.assertEqual(widgets_values[0], -0.75)
+            elif node["id"] == "node_lora":
+                self.assertEqual(node["widgets_values"][1], -0.75)
+                self.assertEqual(node["widgets_values"][2], -0.75)
+
+    def test_adjust_prompt_weights(self):
+        for png_path in self.png_files:
+            with self.subTest(png_path=png_path):
+                with Image.open(png_path) as img:
+                    prompt = json.loads(img.info["prompt"])
+                    workflow = json.loads(img.info["workflow"])
+
+                # 定位正向提示词节点
+                target_node_id = get_target_clip_node(prompt, is_neg=False)
+                self.assertIsNotNone(target_node_id)
+                assert target_node_id is not None
+
+                target_nodes = [
+                    (
+                        target_node_id,
+                        "//#region hook-positive",
+                        "//#endregion hook-positive",
+                        True,
+                    )
+                ]
+
+                # 检查是否存在 "score_7"
+                wf_text = get_workflow_node_text(workflow, target_node_id)
+                self.assertIsNotNone(wf_text)
+                assert wf_text is not None
+
+                target_word = "score_7" if "score_7" in wf_text else "masterpiece"
+                self.assertIn(target_word, wf_text)
+
+                modified = modify_prompt_weights(
+                    prompt, workflow, target_nodes, target_word, 1.35, skip_add=True
+                )
+                self.assertTrue(modified)
+
+                new_wf_text = get_workflow_node_text(workflow, target_node_id)
+                self.assertIsNotNone(new_wf_text)
+                assert new_wf_text is not None
+                self.assertIn(f"({target_word}:1.35)", new_wf_text)
+
+                new_pr_text = prompt[target_node_id]["inputs"]["text"]
+                self.assertIn(f"({target_word}:1.35)", new_pr_text)
+
+                # 再次修改：应该支持在带权重的括号中继续修改
+                modified2 = modify_prompt_weights(
+                    prompt, workflow, target_nodes, target_word, -0.5, skip_add=True
+                )
+                self.assertTrue(modified2)
+
+                new_wf_text2 = get_workflow_node_text(workflow, target_node_id)
+                self.assertIsNotNone(new_wf_text2)
+                assert new_wf_text2 is not None
+                self.assertIn(f"({target_word}:-0.5)", new_wf_text2)
+
+                # 测试不存在的词，且 skip_add=True -> 应不修改，返回 False
+                modified_skip = modify_prompt_weights(
+                    prompt,
+                    workflow,
+                    target_nodes,
+                    "non_existent_word_abc",
+                    1.5,
+                    skip_add=True,
+                )
+                self.assertFalse(modified_skip)
+
+                # 测试不存在的词，且 skip_add=False -> 应修改成功，返回 True 且添加该词
+                modified_add = modify_prompt_weights(
+                    prompt,
+                    workflow,
+                    target_nodes,
+                    "non_existent_word_abc",
+                    1.5,
+                    skip_add=False,
+                )
+                self.assertTrue(modified_add)
+
+                new_wf_text3 = get_workflow_node_text(workflow, target_node_id)
+                self.assertIsNotNone(new_wf_text3)
+                assert new_wf_text3 is not None
+                self.assertIn("(non_existent_word_abc:1.5)", new_wf_text3)
 
 
 if __name__ == "__main__":

@@ -1074,7 +1074,7 @@ def main() -> None:
 
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
-    if args.command in ["add", "remove"]:
+    if args.command in ["add", "remove", "adjust"]:
         _LOGGER.info(f"Command is {args.command}, fetching images via GraphQL...")
         targets = fetch_images(required_rating)
     else:
@@ -1152,6 +1152,92 @@ def main() -> None:
             if submit_error:
                 has_errors = True
             if any_success:
+                success_count += 1
+                if label_to_set and img_id:
+                    update_image_label(img_id, label_to_set)
+
+        elif args.command == "adjust":
+            try:
+                weights = parse_weights(args.weight)
+            except Exception as e:
+                _LOGGER.error(f"Failed to parse weights: {e}")
+                has_errors = True
+                continue
+
+            total_runs = len(weights) * jobs
+            enable_seed_update = args.update_seed or (total_runs > 1)
+            any_image_success = False
+
+            for w in weights:
+                prompt_copy = json.loads(json.dumps(prompt))
+                workflow_copy = json.loads(json.dumps(workflow))
+                is_modified = False
+
+                if args.adjust_type == "lora":
+                    is_modified = modify_lora_weights(
+                        prompt_copy, workflow_copy, args.name, w
+                    )
+                elif args.adjust_type == "prompt":
+                    is_neg = args.neg
+                    raw_targets = []
+                    if args.node:
+                        for nid in args.node:
+                            raw_targets.append(("node", nid))
+                    if args.region:
+                        for rname in args.region:
+                            raw_targets.append(("region", rname))
+                    if not raw_targets:
+                        default_region = "negative" if is_neg else "positive"
+                        raw_targets.append(("region", default_region))
+
+                    target_nodes: List[Tuple[str, str, str, bool]] = []
+                    for target_type, target_value in raw_targets:
+                        target_nodes.extend(
+                            resolve_target_to_nodes(
+                                prompt_copy,
+                                workflow_copy,
+                                target_type,
+                                target_value,
+                                is_neg,
+                            )
+                        )
+
+                    is_modified = modify_prompt_weights(
+                        prompt_copy,
+                        workflow_copy,
+                        target_nodes,
+                        args.text,
+                        w,
+                        args.skip_add,
+                    )
+
+                if not is_modified and not args.no_skip:
+                    _LOGGER.info(
+                        f"No modification made for image {path} with weight {w}. Skipping submission (use --no-skip to force)."
+                    )
+                    continue
+
+                for q_idx in range(jobs):
+                    if jobs > 1 or len(weights) > 1:
+                        _LOGGER.info(f"  -> Queueing weight {w} run {q_idx+1}/{jobs}")
+                    job_prompt = json.loads(json.dumps(prompt_copy))
+                    job_workflow = json.loads(json.dumps(workflow_copy))
+
+                    if enable_seed_update:
+                        if update_seeds(job_prompt, job_workflow) == 0:
+                            _LOGGER.error(
+                                f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
+                            )
+                            has_errors = True
+                            break
+                    update_output_filenames(job_prompt, job_workflow)
+
+                    if send_to_comfyui(comfyui_url, job_prompt, job_workflow):
+                        any_image_success = True
+                    else:
+                        has_errors = True
+
+            if any_image_success:
                 success_count += 1
                 if label_to_set and img_id:
                     update_image_label(img_id, label_to_set)
@@ -1426,7 +1512,393 @@ def parse_args():
     )
     remove_parser.add_argument("prompt", nargs="+", help="The prompt text to remove")
 
+    # adjust command
+    adjust_parser = subparsers.add_parser(
+        "adjust", help="Adjust prompt weights or existing Lora weights"
+    )
+    adjust_subparsers = adjust_parser.add_subparsers(
+        dest="adjust_type", required=True, help="Adjustment types"
+    )
+
+    # 1. adjust lora
+    lora_parser = adjust_subparsers.add_parser(
+        "lora", help="Adjust existing Lora weights"
+    )
+    lora_parser.add_argument("name", help="Target Lora name (substring match)")
+    lora_parser.add_argument(
+        "weight", help="Weight value or range (e.g. 0.8 or 0.5:1.0:0.1)"
+    )
+    lora_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
+    lora_parser.add_argument(
+        "--update-seed",
+        "-u",
+        action="store_true",
+        help="Force enable seed updating",
+    )
+    lora_parser.add_argument(
+        "--no-skip",
+        action="store_true",
+        help="Do not skip ComfyUI submission even if no changes were made",
+    )
+
+    # 2. adjust prompt
+    prompt_parser = adjust_subparsers.add_parser("prompt", help="Adjust prompt weights")
+    prompt_parser.add_argument("text", help="Target prompt text to adjust")
+    prompt_parser.add_argument(
+        "weight", help="Weight value or range (e.g. 1.2 or 0.8:1.2:0.1)"
+    )
+    prompt_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
+    prompt_parser.add_argument(
+        "--update-seed",
+        "-u",
+        action="store_true",
+        help="Force enable seed updating",
+    )
+    prompt_parser.add_argument(
+        "--no-skip",
+        action="store_true",
+        help="Do not skip ComfyUI submission even if no changes were made",
+    )
+    prompt_parser.add_argument(
+        "--skip-add",
+        action="store_true",
+        help="Skip adding the prompt if it does not exist",
+    )
+    prompt_parser.add_argument(
+        "--neg",
+        action="store_true",
+        help="When no region or node matches, use negative keyword matching instead of positive",
+    )
+    prompt_parser.add_argument(
+        "--region",
+        action="append",
+        default=None,
+        metavar="name",
+        help="Target region name, can be specified multiple times; priority after node",
+    )
+    prompt_parser.add_argument(
+        "--node",
+        action="append",
+        default=None,
+        metavar="node-id",
+        help="Target node ID, can be specified multiple times; highest priority",
+    )
+
     return parser.parse_args()
+
+
+def parse_weights(weight_str: str) -> List[float]:
+    """
+    解析权重值或范围值，支持：
+    - 单一数值: 0.8
+    - 范围带步长: 0.5:1.0:0.1
+    - 范围默认步长: 0.5:1.0 (步进值默认由 HOOK_WEIGHT_STEP 环境变量指定，无指定时为 0.1)
+    """
+    parts = weight_str.split(":")
+    if len(parts) == 1:
+        try:
+            return [float(parts[0])]
+        except ValueError:
+            raise ValueError(f"Invalid weight format: '{weight_str}'")
+    elif len(parts) in (2, 3):
+        try:
+            start = float(parts[0])
+            end = float(parts[1])
+            if len(parts) == 3:
+                step = float(parts[2])
+            else:
+                default_step_str = os.getenv("HOOK_WEIGHT_STEP", "0.1")
+                step = float(default_step_str)
+        except ValueError:
+            raise ValueError(f"Invalid weight range format: '{weight_str}'")
+
+        if step == 0:
+            raise ValueError("Step cannot be zero.")
+
+        weights: List[float] = []
+        curr = start
+        if step > 0:
+            while curr <= end + (step * 0.01):
+                weights.append(round(curr, 4))
+                curr += step
+        else:
+            while curr >= end + (step * 0.01):
+                weights.append(round(curr, 4))
+                curr += step
+        if not weights:
+            raise ValueError(f"No weights generated from range '{weight_str}'")
+        return weights
+    else:
+        raise ValueError(f"Invalid weight format: '{weight_str}'")
+
+
+def modify_lora_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    lora_name_query: str,
+    target_weight: float,
+) -> bool:
+    """
+    修改 prompt (API 结构) 和 workflow (UI 结构) 中已存在的 Lora 权重。
+    支持原生 LoraLoader 和 Power Lora Loader (rgthree)。
+    """
+    is_modified = False
+    query_lower = lora_name_query.lower()
+
+    # 记录在 prompt 中被修改了参数的 Primitive 节点及其新数值，用于在 workflow 中同步
+    modified_primitive_nodes: Dict[str, float] = {}
+
+    # 1. 遍历并修改 prompt (API 结构)
+    for nid, node in prompt.items():
+        node_dict = cast(Dict[str, Any], node)
+        class_type = node_dict.get("class_type", "")
+        if class_type == "LoraLoader":
+            inputs = node_dict.get("inputs", {})
+            lora_name = inputs.get("lora_name", "")
+            if isinstance(lora_name, str) and query_lower in lora_name.lower():
+                # 原生 LoraLoader 修改 strength_model 和 strength_clip
+                for ik in ["strength_model", "strength_clip"]:
+                    if ik in inputs:
+                        src_nid, src_key = find_terminal_input(prompt, nid, ik)
+                        current_val = prompt[src_nid]["inputs"].get(src_key)
+                        if current_val != target_weight:
+                            prompt[src_nid]["inputs"][src_key] = target_weight
+                            modified_primitive_nodes[src_nid] = target_weight
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated LoraLoader node {nid} ({lora_name}) input '{ik}' (terminal node {src_nid} key '{src_key}') to {target_weight}"
+                            )
+        elif class_type == "Power Lora Loader (rgthree)":
+            inputs = node_dict.get("inputs", {})
+            for k, v in list(inputs.items()):
+                if k.startswith("lora_") and isinstance(v, dict):
+                    v_dict = cast(Dict[str, Any], v)
+                    lora_path = v_dict.get("lora", "")
+                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
+                        current_strength = v_dict.get("strength")
+                        if current_strength != target_weight:
+                            v_dict["strength"] = target_weight
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated Power Lora Loader node {nid} ({lora_path}) key '{k}' strength to {target_weight}"
+                            )
+
+    # 2. 同步修改 workflow (UI 结构)
+    # A. 遍历并修改可能连线的 Primitive 节点
+    for node in workflow.get("nodes", []):
+        nid_str = str(node.get("id"))
+        if nid_str in modified_primitive_nodes:
+            new_val = modified_primitive_nodes[nid_str]
+            widgets_values = node.get("widgets_values")
+            if isinstance(widgets_values, list) and widgets_values:
+                widgets_values[0] = new_val
+                _LOGGER.info(
+                    f"Updated workflow Primitive node {nid_str} widget value to {new_val}"
+                )
+
+    # B. 收集所有未停用节点（包括顶层和子图内部节点）
+    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str]]] = []
+    for node in workflow.get("nodes", []):
+        if not is_node_disabled(node):
+            candidate_nodes.append((node, str(node.get("id")), False, None))
+    subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
+    for subgraph in subgraphs:
+        subgraph_id = subgraph.get("id")
+        for node in subgraph.get("nodes", []):
+            if not is_node_disabled(node):
+                candidate_nodes.append((node, str(node.get("id")), True, subgraph_id))
+
+    for node, node_id_str, _, subgraph_id in candidate_nodes:
+        node_type = node.get("type", "")
+        widgets_values = node.get("widgets_values")
+        if not isinstance(widgets_values, list):
+            continue
+        widgets_values_list = cast(List[Any], widgets_values)
+
+        if node_type == "LoraLoader":
+            if len(widgets_values_list) > 0 and isinstance(widgets_values_list[0], str):
+                lora_name = widgets_values_list[0]
+                if query_lower in lora_name.lower():
+                    if len(widgets_values_list) > 1 and isinstance(
+                        widgets_values_list[1], (int, float)
+                    ):
+                        if widgets_values_list[1] != target_weight:
+                            widgets_values_list[1] = target_weight
+                            is_modified = True
+                    if len(widgets_values_list) > 2 and isinstance(
+                        widgets_values_list[2], (int, float)
+                    ):
+                        if widgets_values_list[2] != target_weight:
+                            widgets_values_list[2] = target_weight
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated workflow LoraLoader {node_id_str} weight to {target_weight}"
+                            )
+
+        elif node_type == "Power Lora Loader (rgthree)":
+            for val in widgets_values_list:
+                if isinstance(val, dict) and "lora" in val:
+                    val_dict = cast(Dict[str, Any], val)
+                    lora_path = val_dict.get("lora", "")
+                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
+                        if val_dict.get("strength") != target_weight:
+                            val_dict["strength"] = target_weight
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated workflow Power Lora Loader {node_id_str} widget Lora strength to {target_weight}"
+                            )
+
+    return is_modified
+
+
+def adjust_prompt_weight(
+    text: str, target_prompt: str, new_weight: float
+) -> Tuple[str, bool]:
+    """
+    在 CLIPTextEncode 的文本中，找到并更新特定提示词的权重为 new_weight。
+    支持匹配格式：(word:weight)、(word) 以及裸词 word。
+    返回 (new_text, is_modified)。
+    """
+    escaped_target = re.escape(target_prompt)
+
+    # 1. 优先匹配已带权重的格式, 如 (beautiful scenery:1.2) 或 (beautiful scenery:-0.5)
+    pattern_with_weight = re.compile(
+        rf"\(\s*{escaped_target}\s*:\s*[0-9.-]+\s*\)", re.IGNORECASE
+    )
+    if pattern_with_weight.search(text):
+        new_text = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", text)
+        return new_text, True
+
+    # 2. 匹配带括号但无权重的格式, 如 (beautiful scenery)
+    pattern_with_brackets = re.compile(rf"\(\s*{escaped_target}\s*\)", re.IGNORECASE)
+    if pattern_with_brackets.search(text):
+        new_text = pattern_with_brackets.sub(f"({target_prompt}:{new_weight})", text)
+        return new_text, True
+
+    # 3. 匹配裸词，两边使用单词边界以防匹配子串 (caterpillar vs cat)
+    pattern_bare = re.compile(rf"\b{escaped_target}\b", re.IGNORECASE)
+    if pattern_bare.search(text):
+        new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
+        return new_text, True
+
+    return text, False
+
+
+def modify_prompt_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    target_nodes: List[Tuple[str, str, str, bool]],
+    target_prompt: str,
+    target_weight: float,
+    skip_add: bool,
+) -> bool:
+    """
+    在 CLIPTextEncode 节点中调整提示词的权重。
+    如果不存在，且未指定 skip_add 选项，则将其添加到第一个有效节点上。
+    """
+    is_modified = False
+    any_existing_modified = False
+
+    # 1. 首先尝试在所有候选目标节点中修改已存在的提示词
+    for node_id, start_marker, end_marker, use_markers in target_nodes:
+        workflow_text, prompt_text = get_node_texts(prompt, workflow, node_id)
+        if workflow_text is None:
+            continue
+
+        new_workflow_text, mod_wf = adjust_prompt_weight(
+            workflow_text, target_prompt, target_weight
+        )
+        new_prompt_text, mod_pr = adjust_prompt_weight(
+            prompt_text, target_prompt, target_weight
+        )
+
+        if mod_wf or mod_pr:
+            prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
+                new_prompt_text
+            )
+            update_workflow_node_text(workflow, node_id, new_workflow_text)
+            any_existing_modified = True
+            is_modified = True
+            _LOGGER.info(
+                f"Updated existing prompt '{target_prompt}' weight to {target_weight} in node {node_id}"
+            )
+
+    # 2. 如果没有任何一个节点含有该提示词，且允许添加，则在第一个节点上添加
+    if not any_existing_modified and not skip_add:
+        if target_nodes:
+            node_id, start_marker, end_marker, use_markers = target_nodes[0]
+            workflow_text, prompt_text = get_node_texts(prompt, workflow, node_id)
+            if workflow_text is not None:
+                added_text = f"({target_prompt}:{target_weight})"
+                start_idx = -1
+                end_idx = -1
+                if use_markers:
+                    start_idx = workflow_text.find(start_marker)
+                    end_idx = workflow_text.find(end_marker)
+
+                has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
+
+                if has_marker:
+                    before_marker = workflow_text[:start_idx]
+                    marker_content = workflow_text[
+                        start_idx + len(start_marker) : end_idx
+                    ]
+                    after_marker = workflow_text[end_idx + len(end_marker) :]
+
+                    stripped = marker_content.strip()
+                    if stripped:
+                        if not stripped.endswith(","):
+                            stripped += ","
+                        new_content_prompt = f"{stripped}\n{added_text},"
+                    else:
+                        new_content_prompt = f"{added_text},"
+
+                    new_workflow_text = (
+                        before_marker.rstrip()
+                        + f"\n{start_marker}\n"
+                        + new_content_prompt
+                        + f"\n{end_marker}\n"
+                        + after_marker.lstrip()
+                    )
+                    new_prompt_text = prompt_text.rstrip()
+                    if new_prompt_text and not new_prompt_text.endswith(","):
+                        new_prompt_text += ","
+                    new_prompt_text += f"\n{added_text},"
+                else:
+                    new_workflow_text = workflow_text.rstrip()
+                    if new_workflow_text and not new_workflow_text.endswith(","):
+                        new_workflow_text += ","
+                    new_workflow_text += f"\n{added_text},"
+
+                    new_prompt_text = prompt_text.rstrip()
+                    if new_prompt_text and not new_prompt_text.endswith(","):
+                        new_prompt_text += ","
+                    new_prompt_text += f"\n{added_text},"
+
+                prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
+                    new_prompt_text
+                )
+                update_workflow_node_text(workflow, node_id, new_workflow_text)
+                is_modified = True
+                _LOGGER.info(
+                    f"Added prompt '{target_prompt}' with weight {target_weight} to node {node_id}"
+                )
+
+    return is_modified
 
 
 if __name__ == "__main__":
