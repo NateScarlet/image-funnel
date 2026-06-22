@@ -32,26 +32,63 @@
         </button>
       </template>
 
-      <!-- 派发按钮：可即时触发的 memo 钩子 -->
-      <button
-        v-for="h in dispatchableHooks"
-        :key="'dispatch-' + h.id"
-        type="button"
-        class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1 group"
-        :title="'触发动作：' + h.name"
-        :disabled="isDispatching"
-        @click="triggerDispatch(h.id, h.name)"
+      <!-- 派发按钮：可即时触发的 memo 钩子，放入二级菜单防止误触 -->
+      <div
+        v-if="dispatchableHooks.length"
+        ref="dispatchMenuRef"
+        class="relative"
       >
-        <svg
-          class="w-3.5 h-3.5 text-secondary-400 group-hover:text-secondary-300"
-          viewBox="0 0 24 24"
+        <button
+          type="button"
+          class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+          :disabled="isDispatching"
+          @click.stop="showDispatchMenu = !showDispatchMenu"
         >
-          <path :d="mdiLightningBolt" fill="currentColor" />
-        </svg>
-        <span class="text-secondary-400 group-hover:text-secondary-300">{{
-          h.name
-        }}</span>
-      </button>
+          <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
+            <path :d="mdiLightningBolt" fill="currentColor" />
+          </svg>
+          <span>动作 ({{ dispatchableHooks.length }})</span>
+          <svg
+            class="w-3 h-3 text-secondary-400 transition-transform"
+            :class="{ 'rotate-180': showDispatchMenu }"
+            viewBox="0 0 24 24"
+          >
+            <path :d="mdiChevronDown" fill="currentColor" />
+          </svg>
+        </button>
+
+        <!-- 下拉菜单 -->
+        <div
+          v-if="showDispatchMenu"
+          class="absolute top-full left-0 mt-2 z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 w-fit min-w-40 flex flex-col gap-1"
+          @click.stop
+        >
+          <div
+            class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
+          >
+            选择动作
+          </div>
+          <button
+            v-for="h in dispatchableHooks"
+            :key="'dispatch-' + h.id"
+            type="button"
+            class="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm font-medium text-secondary-300 hover:bg-secondary-800 hover:text-white cursor-pointer whitespace-nowrap"
+            :disabled="isDispatching"
+            @click="
+              triggerDispatch(h.id, h.name);
+              showDispatchMenu = false;
+            "
+          >
+            <svg
+              class="w-4 h-4 text-secondary-400 shrink-0"
+              viewBox="0 0 24 24"
+            >
+              <path :d="mdiLightningBolt" fill="currentColor" />
+            </svg>
+            <span>{{ h.name }}</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 文本编辑区 -->
@@ -133,7 +170,8 @@ import mutate from "@/graphql/utils/mutate";
 import { HooksDocument, DispatchMemoHookDocument } from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
-import { mdiConsole, mdiLightningBolt } from "@mdi/js";
+import useClickOutside from "@/composables/useClickOutside";
+import { mdiConsole, mdiLightningBolt, mdiChevronDown } from "@mdi/js";
 
 const props = defineProps<{
   placeholder?: string;
@@ -193,6 +231,14 @@ const dispatchableHooks = computed(() => {
 
 const { showSuccess, showError, showInfo, remove } = useNotification();
 const isDispatching = ref(false);
+
+// 下拉菜单状态
+const showDispatchMenu = ref(false);
+const dispatchMenuRef = useTemplateRef<HTMLDivElement>("dispatchMenuRef");
+
+useClickOutside(dispatchMenuRef, () => {
+  showDispatchMenu.value = false;
+});
 
 async function triggerDispatch(hookId: string, hookName: string) {
   if (!props.memoId || isDispatching.value) return;
