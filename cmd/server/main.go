@@ -27,6 +27,7 @@ import (
 	"main/internal/domain/memo"
 	"main/internal/domain/pairing"
 	"main/internal/domain/session"
+	"main/internal/infrastructure"
 	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/concurrency"
 	"main/internal/infrastructure/ebus"
@@ -98,7 +99,7 @@ func main() {
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor, cfg.AbsRootDir)
 	dirRepo := localfs.NewDirectoryRepository(cfg.AbsRootDir)
 
-	imageRepo := localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
+	var imageRepo image.Repository = localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
 	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
@@ -129,6 +130,8 @@ func main() {
 		sessionDTOFactory,
 		deviceDTOFactory,
 	)
+
+	imageRepo = infrastructure.NewEventPublishingImageRepository(imageRepo, eventBus, dirRepo)
 
 	revocationRepo, err := localfs.NewRevocationRepository(cfg.DataDir)
 	if err != nil {
