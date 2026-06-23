@@ -34,6 +34,16 @@ from weight_parser import parse_weights, is_relative
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _write_action_override(action: str) -> None:
+    """向 IMAGE_FUNNEL_ACTION 文件写入操作覆盖，通知 Runner 跳过默认行为"""
+    action_path = os.getenv("IMAGE_FUNNEL_ACTION", "")
+    if not action_path:
+        raise ValueError("IMAGE_FUNNEL_ACTION environment variable is not set")
+    with open(action_path, "w", encoding="utf-8") as f:
+        f.write(action)
+
+
 # 捕获 PIL 导入错误并给出清晰提示
 try:
     from PIL import Image
@@ -1048,6 +1058,14 @@ def main() -> None:
 
     args = parse_args()
 
+    # 解析 --max-match：默认从 HOOK_MAX_MATCH 环境变量读取，未设置则为 4
+    max_match = args.max_match
+    if max_match is None:
+        max_match_str = os.getenv("HOOK_MAX_MATCH", "4")
+        max_match = int(max_match_str)  # 非法值让 ValueError 向上传播
+    if max_match < 0:
+        raise ValueError(f"--max-match must be non-negative, got: {max_match}")
+
     image_paths_str: str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "")
     image_ids_str: str = os.getenv("IMAGE_FUNNEL_IMAGE_IDS", "")
     comfyui_url: str = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -1078,6 +1096,13 @@ def main() -> None:
     if args.command in ["add", "remove", "adjust"]:
         _LOGGER.info(f"Command is {args.command}, fetching images via GraphQL...")
         targets = fetch_images(required_rating)
+        if max_match > 0 and len(targets) > max_match:
+            print(
+                f"Skipping: matched {len(targets)} images exceeds --max-match limit of {max_match}"
+            )
+            # 跳过时告知 Runner 保留指令行，避免按 on_success_action 处理
+            _write_action_override("KEEP")
+            sys.exit(0)
     else:
         # queue 场景
         if image_paths:
@@ -1462,6 +1487,13 @@ def main() -> None:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ComfyUI Funnel Hook Script")
+    parser.add_argument(
+        "--max-match",
+        type=int,
+        default=None,
+        metavar="N",
+        help="最大匹配图片数量，默认使用 HOOK_MAX_MATCH 环境变量值或 4，0 代表不限制",
+    )
     subparsers = parser.add_subparsers(
         dest="command", required=True, help="Sub-commands"
     )

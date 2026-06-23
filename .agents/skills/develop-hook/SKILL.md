@@ -39,6 +39,7 @@ usage = """
 # - "COMMENT_OUT": 将指令行自动转化为备忘录注释，例如 `%% /your_directive %%`。
 # - "REMOVE": 从备忘录中彻底删除这一行指令。
 # - "KEEP": 保留本行指令内容不变（常用于需持续触发的场景）。
+# 脚本成功执行后，可通过向 IMAGE_FUNNEL_ACTION 环境变量指向的文件写入操作名称来覆盖此行为。
 on_success_action = "REMOVE"        
 on_fail_action = "KEEP"            
 
@@ -98,6 +99,9 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
 - `IMAGE_FUNNEL_GRAPHQL_URL`: 服务端的 GraphQL 终点 API 路径（如 `http://localhost:8000/graphql`）。
 - `IMAGE_FUNNEL_TOKEN`: 服务端专门为此 Hook 执行签发的临时临时 JWT 鉴权令牌。访问 GraphQL 服务时应以 `Authorization: Bearer <TOKEN>` 请求头发送。
 
+### 3.5 操作覆盖
+- `IMAGE_FUNNEL_ACTION`: Runner 提供的一个临时唯一文件路径（不提前创建），脚本可以通过向该文件写入操作名称来覆盖指令执行后的行为。支持的操作：`COMMENT_OUT`、`REMOVE`、`KEEP`。只有脚本成功结束（退出码 0）时才会读取此文件；出错时总是按 `on_fail_action` 执行。Runner 执行完成后会自动清理此临时文件。写入不支持的操作会导致 Runner 报错。
+
 ---
 
 ## 4. 脚本开发黄金法则与核心规范
@@ -129,6 +133,15 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
 * **做法**：
   - 同一个备忘录指令或事件处理上下文中的图片均位于同一目录下，它们的目标相对路径是一致的。
   - 应当收集所有的图片 ID 数组，仅调用一次 GraphQL API 批量修改，极大地节省 network 握手与服务端数据库开销。
+
+### 4.5 图片匹配数量保护 (`--max-match`)
+* **核心规范**：通过 GraphQL 查询匹配图片的脚本（如 `/add`、`/remove`、`/adjust` 指令）应支持 `--max-match` 选项，防止误操作批量处理过多图片。
+* **做法**：
+  - 脚本应添加 `--max-match` 参数，默认值从 `HOOK_MAX_MATCH` 环境变量读取，未设置时默认为 `4`。
+  - `0` 代表不限制匹配数量。
+  - 负数或非法值应立即报错退出。
+  - 当匹配的图片数量超过 `max-match` 时，脚本应跳过执行并在 stdout 中输出跳过原因。
+  - 在 TOML 配置文件的 `[env]` 节中设置 `HOOK_MAX_MATCH` 可覆盖默认值。
 
 ---
 

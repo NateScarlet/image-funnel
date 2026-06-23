@@ -82,6 +82,12 @@ type HookEvent struct {
 	OldAction string
 }
 
+// HookExecutionResult 外部脚本执行结果
+type HookExecutionResult struct {
+	Error  error  // 脚本执行错误，nil 表示成功
+	Action string // 脚本通过 IMAGE_FUNNEL_ACTION 文件指定的操作，空字符串表示未覆盖
+}
+
 // HookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
 type HookExecutionTask struct {
 	HookID       string
@@ -90,13 +96,13 @@ type HookExecutionTask struct {
 	ExtraArgs    []string // 额外参数，原样传递给命令
 	TriggerName  string
 	Events       []HookEvent
-	Dir          string            // 执行外部命令时的当前工作目录
-	Env          map[string]string // 传递给外部脚本的自定义环境变量集合
-	MemoPath     string            // 备忘录文件的相对路径
-	DirectoryID  string            // 会话或备忘录所在的目录ID
-	DirectoryRel string            // 目录的相对路径
-	ResultChan   chan error        // 用于接收外部脚本执行结果的通道
-	RunID        string            // 指令运行 ID 注入环境变量
+	Dir          string               // 执行外部命令时的当前工作目录
+	Env          map[string]string    // 传递给外部脚本的自定义环境变量集合
+	MemoPath     string               // 备忘录文件的相对路径
+	DirectoryID  string               // 会话或备忘录所在的目录ID
+	DirectoryRel string               // 目录的相对路径
+	ResultChan   chan HookExecutionResult // 用于接收外部脚本执行结果的通道
+	RunID        string               // 指令运行 ID 注入环境变量
 }
 
 // Debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件
@@ -319,7 +325,8 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		})
 	}
 
-	return r.executeHookSync(*targetHook, triggerName, events, nil, "", "", "", "")
+	_, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", "", "", "")
+	return err
 }
 
 // TriggerForMemo 手动派发笔记触发的外部钩子任务
@@ -383,13 +390,15 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 
 		if !executed {
 			r.logger.Debug("TriggerForMemo not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			return r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+			_, err = r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+			return err
 		}
 		return nil
 	}
 
 	r.logger.Debug("TriggerForMemo no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	return r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+	_, err = r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+	return err
 }
 
 // runListener 异步监听 EventBus 发来的元数据修改事件以及文件变更事件
@@ -482,7 +491,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 		}
 
 		for _, h := range noDirectiveHooks {
-			err = r.executeHookSync(h, "post_update_memo", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
+			_, err = r.executeHookSync(h, "post_update_memo", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
 			if err != nil {
 				r.logger.Error("failed to execute no-directive post_update_memo hook", zap.String("hook_id", h.ID), zap.Error(err))
 			}
@@ -578,7 +587,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		relPath     string
 		dirID       string
 		dirRelPath  string
-		failed      bool
+		action      string // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
 	}
 
 	var pending []pendingHook
@@ -729,11 +738,11 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
 	for i, p := range pending {
-		err = r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
+		action, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
 		if err != nil {
 			r.logger.Error("failed to execute hook for directive", zap.String("hook_id", p.config.ID), zap.Error(err))
-			pending[i].failed = true
 		}
+		pending[i].action = action
 	}
 
 	// 5. 执行完成后，在 activeTask 关联的所有路径上执行擦除
@@ -741,7 +750,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 	r.activeTasks[runID].phase = phaseAfter3
 	failedDirectives := make(map[string]bool)
 	for _, p := range pending {
-		failedDirectives[p.config.Directive.Name] = p.failed
+		failedDirectives[p.config.Directive.Name] = p.action == p.config.Directive.OnFailAction
 	}
 	r.activeTasks[runID].failedDirectives = failedDirectives
 	var pathsToProcess []string
@@ -775,12 +784,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			pTask := pending[idx]
 			idx++
 
-			action := pTask.config.Directive.OnSuccessAction
-			if pTask.failed {
-				action = pTask.config.Directive.OnFailAction
-			}
-
-			return applyDirectiveAction(action, matchedLine)
+			return applyDirectiveAction(pTask.action, matchedLine)
 		})
 
 		// 擦除 hook-run-id
@@ -805,11 +809,13 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 	return true, nil
 }
 
-func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []HookEvent, extraArgs []string, memoPath string, dirID string, dirRel string, runID string) error {
+// executeHookSync 同步执行钩子并返回解析后的操作
+// 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
+func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []HookEvent, extraArgs []string, memoPath string, dirID string, dirRel string, runID string) (string, error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
-	resChan := make(chan error, 1)
+	resChan := make(chan HookExecutionResult, 1)
 
 	// 构建完整命令行，对含空格/引号的参数用引号包裹
 	var cmdParts []string
@@ -841,10 +847,24 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 	}
 
 	select {
-	case err := <-resChan:
-		return err
+	case result := <-resChan:
+		if result.Error != nil {
+			// 失败时总是使用 on_fail_action
+			if hook.Directive != nil {
+				return hook.Directive.OnFailAction, result.Error
+			}
+			return "", result.Error
+		}
+		// 成功：脚本覆盖优先，否则使用 on_success_action
+		if result.Action != "" {
+			return result.Action, nil
+		}
+		if hook.Directive != nil {
+			return hook.Directive.OnSuccessAction, nil
+		}
+		return "", nil
 	case <-r.ctx.Done():
-		return r.ctx.Err()
+		return "", r.ctx.Err()
 	}
 }
 
@@ -1059,6 +1079,9 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 
 	cmd.Dir = task.Dir // 将脚本的工作目录设置为 Hook 配置文件所在的目录
 
+	// 生成临时文件路径供脚本通过 IMAGE_FUNNEL_ACTION 写入覆盖操作，不提前创建文件
+	actionFilePath := filepath.Join(os.TempDir(), fmt.Sprintf("image_funnel_action_%s.txt", task.RunID))
+
 	env := append(os.Environ(),
 		"IMAGE_FUNNEL_HOOK_ID="+task.HookID,
 		"IMAGE_FUNNEL_HOOK_NAME="+task.HookName,
@@ -1072,6 +1095,7 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		"IMAGE_FUNNEL_IMAGE_OLD_LABEL="+oldLabel,
 		"IMAGE_FUNNEL_IMAGE_OLD_ACTION="+oldAction,
 		"IMAGE_FUNNEL_ROOT_DIR="+r.rootDir,
+		"IMAGE_FUNNEL_ACTION="+actionFilePath,
 		"PYTHONIOENCODING=utf-8",
 		"PYTHONUTF8=1",
 	)
@@ -1124,6 +1148,13 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 	err := cmd.Run()
 	duration := time.Since(start)
 
+	// 清理临时文件
+	defer func() {
+		if removeErr := os.Remove(actionFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
+			r.logger.Warn("failed to clean up action file", zap.String("path", actionFilePath), zap.Error(removeErr))
+		}
+	}()
+
 	if err != nil {
 		r.logger.Error("external hook command failed",
 			zap.String("hook_id", task.HookID),
@@ -1135,9 +1166,9 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		if task.ResultChan != nil {
 			stderrStr := strings.TrimSpace(stderr.String())
 			if stderrStr != "" {
-				task.ResultChan <- fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)
+				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)}
 			} else {
-				task.ResultChan <- fmt.Errorf("hook script failed: %w", err)
+				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err)}
 			}
 		}
 		return
@@ -1155,8 +1186,45 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 			zap.String("stderr", stderrStr),
 		)
 	}
+
+	// 读取脚本通过 IMAGE_FUNNEL_ACTION 写入的覆盖操作
+	var overrideAction string
+	data, readErr := os.ReadFile(actionFilePath)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			// 文件不存在 = 脚本未覆盖，正常路径
+		} else {
+			errMsg := fmt.Sprintf("failed to read IMAGE_FUNNEL_ACTION file: %v", readErr)
+			r.logger.Error(errMsg, zap.String("hook_id", task.HookID), zap.String("path", actionFilePath))
+			if task.ResultChan != nil {
+				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
+			}
+			return
+		}
+	} else {
+		overrideAction = strings.TrimSpace(string(data))
+		if overrideAction != "" && !isValidDirectiveAction(overrideAction) {
+			errMsg := fmt.Sprintf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", overrideAction)
+			r.logger.Error(errMsg, zap.String("hook_id", task.HookID))
+			if task.ResultChan != nil {
+				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
+			}
+			return
+		}
+	}
+
 	if task.ResultChan != nil {
-		task.ResultChan <- nil
+		task.ResultChan <- HookExecutionResult{Action: overrideAction}
+	}
+}
+
+// isValidDirectiveAction 检查操作是否为支持的指令操作
+func isValidDirectiveAction(action string) bool {
+	switch action {
+	case "COMMENT_OUT", "REMOVE", "KEEP":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1192,7 +1260,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 		if len(pureCommitHooks) > 0 {
 			// 彻底禁止为了钩子加载目录下所有图片！仅传入空列表和会话目录信息，由脚本端自行 GraphQL 按需过滤
 			for _, h := range pureCommitHooks {
-				err = r.executeHookSync(h, "post_commit_session", nil, nil, "", dirID.String(), dirRelPath, "")
+				_, err = r.executeHookSync(h, "post_commit_session", nil, nil, "", dirID.String(), dirRelPath, "")
 				if err != nil {
 					r.logger.Error("failed to execute pure post_commit_session hook", zap.String("hook_id", h.ID), zap.Error(err))
 				}
@@ -1246,7 +1314,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 					r.logger.Error("failed to get associated image for commit scan hook", zap.String("memo_path", memoRelPath), zap.Error(err))
 				}
 				for _, h := range noDirectiveMemoScanHooks {
-					err = r.executeHookSync(h, "post_commit_session", evs, nil, memoRelPath, dirID.String(), dirRelPath, "")
+					_, err = r.executeHookSync(h, "post_commit_session", evs, nil, memoRelPath, dirID.String(), dirRelPath, "")
 					if err != nil {
 						r.logger.Error("failed to execute no-directive post_commit_session memo_scan hook", zap.String("hook_id", h.ID), zap.Error(err))
 					}
