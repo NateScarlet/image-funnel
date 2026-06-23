@@ -366,11 +366,16 @@ function insertDirective(dirName: string) {
     model.value = before + `/${dirName} ` + after;
     newCursorPos = triggerIdx + dirName.length + 2;
   } else {
-    // 快捷按钮点击插入，插入到光标位置（如无光标则插入到最后）
+    // 快捷按钮点击插入，确保指令在新行
     before = text.slice(0, start);
     after = text.slice(start);
-    model.value = before + `/${dirName} ` + after;
-    newCursorPos = start + dirName.length + 2;
+
+    // 检查是否需要先换行：如果光标前不是行首（前面有非空白字符）
+    const needsNewline = before.length > 0 && !/(?:^|\n)[ \t]*$/.test(before);
+    const prefix = needsNewline ? "\n" : "";
+
+    model.value = before + prefix + `/${dirName} ` + after;
+    newCursorPos = start + prefix.length + dirName.length + 2;
   }
 
   autocompleteState.value = null;
