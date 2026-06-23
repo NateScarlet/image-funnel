@@ -1228,11 +1228,11 @@ def main() -> None:
                 workflow_copy = json.loads(json.dumps(workflow))
                 is_modified = False
 
-                if args.adjust_type == "lora":
+                if args.adjust_type == ("lora", "l"):
                     is_modified = modify_lora_weights(
                         prompt_copy, workflow_copy, args.name, w
                     )
-                elif args.adjust_type == "prompt":
+                elif args.adjust_type in ("prompt", "p"):
                     is_neg = args.neg
                     raw_targets = []
                     if args.node:
@@ -1265,6 +1265,8 @@ def main() -> None:
                         w,
                         args.skip_add,
                     )
+                else:
+                    raise ValueError(f"unexpected adjust type '{args.adjust_type}'")
 
                 if not is_modified and not args.no_skip:
                     _LOGGER.info(
