@@ -30,6 +30,7 @@ import logging
 import argparse
 
 from graphql_utils import update_image_label, fetch_images
+from weight_parser import parse_weights, is_relative
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1157,12 +1158,66 @@ def main() -> None:
                     update_image_label(img_id, label_to_set)
 
         elif args.command == "adjust":
-            try:
-                weights = parse_weights(args.weight)
-            except Exception as e:
-                _LOGGER.error(f"Failed to parse weights: {e}")
-                has_errors = True
-                continue
+            # 检测是否为相对权重表达式（含 x 或 +- 前缀）
+            is_relative_expr = is_relative(args.weight)
+
+            if is_relative_expr:
+                if args.adjust_type == "lora":
+                    current = get_current_lora_weight(prompt, workflow, args.name)
+                    if current is None:
+                        _LOGGER.error(
+                            f"Cannot resolve relative weight: no matching Lora '{args.name}' in image {path}"
+                        )
+                        has_errors = True
+                        continue
+                else:  # prompt
+                    is_neg = args.neg
+                    raw_targets = []
+                    if args.node:
+                        for nid in args.node:
+                            raw_targets.append(("node", nid))
+                    if args.region:
+                        for rname in args.region:
+                            raw_targets.append(("region", rname))
+                    if not raw_targets:
+                        default_region = "negative" if is_neg else "positive"
+                        raw_targets.append(("region", default_region))
+
+                    target_nodes_for_current: List[Tuple[str, str, str, bool]] = []
+                    for target_type, target_value in raw_targets:
+                        target_nodes_for_current.extend(
+                            resolve_target_to_nodes(
+                                prompt,
+                                workflow,
+                                target_type,
+                                target_value,
+                                is_neg,
+                            )
+                        )
+
+                    current = get_current_prompt_weight(
+                        prompt, workflow, target_nodes_for_current, args.text
+                    )
+                    if current is None:
+                        _LOGGER.error(
+                            f"Cannot resolve relative weight: prompt '{args.text}' not found in image {path}"
+                        )
+                        has_errors = True
+                        continue
+
+                try:
+                    weights = parse_weights(args.weight, current)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to parse relative weights: {e}")
+                    has_errors = True
+                    continue
+            else:
+                try:
+                    weights = parse_weights(args.weight)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to parse weights: {e}")
+                    has_errors = True
+                    continue
 
             total_runs = len(weights) * jobs
             enable_seed_update = args.update_seed or (total_runs > 1)
@@ -1526,7 +1581,8 @@ def parse_args():
     )
     lora_parser.add_argument("name", help="Target Lora name (substring match)")
     lora_parser.add_argument(
-        "weight", help="Weight value or range (e.g. 0.8 or 0.5:1.0:0.1)"
+        "weight",
+        help="Weight value or range (e.g. 0.8, 0.5:1.0:0.1, x-0.1:x+0.2:0.1, +-0.3:0.1)",
     )
     lora_parser.add_argument(
         "-j",
@@ -1552,7 +1608,8 @@ def parse_args():
     prompt_parser = adjust_subparsers.add_parser("prompt", help="Adjust prompt weights")
     prompt_parser.add_argument("text", help="Target prompt text to adjust")
     prompt_parser.add_argument(
-        "weight", help="Weight value or range (e.g. 1.2 or 0.8:1.2:0.1)"
+        "weight",
+        help="Weight value or range (e.g. 1.2, 0.8:1.2:0.1, x-0.1:x+0.2:0.1, +-0.3:0.1)",
     )
     prompt_parser.add_argument(
         "-j",
@@ -1599,51 +1656,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
-
-def parse_weights(weight_str: str) -> List[float]:
-    """
-    解析权重值或范围值，支持：
-    - 单一数值: 0.8
-    - 范围带步长: 0.5:1.0:0.1
-    - 范围默认步长: 0.5:1.0 (步进值默认由 HOOK_WEIGHT_STEP 环境变量指定，无指定时为 0.1)
-    """
-    parts = weight_str.split(":")
-    if len(parts) == 1:
-        try:
-            return [float(parts[0])]
-        except ValueError:
-            raise ValueError(f"Invalid weight format: '{weight_str}'")
-    elif len(parts) in (2, 3):
-        try:
-            start = float(parts[0])
-            end = float(parts[1])
-            if len(parts) == 3:
-                step = float(parts[2])
-            else:
-                default_step_str = os.getenv("HOOK_WEIGHT_STEP", "0.1")
-                step = float(default_step_str)
-        except ValueError:
-            raise ValueError(f"Invalid weight range format: '{weight_str}'")
-
-        if step == 0:
-            raise ValueError("Step cannot be zero.")
-
-        weights: List[float] = []
-        curr = start
-        if step > 0:
-            while curr <= end + (step * 0.01):
-                weights.append(round(curr, 4))
-                curr += step
-        else:
-            while curr >= end + (step * 0.01):
-                weights.append(round(curr, 4))
-                curr += step
-        if not weights:
-            raise ValueError(f"No weights generated from range '{weight_str}'")
-        return weights
-    else:
-        raise ValueError(f"Invalid weight format: '{weight_str}'")
 
 
 def modify_lora_weights(
@@ -1899,6 +1911,106 @@ def modify_prompt_weights(
                 )
 
     return is_modified
+
+
+def get_current_lora_weight(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    lora_name_query: str,
+) -> Optional[float]:
+    """
+    在 prompt 和 workflow 中查找匹配的 Lora 节点，返回其当前权重。
+    支持原生 LoraLoader 和 Power Lora Loader (rgthree)。
+    """
+    query_lower = lora_name_query.lower()
+
+    # 1. 从 prompt (API 结构) 中查找
+    for nid, node in prompt.items():
+        node_dict = cast(Dict[str, Any], node)
+        class_type = node_dict.get("class_type", "")
+        if class_type == "LoraLoader":
+            inputs = node_dict.get("inputs", {})
+            lora_name = inputs.get("lora_name", "")
+            if isinstance(lora_name, str) and query_lower in lora_name.lower():
+                for ik in ["strength_model", "strength_clip"]:
+                    if ik in inputs:
+                        src_nid, src_key = find_terminal_input(prompt, nid, ik)
+                        val = prompt[src_nid]["inputs"].get(src_key)
+                        if isinstance(val, (int, float)):
+                            return float(val)
+        elif class_type == "Power Lora Loader (rgthree)":
+            inputs = node_dict.get("inputs", {})
+            for k, v in inputs.items():
+                if k.startswith("lora_") and isinstance(v, dict):
+                    v_dict = cast(Dict[str, Any], v)
+                    lora_path = v_dict.get("lora", "")
+                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
+                        strength = v_dict.get("strength")
+                        if isinstance(strength, (int, float)):
+                            return float(strength)
+
+    # 2. 从 workflow (UI 结构) 中查找
+    for node in workflow.get("nodes", []):
+        if is_node_disabled(node):
+            continue
+        node_type = node.get("type", "")
+        widgets_values = node.get("widgets_values")
+        if not isinstance(widgets_values, list):
+            continue
+        wv = cast(List[Any], widgets_values)
+
+        if node_type == "LoraLoader":
+            if wv and isinstance(wv[0], str) and query_lower in wv[0].lower():
+                if len(wv) > 1 and isinstance(wv[1], (int, float)):
+                    return float(wv[1])
+        elif node_type == "Power Lora Loader (rgthree)":
+            for val in wv:
+                if isinstance(val, dict) and "lora" in val:
+                    val_dict = cast(Dict[str, Any], val)
+                    if query_lower in str(val_dict.get("lora", "")).lower():
+                        strength = val_dict.get("strength")
+                        if isinstance(strength, (int, float)):
+                            return float(strength)
+
+    return None
+
+
+def get_current_prompt_weight(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    target_nodes: List[Tuple[str, str, str, bool]],
+    target_prompt: str,
+) -> Optional[float]:
+    """
+    在目标节点的文本中查找匹配的提示词，返回其当前权重。
+    支持 (word:weight)、(word) 和裸词格式。未带权重视为 1.0。
+    """
+    escaped = re.escape(target_prompt)
+
+    for node_id, _, _, _ in target_nodes:
+        workflow_text, _ = get_node_texts(prompt, workflow, node_id)
+        if workflow_text is None:
+            continue
+
+        # 匹配带权重的格式: (word:1.2)
+        pattern_with_weight = re.compile(
+            rf"\(\s*{escaped}\s*:\s*([0-9.-]+)\s*\)", re.IGNORECASE
+        )
+        m = pattern_with_weight.search(workflow_text)
+        if m:
+            return float(m.group(1))
+
+        # 匹配带括号无权重的格式: (word) → 默认权重 1.0
+        pattern_brackets = re.compile(rf"\(\s*{escaped}\s*\)", re.IGNORECASE)
+        if pattern_brackets.search(workflow_text):
+            return 1.0
+
+        # 匹配裸词 → 默认权重 1.0
+        pattern_bare = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
+        if pattern_bare.search(workflow_text):
+            return 1.0
+
+    return None
 
 
 if __name__ == "__main__":

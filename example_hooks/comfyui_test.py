@@ -16,7 +16,6 @@ from comfyui import (
     get_target_clip_node,
     process_double_track,
     strip_comments_for_prompt,
-    parse_weights,
     modify_lora_weights,
     modify_prompt_weights,
 )
@@ -439,28 +438,6 @@ class TestComfyUIHook(unittest.TestCase):
             self.assertEqual(target_eq_neg, "node_2")
         finally:
             del os.environ["HOOK_NEGATIVE_KEYWORDS"]
-
-    def test_parse_weights(self):
-        # 1. 单个数字
-        self.assertEqual(parse_weights("0.8"), [0.8])
-        self.assertEqual(parse_weights("-0.5"), [-0.5])
-
-        # 2. 范围带步长
-        self.assertEqual(parse_weights("0.5:0.7:0.1"), [0.5, 0.6, 0.7])
-        self.assertEqual(parse_weights("-0.5:0.5:0.5"), [-0.5, 0.0, 0.5])
-
-        # 3. 范围默认步长
-        os.environ["HOOK_WEIGHT_STEP"] = "0.2"
-        try:
-            self.assertEqual(parse_weights("0.5:0.9"), [0.5, 0.7, 0.9])
-        finally:
-            del os.environ["HOOK_WEIGHT_STEP"]
-
-        # 4. 异常格式
-        with self.assertRaises(ValueError):
-            parse_weights("abc")
-        with self.assertRaises(ValueError):
-            parse_weights("0.5:abc")
 
     def test_adjust_lora_weights(self):
         for png_path in self.png_files:
