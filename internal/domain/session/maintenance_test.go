@@ -19,7 +19,7 @@ func TestRemoveImageByPath_ShouldRemoveUnmarkedImage(t *testing.T) {
 	img0 := session.images[session.queue[0]]
 	originalSize := len(session.queue)
 
-	removed := session.RemoveImageByRelPath(img0.RelPath())
+	removed := session.removeImageByRelPath(img0.RelPath(), false)
 
 	assert.True(t, removed, "未操作的图片应该被移除")
 	assert.Equal(t, originalSize-1, len(session.queue), "队列长度应减少 1")
@@ -32,7 +32,7 @@ func TestRemoveImageByPath_ShouldNotRemoveImageWithAction(t *testing.T) {
 	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))
 
 	originalSize := len(session.queue)
-	removed := session.RemoveImageByRelPath(img0.RelPath())
+	removed := session.removeImageByRelPath(img0.RelPath(), false)
 
 	assert.False(t, removed, "已操作的图片不应该被移除")
 	assert.Equal(t, originalSize, len(session.queue), "队列长度不应改变")
@@ -44,7 +44,7 @@ func TestRemoveImageByPath_ShouldNotRemoveImageWithRejectAction(t *testing.T) {
 	img0 := session.images[session.queue[0]]
 	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionReject))
 
-	removed := session.RemoveImageByRelPath(img0.RelPath())
+	removed := session.removeImageByRelPath(img0.RelPath(), false)
 
 	assert.False(t, removed, "已 Reject 的图片同样不应该被移除")
 }
@@ -103,4 +103,76 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	stats := session.Stats()
 	assert.Equal(t, 0, stats.CurrentRoundRemaining, "图片已处理完，Remaining 应为 0")
 	assert.Equal(t, 1, stats.TotalKept, "Kept 计数应保留（图片仍在 images 中）")
+}
+
+func TestRemoveImageByPath_ShouldRemoveImageWithActionIfForce(t *testing.T) {
+	session := setupTestSession(t, 3, 5)
+
+	img0 := session.images[session.queue[0]]
+	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))
+
+	originalSize := len(session.queue)
+	removed := session.removeImageByRelPath(img0.RelPath(), true)
+
+	assert.True(t, removed, "即便已操作，强制移除也应该成功")
+	assert.Equal(t, originalSize-1, len(session.queue), "队列长度应减少 1")
+}
+
+func TestRemoveImageByPath_ForceRemoveThenUndo_ShouldNotRestoreIndex(t *testing.T) {
+	session := setupTestSession(t, 3, 5)
+
+	img0 := session.images[session.queue[0]]
+	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))
+
+	// 此时 img0 已经被标记，currentIdx 为 1
+	assert.Equal(t, 1, session.currentIdx)
+
+	// 强制删除 img0
+	removed := session.removeImageByRelPath(img0.RelPath(), true)
+	assert.True(t, removed)
+
+	// 队列长度变短为 2，由于 targetIndex (0) < currentIdx (1)，currentIdx 应该自动递减为 0
+	assert.Equal(t, 0, session.currentIdx)
+	assert.Equal(t, 2, len(session.queue))
+
+	// 此时执行 Undo 撤销标记 img0
+	err := session.Undo()
+	assert.NoError(t, err)
+
+	// action 应该被撤销
+	assert.Empty(t, session.actions[img0.ID()])
+
+	// 即使撤销了已删除图片的标记，currentIdx 也应保持安全位置而不受影响
+	assert.Equal(t, 0, session.currentIdx)
+}
+
+func TestRemoveImageByPath_ForceRemoveThenUndo_Complex(t *testing.T) {
+	session := setupTestSession(t, 3, 5) // queue: [img0, img1, img2]
+
+	img0 := session.images[session.queue[0]]
+	img1 := session.images[session.queue[1]]
+
+	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))   // currentIdx -> 1
+	require.NoError(t, session.MarkImage(img1.ID(), shared.ImageActionReject)) // currentIdx -> 2
+
+	// 此时队列有 3 个，当前指向 img2 (idx=2)
+	assert.Equal(t, 2, session.currentIdx)
+
+	// 强制删除 img1 (idx=1)
+	removed := session.removeImageByRelPath(img1.RelPath(), true)
+	assert.True(t, removed)
+
+	// 移除了 idx=1 的图。由于 targetIndex (1) < currentIdx (2)，currentIdx 变为 1。
+	// 队列剩下 [img0, img2]，currentIdx 指向原 img2 (新 idx=1)。
+	assert.Equal(t, 1, session.currentIdx)
+
+	// 撤销对 img1 的操作 (Reject)
+	err := session.Undo()
+	assert.NoError(t, err)
+
+	// img1 的 action 被清除
+	assert.Empty(t, session.actions[img1.ID()])
+
+	// 因为 img1 不在队列中，撤销时跳过对其 currentIdx 的还原，currentIdx 应当保持指向 img2 (idx=1)
+	assert.Equal(t, 1, session.currentIdx)
 }

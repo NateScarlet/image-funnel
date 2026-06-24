@@ -66,7 +66,7 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 			changed = sess.UpdateImage(img, filterFunc(img))
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）
-			changed = sess.RemoveImageByRelPath(relPath)
+			changed = sess.removeImageByRelPath(relPath, true)
 		}
 
 		if changed {

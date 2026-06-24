@@ -29,7 +29,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
-	session.RemoveImageByRelPath(imgA.RelPath())
+	session.removeImageByRelPath(imgA.RelPath(), false)
 	assert.Equal(t, 0, session.CurrentSize())
 
 	imgAFresh := image.New(

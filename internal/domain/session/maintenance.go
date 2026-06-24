@@ -36,7 +36,7 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 
 	// 如果不匹配过滤器，从 queue 中移除
 	if !matchesFilter {
-		return s.RemoveImageByRelPath(img.RelPath())
+		return s.removeImageByRelPath(img.RelPath(), false)
 	}
 
 	// 匹配过滤器，执行更新
@@ -70,7 +70,7 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	return true
 }
 
-func (s *Session) RemoveImageByRelPath(relPath string) bool {
+func (s *Session) removeImageByRelPath(relPath string, force bool) bool {
 	var targetIndex = -1
 	var targetImgIndex = -1
 
@@ -87,10 +87,11 @@ func (s *Session) RemoveImageByRelPath(relPath string) bool {
 		return false
 	}
 
-	// 如果该图片已有用户操作记录，保留它在队列中，以维护 undo stack 的完整性
-	// 例如：Commit 后文件 rating 改变，文件监听器会触发移除，但不应移除已操作图片
-	if _, hasAction := s.actions[s.images[targetImgIndex].ID()]; hasAction {
-		return false
+	// 如果该图片已有用户操作记录，且非强制移除，则保留它在队列中，以维护 undo stack 的完整性
+	if !force {
+		if _, hasAction := s.actions[s.images[targetImgIndex].ID()]; hasAction {
+			return false
+		}
 	}
 
 	// 从 queue 中移除

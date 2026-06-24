@@ -45,7 +45,18 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 
 		// 非当前图片的乱序标记不会改变索引，所以 undo 也不需要恢复
 		if isCurrentImage {
-			s.currentIdx = previousIndex
+			// 只有当图片依然在队列中时，才恢复 currentIdx。
+			// 如果图片已被物理删除并从队列中移出，恢复索引可能会导致指针错乱或越界。
+			inQueue := false
+			for _, imgIdx := range s.queue {
+				if s.images[imgIdx].ID() == imageID {
+					inQueue = true
+					break
+				}
+			}
+			if inQueue {
+				s.currentIdx = previousIndex
+			}
 		}
 		s.updatedAt = time.Now()
 	})
