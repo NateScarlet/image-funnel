@@ -109,6 +109,7 @@ while ($true) {
     # #region 自动构建检查
     if (Test-NeedsBuild -Verbose $true) {
         & (Join-Path $SCRIPT_DIR "build.ps1")
+        Write-Host ""
         if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ 构建失败，无法运行。"
             exit $LASTEXITCODE
@@ -131,7 +132,7 @@ while ($true) {
 
     try {
         Write-Host "正在准备运行环境 (目录: $RUN_DIR)..." -ForegroundColor Cyan
-        Copy-Item -Path "$BUILD_DIR\*" -Destination $RUN_DIR -Recurse -Force
+        Copy-Item -Path "$BUILD_DIR\*" -Destination $RUN_DIR -Recurse -Force -ProgressAction SilentlyContinue
 
         $runBinary = Join-Path $RUN_DIR "image-funnel.exe"
         

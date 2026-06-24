@@ -46,7 +46,9 @@ if ($Frontend) {
     Write-Host "构建前端项目..."
     Push-Location $FRONTEND_DIR
     try {
+        $env:CI = "true"
         pnpm install
+        Write-Host ""
 
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ 前端依赖安装失败"
@@ -54,6 +56,7 @@ if ($Frontend) {
         }
 
         pnpm run build
+        Write-Host ""
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ 前端构建失败"
             exit 1
@@ -67,7 +70,7 @@ if ($Frontend) {
     Write-Host "复制前端构建文件..."
     $FRONTEND_DIST = Join-Path $FRONTEND_DIR "dist"
     if (Test-Path $FRONTEND_DIST) {
-        Copy-Item -Path "$FRONTEND_DIST\*" -Destination $FRONTEND_BUILD_DIR -Recurse -Force
+        Copy-Item -Path "$FRONTEND_DIST\*" -Destination $FRONTEND_BUILD_DIR -Recurse -Force -ProgressAction SilentlyContinue
     } else {
         Write-Host "❌ 前端构建目录不存在: $FRONTEND_DIST"
         exit 1
