@@ -1096,13 +1096,6 @@ def main() -> None:
     if args.command in ["add", "remove", "adjust"]:
         _LOGGER.info(f"Command is {args.command}, fetching images via GraphQL...")
         targets = fetch_images(required_rating)
-        if max_match > 0 and len(targets) > max_match:
-            print(
-                f"Skipping: matched {len(targets)} images exceeds --max-match limit of {max_match}"
-            )
-            # 跳过时告知 Runner 保留指令行，避免按 on_success_action 处理
-            _write_action_override("KEEP")
-            sys.exit(0)
     else:
         # queue 场景
         if image_paths:
@@ -1114,6 +1107,13 @@ def main() -> None:
                 "No images provided in IMAGE_FUNNEL_IMAGE_PATHS for queue command."
             )
             sys.exit(1)
+
+    if max_match > 0 and len(targets) > max_match:
+        print(
+            f"Skipping: matched {len(targets)} images exceeds --max-match limit of {max_match}"
+        )
+        _write_action_override("KEEP")
+        sys.exit(0)
 
     if not targets:
         _LOGGER.error("No images found to process.")
