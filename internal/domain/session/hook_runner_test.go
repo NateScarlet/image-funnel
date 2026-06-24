@@ -17,6 +17,6 @@ func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirID scalar.ID, d
 	return nil
 }
 
-func (r *FakeHookRunner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID scalar.ID) error {
+func (r *FakeHookRunner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
 	return nil
 }

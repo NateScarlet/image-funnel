@@ -104,8 +104,8 @@ type ImageMeta struct {
 	Height int
 }
 
-// MemoDTO 备忘录数据传输对象
-type MemoDTO struct {
+// NoteDTO 笔记数据传输对象
+type NoteDTO struct {
 	ID         scalar.ID
 	RelPath    string
 	AbsPath    string
@@ -114,16 +114,16 @@ type MemoDTO struct {
 	Hidden     bool
 }
 
-// MemoConnectionDTO 备忘录连接数据传输对象
-type MemoConnectionDTO struct {
-	Edges    []*MemoEdgeDTO
-	Nodes    []*MemoDTO
+// NoteConnectionDTO 笔记连接数据传输对象
+type NoteConnectionDTO struct {
+	Edges    []*NoteEdgeDTO
+	Nodes    []*NoteDTO
 	PageInfo *PageInfoDTO
 }
 
-// MemoEdgeDTO 备忘录边数据传输对象
-type MemoEdgeDTO struct {
-	Node   *MemoDTO
+// NoteEdgeDTO 笔记边数据传输对象
+type NoteEdgeDTO struct {
+	Node   *NoteDTO
 	Cursor string
 }
 
@@ -211,10 +211,10 @@ type DirectoryStateDTO struct {
 	UpdatedAt   time.Time                     `json:"updatedAt"`
 }
 
-// DirectoryStateBrowseDTO 状态中的图片与备忘录过滤条件配置
+// DirectoryStateBrowseDTO 状态中的图片与笔记过滤条件配置
 type DirectoryStateBrowseDTO struct {
 	FilterBy     *ImageFilters `json:"filterBy,omitempty"`
-	FilterMemoBy *MemoFilters  `json:"filterMemoBy,omitempty"`
+	FilterNoteBy *NoteFilters  `json:"filterNoteBy,omitempty"`
 }
 
 // DirectoryStateLastSessionDTO 状态中的最近会话配置
@@ -244,7 +244,7 @@ type HookDTO struct {
 	Name               string
 	Description        string
 	CanDispatchByImage bool
-	CanDispatchByMemo  bool
+	CanDispatchByNote  bool
 	Directive          *HookDirectiveDTO
 }
 
@@ -265,6 +265,3 @@ type MetadataUpdatedEvent struct {
 	OldLabel  string
 	OldAction string
 }
-
-
-

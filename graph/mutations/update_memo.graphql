@@ -1,7 +1,0 @@
-extend type Mutation {
-  """
-  更新图片的备忘内容。操作即时写入 Markdown 文件，不参与会话提交。
-  content 可包含 frontmatter（如 hidden/hide 字段）以控制备忘的隐藏状态。
-  """
-  updateMemo(id: ID!, content: String!): Memo!
-}

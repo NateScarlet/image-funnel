@@ -1,0 +1,5 @@
+mutation DispatchNoteHook($input: DispatchNoteHookInput!) {
+  dispatchNoteHook(input: $input) {
+    clientMutationId
+  }
+}

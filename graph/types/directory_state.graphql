@@ -25,8 +25,8 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
 type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   "图片过滤配置"
   filterBy: ImageFilters
-  "备忘录过滤配置"
-  filterMemoBy: MemoFilters
+  "笔记过滤配置"
+  filterNoteBy: NoteFilters
 }
 
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
@@ -36,5 +36,5 @@ input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDT
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   filterBy: ImageFiltersInput
-  filterMemoBy: MemoFiltersInput
+  filterNoteBy: NoteFiltersInput
 }

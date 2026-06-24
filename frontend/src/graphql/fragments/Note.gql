@@ -1,0 +1,7 @@
+fragment Note on Note {
+  id
+  relPath
+  content
+  rawContent
+  hidden
+}

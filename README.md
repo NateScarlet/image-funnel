@@ -56,7 +56,7 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 - `IMAGE_FUNNEL_ROOT_DIR`: 待筛选图片的根目录。
 - `IMAGE_FUNNEL_PORT`: 服务器监听端口 (默认 34898)。
 - `IMAGE_FUNNEL_SECRET_KEY`: 用于签名 URL 的密钥。若不提供，将自动生成（重启后失效，建议生产环境固定）。
-- `IMAGE_FUNNEL_DATA_DIR`: 数据存储目录（设备注册信息、令牌吊销列表等）。默认使用系统用户配置目录下的 `io.github.natescarlet.image-funnel`。
+- `IMAGE_FUNNEL_DATA_DIR`: 数据存储目录（设笔记册信息、令牌吊销列表等）。默认使用系统用户配置目录下的 `io.github.natescarlet.image-funnel`。
 
 #### 网络与访问控制
 
@@ -65,7 +65,7 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
   2. 提供给前端，当认证失败时提示用户通过正确的主域名访问。
   3. 作为 `IMAGE_FUNNEL_WEBAUTHN_RPID` 和 `IMAGE_FUNNEL_WEBAUTHN_RP_ORIGINS` 的默认值推导来源。
 
-- `IMAGE_FUNNEL_TRUSTED_IP`: 受信任的 IP 或 CIDR 网段，多个用逗号分隔。默认仅包含 `127.0.0.0/8` 和 `::1/128`（本机回环地址）。**来自受信任 IP 的请求无需设备认证即可访问所有功能**，设备注册时也会跳过配对流程直接保存为可信设备。如果未配置域名和 HTTPS 但需要从局域网其他设备访问，必须将局域网网段（如 `192.168.1.0/24`）加入此变量，否则会提示未授权。
+- `IMAGE_FUNNEL_TRUSTED_IP`: 受信任的 IP 或 CIDR 网段，多个用逗号分隔。默认仅包含 `127.0.0.0/8` 和 `::1/128`（本机回环地址）。**来自受信任 IP 的请求无需设备认证即可访问所有功能**，设笔记册时也会跳过配对流程直接保存为可信设备。如果未配置域名和 HTTPS 但需要从局域网其他设备访问，必须将局域网网段（如 `192.168.1.0/24`）加入此变量，否则会提示未授权。
 
 - `IMAGE_FUNNEL_TRUSTED_PROXY`: 受信任的反向代理地址（CIDR 格式），默认 `127.0.0.0/8,::1/128`。当通过反向代理（如 Nginx）访问时，需将代理的 IP 加入此列表，服务才会从 `X-Forwarded-For` 或 `X-Real-IP` 头中提取真实客户端 IP。否则 `TRUSTED_IP` 检查的是代理的 IP 而非真实客户端 IP。
 

@@ -15,7 +15,7 @@ fragment Image on Image {
   currentRating
   label
   relPath
-  memo {
-    ...Memo
+  note {
+    ...Note
   }
 }

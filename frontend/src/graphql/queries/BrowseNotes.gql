@@ -1,0 +1,29 @@
+query BrowseNotes(
+  $id: ID!
+  $filterBy: NoteFiltersInput
+  $first: Int
+  $after: String
+) {
+  node(id: $id) {
+    id
+    ... on Directory {
+      notes(filterBy: $filterBy, first: $first, after: $after) {
+        edges {
+          cursor
+          node {
+            ...Note
+          }
+        }
+        nodes {
+          ...Note
+        }
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
+      }
+    }
+  }
+}

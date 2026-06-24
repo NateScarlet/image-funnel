@@ -1,5 +1,0 @@
-mutation CreateMemo($input: CreateMemoInput!) {
-  createMemo(input: $input) {
-    ...Memo
-  }
-}

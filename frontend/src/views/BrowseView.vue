@@ -254,7 +254,7 @@
       />
 
       <!-- 笔记列表容器区 -->
-      <MemoList :directory-id="currentDirectoryId" />
+      <NoteList :directory-id="currentDirectoryId" />
 
       <!-- 图片网格展示与筛选区 -->
       <ImageGrid :directory-id="currentDirectoryId" />
@@ -311,7 +311,7 @@ import useDirectories, {
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
-import MemoList from "../components/MemoList.vue";
+import NoteList from "../components/NoteList.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";

@@ -5,14 +5,14 @@ import (
 	"main/internal/application/directory"
 	"main/internal/application/hook"
 	appimage "main/internal/application/image"
-	"main/internal/application/memo"
+	"main/internal/application/note"
 	"main/internal/application/pairing"
 	"main/internal/application/session"
 )
 
 type sessionHandler = session.Handler
 type directoryHandler = directory.Handler
-type memoHandler = memo.Handler
+type noteHandler = note.Handler
 type imageHandler = appimage.Handler
 type deviceHandler = device.Handler
 type pairingHandler = pairing.Handler
@@ -24,7 +24,7 @@ type hookHandler = hook.Handler
 type Root struct {
 	*sessionHandler
 	*directoryHandler
-	*memoHandler
+	*noteHandler
 	*imageHandler
 	*deviceHandler
 	*pairingHandler
@@ -34,7 +34,7 @@ type Root struct {
 func NewRoot(
 	sessionHandler *session.Handler,
 	directoryHandler *directory.Handler,
-	memoHandler *memo.Handler,
+	noteHandler *note.Handler,
 	imageHandler *appimage.Handler,
 	deviceHandler *device.Handler,
 	pairingHandler *pairing.Handler,
@@ -43,7 +43,7 @@ func NewRoot(
 	return &Root{
 		sessionHandler:   sessionHandler,
 		directoryHandler: directoryHandler,
-		memoHandler:      memoHandler,
+		noteHandler:      noteHandler,
 		imageHandler:     imageHandler,
 		deviceHandler:    deviceHandler,
 		pairingHandler:   pairingHandler,

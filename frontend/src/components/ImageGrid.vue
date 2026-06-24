@@ -1559,7 +1559,7 @@ onMounted(async () => {
 
 // #endregion
 
-// #region 响应 MemoList 打开图片查看器的事件
+// #region 响应 NoteList 打开图片查看器的事件
 watchEffect((onCleanup) => {
   const unsubscribe = openImageViewerByFilename.subscribe((event) => {
     searchAndOpenViewer(event.detail.filename);

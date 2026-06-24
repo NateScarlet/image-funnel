@@ -1,7 +1,7 @@
 type Query {
   """
   通过全局唯一 ID 查找节点。
-  支持按前缀解析：dir: → Directory，memo: → Memo。
+  支持按前缀解析：dir: → Directory，note: → Note。
   不支持的 ID 格式返回 null。
   """
   node(id: ID!): Node

@@ -28,7 +28,7 @@ func (f *DTOFactory) New(h *domain.Hook) *shared.HookDTO {
 		Name:               h.Name(),
 		Description:        h.Description(),
 		CanDispatchByImage: h.CanDispatchByImage(),
-		CanDispatchByMemo:  h.CanDispatchByMemo(),
+		CanDispatchByNote:  h.CanDispatchByNote(),
 		Directive:          dir,
 	}
 }

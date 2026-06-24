@@ -74,10 +74,10 @@ type CommitChangesPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
-type CreateMemoInput struct {
+type CreateNoteInput struct {
 	// 所在目录的 ID
 	DirectoryID scalar.ID `json:"directoryId"`
-	// 备忘主文件名（例如 README，若包含 .md 会自动处理）
+	// 笔记主文件名（例如 README，若包含 .md 会自动处理）
 	Name string `json:"name"`
 	// 笔记内容
 	Content string `json:"content"`
@@ -126,9 +126,9 @@ type DispatchImageHookPayload struct {
 }
 
 // 手动派发笔记钩子的输入
-type DispatchMemoHookInput struct {
+type DispatchNoteHookInput struct {
 	// 笔记 ID
-	MemoID scalar.ID `json:"memoId"`
+	NoteID scalar.ID `json:"noteId"`
 	// 要触发的钩子 ID
 	HookID scalar.ID `json:"hookId"`
 	// 客户端突变标识
@@ -136,7 +136,7 @@ type DispatchMemoHookInput struct {
 }
 
 // 手动派发笔记钩子的返回数据
-type DispatchMemoHookPayload struct {
+type DispatchNoteHookPayload struct {
 	// 客户端突变标识
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }

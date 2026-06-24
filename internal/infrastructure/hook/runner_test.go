@@ -292,8 +292,8 @@ command = "echo test_error_out >&2 && exit 42"
 	assert.Contains(t, err.Error(), "exit status 42")
 }
 
-func TestRunner_NoDirective_PostUpdateMemo(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "no-dir-update-memo-test")
+func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "no-dir-update-note-test")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
@@ -304,9 +304,9 @@ func TestRunner_NoDirective_PostUpdateMemo(t *testing.T) {
 	flagFile := filepath.Join(tempDir, "update_flag")
 	var cmdStr string
 	if filepath.Separator == '/' {
-		cmdStr = `echo "$IMAGE_FUNNEL_MEMO_PATHS" > ` + flagFile
+		cmdStr = `echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagFile
 	} else {
-		cmdStr = `echo %IMAGE_FUNNEL_MEMO_PATHS% > ` + flagFile
+		cmdStr = `echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagFile
 	}
 
 	tomlContent := `
@@ -314,7 +314,7 @@ id = "no-dir-update"
 name = "无指令更新测试"
 command = '` + cmdStr + `'
 
-[on.post_update_memo]
+[on.post_update_note]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "no-dir-update.toml"), []byte(tomlContent), 0644)
 	assert.NoError(t, err)
@@ -329,14 +329,14 @@ command = '` + cmdStr + `'
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, imgRepo, nil, nil)
 	defer runner.Close()
 
-	memoRelPath := "test.png.md"
-	memoAbsPath := filepath.Join(tempDir, memoRelPath)
-	err = os.WriteFile(memoAbsPath, []byte("Just a normal note with no slash commands"), 0644)
+	noteRelPath := "test.png.md"
+	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	err = os.WriteFile(noteAbsPath, []byte("Just a normal note with no slash commands"), 0644)
 	assert.NoError(t, err)
 
 	runner.handleFileChanged(&shared.FileChangedEvent{
 		DirectoryID: scalar.ToID("dir:1"),
-		RelPath:     memoRelPath,
+		RelPath:     noteRelPath,
 		Action:      shared.FileActionWrite,
 		OccurredAt:  time.Now(),
 	})
@@ -350,7 +350,7 @@ command = '` + cmdStr + `'
 	err = json.Unmarshal([]byte(result), &mPaths)
 	assert.NoError(t, err)
 	assert.Len(t, mPaths, 1)
-	assert.Equal(t, memoAbsPath, mPaths[0], "环境变量 IMAGE_FUNNEL_MEMO_PATHS 应该注入正确")
+	assert.Equal(t, noteAbsPath, mPaths[0], "环境变量 IMAGE_FUNNEL_NOTE_PATHS 应该注入正确")
 }
 
 func TestRunner_NoDirective_PostCommitSession(t *testing.T) {
@@ -368,10 +368,10 @@ func TestRunner_NoDirective_PostCommitSession(t *testing.T) {
 	var cmdPure, cmdScan string
 	if filepath.Separator == '/' {
 		cmdPure = `echo "pure" > ` + flagPure
-		cmdScan = `echo "$IMAGE_FUNNEL_MEMO_PATHS" > ` + flagScan
+		cmdScan = `echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagScan
 	} else {
 		cmdPure = `echo pure > ` + flagPure
-		cmdScan = `echo %IMAGE_FUNNEL_MEMO_PATHS% > ` + flagScan
+		cmdScan = `echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagScan
 	}
 
 	tomlPure := `
@@ -386,10 +386,10 @@ command = '` + cmdPure + `'
 
 	tomlScan := `
 id = "scan-commit"
-name = "备忘录扫描提交测试"
+name = "笔记扫描提交测试"
 command = '` + cmdScan + `'
 
-[on.post_commit_session.memo_scan]
+[on.post_commit_session.note_scan]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "scan.toml"), []byte(tomlScan), 0644)
 	assert.NoError(t, err)
@@ -420,7 +420,7 @@ command = '` + cmdScan + `'
 	err = json.Unmarshal([]byte(result), &mPaths)
 	assert.NoError(t, err)
 	assert.Len(t, mPaths, 1)
-	assert.Equal(t, filepath.Join(tempDir, "test.png.md"), mPaths[0], "无指令备忘录扫描钩子的 MemoPaths 应正确携带")
+	assert.Equal(t, filepath.Join(tempDir, "test.png.md"), mPaths[0], "无指令笔记扫描钩子的 NotePaths 应正确携带")
 }
 
 func TestSplitArgs_Simple(t *testing.T) {
@@ -473,8 +473,8 @@ func TestSplitArgs_QuotedWithTabInside(t *testing.T) {
 	assert.Equal(t, []string{"a\tb"}, splitArgs("\"a\tb\""))
 }
 
-func TestRunner_ExecuteMemoDirectives_PartialFailures(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-memo-partial-test")
+func TestRunner_ExecuteNoteDirectives_PartialFailures(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-note-partial-test")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
@@ -493,7 +493,7 @@ name = "fork"
 on_success_action = "REMOVE"
 on_fail_action = "KEEP"
 
-[on.post_update_memo]
+[on.post_update_note]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "fork.toml"), []byte(forkToml), 0644)
 	assert.NoError(t, err)
@@ -509,7 +509,7 @@ name = "comfyui"
 on_success_action = "REMOVE"
 on_fail_action = "KEEP"
 
-[on.post_update_memo]
+[on.post_update_note]
 `
 	err = os.WriteFile(filepath.Join(hooksDir, "comfyui.toml"), []byte(comfyuiToml), 0644)
 	assert.NoError(t, err)
@@ -519,25 +519,25 @@ on_fail_action = "KEEP"
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
-	// 准备备忘录文件
-	memoRelPath := "test_memo.md"
-	memoAbsPath := filepath.Join(tempDir, memoRelPath)
+	// 准备笔记文件
+	noteRelPath := "test_note.md"
+	noteAbsPath := filepath.Join(tempDir, noteRelPath)
 	initialContent := `Some text.
 /fork a
 /comfyui b
 Other text.`
-	err = os.WriteFile(memoAbsPath, []byte(initialContent), 0644)
+	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
 	assert.NoError(t, err)
 
 	// 运行指令处理
-	ok, err := runner.executeMemoDirectives(context.Background(), scalar.ToID("dir:1"), "", memoRelPath, initialContent, "post_update_memo", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), scalar.ToID("dir:1"), "", noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
 	// 检查同步清理后的内容：
 	// fork 成功应被 REMOVE 变成空行（正则替换后可能留空，或者去掉）
 	// comfyui 失败应被 KEEP 保留
-	contentBytes, err := os.ReadFile(memoAbsPath)
+	contentBytes, err := os.ReadFile(noteAbsPath)
 	assert.NoError(t, err)
 	content := string(contentBytes)
 
@@ -550,14 +550,14 @@ Other text.`
 	// 写回一个带未清理指令和 run-id 的文本，模拟迟到写入
 	runID := "run_test_12345"
 	lateContent := fmt.Sprintf("---\nhook-run-id: %s\n---\nSome text.\n/fork a\n/comfyui b\nOther text.", runID)
-	err = os.WriteFile(memoAbsPath, []byte(lateContent), 0644)
+	err = os.WriteFile(noteAbsPath, []byte(lateContent), 0644)
 	assert.NoError(t, err)
 
 	// 在 runner.activeTasks 中预设这个 runID
 	runner.muTasks.Lock()
 	runner.activeTasks[runID] = &activeTask{
 		phase: phaseAfter3,
-		paths: map[string]struct{}{memoAbsPath: {}},
+		paths: map[string]struct{}{noteAbsPath: {}},
 		failedDirectives: map[string]bool{
 			"fork":    false, // 成功
 			"comfyui": true,  // 失败
@@ -576,13 +576,13 @@ Other text.`
 	}
 
 	// 触发 late cleanup
-	runner.postProcessMemoDirectives(context.Background(), memoAbsPath, runID, "post_update_memo", hookMap, map[string]bool{
+	runner.postProcessNoteDirectives(context.Background(), noteAbsPath, runID, "post_update_note", hookMap, map[string]bool{
 		"fork":    false,
 		"comfyui": true,
 	})
 
 	// 再次检查迟到清理后的文件内容
-	contentBytes, err = os.ReadFile(memoAbsPath)
+	contentBytes, err = os.ReadFile(noteAbsPath)
 	assert.NoError(t, err)
 	content = string(contentBytes)
 

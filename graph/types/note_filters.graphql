@@ -1,0 +1,19 @@
+"笔记过滤条件"
+type NoteFilters
+  @goModel(model: "main/internal/shared.NoteFilters") {
+  "按笔记ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
+}
+input NoteFiltersInput
+  @goModel(model: "main/internal/shared.NoteFilters") {
+  "按笔记ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
+}

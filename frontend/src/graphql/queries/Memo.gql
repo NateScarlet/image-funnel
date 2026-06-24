@@ -1,7 +1,0 @@
-query Memo($id: ID!) {
-  node(id: $id) {
-    ... on Memo {
-      ...Memo
-    }
-  }
-}

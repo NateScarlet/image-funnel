@@ -45,13 +45,9 @@ func (r *directoryResolver) Images(ctx context.Context, obj *shared.DirectoryDTO
 	return r.app.Images(ctx, obj.ID, filters, first, after)
 }
 
-// Memos is the resolver for the memos field.
-func (r *directoryResolver) Memos(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.MemoFilters, first *int, after *string) (*shared.MemoConnectionDTO, error) {
-	var filters shared.MemoFilters
-	if filterBy != nil {
-		filters = *filterBy
-	}
-	return r.app.Memos(ctx, obj.ID, filters, first, after)
+// Notes is the resolver for the notes field.
+func (r *directoryResolver) Notes(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.NoteFilters, first *int, after *string) (*shared.NoteConnectionDTO, error) {
+	return r.app.Notes(ctx, obj.ID, util.UnwrapPointer(filterBy), first, after)
 }
 
 // LastSession is the resolver for the lastSession field.

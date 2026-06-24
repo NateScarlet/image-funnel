@@ -45,8 +45,8 @@ type ResolverRoot interface {
 	Directory() DirectoryResolver
 	DirectoryStats() DirectoryStatsResolver
 	Image() ImageResolver
-	Memo() MemoResolver
 	Mutation() MutationResolver
+	Note() NoteResolver
 	Query() QueryResolver
 	Session() SessionResolver
 	Subscription() SubscriptionResolver
@@ -113,7 +113,7 @@ type ComplexityRoot struct {
 		ID            func(childComplexity int) int
 		Images        func(childComplexity int, filterBy *shared.ImageFilters, first *int, after *string) int
 		LastSession   func(childComplexity int) int
-		Memos         func(childComplexity int, filterBy *shared.MemoFilters, first *int, after *string) int
+		Notes         func(childComplexity int, filterBy *shared.NoteFilters, first *int, after *string) int
 		ParentID      func(childComplexity int) int
 		RelPath       func(childComplexity int) int
 		Root          func(childComplexity int) int
@@ -140,7 +140,7 @@ type ComplexityRoot struct {
 
 	DirectoryStateBrowse struct {
 		FilterBy     func(childComplexity int) int
-		FilterMemoBy func(childComplexity int) int
+		FilterNoteBy func(childComplexity int) int
 	}
 
 	DirectoryStateLastSession struct {
@@ -160,7 +160,7 @@ type ComplexityRoot struct {
 		ClientMutationID func(childComplexity int) int
 	}
 
-	DispatchMemoHookPayload struct {
+	DispatchNoteHookPayload struct {
 		ClientMutationID func(childComplexity int) int
 	}
 
@@ -188,7 +188,7 @@ type ComplexityRoot struct {
 
 	Hook struct {
 		CanDispatchByImage func(childComplexity int) int
-		CanDispatchByMemo  func(childComplexity int) int
+		CanDispatchByNote  func(childComplexity int) int
 		Description        func(childComplexity int) int
 		Directive          func(childComplexity int) int
 		ID                 func(childComplexity int) int
@@ -206,8 +206,8 @@ type ComplexityRoot struct {
 		Height        func(childComplexity int) int
 		ID            func(childComplexity int) int
 		Label         func(childComplexity int) int
-		Memo          func(childComplexity int) int
 		ModTime       func(childComplexity int) int
+		Note          func(childComplexity int) int
 		RawURL        func(childComplexity int) int
 		RelPath       func(childComplexity int) int
 		Size          func(childComplexity int) int
@@ -240,32 +240,6 @@ type ComplexityRoot struct {
 		Session          func(childComplexity int) int
 	}
 
-	Memo struct {
-		Content    func(childComplexity int) int
-		Hidden     func(childComplexity int) int
-		ID         func(childComplexity int) int
-		RawContent func(childComplexity int) int
-		RelPath    func(childComplexity int) int
-		Title      func(childComplexity int) int
-	}
-
-	MemoConnection struct {
-		Edges    func(childComplexity int) int
-		Nodes    func(childComplexity int) int
-		PageInfo func(childComplexity int) int
-	}
-
-	MemoEdge struct {
-		Cursor func(childComplexity int) int
-		Node   func(childComplexity int) int
-	}
-
-	MemoFilters struct {
-		DirectoryID func(childComplexity int) int
-		Hidden      func(childComplexity int) int
-		ID          func(childComplexity int) int
-	}
-
 	Meta struct {
 		BaseURL         func(childComplexity int) int
 		RootAbsPath     func(childComplexity int) int
@@ -286,11 +260,11 @@ type ComplexityRoot struct {
 		BeginWebAuthnLogin         func(childComplexity int, input BeginWebAuthnLoginInput) int
 		BeginWebAuthnRegistration  func(childComplexity int, input BeginWebAuthnRegistrationInput) int
 		CommitChanges              func(childComplexity int, input CommitChangesInput) int
-		CreateMemo                 func(childComplexity int, input CreateMemoInput) int
+		CreateNote                 func(childComplexity int, input CreateNoteInput) int
 		CreateSession              func(childComplexity int, input CreateSessionInput) int
 		DeleteDevice               func(childComplexity int, input DeleteDeviceInput) int
 		DispatchImageHook          func(childComplexity int, input DispatchImageHookInput) int
-		DispatchMemoHook           func(childComplexity int, input DispatchMemoHookInput) int
+		DispatchNoteHook           func(childComplexity int, input DispatchNoteHookInput) int
 		EmptyTrash                 func(childComplexity int, minAge scalar.Duration) int
 		FinishWebAuthnLogin        func(childComplexity int, input FinishWebAuthnLoginInput) int
 		FinishWebAuthnRegistration func(childComplexity int, input FinishWebAuthnRegistrationInput) int
@@ -303,8 +277,34 @@ type ComplexityRoot struct {
 		Undo                       func(childComplexity int, input UndoInput) int
 		UndoTrash                  func(childComplexity int, input UndoTrashInput) int
 		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
-		UpdateMemo                 func(childComplexity int, id scalar.ID, content string) int
+		UpdateNote                 func(childComplexity int, id scalar.ID, content string) int
 		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
+	}
+
+	Note struct {
+		Content    func(childComplexity int) int
+		Hidden     func(childComplexity int) int
+		ID         func(childComplexity int) int
+		RawContent func(childComplexity int) int
+		RelPath    func(childComplexity int) int
+		Title      func(childComplexity int) int
+	}
+
+	NoteConnection struct {
+		Edges    func(childComplexity int) int
+		Nodes    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	NoteEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	NoteFilters struct {
+		DirectoryID func(childComplexity int) int
+		Hidden      func(childComplexity int) int
+		ID          func(childComplexity int) int
 	}
 
 	PageInfo struct {
@@ -381,8 +381,8 @@ type ComplexityRoot struct {
 		DirectoryChanged      func(childComplexity int, filterBy *shared.DirectoryFilters) int
 		ImageDeleted          func(childComplexity int, filterBy *shared.ImageFilters) int
 		ImageSaved            func(childComplexity int, filterBy *shared.ImageFilters) int
-		MemoSaved             func(childComplexity int, filterBy *shared.MemoFilters) int
-		MemoUpdated           func(childComplexity int, id scalar.ID) int
+		NoteSaved             func(childComplexity int, filterBy *shared.NoteFilters) int
+		NoteUpdated           func(childComplexity int, id scalar.ID) int
 		PairingRequestCreated func(childComplexity int) int
 		PairingRequestUpdated func(childComplexity int, code string) int
 		SessionUpdated        func(childComplexity int, id scalar.ID) int
@@ -449,7 +449,7 @@ type DirectoryResolver interface {
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
 	DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string) (*shared.DirectoryConnectionDTO, error)
 	Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error)
-	Memos(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.MemoFilters, first *int, after *string) (*shared.MemoConnectionDTO, error)
+	Notes(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.NoteFilters, first *int, after *string) (*shared.NoteConnectionDTO, error)
 	LastSession(ctx context.Context, obj *shared.DirectoryDTO) (*shared.SessionDTO, error)
 }
 type DirectoryStatsResolver interface {
@@ -459,10 +459,7 @@ type ImageResolver interface {
 	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
 	RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error)
 
-	Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error)
-}
-type MemoResolver interface {
-	Title(ctx context.Context, obj *shared.MemoDTO) (string, error)
+	Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error)
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
@@ -471,10 +468,10 @@ type MutationResolver interface {
 	BeginWebAuthnLogin(ctx context.Context, input BeginWebAuthnLoginInput) (*BeginWebAuthnLoginPayload, error)
 	BeginWebAuthnRegistration(ctx context.Context, input BeginWebAuthnRegistrationInput) (*BeginWebAuthnRegistrationPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
-	CreateMemo(ctx context.Context, input CreateMemoInput) (*shared.MemoDTO, error)
+	CreateNote(ctx context.Context, input CreateNoteInput) (*shared.NoteDTO, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
 	DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error)
-	DispatchMemoHook(ctx context.Context, input DispatchMemoHookInput) (*DispatchMemoHookPayload, error)
+	DispatchNoteHook(ctx context.Context, input DispatchNoteHookInput) (*DispatchNoteHookPayload, error)
 	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
@@ -487,8 +484,11 @@ type MutationResolver interface {
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
-	UpdateMemo(ctx context.Context, id scalar.ID, content string) (*shared.MemoDTO, error)
+	UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
+}
+type NoteResolver interface {
+	Title(ctx context.Context, obj *shared.NoteDTO) (string, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id scalar.ID) (Node, error)
@@ -521,8 +521,8 @@ type SubscriptionResolver interface {
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
 	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
-	MemoUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.MemoDTO, error)
-	MemoSaved(ctx context.Context, filterBy *shared.MemoFilters) (<-chan *shared.MemoDTO, error)
+	NoteUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.NoteDTO, error)
+	NoteSaved(ctx context.Context, filterBy *shared.NoteFilters) (<-chan *shared.NoteDTO, error)
 	PairingRequestCreated(ctx context.Context) (<-chan *shared.PairingRequestDTO, error)
 	PairingRequestUpdated(ctx context.Context, code string) (<-chan *shared.PairingRequestDTO, error)
 }
@@ -730,17 +730,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Directory.LastSession(childComplexity), true
-	case "Directory.memos":
-		if e.complexity.Directory.Memos == nil {
+	case "Directory.notes":
+		if e.complexity.Directory.Notes == nil {
 			break
 		}
 
-		args, err := ec.field_Directory_memos_args(ctx, rawArgs)
+		args, err := ec.field_Directory_notes_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Directory.Memos(childComplexity, args["filterBy"].(*shared.MemoFilters), args["first"].(*int), args["after"].(*string)), true
+		return e.complexity.Directory.Notes(childComplexity, args["filterBy"].(*shared.NoteFilters), args["first"].(*int), args["after"].(*string)), true
 	case "Directory.parentId":
 		if e.complexity.Directory.ParentID == nil {
 			break
@@ -829,12 +829,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DirectoryStateBrowse.FilterBy(childComplexity), true
-	case "DirectoryStateBrowse.filterMemoBy":
-		if e.complexity.DirectoryStateBrowse.FilterMemoBy == nil {
+	case "DirectoryStateBrowse.filterNoteBy":
+		if e.complexity.DirectoryStateBrowse.FilterNoteBy == nil {
 			break
 		}
 
-		return e.complexity.DirectoryStateBrowse.FilterMemoBy(childComplexity), true
+		return e.complexity.DirectoryStateBrowse.FilterNoteBy(childComplexity), true
 
 	case "DirectoryStateLastSession.filter":
 		if e.complexity.DirectoryStateLastSession.Filter == nil {
@@ -887,12 +887,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.DispatchImageHookPayload.ClientMutationID(childComplexity), true
 
-	case "DispatchMemoHookPayload.clientMutationId":
-		if e.complexity.DispatchMemoHookPayload.ClientMutationID == nil {
+	case "DispatchNoteHookPayload.clientMutationId":
+		if e.complexity.DispatchNoteHookPayload.ClientMutationID == nil {
 			break
 		}
 
-		return e.complexity.DispatchMemoHookPayload.ClientMutationID(childComplexity), true
+		return e.complexity.DispatchNoteHookPayload.ClientMutationID(childComplexity), true
 
 	case "EmptyTrashPayload.clearedCount":
 		if e.complexity.EmptyTrashPayload.ClearedCount == nil {
@@ -981,12 +981,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Hook.CanDispatchByImage(childComplexity), true
-	case "Hook.canDispatchByMemo":
-		if e.complexity.Hook.CanDispatchByMemo == nil {
+	case "Hook.canDispatchByNote":
+		if e.complexity.Hook.CanDispatchByNote == nil {
 			break
 		}
 
-		return e.complexity.Hook.CanDispatchByMemo(childComplexity), true
+		return e.complexity.Hook.CanDispatchByNote(childComplexity), true
 	case "Hook.description":
 		if e.complexity.Hook.Description == nil {
 			break
@@ -1055,18 +1055,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Image.Label(childComplexity), true
-	case "Image.memo":
-		if e.complexity.Image.Memo == nil {
-			break
-		}
-
-		return e.complexity.Image.Memo(childComplexity), true
 	case "Image.modTime":
 		if e.complexity.Image.ModTime == nil {
 			break
 		}
 
 		return e.complexity.Image.ModTime(childComplexity), true
+	case "Image.note":
+		if e.complexity.Image.Note == nil {
+			break
+		}
+
+		return e.complexity.Image.Note(childComplexity), true
 	case "Image.rawURL":
 		if e.complexity.Image.RawURL == nil {
 			break
@@ -1185,94 +1185,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.MarkImagePayload.Session(childComplexity), true
 
-	case "Memo.content":
-		if e.complexity.Memo.Content == nil {
-			break
-		}
-
-		return e.complexity.Memo.Content(childComplexity), true
-	case "Memo.hidden":
-		if e.complexity.Memo.Hidden == nil {
-			break
-		}
-
-		return e.complexity.Memo.Hidden(childComplexity), true
-	case "Memo.id":
-		if e.complexity.Memo.ID == nil {
-			break
-		}
-
-		return e.complexity.Memo.ID(childComplexity), true
-	case "Memo.rawContent":
-		if e.complexity.Memo.RawContent == nil {
-			break
-		}
-
-		return e.complexity.Memo.RawContent(childComplexity), true
-	case "Memo.relPath":
-		if e.complexity.Memo.RelPath == nil {
-			break
-		}
-
-		return e.complexity.Memo.RelPath(childComplexity), true
-	case "Memo.title":
-		if e.complexity.Memo.Title == nil {
-			break
-		}
-
-		return e.complexity.Memo.Title(childComplexity), true
-
-	case "MemoConnection.edges":
-		if e.complexity.MemoConnection.Edges == nil {
-			break
-		}
-
-		return e.complexity.MemoConnection.Edges(childComplexity), true
-	case "MemoConnection.nodes":
-		if e.complexity.MemoConnection.Nodes == nil {
-			break
-		}
-
-		return e.complexity.MemoConnection.Nodes(childComplexity), true
-	case "MemoConnection.pageInfo":
-		if e.complexity.MemoConnection.PageInfo == nil {
-			break
-		}
-
-		return e.complexity.MemoConnection.PageInfo(childComplexity), true
-
-	case "MemoEdge.cursor":
-		if e.complexity.MemoEdge.Cursor == nil {
-			break
-		}
-
-		return e.complexity.MemoEdge.Cursor(childComplexity), true
-	case "MemoEdge.node":
-		if e.complexity.MemoEdge.Node == nil {
-			break
-		}
-
-		return e.complexity.MemoEdge.Node(childComplexity), true
-
-	case "MemoFilters.directoryId":
-		if e.complexity.MemoFilters.DirectoryID == nil {
-			break
-		}
-
-		return e.complexity.MemoFilters.DirectoryID(childComplexity), true
-	case "MemoFilters.hidden":
-		if e.complexity.MemoFilters.Hidden == nil {
-			break
-		}
-
-		return e.complexity.MemoFilters.Hidden(childComplexity), true
-	case "MemoFilters.id":
-		if e.complexity.MemoFilters.ID == nil {
-			break
-		}
-
-		return e.complexity.MemoFilters.ID(childComplexity), true
-
 	case "Meta.baseURL":
 		if e.complexity.Meta.BaseURL == nil {
 			break
@@ -1378,17 +1290,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CommitChanges(childComplexity, args["input"].(CommitChangesInput)), true
-	case "Mutation.createMemo":
-		if e.complexity.Mutation.CreateMemo == nil {
+	case "Mutation.createNote":
+		if e.complexity.Mutation.CreateNote == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_createMemo_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_createNote_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateMemo(childComplexity, args["input"].(CreateMemoInput)), true
+		return e.complexity.Mutation.CreateNote(childComplexity, args["input"].(CreateNoteInput)), true
 	case "Mutation.createSession":
 		if e.complexity.Mutation.CreateSession == nil {
 			break
@@ -1422,17 +1334,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DispatchImageHook(childComplexity, args["input"].(DispatchImageHookInput)), true
-	case "Mutation.dispatchMemoHook":
-		if e.complexity.Mutation.DispatchMemoHook == nil {
+	case "Mutation.dispatchNoteHook":
+		if e.complexity.Mutation.DispatchNoteHook == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_dispatchMemoHook_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_dispatchNoteHook_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Mutation.DispatchMemoHook(childComplexity, args["input"].(DispatchMemoHookInput)), true
+		return e.complexity.Mutation.DispatchNoteHook(childComplexity, args["input"].(DispatchNoteHookInput)), true
 	case "Mutation.emptyTrash":
 		if e.complexity.Mutation.EmptyTrash == nil {
 			break
@@ -1565,17 +1477,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateImageMetadata(childComplexity, args["input"].(UpdateImageMetadataInput)), true
-	case "Mutation.updateMemo":
-		if e.complexity.Mutation.UpdateMemo == nil {
+	case "Mutation.updateNote":
+		if e.complexity.Mutation.UpdateNote == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_updateMemo_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_updateNote_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateMemo(childComplexity, args["id"].(scalar.ID), args["content"].(string)), true
+		return e.complexity.Mutation.UpdateNote(childComplexity, args["id"].(scalar.ID), args["content"].(string)), true
 	case "Mutation.updateSession":
 		if e.complexity.Mutation.UpdateSession == nil {
 			break
@@ -1587,6 +1499,94 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateSession(childComplexity, args["input"].(UpdateSessionInput)), true
+
+	case "Note.content":
+		if e.complexity.Note.Content == nil {
+			break
+		}
+
+		return e.complexity.Note.Content(childComplexity), true
+	case "Note.hidden":
+		if e.complexity.Note.Hidden == nil {
+			break
+		}
+
+		return e.complexity.Note.Hidden(childComplexity), true
+	case "Note.id":
+		if e.complexity.Note.ID == nil {
+			break
+		}
+
+		return e.complexity.Note.ID(childComplexity), true
+	case "Note.rawContent":
+		if e.complexity.Note.RawContent == nil {
+			break
+		}
+
+		return e.complexity.Note.RawContent(childComplexity), true
+	case "Note.relPath":
+		if e.complexity.Note.RelPath == nil {
+			break
+		}
+
+		return e.complexity.Note.RelPath(childComplexity), true
+	case "Note.title":
+		if e.complexity.Note.Title == nil {
+			break
+		}
+
+		return e.complexity.Note.Title(childComplexity), true
+
+	case "NoteConnection.edges":
+		if e.complexity.NoteConnection.Edges == nil {
+			break
+		}
+
+		return e.complexity.NoteConnection.Edges(childComplexity), true
+	case "NoteConnection.nodes":
+		if e.complexity.NoteConnection.Nodes == nil {
+			break
+		}
+
+		return e.complexity.NoteConnection.Nodes(childComplexity), true
+	case "NoteConnection.pageInfo":
+		if e.complexity.NoteConnection.PageInfo == nil {
+			break
+		}
+
+		return e.complexity.NoteConnection.PageInfo(childComplexity), true
+
+	case "NoteEdge.cursor":
+		if e.complexity.NoteEdge.Cursor == nil {
+			break
+		}
+
+		return e.complexity.NoteEdge.Cursor(childComplexity), true
+	case "NoteEdge.node":
+		if e.complexity.NoteEdge.Node == nil {
+			break
+		}
+
+		return e.complexity.NoteEdge.Node(childComplexity), true
+
+	case "NoteFilters.directoryId":
+		if e.complexity.NoteFilters.DirectoryID == nil {
+			break
+		}
+
+		return e.complexity.NoteFilters.DirectoryID(childComplexity), true
+	case "NoteFilters.hidden":
+		if e.complexity.NoteFilters.Hidden == nil {
+			break
+		}
+
+		return e.complexity.NoteFilters.Hidden(childComplexity), true
+	case "NoteFilters.id":
+		if e.complexity.NoteFilters.ID == nil {
+			break
+		}
+
+		return e.complexity.NoteFilters.ID(childComplexity), true
 
 	case "PageInfo.endCursor":
 		if e.complexity.PageInfo.EndCursor == nil {
@@ -1962,28 +1962,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.ImageSaved(childComplexity, args["filterBy"].(*shared.ImageFilters)), true
-	case "Subscription.memoSaved":
-		if e.complexity.Subscription.MemoSaved == nil {
+	case "Subscription.noteSaved":
+		if e.complexity.Subscription.NoteSaved == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_memoSaved_args(ctx, rawArgs)
+		args, err := ec.field_Subscription_noteSaved_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Subscription.MemoSaved(childComplexity, args["filterBy"].(*shared.MemoFilters)), true
-	case "Subscription.memoUpdated":
-		if e.complexity.Subscription.MemoUpdated == nil {
+		return e.complexity.Subscription.NoteSaved(childComplexity, args["filterBy"].(*shared.NoteFilters)), true
+	case "Subscription.noteUpdated":
+		if e.complexity.Subscription.NoteUpdated == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_memoUpdated_args(ctx, rawArgs)
+		args, err := ec.field_Subscription_noteUpdated_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Subscription.MemoUpdated(childComplexity, args["id"].(scalar.ID)), true
+		return e.complexity.Subscription.NoteUpdated(childComplexity, args["id"].(scalar.ID)), true
 	case "Subscription.pairingRequestCreated":
 		if e.complexity.Subscription.PairingRequestCreated == nil {
 			break
@@ -2196,20 +2196,20 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBeginWebAuthnLoginInput,
 		ec.unmarshalInputBeginWebAuthnRegistrationInput,
 		ec.unmarshalInputCommitChangesInput,
-		ec.unmarshalInputCreateMemoInput,
+		ec.unmarshalInputCreateNoteInput,
 		ec.unmarshalInputCreateSessionInput,
 		ec.unmarshalInputDeleteDeviceInput,
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputDirectoryStateBrowseInput,
 		ec.unmarshalInputDirectoryStateInput,
 		ec.unmarshalInputDispatchImageHookInput,
-		ec.unmarshalInputDispatchMemoHookInput,
+		ec.unmarshalInputDispatchNoteHookInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
-		ec.unmarshalInputMemoFiltersInput,
 		ec.unmarshalInputMoveImagesInput,
+		ec.unmarshalInputNoteFiltersInput,
 		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
@@ -2376,7 +2376,7 @@ directive @oneOf on INPUT_OBJECT
   """
   name: String!
   """
-  设备注册时间
+  设笔记册时间
   """
   createdAt: Time!
   """
@@ -2426,8 +2426,8 @@ type Directory implements Node
     first: Int
     after: String
   ): ImageConnection! @goField(forceResolver: true)
-  "目录下的备忘录列表，支持筛选与分页"
-  memos(filterBy: MemoFiltersInput, first: Int, after: String): MemoConnection!
+  "目录下的笔记列表，支持筛选与分页"
+  notes(filterBy: NoteFiltersInput, first: Int, after: String): NoteConnection!
     @goField(forceResolver: true)
   "该目录下最后活跃的会话，无历史会话时返回null"
   lastSession: Session @goField(forceResolver: true)
@@ -2507,8 +2507,8 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
 type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   "图片过滤配置"
   filterBy: ImageFilters
-  "备忘录过滤配置"
-  filterMemoBy: MemoFilters
+  "笔记过滤配置"
+  filterNoteBy: NoteFilters
 }
 
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
@@ -2518,7 +2518,7 @@ input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDT
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   filterBy: ImageFiltersInput
-  filterMemoBy: MemoFiltersInput
+  filterNoteBy: NoteFiltersInput
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
@@ -2540,7 +2540,7 @@ type Hook @goModel(model: "main/internal/shared.HookDTO") {
   "是否支持按图片手动触发分发"
   canDispatchByImage: Boolean!
   "是否支持按笔记手动触发分发"
-  canDispatchByMemo: Boolean!
+  canDispatchByNote: Boolean!
   "笔记指令配置，如果为空则表示不支持通过该钩子触发指令"
   directive: HookDirective
 }
@@ -2576,8 +2576,8 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   currentRating: Int!
   "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
-  "关联的备忘信息，无备忘文件时返回空备忘对象"
-  memo: Memo!
+  "关联的笔记信息，无笔记文件时返回空笔记对象"
+  note: Note!
   "颜色标签（来自 XMP sidecar），无标签时返回空字符串"
   label: String
   "相对根目录的路径"
@@ -2611,52 +2611,6 @@ input ImageFiltersInput
   "按文件名模糊搜索（忽略大小写，包含即匹配）"
   query: String
 }`, BuiltIn: false},
-	{Name: "../../../graph/types/memo.graphql", Input: `"""
-图片的备忘信息，以 Markdown 文件形式存储于图片同目录。
-frontmatter 中可包含 hidden/hide 字段控制是否隐藏。
-"""
-type Memo implements Node @goModel(model: "main/internal/shared.MemoDTO") {
-  id: ID!
-  title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
-  "备忘文件相对根目录的路径"
-  relPath: String!
-  "剥离 frontmatter 后的正文内容（纯 Markdown）"
-  content: String!
-  "包含 frontmatter 的完整原始内容"
-  rawContent: String!
-  "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
-  hidden: Boolean!
-}
-
-type MemoConnection @goModel(model: "main/internal/shared.MemoConnectionDTO") {
-  edges: [MemoEdge!]!
-  nodes: [Memo!]!
-  pageInfo: PageInfo!
-}
-
-type MemoEdge @goModel(model: "main/internal/shared.MemoEdgeDTO") {
-  node: Memo!
-  cursor: String!
-}`, BuiltIn: false},
-	{Name: "../../../graph/types/memo_filters.graphql", Input: `"备忘录过滤条件"
-type MemoFilters
-  @goModel(model: "main/internal/shared.MemoFilters") {
-  "按备忘录ID过滤，为null表示不限制"
-  id: [ID!]
-  "按所在目录ID过滤，为null表示不限制"
-  directoryId: [ID!]
-  "按是否隐藏过滤，为null表示不限制"
-  hidden: Boolean
-}
-input MemoFiltersInput
-  @goModel(model: "main/internal/shared.MemoFilters") {
-  "按备忘录ID过滤，为null表示不限制"
-  id: [ID!]
-  "按所在目录ID过滤，为null表示不限制"
-  directoryId: [ID!]
-  "按是否隐藏过滤，为null表示不限制"
-  hidden: Boolean
-}`, BuiltIn: false},
 	{Name: "../../../graph/types/meta.graphql", Input: `"应用元信息"
 type Meta {
   "应用根目录的绝对路径"
@@ -2675,6 +2629,52 @@ type Meta {
 interface Node {
   "全局唯一标识符，格式为 {类型前缀}:{编码信息}，客户端不应解析其内部结构"
   id: ID!
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/note.graphql", Input: `"""
+笔记信息，以 Markdown 文件形式存储于图片同目录。
+frontmatter 中可包含 hidden/hide 字段控制是否隐藏。
+"""
+type Note implements Node @goModel(model: "main/internal/shared.NoteDTO") {
+  id: ID!
+  title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
+  "笔记文件相对根目录的路径"
+  relPath: String!
+  "剥离 frontmatter 后的正文内容（纯 Markdown）"
+  content: String!
+  "包含 frontmatter 的完整原始内容"
+  rawContent: String!
+  "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
+  hidden: Boolean!
+}
+
+type NoteConnection @goModel(model: "main/internal/shared.NoteConnectionDTO") {
+  edges: [NoteEdge!]!
+  nodes: [Note!]!
+  pageInfo: PageInfo!
+}
+
+type NoteEdge @goModel(model: "main/internal/shared.NoteEdgeDTO") {
+  node: Note!
+  cursor: String!
+}`, BuiltIn: false},
+	{Name: "../../../graph/types/note_filters.graphql", Input: `"笔记过滤条件"
+type NoteFilters
+  @goModel(model: "main/internal/shared.NoteFilters") {
+  "按笔记ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
+}
+input NoteFiltersInput
+  @goModel(model: "main/internal/shared.NoteFilters") {
+  "按笔记ID过滤，为null表示不限制"
+  id: [ID!]
+  "按所在目录ID过滤，为null表示不限制"
+  directoryId: [ID!]
+  "按是否隐藏过滤，为null表示不限制"
+  hidden: Boolean
 }`, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
   code: String!
@@ -2847,7 +2847,7 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
 	{Name: "../../../graph/queries/node.graphql", Input: `type Query {
   """
   通过全局唯一 ID 查找节点。
-  支持按前缀解析：dir: → Directory，memo: → Memo。
+  支持按前缀解析：dir: → Directory，note: → Note。
   不支持的 ID 格式返回 null。
   """
   node(id: ID!): Node
@@ -2931,18 +2931,18 @@ type DirEntryDeleted @goModel(model: "main/internal/shared.DirEntryDeletedDTO") 
 type DeletedImage {
   id: ID!
 }`, BuiltIn: false},
-	{Name: "../../../graph/subscriptions/memo_updated.graphql", Input: `extend type Subscription {
+	{Name: "../../../graph/subscriptions/note_updated.graphql", Input: `extend type Subscription {
   """
-  按 ID 订阅特定备忘录的更新（已废弃，请使用 memoSaved）
+  按 ID 订阅特定笔记的更新
   """
-  memoUpdated(id: ID!): Memo! @deprecated(reason: "use memoSaved")
+  noteUpdated(id: ID!): Note!
 
   """
-  按过滤器订阅备忘录的新增、更新与删除事件。
-  支持按目录ID、备忘录ID、隐藏状态过滤。
-  文件被删除时推送空内容备忘对象。
+  按过滤器订阅笔记的新增、更新与删除事件。
+  支持按目录ID、笔记ID、隐藏状态过滤。
+  文件被删除时推送空内容笔记对象。
   """
-  memoSaved(filterBy: MemoFiltersInput): Memo!
+  noteSaved(filterBy: NoteFiltersInput): Note!
 }`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/pairing_request_created.graphql", Input: `extend type Subscription {
   pairingRequestCreated: PairingRequest!
@@ -3043,10 +3043,10 @@ type CommitChangesPayload {
 extend type Mutation {
   commitChanges(input: CommitChangesInput!): CommitChangesPayload!
 }`, BuiltIn: false},
-	{Name: "../../../graph/mutations/create_memo.graphql", Input: `input CreateMemoInput {
+	{Name: "../../../graph/mutations/create_note.graphql", Input: `input CreateNoteInput {
   "所在目录的 ID"
   directoryId: ID!
-  "备忘主文件名（例如 README，若包含 .md 会自动处理）"
+  "笔记主文件名（例如 README，若包含 .md 会自动处理）"
   name: String!
   "笔记内容"
   content: String!
@@ -3054,11 +3054,10 @@ extend type Mutation {
 
 extend type Mutation {
   """
-  创建目录下的备忘内容。如果已存在同名备忘，则返回错误。
+  创建目录下的笔记内容。如果已存在同名笔记，则返回错误。
   """
-  createMemo(input: CreateMemoInput!): Memo!
-}
-`, BuiltIn: false},
+  createNote(input: CreateNoteInput!): Note!
+}`, BuiltIn: false},
 	{Name: "../../../graph/mutations/create_session.graphql", Input: `"创建新筛选会话"
 input CreateSessionInput {
   "初始筛选条件，确定哪类图片进入筛选队列"
@@ -3108,15 +3107,15 @@ type DispatchImageHookPayload {
   clientMutationId: String
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/dispatch_memo_hook.graphql", Input: `extend type Mutation {
+	{Name: "../../../graph/mutations/dispatch_note_hook.graphql", Input: `extend type Mutation {
   "手动为笔记触发特定的外部钩子"
-  dispatchMemoHook(input: DispatchMemoHookInput!): DispatchMemoHookPayload!
+  dispatchNoteHook(input: DispatchNoteHookInput!): DispatchNoteHookPayload!
 }
 
 "手动派发笔记钩子的输入"
-input DispatchMemoHookInput {
+input DispatchNoteHookInput {
   "笔记 ID"
-  memoId: ID!
+  noteId: ID!
   "要触发的钩子 ID"
   hookId: ID!
   "客户端突变标识"
@@ -3124,7 +3123,7 @@ input DispatchMemoHookInput {
 }
 
 "手动派发笔记钩子的返回数据"
-type DispatchMemoHookPayload {
+type DispatchNoteHookPayload {
   "客户端突变标识"
   clientMutationId: String
 }`, BuiltIn: false},
@@ -3377,12 +3376,12 @@ input UpdateImageMetadataInput {
   "新的颜色标签，为null表示不修改"
   label: String
 }`, BuiltIn: false},
-	{Name: "../../../graph/mutations/update_memo.graphql", Input: `extend type Mutation {
+	{Name: "../../../graph/mutations/update_note.graphql", Input: `extend type Mutation {
   """
-  更新图片的备忘内容。操作即时写入 Markdown 文件，不参与会话提交。
-  content 可包含 frontmatter（如 hidden/hide 字段）以控制备忘的隐藏状态。
+  更新笔记内容。操作即时写入 Markdown 文件，不参与会话提交。
+  content 可包含 frontmatter（如 hidden/hide 字段）以控制笔记的隐藏状态。
   """
-  updateMemo(id: ID!, content: String!): Memo!
+  updateNote(id: ID!, content: String!): Note!
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_session.graphql", Input: `"更新会话配置（目标保留数量、筛选条件）"
 input UpdateSessionInput {
@@ -3456,10 +3455,10 @@ func (ec *executionContext) field_Directory_images_args(ctx context.Context, raw
 	return args, nil
 }
 
-func (ec *executionContext) field_Directory_memos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Directory_notes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋsharedᚐNoteFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -3548,10 +3547,10 @@ func (ec *executionContext) field_Mutation_commitChanges_args(ctx context.Contex
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_createMemo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_createNote_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateMemoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateMemoInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateNoteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateNoteInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3592,10 +3591,10 @@ func (ec *executionContext) field_Mutation_dispatchImageHook_args(ctx context.Co
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_dispatchMemoHook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_dispatchNoteHook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDispatchMemoHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNDispatchNoteHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchNoteHookInput)
 	if err != nil {
 		return nil, err
 	}
@@ -3735,7 +3734,7 @@ func (ec *executionContext) field_Mutation_updateImageMetadata_args(ctx context.
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_updateMemo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_updateNote_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
@@ -3909,10 +3908,10 @@ func (ec *executionContext) field_Subscription_imageSaved_args(ctx context.Conte
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_memoSaved_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Subscription_noteSaved_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋsharedᚐNoteFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -3920,7 +3919,7 @@ func (ec *executionContext) field_Subscription_memoSaved_args(ctx context.Contex
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_memoUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Subscription_noteUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
@@ -4980,8 +4979,8 @@ func (ec *executionContext) fieldContext_Directory_directories(_ context.Context
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -5089,24 +5088,24 @@ func (ec *executionContext) fieldContext_Directory_images(ctx context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Directory_memos(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Directory_notes(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Directory_memos,
+		ec.fieldContext_Directory_notes,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Directory().Memos(ctx, obj, fc.Args["filterBy"].(*shared.MemoFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+			return ec.resolvers.Directory().Notes(ctx, obj, fc.Args["filterBy"].(*shared.NoteFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
 		},
 		nil,
-		ec.marshalNMemoConnection2ᚖmainᚋinternalᚋsharedᚐMemoConnectionDTO,
+		ec.marshalNNoteConnection2ᚖmainᚋinternalᚋsharedᚐNoteConnectionDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Directory_memos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Directory_notes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Directory",
 		Field:      field,
@@ -5115,13 +5114,13 @@ func (ec *executionContext) fieldContext_Directory_memos(ctx context.Context, fi
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "edges":
-				return ec.fieldContext_MemoConnection_edges(ctx, field)
+				return ec.fieldContext_NoteConnection_edges(ctx, field)
 			case "nodes":
-				return ec.fieldContext_MemoConnection_nodes(ctx, field)
+				return ec.fieldContext_NoteConnection_nodes(ctx, field)
 			case "pageInfo":
-				return ec.fieldContext_MemoConnection_pageInfo(ctx, field)
+				return ec.fieldContext_NoteConnection_pageInfo(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type MemoConnection", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type NoteConnection", field.Name)
 		},
 	}
 	defer func() {
@@ -5131,7 +5130,7 @@ func (ec *executionContext) fieldContext_Directory_memos(ctx context.Context, fi
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Directory_memos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Directory_notes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5282,8 +5281,8 @@ func (ec *executionContext) fieldContext_DirectoryConnection_nodes(_ context.Con
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -5376,8 +5375,8 @@ func (ec *executionContext) fieldContext_DirectoryEdge_node(_ context.Context, f
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -5442,8 +5441,8 @@ func (ec *executionContext) fieldContext_DirectoryState_browse(_ context.Context
 			switch field.Name {
 			case "filterBy":
 				return ec.fieldContext_DirectoryStateBrowse_filterBy(ctx, field)
-			case "filterMemoBy":
-				return ec.fieldContext_DirectoryStateBrowse_filterMemoBy(ctx, field)
+			case "filterNoteBy":
+				return ec.fieldContext_DirectoryStateBrowse_filterNoteBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DirectoryStateBrowse", field.Name)
 		},
@@ -5558,23 +5557,23 @@ func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterBy(_ context
 	return fc, nil
 }
 
-func (ec *executionContext) _DirectoryStateBrowse_filterMemoBy(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateBrowseDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _DirectoryStateBrowse_filterNoteBy(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateBrowseDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_DirectoryStateBrowse_filterMemoBy,
+		ec.fieldContext_DirectoryStateBrowse_filterNoteBy,
 		func(ctx context.Context) (any, error) {
-			return obj.FilterMemoBy, nil
+			return obj.FilterNoteBy, nil
 		},
 		nil,
-		ec.marshalOMemoFilters2ᚖmainᚋinternalᚋsharedᚐMemoFilters,
+		ec.marshalONoteFilters2ᚖmainᚋinternalᚋsharedᚐNoteFilters,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterMemoBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterNoteBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "DirectoryStateBrowse",
 		Field:      field,
@@ -5583,13 +5582,13 @@ func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterMemoBy(_ con
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_MemoFilters_id(ctx, field)
+				return ec.fieldContext_NoteFilters_id(ctx, field)
 			case "directoryId":
-				return ec.fieldContext_MemoFilters_directoryId(ctx, field)
+				return ec.fieldContext_NoteFilters_directoryId(ctx, field)
 			case "hidden":
-				return ec.fieldContext_MemoFilters_hidden(ctx, field)
+				return ec.fieldContext_NoteFilters_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type MemoFilters", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type NoteFilters", field.Name)
 		},
 	}
 	return fc, nil
@@ -5796,8 +5795,8 @@ func (ec *executionContext) fieldContext_DirectoryStats_latestImage(_ context.Co
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -5873,12 +5872,12 @@ func (ec *executionContext) fieldContext_DispatchImageHookPayload_clientMutation
 	return fc, nil
 }
 
-func (ec *executionContext) _DispatchMemoHookPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *DispatchMemoHookPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _DispatchNoteHookPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *DispatchNoteHookPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_DispatchMemoHookPayload_clientMutationId,
+		ec.fieldContext_DispatchNoteHookPayload_clientMutationId,
 		func(ctx context.Context) (any, error) {
 			return obj.ClientMutationID, nil
 		},
@@ -5889,9 +5888,9 @@ func (ec *executionContext) _DispatchMemoHookPayload_clientMutationId(ctx contex
 	)
 }
 
-func (ec *executionContext) fieldContext_DispatchMemoHookPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_DispatchNoteHookPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "DispatchMemoHookPayload",
+		Object:     "DispatchNoteHookPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -6431,14 +6430,14 @@ func (ec *executionContext) fieldContext_Hook_canDispatchByImage(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Hook_canDispatchByMemo(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Hook_canDispatchByNote(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Hook_canDispatchByMemo,
+		ec.fieldContext_Hook_canDispatchByNote,
 		func(ctx context.Context) (any, error) {
-			return obj.CanDispatchByMemo, nil
+			return obj.CanDispatchByNote, nil
 		},
 		nil,
 		ec.marshalNBoolean2bool,
@@ -6447,7 +6446,7 @@ func (ec *executionContext) _Hook_canDispatchByMemo(ctx context.Context, field g
 	)
 }
 
-func (ec *executionContext) fieldContext_Hook_canDispatchByMemo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Hook_canDispatchByNote(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Hook",
 		Field:      field,
@@ -6855,23 +6854,23 @@ func (ec *executionContext) fieldContext_Image_xmpExists(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Image_memo(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _Image_note(ctx context.Context, field graphql.CollectedField, obj *shared.ImageDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Image_memo,
+		ec.fieldContext_Image_note,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Image().Memo(ctx, obj)
+			return ec.resolvers.Image().Note(ctx, obj)
 		},
 		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Image_memo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Image_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Image",
 		Field:      field,
@@ -6880,19 +6879,19 @@ func (ec *executionContext) fieldContext_Image_memo(_ context.Context, field gra
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
+				return ec.fieldContext_Note_id(ctx, field)
 			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
+				return ec.fieldContext_Note_title(ctx, field)
 			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
+				return ec.fieldContext_Note_relPath(ctx, field)
 			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
+				return ec.fieldContext_Note_content(ctx, field)
 			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
+				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
+				return ec.fieldContext_Note_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
 	}
 	return fc, nil
@@ -7035,8 +7034,8 @@ func (ec *executionContext) fieldContext_ImageConnection_nodes(_ context.Context
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -7131,8 +7130,8 @@ func (ec *executionContext) fieldContext_ImageEdge_node(_ context.Context, field
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -7407,456 +7406,6 @@ func (ec *executionContext) fieldContext_MarkImagePayload_clientMutationId(_ con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_id(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_title(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_title,
-		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Memo().Title(ctx, obj)
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_relPath,
-		func(ctx context.Context) (any, error) {
-			return obj.RelPath, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_content(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_content,
-		func(ctx context.Context) (any, error) {
-			return obj.Content, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_rawContent(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_rawContent,
-		func(ctx context.Context) (any, error) {
-			return obj.RawContent, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_rawContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Memo_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.MemoDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Memo_hidden,
-		func(ctx context.Context) (any, error) {
-			return obj.Hidden, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Memo_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Memo",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoConnection_edges,
-		func(ctx context.Context) (any, error) {
-			return obj.Edges, nil
-		},
-		nil,
-		ec.marshalNMemoEdge2ᚕᚖmainᚋinternalᚋsharedᚐMemoEdgeDTOᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoConnection",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "node":
-				return ec.fieldContext_MemoEdge_node(ctx, field)
-			case "cursor":
-				return ec.fieldContext_MemoEdge_cursor(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type MemoEdge", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoConnection_nodes(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoConnection_nodes,
-		func(ctx context.Context) (any, error) {
-			return obj.Nodes, nil
-		},
-		nil,
-		ec.marshalNMemo2ᚕᚖmainᚋinternalᚋsharedᚐMemoDTOᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoConnection_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoConnection",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
-			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
-			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
-			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
-			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *shared.MemoConnectionDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoConnection_pageInfo,
-		func(ctx context.Context) (any, error) {
-			return obj.PageInfo, nil
-		},
-		nil,
-		ec.marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoConnection",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "hasNextPage":
-				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
-			case "hasPreviousPage":
-				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
-			case "startCursor":
-				return ec.fieldContext_PageInfo_startCursor(ctx, field)
-			case "endCursor":
-				return ec.fieldContext_PageInfo_endCursor(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoEdge_node(ctx context.Context, field graphql.CollectedField, obj *shared.MemoEdgeDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoEdge_node,
-		func(ctx context.Context) (any, error) {
-			return obj.Node, nil
-		},
-		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoEdge",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
-			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
-			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
-			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
-			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *shared.MemoEdgeDTO) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoEdge_cursor,
-		func(ctx context.Context) (any, error) {
-			return obj.Cursor, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoEdge",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoFilters_id(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoFilters_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoFilters_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoFilters",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoFilters_directoryId(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoFilters_directoryId,
-		func(ctx context.Context) (any, error) {
-			return obj.DirectoryID, nil
-		},
-		nil,
-		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoFilters_directoryId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoFilters",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _MemoFilters_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.MemoFilters) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MemoFilters_hidden,
-		func(ctx context.Context) (any, error) {
-			return obj.Hidden, nil
-		},
-		nil,
-		ec.marshalOBoolean2ᚖbool,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_MemoFilters_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MemoFilters",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -8398,24 +7947,24 @@ func (ec *executionContext) fieldContext_Mutation_commitChanges(ctx context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_createMemo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_createNote(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_createMemo,
+		ec.fieldContext_Mutation_createNote,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().CreateMemo(ctx, fc.Args["input"].(CreateMemoInput))
+			return ec.resolvers.Mutation().CreateNote(ctx, fc.Args["input"].(CreateNoteInput))
 		},
 		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_createMemo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_createNote(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -8424,19 +7973,19 @@ func (ec *executionContext) fieldContext_Mutation_createMemo(ctx context.Context
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
+				return ec.fieldContext_Note_id(ctx, field)
 			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
+				return ec.fieldContext_Note_title(ctx, field)
 			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
+				return ec.fieldContext_Note_relPath(ctx, field)
 			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
+				return ec.fieldContext_Note_content(ctx, field)
 			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
+				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
+				return ec.fieldContext_Note_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
 	}
 	defer func() {
@@ -8446,7 +7995,7 @@ func (ec *executionContext) fieldContext_Mutation_createMemo(ctx context.Context
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_createMemo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_createNote_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8539,24 +8088,24 @@ func (ec *executionContext) fieldContext_Mutation_dispatchImageHook(ctx context.
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_dispatchMemoHook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_dispatchNoteHook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_dispatchMemoHook,
+		ec.fieldContext_Mutation_dispatchNoteHook,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().DispatchMemoHook(ctx, fc.Args["input"].(DispatchMemoHookInput))
+			return ec.resolvers.Mutation().DispatchNoteHook(ctx, fc.Args["input"].(DispatchNoteHookInput))
 		},
 		nil,
-		ec.marshalNDispatchMemoHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload,
+		ec.marshalNDispatchNoteHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchNoteHookPayload,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_dispatchMemoHook(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_dispatchNoteHook(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -8565,9 +8114,9 @@ func (ec *executionContext) fieldContext_Mutation_dispatchMemoHook(ctx context.C
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "clientMutationId":
-				return ec.fieldContext_DispatchMemoHookPayload_clientMutationId(ctx, field)
+				return ec.fieldContext_DispatchNoteHookPayload_clientMutationId(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type DispatchMemoHookPayload", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type DispatchNoteHookPayload", field.Name)
 		},
 	}
 	defer func() {
@@ -8577,7 +8126,7 @@ func (ec *executionContext) fieldContext_Mutation_dispatchMemoHook(ctx context.C
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_dispatchMemoHook_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_dispatchNoteHook_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9011,8 +8560,8 @@ func (ec *executionContext) fieldContext_Mutation_setDirectoryState(ctx context.
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -9225,8 +8774,8 @@ func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx contex
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -9249,24 +8798,24 @@ func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx contex
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_updateMemo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_updateNote(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_updateMemo,
+		ec.fieldContext_Mutation_updateNote,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateMemo(ctx, fc.Args["id"].(scalar.ID), fc.Args["content"].(string))
+			return ec.resolvers.Mutation().UpdateNote(ctx, fc.Args["id"].(scalar.ID), fc.Args["content"].(string))
 		},
 		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_updateNote(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -9275,19 +8824,19 @@ func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
+				return ec.fieldContext_Note_id(ctx, field)
 			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
+				return ec.fieldContext_Note_title(ctx, field)
 			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
+				return ec.fieldContext_Note_relPath(ctx, field)
 			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
+				return ec.fieldContext_Note_content(ctx, field)
 			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
+				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
+				return ec.fieldContext_Note_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
 	}
 	defer func() {
@@ -9297,7 +8846,7 @@ func (ec *executionContext) fieldContext_Mutation_updateMemo(ctx context.Context
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_updateMemo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_updateNote_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9347,6 +8896,456 @@ func (ec *executionContext) fieldContext_Mutation_updateSession(ctx context.Cont
 	if fc.Args, err = ec.field_Mutation_updateSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_id(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_title(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_title,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Note().Title(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_relPath(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_relPath,
+		func(ctx context.Context) (any, error) {
+			return obj.RelPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_relPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_content(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_rawContent(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_rawContent,
+		func(ctx context.Context) (any, error) {
+			return obj.RawContent, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_rawContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Note_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_hidden,
+		func(ctx context.Context) (any, error) {
+			return obj.Hidden, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.NoteConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNNoteEdge2ᚕᚖmainᚋinternalᚋsharedᚐNoteEdgeDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_NoteEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_NoteEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NoteEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteConnection_nodes(ctx context.Context, field graphql.CollectedField, obj *shared.NoteConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteConnection_nodes,
+		func(ctx context.Context) (any, error) {
+			return obj.Nodes, nil
+		},
+		nil,
+		ec.marshalNNote2ᚕᚖmainᚋinternalᚋsharedᚐNoteDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteConnection_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Note_relPath(ctx, field)
+			case "content":
+				return ec.fieldContext_Note_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Note_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Note_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *shared.NoteConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteEdge_node(ctx context.Context, field graphql.CollectedField, obj *shared.NoteEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Note_relPath(ctx, field)
+			case "content":
+				return ec.fieldContext_Note_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Note_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Note_hidden(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *shared.NoteEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteFilters_id(ctx context.Context, field graphql.CollectedField, obj *shared.NoteFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteFilters_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteFilters_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteFilters_directoryId(ctx context.Context, field graphql.CollectedField, obj *shared.NoteFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteFilters_directoryId,
+		func(ctx context.Context) (any, error) {
+			return obj.DirectoryID, nil
+		},
+		nil,
+		ec.marshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteFilters_directoryId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NoteFilters_hidden(ctx context.Context, field graphql.CollectedField, obj *shared.NoteFilters) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NoteFilters_hidden,
+		func(ctx context.Context) (any, error) {
+			return obj.Hidden, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NoteFilters_hidden(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NoteFilters",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -9761,8 +9760,8 @@ func (ec *executionContext) fieldContext_Query_hooks(_ context.Context, field gr
 				return ec.fieldContext_Hook_description(ctx, field)
 			case "canDispatchByImage":
 				return ec.fieldContext_Hook_canDispatchByImage(ctx, field)
-			case "canDispatchByMemo":
-				return ec.fieldContext_Hook_canDispatchByMemo(ctx, field)
+			case "canDispatchByNote":
+				return ec.fieldContext_Hook_canDispatchByNote(ctx, field)
 			case "directive":
 				return ec.fieldContext_Hook_directive(ctx, field)
 			}
@@ -9894,8 +9893,8 @@ func (ec *executionContext) fieldContext_Query_rootDirectory(_ context.Context, 
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -10027,8 +10026,8 @@ func (ec *executionContext) fieldContext_Query_suggestDirectories(ctx context.Co
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -10453,8 +10452,8 @@ func (ec *executionContext) fieldContext_Session_directory(_ context.Context, fi
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -10834,8 +10833,8 @@ func (ec *executionContext) fieldContext_Session_currentImage(_ context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -10892,8 +10891,8 @@ func (ec *executionContext) fieldContext_Session_nextImages(ctx context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -10961,8 +10960,8 @@ func (ec *executionContext) fieldContext_Session_keptImages(ctx context.Context,
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -11601,8 +11600,8 @@ func (ec *executionContext) fieldContext_Subscription_directoryChanged(ctx conte
 				return ec.fieldContext_Directory_directoriesV2(ctx, field)
 			case "images":
 				return ec.fieldContext_Directory_images(ctx, field)
-			case "memos":
-				return ec.fieldContext_Directory_memos(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_Directory_lastSession(ctx, field)
 			}
@@ -11668,8 +11667,8 @@ func (ec *executionContext) fieldContext_Subscription_imageSaved(ctx context.Con
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -11737,24 +11736,24 @@ func (ec *executionContext) fieldContext_Subscription_imageDeleted(ctx context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_memoUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+func (ec *executionContext) _Subscription_noteUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Subscription_memoUpdated,
+		ec.fieldContext_Subscription_noteUpdated,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Subscription().MemoUpdated(ctx, fc.Args["id"].(scalar.ID))
+			return ec.resolvers.Subscription().NoteUpdated(ctx, fc.Args["id"].(scalar.ID))
 		},
 		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_noteUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -11763,19 +11762,19 @@ func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Co
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
+				return ec.fieldContext_Note_id(ctx, field)
 			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
+				return ec.fieldContext_Note_title(ctx, field)
 			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
+				return ec.fieldContext_Note_relPath(ctx, field)
 			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
+				return ec.fieldContext_Note_content(ctx, field)
 			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
+				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
+				return ec.fieldContext_Note_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
 	}
 	defer func() {
@@ -11785,31 +11784,31 @@ func (ec *executionContext) fieldContext_Subscription_memoUpdated(ctx context.Co
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_memoUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Subscription_noteUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_memoSaved(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+func (ec *executionContext) _Subscription_noteSaved(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Subscription_memoSaved,
+		ec.fieldContext_Subscription_noteSaved,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Subscription().MemoSaved(ctx, fc.Args["filterBy"].(*shared.MemoFilters))
+			return ec.resolvers.Subscription().NoteSaved(ctx, fc.Args["filterBy"].(*shared.NoteFilters))
 		},
 		nil,
-		ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_noteSaved(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -11818,19 +11817,19 @@ func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Cont
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_Memo_id(ctx, field)
+				return ec.fieldContext_Note_id(ctx, field)
 			case "title":
-				return ec.fieldContext_Memo_title(ctx, field)
+				return ec.fieldContext_Note_title(ctx, field)
 			case "relPath":
-				return ec.fieldContext_Memo_relPath(ctx, field)
+				return ec.fieldContext_Note_relPath(ctx, field)
 			case "content":
-				return ec.fieldContext_Memo_content(ctx, field)
+				return ec.fieldContext_Note_content(ctx, field)
 			case "rawContent":
-				return ec.fieldContext_Memo_rawContent(ctx, field)
+				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
-				return ec.fieldContext_Memo_hidden(ctx, field)
+				return ec.fieldContext_Note_hidden(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Memo", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
 	}
 	defer func() {
@@ -11840,7 +11839,7 @@ func (ec *executionContext) fieldContext_Subscription_memoSaved(ctx context.Cont
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_memoSaved_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Subscription_noteSaved_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12361,8 +12360,8 @@ func (ec *executionContext) fieldContext_TrashHistoryItem_coverImage(_ context.C
 				return ec.fieldContext_Image_currentRating(ctx, field)
 			case "xmpExists":
 				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "memo":
-				return ec.fieldContext_Image_memo(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
 			case "label":
 				return ec.fieldContext_Image_label(ctx, field)
 			case "relPath":
@@ -14490,8 +14489,8 @@ func (ec *executionContext) unmarshalInputCommitChangesInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputCreateMemoInput(ctx context.Context, obj any) (CreateMemoInput, error) {
-	var it CreateMemoInput
+func (ec *executionContext) unmarshalInputCreateNoteInput(ctx context.Context, obj any) (CreateNoteInput, error) {
+	var it CreateNoteInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
@@ -14647,7 +14646,7 @@ func (ec *executionContext) unmarshalInputDirectoryStateBrowseInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"filterBy", "filterMemoBy"}
+	fieldsInOrder := [...]string{"filterBy", "filterNoteBy"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -14661,13 +14660,13 @@ func (ec *executionContext) unmarshalInputDirectoryStateBrowseInput(ctx context.
 				return it, err
 			}
 			it.FilterBy = data
-		case "filterMemoBy":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterMemoBy"))
-			data, err := ec.unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx, v)
+		case "filterNoteBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterNoteBy"))
+			data, err := ec.unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋsharedᚐNoteFilters(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.FilterMemoBy = data
+			it.FilterNoteBy = data
 		}
 	}
 
@@ -14742,27 +14741,27 @@ func (ec *executionContext) unmarshalInputDispatchImageHookInput(ctx context.Con
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputDispatchMemoHookInput(ctx context.Context, obj any) (DispatchMemoHookInput, error) {
-	var it DispatchMemoHookInput
+func (ec *executionContext) unmarshalInputDispatchNoteHookInput(ctx context.Context, obj any) (DispatchNoteHookInput, error) {
+	var it DispatchNoteHookInput
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"memoId", "hookId", "clientMutationId"}
+	fieldsInOrder := [...]string{"noteId", "hookId", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "memoId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("memoId"))
+		case "noteId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noteId"))
 			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.MemoID = data
+			it.NoteID = data
 		case "hookId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hookId"))
 			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
@@ -14968,47 +14967,6 @@ func (ec *executionContext) unmarshalInputMarkImageInput(ctx context.Context, ob
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputMemoFiltersInput(ctx context.Context, obj any) (shared.MemoFilters, error) {
-	var it shared.MemoFilters
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"id", "directoryId", "hidden"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "id":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ID = data
-		case "directoryId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
-			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.DirectoryID = data
-		case "hidden":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hidden"))
-			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Hidden = data
-		}
-	}
-
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, obj any) (MoveImagesInput, error) {
 	var it MoveImagesInput
 	asMap := map[string]any{}
@@ -15051,6 +15009,47 @@ func (ec *executionContext) unmarshalInputMoveImagesInput(ctx context.Context, o
 				return it, err
 			}
 			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputNoteFiltersInput(ctx context.Context, obj any) (shared.NoteFilters, error) {
+	var it shared.NoteFilters
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "directoryId", "hidden"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalOID2ᚕmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
+		case "hidden":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hidden"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Hidden = data
 		}
 	}
 
@@ -15433,13 +15432,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
-	case shared.MemoDTO:
-		return ec._Memo(ctx, sel, &obj)
-	case *shared.MemoDTO:
+	case shared.NoteDTO:
+		return ec._Note(ctx, sel, &obj)
+	case *shared.NoteDTO:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._Memo(ctx, sel, obj)
+		return ec._Note(ctx, sel, obj)
 	case shared.ImageDTO:
 		return ec._Image(ctx, sel, &obj)
 	case *shared.ImageDTO:
@@ -16109,7 +16108,7 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "memos":
+		case "notes":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -16118,7 +16117,7 @@ func (ec *executionContext) _Directory(ctx context.Context, sel ast.SelectionSet
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Directory_memos(ctx, field, obj)
+				res = ec._Directory_notes(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -16350,8 +16349,8 @@ func (ec *executionContext) _DirectoryStateBrowse(ctx context.Context, sel ast.S
 			out.Values[i] = graphql.MarshalString("DirectoryStateBrowse")
 		case "filterBy":
 			out.Values[i] = ec._DirectoryStateBrowse_filterBy(ctx, field, obj)
-		case "filterMemoBy":
-			out.Values[i] = ec._DirectoryStateBrowse_filterMemoBy(ctx, field, obj)
+		case "filterNoteBy":
+			out.Values[i] = ec._DirectoryStateBrowse_filterNoteBy(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16542,19 +16541,19 @@ func (ec *executionContext) _DispatchImageHookPayload(ctx context.Context, sel a
 	return out
 }
 
-var dispatchMemoHookPayloadImplementors = []string{"DispatchMemoHookPayload"}
+var dispatchNoteHookPayloadImplementors = []string{"DispatchNoteHookPayload"}
 
-func (ec *executionContext) _DispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, obj *DispatchMemoHookPayload) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, dispatchMemoHookPayloadImplementors)
+func (ec *executionContext) _DispatchNoteHookPayload(ctx context.Context, sel ast.SelectionSet, obj *DispatchNoteHookPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dispatchNoteHookPayloadImplementors)
 
 	out := graphql.NewFieldSet(fields)
 	deferred := make(map[string]*graphql.FieldSet)
 	for i, field := range fields {
 		switch field.Name {
 		case "__typename":
-			out.Values[i] = graphql.MarshalString("DispatchMemoHookPayload")
+			out.Values[i] = graphql.MarshalString("DispatchNoteHookPayload")
 		case "clientMutationId":
-			out.Values[i] = ec._DispatchMemoHookPayload_clientMutationId(ctx, field, obj)
+			out.Values[i] = ec._DispatchNoteHookPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16755,8 +16754,8 @@ func (ec *executionContext) _Hook(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "canDispatchByMemo":
-			out.Values[i] = ec._Hook_canDispatchByMemo(ctx, field, obj)
+		case "canDispatchByNote":
+			out.Values[i] = ec._Hook_canDispatchByNote(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -16952,7 +16951,7 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "memo":
+		case "note":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -16961,7 +16960,7 @@ func (ec *executionContext) _Image(ctx context.Context, sel ast.SelectionSet, ob
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Image_memo(ctx, field, obj)
+				res = ec._Image_note(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -17196,234 +17195,6 @@ func (ec *executionContext) _MarkImagePayload(ctx context.Context, sel ast.Selec
 	return out
 }
 
-var memoImplementors = []string{"Memo", "Node"}
-
-func (ec *executionContext) _Memo(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoDTO) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, memoImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("Memo")
-		case "id":
-			out.Values[i] = ec._Memo_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "title":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Memo_title(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "relPath":
-			out.Values[i] = ec._Memo_relPath(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "content":
-			out.Values[i] = ec._Memo_content(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "rawContent":
-			out.Values[i] = ec._Memo_rawContent(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		case "hidden":
-			out.Values[i] = ec._Memo_hidden(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var memoConnectionImplementors = []string{"MemoConnection"}
-
-func (ec *executionContext) _MemoConnection(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoConnectionDTO) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, memoConnectionImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("MemoConnection")
-		case "edges":
-			out.Values[i] = ec._MemoConnection_edges(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "nodes":
-			out.Values[i] = ec._MemoConnection_nodes(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "pageInfo":
-			out.Values[i] = ec._MemoConnection_pageInfo(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var memoEdgeImplementors = []string{"MemoEdge"}
-
-func (ec *executionContext) _MemoEdge(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoEdgeDTO) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, memoEdgeImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("MemoEdge")
-		case "node":
-			out.Values[i] = ec._MemoEdge_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "cursor":
-			out.Values[i] = ec._MemoEdge_cursor(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var memoFiltersImplementors = []string{"MemoFilters"}
-
-func (ec *executionContext) _MemoFilters(ctx context.Context, sel ast.SelectionSet, obj *shared.MemoFilters) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, memoFiltersImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("MemoFilters")
-		case "id":
-			out.Values[i] = ec._MemoFilters_id(ctx, field, obj)
-		case "directoryId":
-			out.Values[i] = ec._MemoFilters_directoryId(ctx, field, obj)
-		case "hidden":
-			out.Values[i] = ec._MemoFilters_hidden(ctx, field, obj)
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var metaImplementors = []string{"Meta"}
 
 func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj *Meta) graphql.Marshaler {
@@ -17590,9 +17361,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "createMemo":
+		case "createNote":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_createMemo(ctx, field)
+				return ec._Mutation_createNote(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17611,9 +17382,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "dispatchMemoHook":
+		case "dispatchNoteHook":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_dispatchMemoHook(ctx, field)
+				return ec._Mutation_dispatchNoteHook(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17699,9 +17470,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "updateMemo":
+		case "updateNote":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_updateMemo(ctx, field)
+				return ec._Mutation_updateNote(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17713,6 +17484,234 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var noteImplementors = []string{"Note", "Node"}
+
+func (ec *executionContext) _Note(ctx context.Context, sel ast.SelectionSet, obj *shared.NoteDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, noteImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Note")
+		case "id":
+			out.Values[i] = ec._Note_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "title":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Note_title(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "relPath":
+			out.Values[i] = ec._Note_relPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "content":
+			out.Values[i] = ec._Note_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "rawContent":
+			out.Values[i] = ec._Note_rawContent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "hidden":
+			out.Values[i] = ec._Note_hidden(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var noteConnectionImplementors = []string{"NoteConnection"}
+
+func (ec *executionContext) _NoteConnection(ctx context.Context, sel ast.SelectionSet, obj *shared.NoteConnectionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, noteConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NoteConnection")
+		case "edges":
+			out.Values[i] = ec._NoteConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodes":
+			out.Values[i] = ec._NoteConnection_nodes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._NoteConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var noteEdgeImplementors = []string{"NoteEdge"}
+
+func (ec *executionContext) _NoteEdge(ctx context.Context, sel ast.SelectionSet, obj *shared.NoteEdgeDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, noteEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NoteEdge")
+		case "node":
+			out.Values[i] = ec._NoteEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._NoteEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var noteFiltersImplementors = []string{"NoteFilters"}
+
+func (ec *executionContext) _NoteFilters(ctx context.Context, sel ast.SelectionSet, obj *shared.NoteFilters) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, noteFiltersImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NoteFilters")
+		case "id":
+			out.Values[i] = ec._NoteFilters_id(ctx, field, obj)
+		case "directoryId":
+			out.Values[i] = ec._NoteFilters_directoryId(ctx, field, obj)
+		case "hidden":
+			out.Values[i] = ec._NoteFilters_hidden(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -18632,10 +18631,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_imageSaved(ctx, fields[0])
 	case "imageDeleted":
 		return ec._Subscription_imageDeleted(ctx, fields[0])
-	case "memoUpdated":
-		return ec._Subscription_memoUpdated(ctx, fields[0])
-	case "memoSaved":
-		return ec._Subscription_memoSaved(ctx, fields[0])
+	case "noteUpdated":
+		return ec._Subscription_noteUpdated(ctx, fields[0])
+	case "noteSaved":
+		return ec._Subscription_noteSaved(ctx, fields[0])
 	case "pairingRequestCreated":
 		return ec._Subscription_pairingRequestCreated(ctx, fields[0])
 	case "pairingRequestUpdated":
@@ -19530,8 +19529,8 @@ func (ec *executionContext) marshalNCommitChangesPayload2ᚖmainᚋinternalᚋin
 	return ec._CommitChangesPayload(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNCreateMemoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateMemoInput(ctx context.Context, v any) (CreateMemoInput, error) {
-	res, err := ec.unmarshalInputCreateMemoInput(ctx, v)
+func (ec *executionContext) unmarshalNCreateNoteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateNoteInput(ctx context.Context, v any) (CreateNoteInput, error) {
+	res, err := ec.unmarshalInputCreateNoteInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -19795,23 +19794,23 @@ func (ec *executionContext) marshalNDispatchImageHookPayload2ᚖmainᚋinternal�
 	return ec._DispatchImageHookPayload(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNDispatchMemoHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookInput(ctx context.Context, v any) (DispatchMemoHookInput, error) {
-	res, err := ec.unmarshalInputDispatchMemoHookInput(ctx, v)
+func (ec *executionContext) unmarshalNDispatchNoteHookInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchNoteHookInput(ctx context.Context, v any) (DispatchNoteHookInput, error) {
+	res, err := ec.unmarshalInputDispatchNoteHookInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNDispatchMemoHookPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, v DispatchMemoHookPayload) graphql.Marshaler {
-	return ec._DispatchMemoHookPayload(ctx, sel, &v)
+func (ec *executionContext) marshalNDispatchNoteHookPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchNoteHookPayload(ctx context.Context, sel ast.SelectionSet, v DispatchNoteHookPayload) graphql.Marshaler {
+	return ec._DispatchNoteHookPayload(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNDispatchMemoHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchMemoHookPayload(ctx context.Context, sel ast.SelectionSet, v *DispatchMemoHookPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNDispatchNoteHookPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDispatchNoteHookPayload(ctx context.Context, sel ast.SelectionSet, v *DispatchNoteHookPayload) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
 		return graphql.Null
 	}
-	return ec._DispatchMemoHookPayload(ctx, sel, v)
+	return ec._DispatchNoteHookPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration(ctx context.Context, v any) (scalar.Duration, error) {
@@ -20251,132 +20250,6 @@ func (ec *executionContext) marshalNMarkImagePayload2ᚖmainᚋinternalᚋinterf
 	return ec._MarkImagePayload(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNMemo2mainᚋinternalᚋsharedᚐMemoDTO(ctx context.Context, sel ast.SelectionSet, v shared.MemoDTO) graphql.Marshaler {
-	return ec._Memo(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNMemo2ᚕᚖmainᚋinternalᚋsharedᚐMemoDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.MemoDTO) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNMemo2ᚖmainᚋinternalᚋsharedᚐMemoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoDTO) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._Memo(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNMemoConnection2mainᚋinternalᚋsharedᚐMemoConnectionDTO(ctx context.Context, sel ast.SelectionSet, v shared.MemoConnectionDTO) graphql.Marshaler {
-	return ec._MemoConnection(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNMemoConnection2ᚖmainᚋinternalᚋsharedᚐMemoConnectionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoConnectionDTO) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._MemoConnection(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNMemoEdge2ᚕᚖmainᚋinternalᚋsharedᚐMemoEdgeDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.MemoEdgeDTO) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNMemoEdge2ᚖmainᚋinternalᚋsharedᚐMemoEdgeDTO(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNMemoEdge2ᚖmainᚋinternalᚋsharedᚐMemoEdgeDTO(ctx context.Context, sel ast.SelectionSet, v *shared.MemoEdgeDTO) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._MemoEdge(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalNMeta2mainᚋinternalᚋinterfacesᚋgraphqlᚐMeta(ctx context.Context, sel ast.SelectionSet, v Meta) graphql.Marshaler {
 	return ec._Meta(ctx, sel, &v)
 }
@@ -20408,6 +20281,132 @@ func (ec *executionContext) marshalNMoveImagesPayload2ᚖmainᚋinternalᚋinter
 		return graphql.Null
 	}
 	return ec._MoveImagesPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNote2mainᚋinternalᚋsharedᚐNoteDTO(ctx context.Context, sel ast.SelectionSet, v shared.NoteDTO) graphql.Marshaler {
+	return ec._Note(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNNote2ᚕᚖmainᚋinternalᚋsharedᚐNoteDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NoteDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NoteDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Note(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNoteConnection2mainᚋinternalᚋsharedᚐNoteConnectionDTO(ctx context.Context, sel ast.SelectionSet, v shared.NoteConnectionDTO) graphql.Marshaler {
+	return ec._NoteConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNNoteConnection2ᚖmainᚋinternalᚋsharedᚐNoteConnectionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NoteConnectionDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NoteConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNoteEdge2ᚕᚖmainᚋinternalᚋsharedᚐNoteEdgeDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NoteEdgeDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNNoteEdge2ᚖmainᚋinternalᚋsharedᚐNoteEdgeDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNoteEdge2ᚖmainᚋinternalᚋsharedᚐNoteEdgeDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NoteEdgeDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NoteEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PageInfoDTO) graphql.Marshaler {
@@ -21372,26 +21371,26 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	return res
 }
 
-func (ec *executionContext) marshalOMemoFilters2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx context.Context, sel ast.SelectionSet, v *shared.MemoFilters) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._MemoFilters(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalOMemoFiltersInput2ᚖmainᚋinternalᚋsharedᚐMemoFilters(ctx context.Context, v any) (*shared.MemoFilters, error) {
-	if v == nil {
-		return nil, nil
-	}
-	res, err := ec.unmarshalInputMemoFiltersInput(ctx, v)
-	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
 func (ec *executionContext) marshalONode2mainᚋinternalᚋinterfacesᚋgraphqlᚐNode(ctx context.Context, sel ast.SelectionSet, v Node) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Node(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalONoteFilters2ᚖmainᚋinternalᚋsharedᚐNoteFilters(ctx context.Context, sel ast.SelectionSet, v *shared.NoteFilters) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._NoteFilters(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋsharedᚐNoteFilters(ctx context.Context, v any) (*shared.NoteFilters, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputNoteFiltersInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PairingRequestDTO) graphql.Marshaler {

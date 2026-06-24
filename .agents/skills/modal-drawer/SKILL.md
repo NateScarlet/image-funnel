@@ -21,18 +21,18 @@ description: "前端模态框与抽屉（Modal/Dialog/Drawer）使用规范，�
 
 ### 2. 纯展示与插槽架构 (Slot)
 
-- 业务对话框或抽屉的内容组件（例如 `MemoEditorDialog.vue`）应当只负责展现其内容结构（如头部、编辑器主体、底部），**内部严禁包裹 Teleport、Transition 或对话框骨架**。
+- 业务对话框或抽屉的内容组件（例如 `NoteEditorDialog.vue`）应当只负责展现其内容结构（如头部、编辑器主体、底部），**内部严禁包裹 Teleport、Transition 或对话框骨架**。
 - 调用者通过插槽 (Slot) 的形式将内容组件放入控制器包装组件中。
 - 不要在插槽组件上添加关于 `visible` 的冗余 `v-if` 条件（如 `v-if="xxxDialog.visible.value"`），包装器在不可见时会自动处理销毁和退场动画。
 
 ```vue
 <!-- 调用端模板示例 -->
-<memoDialog.component container-class="sm:max-w-3xl">
-  <MemoForm
-    :memo="selectedMemo"
-    @close="memoDialog.close"
+<noteDialog.component container-class="sm:max-w-3xl">
+  <NoteForm
+    :note="selectedNote"
+    @close="noteDialog.close"
   />
-</memoDialog.component>
+</noteDialog.component>
 ```
 
 ### 3. 数据卫语句与 v-if 的挂载位置
@@ -63,18 +63,18 @@ description: "前端模态框与抽屉（Modal/Dialog/Drawer）使用规范，�
 
 ```typescript
 // 调用端 setup 示例
-const memoDialog = useModalDialog({
+const noteDialog = useModalDialog({
   onDidOpen() {
     // 聚焦编辑器
     nextTick(() => {
-      memoDialogRef.value?.focus();
+      noteDialogRef.value?.focus();
     });
   },
   onWillClose() {
     // 恢复滚动条
     document.body.style.overflow = "";
     // 在组件卸载前强制刷入/保存数据
-    memoDialogRef.value?.flush();
+    noteDialogRef.value?.flush();
   },
 });
 ```
@@ -88,10 +88,10 @@ const memoDialog = useModalDialog({
 useHotkey(
   "escape",
   () => {
-    memoDialog.close();
+    noteDialog.close();
   },
   {
-    enabled: memoDialog.visible, // 仅在弹窗打开时启用
+    enabled: noteDialog.visible, // 仅在弹窗打开时启用
   }
 );
 ```

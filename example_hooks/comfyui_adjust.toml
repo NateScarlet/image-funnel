@@ -24,10 +24,10 @@ usage = """
 """
 on_success_action = "COMMENT_OUT"
 
-[on.post_commit_session.memo_scan]
+[on.post_commit_session.note_scan]
 ignore_directive = false
 
-[on.memo_dispatch]
+[on.note_dispatch]
 
 [env]
 HOOK_START_REGION_PREFIX = "//#region "

@@ -4,7 +4,7 @@ query Hooks {
     name
     description
     canDispatchByImage
-    canDispatchByMemo
+    canDispatchByNote
     directive {
       name
       usage

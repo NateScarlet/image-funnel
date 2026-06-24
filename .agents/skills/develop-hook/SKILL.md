@@ -12,7 +12,7 @@ description: 指导 AI 助手如何在 ImageFunnel 项目中定义、编写、�
 ## 1. 结构与目录规范
 
 所有 Hook 的配置文件应放在环境变量 `IMAGE_FUNNEL_HOOK_DIR` 指定的 Hook 目录中。若未指定该环境变量，服务端默认不加载任何 Hook（在开发环境和调试模式下通常配置为项目根目录下的 `example_hooks/`）。每个 Hook 由以下两部分组成：
-1. **`.toml` 配置文件**：声明 Hook 的基本信息、触发时机、备忘录指令定义及自定义环境变量。
+1. **`.toml` 配置文件**：声明 Hook 的基本信息、触发时机、笔记指令定义及自定义环境变量。
 2. **执行脚本/外部程序**：由 `.toml` 的 `command` 字段调用的任意脚本（如 Python 脚本、Powershell 脚本等）。
 
 ---
@@ -28,7 +28,7 @@ name = "Hook 展示名称"
 description = "用于描述 Hook 逻辑的简短文本"
 command = "python your_script.py"  # 触发时在外部调用的 Shell 命令行
 
-# 备忘录指令配置（可选，允许在笔记/备忘录中使用斜杠指令触发）
+# 笔记指令配置（可选，允许在笔记中使用斜杠指令触发）
 [directive]
 name = "your_directive"            # 斜杠指令名字，例如 "/your_directive"
 usage = """
@@ -36,8 +36,8 @@ usage = """
 指令的详细用法和参数说明。
 """
 # 动作指令执行成功/失败后的处理行为（可选，默认为 "COMMENT_OUT"）。支持以下三种显式选项：
-# - "COMMENT_OUT": 将指令行自动转化为备忘录注释，例如 `%% /your_directive %%`。
-# - "REMOVE": 从备忘录中彻底删除这一行指令。
+# - "COMMENT_OUT": 将指令行自动转化为笔记注释，例如 `%% /your_directive %%`。
+# - "REMOVE": 从笔记中彻底删除这一行指令。
 # - "KEEP": 保留本行指令内容不变（常用于需持续触发的场景）。
 # 脚本成功执行后，可通过向 IMAGE_FUNNEL_ACTION 环境变量指向的文件写入操作名称来覆盖此行为。
 on_success_action = "REMOVE"        
@@ -48,11 +48,11 @@ on_fail_action = "KEEP"
 rating = [4, 5]                    # 匹配的评分
 label = ["Red", "Yellow"]          # 匹配的颜色标签
 
-[on.post_update_memo]              # 当备忘录更新时触发
-ignore_directive = false           # 为 true 时忽略 [directive] 约束（即使定义了指令，备忘录中未含该指令也依然触发）
+[on.post_update_note]              # 当笔记更新时触发
+ignore_directive = false           # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）
 
 [on.image_dispatch]                # 允许在前端 UI 的图片上方直接显示手动派发按钮触发
-[on.memo_dispatch]                 # 允许在前端 UI 的备注上方直接显示手动派发按钮触发
+[on.note_dispatch]                 # 允许在前端 UI 的笔记上方直接显示手动派发按钮触发
 
 # 自定义环境变量（可选）
 [env]
@@ -60,7 +60,7 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
 ```
 
 > [!IMPORTANT]
-> **备忘录指令调用语法与限制**：
+> **笔记指令调用语法与限制**：
 > 1. **独占一行**：指令行必须独立占有一行，不能与同一行中的其他普通文本混用。
 > 2. **严格的行首触发**：斜杠 `/` 必须位于该行的绝对行首，前面仅允许包含可选的缩进空白字符（空格 ` ` 或制表符 `\t`），**不能有任何其他文本字符**。
 > 3. **匹配示例**：
@@ -77,11 +77,11 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
 ### 3.1 基础与触发上下文
 - `IMAGE_FUNNEL_HOOK_ID`: 当前 Hook 的 ID。
 - `IMAGE_FUNNEL_HOOK_NAME`: 当前 Hook 的名称。
-- `IMAGE_FUNNEL_TRIGGER`: 具体的触发器类型名称（如 `post_update_image_metadata`、`post_update_memo`、`image_dispatch` 等）。
+- `IMAGE_FUNNEL_TRIGGER`: 具体的触发器类型名称（如 `post_update_image_metadata`、`post_update_note`、`image_dispatch` 等）。
 - `IMAGE_FUNNEL_ROOT_DIR`: 服务端配置的图片管理根目录绝对路径（用于本地其他需要根目录地址的操作）。
 - `IMAGE_FUNNEL_DIRECTORY_ID`: 当前触发目录的 GraphQL 唯一 ID（即 Node ID）。
 - `IMAGE_FUNNEL_DIRECTORY_REL_PATH`: 当前触发目录相对于图片管理根目录的**规范化相对路径**（如果正好在根目录下触发，该变量为 `""` 或未注入）。
-- `IMAGE_FUNNEL_MEMO_PATHS`: 备忘录文件的绝对路径列表，格式为 JSON 字符串数组（如 `["C:\\rootDir\\subDir\\1.md"]`）（仅在备忘录触发事件中有效）。
+- `IMAGE_FUNNEL_NOTE_PATHS`: 笔记文件的绝对路径列表，格式为 JSON 字符串数组（如 `["C:\\rootDir\\subDir\\1.md"]`）（仅在笔记触发事件中有效）。
 
 ### 3.2 被处理的图片信息
 - `IMAGE_FUNNEL_IMAGE_IDS`: 被处理的图片 ID 列表，格式为 JSON 字符串数组（如 `["img:123", "img:456"]`）。
@@ -131,7 +131,7 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
 ### 4.4 批量合批调用原则
 * **核心规范**：禁止在循环中对每个图片分别发出 API 变更或查询调用。
 * **做法**：
-  - 同一个备忘录指令或事件处理上下文中的图片均位于同一目录下，它们的目标相对路径是一致的。
+  - 同一个笔记指令或事件处理上下文中的图片均位于同一目录下，它们的目标相对路径是一致的。
   - 应当收集所有的图片 ID 数组，仅调用一次 GraphQL API 批量修改，极大地节省 network 握手与服务端数据库开销。
 
 ### 4.5 图片匹配数量保护 (`--max-match`)

@@ -1,0 +1,15 @@
+input CreateNoteInput {
+  "所在目录的 ID"
+  directoryId: ID!
+  "笔记主文件名（例如 README，若包含 .md 会自动处理）"
+  name: String!
+  "笔记内容"
+  content: String!
+}
+
+extend type Mutation {
+  """
+  创建目录下的笔记内容。如果已存在同名笔记，则返回错误。
+  """
+  createNote(input: CreateNoteInput!): Note!
+}

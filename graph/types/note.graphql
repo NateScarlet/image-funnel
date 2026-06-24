@@ -1,0 +1,27 @@
+"""
+笔记信息，以 Markdown 文件形式存储于图片同目录。
+frontmatter 中可包含 hidden/hide 字段控制是否隐藏。
+"""
+type Note implements Node @goModel(model: "main/internal/shared.NoteDTO") {
+  id: ID!
+  title: String! @deprecated(reason: "使用 relPath 替代，前端自行解析 basename 并移除 .md 后缀获取原 title 值")
+  "笔记文件相对根目录的路径"
+  relPath: String!
+  "剥离 frontmatter 后的正文内容（纯 Markdown）"
+  content: String!
+  "包含 frontmatter 的完整原始内容"
+  rawContent: String!
+  "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
+  hidden: Boolean!
+}
+
+type NoteConnection @goModel(model: "main/internal/shared.NoteConnectionDTO") {
+  edges: [NoteEdge!]!
+  nodes: [Note!]!
+  pageInfo: PageInfo!
+}
+
+type NoteEdge @goModel(model: "main/internal/shared.NoteEdgeDTO") {
+  node: Note!
+  cursor: String!
+}

@@ -47,7 +47,7 @@ image-funnel/
 │   │   ├── image/       # Image 实体
 │   │   ├── directory/   # Directory 实体
 │   │   ├── metadata/    # 元数据接口
-│   │   └── memo/        # Memo 实体
+│   │   └── note/        # Note 实体
 │   ├── application/     # 应用层，业务层的简单封装
 │   ├── infrastructure/  # 基础设施层
 │   ├── interfaces/      # 接口层
@@ -113,7 +113,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **`iter.Seq` / `iter.Seq2[T, error]`**: 使用迭代器模式减少数组分配
 - **构造函数**: 使用 `New` 前缀，如需清理，将清理函数作为第二个返回值
 - **依赖注入**: 构造函数应通过参数接受所有依赖，不得在内部自行 `New*()` 构建。调用者（如 `main.go`）负责组装依赖图。这适用于 handler、service、factory 等所有带构造函数的类型
-- **EventBus 接口本地化**: 当 handler 需要事件总线但引用 `application/session` 中的接口会造成循环导入时，在包内定义同名本地接口（如 `type EventBus interface { SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] }`）。Go 的隐式接口满足确保 `infrastructure/ebus.EventBus` 无需显式声明即可匹配。参照 `memo.Handler` 和 `image.Handler` 中的实践
+- **EventBus 接口本地化**: 当 handler 需要事件总线但引用 `application/session` 中的接口会造成循环导入时，在包内定义同名本地接口（如 `type EventBus interface { SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] }`）。Go 的隐式接口满足确保 `infrastructure/ebus.EventBus` 无需显式声明即可匹配。参照 `note.Handler` 和 `image.Handler` 中的实践
 - **编译时接口检查**: 使用 `var _ Interface = (*Impl)(nil)`
 - **错误处理**: 绝不静默忽略错误，使用 `errors` 包处理
 - **业务错误**: 使用 `internal/apperror` 包
@@ -129,12 +129,12 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **ID 生成**: 新建资源的 ID 生成应由领域层（如 `domain/*/service.go` 或实体构造器）自行负责，禁止由应用层（`application`）或接口层计算并传递 ID
 - **ID 编码不导出**: `encodeID` 和 `decodeID` 均为非导出函数，ID 的编解码是领域内部实现细节，外部任何层级不得直接调用。需要将 ID 翻译为路径或获取领域对象时，应通过领域 Service（如 `directory.Service.GetDirectory`）或 Repository 获取领域对象后从中读取属性。
 - **仓库构造权**: 领域实体的原始构造函数（如 `New`）不应导出供包外调用。外部构造入口统一为 `FromRepository` 专用方法，该方法内部调用非导出的构造函数与 `encodeID` 生成 ID。只有仓库实现有权限构造领域对象。
-- **仓库接口接收已解码值**: Repository 接口的方法参数应当使用已解码的路径值（如 `relPath`、`absPath`），而非编码的 `scalar.ID`。ID 解码由领域 Service 在调用 Repository 前完成。例如 `directory.Repository.Get(ctx, relPath)`、`memo.Repository.Read(ctx, relPath)`。
+- **仓库接口接收已解码值**: Repository 接口的方法参数应当使用已解码的路径值（如 `relPath`、`absPath`），而非编码的 `scalar.ID`。ID 解码由领域 Service 在调用 Repository 前完成。例如 `directory.Repository.Get(ctx, relPath)`、`note.Repository.Read(ctx, relPath)`。
 - **通过仓库获取 ID**: 当外部代码需要领域实体的 ID 时，应通过仓库获取领域对象后调用 `.ID()`，不得自行编码。需要目录 ID 的组件（如 `ImageScanner`、`image.Handler`）应注入 `directory.Repository`，通过 `Get` 获取 `*Directory` 后取其 `ID()`，而非从路径字符串自行编码。
 - **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.Service.GetDirectory` 转为领域对象再获取 `RelPath()`），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
 - **仓库接口极简设计**: `Repository` 接口必须保持极简且高度专注于数据的核心持久化（如 CRUD）。禁止为了计算物理绝对路径或辅助其他层创建空对象等非持久化行为而在接口中强行添加辅助方法。任何物理基准路径（如 `rootDir`）等硬件细节应通过依赖注入传入对应的领域服务（`Service`）或相关组件内部，由其内部自行处理。
 - **空实体回退机制内聚**: 当部分接口为了支持 GraphQL 等层级的非空约束（如 `NonNull!`）需要对缺失的数据进行“空实体”回退（Fallback）时，空实体的构造和物理绝对路径计算应属于领域层 Service 的内聚职责（通常由 Service 的私有方法如 `newEmpty` 统一创建）。应用层禁止获取物理路径属性后手动拼装实体，以避免职责边界外泄与属性构建不一致。
-- **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，备忘录列表查询应放在 `application/memo.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
+- **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，笔记列表查询应放在 `application/note.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
 - **应用层方法命名规范**: 属于特定领域 Handler 的方法，在全局上绝对不应该重名（防止 `Root` 结构体在嵌入提升方法时发生重名选择器歧义）。例如，获取列表的方法不应命名为通用的 `List`，而应直接以返回类型的名词复数命名（如 `device.Handler` 中命名为 `Devices` 替代 `List`，`hook.Handler` 中命名为 `Hooks` 替代 `List`），其他方法也应避免全局冲突。
 
 - **DTO 跨领域引用**: `shared/*DTO` 中不应嵌入其他领域的 DTO 字段（如 `SessionDTO.CurrentImage *ImageDTO`），这会迫使 DTO 工厂导入其他应用层包造成跨领域耦合。改为存储 `scalar.ID`（如 `CurrentImageID scalar.ID`），零值即表示该关联不存在，GraphQL 层通过自动生成的 resolver 按 ID 查询完整对象。参照 `SessionDTO.CurrentImageID` 与 `session.resolvers.go` 中的 `CurrentImage` resolver

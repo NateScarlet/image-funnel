@@ -1,0 +1,20 @@
+extend type Mutation {
+  "手动为笔记触发特定的外部钩子"
+  dispatchNoteHook(input: DispatchNoteHookInput!): DispatchNoteHookPayload!
+}
+
+"手动派发笔记钩子的输入"
+input DispatchNoteHookInput {
+  "笔记 ID"
+  noteId: ID!
+  "要触发的钩子 ID"
+  hookId: ID!
+  "客户端突变标识"
+  clientMutationId: String
+}
+
+"手动派发笔记钩子的返回数据"
+type DispatchNoteHookPayload {
+  "客户端突变标识"
+  clientMutationId: String
+}

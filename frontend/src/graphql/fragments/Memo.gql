@@ -1,7 +1,0 @@
-fragment Memo on Memo {
-  id
-  relPath
-  content
-  rawContent
-  hidden
-}

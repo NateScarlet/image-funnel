@@ -55,16 +55,16 @@ type HookConfig struct {
 	On          struct {
 		PostUpdateImageMetadata *Filters              `toml:"post_update_image_metadata"`
 		ImageDispatch           *ImageDispatchTrigger `toml:"image_dispatch"`
-		PostUpdateMemo          *struct {
+		PostUpdateNote          *struct {
 			IgnoreDirective bool `toml:"ignore_directive"`
-		} `toml:"post_update_memo"`
+		} `toml:"post_update_note"`
 		PostCommitSession *struct {
-			MemoScan *struct {
+			NoteScan *struct {
 				IgnoreDirective bool `toml:"ignore_directive"`
-			} `toml:"memo_scan"`
+			} `toml:"note_scan"`
 		} `toml:"post_commit_session"`
-		MemoDispatch *struct {
-		} `toml:"memo_dispatch"`
+		NoteDispatch *struct {
+		} `toml:"note_dispatch"`
 	} `toml:"on"`
 	Env map[string]string `toml:"env"` // 允许在 TOML 中配置自定义环境变量，键值对都为字符串
 	Dir string            `toml:"-"`   // Hook 配置文件所在的父目录
@@ -96,13 +96,13 @@ type HookExecutionTask struct {
 	ExtraArgs    []string // 额外参数，原样传递给命令
 	TriggerName  string
 	Events       []HookEvent
-	Dir          string               // 执行外部命令时的当前工作目录
-	Env          map[string]string    // 传递给外部脚本的自定义环境变量集合
-	MemoPath     string               // 备忘录文件的相对路径
-	DirectoryID  string               // 会话或备忘录所在的目录ID
-	DirectoryRel string               // 目录的相对路径
+	Dir          string                   // 执行外部命令时的当前工作目录
+	Env          map[string]string        // 传递给外部脚本的自定义环境变量集合
+	NotePath     string                   // 笔记文件的相对路径
+	DirectoryID  string                   // 会话或笔记所在的目录ID
+	DirectoryRel string                   // 目录的相对路径
 	ResultChan   chan HookExecutionResult // 用于接收外部脚本执行结果的通道
-	RunID        string               // 指令运行 ID 注入环境变量
+	RunID        string                   // 指令运行 ID 注入环境变量
 }
 
 // Debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件
@@ -264,17 +264,17 @@ func (r *Runner) List(ctx context.Context) ([]*domhook.Hook, error) {
 	}
 	var res []*domhook.Hook
 	for _, h := range hooks {
-		hasPostUpdateMemo := h.On.PostUpdateMemo != nil
-		hasPostCommitSessionMemoScan := h.On.PostCommitSession != nil && h.On.PostCommitSession.MemoScan != nil
+		hasPostUpdateNote := h.On.PostUpdateNote != nil
+		hasPostCommitSessionNoteScan := h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan != nil
 		res = append(res, domhook.FromRepository(
 			h.ID,
 			h.Name,
 			h.Description,
 			h.On.ImageDispatch != nil,
-			h.On.MemoDispatch != nil,
+			h.On.NoteDispatch != nil,
 			toDomainDirective(h.Directive),
-			hasPostUpdateMemo,
-			hasPostCommitSessionMemoScan,
+			hasPostUpdateNote,
+			hasPostCommitSessionNoteScan,
 		))
 	}
 	return res, nil
@@ -288,7 +288,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 
 	var targetHook *HookConfig
 	for _, h := range hooks {
-		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.MemoDispatch != nil, nil, false, false)
+		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
 		if domH.ID() == hookID {
 			targetHook = &h
 			break
@@ -302,8 +302,8 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 	if triggerName == "image_dispatch" && targetHook.On.ImageDispatch == nil {
 		return fmt.Errorf("hook %s does not allow manual dispatch", hookID.String())
 	}
-	if triggerName == "memo_dispatch" && targetHook.On.MemoDispatch == nil {
-		return fmt.Errorf("hook %s does not allow memo dispatch", hookID.String())
+	if triggerName == "note_dispatch" && targetHook.On.NoteDispatch == nil {
+		return fmt.Errorf("hook %s does not allow note dispatch", hookID.String())
 	}
 
 	var events []HookEvent
@@ -329,9 +329,9 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 	return err
 }
 
-// TriggerForMemo 手动派发笔记触发的外部钩子任务
-func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID scalar.ID) error {
-	r.logger.Debug("TriggerForMemo start", zap.String("memoRelPath", memoRelPath), zap.String("hookID", hookID.String()))
+// TriggerForNote 手动派发笔记触发的外部钩子任务
+func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
+	r.logger.Debug("TriggerForNote start", zap.String("noteRelPath", noteRelPath), zap.String("hookID", hookID.String()))
 	hooks, err := r.LoadHooks()
 	if err != nil {
 		return err
@@ -339,8 +339,8 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 
 	var targetHook *HookConfig
 	for _, h := range hooks {
-		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.MemoDispatch != nil, nil, false, false)
-		r.logger.Debug("TriggerForMemo comparing hook", zap.String("h.ID", h.ID), zap.String("domH.ID", domH.ID().String()))
+		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
+		r.logger.Debug("TriggerForNote comparing hook", zap.String("h.ID", h.ID), zap.String("domH.ID", domH.ID().String()))
 		if domH.ID() == hookID {
 			targetHook = &h
 			break
@@ -351,17 +351,17 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 		return fmt.Errorf("hook %s not found", hookID.String())
 	}
 
-	if targetHook.On.MemoDispatch == nil {
-		return fmt.Errorf("hook %s does not allow memo dispatch", hookID.String())
+	if targetHook.On.NoteDispatch == nil {
+		return fmt.Errorf("hook %s does not allow note dispatch", hookID.String())
 	}
 
 	// 寻找配套的图片
-	events, err := r.findAssociatedImageEvents(ctx, memoRelPath)
+	events, err := r.findAssociatedImageEvents(ctx, noteRelPath)
 	if err != nil {
-		return fmt.Errorf("failed to get associated image for memo dispatch: %w", err)
+		return fmt.Errorf("failed to get associated image for note dispatch: %w", err)
 	}
 
-	dirRelPath := filepath.Dir(memoRelPath)
+	dirRelPath := filepath.Dir(noteRelPath)
 	if dirRelPath == "." {
 		dirRelPath = ""
 	}
@@ -369,35 +369,35 @@ func (r *Runner) TriggerForMemo(ctx context.Context, memoRelPath string, hookID 
 	// 依照领域仓库通过相对路径加载目录实体以提取其 ID，避免外部自行编码
 	dir, err := r.dirRepo.Get(ctx, dirRelPath)
 	if err != nil {
-		return fmt.Errorf("failed to get directory for memo dispatch: %w", err)
+		return fmt.Errorf("failed to get directory for note dispatch: %w", err)
 	}
 	dirID := dir.ID()
 
 	if targetHook.Directive != nil && targetHook.Directive.Name != "" {
-		r.logger.Debug("TriggerForMemo directive matches, will execute directives", zap.String("directiveName", targetHook.Directive.Name))
-		memoAbsPath := filepath.Join(r.rootDir, memoRelPath)
-		contentBytes, err := os.ReadFile(memoAbsPath)
+		r.logger.Debug("TriggerForNote directive matches, will execute directives", zap.String("directiveName", targetHook.Directive.Name))
+		noteAbsPath := filepath.Join(r.rootDir, noteRelPath)
+		contentBytes, err := os.ReadFile(noteAbsPath)
 		if err != nil {
-			return fmt.Errorf("failed to read memo file for dispatch: %w", err)
+			return fmt.Errorf("failed to read note file for dispatch: %w", err)
 		}
 		content := string(contentBytes)
 
-		executed, err := r.executeMemoDirectives(ctx, dirID, dirRelPath, memoRelPath, content, "memo_dispatch", hookID)
-		r.logger.Debug("TriggerForMemo executeMemoDirectives finished", zap.Bool("executed", executed), zap.Error(err))
+		executed, err := r.executeNoteDirectives(ctx, dirID, dirRelPath, noteRelPath, content, "note_dispatch", hookID)
+		r.logger.Debug("TriggerForNote executeNoteDirectives finished", zap.Bool("executed", executed), zap.Error(err))
 		if err != nil {
 			return err
 		}
 
 		if !executed {
-			r.logger.Debug("TriggerForMemo not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			_, err = r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+			r.logger.Debug("TriggerForNote not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
+			_, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
 			return err
 		}
 		return nil
 	}
 
-	r.logger.Debug("TriggerForMemo no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	_, err = r.executeHookSync(*targetHook, "memo_dispatch", events, nil, memoRelPath, dirID.String(), dirRelPath, "")
+	r.logger.Debug("TriggerForNote no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
+	_, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
 	return err
 }
 
@@ -437,20 +437,20 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 		return
 	}
 
-	memoAbsPath := filepath.Join(r.rootDir, event.RelPath)
-	contentBytes, err := os.ReadFile(memoAbsPath)
+	noteAbsPath := filepath.Join(r.rootDir, event.RelPath)
+	contentBytes, err := os.ReadFile(noteAbsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return
 		}
-		r.logger.Error("failed to read memo file for directive processing", zap.String("path", event.RelPath), zap.Error(err))
+		r.logger.Error("failed to read note file for directive processing", zap.String("path", event.RelPath), zap.Error(err))
 		return
 	}
 
 	content := string(contentBytes)
 
 	// 0. 检查内容哈希防重入列表，若是自身写入触发的事件则直接忽略
-	if r.shouldIgnoreEvent(memoAbsPath, contentBytes) {
+	if r.shouldIgnoreEvent(noteAbsPath, contentBytes) {
 		r.logger.Debug("ignoring change event as it was triggered by our own write", zap.String("path", event.RelPath))
 		return
 	}
@@ -461,14 +461,14 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	}
 
 	// 1. 处理包含指令的钩子：执行指令并回写文本
-	// 磁盘写回职责已完全收拢至 processSingleMemo 内部，外层不再负责二次写入
-	_, err = r.executeMemoDirectives(r.ctx, event.DirectoryID, dirRelPath, event.RelPath, content, "post_update_memo", scalar.ID{})
+	// 磁盘写回职责已完全收拢至 processSingleNote 内部，外层不再负责二次写入
+	_, err = r.executeNoteDirectives(r.ctx, event.DirectoryID, dirRelPath, event.RelPath, content, "post_update_note", scalar.ID{})
 	if err != nil {
-		r.logger.Error("failed to process memo directives for file change", zap.String("path", event.RelPath), zap.Error(err))
+		r.logger.Error("failed to process note directives for file change", zap.String("path", event.RelPath), zap.Error(err))
 		return
 	}
 
-	// 2. 触发无指令要求的备忘录修改钩子 (h.Directive == nil 或 requires_directive = false)
+	// 2. 触发无指令要求的笔记修改钩子 (h.Directive == nil 或 requires_directive = false)
 	hooks, err := r.LoadHooks()
 	if err != nil {
 		return
@@ -476,10 +476,10 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 
 	var noDirectiveHooks []HookConfig
 	for _, h := range hooks {
-		if h.On.PostUpdateMemo == nil {
+		if h.On.PostUpdateNote == nil {
 			continue
 		}
-		if h.Directive == nil || h.On.PostUpdateMemo.IgnoreDirective {
+		if h.Directive == nil || h.On.PostUpdateNote.IgnoreDirective {
 			noDirectiveHooks = append(noDirectiveHooks, h)
 		}
 	}
@@ -487,25 +487,25 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	if len(noDirectiveHooks) > 0 {
 		evs, err := r.findAssociatedImageEvents(r.ctx, event.RelPath)
 		if err != nil {
-			r.logger.Error("failed to get associated image for memo update hook", zap.String("memo_path", event.RelPath), zap.Error(err))
+			r.logger.Error("failed to get associated image for note update hook", zap.String("note_path", event.RelPath), zap.Error(err))
 		}
 
 		for _, h := range noDirectiveHooks {
-			_, err = r.executeHookSync(h, "post_update_memo", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
+			_, err = r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
 			if err != nil {
-				r.logger.Error("failed to execute no-directive post_update_memo hook", zap.String("hook_id", h.ID), zap.Error(err))
+				r.logger.Error("failed to execute no-directive post_update_note hook", zap.String("hook_id", h.ID), zap.Error(err))
 			}
 		}
 	}
 }
 
-func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dirRelPath string, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
+func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dirRelPath string, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
 	fastCheck := fastCheckReg.MatchString(content)
 	contentSummary := content
 	if len(contentSummary) > 500 {
 		contentSummary = contentSummary[:500] + "...(truncated)"
 	}
-	r.logger.Debug("executeMemoDirectives start",
+	r.logger.Debug("executeNoteDirectives start",
 		zap.String("relPath", relPath),
 		zap.String("triggerType", triggerType),
 		zap.String("filterHookID", filterHookID.String()),
@@ -537,7 +537,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			registeredDirectives = append(registeredDirectives, h.Directive.Name)
 		}
 	}
-	r.logger.Debug("executeMemoDirectives hookMap built", zap.Strings("directives", registeredDirectives))
+	r.logger.Debug("executeNoteDirectives hookMap built", zap.Strings("directives", registeredDirectives))
 
 	// 1. 获取临时的 hook-run-id
 	runID := getHookRunID(content)
@@ -548,7 +548,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		r.muTasks.Unlock()
 	}
 
-	memoAbsPath := filepath.Join(r.rootDir, relPath)
+	noteAbsPath := filepath.Join(r.rootDir, relPath)
 
 	// 1b. 若是有已知且正在运行的 ID，则进行快速返回或执行后置迟到擦除
 	if runID != "" && isKnown {
@@ -557,7 +557,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			defer r.muTasks.Unlock()
 			task := r.activeTasks[runID]
 			if task.phase == phaseBefore3 {
-				task.paths[memoAbsPath] = struct{}{}
+				task.paths[noteAbsPath] = struct{}{}
 				return true, nil
 			}
 			fd := make(map[string]bool)
@@ -574,7 +574,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 
 		// 1b2. 若步骤 3 已完毕，执行后置迟到擦除
 		r.logger.Debug("executing late path cleanup for known hook-run-id", zap.String("path", relPath), zap.String("run_id", runID))
-		r.postProcessMemoDirectives(ctx, memoAbsPath, runID, triggerType, hookMap, failedDirectives)
+		r.postProcessNoteDirectives(ctx, noteAbsPath, runID, triggerType, hookMap, failedDirectives)
 		return false, nil
 	}
 
@@ -594,7 +594,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 
 	// 通过正则遍历提取指令到 pending 列表中，内容不做任何抹除以供 Hook 脚本使用
 	matches := directiveReg.FindAllStringSubmatch(content, -1)
-	r.logger.Debug("executeMemoDirectives regexp matched lines", zap.Int("count", len(matches)))
+	r.logger.Debug("executeNoteDirectives regexp matched lines", zap.Int("count", len(matches)))
 	for _, match := range matches {
 		if len(match) < 2 {
 			continue
@@ -606,7 +606,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			cmdArgs = strings.TrimSpace(match[2])
 		}
 
-		r.logger.Debug("executeMemoDirectives processing line",
+		r.logger.Debug("executeNoteDirectives processing line",
 			zap.String("matchedLine", strings.TrimSpace(matchedLine)),
 			zap.String("cmdName", cmdName),
 			zap.String("cmdArgs", cmdArgs),
@@ -614,52 +614,52 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 
 		hookConfig, ok := hookMap[cmdName]
 		if !ok {
-			r.logger.Debug("executeMemoDirectives cmdName not found in hookMap", zap.String("cmdName", cmdName))
+			r.logger.Debug("executeNoteDirectives cmdName not found in hookMap", zap.String("cmdName", cmdName))
 			continue
 		}
 
 		// 根据触发类型进行筛选
 		filterPassed := false
 		switch triggerType {
-		case "post_update_memo":
-			if hookConfig.On.PostUpdateMemo == nil {
-				r.logger.Debug("executeMemoDirectives trigger filter skipped: On.PostUpdateMemo is nil")
+		case "post_update_note":
+			if hookConfig.On.PostUpdateNote == nil {
+				r.logger.Debug("executeNoteDirectives trigger filter skipped: On.PostUpdateNote is nil")
 				continue
 			}
 			// 若设定为 true，说明它是无条件静默触发，指令阶段不重复触发
-			if hookConfig.On.PostUpdateMemo.IgnoreDirective {
-				r.logger.Debug("executeMemoDirectives trigger filter skipped: On.PostUpdateMemo.IgnoreDirective is true")
+			if hookConfig.On.PostUpdateNote.IgnoreDirective {
+				r.logger.Debug("executeNoteDirectives trigger filter skipped: On.PostUpdateNote.IgnoreDirective is true")
 				continue
 			}
 			filterPassed = true
 		case "post_commit_session":
-			if hookConfig.On.PostCommitSession == nil || hookConfig.On.PostCommitSession.MemoScan == nil {
-				r.logger.Debug("executeMemoDirectives trigger filter skipped: On.PostCommitSession.MemoScan is nil")
+			if hookConfig.On.PostCommitSession == nil || hookConfig.On.PostCommitSession.NoteScan == nil {
+				r.logger.Debug("executeNoteDirectives trigger filter skipped: On.PostCommitSession.NoteScan is nil")
 				continue
 			}
 			// 若设定为 true，说明它是无条件静默扫描，指令阶段不重复触发
-			if hookConfig.On.PostCommitSession.MemoScan.IgnoreDirective {
-				r.logger.Debug("executeMemoDirectives trigger filter skipped: On.PostCommitSession.MemoScan.IgnoreDirective is true")
+			if hookConfig.On.PostCommitSession.NoteScan.IgnoreDirective {
+				r.logger.Debug("executeNoteDirectives trigger filter skipped: On.PostCommitSession.NoteScan.IgnoreDirective is true")
 				continue
 			}
 			filterPassed = true
-		case "memo_dispatch":
-			if hookConfig.On.MemoDispatch == nil {
-				r.logger.Debug("executeMemoDirectives trigger filter skipped: On.MemoDispatch is nil")
+		case "note_dispatch":
+			if hookConfig.On.NoteDispatch == nil {
+				r.logger.Debug("executeNoteDirectives trigger filter skipped: On.NoteDispatch is nil")
 				continue
 			}
 			filterPassed = true
 		default:
-			r.logger.Debug("executeMemoDirectives trigger filter skipped: unknown triggerType")
+			r.logger.Debug("executeNoteDirectives trigger filter skipped: unknown triggerType")
 			continue
 		}
 
-		r.logger.Debug("executeMemoDirectives trigger filter passed", zap.Bool("passed", filterPassed))
+		r.logger.Debug("executeNoteDirectives trigger filter passed", zap.Bool("passed", filterPassed))
 
 		if !filterHookID.IsZero() {
-			domH := domhook.FromRepository(hookConfig.ID, hookConfig.Name, hookConfig.Description, hookConfig.On.ImageDispatch != nil, hookConfig.On.MemoDispatch != nil, nil, false, false)
+			domH := domhook.FromRepository(hookConfig.ID, hookConfig.Name, hookConfig.Description, hookConfig.On.ImageDispatch != nil, hookConfig.On.NoteDispatch != nil, nil, false, false)
 			idMatch := domH.ID() == filterHookID
-			r.logger.Debug("executeMemoDirectives hook ID filter check",
+			r.logger.Debug("executeNoteDirectives hook ID filter check",
 				zap.String("domH.ID", domH.ID().String()),
 				zap.String("filterHookID", filterHookID.String()),
 				zap.Bool("matched", idMatch),
@@ -672,7 +672,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		// 寻找配套的图片
 		evs, err := r.findAssociatedImageEvents(ctx, relPath)
 		if err != nil {
-			r.logger.Error("failed to get associated image for memo directive", zap.String("memo_path", relPath), zap.Error(err))
+			r.logger.Error("failed to get associated image for note directive", zap.String("note_path", relPath), zap.Error(err))
 			continue
 		}
 
@@ -681,7 +681,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			args = splitArgs(cmdArgs)
 		}
 
-		r.logger.Debug("executeMemoDirectives appending pending directive",
+		r.logger.Debug("executeNoteDirectives appending pending directive",
 			zap.String("hookID", hookConfig.ID),
 			zap.Strings("args", args),
 		)
@@ -698,7 +698,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		})
 	}
 
-	r.logger.Debug("executeMemoDirectives loop finished", zap.Int("pendingCount", len(pending)))
+	r.logger.Debug("executeNoteDirectives loop finished", zap.Int("pendingCount", len(pending)))
 	if len(pending) == 0 {
 		return false, nil
 	}
@@ -708,8 +708,8 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 	newContent := setHookRunID(content, runID)
 	if newContent != content {
 		newContentBytes := []byte(newContent)
-		if err := r.writeFileWithIgnore(memoAbsPath, newContentBytes, 0644); err != nil {
-			r.logger.Error("failed to write hook-run-id to memo", zap.String("path", relPath), zap.Error(err))
+		if err := r.writeFileWithIgnore(noteAbsPath, newContentBytes, 0644); err != nil {
+			r.logger.Error("failed to write hook-run-id to note", zap.String("path", relPath), zap.Error(err))
 			return false, err
 		}
 		content = newContent
@@ -725,7 +725,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 		}
 		r.activeTasks[runID] = task
 	}
-	task.paths[memoAbsPath] = struct{}{}
+	task.paths[noteAbsPath] = struct{}{}
 	r.muTasks.Unlock()
 
 	defer func() {
@@ -794,14 +794,14 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 			if finalContent == "" {
 				// 处理后的内容为空，直接删除文件
 				if err := os.Remove(p); err != nil {
-					r.logger.Error("failed to delete empty memo file after directive cleanup", zap.String("path", p), zap.Error(err))
+					r.logger.Error("failed to delete empty note file after directive cleanup", zap.String("path", p), zap.Error(err))
 				}
 				continue
 			}
 			// 在写回磁盘前，计算 xxhash 并注册为忽略事件，自防循环
 			finalContentBytes := []byte(finalContent)
 			if err := r.writeFileWithIgnore(p, finalContentBytes, 0644); err != nil {
-				r.logger.Error("failed to write clean content to memo file during cleanup", zap.String("path", p), zap.Error(err))
+				r.logger.Error("failed to write clean content to note file during cleanup", zap.String("path", p), zap.Error(err))
 			}
 		}
 	}
@@ -811,7 +811,7 @@ func (r *Runner) executeMemoDirectives(ctx context.Context, dirID scalar.ID, dir
 
 // executeHookSync 同步执行钩子并返回解析后的操作
 // 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
-func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []HookEvent, extraArgs []string, memoPath string, dirID string, dirRel string, runID string) (string, error) {
+func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []HookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (string, error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
@@ -839,7 +839,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 		Events:       events,
 		Dir:          hook.Dir,
 		Env:          hook.Env,
-		MemoPath:     memoPath,
+		NotePath:     notePath,
 		DirectoryID:  dirID,
 		DirectoryRel: dirRel,
 		ResultChan:   resChan,
@@ -1100,10 +1100,10 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		"PYTHONUTF8=1",
 	)
 
-	if task.MemoPath != "" {
-		memoAbsPath := filepath.Join(r.rootDir, task.MemoPath)
-		mPathsJSON, _ := json.Marshal([]string{memoAbsPath})
-		env = append(env, "IMAGE_FUNNEL_MEMO_PATHS="+string(mPathsJSON))
+	if task.NotePath != "" {
+		noteAbsPath := filepath.Join(r.rootDir, task.NotePath)
+		mPathsJSON, _ := json.Marshal([]string{noteAbsPath})
+		env = append(env, "IMAGE_FUNNEL_NOTE_PATHS="+string(mPathsJSON))
 	}
 	if task.DirectoryID != "" {
 		env = append(env, "IMAGE_FUNNEL_DIRECTORY_ID="+task.DirectoryID)
@@ -1249,10 +1249,10 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 			return
 		}
 
-		// 1. 触发纯会话提交钩子 (配置了 post_commit_session 但没有配置 memo_scan 属性的钩子)
+		// 1. 触发纯会话提交钩子 (配置了 post_commit_session 但没有配置 note_scan 属性的钩子)
 		var pureCommitHooks []HookConfig
 		for _, h := range hooks {
-			if h.On.PostCommitSession != nil && h.On.PostCommitSession.MemoScan == nil {
+			if h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan == nil {
 				pureCommitHooks = append(pureCommitHooks, h)
 			}
 		}
@@ -1267,11 +1267,11 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 			}
 		}
 
-		// 2. 扫描备忘录文件并处理
+		// 2. 扫描笔记文件并处理
 		dirAbsPath := filepath.Join(r.rootDir, dirRelPath)
 		entries, err := os.ReadDir(dirAbsPath)
 		if err != nil {
-			r.logger.Error("failed to read directory for post_commit_session memo scan", zap.String("dir_rel_path", dirRelPath), zap.Error(err))
+			r.logger.Error("failed to read directory for post_commit_session note scan", zap.String("dir_rel_path", dirRelPath), zap.Error(err))
 			return
 		}
 
@@ -1280,43 +1280,43 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 				continue
 			}
 
-			memoRelPath := filepath.ToSlash(filepath.Join(dirRelPath, entry.Name()))
-			memoAbsPath := filepath.Join(r.rootDir, memoRelPath)
+			noteRelPath := filepath.ToSlash(filepath.Join(dirRelPath, entry.Name()))
+			noteAbsPath := filepath.Join(r.rootDir, noteRelPath)
 
-			contentBytes, err := os.ReadFile(memoAbsPath)
+			contentBytes, err := os.ReadFile(noteAbsPath)
 			if err != nil {
-				r.logger.Error("failed to read memo file during commit scan", zap.String("path", memoRelPath), zap.Error(err))
+				r.logger.Error("failed to read note file during commit scan", zap.String("path", noteRelPath), zap.Error(err))
 				continue
 			}
 
 			// 2a. 带有指令的钩子：解析与执行指令
-			_, err = r.executeMemoDirectives(r.ctx, dirID, dirRelPath, memoRelPath, string(contentBytes), "post_commit_session", scalar.ID{})
+			_, err = r.executeNoteDirectives(r.ctx, dirID, dirRelPath, noteRelPath, string(contentBytes), "post_commit_session", scalar.ID{})
 			if err != nil {
-				r.logger.Error("failed to process memo directives during commit scan", zap.String("path", memoRelPath), zap.Error(err))
+				r.logger.Error("failed to process note directives during commit scan", zap.String("path", noteRelPath), zap.Error(err))
 				continue
 			}
 
-			// processSingleMemo 内部已完成相应的预先写回和失败回滚
+			// processSingleNote 内部已完成相应的预先写回和失败回滚
 
-			// 2b. 无指令的 memo_scan 钩子：配置了 memo_scan 且没有 Directive 或 ignore_directive = true 时直接触发
-			var noDirectiveMemoScanHooks []HookConfig
+			// 2b. 无指令的 note_scan 钩子：配置了 note_scan 且没有 Directive 或 ignore_directive = true 时直接触发
+			var noDirectiveNoteScanHooks []HookConfig
 			for _, h := range hooks {
-				if h.On.PostCommitSession != nil && h.On.PostCommitSession.MemoScan != nil {
-					if h.Directive == nil || h.On.PostCommitSession.MemoScan.IgnoreDirective {
-						noDirectiveMemoScanHooks = append(noDirectiveMemoScanHooks, h)
+				if h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan != nil {
+					if h.Directive == nil || h.On.PostCommitSession.NoteScan.IgnoreDirective {
+						noDirectiveNoteScanHooks = append(noDirectiveNoteScanHooks, h)
 					}
 				}
 			}
 
-			if len(noDirectiveMemoScanHooks) > 0 {
-				evs, err := r.findAssociatedImageEvents(r.ctx, memoRelPath)
+			if len(noDirectiveNoteScanHooks) > 0 {
+				evs, err := r.findAssociatedImageEvents(r.ctx, noteRelPath)
 				if err != nil {
-					r.logger.Error("failed to get associated image for commit scan hook", zap.String("memo_path", memoRelPath), zap.Error(err))
+					r.logger.Error("failed to get associated image for commit scan hook", zap.String("note_path", noteRelPath), zap.Error(err))
 				}
-				for _, h := range noDirectiveMemoScanHooks {
-					_, err = r.executeHookSync(h, "post_commit_session", evs, nil, memoRelPath, dirID.String(), dirRelPath, "")
+				for _, h := range noDirectiveNoteScanHooks {
+					_, err = r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dirID.String(), dirRelPath, "")
 					if err != nil {
-						r.logger.Error("failed to execute no-directive post_commit_session memo_scan hook", zap.String("hook_id", h.ID), zap.Error(err))
+						r.logger.Error("failed to execute no-directive post_commit_session note_scan hook", zap.String("hook_id", h.ID), zap.Error(err))
 					}
 				}
 			}
@@ -1372,17 +1372,17 @@ func splitArgs(s string) []string {
 	return args
 }
 
-func associatedImageRelPath(memoRelPath string) (string, bool) {
-	ext := filepath.Ext(memoRelPath)
+func associatedImageRelPath(noteRelPath string) (string, bool) {
+	ext := filepath.Ext(noteRelPath)
 	if ext == "" {
 		return "", false
 	}
-	return strings.TrimSuffix(memoRelPath, ext), true
+	return strings.TrimSuffix(noteRelPath, ext), true
 }
 
-// findAssociatedImageEvents 查找备忘录配套的图片，构建对应的 HookEvent 列表
-func (r *Runner) findAssociatedImageEvents(ctx context.Context, memoRelPath string) ([]HookEvent, error) {
-	imgRelPath, ok := associatedImageRelPath(memoRelPath)
+// findAssociatedImageEvents 查找笔记配套的图片，构建对应的 HookEvent 列表
+func (r *Runner) findAssociatedImageEvents(ctx context.Context, noteRelPath string) ([]HookEvent, error) {
+	imgRelPath, ok := associatedImageRelPath(noteRelPath)
 	if !ok {
 		return nil, nil
 	}
@@ -1562,7 +1562,7 @@ func (r *Runner) writeFileWithIgnore(absPath string, content []byte, perm os.Fil
 	return os.WriteFile(absPath, content, perm)
 }
 
-func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]HookConfig, failedDirectives map[string]bool) {
+func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]HookConfig, failedDirectives map[string]bool) {
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1602,13 +1602,13 @@ func (r *Runner) postProcessMemoDirectives(ctx context.Context, absPath string, 
 		if finalContent == "" {
 			// 处理后的内容为空，直接删除文件
 			if err := os.Remove(absPath); err != nil {
-				r.logger.Error("failed to delete empty memo file during late cleanup", zap.String("path", absPath), zap.Error(err))
+				r.logger.Error("failed to delete empty note file during late cleanup", zap.String("path", absPath), zap.Error(err))
 			}
 			return
 		}
 		finalContentBytes := []byte(finalContent)
 		if err := r.writeFileWithIgnore(absPath, finalContentBytes, 0644); err != nil {
-			r.logger.Error("failed to write clean content to memo file during late cleanup", zap.String("path", absPath), zap.Error(err))
+			r.logger.Error("failed to write clean content to note file during late cleanup", zap.String("path", absPath), zap.Error(err))
 		}
 	}
 }

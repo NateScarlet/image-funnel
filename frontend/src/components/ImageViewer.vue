@@ -297,22 +297,22 @@
       </div>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
 
-      <!-- 备注按钮 -->
+      <!-- 笔记按钮 -->
       <button
         class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 text-white/50 hover:text-white shrink-0 cursor-pointer"
         :class="
-          image.memo.content
+          image.note.content
             ? 'text-secondary-400 hover:text-secondary-300'
             : ''
         "
-        :title="image.memo.content ? '编辑备注' : '添加备注'"
-        @click="memoDialog.open()"
+        :title="image.note.content ? '编辑笔记' : '添加笔记'"
+        @click="noteDialog.open()"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiNoteTextOutline" />
         </svg>
         <span class="truncate max-w-24 md:max-w-36 text-xs">{{
-          image.memo.content || "添加备注"
+          image.note.content || "添加笔记"
         }}</span>
       </button>
       <div class="w-px h-4 bg-white/30 mx-1"></div>
@@ -477,15 +477,15 @@
       </div>
     </div>
 
-    <!-- 备忘录/笔记编辑对话框 -->
-    <memoDialog.component container-class="sm:max-w-3xl short:max-w-none">
-      <MemoForm
+    <!-- 笔记编辑对话框 -->
+    <noteDialog.component container-class="sm:max-w-3xl short:max-w-none">
+      <NoteForm
         v-if="image"
-        ref="memoDialogRef"
-        :memo="image.memo"
-        @close="memoDialog.close"
+        ref="noteDialogRef"
+        :note="image.note"
+        @close="noteDialog.close"
       />
-    </memoDialog.component>
+    </noteDialog.component>
   </div>
 </template>
 
@@ -532,8 +532,8 @@ import { MetaDocument } from "@/graphql/generated";
 import useImageHooks from "@/composables/useImageHooks";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useOpenDir } from "@/composables/useOpenDir";
-import MemoForm from "./MemoForm.vue";
-import useMemo from "@/composables/useMemo";
+import NoteForm from "./NoteForm.vue";
+import useNote from "@/composables/useNote";
 import useModalDialog from "@/composables/useModalDialog";
 import { useClipboard } from "@/composables/useClipboard";
 
@@ -942,56 +942,56 @@ async function handleDispatch(hookId: string, hookName: string) {
 }
 // #endregion
 
-const memoDialog = useModalDialog({
+const noteDialog = useModalDialog({
   onDidOpen() {
     document.body.style.overflow = "hidden";
     nextTick(() => {
-      memoDialogRef.value?.focus();
+      noteDialogRef.value?.focus();
     });
   },
   onWillClose() {
     document.body.style.overflow = "";
-    memoDialogRef.value?.flush();
+    noteDialogRef.value?.flush();
   },
 });
 
-const memoDialogRef =
-  useTemplateRef<InstanceType<typeof MemoForm>>("memoDialogRef");
+const noteDialogRef =
+  useTemplateRef<InstanceType<typeof NoteForm>>("noteDialogRef");
 
-// 开启当前查看图片的备注实时订阅，保证外部修改时能自动同步
-useMemo(() => image.memo.id);
+// 开启当前查看图片的笔记实时订阅，保证外部修改时能自动同步
+useNote(() => image.note.id);
 
-// 绑定快捷键 m 或 shift+m 来编辑备注
+// 绑定快捷键 m 或 shift+m 来编辑笔记
 useHotkeys(
   {
     "m, shift+m": () => {
-      memoDialog.open();
+      noteDialog.open();
     },
   },
   {
-    description: "编辑图片备注",
+    description: "编辑图片笔记",
     category: "图片操作",
   },
 );
 
-// 当备注编辑器打开时，启用 escape 键以关闭备注框，同时阻断外层查看器关闭的快捷键
+// 当笔记编辑器打开时，启用 escape 键以关闭笔记框，同时阻断外层查看器关闭的快捷键
 useHotkeys(
   {
     escape: () => {
-      memoDialog.close();
+      noteDialog.close();
     },
   },
   {
     allowInInputs: true,
     preventDefault: true,
     stopPropagation: true,
-    description: "关闭备注",
-    scope: memoDialog.scopeId,
+    description: "关闭笔记",
+    scope: noteDialog.scopeId,
     category: "图片操作",
   },
 );
 
-// 当备注编辑器打开时，阻断 arrowleft 和 arrowright 的快捷键处理，避免光标移动误触发图片切换
+// 当笔记编辑器打开时，阻断 arrowleft 和 arrowright 的快捷键处理，避免光标移动误触发图片切换
 useHotkeys(
   {
     "arrowleft, arrowright": () => {
@@ -1002,7 +1002,7 @@ useHotkeys(
     allowInInputs: true,
     preventDefault: false,
     stopPropagation: true,
-    scope: memoDialog.scopeId,
+    scope: noteDialog.scopeId,
   },
 );
 

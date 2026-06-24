@@ -6,7 +6,7 @@ import {
   DirectoryStateDocument,
   SetDirectoryStateDocument,
   type ImageFiltersInput,
-  type MemoFiltersInput,
+  type NoteFiltersInput,
   type SessionFragment,
   type DirectoryStateInput,
 } from "../graphql/generated";
@@ -16,7 +16,7 @@ import { debounce } from "es-toolkit";
 // #region 类型定义
 export interface DirectoryState {
   filterBy?: ImageFiltersInput;
-  filterMemoBy?: MemoFiltersInput;
+  filterNoteBy?: NoteFiltersInput;
 }
 // #endregion
 
@@ -134,7 +134,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       fn = debounce(async (stateToSave: DirectoryState) => {
         const inputState: DirectoryStateInput = {
           browse:
-            stateToSave.filterBy || stateToSave.filterMemoBy
+            stateToSave.filterBy || stateToSave.filterNoteBy
               ? {
                   filterBy: stateToSave.filterBy
                     ? {
@@ -143,9 +143,9 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
                         query: stateToSave.filterBy.query,
                       }
                     : undefined,
-                  filterMemoBy: stateToSave.filterMemoBy
+                  filterNoteBy: stateToSave.filterNoteBy
                     ? {
-                        hidden: stateToSave.filterMemoBy.hidden,
+                        hidden: stateToSave.filterNoteBy.hidden,
                       }
                     : undefined,
                 }
@@ -254,22 +254,22 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     },
   });
 
-  // 备忘录是否显示隐藏项，默认值为 false
-  const showHiddenMemos = computed<boolean>({
+  // 笔记是否显示隐藏项，默认值为 false
+  const showHiddenNotes = computed<boolean>({
     get() {
       const dirState = currentBrowse.value;
-      if (dirState.filterMemoBy) {
-        return dirState.filterMemoBy.hidden === true;
+      if (dirState.filterNoteBy) {
+        return dirState.filterNoteBy.hidden === true;
       }
       const sState = serverState.value;
-      if (sState?.browse?.filterMemoBy) {
-        return sState.browse.filterMemoBy.hidden === true;
+      if (sState?.browse?.filterNoteBy) {
+        return sState.browse.filterNoteBy.hidden === true;
       }
       return false;
     },
     set(val) {
       updateDirectoryState((state) => {
-        state.filterMemoBy = val ? { hidden: true } : undefined;
+        state.filterNoteBy = val ? { hidden: true } : undefined;
       });
     },
   });
@@ -292,7 +292,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     filterRating,
     filterLabels,
     searchQuery,
-    showHiddenMemos,
+    showHiddenNotes,
     hasActiveFilters,
     clearFilters,
     lastSession,

@@ -1,0 +1,5 @@
+subscription NoteSaved($filterBy: NoteFiltersInput) {
+  noteSaved(filterBy: $filterBy) {
+    ...Note
+  }
+}

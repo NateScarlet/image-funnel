@@ -9,7 +9,7 @@ mutation SetDirectoryState($input: SetDirectoryStateInput!) {
           label
           query
         }
-        filterMemoBy {
+        filterNoteBy {
           id
           hidden
         }

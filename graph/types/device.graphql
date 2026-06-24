@@ -8,7 +8,7 @@ type Device @goModel(model: "main/internal/shared.DeviceDTO") {
   """
   name: String!
   """
-  设备注册时间
+  设笔记册时间
   """
   createdAt: Time!
   """

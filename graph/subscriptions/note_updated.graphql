@@ -1,0 +1,13 @@
+extend type Subscription {
+  """
+  按 ID 订阅特定笔记的更新
+  """
+  noteUpdated(id: ID!): Note!
+
+  """
+  按过滤器订阅笔记的新增、更新与删除事件。
+  支持按目录ID、笔记ID、隐藏状态过滤。
+  文件被删除时推送空内容笔记对象。
+  """
+  noteSaved(filterBy: NoteFiltersInput): Note!
+}

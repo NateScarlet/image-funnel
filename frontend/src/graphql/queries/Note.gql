@@ -1,0 +1,7 @@
+query Note($id: ID!) {
+  node(id: $id) {
+    ... on Note {
+      ...Note
+    }
+  }
+}

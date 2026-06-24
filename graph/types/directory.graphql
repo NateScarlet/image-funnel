@@ -31,8 +31,8 @@ type Directory implements Node
     first: Int
     after: String
   ): ImageConnection! @goField(forceResolver: true)
-  "目录下的备忘录列表，支持筛选与分页"
-  memos(filterBy: MemoFiltersInput, first: Int, after: String): MemoConnection!
+  "目录下的笔记列表，支持筛选与分页"
+  notes(filterBy: NoteFiltersInput, first: Int, after: String): NoteConnection!
     @goField(forceResolver: true)
   "该目录下最后活跃的会话，无历史会话时返回null"
   lastSession: Session @goField(forceResolver: true)

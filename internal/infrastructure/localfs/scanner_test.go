@@ -22,7 +22,7 @@ type testContext struct {
 	rootDir     string
 	imageRepo   *ImageRepository
 	imageMover  *ImageMover
-	memoRepo    *MemoRepository
+	noteRepo    *NoteRepository
 	dirRepo     directory.Repository
 	dirAnalyzer *DirectoryAnalyzer
 }
@@ -36,7 +36,7 @@ func newTestContext(t *testing.T) *testContext {
 		rootDir:     rootDir,
 		imageRepo:   imgRepo,
 		imageMover:  NewImageMover(rootDir, imgRepo, domainimage.NewFilterBuilder()),
-		memoRepo:    NewMemoRepository(rootDir),
+		noteRepo:    NewNoteRepository(rootDir),
 		dirRepo:     dirRepo,
 		dirAnalyzer: NewDirectoryAnalyzer(rootDir, factory, dirRepo),
 	}

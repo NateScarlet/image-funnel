@@ -1,5 +1,0 @@
-subscription MemoSaved($filterBy: MemoFiltersInput) {
-  memoSaved(filterBy: $filterBy) {
-    ...Memo
-  }
-}

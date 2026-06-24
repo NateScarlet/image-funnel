@@ -7,9 +7,10 @@ package graphql
 
 import (
 	"context"
+	"path/filepath"
+
 	"main/internal/application/image"
 	"main/internal/shared"
-	"path/filepath"
 )
 
 // URL is the resolver for the url field.
@@ -29,14 +30,12 @@ func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (strin
 	return r.signer.GenerateSignedURL(obj.AbsPath, image.WithRaw())
 }
 
-// Memo is the resolver for the memo field.
-func (r *imageResolver) Memo(ctx context.Context, obj *shared.ImageDTO) (*shared.MemoDTO, error) {
-	relPath, err := filepath.Rel(r.rootDir, obj.AbsPath)
-	if err != nil {
-		return nil, err
-	}
-	memoPath := filepath.ToSlash(relPath) + ".md"
-	return r.app.MemoByRelPath(ctx, memoPath)
+// Note is the resolver for the note field.
+func (r *imageResolver) Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error) {
+	// 图片的关联笔记是同名的 .md 文件
+	ext := filepath.Ext(obj.RelPath)
+	noteRelPath := obj.RelPath[:len(obj.RelPath)-len(ext)] + ".md"
+	return r.app.NoteByRelPath(ctx, noteRelPath)
 }
 
 // Image returns ImageResolver implementation.

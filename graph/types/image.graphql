@@ -21,8 +21,8 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   currentRating: Int!
   "是否存在 XMP sidecar 文件"
   xmpExists: Boolean!
-  "关联的备忘信息，无备忘文件时返回空备忘对象"
-  memo: Memo!
+  "关联的笔记信息，无笔记文件时返回空笔记对象"
+  note: Note!
   "颜色标签（来自 XMP sidecar），无标签时返回空字符串"
   label: String
   "相对根目录的路径"

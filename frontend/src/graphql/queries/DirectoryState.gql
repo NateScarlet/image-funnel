@@ -10,7 +10,7 @@ query DirectoryState($id: ID!) {
             label
             query
           }
-          filterMemoBy {
+          filterNoteBy {
             id
             hidden
           }

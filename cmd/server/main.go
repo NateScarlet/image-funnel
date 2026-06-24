@@ -18,13 +18,13 @@ import (
 	appdirectory "main/internal/application/directory"
 	apphook "main/internal/application/hook"
 	appimage "main/internal/application/image"
-	appmemo "main/internal/application/memo"
+	appnote "main/internal/application/note"
 	apppairing "main/internal/application/pairing"
 	appsession "main/internal/application/session"
 	ddevice "main/internal/domain/device"
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
-	"main/internal/domain/memo"
+	"main/internal/domain/note"
 	"main/internal/domain/pairing"
 	"main/internal/domain/session"
 	"main/internal/infrastructure"
@@ -212,10 +212,10 @@ func main() {
 		logger,
 		dirSvc,
 	)
-	memoDTOFactory := appmemo.NewDTOFactory(cfg.AbsRootDir)
-	memoFilterBuilder := memo.NewFilterBuilder()
-	memoRepository := localfs.NewMemoRepository(cfg.AbsRootDir)
-	memoHandler := appmemo.NewHandler(memoRepository, memo.NewService(memoRepository, memo.NewFactory(cfg.AbsRootDir)), dirSvc, eventBus, memoDTOFactory, memoFilterBuilder)
+	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
+	noteFilterBuilder := note.NewFilterBuilder()
+	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
+	noteHandler := appnote.NewHandler(noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, eventBus, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
 	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
 
@@ -240,7 +240,7 @@ func main() {
 
 	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, memoHandler, imageHandler, deviceHandler, pairingHandler, hookHandler)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler)
 
 	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL)
 

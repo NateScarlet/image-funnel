@@ -1,0 +1,5 @@
+mutation CreateNote($input: CreateNoteInput!) {
+  createNote(input: $input) {
+    ...Note
+  }
+}
