@@ -30,6 +30,7 @@ type Config struct {
 	WebAuthnRPOrigins         []string
 	BaseURL                   string
 	HooksDir                  string
+	UseSystemRecycleBin       bool
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -199,6 +200,15 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 
 	hooksDir := os.Getenv("IMAGE_FUNNEL_HOOK_DIR")
 
+	useSystemRecycleBin := false
+	if v := os.Getenv("IMAGE_FUNNEL_USE_SYSTEM_RECYCLE_BIN"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			useSystemRecycleBin = b
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_USE_SYSTEM_RECYCLE_BIN, use default", zap.String("value", v))
+		}
+	}
+
 	return &Config{
 		Port:                      port,
 		RootDir:                   rootDir,
@@ -217,5 +227,6 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		WebAuthnRPOrigins:         webauthnRPOrigins,
 		BaseURL:                   baseURL,
 		HooksDir:                  hooksDir,
+		UseSystemRecycleBin:       useSystemRecycleBin,
 	}, nil
 }

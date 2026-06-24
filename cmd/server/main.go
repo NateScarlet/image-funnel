@@ -101,7 +101,7 @@ func main() {
 
 	var imageRepo image.Repository = localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
-	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder)
+	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder, cfg.UseSystemRecycleBin)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
 	singleFlightDirAnalyzer := concurrency.NewSingleFlightDirectoryAnalyzer(dirAnalyzerImpl)
 

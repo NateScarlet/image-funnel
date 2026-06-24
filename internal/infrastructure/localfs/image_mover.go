@@ -85,17 +85,19 @@ type trashMeta struct {
 
 // ImageMover 专职处理图片及其同名或带有额外扩展名的配套伴随文件物理移动、暂存与回收站操作
 type ImageMover struct {
-	rootDir       string
-	repo          image.Repository
-	filterBuilder *image.FilterBuilder
+	rootDir             string
+	repo                image.Repository
+	filterBuilder       *image.FilterBuilder
+	useSystemRecycleBin bool
 }
 
 // NewImageMover 创建图片移动实现实例
-func NewImageMover(rootDir string, repo image.Repository, filterBuilder *image.FilterBuilder) *ImageMover {
+func NewImageMover(rootDir string, repo image.Repository, filterBuilder *image.FilterBuilder, useSystemRecycleBin bool) *ImageMover {
 	return &ImageMover{
-		rootDir:       rootDir,
-		repo:          repo,
-		filterBuilder: filterBuilder,
+		rootDir:             rootDir,
+		repo:                repo,
+		filterBuilder:       filterBuilder,
+		useSystemRecycleBin: useSystemRecycleBin,
 	}
 }
 
@@ -559,7 +561,7 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 		}
 
 		// 将原始路径下的文件投递到系统回收站
-		if err := moveToRecycleBin(srcPaths); err != nil {
+		if err := trashOrDelete(srcPaths, s.useSystemRecycleBin); err != nil {
 			return clearedCount, fmt.Errorf("failed to move files to recycle bin: %w", err)
 		}
 

@@ -35,7 +35,7 @@ func newTestContext(t *testing.T) *testContext {
 	return &testContext{
 		rootDir:     rootDir,
 		imageRepo:   imgRepo,
-		imageMover:  NewImageMover(rootDir, imgRepo, domainimage.NewFilterBuilder()),
+		imageMover:  NewImageMover(rootDir, imgRepo, domainimage.NewFilterBuilder(), false),
 		noteRepo:    NewNoteRepository(rootDir),
 		dirRepo:     dirRepo,
 		dirAnalyzer: NewDirectoryAnalyzer(rootDir, factory, dirRepo),
