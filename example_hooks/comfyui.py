@@ -1227,7 +1227,7 @@ def main() -> None:
             any_image_success = False
             variant_count = 0
 
-            for prompt_copy, workflow_copy in generator:
+            for prompt, workflow in generator:
                 variant_count += 1
                 if variant_count > 1:
                     enable_seed_update = True
@@ -1237,8 +1237,8 @@ def main() -> None:
                         _LOGGER.info(
                             f"  -> Queueing variant {variant_count} run {q_idx + 1}/{jobs}"
                         )
-                    job_prompt = json.loads(json.dumps(prompt_copy))
-                    job_workflow = json.loads(json.dumps(workflow_copy))
+                    job_prompt = json.loads(json.dumps(prompt))
+                    job_workflow = json.loads(json.dumps(workflow))
 
                     if enable_seed_update:
                         if update_seeds(job_prompt, job_workflow) == 0:
@@ -1688,22 +1688,22 @@ def parse_args():
     return parser.parse_args()
 
 
-def _apply_lora_weight(
+def _make_lora_applier(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
     lora_name_query: str,
-    target_weight: float,
-) -> None:
-    """
-    修改 prompt (API 结构) 和 workflow (UI 结构) 中已存在的 Lora 权重（原地修改）。
-    支持原生 LoraLoader 和 Power Lora Loader (rgthree)。
-    """
+):
+    """分析工作流，返回 applier(weight) -> (prompt, workflow)，原地修改后直接返回。"""
     query_lower = lora_name_query.lower()
 
-    # 记录在 prompt 中被修改了参数的 Primitive 节点及其新数值，用于在 workflow 中同步
-    modified_primitive_nodes: Dict[str, float] = {}
+    # 收集需要修改的位置信息
+    prompt_primitive_sources: List[Tuple[str, str]] = []  # (src_nid, src_key)
+    prompt_powerlora_sources: List[Tuple[str, str]] = []  # (nid, key)
+    wf_primitive_ids: Set[str] = set()
+    wf_loraloader_indices: List[Tuple[str, List[int]]] = []  # (node_id, [widget_index])
+    wf_powerlora_ids: List[str] = []
 
-    # 1. 遍历并修改 prompt (API 结构)
+    # 分析 prompt 侧
     for nid, node in prompt.items():
         node_dict = cast(Dict[str, Any], node)
         class_type = node_dict.get("class_type", "")
@@ -1711,17 +1711,13 @@ def _apply_lora_weight(
             inputs = node_dict.get("inputs", {})
             lora_name = inputs.get("lora_name", "")
             if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                # 原生 LoraLoader 修改 strength_model 和 strength_clip
                 for ik in ["strength_model", "strength_clip"]:
                     if ik in inputs:
                         src_nid, src_key = find_terminal_input(prompt, nid, ik)
-                        current_val = prompt[src_nid]["inputs"].get(src_key)
-                        if current_val != target_weight:
-                            prompt[src_nid]["inputs"][src_key] = target_weight
-                            modified_primitive_nodes[src_nid] = target_weight
-                            _LOGGER.info(
-                                f"Updated LoraLoader node {nid} ({lora_name}) input '{ik}' (terminal node {src_nid} key '{src_key}') to {target_weight}"
-                            )
+                        prompt_primitive_sources.append((src_nid, src_key))
+                        src_node = prompt.get(src_nid, {})
+                        if src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES:
+                            wf_primitive_ids.add(src_nid)
         elif class_type == "Power Lora Loader (rgthree)":
             inputs = node_dict.get("inputs", {})
             for k, v in list(inputs.items()):
@@ -1729,74 +1725,98 @@ def _apply_lora_weight(
                     v_dict = cast(Dict[str, Any], v)
                     lora_path = v_dict.get("lora", "")
                     if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        current_strength = v_dict.get("strength")
-                        if current_strength != target_weight:
-                            v_dict["strength"] = target_weight
-                            _LOGGER.info(
-                                f"Updated Power Lora Loader node {nid} ({lora_path}) key '{k}' strength to {target_weight}"
-                            )
+                        prompt_powerlora_sources.append((nid, k))
 
-    # 2. 同步修改 workflow (UI 结构)
-    # A. 遍历并修改可能连线的 Primitive 节点
-    for node in workflow.get("nodes", []):
-        nid_str = str(node.get("id"))
-        if nid_str in modified_primitive_nodes:
-            new_val = modified_primitive_nodes[nid_str]
-            widgets_values = node.get("widgets_values")
-            if isinstance(widgets_values, list) and widgets_values:
-                widgets_values[0] = new_val
-                _LOGGER.info(
-                    f"Updated workflow Primitive node {nid_str} widget value to {new_val}"
-                )
-
-    # B. 收集所有未停用节点（包括顶层和子图内部节点）
-    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str]]] = []
+    # 分析 workflow 侧
+    candidate_nodes: List[Tuple[Dict[str, Any], str]] = []
     for node in workflow.get("nodes", []):
         if not is_node_disabled(node):
-            candidate_nodes.append((node, str(node.get("id")), False, None))
+            candidate_nodes.append((node, str(node.get("id"))))
     subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
     for subgraph in subgraphs:
-        subgraph_id = subgraph.get("id")
         for node in subgraph.get("nodes", []):
             if not is_node_disabled(node):
-                candidate_nodes.append((node, str(node.get("id")), True, subgraph_id))
+                candidate_nodes.append((node, str(node.get("id"))))
 
-    for node, node_id_str, _, subgraph_id in candidate_nodes:
+    for node, node_id_str in candidate_nodes:
         node_type = node.get("type", "")
         widgets_values = node.get("widgets_values")
         if not isinstance(widgets_values, list):
             continue
-        widgets_values_list = cast(List[Any], widgets_values)
+        wv = cast(List[Any], widgets_values)
 
         if node_type == "LoraLoader":
-            if len(widgets_values_list) > 0 and isinstance(widgets_values_list[0], str):
-                lora_name = widgets_values_list[0]
-                if query_lower in lora_name.lower():
-                    if len(widgets_values_list) > 1 and isinstance(
-                        widgets_values_list[1], (int, float)
-                    ):
-                        if widgets_values_list[1] != target_weight:
-                            widgets_values_list[1] = target_weight
-                    if len(widgets_values_list) > 2 and isinstance(
-                        widgets_values_list[2], (int, float)
-                    ):
-                        if widgets_values_list[2] != target_weight:
-                            widgets_values_list[2] = target_weight
-                            _LOGGER.info(
-                                f"Updated workflow LoraLoader {node_id_str} weight to {target_weight}"
-                            )
-
+            if len(wv) > 0 and isinstance(wv[0], str) and query_lower in wv[0].lower():
+                indices: List[int] = []
+                if len(wv) > 1 and isinstance(wv[1], (int, float)):
+                    indices.append(1)
+                if len(wv) > 2 and isinstance(wv[2], (int, float)):
+                    indices.append(2)
+                if indices:
+                    wf_loraloader_indices.append((node_id_str, indices))
         elif node_type == "Power Lora Loader (rgthree)":
-            for val in widgets_values_list:
+            for val in wv:
                 if isinstance(val, dict) and "lora" in val:
                     val_dict = cast(Dict[str, Any], val)
                     lora_path = val_dict.get("lora", "")
                     if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        if val_dict.get("strength") != target_weight:
-                            val_dict["strength"] = target_weight
-                            _LOGGER.info(
-                                f"Updated workflow Power Lora Loader {node_id_str} widget Lora strength to {target_weight}"
-                            )
+                        wf_powerlora_ids.append(node_id_str)
+                        break
+
+    # 构建 workflow 节点索引（只建一次，节点对象引用不变）
+    wf_nodes = {str(n.get("id")): n for n in workflow.get("nodes", [])}
+
+    def apply(weight: float) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        # 修改 prompt 中的 Primitive 值（原地修改，消费者会自行深拷贝）
+        for src_nid, src_key in prompt_primitive_sources:
+            if src_nid in prompt:
+                prompt[src_nid]["inputs"][src_key] = weight
+
+        # 修改 prompt 中的 PowerLora dict
+        for nid, key in prompt_powerlora_sources:
+            node = prompt.get(nid, {})
+            v = node.get("inputs", {}).get(key)
+            if isinstance(v, dict):
+                v["strength"] = weight
+
+        # 修改 workflow 中的 Primitive 节点
+        for nid_str in wf_primitive_ids:
+            node = wf_nodes.get(nid_str)
+            if node:
+                wv = node.get("widgets_values")
+                if isinstance(wv, list) and wv:
+                    wv[0] = weight
+
+        # 修改 workflow 中的 LoraLoader widget
+        for nid_str, indices in wf_loraloader_indices:
+            node = wf_nodes.get(nid_str)
+            if node:
+                wv = node.get("widgets_values")
+                if isinstance(wv, list):
+                    wv_list = cast(List[Any], wv)
+                    for idx in indices:
+                        if idx < len(wv_list):
+                            wv_list[idx] = weight
+
+        # 修改 workflow 中的 PowerLora widget
+        for nid_str in wf_powerlora_ids:
+            node = wf_nodes.get(nid_str)
+            if node:
+                wv = node.get("widgets_values")
+                if isinstance(wv, list):
+                    for val in cast(List[Any], wv):
+                        if isinstance(val, dict) and "lora" in val:
+                            val_dict = cast(Dict[str, Any], val)
+                            lora_path = val_dict.get("lora", "")
+                            if (
+                                isinstance(lora_path, str)
+                                and query_lower in lora_path.lower()
+                            ):
+                                val_dict["strength"] = weight
+
+        return prompt, workflow
+
+    return apply
 
 
 def modify_lora_weights(
@@ -1807,7 +1827,7 @@ def modify_lora_weights(
 ) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
     """
     生成器：为每个权重变体生成修改后的 prompt 和 workflow 深拷贝。
-    如果未找到匹配的 Lora 或相对权重无法解析当前值，迭代器为空，外部可据此判断无修改。
+    如果未找到匹配的 Lora 或相对权重无法解析当前值，迭代器为空。
     """
     if is_relative(weight_expr):
         current = get_current_lora_weight(prompt, workflow, lora_name_query)
@@ -1823,10 +1843,10 @@ def modify_lora_weights(
         except Exception:
             return
 
+    applier = _make_lora_applier(prompt, workflow, lora_name_query)
+
     for w in weights:
-        prompt_copy = json.loads(json.dumps(prompt))
-        workflow_copy = json.loads(json.dumps(workflow))
-        _apply_lora_weight(prompt_copy, workflow_copy, lora_name_query, w)
+        prompt_copy, workflow_copy = applier(w)
         yield prompt_copy, workflow_copy
 
 
@@ -2105,97 +2125,50 @@ def get_current_prompt_weight(
     return None
 
 
-def _apply_cfg_weights(
+def _make_cfg_applier(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
-    weight_expr: str,
-    version_idx: int,
+    node_weights_map: Dict[str, List[float]],
     node_ids: Optional[List[str]] = None,
-) -> None:
-    """
-    修改 prompt 和 workflow 中 KSampler 的 CFG 权重（原地修改，单个版本）。
-    如果未找到任何匹配的 KSampler 节点或其 CFG 端口，直接抛出 ValueError。
-    """
-    modified_primitive_nodes: Dict[str, float] = {}
+):
+    """分析工作流，返回 applier(version_idx) -> (prompt, workflow)，原地修改后直接返回。"""
 
-    ksampler_nodes: List[Tuple[str, Dict[str, Any]]] = []
+    cfg_sources: List[Tuple[str, str, List[float]]] = []  # (src_nid, src_key, weights)
+    wf_primitive_map: Dict[str, List[float]] = {}  # src_nid -> weights
+    wf_ksampler_cfg: List[Tuple[str, int, List[float]]] = (
+        []
+    )  # (node_id, widget_index, weights)
+
+    # 分析 prompt 侧
     for nid, node in prompt.items():
         if node_ids is not None and nid not in node_ids:
             continue
         node_dict = cast(Dict[str, Any], node)
         class_type = node_dict.get("class_type", "")
-        if "KSampler" in class_type:
-            ksampler_nodes.append((nid, node_dict))
-
-    if not ksampler_nodes:
-        raise ValueError(
-            f"No matching KSampler nodes found to modify (node_ids: {node_ids})"
-        )
-
-    has_cfg_input = False
-    for nid, node_dict in ksampler_nodes:
-        inputs = node_dict.get("inputs", {})
-        if "cfg" in inputs:
-            has_cfg_input = True
-            src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-            if src_nid not in prompt:
-                raise ValueError(
-                    f"Source node {src_nid} for KSampler CFG is missing in prompt API structure"
-                )
-            current_val = prompt[src_nid]["inputs"].get(src_key)
-            if not isinstance(current_val, (int, float)):
-                raise ValueError(
-                    f"CFG value of source node {src_nid} is not a valid number: {current_val}"
-                )
-
-            # 现场将当前节点的数值作为 current 传入解析器计算
-            node_weights = parse_weights(weight_expr, float(current_val))
-            if version_idx >= len(node_weights):
-                raise ValueError(
-                    f"Version index {version_idx} out of range for node weights (length: {len(node_weights)})"
-                )
-            node_target_cfg = node_weights[version_idx]
-
-            if current_val != node_target_cfg:
-                prompt[src_nid]["inputs"][src_key] = node_target_cfg
-                _LOGGER.info(
-                    f"Updated KSampler node {nid} CFG (terminal node {src_nid} key '{src_key}') to {node_target_cfg}"
-                )
+        if "KSampler" in class_type and nid in node_weights_map:
+            inputs = node_dict.get("inputs", {})
+            if "cfg" in inputs:
+                src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
+                cfg_sources.append((src_nid, src_key, node_weights_map[nid]))
                 src_node = prompt.get(src_nid, {})
-                src_class = src_node.get("class_type", "")
-                if src_class in KNOWN_PRIMITIVE_TYPES:
-                    modified_primitive_nodes[src_nid] = node_target_cfg
+                if src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES:
+                    wf_primitive_map[src_nid] = node_weights_map[nid]
 
-    if not has_cfg_input:
-        raise ValueError("None of the matching KSampler nodes have a 'cfg' input")
-
-    # 同步修改 workflow (UI 结构)
-    # 1. 修改连线的 PrimitiveFloat 节点
-    for node in workflow.get("nodes", []):
-        nid_str = str(node.get("id"))
-        if nid_str in modified_primitive_nodes:
-            new_val = modified_primitive_nodes[nid_str]
-            widgets_values = node.get("widgets_values")
-            if isinstance(widgets_values, list) and widgets_values:
-                widgets_values[0] = new_val
-                _LOGGER.info(
-                    f"Updated workflow Primitive node {nid_str} widget value to {new_val}"
-                )
-
-    # 2. 修改原生设置的 KSampler / KSamplerAdvanced 节点
-    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str]]] = []
+    # 分析 workflow 侧
+    candidate_nodes: List[Tuple[Dict[str, Any], str]] = []
     for node in workflow.get("nodes", []):
         if not is_node_disabled(node):
-            candidate_nodes.append((node, str(node.get("id")), False, None))
+            candidate_nodes.append((node, str(node.get("id"))))
     subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
     for subgraph in subgraphs:
-        subgraph_id = subgraph.get("id")
         for node in subgraph.get("nodes", []):
             if not is_node_disabled(node):
-                candidate_nodes.append((node, str(node.get("id")), True, subgraph_id))
+                candidate_nodes.append((node, str(node.get("id"))))
 
-    for node, node_id_str, _, subgraph_id in candidate_nodes:
+    for node, node_id_str in candidate_nodes:
         if node_ids is not None and node_id_str not in node_ids:
+            continue
+        if node_id_str not in node_weights_map:
             continue
         node_type = node.get("type", "")
         if "KSampler" in node_type:
@@ -2203,27 +2176,44 @@ def _apply_cfg_weights(
             if not isinstance(widgets_values, list):
                 continue
             wv = cast(List[Any], widgets_values)
+            weights = node_weights_map[node_id_str]
             if node_type == "KSampler" and len(wv) >= 4:
                 if isinstance(wv[3], (int, float)):
-                    # 在 workflow 节点本身原本的值上重新解析表达式并取对应索引值修改
-                    node_weights = parse_weights(weight_expr, float(wv[3]))
-                    if version_idx < len(node_weights):
-                        node_target_cfg = node_weights[version_idx]
-                        if wv[3] != node_target_cfg:
-                            wv[3] = node_target_cfg
-                            _LOGGER.info(
-                                f"Updated workflow KSampler {node_id_str} CFG to {node_target_cfg}"
-                            )
+                    wf_ksampler_cfg.append((node_id_str, 3, weights))
             elif node_type == "KSamplerAdvanced" and len(wv) >= 5:
                 if isinstance(wv[4], (int, float)):
-                    node_weights = parse_weights(weight_expr, float(wv[4]))
-                    if version_idx < len(node_weights):
-                        node_target_cfg = node_weights[version_idx]
-                        if wv[4] != node_target_cfg:
-                            wv[4] = node_target_cfg
-                            _LOGGER.info(
-                                f"Updated workflow KSamplerAdvanced {node_id_str} CFG to {node_target_cfg}"
-                            )
+                    wf_ksampler_cfg.append((node_id_str, 4, weights))
+
+    # 构建 workflow 节点索引（只建一次，节点对象引用不变）
+    wf_nodes = {str(n.get("id")): n for n in workflow.get("nodes", [])}
+
+    def apply(version_idx: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        # 修改 prompt 中的 CFG 值（原地修改，消费者会自行深拷贝）
+        for src_nid, src_key, weights in cfg_sources:
+            if version_idx < len(weights) and src_nid in prompt:
+                prompt[src_nid]["inputs"][src_key] = weights[version_idx]
+
+        # 修改 workflow 中的 Primitive 节点
+        for src_nid, weights in wf_primitive_map.items():
+            node = wf_nodes.get(src_nid)
+            if node and version_idx < len(weights):
+                wv = node.get("widgets_values")
+                if isinstance(wv, list) and wv:
+                    wv[0] = weights[version_idx]
+
+        # 修改 workflow 中的 KSampler widget
+        for nid_str, widget_idx, weights in wf_ksampler_cfg:
+            node = wf_nodes.get(nid_str)
+            if node and version_idx < len(weights):
+                wv = node.get("widgets_values")
+                if isinstance(wv, list):
+                    wv_list = cast(List[Any], wv)
+                    if widget_idx < len(wv_list):
+                        wv_list[widget_idx] = weights[version_idx]
+
+        return prompt, workflow
+
+    return apply
 
 
 def modify_cfg_weights(
@@ -2256,10 +2246,12 @@ def modify_cfg_weights(
             f"No matching KSampler nodes found with valid CFG (node_ids: {node_ids})"
         )
 
-    # 2. 检查各节点版本数一致性
+    # 2. 预计算每个节点的权重列表并检查版本数一致性
+    node_weights_map: Dict[str, List[float]] = {}
     version_lengths: Dict[str, int] = {}
     for nid, cfg_val in ksampler_cfgs.items():
         node_weights = parse_weights(weight_expr, cfg_val)
+        node_weights_map[nid] = node_weights
         version_lengths[nid] = len(node_weights)
 
     unique_lengths = set(version_lengths.values())
@@ -2272,16 +2264,11 @@ def modify_cfg_weights(
             f"under expression '{weight_expr}'. Please filter targets using --node to resolve ambiguity."
         )
 
-    first_cfg_val = list(ksampler_cfgs.values())[0]
-    weights = parse_weights(weight_expr, first_cfg_val)
+    applier = _make_cfg_applier(prompt, workflow, node_weights_map, node_ids)
 
-    for version_idx in range(len(weights)):
-        prompt_copy = json.loads(json.dumps(prompt))
-        workflow_copy = json.loads(json.dumps(workflow))
-        _apply_cfg_weights(
-            prompt_copy, workflow_copy, weight_expr, version_idx, node_ids
-        )
-        yield prompt_copy, workflow_copy
+    first_weights = list(node_weights_map.values())[0]
+    for version_idx in range(len(first_weights)):
+        yield applier(version_idx)
 
 
 if __name__ == "__main__":
