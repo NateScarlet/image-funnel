@@ -461,21 +461,22 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.U
 // EmptyTrash 清空早于指定存留期的暂存记录。先放回原位，然后系统级回收站删除，若冲突则报错
 func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error) {
 	trashRoot := filepath.Join(s.rootDir, trashDirName)
-	entries, err := os.ReadDir(trashRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, err
-	}
 
-	var expiredDirs []os.DirEntry
-	for _, entry := range entries {
+	// 使用 dirEntries 进行流式分批遍历目录项，避免一次性读入全部条目到内存中
+	for entry, scanErr := range dirEntries(ctx, trashRoot) {
+		if scanErr != nil {
+			return clearedCount, scanErr
+		}
 		if !entry.IsDir() {
 			continue
 		}
-		metaBytes, err := os.ReadFile(filepath.Join(trashRoot, entry.Name(), "meta.json"))
+
+		historyId := entry.Name()
+		historyDir := filepath.Join(trashRoot, historyId)
+
+		metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
 		if err != nil {
+			// 忽略可能已经被删除或元数据损坏的目录项
 			continue
 		}
 		var meta trashMeta
@@ -483,20 +484,13 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 			continue
 		}
 
+		// 如果存留时间超过设定时长，立即流式删除，不进行在内存中的全量收集
 		if time.Since(meta.TrashedAt) >= minAge {
-			expiredDirs = append(expiredDirs, entry)
+			if err := trashOrDelete([]string{historyDir}, s.useSystemRecycleBin); err != nil {
+				return clearedCount, fmt.Errorf("failed to delete history directory: %w", err)
+			}
+			clearedCount++
 		}
-	}
-
-	for _, entry := range expiredDirs {
-		historyId := entry.Name()
-		historyDir := filepath.Join(trashRoot, historyId)
-
-		if err := trashOrDelete([]string{historyDir}, s.useSystemRecycleBin); err != nil {
-			return clearedCount, fmt.Errorf("failed to delete history directory: %w", err)
-		}
-
-		clearedCount++
 	}
 
 	return clearedCount, nil
@@ -515,28 +509,15 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 			return
 		}
 
-		// 收集所有有效的 trash 历史目录（以 "trash_" 开头）
-		var validDirs []os.DirEntry
-		for _, entry := range entries {
-			if entry.IsDir() && strings.HasPrefix(entry.Name(), "trash_") {
-				validDirs = append(validDirs, entry)
+		// 逐个反向处理并流式返回。由于 os.ReadDir 已经对 entries 按名称进行了升序排序，
+		// 因而在此处直接从后往前进行反向遍历即是降序（最新的记录在最前面），
+		// 由此彻底省去了用于过滤的辅助 validDirs 数组和额外的 slices.SortFunc 排序步骤。
+		for i := len(entries) - 1; i >= 0; i-- {
+			entry := entries[i]
+			if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "trash_") {
+				continue
 			}
-		}
 
-		// 按目录名降序排序（由于目录名包含时间戳，这样最新的记录在最前面）
-		slices.SortFunc(validDirs, func(a, b os.DirEntry) int {
-			// 字符串比较，字典序降序
-			if a.Name() > b.Name() {
-				return -1
-			}
-			if a.Name() < b.Name() {
-				return 1
-			}
-			return 0
-		})
-
-		// 逐个处理并流式返回
-		for _, entry := range validDirs {
 			metaBytes, err := os.ReadFile(filepath.Join(trashRoot, entry.Name(), "meta.json"))
 			if err != nil {
 				continue
