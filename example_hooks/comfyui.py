@@ -25,7 +25,7 @@ import uuid
 import datetime
 import re
 import urllib.request
-from typing import Dict, List, Tuple, Any, Optional, Set, cast
+from typing import Dict, List, Tuple, Any, Optional, Set, Generator, cast
 import logging
 import argparse
 
@@ -1183,176 +1183,60 @@ def main() -> None:
                     update_image_label(img_id, label_to_set)
 
         elif args.command == "adjust":
-            # 检测是否为相对权重表达式（含 x 或 +- 前缀）
-            is_relative_expr = is_relative(args.weight)
-
             if args.adjust_type == "cfg":
-                ksampler_cfgs: Dict[str, float] = {}
-                for nid, node in prompt.items():
-                    if args.node is not None and nid not in args.node:
-                        continue
-                    node_dict = cast(Dict[str, Any], node)
-                    class_type = node_dict.get("class_type", "")
-                    if "KSampler" in class_type:
-                        inputs = node_dict.get("inputs", {})
-                        if "cfg" in inputs:
-                            src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-                            val = prompt[src_nid]["inputs"].get(src_key)
-                            if isinstance(val, (int, float)):
-                                ksampler_cfgs[nid] = float(val)
+                generator = modify_cfg_weights(
+                    prompt, workflow, args.weight, getattr(args, "node", None)
+                )
+            elif args.adjust_type in ("lora", "l"):
+                generator = modify_lora_weights(
+                    prompt, workflow, args.name, args.weight
+                )
+            elif args.adjust_type in ("prompt", "p"):
+                is_neg = args.neg
+                raw_targets = []
+                if args.node:
+                    for nid in args.node:
+                        raw_targets.append(("node", nid))
+                if args.region:
+                    for rname in args.region:
+                        raw_targets.append(("region", rname))
+                if not raw_targets:
+                    default_region = "negative" if is_neg else "positive"
+                    raw_targets.append(("region", default_region))
 
-                if not ksampler_cfgs:
-                    raise ValueError(
-                        f"No matching KSampler nodes found with valid CFG (node_ids: {args.node})"
+                target_nodes: List[Tuple[str, str, str, bool]] = []
+                for target_type, target_value in raw_targets:
+                    target_nodes.extend(
+                        resolve_target_to_nodes(
+                            prompt, workflow, target_type, target_value, is_neg
+                        )
                     )
 
-                version_lengths: Dict[str, int] = {}
-                for nid, cfg_val in ksampler_cfgs.items():
-                    try:
-                        node_weights = parse_weights(args.weight, cfg_val)
-                        version_lengths[nid] = len(node_weights)
-                    except Exception as e:
-                        raise ValueError(
-                            f"Failed to parse weights expression '{args.weight}' for KSampler node {nid}: {e}"
-                        )
-
-                unique_lengths = set(version_lengths.values())
-                if len(unique_lengths) > 1:
-                    details = ", ".join(
-                        f"node {nid}: {l} versions"
-                        for nid, l in version_lengths.items()
-                    )
-                    raise ValueError(
-                        f"Inconsistent weights version counts generated for KSampler nodes ({details}) "
-                        f"under expression '{args.weight}'. Please filter targets using --node to resolve ambiguity."
-                    )
-
-                first_cfg_val = list(ksampler_cfgs.values())[0]
-                weights = parse_weights(args.weight, first_cfg_val)
-            elif is_relative_expr:
-                if args.adjust_type == "lora":
-                    current = get_current_lora_weight(prompt, workflow, args.name)
-                    if current is None:
-                        _LOGGER.error(
-                            f"Cannot resolve relative weight: no matching Lora '{args.name}' in image {path}"
-                        )
-                        has_errors = True
-                        continue
-                else:  # prompt
-                    is_neg = args.neg
-                    raw_targets = []
-                    if args.node:
-                        for nid in args.node:
-                            raw_targets.append(("node", nid))
-                    if args.region:
-                        for rname in args.region:
-                            raw_targets.append(("region", rname))
-                    if not raw_targets:
-                        default_region = "negative" if is_neg else "positive"
-                        raw_targets.append(("region", default_region))
-
-                    target_nodes_for_current: List[Tuple[str, str, str, bool]] = []
-                    for target_type, target_value in raw_targets:
-                        target_nodes_for_current.extend(
-                            resolve_target_to_nodes(
-                                prompt,
-                                workflow,
-                                target_type,
-                                target_value,
-                                is_neg,
-                            )
-                        )
-
-                    current = get_current_prompt_weight(
-                        prompt, workflow, target_nodes_for_current, args.text
-                    )
-                    if current is None:
-                        _LOGGER.error(
-                            f"Cannot resolve relative weight: prompt '{args.text}' not found in image {path}"
-                        )
-                        has_errors = True
-                        continue
-
-                try:
-                    weights = parse_weights(args.weight, current)
-                except Exception as e:
-                    _LOGGER.error(f"Failed to parse relative weights: {e}")
-                    has_errors = True
-                    continue
+                generator = modify_prompt_weights(
+                    prompt,
+                    workflow,
+                    target_nodes,
+                    args.text,
+                    args.weight,
+                    args.skip_add,
+                )
             else:
-                try:
-                    weights = parse_weights(args.weight)
-                except Exception as e:
-                    _LOGGER.error(f"Failed to parse weights: {e}")
-                    has_errors = True
-                    continue
+                raise ValueError(f"unexpected adjust type '{args.adjust_type}'")
 
-            total_runs = len(weights) * jobs
-            enable_seed_update = args.update_seed or (total_runs > 1)
+            enable_seed_update = args.update_seed or (jobs > 1)
             any_image_success = False
+            variant_count = 0
 
-            for idx, w in enumerate(weights):
-                prompt_copy = json.loads(json.dumps(prompt))
-                workflow_copy = json.loads(json.dumps(workflow))
-                is_modified = False
-
-                if args.adjust_type in ("lora", "l") or args.adjust_type == "lora":
-                    is_modified = modify_lora_weights(
-                        prompt_copy, workflow_copy, args.name, w
-                    )
-                elif args.adjust_type == "cfg":
-                    is_modified = modify_cfg_weights(
-                        prompt_copy,
-                        workflow_copy,
-                        args.weight,
-                        idx,
-                        getattr(args, "node", None),
-                    )
-                elif args.adjust_type in ("prompt", "p"):
-                    is_neg = args.neg
-                    raw_targets = []
-                    if args.node:
-                        for nid in args.node:
-                            raw_targets.append(("node", nid))
-                    if args.region:
-                        for rname in args.region:
-                            raw_targets.append(("region", rname))
-                    if not raw_targets:
-                        default_region = "negative" if is_neg else "positive"
-                        raw_targets.append(("region", default_region))
-
-                    target_nodes: List[Tuple[str, str, str, bool]] = []
-                    for target_type, target_value in raw_targets:
-                        target_nodes.extend(
-                            resolve_target_to_nodes(
-                                prompt_copy,
-                                workflow_copy,
-                                target_type,
-                                target_value,
-                                is_neg,
-                            )
-                        )
-
-                    is_modified = modify_prompt_weights(
-                        prompt_copy,
-                        workflow_copy,
-                        target_nodes,
-                        args.text,
-                        w,
-                        args.skip_add,
-                    )
-                else:
-                    raise ValueError(f"unexpected adjust type '{args.adjust_type}'")
-
-                if not is_modified and not args.no_skip:
-                    _LOGGER.info(
-                        f"No modification made for image {path} with weight {w}. Skipping submission (use --no-skip to force)."
-                    )
-                    continue
+            for prompt_copy, workflow_copy in generator:
+                variant_count += 1
+                if variant_count > 1:
+                    enable_seed_update = True
 
                 for q_idx in range(jobs):
-                    if jobs > 1 or len(weights) > 1:
-                        _LOGGER.info(f"  -> Queueing weight {w} run {q_idx+1}/{jobs}")
+                    if jobs > 1 or variant_count > 1:
+                        _LOGGER.info(
+                            f"  -> Queueing variant {variant_count} run {q_idx + 1}/{jobs}"
+                        )
                     job_prompt = json.loads(json.dumps(prompt_copy))
                     job_workflow = json.loads(json.dumps(workflow_copy))
 
@@ -1369,6 +1253,34 @@ def main() -> None:
                         any_image_success = True
                     else:
                         has_errors = True
+
+            if variant_count == 0 and args.no_skip:
+                _LOGGER.info(
+                    f"No variants generated for image {path}, sending original workflow (--no-skip)."
+                )
+                for q_idx in range(jobs):
+                    if jobs > 1:
+                        _LOGGER.info(f"  -> Queueing original run {q_idx + 1}/{jobs}")
+                    job_prompt = json.loads(json.dumps(prompt))
+                    job_workflow = json.loads(json.dumps(workflow))
+
+                    if enable_seed_update:
+                        if update_seeds(job_prompt, job_workflow) == 0:
+                            _LOGGER.error(
+                                f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
+                            )
+                            has_errors = True
+                            break
+                    update_output_filenames(job_prompt, job_workflow)
+
+                    if send_to_comfyui(comfyui_url, job_prompt, job_workflow):
+                        any_image_success = True
+                    else:
+                        has_errors = True
+            elif variant_count == 0:
+                _LOGGER.info(
+                    f"No variants generated for image {path}, skipping submission."
+                )
 
             if any_image_success:
                 success_count += 1
@@ -1776,17 +1688,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def modify_lora_weights(
+def _apply_lora_weight(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
     lora_name_query: str,
     target_weight: float,
-) -> bool:
+) -> None:
     """
-    修改 prompt (API 结构) 和 workflow (UI 结构) 中已存在的 Lora 权重。
+    修改 prompt (API 结构) 和 workflow (UI 结构) 中已存在的 Lora 权重（原地修改）。
     支持原生 LoraLoader 和 Power Lora Loader (rgthree)。
     """
-    is_modified = False
     query_lower = lora_name_query.lower()
 
     # 记录在 prompt 中被修改了参数的 Primitive 节点及其新数值，用于在 workflow 中同步
@@ -1808,7 +1719,6 @@ def modify_lora_weights(
                         if current_val != target_weight:
                             prompt[src_nid]["inputs"][src_key] = target_weight
                             modified_primitive_nodes[src_nid] = target_weight
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated LoraLoader node {nid} ({lora_name}) input '{ik}' (terminal node {src_nid} key '{src_key}') to {target_weight}"
                             )
@@ -1822,7 +1732,6 @@ def modify_lora_weights(
                         current_strength = v_dict.get("strength")
                         if current_strength != target_weight:
                             v_dict["strength"] = target_weight
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated Power Lora Loader node {nid} ({lora_path}) key '{k}' strength to {target_weight}"
                             )
@@ -1868,13 +1777,11 @@ def modify_lora_weights(
                     ):
                         if widgets_values_list[1] != target_weight:
                             widgets_values_list[1] = target_weight
-                            is_modified = True
                     if len(widgets_values_list) > 2 and isinstance(
                         widgets_values_list[2], (int, float)
                     ):
                         if widgets_values_list[2] != target_weight:
                             widgets_values_list[2] = target_weight
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated workflow LoraLoader {node_id_str} weight to {target_weight}"
                             )
@@ -1887,12 +1794,40 @@ def modify_lora_weights(
                     if isinstance(lora_path, str) and query_lower in lora_path.lower():
                         if val_dict.get("strength") != target_weight:
                             val_dict["strength"] = target_weight
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated workflow Power Lora Loader {node_id_str} widget Lora strength to {target_weight}"
                             )
 
-    return is_modified
+
+def modify_lora_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    lora_name_query: str,
+    weight_expr: str,
+) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
+    """
+    生成器：为每个权重变体生成修改后的 prompt 和 workflow 深拷贝。
+    如果未找到匹配的 Lora 或相对权重无法解析当前值，迭代器为空，外部可据此判断无修改。
+    """
+    if is_relative(weight_expr):
+        current = get_current_lora_weight(prompt, workflow, lora_name_query)
+        if current is None:
+            return
+        try:
+            weights = parse_weights(weight_expr, current)
+        except Exception:
+            return
+    else:
+        try:
+            weights = parse_weights(weight_expr)
+        except Exception:
+            return
+
+    for w in weights:
+        prompt_copy = json.loads(json.dumps(prompt))
+        workflow_copy = json.loads(json.dumps(workflow))
+        _apply_lora_weight(prompt_copy, workflow_copy, lora_name_query, w)
+        yield prompt_copy, workflow_copy
 
 
 def adjust_prompt_weight(
@@ -1928,19 +1863,18 @@ def adjust_prompt_weight(
     return text, False
 
 
-def modify_prompt_weights(
+def _apply_prompt_weight(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
     target_nodes: List[Tuple[str, str, str, bool]],
     target_prompt: str,
     target_weight: float,
     skip_add: bool,
-) -> bool:
+) -> None:
     """
-    在 CLIPTextEncode 节点中调整提示词的权重。
+    在 CLIPTextEncode 节点中调整提示词的权重（原地修改）。
     如果不存在，且未指定 skip_add 选项，则将其添加到第一个有效节点上。
     """
-    is_modified = False
     any_existing_modified = False
 
     # 1. 首先尝试在所有候选目标节点中修改已存在的提示词
@@ -1962,7 +1896,6 @@ def modify_prompt_weights(
             )
             update_workflow_node_text(workflow, node_id, new_workflow_text)
             any_existing_modified = True
-            is_modified = True
             _LOGGER.info(
                 f"Updated existing prompt '{target_prompt}' weight to {target_weight} in node {node_id}"
             )
@@ -2023,12 +1956,53 @@ def modify_prompt_weights(
                     new_prompt_text
                 )
                 update_workflow_node_text(workflow, node_id, new_workflow_text)
-                is_modified = True
                 _LOGGER.info(
                     f"Added prompt '{target_prompt}' with weight {target_weight} to node {node_id}"
                 )
 
-    return is_modified
+
+def modify_prompt_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    target_nodes: List[Tuple[str, str, str, bool]],
+    target_prompt: str,
+    weight_expr: str,
+    skip_add: bool,
+) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
+    """
+    生成器：为每个权重变体生成修改后的 prompt 和 workflow 深拷贝。
+    如果未找到匹配的提示词且 skip_add 为 True，或相对权重无法解析当前值，迭代器为空。
+    """
+    if is_relative(weight_expr):
+        current = get_current_prompt_weight(
+            prompt, workflow, target_nodes, target_prompt
+        )
+        if current is None:
+            return
+        try:
+            weights = parse_weights(weight_expr, current)
+        except Exception:
+            return
+    else:
+        try:
+            weights = parse_weights(weight_expr)
+        except Exception:
+            return
+        # 绝对权重且 skip_add 时，若提示词不存在则跳过所有变体
+        if (
+            skip_add
+            and get_current_prompt_weight(prompt, workflow, target_nodes, target_prompt)
+            is None
+        ):
+            return
+
+    for w in weights:
+        prompt_copy = json.loads(json.dumps(prompt))
+        workflow_copy = json.loads(json.dumps(workflow))
+        _apply_prompt_weight(
+            prompt_copy, workflow_copy, target_nodes, target_prompt, w, skip_add
+        )
+        yield prompt_copy, workflow_copy
 
 
 def get_current_lora_weight(
@@ -2131,19 +2105,17 @@ def get_current_prompt_weight(
     return None
 
 
-def modify_cfg_weights(
+def _apply_cfg_weights(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
     weight_expr: str,
     version_idx: int,
     node_ids: Optional[List[str]] = None,
-) -> bool:
+) -> None:
     """
-    修改 prompt (API 结构) 和 workflow (UI 结构) 中 KSampler 的 CFG 权重。
-    利用每一个 KSampler 节点的当前 CFG 值代入表达式独立计算修改目标值。
+    修改 prompt 和 workflow 中 KSampler 的 CFG 权重（原地修改，单个版本）。
     如果未找到任何匹配的 KSampler 节点或其 CFG 端口，直接抛出 ValueError。
     """
-    is_modified = False
     modified_primitive_nodes: Dict[str, float] = {}
 
     ksampler_nodes: List[Tuple[str, Dict[str, Any]]] = []
@@ -2186,7 +2158,6 @@ def modify_cfg_weights(
 
             if current_val != node_target_cfg:
                 prompt[src_nid]["inputs"][src_key] = node_target_cfg
-                is_modified = True
                 _LOGGER.info(
                     f"Updated KSampler node {nid} CFG (terminal node {src_nid} key '{src_key}') to {node_target_cfg}"
                 )
@@ -2207,7 +2178,6 @@ def modify_cfg_weights(
             widgets_values = node.get("widgets_values")
             if isinstance(widgets_values, list) and widgets_values:
                 widgets_values[0] = new_val
-                is_modified = True
                 _LOGGER.info(
                     f"Updated workflow Primitive node {nid_str} widget value to {new_val}"
                 )
@@ -2241,7 +2211,6 @@ def modify_cfg_weights(
                         node_target_cfg = node_weights[version_idx]
                         if wv[3] != node_target_cfg:
                             wv[3] = node_target_cfg
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated workflow KSampler {node_id_str} CFG to {node_target_cfg}"
                             )
@@ -2252,12 +2221,67 @@ def modify_cfg_weights(
                         node_target_cfg = node_weights[version_idx]
                         if wv[4] != node_target_cfg:
                             wv[4] = node_target_cfg
-                            is_modified = True
                             _LOGGER.info(
                                 f"Updated workflow KSamplerAdvanced {node_id_str} CFG to {node_target_cfg}"
                             )
 
-    return is_modified
+
+def modify_cfg_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    weight_expr: str,
+    node_ids: Optional[List[str]] = None,
+) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
+    """
+    生成器：为每个 CFG 变体生成修改后的 prompt 和 workflow 深拷贝。
+    如果未找到匹配的 KSampler 节点，抛出 ValueError。
+    """
+    # 1. 找到所有 KSampler 节点的当前 CFG 值
+    ksampler_cfgs: Dict[str, float] = {}
+    for nid, node in prompt.items():
+        if node_ids is not None and nid not in node_ids:
+            continue
+        node_dict = cast(Dict[str, Any], node)
+        class_type = node_dict.get("class_type", "")
+        if "KSampler" in class_type:
+            inputs = node_dict.get("inputs", {})
+            if "cfg" in inputs:
+                src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
+                val = prompt[src_nid]["inputs"].get(src_key)
+                if isinstance(val, (int, float)):
+                    ksampler_cfgs[nid] = float(val)
+
+    if not ksampler_cfgs:
+        raise ValueError(
+            f"No matching KSampler nodes found with valid CFG (node_ids: {node_ids})"
+        )
+
+    # 2. 检查各节点版本数一致性
+    version_lengths: Dict[str, int] = {}
+    for nid, cfg_val in ksampler_cfgs.items():
+        node_weights = parse_weights(weight_expr, cfg_val)
+        version_lengths[nid] = len(node_weights)
+
+    unique_lengths = set(version_lengths.values())
+    if len(unique_lengths) > 1:
+        details = ", ".join(
+            f"node {nid}: {l} versions" for nid, l in version_lengths.items()
+        )
+        raise ValueError(
+            f"Inconsistent weights version counts generated for KSampler nodes ({details}) "
+            f"under expression '{weight_expr}'. Please filter targets using --node to resolve ambiguity."
+        )
+
+    first_cfg_val = list(ksampler_cfgs.values())[0]
+    weights = parse_weights(weight_expr, first_cfg_val)
+
+    for version_idx in range(len(weights)):
+        prompt_copy = json.loads(json.dumps(prompt))
+        workflow_copy = json.loads(json.dumps(workflow))
+        _apply_cfg_weights(
+            prompt_copy, workflow_copy, weight_expr, version_idx, node_ids
+        )
+        yield prompt_copy, workflow_copy
 
 
 if __name__ == "__main__":

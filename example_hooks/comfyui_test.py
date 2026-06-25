@@ -476,8 +476,11 @@ class TestComfyUIHook(unittest.TestCase):
                 assert target_keyword is not None
 
                 # 修改 Lora 权重
-                modified = modify_lora_weights(prompt, workflow, target_keyword, 0.99)
-                self.assertTrue(modified)
+                variants = list(
+                    modify_lora_weights(prompt, workflow, target_keyword, "0.99")
+                )
+                self.assertTrue(len(variants) > 0)
+                prompt, workflow = variants[0]
 
                 # 验证修改结果
                 found_prompt_updated = False
@@ -542,8 +545,9 @@ class TestComfyUIHook(unittest.TestCase):
             ]
         }
 
-        modified = modify_lora_weights(prompt, workflow, "style_test", -0.75)
-        self.assertTrue(modified)
+        variants = list(modify_lora_weights(prompt, workflow, "style_test", "-0.75"))
+        self.assertTrue(len(variants) > 0)
+        prompt, workflow = variants[0]
 
         # 验证 prompt 侧被连接的 Primitive 节点值是否被修改为 -0.75
         node_prim = cast(Dict[str, Any], prompt["node_prim"])
@@ -590,9 +594,11 @@ class TestComfyUIHook(unittest.TestCase):
                 self.assertIn(target_word, wf_text)
 
                 modified = modify_prompt_weights(
-                    prompt, workflow, target_nodes, target_word, 1.35, skip_add=True
+                    prompt, workflow, target_nodes, target_word, "1.35", skip_add=True
                 )
-                self.assertTrue(modified)
+                variants = list(modified)
+                self.assertTrue(len(variants) > 0)
+                prompt, workflow = variants[0]
 
                 new_wf_text = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text)
@@ -604,36 +610,41 @@ class TestComfyUIHook(unittest.TestCase):
 
                 # 再次修改：应该支持在带权重的括号中继续修改
                 modified2 = modify_prompt_weights(
-                    prompt, workflow, target_nodes, target_word, -0.5, skip_add=True
+                    prompt, workflow, target_nodes, target_word, "-0.5", skip_add=True
                 )
-                self.assertTrue(modified2)
+                variants2 = list(modified2)
+                self.assertTrue(len(variants2) > 0)
+                prompt, workflow = variants2[0]
 
                 new_wf_text2 = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text2)
                 assert new_wf_text2 is not None
                 self.assertIn(f"({target_word}:-0.5)", new_wf_text2)
 
-                # 测试不存在的词，且 skip_add=True -> 应不修改，返回 False
+                # 测试不存在的词，且 skip_add=True -> 应不修改，生成器为空
                 modified_skip = modify_prompt_weights(
                     prompt,
                     workflow,
                     target_nodes,
                     "non_existent_word_abc",
-                    1.5,
+                    "1.5",
                     skip_add=True,
                 )
-                self.assertFalse(modified_skip)
+                variants_skip = list(modified_skip)
+                self.assertEqual(len(variants_skip), 0)
 
-                # 测试不存在的词，且 skip_add=False -> 应修改成功，返回 True 且添加该词
+                # 测试不存在的词，且 skip_add=False -> 应修改成功，生成器非空且添加该词
                 modified_add = modify_prompt_weights(
                     prompt,
                     workflow,
                     target_nodes,
                     "non_existent_word_abc",
-                    1.5,
+                    "1.5",
                     skip_add=False,
                 )
-                self.assertTrue(modified_add)
+                variants_add = list(modified_add)
+                self.assertTrue(len(variants_add) > 0)
+                prompt, workflow = variants_add[0]
 
                 new_wf_text3 = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text3)
