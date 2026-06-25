@@ -351,7 +351,7 @@ class WorkflowPromptPair:
                     elif strategy == "increment":
                         new_seed = (old_seed + 1) % 1125899906842624
                     elif strategy == "decrement":
-                        new_seed = (old_seed - 1) % 1125899906842624
+                        new_seed = old_seed - 1
                         if new_seed < 0:
                             new_seed = 0
                     else:  # randomize
@@ -612,9 +612,10 @@ class WorkflowPromptPair:
                             src_nid, src_key = find_terminal_input(self.prompt, nid, ik)
                             self.prompt[src_nid]["inputs"][src_key] = weight
                             # 同步更新 workflow 中对应 Primitive 节点的 widgets_values
-                            wf_node = self.get_node_by_id(src_nid)
-                            if wf_node and wf_node.widgets_values:
-                                wf_node.widgets_values[0] = weight
+                            if src_nid != nid:
+                                wf_node = self.get_node_by_id(src_nid)
+                                if wf_node and wf_node.widgets_values:
+                                    wf_node.widgets_values[0] = weight
             elif class_type == "Power Lora Loader (rgthree)":
                 inputs = node_dict.get("inputs", {})
                 for k, v in list(inputs.items()):
