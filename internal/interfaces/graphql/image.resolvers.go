@@ -9,7 +9,6 @@ import (
 	"context"
 	"main/internal/application/image"
 	"main/internal/shared"
-	"path/filepath"
 )
 
 // URL is the resolver for the url field.
@@ -31,9 +30,8 @@ func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (strin
 
 // Note is the resolver for the note field.
 func (r *imageResolver) Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error) {
-	// 图片的关联笔记是同名的 .md 文件
-	ext := filepath.Ext(obj.RelPath)
-	noteRelPath := obj.RelPath[:len(obj.RelPath)-len(ext)] + ".md"
+	// 配套文件：以图片文件名加上额外后缀的文件为配套文件
+	noteRelPath := obj.RelPath + ".md"
 	return r.app.NoteByRelPath(ctx, noteRelPath)
 }
 
