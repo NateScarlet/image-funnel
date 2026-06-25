@@ -14,11 +14,9 @@ if current_dir not in sys.path:
 from comfyui import (
     get_workflow_node_text,
     get_target_clip_node,
-    process_double_track,
     strip_comments_for_prompt,
-    modify_lora_weights,
-    modify_prompt_weights,
 )
+from workflow_prompt_pair import WorkflowPromptPair
 
 
 class TestComfyUIHook(unittest.TestCase):
@@ -123,25 +121,10 @@ class TestComfyUIHook(unittest.TestCase):
                 )
                 assert target_node_id is not None
 
-                node = prompt[target_node_id]
-
                 start_marker = "//#region hook-positive"
                 end_marker = "//#endregion hook-positive"
 
-                # 辅助函数用于模拟在 workflow 结构中写回节点值
-                def update_workflow_node_text_mock(
-                    wf: Dict[str, Any], nid_str: str, new_text: str
-                ) -> None:
-                    nodes: Any = wf.get("nodes")
-                    if isinstance(nodes, list):
-                        for n in cast(List[Any], nodes):
-                            n_dict: Dict[str, Any] = cast(Dict[str, Any], n)
-                            if str(n_dict.get("id")) == nid_str:
-                                widgets_values: Any = n_dict.get("widgets_values")
-                                if isinstance(widgets_values, list) and widgets_values:
-                                    widgets_values[0] = new_text
-                                    return
-                    self.fail(f"Node {nid_str} not found in workflow")
+                pair = WorkflowPromptPair(workflow, prompt)
 
                 # --- 第一次 add "beautiful scenery" ---
                 prompt_str_arg = "beautiful scenery"
@@ -157,37 +140,22 @@ class TestComfyUIHook(unittest.TestCase):
                     "Start marker should not be in raw sample workflow text yet",
                 )
 
-                prompt_text = node.get("text", "")
-                if not isinstance(prompt_text, str):
-                    prompt_text = ""
-
-                # 直接调用被测模块的核心函数
-                new_workflow_text, new_prompt_text = process_double_track(
-                    workflow_text,
-                    prompt_text,
-                    "add",
-                    prompt_str_arg,
-                    start_marker,
-                    end_marker,
-                    args_raw,
-                    args_no_skip,
-                    False,
-                )
-
-                self.assertIsNotNone(new_workflow_text)
-                self.assertIsNotNone(new_prompt_text)
-                assert new_workflow_text is not None
-                assert new_prompt_text is not None
-
-                # 分别更新双轨道
-                node["inputs"]["text"] = new_prompt_text
-                update_workflow_node_text_mock(
-                    workflow, target_node_id, new_workflow_text
+                self.assertTrue(
+                    pair.process_double_track(
+                        target_node_id,
+                        "add",
+                        prompt_str_arg,
+                        start_marker,
+                        end_marker,
+                        args_raw,
+                        args_no_skip,
+                        False,
+                    )
                 )
 
                 # 验证第一次写入后的结果
-                wf_text_got = get_workflow_node_text(workflow, target_node_id)
-                pr_text_got = prompt[target_node_id]["inputs"]["text"]
+                wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
+                pr_text_got = pair.prompt[target_node_id]["inputs"]["text"]
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
@@ -197,41 +165,23 @@ class TestComfyUIHook(unittest.TestCase):
 
                 # --- 第二次 add "golden sunset" ---
                 prompt_str_arg = "golden sunset"
-                workflow_text = get_workflow_node_text(workflow, target_node_id)
-                self.assertIsNotNone(workflow_text)
-                assert workflow_text is not None
 
-                prompt_text = prompt[target_node_id]["inputs"]["text"]
-                if not isinstance(prompt_text, str):
-                    prompt_text = ""
-
-                # 直接调用被测模块的核心函数
-                new_workflow_text, new_prompt_text = process_double_track(
-                    workflow_text,
-                    prompt_text,
-                    "add",
-                    prompt_str_arg,
-                    start_marker,
-                    end_marker,
-                    args_raw,
-                    args_no_skip,
-                    False,
-                )
-
-                self.assertIsNotNone(new_workflow_text)
-                self.assertIsNotNone(new_prompt_text)
-                assert new_workflow_text is not None
-                assert new_prompt_text is not None
-
-                # 分别更新双轨道
-                node["inputs"]["text"] = new_prompt_text
-                update_workflow_node_text_mock(
-                    workflow, target_node_id, new_workflow_text
+                self.assertTrue(
+                    pair.process_double_track(
+                        target_node_id,
+                        "add",
+                        prompt_str_arg,
+                        start_marker,
+                        end_marker,
+                        args_raw,
+                        args_no_skip,
+                        False,
+                    )
                 )
 
                 # 验证第二次写入后的结果
-                wf_text_got = get_workflow_node_text(workflow, target_node_id)
-                pr_text_got = prompt[target_node_id]["inputs"]["text"]
+                wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
+                pr_text_got = pair.prompt[target_node_id]["inputs"]["text"]
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
@@ -242,40 +192,22 @@ class TestComfyUIHook(unittest.TestCase):
 
                 # --- 第三次 remove "beautiful scenery" ---
                 prompt_str_arg = "beautiful scenery"
-                workflow_text = get_workflow_node_text(workflow, target_node_id)
-                self.assertIsNotNone(workflow_text)
-                assert workflow_text is not None
 
-                prompt_text = prompt[target_node_id]["inputs"]["text"]
-                if not isinstance(prompt_text, str):
-                    prompt_text = ""
-
-                # 直接调用被测模块的核心函数
-                new_workflow_text, new_prompt_text = process_double_track(
-                    workflow_text,
-                    prompt_text,
-                    "remove",
-                    prompt_str_arg,
-                    start_marker,
-                    end_marker,
-                    args_raw,
-                    args_no_skip,
-                    True,
+                self.assertTrue(
+                    pair.process_double_track(
+                        target_node_id,
+                        "remove",
+                        prompt_str_arg,
+                        start_marker,
+                        end_marker,
+                        args_raw,
+                        args_no_skip,
+                        True,
+                    )
                 )
 
-                self.assertIsNotNone(new_workflow_text)
-                self.assertIsNotNone(new_prompt_text)
-                assert new_workflow_text is not None
-                assert new_prompt_text is not None
-
-                # 分别更新双轨道
-                node["inputs"]["text"] = new_prompt_text
-                update_workflow_node_text_mock(
-                    workflow, target_node_id, new_workflow_text
-                )
-
-                wf_text_got = get_workflow_node_text(workflow, target_node_id)
-                pr_text_got = prompt[target_node_id]["inputs"]["text"]
+                wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
+                pr_text_got = pair.prompt[target_node_id]["inputs"]["text"]
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
@@ -286,34 +218,27 @@ class TestComfyUIHook(unittest.TestCase):
 
                 # --- 第四次 remove "golden sunset" (hard=False) ---
                 prompt_str_arg = "golden sunset"
-                workflow_text = get_workflow_node_text(workflow, target_node_id)
-                self.assertIsNotNone(workflow_text)
-                assert workflow_text is not None
 
-                prompt_text = prompt[target_node_id]["inputs"]["text"]
-                if not isinstance(prompt_text, str):
-                    prompt_text = ""
-
-                new_workflow_text, new_prompt_text = process_double_track(
-                    workflow_text,
-                    prompt_text,
-                    "remove",
-                    prompt_str_arg,
-                    start_marker,
-                    end_marker,
-                    args_raw,
-                    args_no_skip,
-                    False,
+                self.assertTrue(
+                    pair.process_double_track(
+                        target_node_id,
+                        "remove",
+                        prompt_str_arg,
+                        start_marker,
+                        end_marker,
+                        args_raw,
+                        args_no_skip,
+                        False,
+                    )
                 )
 
-                self.assertIsNotNone(new_workflow_text)
-                self.assertIsNotNone(new_prompt_text)
-                assert new_workflow_text is not None
-                assert new_prompt_text is not None
+                wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
+                pr_text_got = pair.prompt[target_node_id]["inputs"]["text"]
 
-                # 验证非 hard 模式下，被移除项应该在 workflow 文本中以 // 注释，且在 prompt 中被删除
-                self.assertIn("// golden sunset", new_workflow_text)
-                self.assertNotIn("golden sunset", new_prompt_text)
+                self.assertIsNotNone(wf_text_got)
+                assert wf_text_got is not None
+                self.assertIn("// golden sunset", wf_text_got)
+                self.assertNotIn("golden sunset", pr_text_got)
 
     def test_get_target_clip_node_no_locator(self):
         # 模拟没有 KSampler 连线（即没有定位符）的情况，测试通过关键词匹配查找最佳 CLIPTextEncode
@@ -476,11 +401,10 @@ class TestComfyUIHook(unittest.TestCase):
                 assert target_keyword is not None
 
                 # 修改 Lora 权重
-                variants = list(
-                    modify_lora_weights(prompt, workflow, target_keyword, "0.99")
-                )
+                pair = WorkflowPromptPair(workflow, prompt)
+                variants = list(pair.generate_lora_variants(target_keyword, "0.99"))
                 self.assertTrue(len(variants) > 0)
-                prompt, workflow = variants[0]
+                prompt, workflow = pair.prompt, pair.workflow
 
                 # 验证修改结果
                 found_prompt_updated = False
@@ -545,9 +469,10 @@ class TestComfyUIHook(unittest.TestCase):
             ]
         }
 
-        variants = list(modify_lora_weights(prompt, workflow, "style_test", "-0.75"))
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(pair.generate_lora_variants("style_test", "-0.75"))
         self.assertTrue(len(variants) > 0)
-        prompt, workflow = variants[0]
+        prompt, workflow = pair.prompt, pair.workflow
 
         # 验证 prompt 侧被连接的 Primitive 节点值是否被修改为 -0.75
         node_prim = cast(Dict[str, Any], prompt["node_prim"])
@@ -593,12 +518,13 @@ class TestComfyUIHook(unittest.TestCase):
                 target_word = "score_7" if "score_7" in wf_text else "masterpiece"
                 self.assertIn(target_word, wf_text)
 
-                modified = modify_prompt_weights(
-                    prompt, workflow, target_nodes, target_word, "1.35", skip_add=True
+                pair = WorkflowPromptPair(workflow, prompt)
+                modified = pair.generate_prompt_variants(
+                    target_nodes, target_word, "1.35", skip_add=True
                 )
                 variants = list(modified)
                 self.assertTrue(len(variants) > 0)
-                prompt, workflow = variants[0]
+                prompt, workflow = pair.prompt, pair.workflow
 
                 new_wf_text = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text)
@@ -609,12 +535,13 @@ class TestComfyUIHook(unittest.TestCase):
                 self.assertIn(f"({target_word}:1.35)", new_pr_text)
 
                 # 再次修改：应该支持在带权重的括号中继续修改
-                modified2 = modify_prompt_weights(
-                    prompt, workflow, target_nodes, target_word, "-0.5", skip_add=True
+                pair2 = WorkflowPromptPair(workflow, prompt)
+                modified2 = pair2.generate_prompt_variants(
+                    target_nodes, target_word, "-0.5", skip_add=True
                 )
                 variants2 = list(modified2)
                 self.assertTrue(len(variants2) > 0)
-                prompt, workflow = variants2[0]
+                prompt, workflow = pair2.prompt, pair2.workflow
 
                 new_wf_text2 = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text2)
@@ -622,9 +549,8 @@ class TestComfyUIHook(unittest.TestCase):
                 self.assertIn(f"({target_word}:-0.5)", new_wf_text2)
 
                 # 测试不存在的词，且 skip_add=True -> 应不修改，生成器为空
-                modified_skip = modify_prompt_weights(
-                    prompt,
-                    workflow,
+                pair_skip = WorkflowPromptPair(workflow, prompt)
+                modified_skip = pair_skip.generate_prompt_variants(
                     target_nodes,
                     "non_existent_word_abc",
                     "1.5",
@@ -634,9 +560,8 @@ class TestComfyUIHook(unittest.TestCase):
                 self.assertEqual(len(variants_skip), 0)
 
                 # 测试不存在的词，且 skip_add=False -> 应修改成功，生成器非空且添加该词
-                modified_add = modify_prompt_weights(
-                    prompt,
-                    workflow,
+                pair_add = WorkflowPromptPair(workflow, prompt)
+                modified_add = pair_add.generate_prompt_variants(
                     target_nodes,
                     "non_existent_word_abc",
                     "1.5",
@@ -644,7 +569,7 @@ class TestComfyUIHook(unittest.TestCase):
                 )
                 variants_add = list(modified_add)
                 self.assertTrue(len(variants_add) > 0)
-                prompt, workflow = variants_add[0]
+                prompt, workflow = pair_add.prompt, pair_add.workflow
 
                 new_wf_text3 = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(new_wf_text3)

@@ -20,17 +20,12 @@ if sys.platform.startswith("win"):
             pass
 
 import json
-import random
-import uuid
-import datetime
-import re
-import urllib.request
-from typing import Dict, List, Tuple, Any, Optional, Set, Generator, cast
+from typing import Dict, List, Tuple, Any, Optional, Set, cast
 import logging
 import argparse
 
 from graphql_utils import update_image_label, fetch_images
-from weight_parser import parse_weights, is_relative
+from workflow_prompt_pair import WorkflowPromptPair
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,276 +146,6 @@ def convert_comfy_date_format_to_python(comfy_fmt: str) -> Tuple[str, str]:
     return py_fmt, regex_pattern
 
 
-def update_output_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> None:
-    """
-    扫描 workflow 和 prompt 中的输出节点，如果发现使用了 %date:...% 占位符且在 prompt 中被写死为旧日期，
-    将其更新为当前系统时间的日期静态值。
-    """
-
-    # 汇总所有待处理的节点（包含顶层节点和子图内部节点）
-    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str], str]] = []
-
-    # 1. 收集工作流顶层节点
-    for node in workflow.get("nodes", []):
-        if is_node_disabled(node):
-            continue
-        candidate_nodes.append(
-            (node, str(node.get("id")), False, None, node.get("type"))
-        )
-
-    # 2. 收集各子图定义内部的节点
-    subgraphs: List[Dict[str, Any]] = workflow.get("definitions", {}).get(
-        "subgraphs", []
-    )
-    for subgraph in subgraphs:
-        subgraph_id = subgraph.get("id")
-        for node in subgraph.get("nodes", []):
-            if is_node_disabled(node):
-                continue
-            candidate_nodes.append(
-                (
-                    node,
-                    str(node.get("id")),
-                    True,
-                    subgraph_id,
-                    f"{subgraph.get('name', 'Subgraph')}:{node.get('type')}",
-                )
-            )
-
-    date_patterns: Dict[str, Tuple[str, str, bool, Optional[str]]] = (
-        {}
-    )  # node_id_str -> (py_fmt, regex_pattern, is_subgraph, subgraph_id)
-
-    for (
-        node,
-        node_id_str,
-        is_subgraph,
-        subgraph_id,
-        node_type_for_log,
-    ) in candidate_nodes:
-        widgets_values_raw: Any = node.get("widgets_values")
-        if not isinstance(widgets_values_raw, list):
-            continue
-        widgets_values = cast(List[Any], widgets_values_raw)
-
-        # 寻找包含 "%date:" 的字符串 widget
-        for val in widgets_values:
-            if isinstance(val, str) and "%date:" in val:
-                match = re.search(r"%date:([^%]+)%", val)
-                if match:
-                    comfy_fmt: str = match.group(1)
-                    py_fmt, regex_pattern = convert_comfy_date_format_to_python(
-                        comfy_fmt
-                    )
-                    date_patterns[node_id_str] = (
-                        py_fmt,
-                        regex_pattern,
-                        is_subgraph,
-                        subgraph_id,
-                    )
-                    _LOGGER.info(
-                        f"Workflow node {node_id_str} ({node_type_for_log}) uses date template: {comfy_fmt}"
-                    )
-                    break
-
-    if not date_patterns:
-        return
-
-    now = datetime.datetime.now()
-
-    for node_id_str, (
-        py_fmt,
-        regex_pattern,
-        is_subgraph,
-        subgraph_id,
-    ) in date_patterns.items():
-        # 映射到 API (prompt) 端节点 ID 列表。对于子图节点，需根据其所有顶层实例生成前缀 ID 列表。
-        api_node_ids: List[str] = []
-        if not is_subgraph:
-            api_node_ids = [node_id_str]
-        else:
-            for parent_node in workflow.get("nodes", []):
-                if parent_node.get("type") == subgraph_id:
-                    if is_node_disabled(parent_node):
-                        continue
-                    api_node_ids.append(f"{parent_node.get('id')}:{node_id_str}")
-
-        for api_node_id in api_node_ids:
-            # api_node_id 必须存在于 prompt 结构中，若缺失直接报错以快速失败，避免数据不一致
-            if api_node_id not in prompt:
-                raise ValueError(
-                    f"Workflow output node {api_node_id} is missing in the prompt API structure."
-                )
-
-            inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
-            filename_prefix: Any = inputs.get("filename_prefix")
-
-            if filename_prefix:
-                # 追溯 filename_prefix 端口的值源头
-                src_node_id: str
-                src_key: str
-                src_node_id, src_key = find_terminal_input(
-                    prompt, api_node_id, "filename_prefix"
-                )
-                # 追溯到的源头节点必须存在于 prompt 结构中，若缺失直接报错以快速失败
-                if src_node_id not in prompt:
-                    raise ValueError(
-                        f"Source node {src_node_id} for filename_prefix is missing in the prompt API structure."
-                    )
-
-                src_inputs = prompt[src_node_id].setdefault("inputs", {})
-                prefix_val: Any = src_inputs.get(src_key)
-                if isinstance(prefix_val, str):
-                    new_date_str: str = now.strftime(py_fmt)
-                    if re.search(regex_pattern, prefix_val):
-                        new_prefix: str = re.sub(
-                            regex_pattern, new_date_str, prefix_val
-                        )
-                        src_inputs[src_key] = new_prefix
-                        _LOGGER.info(
-                            f"Prompt node {src_node_id} (key {src_key}) filename_prefix updated: {prefix_val} -> {new_prefix}"
-                        )
-
-
-def update_seeds(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> int:
-    """
-    修改 prompt (API 结构) 和 workflow (UI 结构) 中的随机种子值。
-    支持一个节点存在多个种子，并在 prompt 和 workflow 中同步更新。
-    通过识别 workflow.nodes 中 widgets_values 的数组临接特征（[seed数值, 变化策略]）精准替换种子值。
-    返回成功修改的种子总数。
-    """
-
-    modified_count: int = 0
-
-    # 汇总所有待处理的节点（包含顶层节点和子图内部节点）
-    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str], str]] = []
-
-    # 1. 收集工作流顶层节点
-    for node in workflow.get("nodes", []):
-        if is_node_disabled(node):
-            continue
-        candidate_nodes.append(
-            (node, str(node.get("id")), False, None, node.get("type"))
-        )
-
-    # 2. 收集各子图定义内部的节点
-    subgraphs: List[Dict[str, Any]] = workflow.get("definitions", {}).get(
-        "subgraphs", []
-    )
-    for subgraph in subgraphs:
-        subgraph_id = subgraph.get("id")
-        for node in subgraph.get("nodes", []):
-            if is_node_disabled(node):
-                continue
-            candidate_nodes.append(
-                (
-                    node,
-                    str(node.get("id")),
-                    True,
-                    subgraph_id,
-                    f"{subgraph.get('name', 'Subgraph')}:{node.get('type')}",
-                )
-            )
-
-    # 遍历所有候选节点，定位包含种子的 Widget 并更新
-    for (
-        node,
-        node_id_str,
-        is_subgraph,
-        subgraph_id,
-        node_type_for_log,
-    ) in candidate_nodes:
-        widgets_values_raw: Any = node.get("widgets_values")
-        if not isinstance(widgets_values_raw, list):
-            continue
-        widgets_values = cast(List[Any], widgets_values_raw)
-
-        # 遍历 widgets_values 数组，寻找满足 [整数值, 'fixed'/'increment'/'decrement'/'randomize'] 邻接特征的项
-        for idx in range(len(widgets_values) - 1):
-            val: Any = widgets_values[idx]
-            val_next: Any = widgets_values[idx + 1]
-            if isinstance(val, int) and val_next in [
-                "fixed",
-                "increment",
-                "decrement",
-                "randomize",
-            ]:
-                old_seed: int = val
-                strategy: str = str(val_next)
-
-                # 计算新生成的种子值
-                new_seed: int
-                if strategy == "fixed":
-                    new_seed = old_seed
-                elif strategy == "increment":
-                    new_seed = (old_seed + 1) % 1125899906842624
-                elif strategy == "decrement":
-                    new_seed = (old_seed - 1) % 1125899906842624
-                    if new_seed < 0:
-                        new_seed = 0
-                else:  # randomize
-                    new_seed = random.randint(1, 1125899906842624)
-
-                # A. 尝试更新 workflow 中的数值，使用户用 Web UI 打开 workflow 即可重现生成数值
-                widgets_values[idx] = new_seed
-                modified_count += 1
-                _LOGGER.info(
-                    f"Workflow node {node_id_str} ({node_type_for_log}) seed updated: {old_seed} -> {new_seed} (strategy: {strategy})"
-                )
-
-                # B. 映射到 API (prompt) 端节点 ID 列表。对于子图节点，需根据其所有顶层实例生成前缀 ID 列表。
-                api_node_ids: List[str] = []
-                if not is_subgraph:
-                    api_node_ids = [node_id_str]
-                else:
-                    for parent_node in workflow.get("nodes", []):
-                        if parent_node.get("type") == subgraph_id:
-                            if is_node_disabled(parent_node):
-                                continue
-                            api_node_ids.append(
-                                f"{parent_node.get('id')}:{node_id_str}"
-                            )
-
-                for api_node_id in api_node_ids:
-                    # api_node_id 必须存在于 prompt 结构中，若缺失直接报错以快速失败，避免数据不一致
-                    if api_node_id not in prompt:
-                        raise ValueError(
-                            f"Workflow seed node {api_node_id} is missing in the prompt API structure."
-                        )
-
-                    inputs: Dict[str, Any] = prompt[api_node_id].get("inputs", {})
-                    # 遍历此节点在 prompt 中的所有 inputs，寻找和当前种子关联的端口并追溯修改其源头值
-                    for ik in list(inputs.keys()):
-                        src_node_id: str
-                        src_key: str
-                        src_node_id, src_key = find_terminal_input(
-                            prompt, api_node_id, ik
-                        )
-                        # 追溯到的源头节点必须存在于 prompt 结构中，若缺失直接报错以快速失败
-                        if src_node_id not in prompt:
-                            raise ValueError(
-                                f"Source node {src_node_id} for seed tracking is missing in the prompt API structure."
-                            )
-
-                        src_node: Dict[str, Any] = prompt[src_node_id]
-                        src_inputs: Dict[str, Any] = src_node.get("inputs", {})
-                        current_val: Any = src_inputs.get(src_key)
-
-                        # 校验当前值是否等于 old_seed 且满足种子标识或 Primitive 属性
-                        is_primitive = (
-                            src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES
-                        )
-                        if (
-                            current_val == old_seed or str(current_val) == str(old_seed)
-                        ) and ("seed" in ik or "seed" in src_key or is_primitive):
-                            src_inputs[src_key] = new_seed
-                            _LOGGER.info(
-                                f"  -> Prompt structure sync: updated source node {src_node_id} key {src_key} = {new_seed}"
-                            )
-
-    return modified_count
-
-
 def get_workflow_node_text(workflow: Dict[str, Any], node_id_str: str) -> Optional[str]:
     """
     在 UI 结构 workflow 中获取特定节点的文本 widget 数值。
@@ -484,274 +209,6 @@ def strip_comments_for_prompt(text: str) -> str:
             continue
         lines.append(line)
     return "\n".join(lines)
-
-
-def process_double_track(
-    workflow_text: str,
-    prompt_text: str,
-    command: str,
-    prompt_str_arg: str,
-    start_marker: str,
-    end_marker: str,
-    raw: bool,
-    no_skip: bool,
-    hard: bool,
-    use_markers: bool = True,
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    处理双轨道逻辑，输入 workflow_text 并执行 add/remove 动作，分别生成：
-    new_workflow_text (包含 marker)
-    new_prompt_text (不包含 marker)
-    如果需要跳过操作，返回 (None, None)。
-    """
-    # 经过我们的清除逻辑得到的 prompt 文本，用于做等价性比对
-    stripped_workflow = strip_comments_for_prompt(workflow_text)
-    workflow_cleaned = "\n".join(
-        [line.strip() for line in stripped_workflow.splitlines() if line.strip()]
-    )
-    prompt_cleaned = "\n".join(
-        [line.strip() for line in prompt_text.splitlines() if line.strip()]
-    )
-    is_equivalent = workflow_cleaned == prompt_cleaned
-
-    # 在 workflow 文本中定位 marker 区域
-    start_idx = -1
-    end_idx = -1
-    if use_markers:
-        start_idx = workflow_text.find(start_marker)
-        end_idx = workflow_text.find(end_marker)
-        has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-    else:
-        has_marker = False
-
-    # 校验提示词是否已存在
-    def contains_prompt(area: str) -> bool:
-        target_lower = prompt_str_arg.strip().lower()
-        if raw:
-            return target_lower in area.lower()
-        for line in area.splitlines():
-            if line.strip().startswith("//"):
-                continue
-            if target_lower in line.lower():
-                return True
-        return False
-
-    new_workflow_text = None
-    new_prompt_text = None
-
-    if command == "add":
-        if has_marker:
-            before_marker = workflow_text[:start_idx]
-            marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-            after_marker = workflow_text[end_idx + len(end_marker) :]
-
-            if contains_prompt(marker_content) and not no_skip:
-                _LOGGER.info(
-                    f"Prompt '{prompt_str_arg}' already exists in marker region, skipping."
-                )
-                return None, None
-
-            # 计算不带 marker 的内部拼接新文本，按行追加
-            stripped = marker_content.strip()
-            if stripped:
-                if not stripped.endswith(","):
-                    stripped += ","
-                new_content_prompt = f"{stripped}\n{prompt_str_arg},"
-            else:
-                new_content_prompt = f"{prompt_str_arg},"
-
-            # 双轨道组装：分别组装带 marker 的 workflow 文本，和不带 marker 的 prompt 文本
-            new_workflow_text = (
-                before_marker.rstrip()
-                + f"\n{start_marker}\n"
-                + new_content_prompt
-                + f"\n{end_marker}\n"
-                + after_marker.lstrip()
-            )
-
-            # 判断等价性以决定是否采用回退防御机制
-            if is_equivalent:
-                new_prompt_text_raw = (
-                    before_marker.rstrip()
-                    + "\n"
-                    + new_content_prompt
-                    + "\n"
-                    + after_marker.lstrip()
-                )
-                new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
-            else:
-                # 回退：基于区域内容在 prompt 中做精确匹配
-                target_match_content = strip_comments_for_prompt(marker_content).strip()
-                if target_match_content and target_match_content in prompt_text:
-                    new_prompt_text = prompt_text.replace(
-                        target_match_content, new_content_prompt.strip(), 1
-                    )
-                else:
-                    # 匹配不到加在尾部
-                    if raw:
-                        new_prompt_text = prompt_text.rstrip() + "\n" + prompt_str_arg
-                    else:
-                        new_prompt_text = prompt_text.rstrip() + f"\n{prompt_str_arg},"
-        else:
-            if contains_prompt(workflow_text) and not no_skip:
-                _LOGGER.info(
-                    f"Prompt '{prompt_str_arg}' already exists in text, skipping."
-                )
-                return None, None
-
-            if raw:
-                new_content_prompt = prompt_str_arg
-            else:
-                new_content_prompt = f"{prompt_str_arg},"
-
-            # 第一次添加，双轨道组装：workflow 附加带 marker 区域（如果 use_markers），prompt 附加不带 marker 区域
-            if use_markers:
-                new_workflow_text = (
-                    workflow_text.rstrip()
-                    + f"\n{start_marker}\n"
-                    + new_content_prompt
-                    + f"\n{end_marker}\n"
-                )
-            else:
-                new_workflow_text = workflow_text.rstrip() + "\n" + new_content_prompt
-            # 对于无 marker，直接拼在尾部即可
-            new_prompt_text = prompt_text.rstrip() + "\n" + new_content_prompt
-
-    else:  # remove Command
-        effective_hard = hard or raw
-        if has_marker:
-            before_marker = workflow_text[:start_idx]
-            marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-            after_marker = workflow_text[end_idx + len(end_marker) :]
-
-            if not contains_prompt(marker_content):
-                _LOGGER.debug(
-                    f"remove: prompt '{prompt_str_arg}' not found in marker region (has_marker=True)"
-                )
-                if not no_skip:
-                    _LOGGER.info(
-                        f"Prompt '{prompt_str_arg}' not found in marker region, skipping."
-                    )
-                    return None, None
-                new_content_prompt = marker_content
-            else:
-                if raw:
-                    new_content_prompt = marker_content.replace(prompt_str_arg, "")
-                else:
-                    target_lower = prompt_str_arg.strip().lower()
-                    lines = marker_content.split("\n")
-                    new_lines: List[str] = []
-                    for line in lines:
-                        if target_lower in line.lower():
-                            if effective_hard:
-                                pass
-                            else:
-                                stripped = line.strip()
-                                if stripped.startswith("//"):
-                                    new_lines.append(line)
-                                else:
-                                    indent = line[: len(line) - len(line.lstrip())]
-                                    new_lines.append(f"{indent}// {line.lstrip()}")
-                        else:
-                            new_lines.append(line)
-                    new_content_prompt = "\n".join(new_lines)
-
-            # 双轨道组装：分别组装带 marker 的 workflow 文本，和不带 marker 的 prompt 文本
-            new_workflow_text = (
-                before_marker.rstrip()
-                + f"\n{start_marker}\n"
-                + new_content_prompt
-                + f"\n{end_marker}\n"
-                + after_marker.lstrip()
-            )
-
-            # 判断等价性以决定是否采用回退防御机制
-            if is_equivalent:
-                new_prompt_text_raw = (
-                    before_marker.rstrip()
-                    + "\n"
-                    + new_content_prompt
-                    + "\n"
-                    + after_marker.lstrip()
-                )
-                new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
-            else:
-                # 回退：基于区域内容在 prompt 中做精确匹配
-                target_match_content = strip_comments_for_prompt(marker_content).strip()
-                if target_match_content and target_match_content in prompt_text:
-                    new_prompt_text = prompt_text.replace(
-                        target_match_content, new_content_prompt.strip(), 1
-                    )
-                else:
-                    # 匹配不到则保持原样
-                    new_prompt_text = prompt_text
-        else:
-            if not contains_prompt(workflow_text):
-                _LOGGER.debug(
-                    f"remove: prompt '{prompt_str_arg}' not found in full text (has_marker=False)"
-                )
-                if not no_skip:
-                    _LOGGER.info(f"Prompt '{prompt_str_arg}' not found, skipping.")
-                    return None, None
-                new_content_prompt = workflow_text
-            else:
-                if raw:
-                    new_content_prompt = workflow_text.replace(prompt_str_arg, "")
-                else:
-                    target_lower = prompt_str_arg.strip().lower()
-                    lines = workflow_text.split("\n")
-                    new_lines = []
-                    for line in lines:
-                        if target_lower in line.lower():
-                            if effective_hard:
-                                pass
-                            else:
-                                stripped = line.strip()
-                                if stripped.startswith("//"):
-                                    new_lines.append(line)
-                                else:
-                                    indent = line[: len(line) - len(line.lstrip())]
-                                    new_lines.append(f"{indent}// {line.lstrip()}")
-                        else:
-                            new_lines.append(line)
-                    new_content_prompt = "\n".join(new_lines)
-
-            # 第一次移除（原本无 marker），因为已移除，无需追加 marker 结构
-            new_workflow_text = new_content_prompt
-            new_prompt_text = new_content_prompt
-
-    new_prompt_text = strip_comments_for_prompt(new_prompt_text)
-
-    return new_workflow_text, new_prompt_text
-
-
-def send_to_comfyui(
-    comfyui_url: str, prompt: Dict[str, Any], workflow: Dict[str, Any]
-) -> bool:
-    """
-    提交工作流到 ComfyUI 的 /prompt 接口。
-    """
-    client_id: str = str(uuid.uuid4())
-    payload: Dict[str, Any] = {
-        "prompt": prompt,
-        "client_id": client_id,
-        "extra_data": {"extra_pnginfo": {"workflow": workflow}},
-    }
-    data: bytes = json.dumps(payload).encode("utf-8")
-    req: urllib.request.Request = urllib.request.Request(
-        f"{comfyui_url}/prompt", data=data, headers={"Content-Type": "application/json"}
-    )
-    try:
-        with urllib.request.urlopen(req) as f:
-            res: Dict[str, Any] = json.loads(f.read().decode("utf-8"))
-            prompt_id: Any = res.get("prompt_id")
-            _LOGGER.info(
-                f"Workflow successfully queued to ComfyUI, prompt_id: {prompt_id}"
-            )
-            return True
-    except Exception as e:
-        _LOGGER.error(f"Failed to submit to ComfyUI: {e}")
-        return False
 
 
 def find_clip_text_nodes(prompt: Dict[str, Any], start_val: Any) -> List[str]:
@@ -874,119 +331,6 @@ def get_target_clip_node(prompt: Dict[str, Any], is_neg: bool) -> Optional[str]:
     return best_node_id
 
 
-def process_add_prompt(
-    text: str,
-    prompt_to_add: str,
-    start_marker: str,
-    end_marker: str,
-    raw: bool,
-    no_skip: bool,
-) -> Optional[str]:
-    """
-    添加提示词行。如果跳过，返回 None。
-    """
-    start_idx = text.find(start_marker)
-    end_idx = text.find(end_marker)
-
-    def contains_prompt(area: str) -> bool:
-        if raw:
-            return prompt_to_add in area
-        parts = [p.strip().lower() for p in area.split(",")]
-        return prompt_to_add.strip().lower() in parts
-
-    if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-        before_marker = text[:start_idx]
-        marker_content = text[start_idx + len(start_marker) : end_idx]
-        after_marker = text[end_idx + len(end_marker) :]
-
-        if contains_prompt(marker_content):
-            if not no_skip:
-                _LOGGER.info(
-                    f"Prompt '{prompt_to_add}' already exists in marker region, skipping."
-                )
-                return None
-
-        if raw:
-            new_content = marker_content + prompt_to_add
-        else:
-            stripped = marker_content.strip()
-            if stripped:
-                if not stripped.endswith(","):
-                    stripped += ","
-                new_content = f" {stripped} {prompt_to_add},"
-            else:
-                new_content = f" {prompt_to_add},"
-
-        return before_marker + start_marker + new_content + end_marker + after_marker
-    else:
-        if contains_prompt(text):
-            if not no_skip:
-                _LOGGER.info(
-                    f"Prompt '{prompt_to_add}' already exists in text, skipping."
-                )
-                return None
-
-        if raw:
-            appended = f"\n{start_marker}\n{prompt_to_add}\n{end_marker}"
-        else:
-            appended = f"\n{start_marker}\n{prompt_to_add},\n{end_marker}"
-
-        if text.strip():
-            return text.rstrip() + appended
-        else:
-            return appended
-
-
-def update_workflow_node_text(
-    workflow: Dict[str, Any], node_id_str: str, new_text: str
-) -> None:
-    """
-    在 UI 结构 workflow 中同步更新特定节点的文本 widget 数值。
-    """
-
-    for node in workflow.get("nodes", []):
-        if str(node.get("id")) == node_id_str:
-            widgets_values = node.get("widgets_values")
-            if isinstance(widgets_values, list):
-                val_list = cast(List[Any], widgets_values)
-                if len(val_list) > 0:
-                    val_list[0] = new_text
-                    _LOGGER.info(f"Updated workflow node {node_id_str} text widget.")
-                    return
-
-    if ":" in node_id_str:
-        _, child_id = node_id_str.split(":", 1)
-        subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
-        for subgraph in subgraphs:
-            for node in subgraph.get("nodes", []):
-                if str(node.get("id")) == child_id:
-                    widgets_values = node.get("widgets_values")
-                    if isinstance(widgets_values, list):
-                        val_list = cast(List[Any], widgets_values)
-                        if len(val_list) > 0:
-                            val_list[0] = new_text
-                            _LOGGER.info(
-                                f"Updated workflow subgraph node {child_id} text widget."
-                            )
-                            return
-
-
-def get_node_texts(
-    prompt: Dict[str, Any], workflow: Dict[str, Any], node_id: str
-) -> Tuple[Optional[str], str]:
-    """
-    获取指定节点的 workflow 文本和 prompt 文本。
-    返回 (workflow_text, prompt_text)，若节点在 workflow 中不存在则 workflow_text 为 None。
-    """
-    workflow_text = get_workflow_node_text(workflow, node_id)
-    if workflow_text is None:
-        return None, ""
-    prompt_text = prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-    if not isinstance(prompt_text, str):
-        prompt_text = ""
-    return workflow_text, prompt_text
-
-
 def resolve_target_to_nodes(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
@@ -1030,19 +374,20 @@ def submit_workflow(
     更新种子和文件名后提交工作流到 ComfyUI。
     返回 (any_success, has_error)。
     """
+    pair = WorkflowPromptPair(workflow, prompt)
     any_success = False
     has_error = False
     for q_idx in range(jobs):
         if jobs > 1:
             _LOGGER.info(f"  -> Queueing run {q_idx+1}/{jobs}")
-        if update_seeds(prompt, workflow) == 0:
+        if pair.update_seeds() == 0:
             _LOGGER.error(
                 f"Failed to update any seeds for image: {image_path}. Cannot queue duplicate workflow without changing seeds."
             )
             has_error = True
             break
-        update_output_filenames(prompt, workflow)
-        if send_to_comfyui(comfyui_url, prompt, workflow):
+        pair.update_output_filenames()
+        if pair.submit(comfyui_url):
             any_success = True
         else:
             has_error = True
@@ -1183,14 +528,14 @@ def main() -> None:
                     update_image_label(img_id, label_to_set)
 
         elif args.command == "adjust":
+            node_ids: Optional[List[str]] = getattr(args, "node", None)
+
             if args.adjust_type == "cfg":
-                generator = modify_cfg_weights(
-                    prompt, workflow, args.weight, getattr(args, "node", None)
-                )
+                pair = WorkflowPromptPair(workflow, prompt)
+                variant_gen = pair.generate_cfg_variants(args.weight, node_ids)
             elif args.adjust_type in ("lora", "l"):
-                generator = modify_lora_weights(
-                    prompt, workflow, args.name, args.weight
-                )
+                pair = WorkflowPromptPair(workflow, prompt)
+                variant_gen = pair.generate_lora_variants(args.name, args.weight)
             elif args.adjust_type in ("prompt", "p"):
                 is_neg = args.neg
                 raw_targets = []
@@ -1212,13 +557,9 @@ def main() -> None:
                         )
                     )
 
-                generator = modify_prompt_weights(
-                    prompt,
-                    workflow,
-                    target_nodes,
-                    args.text,
-                    args.weight,
-                    args.skip_add,
+                pair = WorkflowPromptPair(workflow, prompt)
+                variant_gen = pair.generate_prompt_variants(
+                    target_nodes, args.text, args.weight, args.skip_add
                 )
             else:
                 raise ValueError(f"unexpected adjust type '{args.adjust_type}'")
@@ -1227,7 +568,7 @@ def main() -> None:
             any_image_success = False
             variant_count = 0
 
-            for prompt, workflow in generator:
+            for _ in variant_gen:
                 variant_count += 1
                 if variant_count > 1:
                     enable_seed_update = True
@@ -1237,19 +578,15 @@ def main() -> None:
                         _LOGGER.info(
                             f"  -> Queueing variant {variant_count} run {q_idx + 1}/{jobs}"
                         )
-                    job_prompt = json.loads(json.dumps(prompt))
-                    job_workflow = json.loads(json.dumps(workflow))
-
                     if enable_seed_update:
-                        if update_seeds(job_prompt, job_workflow) == 0:
+                        if pair.update_seeds() == 0:
                             _LOGGER.error(
                                 f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
                             )
                             has_errors = True
                             break
-                    update_output_filenames(job_prompt, job_workflow)
-
-                    if send_to_comfyui(comfyui_url, job_prompt, job_workflow):
+                    pair.update_output_filenames()
+                    if pair.submit(comfyui_url):
                         any_image_success = True
                     else:
                         has_errors = True
@@ -1258,22 +595,19 @@ def main() -> None:
                 _LOGGER.info(
                     f"No variants generated for image {path}, sending original workflow (--no-skip)."
                 )
+                pair = WorkflowPromptPair(workflow, prompt)
                 for q_idx in range(jobs):
                     if jobs > 1:
                         _LOGGER.info(f"  -> Queueing original run {q_idx + 1}/{jobs}")
-                    job_prompt = json.loads(json.dumps(prompt))
-                    job_workflow = json.loads(json.dumps(workflow))
-
                     if enable_seed_update:
-                        if update_seeds(job_prompt, job_workflow) == 0:
+                        if pair.update_seeds() == 0:
                             _LOGGER.error(
                                 f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
                             )
                             has_errors = True
                             break
-                    update_output_filenames(job_prompt, job_workflow)
-
-                    if send_to_comfyui(comfyui_url, job_prompt, job_workflow):
+                    pair.update_output_filenames()
+                    if pair.submit(comfyui_url):
                         any_image_success = True
                     else:
                         has_errors = True
@@ -1308,6 +642,7 @@ def main() -> None:
 
             if args.command == "add":
                 prompt_str_arg = " ".join(args.prompt)
+                pair = WorkflowPromptPair(workflow, prompt)
                 for target_type, target_value in raw_targets:
                     nodes = resolve_target_to_nodes(
                         prompt, workflow, target_type, target_value, is_neg
@@ -1317,18 +652,8 @@ def main() -> None:
                     # add 只取第一个匹配节点
                     node_id, start_marker, end_marker, use_markers = nodes[0]
 
-                    workflow_text, prompt_text = get_node_texts(
-                        prompt, workflow, node_id
-                    )
-                    if workflow_text is None:
-                        _LOGGER.error(
-                            f"Failed to locate target node {node_id} in workflow metadata."
-                        )
-                        continue
-
-                    new_workflow_text, new_prompt_text = process_double_track(
-                        workflow_text,
-                        prompt_text,
+                    if pair.process_double_track(
+                        node_id,
                         args.command,
                         prompt_str_arg,
                         start_marker,
@@ -1337,16 +662,11 @@ def main() -> None:
                         args.no_skip,
                         hard,
                         use_markers,
-                    )
-
-                    if new_workflow_text is None or new_prompt_text is None:
+                    ):
+                        any_processed = True
+                        break
+                    else:
                         any_processed = True  # 跳过也算成功
-                        continue
-
-                    prompt[node_id]["inputs"]["text"] = new_prompt_text
-                    update_workflow_node_text(workflow, node_id, new_workflow_text)
-                    any_processed = True
-                    break  # 第一个成功即停止
 
                 if not any_processed:
                     has_errors = True
@@ -1380,23 +700,14 @@ def main() -> None:
                     remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
                 _LOGGER.info(f"Remove prompts (variants): {remove_prompts}")
 
+                pair = WorkflowPromptPair(workflow, prompt)
                 for node_id, start_marker, end_marker, use_markers in nodes_to_process:
-                    workflow_text, prompt_text = get_node_texts(
-                        prompt, workflow, node_id
-                    )
-                    if workflow_text is None:
-                        _LOGGER.error(
-                            f"Failed to locate target node {node_id} in workflow metadata."
-                        )
-                        continue
-
                     for prompt_str_arg in remove_prompts:
                         _LOGGER.info(
                             f"Trying to remove '{prompt_str_arg}' from node {node_id}"
                         )
-                        new_workflow_text, new_prompt_text = process_double_track(
-                            workflow_text,
-                            prompt_text,
+                        if pair.process_double_track(
+                            node_id,
                             args.command,
                             prompt_str_arg,
                             start_marker,
@@ -1405,25 +716,15 @@ def main() -> None:
                             args.no_skip,
                             hard,
                             use_markers,
-                        )
-
-                        if (
-                            new_workflow_text is not None
-                            and new_prompt_text is not None
                         ):
                             _LOGGER.info(
                                 f"Removed '{prompt_str_arg}' from node {node_id}"
                             )
-                            workflow_text = new_workflow_text
-                            prompt_text = new_prompt_text
                             any_processed = True
                         else:
                             _LOGGER.info(
                                 f"Skipped '{prompt_str_arg}' in node {node_id} (not found or skipped)"
                             )
-
-                    prompt[node_id]["inputs"]["text"] = prompt_text
-                    update_workflow_node_text(workflow, node_id, workflow_text)
 
                 if not any_processed:
                     _LOGGER.info("No prompts were removed, skipping submission.")
@@ -1686,589 +987,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
-
-def _make_lora_applier(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    lora_name_query: str,
-):
-    """分析工作流，返回 applier(weight) -> (prompt, workflow)，原地修改后直接返回。"""
-    query_lower = lora_name_query.lower()
-
-    # 收集需要修改的位置信息
-    prompt_primitive_sources: List[Tuple[str, str]] = []  # (src_nid, src_key)
-    prompt_powerlora_sources: List[Tuple[str, str]] = []  # (nid, key)
-    wf_primitive_ids: Set[str] = set()
-    wf_loraloader_indices: List[Tuple[str, List[int]]] = []  # (node_id, [widget_index])
-    wf_powerlora_ids: List[str] = []
-
-    # 分析 prompt 侧
-    for nid, node in prompt.items():
-        node_dict = cast(Dict[str, Any], node)
-        class_type = node_dict.get("class_type", "")
-        if class_type == "LoraLoader":
-            inputs = node_dict.get("inputs", {})
-            lora_name = inputs.get("lora_name", "")
-            if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                for ik in ["strength_model", "strength_clip"]:
-                    if ik in inputs:
-                        src_nid, src_key = find_terminal_input(prompt, nid, ik)
-                        prompt_primitive_sources.append((src_nid, src_key))
-                        src_node = prompt.get(src_nid, {})
-                        if src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES:
-                            wf_primitive_ids.add(src_nid)
-        elif class_type == "Power Lora Loader (rgthree)":
-            inputs = node_dict.get("inputs", {})
-            for k, v in list(inputs.items()):
-                if k.startswith("lora_") and isinstance(v, dict):
-                    v_dict = cast(Dict[str, Any], v)
-                    lora_path = v_dict.get("lora", "")
-                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        prompt_powerlora_sources.append((nid, k))
-
-    # 分析 workflow 侧
-    candidate_nodes: List[Tuple[Dict[str, Any], str]] = []
-    for node in workflow.get("nodes", []):
-        if not is_node_disabled(node):
-            candidate_nodes.append((node, str(node.get("id"))))
-    subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
-    for subgraph in subgraphs:
-        for node in subgraph.get("nodes", []):
-            if not is_node_disabled(node):
-                candidate_nodes.append((node, str(node.get("id"))))
-
-    for node, node_id_str in candidate_nodes:
-        node_type = node.get("type", "")
-        widgets_values = node.get("widgets_values")
-        if not isinstance(widgets_values, list):
-            continue
-        wv = cast(List[Any], widgets_values)
-
-        if node_type == "LoraLoader":
-            if len(wv) > 0 and isinstance(wv[0], str) and query_lower in wv[0].lower():
-                indices: List[int] = []
-                if len(wv) > 1 and isinstance(wv[1], (int, float)):
-                    indices.append(1)
-                if len(wv) > 2 and isinstance(wv[2], (int, float)):
-                    indices.append(2)
-                if indices:
-                    wf_loraloader_indices.append((node_id_str, indices))
-        elif node_type == "Power Lora Loader (rgthree)":
-            for val in wv:
-                if isinstance(val, dict) and "lora" in val:
-                    val_dict = cast(Dict[str, Any], val)
-                    lora_path = val_dict.get("lora", "")
-                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        wf_powerlora_ids.append(node_id_str)
-                        break
-
-    # 构建 workflow 节点索引（只建一次，节点对象引用不变）
-    wf_nodes = {str(n.get("id")): n for n in workflow.get("nodes", [])}
-
-    def apply(weight: float) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        # 修改 prompt 中的 Primitive 值（原地修改，消费者会自行深拷贝）
-        for src_nid, src_key in prompt_primitive_sources:
-            if src_nid in prompt:
-                prompt[src_nid]["inputs"][src_key] = weight
-
-        # 修改 prompt 中的 PowerLora dict
-        for nid, key in prompt_powerlora_sources:
-            node = prompt.get(nid, {})
-            v = node.get("inputs", {}).get(key)
-            if isinstance(v, dict):
-                v["strength"] = weight
-
-        # 修改 workflow 中的 Primitive 节点
-        for nid_str in wf_primitive_ids:
-            node = wf_nodes.get(nid_str)
-            if node:
-                wv = node.get("widgets_values")
-                if isinstance(wv, list) and wv:
-                    wv[0] = weight
-
-        # 修改 workflow 中的 LoraLoader widget
-        for nid_str, indices in wf_loraloader_indices:
-            node = wf_nodes.get(nid_str)
-            if node:
-                wv = node.get("widgets_values")
-                if isinstance(wv, list):
-                    wv_list = cast(List[Any], wv)
-                    for idx in indices:
-                        if idx < len(wv_list):
-                            wv_list[idx] = weight
-
-        # 修改 workflow 中的 PowerLora widget
-        for nid_str in wf_powerlora_ids:
-            node = wf_nodes.get(nid_str)
-            if node:
-                wv = node.get("widgets_values")
-                if isinstance(wv, list):
-                    for val in cast(List[Any], wv):
-                        if isinstance(val, dict) and "lora" in val:
-                            val_dict = cast(Dict[str, Any], val)
-                            lora_path = val_dict.get("lora", "")
-                            if (
-                                isinstance(lora_path, str)
-                                and query_lower in lora_path.lower()
-                            ):
-                                val_dict["strength"] = weight
-
-        return prompt, workflow
-
-    return apply
-
-
-def modify_lora_weights(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    lora_name_query: str,
-    weight_expr: str,
-) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
-    """
-    生成器：为每个权重变体生成修改后的 prompt 和 workflow 深拷贝。
-    如果未找到匹配的 Lora 或相对权重无法解析当前值，迭代器为空。
-    """
-    if is_relative(weight_expr):
-        current = get_current_lora_weight(prompt, workflow, lora_name_query)
-        if current is None:
-            return
-        try:
-            weights = parse_weights(weight_expr, current)
-        except Exception:
-            return
-    else:
-        try:
-            weights = parse_weights(weight_expr)
-        except Exception:
-            return
-
-    applier = _make_lora_applier(prompt, workflow, lora_name_query)
-
-    for w in weights:
-        prompt_copy, workflow_copy = applier(w)
-        yield prompt_copy, workflow_copy
-
-
-def adjust_prompt_weight(
-    text: str, target_prompt: str, new_weight: float
-) -> Tuple[str, bool]:
-    """
-    在 CLIPTextEncode 的文本中，找到并更新特定提示词的权重为 new_weight。
-    支持匹配格式：(word:weight)、(word) 以及裸词 word。
-    返回 (new_text, is_modified)。
-    """
-    escaped_target = re.escape(target_prompt)
-
-    # 1. 优先匹配已带权重的格式, 如 (beautiful scenery:1.2) 或 (beautiful scenery:-0.5)
-    pattern_with_weight = re.compile(
-        rf"\(\s*{escaped_target}\s*:\s*[0-9.-]+\s*\)", re.IGNORECASE
-    )
-    if pattern_with_weight.search(text):
-        new_text = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", text)
-        return new_text, True
-
-    # 2. 匹配带括号但无权重的格式, 如 (beautiful scenery)
-    pattern_with_brackets = re.compile(rf"\(\s*{escaped_target}\s*\)", re.IGNORECASE)
-    if pattern_with_brackets.search(text):
-        new_text = pattern_with_brackets.sub(f"({target_prompt}:{new_weight})", text)
-        return new_text, True
-
-    # 3. 匹配裸词，两边使用单词边界以防匹配子串 (caterpillar vs cat)
-    pattern_bare = re.compile(rf"\b{escaped_target}\b", re.IGNORECASE)
-    if pattern_bare.search(text):
-        new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
-        return new_text, True
-
-    return text, False
-
-
-def _apply_prompt_weight(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    target_nodes: List[Tuple[str, str, str, bool]],
-    target_prompt: str,
-    target_weight: float,
-    skip_add: bool,
-) -> None:
-    """
-    在 CLIPTextEncode 节点中调整提示词的权重（原地修改）。
-    如果不存在，且未指定 skip_add 选项，则将其添加到第一个有效节点上。
-    """
-    any_existing_modified = False
-
-    # 1. 首先尝试在所有候选目标节点中修改已存在的提示词
-    for node_id, start_marker, end_marker, use_markers in target_nodes:
-        workflow_text, prompt_text = get_node_texts(prompt, workflow, node_id)
-        if workflow_text is None:
-            continue
-
-        new_workflow_text, mod_wf = adjust_prompt_weight(
-            workflow_text, target_prompt, target_weight
-        )
-        new_prompt_text, mod_pr = adjust_prompt_weight(
-            prompt_text, target_prompt, target_weight
-        )
-
-        if mod_wf or mod_pr:
-            prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
-                new_prompt_text
-            )
-            update_workflow_node_text(workflow, node_id, new_workflow_text)
-            any_existing_modified = True
-            _LOGGER.info(
-                f"Updated existing prompt '{target_prompt}' weight to {target_weight} in node {node_id}"
-            )
-
-    # 2. 如果没有任何一个节点含有该提示词，且允许添加，则在第一个节点上添加
-    if not any_existing_modified and not skip_add:
-        if target_nodes:
-            node_id, start_marker, end_marker, use_markers = target_nodes[0]
-            workflow_text, prompt_text = get_node_texts(prompt, workflow, node_id)
-            if workflow_text is not None:
-                added_text = f"({target_prompt}:{target_weight})"
-                start_idx = -1
-                end_idx = -1
-                if use_markers:
-                    start_idx = workflow_text.find(start_marker)
-                    end_idx = workflow_text.find(end_marker)
-
-                has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-
-                if has_marker:
-                    before_marker = workflow_text[:start_idx]
-                    marker_content = workflow_text[
-                        start_idx + len(start_marker) : end_idx
-                    ]
-                    after_marker = workflow_text[end_idx + len(end_marker) :]
-
-                    stripped = marker_content.strip()
-                    if stripped:
-                        if not stripped.endswith(","):
-                            stripped += ","
-                        new_content_prompt = f"{stripped}\n{added_text},"
-                    else:
-                        new_content_prompt = f"{added_text},"
-
-                    new_workflow_text = (
-                        before_marker.rstrip()
-                        + f"\n{start_marker}\n"
-                        + new_content_prompt
-                        + f"\n{end_marker}\n"
-                        + after_marker.lstrip()
-                    )
-                    new_prompt_text = prompt_text.rstrip()
-                    if new_prompt_text and not new_prompt_text.endswith(","):
-                        new_prompt_text += ","
-                    new_prompt_text += f"\n{added_text},"
-                else:
-                    new_workflow_text = workflow_text.rstrip()
-                    if new_workflow_text and not new_workflow_text.endswith(","):
-                        new_workflow_text += ","
-                    new_workflow_text += f"\n{added_text},"
-
-                    new_prompt_text = prompt_text.rstrip()
-                    if new_prompt_text and not new_prompt_text.endswith(","):
-                        new_prompt_text += ","
-                    new_prompt_text += f"\n{added_text},"
-
-                prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
-                    new_prompt_text
-                )
-                update_workflow_node_text(workflow, node_id, new_workflow_text)
-                _LOGGER.info(
-                    f"Added prompt '{target_prompt}' with weight {target_weight} to node {node_id}"
-                )
-
-
-def modify_prompt_weights(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    target_nodes: List[Tuple[str, str, str, bool]],
-    target_prompt: str,
-    weight_expr: str,
-    skip_add: bool,
-) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
-    """
-    生成器：为每个权重变体生成修改后的 prompt 和 workflow 深拷贝。
-    如果未找到匹配的提示词且 skip_add 为 True，或相对权重无法解析当前值，迭代器为空。
-    """
-    if is_relative(weight_expr):
-        current = get_current_prompt_weight(
-            prompt, workflow, target_nodes, target_prompt
-        )
-        if current is None:
-            return
-        try:
-            weights = parse_weights(weight_expr, current)
-        except Exception:
-            return
-    else:
-        try:
-            weights = parse_weights(weight_expr)
-        except Exception:
-            return
-        # 绝对权重且 skip_add 时，若提示词不存在则跳过所有变体
-        if (
-            skip_add
-            and get_current_prompt_weight(prompt, workflow, target_nodes, target_prompt)
-            is None
-        ):
-            return
-
-    for w in weights:
-        prompt_copy = json.loads(json.dumps(prompt))
-        workflow_copy = json.loads(json.dumps(workflow))
-        _apply_prompt_weight(
-            prompt_copy, workflow_copy, target_nodes, target_prompt, w, skip_add
-        )
-        yield prompt_copy, workflow_copy
-
-
-def get_current_lora_weight(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    lora_name_query: str,
-) -> Optional[float]:
-    """
-    在 prompt 和 workflow 中查找匹配的 Lora 节点，返回其当前权重。
-    支持原生 LoraLoader 和 Power Lora Loader (rgthree)。
-    """
-    query_lower = lora_name_query.lower()
-
-    # 1. 从 prompt (API 结构) 中查找
-    for nid, node in prompt.items():
-        node_dict = cast(Dict[str, Any], node)
-        class_type = node_dict.get("class_type", "")
-        if class_type == "LoraLoader":
-            inputs = node_dict.get("inputs", {})
-            lora_name = inputs.get("lora_name", "")
-            if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                for ik in ["strength_model", "strength_clip"]:
-                    if ik in inputs:
-                        src_nid, src_key = find_terminal_input(prompt, nid, ik)
-                        val = prompt[src_nid]["inputs"].get(src_key)
-                        if isinstance(val, (int, float)):
-                            return float(val)
-        elif class_type == "Power Lora Loader (rgthree)":
-            inputs = node_dict.get("inputs", {})
-            for k, v in inputs.items():
-                if k.startswith("lora_") and isinstance(v, dict):
-                    v_dict = cast(Dict[str, Any], v)
-                    lora_path = v_dict.get("lora", "")
-                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        strength = v_dict.get("strength")
-                        if isinstance(strength, (int, float)):
-                            return float(strength)
-
-    # 2. 从 workflow (UI 结构) 中查找
-    for node in workflow.get("nodes", []):
-        if is_node_disabled(node):
-            continue
-        node_type = node.get("type", "")
-        widgets_values = node.get("widgets_values")
-        if not isinstance(widgets_values, list):
-            continue
-        wv = cast(List[Any], widgets_values)
-
-        if node_type == "LoraLoader":
-            if wv and isinstance(wv[0], str) and query_lower in wv[0].lower():
-                if len(wv) > 1 and isinstance(wv[1], (int, float)):
-                    return float(wv[1])
-        elif node_type == "Power Lora Loader (rgthree)":
-            for val in wv:
-                if isinstance(val, dict) and "lora" in val:
-                    val_dict = cast(Dict[str, Any], val)
-                    if query_lower in str(val_dict.get("lora", "")).lower():
-                        strength = val_dict.get("strength")
-                        if isinstance(strength, (int, float)):
-                            return float(strength)
-
-    return None
-
-
-def get_current_prompt_weight(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    target_nodes: List[Tuple[str, str, str, bool]],
-    target_prompt: str,
-) -> Optional[float]:
-    """
-    在目标节点的文本中查找匹配的提示词，返回其当前权重。
-    支持 (word:weight)、(word) 和裸词格式。未带权重视为 1.0。
-    """
-    escaped = re.escape(target_prompt)
-
-    for node_id, _, _, _ in target_nodes:
-        workflow_text, _ = get_node_texts(prompt, workflow, node_id)
-        if workflow_text is None:
-            continue
-
-        # 匹配带权重的格式: (word:1.2)
-        pattern_with_weight = re.compile(
-            rf"\(\s*{escaped}\s*:\s*([0-9.-]+)\s*\)", re.IGNORECASE
-        )
-        m = pattern_with_weight.search(workflow_text)
-        if m:
-            return float(m.group(1))
-
-        # 匹配带括号无权重的格式: (word) → 默认权重 1.0
-        pattern_brackets = re.compile(rf"\(\s*{escaped}\s*\)", re.IGNORECASE)
-        if pattern_brackets.search(workflow_text):
-            return 1.0
-
-        # 匹配裸词 → 默认权重 1.0
-        pattern_bare = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
-        if pattern_bare.search(workflow_text):
-            return 1.0
-
-    return None
-
-
-def _make_cfg_applier(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    node_weights_map: Dict[str, List[float]],
-    node_ids: Optional[List[str]] = None,
-):
-    """分析工作流，返回 applier(version_idx) -> (prompt, workflow)，原地修改后直接返回。"""
-
-    cfg_sources: List[Tuple[str, str, List[float]]] = []  # (src_nid, src_key, weights)
-    wf_primitive_map: Dict[str, List[float]] = {}  # src_nid -> weights
-    wf_ksampler_cfg: List[Tuple[str, int, List[float]]] = (
-        []
-    )  # (node_id, widget_index, weights)
-
-    # 分析 prompt 侧
-    for nid, node in prompt.items():
-        if node_ids is not None and nid not in node_ids:
-            continue
-        node_dict = cast(Dict[str, Any], node)
-        class_type = node_dict.get("class_type", "")
-        if "KSampler" in class_type and nid in node_weights_map:
-            inputs = node_dict.get("inputs", {})
-            if "cfg" in inputs:
-                src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-                cfg_sources.append((src_nid, src_key, node_weights_map[nid]))
-                src_node = prompt.get(src_nid, {})
-                if src_node.get("class_type") in KNOWN_PRIMITIVE_TYPES:
-                    wf_primitive_map[src_nid] = node_weights_map[nid]
-
-    # 分析 workflow 侧
-    candidate_nodes: List[Tuple[Dict[str, Any], str]] = []
-    for node in workflow.get("nodes", []):
-        if not is_node_disabled(node):
-            candidate_nodes.append((node, str(node.get("id"))))
-    subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
-    for subgraph in subgraphs:
-        for node in subgraph.get("nodes", []):
-            if not is_node_disabled(node):
-                candidate_nodes.append((node, str(node.get("id"))))
-
-    for node, node_id_str in candidate_nodes:
-        if node_ids is not None and node_id_str not in node_ids:
-            continue
-        if node_id_str not in node_weights_map:
-            continue
-        node_type = node.get("type", "")
-        if "KSampler" in node_type:
-            widgets_values = node.get("widgets_values")
-            if not isinstance(widgets_values, list):
-                continue
-            wv = cast(List[Any], widgets_values)
-            weights = node_weights_map[node_id_str]
-            if node_type == "KSampler" and len(wv) >= 4:
-                if isinstance(wv[3], (int, float)):
-                    wf_ksampler_cfg.append((node_id_str, 3, weights))
-            elif node_type == "KSamplerAdvanced" and len(wv) >= 5:
-                if isinstance(wv[4], (int, float)):
-                    wf_ksampler_cfg.append((node_id_str, 4, weights))
-
-    # 构建 workflow 节点索引（只建一次，节点对象引用不变）
-    wf_nodes = {str(n.get("id")): n for n in workflow.get("nodes", [])}
-
-    def apply(version_idx: int) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        # 修改 prompt 中的 CFG 值（原地修改，消费者会自行深拷贝）
-        for src_nid, src_key, weights in cfg_sources:
-            if version_idx < len(weights) and src_nid in prompt:
-                prompt[src_nid]["inputs"][src_key] = weights[version_idx]
-
-        # 修改 workflow 中的 Primitive 节点
-        for src_nid, weights in wf_primitive_map.items():
-            node = wf_nodes.get(src_nid)
-            if node and version_idx < len(weights):
-                wv = node.get("widgets_values")
-                if isinstance(wv, list) and wv:
-                    wv[0] = weights[version_idx]
-
-        # 修改 workflow 中的 KSampler widget
-        for nid_str, widget_idx, weights in wf_ksampler_cfg:
-            node = wf_nodes.get(nid_str)
-            if node and version_idx < len(weights):
-                wv = node.get("widgets_values")
-                if isinstance(wv, list):
-                    wv_list = cast(List[Any], wv)
-                    if widget_idx < len(wv_list):
-                        wv_list[widget_idx] = weights[version_idx]
-
-        return prompt, workflow
-
-    return apply
-
-
-def modify_cfg_weights(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    weight_expr: str,
-    node_ids: Optional[List[str]] = None,
-) -> Generator[Tuple[Dict[str, Any], Dict[str, Any]], None, None]:
-    """
-    生成器：为每个 CFG 变体生成修改后的 prompt 和 workflow 深拷贝。
-    如果未找到匹配的 KSampler 节点，抛出 ValueError。
-    """
-    # 1. 找到所有 KSampler 节点的当前 CFG 值
-    ksampler_cfgs: Dict[str, float] = {}
-    for nid, node in prompt.items():
-        if node_ids is not None and nid not in node_ids:
-            continue
-        node_dict = cast(Dict[str, Any], node)
-        class_type = node_dict.get("class_type", "")
-        if "KSampler" in class_type:
-            inputs = node_dict.get("inputs", {})
-            if "cfg" in inputs:
-                src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-                val = prompt[src_nid]["inputs"].get(src_key)
-                if isinstance(val, (int, float)):
-                    ksampler_cfgs[nid] = float(val)
-
-    if not ksampler_cfgs:
-        raise ValueError(
-            f"No matching KSampler nodes found with valid CFG (node_ids: {node_ids})"
-        )
-
-    # 2. 预计算每个节点的权重列表并检查版本数一致性
-    node_weights_map: Dict[str, List[float]] = {}
-    version_lengths: Dict[str, int] = {}
-    for nid, cfg_val in ksampler_cfgs.items():
-        node_weights = parse_weights(weight_expr, cfg_val)
-        node_weights_map[nid] = node_weights
-        version_lengths[nid] = len(node_weights)
-
-    unique_lengths = set(version_lengths.values())
-    if len(unique_lengths) > 1:
-        details = ", ".join(
-            f"node {nid}: {l} versions" for nid, l in version_lengths.items()
-        )
-        raise ValueError(
-            f"Inconsistent weights version counts generated for KSampler nodes ({details}) "
-            f"under expression '{weight_expr}'. Please filter targets using --node to resolve ambiguity."
-        )
-
-    applier = _make_cfg_applier(prompt, workflow, node_weights_map, node_ids)
-
-    first_weights = list(node_weights_map.values())[0]
-    for version_idx in range(len(first_weights)):
-        yield applier(version_idx)
 
 
 if __name__ == "__main__":
