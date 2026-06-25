@@ -144,9 +144,11 @@ type ComplexityRoot struct {
 	}
 
 	DirectoryStateLastSession struct {
-		Filter     func(childComplexity int) int
-		ID         func(childComplexity int) int
-		TargetKeep func(childComplexity int) int
+		CommitActions func(childComplexity int) int
+		CreateActions func(childComplexity int) int
+		Filter        func(childComplexity int) int
+		ID            func(childComplexity int) int
+		TargetKeep    func(childComplexity int) int
 	}
 
 	DirectoryStats struct {
@@ -836,6 +838,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.DirectoryStateBrowse.FilterNoteBy(childComplexity), true
 
+	case "DirectoryStateLastSession.commitActions":
+		if e.complexity.DirectoryStateLastSession.CommitActions == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateLastSession.CommitActions(childComplexity), true
+	case "DirectoryStateLastSession.createActions":
+		if e.complexity.DirectoryStateLastSession.CreateActions == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateLastSession.CreateActions(childComplexity), true
 	case "DirectoryStateLastSession.filter":
 		if e.complexity.DirectoryStateLastSession.Filter == nil {
 			break
@@ -2202,6 +2216,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputDirectoryStateBrowseInput,
 		ec.unmarshalInputDirectoryStateInput,
+		ec.unmarshalInputDirectoryStateLastSessionInput,
 		ec.unmarshalInputDispatchImageHookInput,
 		ec.unmarshalInputDispatchNoteHookInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
@@ -2499,6 +2514,10 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
   filter: ImageFilters!
   "目标保留数量"
   targetKeep: Int!
+  "上一次提交时使用的动作"
+  commitActions: WriteActions
+  "上一次创建时由客户端主动上报的预设对应的动作"
+  createActions: WriteActions
 }
 
 """
@@ -2514,12 +2533,20 @@ type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBr
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   "浏览/过滤配置"
   browse: DirectoryStateBrowseInput
+  "上一次会话输入数据（客户端主动上报预设动作）"
+  lastSession: DirectoryStateLastSessionInput
 }
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   filterBy: ImageFiltersInput
   filterNoteBy: NoteFiltersInput
 }
+
+input DirectoryStateLastSessionInput @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
+  "上一次创建时由客户端主动上报的预设对应的动作"
+  createActions: WriteActionsInput
+}
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
 type DirectoryStats @goModel(model: "main/internal/shared.DirectoryStatsDTO") {
@@ -5480,6 +5507,10 @@ func (ec *executionContext) fieldContext_DirectoryState_lastSession(_ context.Co
 				return ec.fieldContext_DirectoryStateLastSession_filter(ctx, field)
 			case "targetKeep":
 				return ec.fieldContext_DirectoryStateLastSession_targetKeep(ctx, field)
+			case "commitActions":
+				return ec.fieldContext_DirectoryStateLastSession_commitActions(ctx, field)
+			case "createActions":
+				return ec.fieldContext_DirectoryStateLastSession_createActions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DirectoryStateLastSession", field.Name)
 		},
@@ -5688,6 +5719,80 @@ func (ec *executionContext) fieldContext_DirectoryStateLastSession_targetKeep(_ 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateLastSession_commitActions(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateLastSessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateLastSession_commitActions,
+		func(ctx context.Context) (any, error) {
+			return obj.CommitActions, nil
+		},
+		nil,
+		ec.marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateLastSession_commitActions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateLastSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "keepRating":
+				return ec.fieldContext_WriteActions_keepRating(ctx, field)
+			case "shelveRating":
+				return ec.fieldContext_WriteActions_shelveRating(ctx, field)
+			case "rejectRating":
+				return ec.fieldContext_WriteActions_rejectRating(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WriteActions", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateLastSession_createActions(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateLastSessionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateLastSession_createActions,
+		func(ctx context.Context) (any, error) {
+			return obj.CreateActions, nil
+		},
+		nil,
+		ec.marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateLastSession_createActions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateLastSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "keepRating":
+				return ec.fieldContext_WriteActions_keepRating(ctx, field)
+			case "shelveRating":
+				return ec.fieldContext_WriteActions_shelveRating(ctx, field)
+			case "rejectRating":
+				return ec.fieldContext_WriteActions_rejectRating(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WriteActions", field.Name)
 		},
 	}
 	return fc, nil
@@ -14680,7 +14785,7 @@ func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"browse"}
+	fieldsInOrder := [...]string{"browse", "lastSession"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -14694,6 +14799,40 @@ func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Contex
 				return it, err
 			}
 			it.Browse = data
+		case "lastSession":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("lastSession"))
+			data, err := ec.unmarshalODirectoryStateLastSessionInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateLastSessionDTO(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LastSession = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputDirectoryStateLastSessionInput(ctx context.Context, obj any) (shared.DirectoryStateLastSessionDTO, error) {
+	var it shared.DirectoryStateLastSessionDTO
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"createActions"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "createActions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("createActions"))
+			data, err := ec.unmarshalOWriteActionsInput2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CreateActions = data
 		}
 	}
 
@@ -16400,6 +16539,10 @@ func (ec *executionContext) _DirectoryStateLastSession(ctx context.Context, sel 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "commitActions":
+			out.Values[i] = ec._DirectoryStateLastSession_commitActions(ctx, field, obj)
+		case "createActions":
+			out.Values[i] = ec._DirectoryStateLastSession_createActions(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -21203,6 +21346,14 @@ func (ec *executionContext) marshalODirectoryStateLastSession2ᚖmainᚋinternal
 	return ec._DirectoryStateLastSession(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalODirectoryStateLastSessionInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateLastSessionDTO(ctx context.Context, v any) (*shared.DirectoryStateLastSessionDTO, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputDirectoryStateLastSessionInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalODirectoryStats2ᚖmainᚋinternalᚋsharedᚐDirectoryStatsDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStatsDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -21478,6 +21629,21 @@ func (ec *executionContext) marshalOUndoPayload2ᚖmainᚋinternalᚋinterfaces�
 		return graphql.Null
 	}
 	return ec._UndoPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx context.Context, sel ast.SelectionSet, v *shared.WriteActions) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._WriteActions(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOWriteActionsInput2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx context.Context, v any) (*shared.WriteActions, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputWriteActionsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

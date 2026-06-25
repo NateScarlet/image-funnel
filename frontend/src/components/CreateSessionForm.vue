@@ -88,17 +88,12 @@ import { computed, ref } from "vue";
 import { mdiLoading, mdiFolder } from "@mdi/js";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
-import mutate from "../graphql/utils/mutate";
-import {
-  CreateSessionDocument,
-  MetaDocument,
-  RootDirectoryDocument,
-} from "../graphql/generated";
+import { MetaDocument, RootDirectoryDocument } from "../graphql/generated";
 import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import useRouteQuery from "../composables/useRouteQuery";
-import { updateLastSession } from "../composables/useDirectoryState";
+import { useCreateSession } from "../composables/useCreateSession";
 
 type Emits = (e: "created") => void;
 
@@ -109,12 +104,14 @@ const router = useRouter();
 const {
   presets,
   selectedPresetId,
+  selectedPreset,
   targetKeep,
   rating: filterRating,
 } = useSessionConfig();
 
+const { createSession, creating: creatingSession } = useCreateSession();
+
 const loadingCount = ref(0);
-const creatingSession = ref(false);
 
 const { data: metaData } = useQuery(MetaDocument, {
   loadingCount,
@@ -143,30 +140,18 @@ const canCreate = computed(() => {
 });
 
 async function handleCreate() {
-  creatingSession.value = true;
+  const session = await createSession({
+    directoryId: selectedDirectoryId.value,
+    filter: {
+      rating: filterRating.value.slice(),
+    },
+    targetKeep: targetKeep.value,
+    createActions: selectedPreset.value?.writeActions,
+  });
 
-  try {
-    const { data } = await mutate(CreateSessionDocument, {
-      variables: {
-        input: {
-          filter: {
-            rating: filterRating.value.slice(),
-          },
-          targetKeep: targetKeep.value,
-          directoryId: selectedDirectoryId.value,
-        },
-      },
-    });
-
-    if (data?.createSession) {
-      const session = data.createSession.session;
-      updateLastSession(session);
-
-      router.push(`/session/${session.id}`);
-      emit("created");
-    }
-  } finally {
-    creatingSession.value = false;
+  if (session) {
+    router.push(`/session/${session.id}`);
+    emit("created");
   }
 }
 </script>

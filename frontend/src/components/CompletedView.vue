@@ -131,17 +131,15 @@
 <script setup lang="ts">
 import { ref, computed, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
-import mutate from "../graphql/utils/mutate";
-import {
-  CreateSessionDocument,
-  type SessionFragment,
-} from "../graphql/generated";
+import { type SessionFragment } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
 import { useDirectoryState } from "../composables/useDirectoryState";
+import { useCreateSession } from "../composables/useCreateSession";
+import { usePresets } from "../composables/usePresets";
 
 const { session } = defineProps<{
   session: SessionFragment;
@@ -165,6 +163,10 @@ const { lastSession: nextDirLastSession } = useDirectoryState(
 
 const commitForm =
   useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
+
+const { getPreset, lastSelectedPresetId } = usePresets();
+const selectedPreset = computed(() => getPreset(lastSelectedPresetId.value));
+const { createSession } = useCreateSession();
 
 const showConfirm = ref(false);
 let pendingCommit: (() => void) | null = null;
@@ -203,21 +205,16 @@ async function handleCommitted() {
       nextDirLastSession.value?.filter?.rating ?? filter.rating ?? [];
     const nextTargetKeep = nextDirLastSession.value?.targetKeep ?? targetKeep;
 
-    const { data } = await mutate(CreateSessionDocument, {
-      variables: {
-        input: {
-          filter: {
-            rating: nextRating,
-          },
-          targetKeep: nextTargetKeep,
-          directoryId: nextDirectoryIdValue,
-        },
+    const nextSession = await createSession({
+      directoryId: nextDirectoryIdValue,
+      filter: {
+        rating: nextRating,
       },
+      targetKeep: nextTargetKeep,
+      createActions: selectedPreset.value?.writeActions,
     });
 
-    if (data?.createSession) {
-      const nextSession = data.createSession.session;
-
+    if (nextSession) {
       await router.push({
         name: "session",
         params: {

@@ -118,6 +118,7 @@ import {
   type SessionFragment,
 } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
+import { useDirectoryState } from "../composables/useDirectoryState";
 import RatingSelector from "./RatingSelector.vue";
 import { mdiLoading } from "@mdi/js";
 import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
@@ -135,6 +136,9 @@ const {
 
 const emit = defineEmits<(e: "committed") => void>();
 const { getPreset, lastSelectedPresetId } = usePresets();
+const { lastSessionState } = useDirectoryState(
+  computed(() => session.directory.id),
+);
 
 const committing = ref(false);
 const commitResult = ref<{
@@ -154,6 +158,8 @@ const keepRatingBuffer = ref<number>();
 const keepRating = computed({
   get: () =>
     keepRatingBuffer.value ??
+    lastSessionState.value?.commitActions?.keepRating ??
+    lastSessionState.value?.createActions?.keepRating ??
     selectedPreset.value?.writeActions.keepRating ??
     0,
   set: (v: number) => {
@@ -165,6 +171,8 @@ const shelveRatingBuffer = ref<number>();
 const shelveRating = computed({
   get: () =>
     shelveRatingBuffer.value ??
+    lastSessionState.value?.commitActions?.shelveRating ??
+    lastSessionState.value?.createActions?.shelveRating ??
     selectedPreset.value?.writeActions.shelveRating ??
     0,
   set: (v: number) => {
@@ -176,6 +184,8 @@ const rejectRatingBuffer = ref<number>();
 const rejectRating = computed({
   get: () =>
     rejectRatingBuffer.value ??
+    lastSessionState.value?.commitActions?.rejectRating ??
+    lastSessionState.value?.createActions?.rejectRating ??
     selectedPreset.value?.writeActions.rejectRating ??
     0,
   set: (v: number) => {

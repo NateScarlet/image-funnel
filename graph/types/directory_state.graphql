@@ -17,6 +17,10 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
   filter: ImageFilters!
   "目标保留数量"
   targetKeep: Int!
+  "上一次提交时使用的动作"
+  commitActions: WriteActions
+  "上一次创建时由客户端主动上报的预设对应的动作"
+  createActions: WriteActions
 }
 
 """
@@ -32,9 +36,17 @@ type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBr
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   "浏览/过滤配置"
   browse: DirectoryStateBrowseInput
+  "上一次会话输入数据（客户端主动上报预设动作）"
+  lastSession: DirectoryStateLastSessionInput
 }
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
   filterBy: ImageFiltersInput
   filterNoteBy: NoteFiltersInput
 }
+
+input DirectoryStateLastSessionInput @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
+  "上一次创建时由客户端主动上报的预设对应的动作"
+  createActions: WriteActionsInput
+}
+

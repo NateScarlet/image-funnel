@@ -93,9 +93,9 @@ type StatsDTO struct {
 
 // WriteActions 写入操作配置
 type WriteActions struct {
-	KeepRating   int
-	ShelveRating int
-	RejectRating int
+	KeepRating   int `json:"keepRating"`
+	ShelveRating int `json:"shelveRating"`
+	RejectRating int `json:"rejectRating"`
 }
 
 // ImageMeta 图片元数据
@@ -219,9 +219,11 @@ type DirectoryStateBrowseDTO struct {
 
 // DirectoryStateLastSessionDTO 状态中的最近会话配置
 type DirectoryStateLastSessionDTO struct {
-	ID         scalar.ID    `json:"id"`
-	Filter     ImageFilters `json:"filter"`
-	TargetKeep int          `json:"targetKeep"`
+	ID            scalar.ID     `json:"id"`
+	Filter        ImageFilters  `json:"filter"`
+	TargetKeep    int           `json:"targetKeep"`
+	CommitActions *WriteActions `json:"commitActions,omitempty"`
+	CreateActions *WriteActions `json:"createActions,omitempty"`
 }
 
 // UndoTrashResultDTO 撤销回收站的结果数据传输对象

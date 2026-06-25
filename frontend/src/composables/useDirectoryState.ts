@@ -67,6 +67,8 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     return node?.__typename === "Directory" ? node.state : undefined;
   });
 
+  const lastSessionState = computed(() => serverState.value?.lastSession);
+
   // 从服务器异步查询当前目录的最新会话信息
   const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
     variables: () => {
@@ -296,5 +298,6 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     hasActiveFilters,
     clearFilters,
     lastSession,
+    lastSessionState,
   };
 }

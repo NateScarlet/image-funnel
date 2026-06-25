@@ -230,10 +230,46 @@ func (s *Service) WriteState(ctx context.Context, id scalar.ID, state *shared.Di
 	if err != nil {
 		return err
 	}
-	if state != nil {
-		state.UpdatedAt = time.Now()
+
+	existingState, err := s.repo.ReadState(ctx, dir.RelPath())
+	if err != nil {
+		return err
 	}
-	return s.repo.WriteState(ctx, dir.RelPath(), state)
+	if existingState == nil {
+		existingState = &shared.DirectoryStateDTO{
+			Version: 2,
+		}
+	}
+
+	if state != nil {
+		if state.Browse != nil {
+			existingState.Browse = state.Browse
+		}
+		if state.LastSession != nil {
+			if existingState.LastSession == nil {
+				existingState.LastSession = state.LastSession
+			} else {
+				if !state.LastSession.ID.IsZero() {
+					existingState.LastSession.ID = state.LastSession.ID
+				}
+				if len(state.LastSession.Filter.Rating) > 0 || len(state.LastSession.Filter.Label) > 0 || state.LastSession.Filter.Query != "" {
+					existingState.LastSession.Filter = state.LastSession.Filter
+				}
+				if state.LastSession.TargetKeep != 0 {
+					existingState.LastSession.TargetKeep = state.LastSession.TargetKeep
+				}
+				if state.LastSession.CommitActions != nil {
+					existingState.LastSession.CommitActions = state.LastSession.CommitActions
+				}
+				if state.LastSession.CreateActions != nil {
+					existingState.LastSession.CreateActions = state.LastSession.CreateActions
+				}
+			}
+		}
+	}
+	existingState.UpdatedAt = time.Now()
+
+	return s.repo.WriteState(ctx, dir.RelPath(), existingState)
 }
 
 // SaveLastSession 保存上一次活跃会话的历史配置到该目录的持久化状态文件中
@@ -253,7 +289,9 @@ func (s *Service) SaveLastSession(
 		return err
 	}
 	if state == nil {
-		state = &shared.DirectoryStateDTO{}
+		state = &shared.DirectoryStateDTO{
+			Version: 2,
+		}
 	}
 	var ratingVal []int
 	var labelVal []string
@@ -275,4 +313,37 @@ func (s *Service) SaveLastSession(
 	state.UpdatedAt = time.Now()
 	return s.repo.WriteState(ctx, dir.RelPath(), state)
 }
+
+// SaveLastSessionCommitActions 保存上一次活跃会话的提交配置到该目录的持久化状态文件中
+func (s *Service) SaveLastSessionCommitActions(
+	ctx context.Context,
+	directoryID scalar.ID,
+	sessionID scalar.ID,
+	commitActions *shared.WriteActions,
+) error {
+	dir, err := s.GetDirectory(ctx, directoryID)
+	if err != nil {
+		return err
+	}
+	state, err := s.repo.ReadState(ctx, dir.RelPath())
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		state = &shared.DirectoryStateDTO{
+			Version: 2,
+		}
+	}
+	if state.LastSession == nil {
+		state.LastSession = &shared.DirectoryStateLastSessionDTO{
+			ID: sessionID,
+		}
+	} else if state.LastSession.ID != sessionID {
+		state.LastSession.ID = sessionID
+	}
+	state.LastSession.CommitActions = commitActions
+	state.UpdatedAt = time.Now()
+	return s.repo.WriteState(ctx, dir.RelPath(), state)
+}
+
 

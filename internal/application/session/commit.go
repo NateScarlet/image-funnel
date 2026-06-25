@@ -47,5 +47,14 @@ func (h *Handler) Commit(
 		ShelveRating: shelveRating,
 		RejectRating: rejectRating,
 	}
-	return h.sessionService.Commit(ctx, sess, writeActions)
+	successCount, err := h.sessionService.Commit(ctx, sess, writeActions)
+	if err != nil {
+		return 0, err
+	}
+
+	if h.lastSessionSaver != nil {
+		_ = h.lastSessionSaver.SaveLastSessionCommitActions(ctx, sess.DirectoryID(), sessionID, writeActions)
+	}
+
+	return successCount, nil
 }

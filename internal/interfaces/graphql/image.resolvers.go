@@ -7,10 +7,9 @@ package graphql
 
 import (
 	"context"
-	"path/filepath"
-
 	"main/internal/application/image"
 	"main/internal/shared"
+	"path/filepath"
 )
 
 // URL is the resolver for the url field.
