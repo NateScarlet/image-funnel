@@ -491,83 +491,9 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 	for _, entry := range expiredDirs {
 		historyId := entry.Name()
 		historyDir := filepath.Join(trashRoot, historyId)
-		filesDir := filepath.Join(historyDir, "files")
 
-		metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
-		if err != nil {
-			return clearedCount, err
-		}
-		var meta trashMeta
-		if err := json.Unmarshal(metaBytes, &meta); err != nil {
-			return clearedCount, err
-		}
-
-		var tempFiles []string
-		if _, err := os.Stat(filesDir); err == nil {
-			err = filepath.Walk(filesDir, func(path string, info os.FileInfo, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if !info.IsDir() {
-					tempFiles = append(tempFiles, path)
-				}
-				return nil
-			})
-			if err != nil {
-				return clearedCount, err
-			}
-		} else if !os.IsNotExist(err) {
-			return clearedCount, err
-		}
-
-		type restoreToTrashTask struct {
-			tempAbsPath string
-			srcAbsPath  string
-			srcRelPath  string
-		}
-		var tasks []restoreToTrashTask
-
-		// 检查冲突
-		for _, tempAbsPath := range tempFiles {
-			rel, err := filepath.Rel(filesDir, tempAbsPath)
-			if err != nil {
-				return clearedCount, err
-			}
-			tempRelPath := filepath.ToSlash(rel)
-			srcRelPath := filepath.Clean(filepath.Join(meta.SrcRelPath, tempRelPath))
-			srcAbsPath := filepath.Join(s.rootDir, srcRelPath)
-
-			if _, err := os.Stat(srcAbsPath); err == nil {
-				return clearedCount, fmt.Errorf("conflict: cannot empty trash, target file already exists: %s", srcRelPath)
-			}
-
-			tasks = append(tasks, restoreToTrashTask{
-				tempAbsPath: tempAbsPath,
-				srcAbsPath:  srcAbsPath,
-				srcRelPath:  srcRelPath,
-			})
-		}
-
-		// 移回原始路径
-		var srcPaths []string
-		for _, task := range tasks {
-			if err := os.MkdirAll(filepath.Dir(task.srcAbsPath), 0755); err != nil {
-				return clearedCount, err
-			}
-			if err := os.Rename(task.tempAbsPath, task.srcAbsPath); err != nil {
-				return clearedCount, fmt.Errorf("failed to restore file %s to %s for trash: %w", task.tempAbsPath, task.srcRelPath, err)
-			}
-			srcPaths = append(srcPaths, task.srcAbsPath)
-		}
-
-		// 将原始路径下的文件投递到系统回收站
-		if err := trashOrDelete(srcPaths, s.useSystemRecycleBin); err != nil {
-			return clearedCount, fmt.Errorf("failed to move files to recycle bin: %w", err)
-		}
-
-		// 物理删除整个暂存历史子目录
-		if err := os.RemoveAll(historyDir); err != nil {
-			return clearedCount, err
+		if err := trashOrDelete([]string{historyDir}, s.useSystemRecycleBin); err != nil {
+			return clearedCount, fmt.Errorf("failed to delete history directory: %w", err)
 		}
 
 		clearedCount++
