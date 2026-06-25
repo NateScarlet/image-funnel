@@ -1186,7 +1186,50 @@ def main() -> None:
             # 检测是否为相对权重表达式（含 x 或 +- 前缀）
             is_relative_expr = is_relative(args.weight)
 
-            if is_relative_expr:
+            if args.adjust_type == "cfg":
+                ksampler_cfgs: Dict[str, float] = {}
+                for nid, node in prompt.items():
+                    if args.node is not None and nid not in args.node:
+                        continue
+                    node_dict = cast(Dict[str, Any], node)
+                    class_type = node_dict.get("class_type", "")
+                    if "KSampler" in class_type:
+                        inputs = node_dict.get("inputs", {})
+                        if "cfg" in inputs:
+                            src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
+                            val = prompt[src_nid]["inputs"].get(src_key)
+                            if isinstance(val, (int, float)):
+                                ksampler_cfgs[nid] = float(val)
+
+                if not ksampler_cfgs:
+                    raise ValueError(
+                        f"No matching KSampler nodes found with valid CFG (node_ids: {args.node})"
+                    )
+
+                version_lengths: Dict[str, int] = {}
+                for nid, cfg_val in ksampler_cfgs.items():
+                    try:
+                        node_weights = parse_weights(args.weight, cfg_val)
+                        version_lengths[nid] = len(node_weights)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Failed to parse weights expression '{args.weight}' for KSampler node {nid}: {e}"
+                        )
+
+                unique_lengths = set(version_lengths.values())
+                if len(unique_lengths) > 1:
+                    details = ", ".join(
+                        f"node {nid}: {l} versions"
+                        for nid, l in version_lengths.items()
+                    )
+                    raise ValueError(
+                        f"Inconsistent weights version counts generated for KSampler nodes ({details}) "
+                        f"under expression '{args.weight}'. Please filter targets using --node to resolve ambiguity."
+                    )
+
+                first_cfg_val = list(ksampler_cfgs.values())[0]
+                weights = parse_weights(args.weight, first_cfg_val)
+            elif is_relative_expr:
                 if args.adjust_type == "lora":
                     current = get_current_lora_weight(prompt, workflow, args.name)
                     if current is None:
@@ -1248,14 +1291,22 @@ def main() -> None:
             enable_seed_update = args.update_seed or (total_runs > 1)
             any_image_success = False
 
-            for w in weights:
+            for idx, w in enumerate(weights):
                 prompt_copy = json.loads(json.dumps(prompt))
                 workflow_copy = json.loads(json.dumps(workflow))
                 is_modified = False
 
-                if args.adjust_type == ("lora", "l"):
+                if args.adjust_type in ("lora", "l") or args.adjust_type == "lora":
                     is_modified = modify_lora_weights(
                         prompt_copy, workflow_copy, args.name, w
+                    )
+                elif args.adjust_type == "cfg":
+                    is_modified = modify_cfg_weights(
+                        prompt_copy,
+                        workflow_copy,
+                        args.weight,
+                        idx,
+                        getattr(args, "node", None),
                     )
                 elif args.adjust_type in ("prompt", "p"):
                     is_neg = args.neg
@@ -1689,6 +1740,39 @@ def parse_args():
         help="Target node ID, can be specified multiple times; highest priority",
     )
 
+    # 3. adjust cfg
+    cfg_parser = adjust_subparsers.add_parser("cfg", help="Adjust KSampler CFG scale")
+    cfg_parser.add_argument(
+        "weight",
+        help="CFG value or range (e.g. 7.0, 5.0:9.0:0.5, x-0.5:x+0.5:0.5, +-1.0:0.5)",
+    )
+    cfg_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
+    cfg_parser.add_argument(
+        "--update-seed",
+        "-u",
+        action="store_true",
+        help="Force enable seed updating",
+    )
+    cfg_parser.add_argument(
+        "--no-skip",
+        action="store_true",
+        help="Do not skip ComfyUI submission even if no changes were made",
+    )
+    cfg_parser.add_argument(
+        "--node",
+        action="append",
+        default=None,
+        metavar="node-id",
+        help="Target KSampler node ID, can be specified multiple times; if omitted, adjusts all KSampler nodes",
+    )
+
     return parser.parse_args()
 
 
@@ -2045,6 +2129,135 @@ def get_current_prompt_weight(
             return 1.0
 
     return None
+
+
+def modify_cfg_weights(
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    weight_expr: str,
+    version_idx: int,
+    node_ids: Optional[List[str]] = None,
+) -> bool:
+    """
+    修改 prompt (API 结构) 和 workflow (UI 结构) 中 KSampler 的 CFG 权重。
+    利用每一个 KSampler 节点的当前 CFG 值代入表达式独立计算修改目标值。
+    如果未找到任何匹配的 KSampler 节点或其 CFG 端口，直接抛出 ValueError。
+    """
+    is_modified = False
+    modified_primitive_nodes: Dict[str, float] = {}
+
+    ksampler_nodes: List[Tuple[str, Dict[str, Any]]] = []
+    for nid, node in prompt.items():
+        if node_ids is not None and nid not in node_ids:
+            continue
+        node_dict = cast(Dict[str, Any], node)
+        class_type = node_dict.get("class_type", "")
+        if "KSampler" in class_type:
+            ksampler_nodes.append((nid, node_dict))
+
+    if not ksampler_nodes:
+        raise ValueError(
+            f"No matching KSampler nodes found to modify (node_ids: {node_ids})"
+        )
+
+    has_cfg_input = False
+    for nid, node_dict in ksampler_nodes:
+        inputs = node_dict.get("inputs", {})
+        if "cfg" in inputs:
+            has_cfg_input = True
+            src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
+            if src_nid not in prompt:
+                raise ValueError(
+                    f"Source node {src_nid} for KSampler CFG is missing in prompt API structure"
+                )
+            current_val = prompt[src_nid]["inputs"].get(src_key)
+            if not isinstance(current_val, (int, float)):
+                raise ValueError(
+                    f"CFG value of source node {src_nid} is not a valid number: {current_val}"
+                )
+
+            # 现场将当前节点的数值作为 current 传入解析器计算
+            node_weights = parse_weights(weight_expr, float(current_val))
+            if version_idx >= len(node_weights):
+                raise ValueError(
+                    f"Version index {version_idx} out of range for node weights (length: {len(node_weights)})"
+                )
+            node_target_cfg = node_weights[version_idx]
+
+            if current_val != node_target_cfg:
+                prompt[src_nid]["inputs"][src_key] = node_target_cfg
+                is_modified = True
+                _LOGGER.info(
+                    f"Updated KSampler node {nid} CFG (terminal node {src_nid} key '{src_key}') to {node_target_cfg}"
+                )
+                src_node = prompt.get(src_nid, {})
+                src_class = src_node.get("class_type", "")
+                if src_class in KNOWN_PRIMITIVE_TYPES:
+                    modified_primitive_nodes[src_nid] = node_target_cfg
+
+    if not has_cfg_input:
+        raise ValueError("None of the matching KSampler nodes have a 'cfg' input")
+
+    # 同步修改 workflow (UI 结构)
+    # 1. 修改连线的 PrimitiveFloat 节点
+    for node in workflow.get("nodes", []):
+        nid_str = str(node.get("id"))
+        if nid_str in modified_primitive_nodes:
+            new_val = modified_primitive_nodes[nid_str]
+            widgets_values = node.get("widgets_values")
+            if isinstance(widgets_values, list) and widgets_values:
+                widgets_values[0] = new_val
+                is_modified = True
+                _LOGGER.info(
+                    f"Updated workflow Primitive node {nid_str} widget value to {new_val}"
+                )
+
+    # 2. 修改原生设置的 KSampler / KSamplerAdvanced 节点
+    candidate_nodes: List[Tuple[Dict[str, Any], str, bool, Optional[str]]] = []
+    for node in workflow.get("nodes", []):
+        if not is_node_disabled(node):
+            candidate_nodes.append((node, str(node.get("id")), False, None))
+    subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
+    for subgraph in subgraphs:
+        subgraph_id = subgraph.get("id")
+        for node in subgraph.get("nodes", []):
+            if not is_node_disabled(node):
+                candidate_nodes.append((node, str(node.get("id")), True, subgraph_id))
+
+    for node, node_id_str, _, subgraph_id in candidate_nodes:
+        if node_ids is not None and node_id_str not in node_ids:
+            continue
+        node_type = node.get("type", "")
+        if "KSampler" in node_type:
+            widgets_values = node.get("widgets_values")
+            if not isinstance(widgets_values, list):
+                continue
+            wv = cast(List[Any], widgets_values)
+            if node_type == "KSampler" and len(wv) >= 4:
+                if isinstance(wv[3], (int, float)):
+                    # 在 workflow 节点本身原本的值上重新解析表达式并取对应索引值修改
+                    node_weights = parse_weights(weight_expr, float(wv[3]))
+                    if version_idx < len(node_weights):
+                        node_target_cfg = node_weights[version_idx]
+                        if wv[3] != node_target_cfg:
+                            wv[3] = node_target_cfg
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated workflow KSampler {node_id_str} CFG to {node_target_cfg}"
+                            )
+            elif node_type == "KSamplerAdvanced" and len(wv) >= 5:
+                if isinstance(wv[4], (int, float)):
+                    node_weights = parse_weights(weight_expr, float(wv[4]))
+                    if version_idx < len(node_weights):
+                        node_target_cfg = node_weights[version_idx]
+                        if wv[4] != node_target_cfg:
+                            wv[4] = node_target_cfg
+                            is_modified = True
+                            _LOGGER.info(
+                                f"Updated workflow KSamplerAdvanced {node_id_str} CFG to {node_target_cfg}"
+                            )
+
+    return is_modified
 
 
 if __name__ == "__main__":
