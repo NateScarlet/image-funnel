@@ -1,4 +1,5 @@
 import { computed, toValue, ref, type MaybeRefOrGetter, type Ref } from "vue";
+import { keyBy } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import useRelayConnection from "./useRelayConnection";
@@ -78,12 +79,7 @@ export default function useBrowseImages(
 
   // 订阅图片的新增与修改事件
   useSubscription(ImageSavedDocument, {
-    variables: () => {
-      const filterBy = directoryId.value
-        ? { directoryId: [directoryId.value] }
-        : undefined; // 避免返回 null，使用 undefined 代替
-      return { filterBy };
-    },
+    variables: () => ({ filterBy: { directoryId: [directoryId.value] } }),
     onNext: (result) => {
       const savedImage = result.data?.imageSaved;
       if (savedImage) {
@@ -98,17 +94,16 @@ export default function useBrowseImages(
     },
   });
 
+  // 构建 relPath 到图片的索引，删除文件时 O(1) 查找
+  const imageByRelPath = computed(() => keyBy(images.value, (i) => i.relPath));
+
   // 订阅文件/目录的删除事件
   useSubscription(DirEntryDeletedDocument, {
-    variables: () => {
-      return { directoryId: directoryId.value || undefined };
-    },
+    variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
       const deletedEntry = result.data?.dirEntryDeleted;
       if (deletedEntry) {
-        const match = images.value.find(
-          (i) => i.relPath === deletedEntry.relPath,
-        );
+        const match = imageByRelPath.value[deletedEntry.relPath];
         if (match) {
           onDeleted({ id: match.id });
         }
