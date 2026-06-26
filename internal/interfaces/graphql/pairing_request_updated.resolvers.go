@@ -13,7 +13,7 @@ import (
 // PairingRequestUpdated is the resolver for the pairingRequestUpdated field.
 func (r *subscriptionResolver) PairingRequestUpdated(ctx context.Context, code string) (<-chan *shared.PairingRequestDTO, error) {
 	seq := func(yield func(*shared.PairingRequestDTO, error) bool) {
-		for dto, err := range r.app.SubscribeParingRequestUpdated(ctx) {
+		for dto, err := range r.app.SubscribePairingRequestUpdated(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
 					return

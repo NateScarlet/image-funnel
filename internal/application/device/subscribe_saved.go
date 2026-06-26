@@ -7,8 +7,21 @@ import (
 )
 
 func (h *Handler) SubscribeSaved(ctx context.Context) iter.Seq2[*shared.DeviceDTO, error] {
-	if h.ebus != nil {
-		return h.ebus.SubscribeDeviceSaved(ctx)
+	if h.deviceSavedSub != nil {
+		return func(yield func(*shared.DeviceDTO, error) bool) {
+			for dev, err := range h.deviceSavedSub.Subscribe(ctx) {
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				dto := h.dtoFactory.New(dev)
+				if !yield(dto, nil) {
+					return
+				}
+			}
+		}
 	}
 	return func(yield func(*shared.DeviceDTO, error) bool) {}
 }

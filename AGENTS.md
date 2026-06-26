@@ -113,7 +113,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **`iter.Seq` / `iter.Seq2[T, error]`**: 使用迭代器模式减少数组分配
 - **构造函数**: 使用 `New` 前缀，如需清理，将清理函数作为第二个返回值
 - **依赖注入**: 构造函数应通过参数接受所有依赖，不得在内部自行 `New*()` 构建。调用者（如 `main.go`）负责组装依赖图。这适用于 handler、service、factory 等所有带构造函数的类型
-- **EventBus 接口本地化**: 当 handler 需要事件总线但引用 `application/session` 中的接口会造成循环导入时，在包内定义同名本地接口（如 `type EventBus interface { SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] }`）。Go 的隐式接口满足确保 `infrastructure/ebus.EventBus` 无需显式声明即可匹配。参照 `note.Handler` 和 `image.Handler` 中的实践
+- **事件发布模式**: 移除统一的 `EventBus` 接口，改为直接依赖 `pubsub.Topic[T]`。领域层发布领域对象（如 `*pairing.Request`、`*device.Device`），应用层订阅后通过 `DTOFactory` 转换为 DTO。事件类型在 `shared` 包中定义（如 `FileChangedEvent`、`MetadataUpdatedEvent`），或直接在领域层使用领域对象。`main.go` 负责创建所有 `pubsub.Topic` 实例并注入到各组件
 - **编译时接口检查**: 使用 `var _ Interface = (*Impl)(nil)`
 - **错误处理**: 绝不静默忽略错误，使用 `errors` 包处理
 - **业务错误**: 使用 `internal/apperror` 包

@@ -7,6 +7,7 @@ import (
 	"iter"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"os"
@@ -172,11 +173,54 @@ func (f *FakeSessionRepo) LastSession(ctx context.Context, directoryID scalar.ID
 	return latest, func() {}, nil
 }
 
-// FakeEventBus is a mock implementation of EventBus.
-type FakeEventBus struct{}; func (f *FakeEventBus) PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent) {}
+// mockFileChangedSub 实现 pubsub.Topic[*shared.FileChangedEvent]
+type mockFileChangedSub struct {
+	events chan *shared.FileChangedEvent
+}
 
-func (f *FakeEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
-	return func(yield func(*shared.FileChangedEvent, error) bool) {}
+func (m *mockFileChangedSub) Publish(ctx context.Context, event *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+	m.events <- event
+	return nil
+}
+
+func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
+	return func(yield func(*shared.FileChangedEvent, error) bool) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-m.events:
+				if !yield(event, nil) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// mockMetadataUpdatedPub 实现 pubsub.Topic[*shared.MetadataUpdatedEvent]
+type mockMetadataUpdatedPub struct {
+	events chan *shared.MetadataUpdatedEvent
+}
+
+func (m *mockMetadataUpdatedPub) Publish(ctx context.Context, event *shared.MetadataUpdatedEvent, opts ...pubsub.PublishOption) error {
+	m.events <- event
+	return nil
+}
+
+func (m *mockMetadataUpdatedPub) Subscribe(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
+	return func(yield func(*shared.MetadataUpdatedEvent, error) bool) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event := <-m.events:
+				if !yield(event, nil) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // FakeImageRepo is a mock implementation of image.Repository

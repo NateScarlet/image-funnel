@@ -30,7 +30,6 @@ import (
 	"main/internal/infrastructure"
 	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/concurrency"
-	"main/internal/infrastructure/ebus"
 	infrahook "main/internal/infrastructure/hook"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/jwt"
@@ -112,26 +111,14 @@ func main() {
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
-	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
-	prUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.PairingRequestDTO](pubsub.InMemoryTopicWithCapacity(1024))
-	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*shared.DeviceDTO]()
+	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*pairing.Request](pubsub.InMemoryTopicWithCapacity(1024))
+	prResolvedTopic, _ := pubsub.NewInMemoryTopic[*pairing.RequestResolvedEvent](pubsub.InMemoryTopicWithCapacity(1024))
+	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*ddevice.Device]()
 	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
+	sessionCommittedTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionCommittedEvent](pubsub.InMemoryTopicWithCapacity(1024))
 
-	eventBus := ebus.NewEventBus(
-		sessionTopic,
-		fileChangedTopic,
-		prCreatedTopic,
-		prUpdatedTopic,
-		deviceSavedTopic,
-		deviceDeletedTopic,
-		metadataUpdatedTopic,
-		sessionRepo,
-		sessionDTOFactory,
-		deviceDTOFactory,
-	)
-
-	imageRepo = infrastructure.NewEventPublishingImageRepository(imageRepo, eventBus, dirRepo)
+	imageRepo = infrastructure.NewEventPublishingImageRepository(imageRepo, fileChangedTopic, dirRepo)
 
 	revocationRepo, err := localfs.NewRevocationRepository(cfg.DataDir)
 	if err != nil {
@@ -153,11 +140,11 @@ func main() {
 
 	rawFileWatcher := localfs.NewWatcher(logger)
 	fileWatcher := inmem.NewDebouncedWatcher(rawFileWatcher, 300*time.Millisecond)
-	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, eventBus, cfg.AbsRootDir, dirRepo, logger)
+	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, fileChangedTopic, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 
 	// 初始化外部钩子服务
-	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, eventBus, cfg.BaseURL+"/graphql", tokenSource, imageRepo, dirSvc, dirRepo)
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, metadataUpdatedTopic, fileChangedTopic, cfg.BaseURL+"/graphql", tokenSource, imageRepo, dirSvc, dirRepo)
 	defer hookRunner.Close()
 
 	if cfg.EnableDirectoryStatsCache && statsCache != nil {
@@ -183,41 +170,42 @@ func main() {
 		defer cancel()
 	}
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, eventBus, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, fileChangedTopic, metadataUpdatedTopic, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接
 	sleepGuard, stopSleepGuard := winsleep.NewGuard(cfg.IdleThreshold, logger)
 	defer stopSleepGuard()
 
-	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir, eventBus)
+	imageService := image.NewService(metadataRepo, imageRepo, cfg.AbsRootDir, metadataUpdatedTopic)
 
 	directoryDTOFactory := appdirectory.NewDTOFactory(imageDTOFactory)
 	filterBuilder := domdirectory.NewFilterBuilder()
 
 	directoryHandler := appdirectory.NewHandler(
 		dirAnalyzer,
-		eventBus,
 		directoryDTOFactory,
 		filterBuilder,
 		dirRepo,
 		dirSvc,
+		fileChangedTopic,
 	)
 
 	sessionHandler := appsession.NewHandler(
 		sessionService,
-		eventBus,
 		sessionDTOFactory,
 		imageDTOFactory,
 		logger,
 		dirSvc,
+		sessionTopic,
+		sessionCommittedTopic,
 	)
 	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
 	noteFilterBuilder := note.NewFilterBuilder()
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
-	noteHandler := appnote.NewHandler(noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, eventBus, noteDTOFactory, noteFilterBuilder)
+	noteHandler := appnote.NewHandler(noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
-	imageHandler := appimage.NewHandler(imageService, eventBus, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
+	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {
@@ -228,13 +216,13 @@ func main() {
 		logger.Fatal("failed to create cached device repository", zap.Error(err))
 	}
 	pairingRepo := inmem.NewPairingRequestRepository()
-	pairingService := pairing.NewService(pairingRepo, eventBus)
+	pairingService := pairing.NewService(pairingRepo, prCreatedTopic, prResolvedTopic, prCreatedTopic, prResolvedTopic)
 	deviceFactory := ddevice.NewFactory()
-	authService, err := ddevice.NewService(authRepo, pairingService, logger, cfg.WebAuthnRPID, cfg.WebAuthnRPOrigins, eventBus, revocationList, deviceFactory)
+	authService, err := ddevice.NewService(authRepo, pairingService, logger, cfg.WebAuthnRPID, cfg.WebAuthnRPOrigins, deviceSavedTopic, deviceDeletedTopic, revocationList, deviceFactory)
 	if err != nil {
 		logger.Fatal("Failed to initialize auth service", zap.Error(err))
 	}
-	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, eventBus)
+	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, deviceSavedTopic, deviceDeletedTopic)
 	pairingDTOFactory := apppairing.NewDTOFactory()
 	pairingHandler := apppairing.NewHandler(authService, pairingService, pairingDTOFactory)
 

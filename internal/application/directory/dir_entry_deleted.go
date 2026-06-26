@@ -10,7 +10,7 @@ import (
 // DirEntryDeleted 订阅目录内的文件/目录被删除或移走（重命名为其他名字）的事件
 func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) iter.Seq2[*shared.DirEntryDeletedDTO, error] {
 	return func(yield func(*shared.DirEntryDeletedDTO, error) bool) {
-		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
+		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if !func() bool {
 				if err != nil {
 					return yield(nil, err)

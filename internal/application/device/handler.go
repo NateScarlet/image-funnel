@@ -1,41 +1,43 @@
 package device
 
 import (
-	"context"
 	"errors"
-	"iter"
 	"net/http"
 	"strings"
 
 	"main/internal/apperror"
 	"main/internal/domain/device"
+	"main/internal/pubsub"
 	"main/internal/scalar"
-	"main/internal/shared"
 	"main/internal/tokenrw"
 
 	"go.uber.org/zap"
 )
 
-type EventBus interface {
-	SubscribeDeviceSaved(ctx context.Context) iter.Seq2[*shared.DeviceDTO, error]
-	SubscribeDeviceDeleted(ctx context.Context) iter.Seq2[scalar.ID, error]
-}
-
 type Handler struct {
-	service     *device.Service
-	tokenSource device.TokenSource
-	dtoFactory  *DTOFactory
-	logger      *zap.Logger
-	ebus        EventBus
+	service         *device.Service
+	tokenSource     device.TokenSource
+	dtoFactory      *DTOFactory
+	logger          *zap.Logger
+	deviceSavedSub  pubsub.Topic[*device.Device]
+	deviceDeletedSub pubsub.Topic[scalar.ID]
 }
 
-func NewHandler(service *device.Service, tokenSource device.TokenSource, dtoFactory *DTOFactory, logger *zap.Logger, ebus EventBus) *Handler {
+func NewHandler(
+	service *device.Service,
+	tokenSource device.TokenSource,
+	dtoFactory *DTOFactory,
+	logger *zap.Logger,
+	deviceSavedSub pubsub.Topic[*device.Device],
+	deviceDeletedSub pubsub.Topic[scalar.ID],
+) *Handler {
 	return &Handler{
-		service:     service,
-		tokenSource: tokenSource,
-		dtoFactory:  dtoFactory,
-		logger:      logger,
-		ebus:        ebus,
+		service:         service,
+		tokenSource:     tokenSource,
+		dtoFactory:      dtoFactory,
+		logger:          logger,
+		deviceSavedSub:  deviceSavedSub,
+		deviceDeletedSub: deviceDeletedSub,
 	}
 }
 

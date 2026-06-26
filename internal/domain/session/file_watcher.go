@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Service) subscribeFileChanges(ctx context.Context) {
-	for e, err := range s.eventBus.SubscribeFileChanged(ctx) {
+	for e, err := range s.fileChangedSub.Subscribe(ctx) {
 		if err != nil {
 			s.logger.Error("failed to receive file changed event", zap.Error(err))
 			continue

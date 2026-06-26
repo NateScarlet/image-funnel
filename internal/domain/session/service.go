@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/hook"
 	"main/internal/domain/image"
@@ -19,17 +18,12 @@ type DirectoryResolver interface {
 	GetDirectory(ctx context.Context, id scalar.ID) (*directory.Directory, error)
 }
 
-// EventBus 事件总线接口
-type EventBus interface {
-	SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error]
-	PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent)
-}
-
 type Service struct {
 	sessionRepo        Repository
 	metadataRepo       metadata.Repository
 	imageRepo          image.Repository
-	eventBus           EventBus
+	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
+	metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent]
 	directoryResolver  DirectoryResolver
 	logger             *zap.Logger
 	// 只发布 ID，订阅者需要自己 Acquire 后读取，避免跨 goroutine 持有 *Session 指针导致并发 map 读写
@@ -43,7 +37,8 @@ func NewService(
 	sessionRepo Repository,
 	metadataRepo metadata.Repository,
 	imageRepo image.Repository,
-	eventBus EventBus,
+	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
+	metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent],
 	directoryResolver DirectoryResolver,
 	logger *zap.Logger,
 	sessionSaved pubsub.Topic[scalar.ID],
@@ -55,7 +50,8 @@ func NewService(
 		sessionRepo:        sessionRepo,
 		metadataRepo:       metadataRepo,
 		imageRepo:          imageRepo,
-		eventBus:           eventBus,
+		fileChangedSub:     fileChangedSub,
+		metadataUpdatedPub: metadataUpdatedPub,
 		directoryResolver:  directoryResolver,
 		logger:             logger,
 		sessionSaved:       sessionSaved,

@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"iter"
+	"main/internal/pubsub"
 	"main/internal/shared"
 	"os"
 	"testing"
@@ -16,9 +17,15 @@ func (w *mockWatcher) Watch(ctx context.Context, dir string) iter.Seq2[*FileChan
 	return func(yield func(*FileChange, error) bool) {}
 }
 
-type mockEventBus struct{}
+type mockFileChangedPub struct{}
 
-func (e *mockEventBus) PublishFileChanged(ctx context.Context, event *shared.FileChangedEvent) {}
+func (e *mockFileChangedPub) Publish(ctx context.Context, event *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+	return nil
+}
+
+func (e *mockFileChangedPub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
+	return func(yield func(*shared.FileChangedEvent, error) bool) {}
+}
 
 type mockRepository struct {
 	findErr error
@@ -59,8 +66,7 @@ func TestService_SuggestDirectories_IgnoreNotExist(t *testing.T) {
 		findErr: os.ErrNotExist,
 	}
 	watcher := &mockWatcher{}
-	ebus := &mockEventBus{}
-
+	ebus := &mockFileChangedPub{}
 	s, cleanup := NewService(watcher, ebus, "C:/mock_root", repo, logger)
 	defer cleanup()
 

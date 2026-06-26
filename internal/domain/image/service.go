@@ -4,6 +4,7 @@ import (
 	"context"
 	"main/internal/apperror"
 	"main/internal/domain/metadata"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -11,26 +12,21 @@ import (
 	"time"
 )
 
-// EventBus 本地事件总线接口，避免循环导入
-type EventBus interface {
-	PublishMetadataUpdated(ctx context.Context, event *shared.MetadataUpdatedEvent)
-}
-
 // Service 图片领域服务
 type Service struct {
-	xmpRepo   metadata.Repository
-	imageRepo Repository
-	rootDir   string
-	eventBus  EventBus
+	xmpRepo            metadata.Repository
+	imageRepo          Repository
+	rootDir            string
+	metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent]
 }
 
 // NewService 创建图片领域服务
-func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir string, eventBus EventBus) *Service {
+func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir string, metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent]) *Service {
 	return &Service{
-		xmpRepo:   xmpRepo,
-		imageRepo: imageRepo,
-		rootDir:   rootDir,
-		eventBus:  eventBus,
+		xmpRepo:            xmpRepo,
+		imageRepo:          imageRepo,
+		rootDir:            rootDir,
+		metadataUpdatedPub: metadataUpdatedPub,
 	}
 }
 
@@ -110,7 +106,7 @@ func (s *Service) UpdateImageMetadata(
 	}
 
 	// 写入成功后发布元数据更新事件
-	s.eventBus.PublishMetadataUpdated(ctx, &shared.MetadataUpdatedEvent{
+	s.metadataUpdatedPub.Publish(ctx, &shared.MetadataUpdatedEvent{
 		ID:        id,
 		Path:      absPath,
 		Rating:    ratingVal,

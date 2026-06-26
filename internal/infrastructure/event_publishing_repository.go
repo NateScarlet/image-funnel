@@ -7,30 +7,26 @@ import (
 	"main/internal/apperror"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/pubsub"
 	"main/internal/shared"
 	"path/filepath"
 	"time"
 )
 
-// EventBus 基础设施层本地事件总线接口，仅用于发布文件变更事件
-type EventBus interface {
-	PublishFileChanged(ctx context.Context, event *shared.FileChangedEvent)
-}
-
 // EventPublishingImageRepository 图像仓库装饰器
 // 负责拦截加载失败（文件不存在）并在后台补发删除事件
 type EventPublishingImageRepository struct {
-	repo     image.Repository
-	eventBus EventBus
-	dirRepo  directory.Repository
+	repo           image.Repository
+	fileChangedPub pubsub.Topic[*shared.FileChangedEvent]
+	dirRepo        directory.Repository
 }
 
 // NewEventPublishingImageRepository 创建一个图像仓库装饰器
-func NewEventPublishingImageRepository(repo image.Repository, eventBus EventBus, dirRepo directory.Repository) image.Repository {
+func NewEventPublishingImageRepository(repo image.Repository, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], dirRepo directory.Repository) image.Repository {
 	return &EventPublishingImageRepository{
-		repo:     repo,
-		eventBus: eventBus,
-		dirRepo:  dirRepo,
+		repo:           repo,
+		fileChangedPub: fileChangedPub,
+		dirRepo:        dirRepo,
 	}
 }
 
@@ -49,7 +45,7 @@ func (r *EventPublishingImageRepository) Get(ctx context.Context, relPath string
 				return nil, errors.Join(err, errDir)
 			}
 
-			r.eventBus.PublishFileChanged(ctx, &shared.FileChangedEvent{
+			r.fileChangedPub.Publish(ctx, &shared.FileChangedEvent{
 				DirectoryID: dir.ID(),
 				RelPath:     relPath,
 				Action:      shared.FileActionRemove,

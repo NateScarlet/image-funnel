@@ -24,7 +24,7 @@ func (h *Handler) NoteSaved(ctx context.Context, filter *shared.NoteFilters) ite
 
 		noteFilter := h.filterBuilder.Build(filters)
 
-		for event, err := range h.ebus.SubscribeFileChanged(ctx) {
+		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
 					return

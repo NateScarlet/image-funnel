@@ -12,6 +12,7 @@ import (
 
 	"main/internal/apperror"
 	"main/internal/domain/pairing"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -20,25 +21,31 @@ import (
 	"go.uber.org/zap"
 )
 
-type EventBus interface {
-	PublishDeviceSaved(ctx context.Context, device *Device)
-	PublishDeviceDeleted(ctx context.Context, id scalar.ID)
-}
-
 type Service struct {
-	repo           Repository
-	pairingSvc     *pairing.Service
-	wa             *webauthn.WebAuthn
-	setupToken     string                           // 在 NewService 中生成，不存在并发问题
-	sessionDataMap map[string]*webauthn.SessionData // key is a random string representing the session challenge
-	sessionDataMu  sync.RWMutex
-	logger         *zap.Logger
-	ebus           EventBus
-	revocationList RevocationList
-	factory        *Factory
+	repo             Repository
+	pairingSvc       *pairing.Service
+	wa               *webauthn.WebAuthn
+	setupToken       string                           // 在 NewService 中生成，不存在并发问题
+	sessionDataMap   map[string]*webauthn.SessionData // key is a random string representing the session challenge
+	sessionDataMu    sync.RWMutex
+	logger           *zap.Logger
+	deviceSavedPub   pubsub.Topic[*Device]
+	deviceDeletedPub pubsub.Topic[scalar.ID]
+	revocationList   RevocationList
+	factory          *Factory
 }
 
-func NewService(repo Repository, pairingSvc *pairing.Service, logger *zap.Logger, rpid string, rpOrigins []string, ebus EventBus, revocationList RevocationList, factory *Factory) (*Service, error) {
+func NewService(
+	repo Repository,
+	pairingSvc *pairing.Service,
+	logger *zap.Logger,
+	rpid string,
+	rpOrigins []string,
+	deviceSavedPub pubsub.Topic[*Device],
+	deviceDeletedPub pubsub.Topic[scalar.ID],
+	revocationList RevocationList,
+	factory *Factory,
+) (*Service, error) {
 	// 实际生产中 RPDisplayName 和 RPID 应该从配置读取
 	wconfig := &webauthn.Config{
 		RPDisplayName: "Image Funnel",
@@ -57,15 +64,16 @@ func NewService(repo Repository, pairingSvc *pairing.Service, logger *zap.Logger
 	}
 
 	s := &Service{
-		repo:           repo,
-		pairingSvc:     pairingSvc,
-		wa:             wa,
-		setupToken:     setupToken,
-		sessionDataMap: make(map[string]*webauthn.SessionData),
-		logger:         logger,
-		ebus:           ebus,
-		revocationList: revocationList,
-		factory:        factory,
+		repo:             repo,
+		pairingSvc:       pairingSvc,
+		wa:               wa,
+		setupToken:       setupToken,
+		sessionDataMap:   make(map[string]*webauthn.SessionData),
+		logger:           logger,
+		deviceSavedPub:   deviceSavedPub,
+		deviceDeletedPub: deviceDeletedPub,
+		revocationList:   revocationList,
+		factory:          factory,
 	}
 
 	return s, nil
@@ -223,8 +231,8 @@ func (s *Service) FinishRegistration(ctx context.Context, sessionKey string, res
 		if err != nil {
 			return nil, nil, err
 		}
-		if s.ebus != nil {
-			s.ebus.PublishDeviceSaved(ctx, newDevice)
+		if s.deviceSavedPub != nil {
+			s.deviceSavedPub.Publish(ctx, newDevice)
 		}
 		// 若使用的是 setupToken，在首次成功后将其清除
 		if !hasDevices && s.setupToken != "" && providedSetupToken == s.setupToken {
@@ -320,8 +328,8 @@ func (s *Service) FinishLogin(ctx context.Context, sessionKey string, responseJS
 	if err != nil {
 		return nil, err
 	}
-	if s.ebus != nil {
-		s.ebus.PublishDeviceSaved(ctx, matchedDevice)
+	if s.deviceSavedPub != nil {
+		s.deviceSavedPub.Publish(ctx, matchedDevice)
 	}
 
 	return matchedDevice, nil
@@ -362,8 +370,8 @@ func (s *Service) ApproveRequest(ctx context.Context, code string) error {
 	if err != nil {
 		return err
 	}
-	if s.ebus != nil {
-		s.ebus.PublishDeviceSaved(ctx, newDevice)
+	if s.deviceSavedPub != nil {
+		s.deviceSavedPub.Publish(ctx, newDevice)
 	}
 
 	return s.pairingSvc.Delete(ctx, code, shared.PairingRequestStatusApproved)
@@ -389,8 +397,8 @@ func (s *Service) Delete(ctx context.Context, id scalar.ID) error {
 	if err != nil {
 		return err
 	}
-	if s.ebus != nil {
-		s.ebus.PublishDeviceDeleted(ctx, id)
+	if s.deviceDeletedPub != nil {
+		s.deviceDeletedPub.Publish(ctx, id)
 	}
 	return nil
 }
@@ -419,7 +427,9 @@ func (s *Service) UpdateRefreshToken(ctx context.Context, deviceID scalar.ID, jt
 	if err != nil {
 		return err
 	}
-	s.ebus.PublishDeviceSaved(ctx, device)
+	if s.deviceSavedPub != nil {
+		s.deviceSavedPub.Publish(ctx, device)
+	}
 	return nil
 }
 

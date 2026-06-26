@@ -93,7 +93,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 
 		// 发布元数据更新事件
-		s.eventBus.PublishMetadataUpdated(ctx, &shared.MetadataUpdatedEvent{
+		s.metadataUpdatedPub.Publish(ctx, &shared.MetadataUpdatedEvent{
 			ID:        currentImg.ID(),
 			Path:      absPath,
 			Rating:    rating,

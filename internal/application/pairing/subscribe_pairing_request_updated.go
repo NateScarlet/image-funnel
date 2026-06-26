@@ -6,16 +6,16 @@ import (
 	"main/internal/shared"
 )
 
-func (h *Handler) SubscribePairingRequestCreated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error] {
+func (h *Handler) SubscribePairingRequestUpdated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error] {
 	return func(yield func(*shared.PairingRequestDTO, error) bool) {
-		for req, err := range h.pairingSvc.SubscribeRequestCreated(ctx) {
+		for event, err := range h.pairingSvc.SubscribeRequestResolved(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
 					return
 				}
 				continue
 			}
-			dto := h.dtoFactory.New(req, shared.PairingRequestStatusPending)
+			dto := h.dtoFactory.New(event.Request, event.Status)
 			if !yield(dto, nil) {
 				return
 			}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 	"main/internal/apperror"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -14,29 +15,24 @@ import (
 	"go.uber.org/zap"
 )
 
-// EventBus 事件总线接口
-type EventBus interface {
-	PublishFileChanged(ctx context.Context, event *shared.FileChangedEvent)
-}
-
 // Service 目录领域服务
 // 负责监听文件变更并转换为应用层事件
 type Service struct {
-	watcher  Watcher
-	eventBus EventBus
-	rootDir  string
-	logger   *zap.Logger
-	repo     Repository
+	watcher        Watcher
+	fileChangedPub pubsub.Topic[*shared.FileChangedEvent]
+	rootDir        string
+	logger         *zap.Logger
+	repo           Repository
 }
 
 // NewService 创建目录服务
-func NewService(watcher Watcher, eventBus EventBus, rootDir string, repo Repository, logger *zap.Logger) (*Service, func()) {
+func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], rootDir string, repo Repository, logger *zap.Logger) (*Service, func()) {
 	s := &Service{
-		watcher:  watcher,
-		eventBus: eventBus,
-		rootDir:  rootDir,
-		logger:   logger,
-		repo:     repo,
+		watcher:        watcher,
+		fileChangedPub: fileChangedPub,
+		rootDir:        rootDir,
+		logger:         logger,
+		repo:           repo,
 	}
 
 	// 启动后台监听
@@ -87,7 +83,9 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		}
 
 		// 发布事件
-		s.eventBus.PublishFileChanged(ctx, event)
+		if s.fileChangedPub != nil {
+			s.fileChangedPub.Publish(ctx, event)
+		}
 	}
 }
 

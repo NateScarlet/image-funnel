@@ -21,6 +21,7 @@ import (
 	domdir "main/internal/domain/directory"
 	domhook "main/internal/domain/hook"
 	domimage "main/internal/domain/image"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -158,12 +159,6 @@ type DirectoryService interface {
 	GetDirectory(ctx context.Context, id scalar.ID) (*domdir.Directory, error)
 }
 
-// EventBus 本地监听接口
-type EventBus interface {
-	SubscribeMetadataUpdated(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error]
-	SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error]
-}
-
 var _ domhook.Repository = (*Runner)(nil)
 var _ domhook.Runner = (*Runner)(nil)
 
@@ -187,31 +182,33 @@ type activeTask struct {
 
 // Runner 外部钩子管理器（应用/基础设施适配器服务）
 type Runner struct {
-	rootDir     string
-	hooksDir    string
-	logger      *zap.Logger
-	ebus        EventBus
-	graphqlURL  string
-	tokenSource device.TokenSource
-	imgRepo     ImageRepository
-	dirSvc      DirectoryService
-	dirRepo     domdir.Repository
-	ch          chan HookExecutionTask
-	debouncer   *Debouncer
-	ctx         context.Context
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
-	muIgnore    sync.Mutex
-	writeIgnore map[string]writeIgnoreItem
-	muTasks     sync.Mutex
-	activeTasks map[string]*activeTask
+	rootDir            string
+	hooksDir           string
+	logger             *zap.Logger
+	metadataUpdatedSub pubsub.Topic[*shared.MetadataUpdatedEvent]
+	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
+	graphqlURL         string
+	tokenSource        device.TokenSource
+	imgRepo            ImageRepository
+	dirSvc             DirectoryService
+	dirRepo            domdir.Repository
+	ch                 chan HookExecutionTask
+	debouncer          *Debouncer
+	ctx                context.Context
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
+	muIgnore           sync.Mutex
+	writeIgnore        map[string]writeIgnoreItem
+	muTasks            sync.Mutex
+	activeTasks        map[string]*activeTask
 }
 
 func NewRunner(
 	rootDir string,
 	hooksDir string,
 	logger *zap.Logger,
-	ebus EventBus,
+	metadataUpdatedSub pubsub.Topic[*shared.MetadataUpdatedEvent],
+	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
 	graphqlURL string,
 	tokenSource device.TokenSource,
 	imgRepo ImageRepository,
@@ -220,12 +217,13 @@ func NewRunner(
 ) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Runner{
-		rootDir:     rootDir,
-		hooksDir:    hooksDir,
-		logger:      logger,
-		ebus:        ebus,
-		graphqlURL:  graphqlURL,
-		tokenSource: tokenSource,
+		rootDir:            rootDir,
+		hooksDir:           hooksDir,
+		logger:             logger,
+		metadataUpdatedSub: metadataUpdatedSub,
+		fileChangedSub:     fileChangedSub,
+		graphqlURL:         graphqlURL,
+		tokenSource:        tokenSource,
 		imgRepo:     imgRepo,
 		dirSvc:      dirSvc,
 		dirRepo:     dirRepo,
@@ -406,7 +404,7 @@ func (r *Runner) runListener(ctx context.Context) {
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		for event, err := range r.ebus.SubscribeFileChanged(ctx) {
+		for event, err := range r.fileChangedSub.Subscribe(ctx) {
 			if err != nil {
 				if ctx.Err() != nil {
 					return
@@ -417,7 +415,7 @@ func (r *Runner) runListener(ctx context.Context) {
 		}
 	}()
 
-	for event, err := range r.ebus.SubscribeMetadataUpdated(ctx) {
+	for event, err := range r.metadataUpdatedSub.Subscribe(ctx) {
 		if err != nil {
 			if ctx.Err() != nil {
 				return

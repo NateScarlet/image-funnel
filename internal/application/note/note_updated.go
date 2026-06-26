@@ -11,7 +11,10 @@ import (
 // NoteUpdated 订阅特定笔记更新
 func (h *Handler) NoteUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shared.NoteDTO, error] {
 	return func(yield func(*shared.NoteDTO, error) bool) {
-		for event, err := range h.ebus.SubscribeFileChanged(ctx) {
+		if h.fileChangedSub == nil {
+			return
+		}
+		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if err != nil {
 				if !yield(nil, err) {
 					return

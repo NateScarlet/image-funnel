@@ -5,30 +5,40 @@ import (
 	"iter"
 	"time"
 
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
 
-// EventBus 定义了配对领域事件的发布与订阅标准接口，
-// 这样可以避免将领域服务直接绑定到某个具体的消息中介。
-type EventBus interface {
-	PublishPairingRequestCreated(ctx context.Context, dto *shared.PairingRequestDTO)
-	PublishPairingRequestUpdated(ctx context.Context, dto *shared.PairingRequestDTO)
-	SubscribePairingRequestCreated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error]
-	SubscribePairingRequestUpdated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error]
+// RequestResolvedEvent 配对请求被解决（批准或拒绝）时发布的事件
+type RequestResolvedEvent struct {
+	Request *Request
+	Status  shared.PairingRequestStatus
 }
 
 // Service 负责控制设备配对请求（Request）的完整业务生命周期。
 type Service struct {
-	repo Repository
-	ebus EventBus
+	repo         Repository
+	prCreatedPub pubsub.Topic[*Request]
+	prResolvedPub pubsub.Topic[*RequestResolvedEvent]
+	prCreatedSub pubsub.Topic[*Request]
+	prResolvedSub pubsub.Topic[*RequestResolvedEvent]
 }
 
 // NewService 初始化配对领域的 Service 实例。
-func NewService(repo Repository, ebus EventBus) *Service {
+func NewService(
+	repo Repository,
+	prCreatedPub pubsub.Topic[*Request],
+	prResolvedPub pubsub.Topic[*RequestResolvedEvent],
+	prCreatedSub pubsub.Topic[*Request],
+	prResolvedSub pubsub.Topic[*RequestResolvedEvent],
+) *Service {
 	return &Service{
-		repo: repo,
-		ebus: ebus,
+		repo:         repo,
+		prCreatedPub: prCreatedPub,
+		prResolvedPub: prResolvedPub,
+		prCreatedSub: prCreatedSub,
+		prResolvedSub: prResolvedSub,
 	}
 }
 
@@ -49,12 +59,8 @@ func (s *Service) Create(
 		return nil, err
 	}
 
-	if s.ebus != nil {
-		s.ebus.PublishPairingRequestCreated(ctx, &shared.PairingRequestDTO{
-			Code:      code,
-			CreatedAt: req.CreatedAt(),
-			Status:    shared.PairingRequestStatusPending,
-		})
+	if s.prCreatedPub != nil {
+		s.prCreatedPub.Publish(ctx, req)
 	}
 
 	return req, nil
@@ -81,11 +87,10 @@ func (s *Service) Delete(ctx context.Context, code string, status shared.Pairing
 		return err
 	}
 
-	if s.ebus != nil {
-		s.ebus.PublishPairingRequestUpdated(ctx, &shared.PairingRequestDTO{
-			Code:      code,
-			CreatedAt: req.CreatedAt(),
-			Status:    status,
+	if s.prResolvedPub != nil {
+		s.prResolvedPub.Publish(ctx, &RequestResolvedEvent{
+			Request: req,
+			Status:  status,
 		})
 	}
 
@@ -93,19 +98,19 @@ func (s *Service) Delete(ctx context.Context, code string, status shared.Pairing
 }
 
 // SubscribeRequestCreated 订阅新配对请求产生的事件通道。
-func (s *Service) SubscribeRequestCreated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error] {
-	if s.ebus != nil {
-		return s.ebus.SubscribePairingRequestCreated(ctx)
+func (s *Service) SubscribeRequestCreated(ctx context.Context) iter.Seq2[*Request, error] {
+	if s.prCreatedSub != nil {
+		return s.prCreatedSub.Subscribe(ctx)
 	}
-	return func(yield func(*shared.PairingRequestDTO, error) bool) {}
+	return func(yield func(*Request, error) bool) {}
 }
 
-// SubscribeRequestUpdated 订阅配对请求状态更新或删除的事件通道。
-func (s *Service) SubscribeRequestUpdated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error] {
-	if s.ebus != nil {
-		return s.ebus.SubscribePairingRequestUpdated(ctx)
+// SubscribeRequestResolved 订阅配对请求被解决（批准或拒绝）的事件通道。
+func (s *Service) SubscribeRequestResolved(ctx context.Context) iter.Seq2[*RequestResolvedEvent, error] {
+	if s.prResolvedSub != nil {
+		return s.prResolvedSub.Subscribe(ctx)
 	}
-	return func(yield func(*shared.PairingRequestDTO, error) bool) {}
+	return func(yield func(*RequestResolvedEvent, error) bool) {}
 }
 
 // Find 返回所有当前的配对请求。

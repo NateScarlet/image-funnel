@@ -11,7 +11,7 @@ import (
 func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.DirectoryFilters) iter.Seq2[*shared.DirectoryDTO, error] {
 	return func(yield func(*shared.DirectoryDTO, error) bool) {
 		var filter = h.filterBuilder.Build(filters)
-		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
+		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if !func() bool {
 				if err != nil {
 					return yield(nil, err)

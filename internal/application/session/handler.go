@@ -5,6 +5,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/domain/session"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -29,28 +30,31 @@ type LastSessionSaver interface {
 }
 
 type Handler struct {
-	sessionService  *session.Service
-	eventBus        EventBus
-	dtoFactory      *DTOFactory
-	imageDTOFactory *appimage.DTOFactory
-	logger          *zap.Logger
-	lastSessionSaver LastSessionSaver
+	sessionService     *session.Service
+	dtoFactory         *DTOFactory
+	imageDTOFactory    *appimage.DTOFactory
+	logger             *zap.Logger
+	lastSessionSaver   LastSessionSaver
+	sessionSavedSub    pubsub.Topic[scalar.ID]
+	sessionCommittedSub pubsub.Topic[*shared.SessionCommittedEvent]
 }
 
 func NewHandler(
 	sessionService *session.Service,
-	eventBus EventBus,
 	dtoFactory *DTOFactory,
 	imageDTOFactory *appimage.DTOFactory,
 	logger *zap.Logger,
 	lastSessionSaver LastSessionSaver,
+	sessionSavedSub pubsub.Topic[scalar.ID],
+	sessionCommittedSub pubsub.Topic[*shared.SessionCommittedEvent],
 ) *Handler {
 	return &Handler{
-		sessionService:  sessionService,
-		eventBus:        eventBus,
-		dtoFactory:      dtoFactory,
-		imageDTOFactory: imageDTOFactory,
-		logger:          logger,
-		lastSessionSaver: lastSessionSaver,
+		sessionService:     sessionService,
+		dtoFactory:         dtoFactory,
+		imageDTOFactory:    imageDTOFactory,
+		logger:             logger,
+		lastSessionSaver:   lastSessionSaver,
+		sessionSavedSub:    sessionSavedSub,
+		sessionCommittedSub: sessionCommittedSub,
 	}
 }

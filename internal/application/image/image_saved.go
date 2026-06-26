@@ -13,7 +13,7 @@ import (
 func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) iter.Seq2[*shared.ImageDTO, error] {
 	return func(yield func(*shared.ImageDTO, error) bool) {
 		imageFilter := h.imageFilterBuilder.Build(util.UnwrapPointer(filter))
-		for event, err := range h.eventBus.SubscribeFileChanged(ctx) {
+		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if !func() bool {
 				if err != nil {
 					return yield(nil, err)

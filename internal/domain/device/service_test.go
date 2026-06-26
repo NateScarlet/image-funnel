@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"main/internal/pubsub"
 	"main/internal/scalar"
 
 	"go.uber.org/zap"
@@ -37,23 +38,38 @@ func (m *mockRepository) Find(ctx context.Context) iter.Seq2[*Device, error] {
 	return func(yield func(*Device, error) bool) {}
 }
 
-// mockEventBus 模拟事件总线，用于验证发布事件
-type mockEventBus struct {
+// mockDeviceSavedPub 模拟设备保存事件发布
+type mockDeviceSavedPub struct {
 	savedDevices []*Device
 }
 
-func (m *mockEventBus) PublishDeviceSaved(ctx context.Context, d *Device) {
+func (m *mockDeviceSavedPub) Publish(ctx context.Context, d *Device, opts ...pubsub.PublishOption) error {
 	m.savedDevices = append(m.savedDevices, d)
+	return nil
 }
 
-func (m *mockEventBus) PublishDeviceDeleted(ctx context.Context, id scalar.ID) {}
+func (m *mockDeviceSavedPub) Subscribe(ctx context.Context) iter.Seq2[*Device, error] {
+	return func(yield func(*Device, error) bool) {}
+}
+
+// mockDeviceDeletedPub 模拟设备删除事件发布
+type mockDeviceDeletedPub struct{}
+
+func (m *mockDeviceDeletedPub) Publish(ctx context.Context, id scalar.ID, opts ...pubsub.PublishOption) error {
+	return nil
+}
+
+func (m *mockDeviceDeletedPub) Subscribe(ctx context.Context) iter.Seq2[scalar.ID, error] {
+	return func(yield func(scalar.ID, error) bool) {}
+}
 
 func TestService_UpdateRefreshToken(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. 初始化依赖项
 	repo := &mockRepository{}
-	ebus := &mockEventBus{}
+	deviceSavedPub := &mockDeviceSavedPub{}
+	deviceDeletedPub := &mockDeviceDeletedPub{}
 	factory := NewFactory()
 
 	// 2. 创建一个测试设备并存入仓库
@@ -74,7 +90,7 @@ func TestService_UpdateRefreshToken(t *testing.T) {
 	_ = repo.Save(ctx, dev)
 
 	// 3. 构建 Service 实例
-	service, err := NewService(repo, nil, zap.NewNop(), "localhost", []string{"http://localhost"}, ebus, nil, factory)
+	service, err := NewService(repo, nil, zap.NewNop(), "localhost", []string{"http://localhost"}, deviceSavedPub, deviceDeletedPub, nil, factory)
 	if err != nil {
 		t.Fatalf("failed to create device service: %v", err)
 	}
@@ -114,10 +130,10 @@ func TestService_UpdateRefreshToken(t *testing.T) {
 	}
 
 	// 6. 验证是否向事件总线发布了设备保存的事件
-	if len(ebus.savedDevices) != 1 {
-		t.Fatalf("expected 1 event published, got %d", len(ebus.savedDevices))
+	if len(deviceSavedPub.savedDevices) != 1 {
+		t.Fatalf("expected 1 event published, got %d", len(deviceSavedPub.savedDevices))
 	}
-	if ebus.savedDevices[0].ID() != deviceID {
-		t.Errorf("expected published device ID %v, got %v", deviceID, ebus.savedDevices[0].ID())
+	if deviceSavedPub.savedDevices[0].ID() != deviceID {
+		t.Errorf("expected published device ID %v, got %v", deviceID, deviceSavedPub.savedDevices[0].ID())
 	}
 }

@@ -17,12 +17,13 @@ func TestService_LastSession(t *testing.T) {
 	fakeRepo := NewFakeSessionRepo()
 	fakeMeta := NewFakeMetadataRepo()
 	fakeScanner := &FakeImageRepo{}
-	fakeEventBus := &FakeEventBus{}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, topicCleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer topicCleanup()
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fakeEventBus, &FakeDirectoryResolver{}, zap.NewNop(), topic, "", imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, "", imageFb, &FakeHookRunner{})
 	defer cleanupService()
 
 	dirID := scalar.ToID("dir-1")

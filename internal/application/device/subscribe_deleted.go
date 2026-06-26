@@ -7,8 +7,8 @@ import (
 )
 
 func (h *Handler) SubscribeDeleted(ctx context.Context) iter.Seq2[scalar.ID, error] {
-	if h.ebus != nil {
-		return h.ebus.SubscribeDeviceDeleted(ctx)
+	if h.deviceDeletedSub != nil {
+		return h.deviceDeletedSub.Subscribe(ctx)
 	}
 	return func(yield func(scalar.ID, error) bool) {}
 }

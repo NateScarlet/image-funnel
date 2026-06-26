@@ -12,6 +12,7 @@ import (
 	"time"
 
 	domimage "main/internal/domain/image"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 
@@ -19,11 +20,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type mockEventBus struct {
+type mockMetadataUpdatedSub struct {
 	subscribers []chan *shared.MetadataUpdatedEvent
 }
 
-func (m *mockEventBus) SubscribeMetadataUpdated(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
+func (m *mockMetadataUpdatedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
 	ch := make(chan *shared.MetadataUpdatedEvent, 10)
 	m.subscribers = append(m.subscribers, ch)
 	return func(yield func(*shared.MetadataUpdatedEvent, error) bool) {
@@ -40,14 +41,21 @@ func (m *mockEventBus) SubscribeMetadataUpdated(ctx context.Context) iter.Seq2[*
 	}
 }
 
-func (m *mockEventBus) Publish(ev *shared.MetadataUpdatedEvent) {
+func (m *mockMetadataUpdatedSub) Publish(ctx context.Context, ev *shared.MetadataUpdatedEvent, opts ...pubsub.PublishOption) error {
 	for _, ch := range m.subscribers {
 		ch <- ev
 	}
+	return nil
 }
 
-func (m *mockEventBus) SubscribeFileChanged(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
+type mockFileChangedSub struct{}
+
+func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
 	return func(yield func(*shared.FileChangedEvent, error) bool) {}
+}
+
+func (m *mockFileChangedSub) Publish(ctx context.Context, ev *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+	return nil
 }
 
 type mockImageRepository struct {
@@ -98,9 +106,10 @@ label = [""]
 	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
 	defer runner.Close()
 
 	hooks, err := runner.List(context.Background())
@@ -142,14 +151,15 @@ label = [""]
 	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewExample()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
 	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
 	defer runner.Close()
 
 	// 1. 自动触发：测试发送不符合过滤条件的事件（3星）
-	ebus.Publish(&shared.MetadataUpdatedEvent{
+	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
 		ID:        scalar.ToID("img:1:a.png"),
 		Path:      filepath.Join(tempDir, "a.png"),
 		Rating:    3,
@@ -165,7 +175,7 @@ label = [""]
 	assert.True(t, os.IsNotExist(err), "3星评级不应触发钩子运行")
 
 	// 2. 自动触发：测试发送符合过滤条件的事件（4星）且标签为 ""
-	ebus.Publish(&shared.MetadataUpdatedEvent{
+	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
 		ID:        scalar.ToID("img:1:a.png"),
 		Path:      filepath.Join(tempDir, "a.png"),
 		Rating:    4,
@@ -184,7 +194,7 @@ label = [""]
 	assert.NoError(t, err)
 
 	// 3. 自动触发：测试发送符合 4星但标签为 Red（不满足 label = [""] 的过滤）
-	ebus.Publish(&shared.MetadataUpdatedEvent{
+	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
 		ID:        scalar.ToID("img:1:a.png"),
 		Path:      filepath.Join(tempDir, "a.png"),
 		Rating:    4,
@@ -233,9 +243,10 @@ TEST_VAR_TWO = "val2"
 	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
 	defer runner.Close()
 
 	configs, err := runner.LoadHooks()
@@ -276,9 +287,10 @@ command = "echo test_error_out >&2 && exit 42"
 	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(failToml), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
 	defer runner.Close()
 
 	// 触发成功钩子，应该同步等待并返回 nil
@@ -319,14 +331,15 @@ command = '` + cmdStr + `'
 	err = os.WriteFile(filepath.Join(hooksDir, "no-dir-update.toml"), []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 
 	imgID := scalar.ToID("img:1")
 	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, imgRepo, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, imgRepo, nil, nil)
 	defer runner.Close()
 
 	noteRelPath := "test.png.md"
@@ -394,14 +407,15 @@ command = '` + cmdScan + `'
 	err = os.WriteFile(filepath.Join(hooksDir, "scan.toml"), []byte(tomlScan), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 
 	imgID := scalar.ToID("img:1")
 	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, imgRepo, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, imgRepo, nil, nil)
 	defer runner.Close()
 
 	err = os.WriteFile(filepath.Join(tempDir, "test.png.md"), []byte("Hello world note"), 0644)
@@ -514,9 +528,10 @@ on_fail_action = "KEEP"
 	err = os.WriteFile(filepath.Join(hooksDir, "comfyui.toml"), []byte(comfyuiToml), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, &mockImageRepository{}, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
 	// 准备笔记文件
@@ -613,9 +628,10 @@ name = "strict"
 	err = os.WriteFile(filepath.Join(hooksDir, "invalid.toml"), []byte(invalidToml), 0644)
 	assert.NoError(t, err)
 
-	ebus := &mockEventBus{}
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, "", nil, &mockImageRepository{}, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
 	configs, err := runner.LoadHooks()
