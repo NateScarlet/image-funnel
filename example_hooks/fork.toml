@@ -15,5 +15,5 @@ on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
 ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）
 
 [env]
-HOOK_IMAGE_SET_LABEL = "Yellow"
+HOOK_IMAGE_SET_LABEL = "White"
 
