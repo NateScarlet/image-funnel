@@ -196,6 +196,24 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       };
     }
 
+    const lastSessState = serverState.value?.lastSession;
+    if (lastSessState) {
+      const keepRating =
+        lastSessState.commitActions?.keepRating ??
+        lastSessState.createActions?.keepRating;
+      const baseFilter = lastSessState.filter;
+      return {
+        rating:
+          keepRating != null
+            ? [keepRating]
+            : baseFilter
+              ? optionalArray(baseFilter.rating)
+              : [],
+        label: baseFilter ? optionalArray(baseFilter.label) : [],
+        query: baseFilter?.query || undefined,
+      };
+    }
+
     const serverSess = lastSession.value;
     if (serverSess?.filter) {
       return {
