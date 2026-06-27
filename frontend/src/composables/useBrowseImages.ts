@@ -1,12 +1,5 @@
-import {
-  computed,
-  toValue,
-  ref,
-  type MaybeRefOrGetter,
-  type Ref,
-  nextTick,
-} from "vue";
-import { keyBy } from "es-toolkit";
+import { computed, toValue, ref, type MaybeRefOrGetter, type Ref } from "vue";
+import { throttle } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import useRelayConnection from "./useRelayConnection";
@@ -101,22 +94,30 @@ export default function useBrowseImages(
     },
   });
 
-  // 构建 relPath 到图片的索引，删除文件时 O(1) 查找
-  const imageByRelPath = computed(() => keyBy(images.value, (i) => i.relPath));
-
+  const pendingRelPathDeletion = new Set<string>();
+  function doFlushRelPathDeletion() {
+    if (pendingRelPathDeletion.size === 0) {
+      return;
+    }
+    for (const img of images.value) {
+      if (pendingRelPathDeletion.has(img.relPath)) {
+        onDeleted(img);
+      }
+    }
+    pendingRelPathDeletion.clear();
+  }
+  const flushRelPathDeletion = throttle(doFlushRelPathDeletion, 1e3, {
+    edges: ["leading", "trailing"],
+  });
   // 订阅文件/目录的删除事件
   useSubscription(DirEntryDeletedDocument, {
     variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
-      nextTick(() => {
-        const deletedEntry = result.data?.dirEntryDeleted;
-        if (deletedEntry) {
-          const match = imageByRelPath.value[deletedEntry.relPath];
-          if (match) {
-            onDeleted({ id: match.id });
-          }
-        }
-      });
+      const deletedEntry = result.data?.dirEntryDeleted;
+      if (deletedEntry) {
+        pendingRelPathDeletion.add(deletedEntry.relPath);
+        flushRelPathDeletion();
+      }
     },
   });
 

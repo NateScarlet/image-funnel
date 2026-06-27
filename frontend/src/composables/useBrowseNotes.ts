@@ -12,6 +12,7 @@ import {
   type NoteFragment,
   type BrowseNotesQueryVariables,
 } from "@/graphql/generated";
+import { throttle } from "es-toolkit";
 
 /**
  * useBrowseNotes 提供目录笔记（笔记）的查询、实时订阅、数据过滤和隐藏更新功能
@@ -79,19 +80,29 @@ export default function useBrowseNotes(
   });
 
   // 订阅文件/目录的删除事件
+  const pendingRelPathDeletion = new Set<string>();
+  function doFlushRelPathDeletion() {
+    if (pendingRelPathDeletion.size === 0) {
+      return;
+    }
+    for (const note of notes.value) {
+      if (pendingRelPathDeletion.has(note.relPath)) {
+        onNoteDeleted(note);
+      }
+    }
+    pendingRelPathDeletion.clear();
+  }
+  const flushRelPathDeletion = throttle(doFlushRelPathDeletion, 1e3, {
+    edges: ["leading", "trailing"],
+  });
+  // 订阅文件/目录的删除事件
   useSubscription(DirEntryDeletedDocument, {
-    variables: () => {
-      return { directoryId: directoryId.value || undefined };
-    },
+    variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
       const deletedEntry = result.data?.dirEntryDeleted;
       if (deletedEntry) {
-        const match = notes.value.find(
-          (n) => n.relPath === deletedEntry.relPath,
-        );
-        if (match) {
-          onNoteDeleted({ id: match.id });
-        }
+        pendingRelPathDeletion.add(deletedEntry.relPath);
+        flushRelPathDeletion();
       }
     },
   });

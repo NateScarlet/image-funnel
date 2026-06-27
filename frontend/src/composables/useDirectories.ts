@@ -6,7 +6,7 @@ import useLiveConnection from "./useLiveConnection";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useDirectoryStats from "@/composables/useDirectoryStats";
 import useStorage from "@/composables/useStorage";
-import { sortBy } from "es-toolkit";
+import { sortBy, throttle } from "es-toolkit";
 
 // 模块级全局状态，保证单例并避免重复 key
 export const { model: maxUnratedCount } = useStorage<number>(
@@ -119,19 +119,29 @@ export default function useDirectories(
   });
 
   // 订阅目录项删除事件
+  const pendingRelPathDeletion = new Set<string>();
+  function doFlushRelPathDeletion() {
+    if (pendingRelPathDeletion.size === 0) {
+      return;
+    }
+    for (const d of liveDirectories.value) {
+      if (pendingRelPathDeletion.has(d.relPath)) {
+        onDeleted(d);
+      }
+    }
+    pendingRelPathDeletion.clear();
+  }
+  const flushRelPathDeletion = throttle(doFlushRelPathDeletion, 1e3, {
+    edges: ["leading", "trailing"],
+  });
+  // 订阅文件/目录的删除事件
   useSubscription(DirEntryDeletedDocument, {
-    variables: () => {
-      return { directoryId: directoryId.value || undefined };
-    },
+    variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
       const deletedEntry = result.data?.dirEntryDeleted;
       if (deletedEntry) {
-        const match = liveDirectories.value.find(
-          (d) => d.relPath === deletedEntry.relPath,
-        );
-        if (match) {
-          onDeleted({ id: match.id });
-        }
+        pendingRelPathDeletion.add(deletedEntry.relPath);
+        flushRelPathDeletion();
       }
     },
   });
