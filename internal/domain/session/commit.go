@@ -28,6 +28,10 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 	filter := s.imageFilterBuilder.Build(util.UnwrapPointer(s.filter))
 	return func(yield func(*image.Image, shared.ImageAction) bool) {
 		for _, img := range s.images {
+			// 如果图片已被强制物理删除，则跳过
+			if s.removed != nil && s.removed[img.ID()] {
+				continue
+			}
 			// 如果图片符合 filter，或者它在本会话中已经被 commit 过，则允许提交
 			if !filter(img) && !s.committed[img.ID()] {
 				continue

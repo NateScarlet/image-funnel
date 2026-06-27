@@ -176,3 +176,23 @@ func TestRemoveImageByPath_ForceRemoveThenUndo_Complex(t *testing.T) {
 	// 因为 img1 不在队列中，撤销时跳过对其 currentIdx 的还原，currentIdx 应当保持指向 img2 (idx=1)
 	assert.Equal(t, 1, session.currentIdx)
 }
+
+func TestRemoveImageByPath_ForceRemoveShouldUpdateStats(t *testing.T) {
+	session := setupTestSession(t, 3, 2) // queue: [img0, img1, img2], targetKeep: 2
+
+	img0 := session.images[session.queue[0]]
+
+	// 1. 用户将 img0 标记为 Keep
+	require.NoError(t, session.MarkImage(img0.ID(), shared.ImageActionKeep))
+
+	// 检查统计，TotalKept 应为 1
+	assert.Equal(t, 1, session.Stats().TotalKept)
+
+	// 2. 强制移除了已被标记为 Keep 的 img0
+	removed := session.removeImageByRelPath(img0.RelPath(), true)
+	assert.True(t, removed)
+
+	// 3. 验证：强制移除后，被移除的 img0 应当不被计入 TotalKept
+	assert.Equal(t, 0, session.Stats().TotalKept, "被删除图片的 Keep 操作不应影响统计的 TotalKept")
+}
+

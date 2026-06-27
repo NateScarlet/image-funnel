@@ -2,6 +2,7 @@ package session
 
 import (
 	"main/internal/domain/image"
+	"main/internal/scalar"
 	"time"
 )
 
@@ -28,6 +29,9 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	// 如果原本不在会话中（既不在 queue 也不在 history）
 	if oldImageIndex == -1 {
 		if matchesFilter {
+			if s.removed != nil {
+				delete(s.removed, img.ID())
+			}
 			s.addFilteredImage(img)
 			return true
 		}
@@ -43,6 +47,10 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	// 更新 images 中的对象
 	// 如果 ID 没变，直接更新对象内容
 	oldImg := s.images[oldImageIndex]
+	if s.removed != nil {
+		delete(s.removed, img.ID())
+		delete(s.removed, oldImg.ID())
+	}
 	if oldImg.ID() == img.ID() {
 		s.images[oldImageIndex] = img
 		// queue 中的引用是 index，不需要变
@@ -98,6 +106,15 @@ func (s *Session) removeImageByRelPath(relPath string, force bool) bool {
 	s.queue = append(s.queue[:targetIndex], s.queue[targetIndex+1:]...)
 	if targetIndex < s.currentIdx {
 		s.currentIdx--
+	}
+
+	// 如果是强制移除（如文件已被物理删除），则记录为 removed 状态
+	if force {
+		imgID := s.images[targetImgIndex].ID()
+		if s.removed == nil {
+			s.removed = make(map[scalar.ID]bool)
+		}
+		s.removed[imgID] = true
 	}
 
 	// 注意：我们不从 s.images 中移除图片，保持"只增不减"并维持索引稳定性

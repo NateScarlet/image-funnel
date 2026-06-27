@@ -15,6 +15,11 @@ func (s *Session) Stats() *shared.StatsDTO {
 	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(s.filter))
 
 	for id, action := range s.actions {
+		// 如果该图片已被强制删除，跳过
+		if s.removed != nil && s.removed[id] {
+			continue
+		}
+
 		// 查找对应的图片对象
 		var img *image.Image
 		if idx, ok := s.indexByID[id]; ok {

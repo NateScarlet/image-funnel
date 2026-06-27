@@ -38,6 +38,7 @@ type Session struct {
 	currentRound        int                // 当前筛选轮次
 	committed           map[scalar.ID]bool // 记录已提交过的图片 ID
 	imageFilterBuilder  *image.FilterBuilder
+	removed             map[scalar.ID]bool // 记录被物理移除的图片 ID，防止其 action 影响统计数据
 }
 
 // New 创建一个新的图片筛选会话
@@ -78,6 +79,7 @@ func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targe
 		currentRound:        0,
 		committed:           make(map[scalar.ID]bool),
 		imageFilterBuilder:  imageFilterBuilder,
+		removed:             make(map[scalar.ID]bool),
 	}
 }
 
@@ -157,6 +159,9 @@ func (s *Session) KeptImages(limit, offset int) []*image.Image {
 
 	var kept []*image.Image
 	for _, img := range s.images {
+		if s.removed != nil && s.removed[img.ID()] {
+			continue
+		}
 		if s.actions[img.ID()] == shared.ImageActionKeep {
 			kept = append(kept, img)
 		}
