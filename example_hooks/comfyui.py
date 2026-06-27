@@ -447,11 +447,6 @@ def main() -> None:
             for idx, path in enumerate(image_paths):
                 img_id = image_ids[idx] if idx < len(image_ids) else ""
                 targets.append((img_id, path))
-        else:
-            _LOGGER.error(
-                "No images provided in IMAGE_FUNNEL_IMAGE_PATHS for queue command."
-            )
-            sys.exit(1)
 
     if max_match > 0 and len(targets) > max_match:
         print(
@@ -461,8 +456,17 @@ def main() -> None:
         sys.exit(0)
 
     if not targets:
-        _LOGGER.error("No images found to process.")
-        sys.exit(1)
+        trigger = os.getenv("IMAGE_FUNNEL_TRIGGER", "")
+        if not trigger:
+            raise ValueError("Environment variable IMAGE_FUNNEL_TRIGGER is missing")
+        is_non_manual = trigger not in ["image_dispatch", "note_dispatch"]
+        if is_non_manual:
+            _LOGGER.info("No images found to process. Skipping.")
+            _write_action_override("KEEP")
+            sys.exit(0)
+        else:
+            _LOGGER.error("No images found to process.")
+            sys.exit(1)
 
     _LOGGER.info(f"Found {len(targets)} image(s) to process, command: {args.command}")
 
