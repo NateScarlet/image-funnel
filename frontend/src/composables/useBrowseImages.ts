@@ -1,4 +1,11 @@
-import { computed, toValue, ref, type MaybeRefOrGetter, type Ref } from "vue";
+import {
+  computed,
+  toValue,
+  ref,
+  type MaybeRefOrGetter,
+  type Ref,
+  nextTick,
+} from "vue";
 import { keyBy } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
@@ -101,13 +108,15 @@ export default function useBrowseImages(
   useSubscription(DirEntryDeletedDocument, {
     variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
-      const deletedEntry = result.data?.dirEntryDeleted;
-      if (deletedEntry) {
-        const match = imageByRelPath.value[deletedEntry.relPath];
-        if (match) {
-          onDeleted({ id: match.id });
+      nextTick(() => {
+        const deletedEntry = result.data?.dirEntryDeleted;
+        if (deletedEntry) {
+          const match = imageByRelPath.value[deletedEntry.relPath];
+          if (match) {
+            onDeleted({ id: match.id });
+          }
         }
-      }
+      });
     },
   });
 
