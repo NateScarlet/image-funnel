@@ -648,7 +648,7 @@ export type DirEntryDeletedSubscriptionVariables = Exact<{
 }>;
 
 
-export type DirEntryDeletedSubscription = { __typename: 'Subscription', dirEntryDeleted: { __typename: 'DirEntryDeleted', relPath: string } };
+export type DirEntryDeletedSubscription = { __typename: 'Subscription', dirEntryDeleted: Array<{ __typename: 'DirEntryDeleted', relPath: string }> };
 
 export type DirectoryChangedSubscriptionVariables = Exact<{
   id?: InputMaybe<Array<Scalars['ID']['input']>>;

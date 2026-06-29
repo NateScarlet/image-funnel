@@ -134,13 +134,15 @@ export default function useDirectories(
   const flushRelPathDeletion = throttle(doFlushRelPathDeletion, 1e3, {
     edges: ["leading", "trailing"],
   });
-  // 订阅文件/目录的删除事件
+  // 订阅文件/目录的删除事件（后端合并500ms内的删除作为一个批次返回）
   useSubscription(DirEntryDeletedDocument, {
     variables: () => ({ directoryId: directoryId.value }),
     onNext: (result) => {
-      const deletedEntry = result.data?.dirEntryDeleted;
-      if (deletedEntry) {
-        pendingRelPathDeletion.add(deletedEntry.relPath);
+      const deletedEntries = result.data?.dirEntryDeleted;
+      if (deletedEntries && deletedEntries.length > 0) {
+        for (const entry of deletedEntries) {
+          pendingRelPathDeletion.add(entry.relPath);
+        }
         flushRelPathDeletion();
       }
     },

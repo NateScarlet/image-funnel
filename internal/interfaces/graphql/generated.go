@@ -526,7 +526,7 @@ type SubscriptionResolver interface {
 	SessionUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.SessionDTO, error)
 	DeviceDeleted(ctx context.Context) (<-chan *scalar.ID, error)
 	DeviceSaved(ctx context.Context) (<-chan *shared.DeviceDTO, error)
-	DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan *shared.DirEntryDeletedDTO, error)
+	DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan []*shared.DirEntryDeletedDTO, error)
 	DirectoryChanged(ctx context.Context, filterBy *shared.DirectoryFilters) (<-chan *shared.DirectoryDTO, error)
 	ImageSaved(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *shared.ImageDTO, error)
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
@@ -2960,8 +2960,8 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/dir_entry_deleted.graphql", Input: `extend type Subscription {
-  "订阅目录内文件或子目录删除或移走事件（文件被移除或重命名时触发），支持按目录ID过滤"
-  dirEntryDeleted(directoryId: ID): DirEntryDeleted!
+  "订阅目录内文件或子目录删除或移走事件（文件被移除或重命名时触发），支持按目录ID过滤。合并500ms内的删除事件作为一批响应，避免批量删除时产生巨量响应"
+  dirEntryDeleted(directoryId: ID): [DirEntryDeleted!]!
 }
 
 "目录项删除事件载体，包含删除的文件或目录相对路径"
@@ -11737,7 +11737,7 @@ func (ec *executionContext) _Subscription_dirEntryDeleted(ctx context.Context, f
 			return ec.resolvers.Subscription().DirEntryDeleted(ctx, fc.Args["directoryId"].(*scalar.ID))
 		},
 		nil,
-		ec.marshalNDirEntryDeleted2ᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTO,
+		ec.marshalNDirEntryDeleted2ᚕᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTOᚄ,
 		true,
 		true,
 	)
@@ -20038,8 +20038,48 @@ func (ec *executionContext) marshalNDevice2ᚖmainᚋinternalᚋsharedᚐDeviceD
 	return ec._Device(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNDirEntryDeleted2mainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx context.Context, sel ast.SelectionSet, v shared.DirEntryDeletedDTO) graphql.Marshaler {
-	return ec._DirEntryDeleted(ctx, sel, &v)
+func (ec *executionContext) marshalNDirEntryDeleted2ᚕᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.DirEntryDeletedDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNDirEntryDeleted2ᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNDirEntryDeleted2ᚖmainᚋinternalᚋsharedᚐDirEntryDeletedDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirEntryDeletedDTO) graphql.Marshaler {

@@ -12,6 +12,6 @@ import (
 )
 
 // DirEntryDeleted is the resolver for the dirEntryDeleted field.
-func (r *subscriptionResolver) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan *shared.DirEntryDeletedDTO, error) {
+func (r *subscriptionResolver) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) (<-chan []*shared.DirEntryDeletedDTO, error) {
 	return SubscriptionFromSeq(ctx, r.app.DirEntryDeleted(ctx, directoryID))
 }
