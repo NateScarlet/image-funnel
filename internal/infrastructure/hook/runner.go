@@ -34,28 +34,28 @@ var fastCheckReg = regexp.MustCompile(`(?m)^[ \t]*/[a-zA-Z0-9_-]+`)
 
 var directiveReg = regexp.MustCompile(`(?m)^[ \t]*/([a-zA-Z0-9_-]+)(?:\s+([^\r\n]*))?\r?\n?`)
 
-// ImageDispatchTrigger 图片手动触发分发器定义
-type ImageDispatchTrigger struct {
+// imageDispatchTrigger 图片手动触发分发器定义
+type imageDispatchTrigger struct {
 }
 
-// DirectiveConfig 钩子提供的笔记指令配置
-type DirectiveConfig struct {
+// directiveConfig 钩子提供的笔记指令配置
+type directiveConfig struct {
 	Name            string `toml:"name"`
 	Usage           string `toml:"usage"`
 	OnSuccessAction string `toml:"on_success_action"`
 	OnFailAction    string `toml:"on_fail_action"`
 }
 
-// HookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
-type HookConfig struct {
+// hookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
+type hookConfig struct {
 	ID          string           `toml:"id"`
 	Name        string           `toml:"name"`
 	Description string           `toml:"description"`
 	Command     string           `toml:"command"`
-	Directive   *DirectiveConfig `toml:"directive"` // 笔记指令定义
+	Directive   *directiveConfig `toml:"directive"` // 笔记指令定义
 	On          struct {
-		PostUpdateImageMetadata *Filters              `toml:"post_update_image_metadata"`
-		ImageDispatch           *ImageDispatchTrigger `toml:"image_dispatch"`
+		PostUpdateImageMetadata *filters              `toml:"post_update_image_metadata"`
+		ImageDispatch           *imageDispatchTrigger `toml:"image_dispatch"`
 		PostUpdateNote          *struct {
 			IgnoreDirective bool `toml:"ignore_directive"`
 		} `toml:"post_update_note"`
@@ -71,8 +71,8 @@ type HookConfig struct {
 	Dir string            `toml:"-"`   // Hook 配置文件所在的父目录
 }
 
-// HookEvent 存储单张图片发生元数据变更的详细属性
-type HookEvent struct {
+// hookEvent 存储单张图片发生元数据变更的详细属性
+type hookEvent struct {
 	ID        string
 	Path      string
 	Rating    int
@@ -83,47 +83,47 @@ type HookEvent struct {
 	OldAction string
 }
 
-// HookExecutionResult 外部脚本执行结果
-type HookExecutionResult struct {
+// hookExecutionResult 外部脚本执行结果
+type hookExecutionResult struct {
 	Error  error  // 脚本执行错误，nil 表示成功
 	Action string // 脚本通过 IMAGE_FUNNEL_ACTION 文件指定的操作，空字符串表示未覆盖
 }
 
-// HookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
-type HookExecutionTask struct {
+// hookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
+type hookExecutionTask struct {
 	HookID       string
 	HookName     string
 	Command      string   // 基础命令（如 "python comfyui.py remove"）
 	ExtraArgs    []string // 额外参数，原样传递给命令
 	TriggerName  string
-	Events       []HookEvent
+	Events       []hookEvent
 	Dir          string                   // 执行外部命令时的当前工作目录
 	Env          map[string]string        // 传递给外部脚本的自定义环境变量集合
 	NotePath     string                   // 笔记文件的相对路径
 	DirectoryID  string                   // 会话或笔记所在的目录ID
 	DirectoryRel string                   // 目录的相对路径
-	ResultChan   chan HookExecutionResult // 用于接收外部脚本执行结果的通道
+	resultChan   chan hookExecutionResult // 用于接收外部脚本执行结果的通道
 	RunID        string                   // 指令运行 ID 注入环境变量
 }
 
-// Debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件
-type Debouncer struct {
+// debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件
+type debouncer struct {
 	mu       sync.Mutex
 	timer    *time.Timer
-	events   map[string][]HookEvent // key: hookID -> events
+	events   map[string][]hookEvent // key: hookID -> events
 	duration time.Duration
-	callback func(hookID string, events []HookEvent)
+	callback func(hookID string, events []hookEvent)
 }
 
-func NewDebouncer(duration time.Duration, callback func(hookID string, events []HookEvent)) *Debouncer {
-	return &Debouncer{
-		events:   make(map[string][]HookEvent),
+func newDebouncer(duration time.Duration, callback func(hookID string, events []hookEvent)) *debouncer {
+	return &debouncer{
+		events:   make(map[string][]hookEvent),
 		duration: duration,
 		callback: callback,
 	}
 }
 
-func (d *Debouncer) Add(hookID string, ev HookEvent) {
+func (d *debouncer) Add(hookID string, ev hookEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -136,7 +136,7 @@ func (d *Debouncer) Add(hookID string, ev HookEvent) {
 	d.timer = time.AfterFunc(d.duration, func() {
 		d.mu.Lock()
 		eventsCopy := d.events
-		d.events = make(map[string][]HookEvent)
+		d.events = make(map[string][]hookEvent)
 		d.timer = nil
 		d.mu.Unlock()
 
@@ -148,14 +148,14 @@ func (d *Debouncer) Add(hookID string, ev HookEvent) {
 	})
 }
 
-// ImageRepository 本地图像仓库接口
-type ImageRepository interface {
+// imageRepository 本地图像仓库接口
+type imageRepository interface {
 	Get(ctx context.Context, relPath string) (*domimage.Image, error)
 	Find(ctx context.Context, relPath string) iter.Seq2[*domimage.Image, error]
 }
 
-// DirectoryService 本地目录服务接口
-type DirectoryService interface {
+// directoryService 本地目录服务接口
+type directoryService interface {
 	GetDirectory(ctx context.Context, id scalar.ID) (*domdir.Directory, error)
 }
 
@@ -189,11 +189,11 @@ type Runner struct {
 	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
 	graphqlURL         string
 	tokenSource        device.TokenSource
-	imgRepo            ImageRepository
-	dirSvc             DirectoryService
+	imgRepo            imageRepository
+	dirSvc             directoryService
 	dirRepo            domdir.Repository
-	ch                 chan HookExecutionTask
-	debouncer          *Debouncer
+	ch                 chan hookExecutionTask
+	debouncer          *debouncer
 	ctx                context.Context
 	cancel             context.CancelFunc
 	wg                 sync.WaitGroup
@@ -211,8 +211,8 @@ func NewRunner(
 	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
 	graphqlURL string,
 	tokenSource device.TokenSource,
-	imgRepo ImageRepository,
-	dirSvc DirectoryService,
+	imgRepo imageRepository,
+	dirSvc directoryService,
 	dirRepo domdir.Repository,
 ) *Runner {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -227,14 +227,14 @@ func NewRunner(
 		imgRepo:     imgRepo,
 		dirSvc:      dirSvc,
 		dirRepo:     dirRepo,
-		ch:          make(chan HookExecutionTask, 1024),
+		ch:          make(chan hookExecutionTask, 1024),
 		ctx:         ctx,
 		cancel:      cancel,
 		writeIgnore: make(map[string]writeIgnoreItem),
 		activeTasks: make(map[string]*activeTask),
 	}
 
-	r.debouncer = NewDebouncer(100*time.Millisecond, r.onDebounceTrigger)
+	r.debouncer = newDebouncer(100*time.Millisecond, r.onDebounceTrigger)
 
 	r.wg.Add(2)
 	go func() {
@@ -256,7 +256,7 @@ func (r *Runner) Close() {
 }
 
 func (r *Runner) List(ctx context.Context) ([]*domhook.Hook, error) {
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		return nil, err
 	}
@@ -279,12 +279,12 @@ func (r *Runner) List(ctx context.Context) ([]*domhook.Hook, error) {
 }
 
 func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hookID scalar.ID, triggerName string) error {
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		return err
 	}
 
-	var targetHook *HookConfig
+	var targetHook *hookConfig
 	for _, h := range hooks {
 		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
 		if domH.ID() == hookID {
@@ -304,14 +304,14 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		return fmt.Errorf("hook %s does not allow note dispatch", hookID.String())
 	}
 
-	var events []HookEvent
+	var events []hookEvent
 	for i, id := range ids {
 		var path string
 		if i < len(paths) {
 			path = paths[i]
 		}
 
-		events = append(events, HookEvent{
+		events = append(events, hookEvent{
 			ID:        id,
 			Path:      path,
 			Rating:    0,
@@ -330,12 +330,12 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 // TriggerForNote 手动派发笔记触发的外部钩子任务
 func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
 	r.logger.Debug("TriggerForNote start", zap.String("noteRelPath", noteRelPath), zap.String("hookID", hookID.String()))
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		return err
 	}
 
-	var targetHook *HookConfig
+	var targetHook *hookConfig
 	for _, h := range hooks {
 		domH := domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
 		r.logger.Debug("TriggerForNote comparing hook", zap.String("h.ID", h.ID), zap.String("domH.ID", domH.ID().String()))
@@ -467,12 +467,12 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	}
 
 	// 2. 触发无指令要求的笔记修改钩子 (h.Directive == nil 或 requires_directive = false)
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		return
 	}
 
-	var noDirectiveHooks []HookConfig
+	var noDirectiveHooks []hookConfig
 	for _, h := range hooks {
 		if h.On.PostUpdateNote == nil {
 			continue
@@ -515,12 +515,12 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 		return false, nil
 	}
 
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		return false, err
 	}
 
-	hookMap := make(map[string]HookConfig)
+	hookMap := make(map[string]hookConfig)
 	var registeredDirectives []string
 	for _, h := range hooks {
 		if h.Directive != nil && h.Directive.Name != "" {
@@ -578,9 +578,9 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 
 	// 2. 对于新启动的指令流程，我们先匹配提取 pending 任务
 	type pendingHook struct {
-		config      HookConfig
+		config      hookConfig
 		triggerType string
-		events      []HookEvent
+		events      []hookEvent
 		args        []string
 		relPath     string
 		dirID       string
@@ -809,11 +809,11 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 
 // executeHookSync 同步执行钩子并返回解析后的操作
 // 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
-func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []HookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (string, error) {
+func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (string, error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
-	resChan := make(chan HookExecutionResult, 1)
+	resChan := make(chan hookExecutionResult, 1)
 
 	// 构建完整命令行，对含空格/引号的参数用引号包裹
 	var cmdParts []string
@@ -828,7 +828,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 	}
 	fullCommand := strings.Join(cmdParts, " ")
 
-	r.ch <- HookExecutionTask{
+	r.ch <- hookExecutionTask{
 		HookID:       hook.ID,
 		HookName:     hook.Name,
 		Command:      fullCommand,
@@ -840,7 +840,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 		NotePath:     notePath,
 		DirectoryID:  dirID,
 		DirectoryRel: dirRel,
-		ResultChan:   resChan,
+		resultChan:   resChan,
 		RunID:        runID,
 	}
 
@@ -867,7 +867,7 @@ func (r *Runner) executeHookSync(hook HookConfig, triggerName string, events []H
 }
 
 func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
-	hooks, err := r.LoadHooks()
+	hooks, err := r.loadHooks()
 	if err != nil {
 		r.logger.Error("failed to load hooks during metadata updated event", zap.Error(err))
 		return
@@ -880,12 +880,12 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 		}
 
 		// 直接评估事件是否匹配钩子的过滤规则
-		if !trigger.Match(event) {
+		if !trigger.match(event) {
 			continue
 		}
 
 		// 加入防抖
-		r.debouncer.Add(h.ID, HookEvent{
+		r.debouncer.Add(h.ID, hookEvent{
 			ID:        event.ID.String(),
 			Path:      event.Path,
 			Rating:    event.Rating,
@@ -898,8 +898,8 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 	}
 }
 
-// Filters 元数据更新筛选条件，专门用于外部钩子中的事件过滤
-type Filters struct {
+// filters 元数据更新筛选条件，专门用于外部钩子中的事件过滤
+type filters struct {
 	ID     []scalar.ID `toml:"id"`
 	Rating []int       `toml:"rating"`
 	Label  []string    `toml:"label"`
@@ -907,7 +907,7 @@ type Filters struct {
 }
 
 // Match 评估单个事件是否匹配当前的筛选条件
-func (f *Filters) Match(event *shared.MetadataUpdatedEvent) bool {
+func (f *filters) match(event *shared.MetadataUpdatedEvent) bool {
 	if f == nil {
 		return true
 	}
@@ -945,11 +945,11 @@ func (f *Filters) Match(event *shared.MetadataUpdatedEvent) bool {
 	return true
 }
 
-func (r *Runner) LoadHooks() ([]HookConfig, error) {
+func (r *Runner) loadHooks() ([]hookConfig, error) {
 	if r.hooksDir == "" {
 		return nil, nil
 	}
-	var configs []HookConfig
+	var configs []hookConfig
 
 	entries, err := os.ReadDir(r.hooksDir)
 	if err != nil {
@@ -972,7 +972,7 @@ func (r *Runner) LoadHooks() ([]HookConfig, error) {
 			continue
 		}
 
-		var cfg HookConfig
+		var cfg hookConfig
 		dec := toml.NewDecoder(bytes.NewReader(data))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&cfg); err != nil {
@@ -1005,14 +1005,14 @@ func (r *Runner) LoadHooks() ([]HookConfig, error) {
 	return configs, nil
 }
 
-func (r *Runner) onDebounceTrigger(hookID string, events []HookEvent) {
-	hooks, err := r.LoadHooks()
+func (r *Runner) onDebounceTrigger(hookID string, events []hookEvent) {
+	hooks, err := r.loadHooks()
 	if err != nil {
 		r.logger.Error("failed to load hooks on debounce callback", zap.Error(err))
 		return
 	}
 
-	var targetHook *HookConfig
+	var targetHook *hookConfig
 	for _, h := range hooks {
 		if h.ID == hookID {
 			targetHook = &h
@@ -1024,7 +1024,7 @@ func (r *Runner) onDebounceTrigger(hookID string, events []HookEvent) {
 		return
 	}
 
-	r.ch <- HookExecutionTask{
+	r.ch <- hookExecutionTask{
 		HookID:      targetHook.ID,
 		HookName:    targetHook.Name,
 		Command:     targetHook.Command,
@@ -1032,6 +1032,7 @@ func (r *Runner) onDebounceTrigger(hookID string, events []HookEvent) {
 		Events:      events,
 		Dir:         targetHook.Dir,
 		Env:         targetHook.Env,
+		resultChan:  make(chan hookExecutionResult, 1),
 	}
 }
 
@@ -1049,7 +1050,7 @@ func (r *Runner) runWorker(ctx context.Context) {
 	}
 }
 
-func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
+func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	var ids []string
 	var paths []string
 
@@ -1161,13 +1162,11 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 			zap.String("stdout", stdout.String()),
 			zap.String("stderr", stderr.String()),
 		)
-		if task.ResultChan != nil {
-			stderrStr := strings.TrimSpace(stderr.String())
-			if stderrStr != "" {
-				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)}
-			} else {
-				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err)}
-			}
+		stderrStr := strings.TrimSpace(stderr.String())
+		if stderrStr != "" {
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)}
+		} else {
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err)}
 		}
 		return
 	}
@@ -1194,9 +1193,7 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		} else {
 			errMsg := fmt.Sprintf("failed to read IMAGE_FUNNEL_ACTION file: %v", readErr)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID), zap.String("path", actionFilePath))
-			if task.ResultChan != nil {
-				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
-			}
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
 			return
 		}
 	} else {
@@ -1204,16 +1201,12 @@ func (r *Runner) executeHook(ctx context.Context, task HookExecutionTask) {
 		if overrideAction != "" && !isValidDirectiveAction(overrideAction) {
 			errMsg := fmt.Sprintf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", overrideAction)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID))
-			if task.ResultChan != nil {
-				task.ResultChan <- HookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
-			}
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
 			return
 		}
 	}
 
-	if task.ResultChan != nil {
-		task.ResultChan <- HookExecutionResult{Action: overrideAction}
-	}
+	task.resultChan <- hookExecutionResult{Action: overrideAction}
 }
 
 // isValidDirectiveAction 检查操作是否为支持的指令操作
@@ -1226,7 +1219,7 @@ func isValidDirectiveAction(action string) bool {
 	}
 }
 
-func toDomainDirective(cfg *DirectiveConfig) *domhook.Directive {
+func toDomainDirective(cfg *directiveConfig) *domhook.Directive {
 	if cfg == nil {
 		return nil
 	}
@@ -1241,14 +1234,14 @@ func toDomainDirective(cfg *DirectiveConfig) *domhook.Directive {
 func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error {
 	// 触发异步后台任务，尽快返回给调用者
 	go func() {
-		hooks, err := r.LoadHooks()
+		hooks, err := r.loadHooks()
 		if err != nil {
 			r.logger.Error("failed to load hooks for post_commit_session in background", zap.Error(err))
 			return
 		}
 
 		// 1. 触发纯会话提交钩子 (配置了 post_commit_session 但没有配置 note_scan 属性的钩子)
-		var pureCommitHooks []HookConfig
+		var pureCommitHooks []hookConfig
 		for _, h := range hooks {
 			if h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan == nil {
 				pureCommitHooks = append(pureCommitHooks, h)
@@ -1297,7 +1290,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 			// processSingleNote 内部已完成相应的预先写回和失败回滚
 
 			// 2b. 无指令的 note_scan 钩子：配置了 note_scan 且没有 Directive 或 ignore_directive = true 时直接触发
-			var noDirectiveNoteScanHooks []HookConfig
+			var noDirectiveNoteScanHooks []hookConfig
 			for _, h := range hooks {
 				if h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan != nil {
 					if h.Directive == nil || h.On.PostCommitSession.NoteScan.IgnoreDirective {
@@ -1378,8 +1371,8 @@ func associatedImageRelPath(noteRelPath string) (string, bool) {
 	return strings.TrimSuffix(noteRelPath, ext), true
 }
 
-// findAssociatedImageEvents 查找笔记配套的图片，构建对应的 HookEvent 列表
-func (r *Runner) findAssociatedImageEvents(ctx context.Context, noteRelPath string) ([]HookEvent, error) {
+// findAssociatedImageEvents 查找笔记配套的图片，构建对应的 hookEvent 列表
+func (r *Runner) findAssociatedImageEvents(ctx context.Context, noteRelPath string) ([]hookEvent, error) {
 	imgRelPath, ok := associatedImageRelPath(noteRelPath)
 	if !ok {
 		return nil, nil
@@ -1394,7 +1387,7 @@ func (r *Runner) findAssociatedImageEvents(ctx context.Context, noteRelPath stri
 	if img == nil {
 		return nil, nil
 	}
-	return []HookEvent{{
+	return []hookEvent{{
 		ID:   img.ID().String(),
 		Path: filepath.Join(r.rootDir, img.RelPath()),
 	}}, nil
@@ -1560,7 +1553,7 @@ func (r *Runner) writeFileWithIgnore(absPath string, content []byte, perm os.Fil
 	return os.WriteFile(absPath, content, perm)
 }
 
-func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]HookConfig, failedDirectives map[string]bool) {
+func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]hookConfig, failedDirectives map[string]bool) {
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {

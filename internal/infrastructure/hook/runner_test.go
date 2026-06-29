@@ -116,7 +116,7 @@ label = [""]
 	assert.NoError(t, err)
 	assert.Len(t, hooks, 1)
 
-	configs, err := runner.LoadHooks()
+	configs, err := runner.loadHooks()
 	assert.NoError(t, err)
 	assert.Len(t, configs, 1)
 
@@ -249,7 +249,7 @@ TEST_VAR_TWO = "val2"
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
 	defer runner.Close()
 
-	configs, err := runner.LoadHooks()
+	configs, err := runner.loadHooks()
 	assert.NoError(t, err)
 	assert.Len(t, configs, 1)
 	assert.Equal(t, "val1", configs[0].Env["TEST_VAR_ONE"])
@@ -581,9 +581,9 @@ Other text.`
 	runner.muTasks.Unlock()
 
 	// 获取 hookMap
-	hooks, err := runner.LoadHooks()
+	hooks, err := runner.loadHooks()
 	assert.NoError(t, err)
-	hookMap := make(map[string]HookConfig)
+	hookMap := make(map[string]hookConfig)
 	for _, h := range hooks {
 		if h.Directive != nil && h.Directive.Name != "" {
 			hookMap[h.Directive.Name] = h
@@ -606,7 +606,7 @@ Other text.`
 	assert.NotContains(t, content, "hook-run-id")
 }
 
-func TestRunner_LoadHooks_StrictParsing(t *testing.T) {
+func TestRunner_loadHooks_StrictParsing(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "image-funnel-hook-strict-test")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tempDir)
@@ -634,7 +634,7 @@ name = "strict"
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
-	configs, err := runner.LoadHooks()
+	configs, err := runner.loadHooks()
 	assert.NoError(t, err)
 
 	// configs 不应该包含 strict-test，因为解析由于未知字段而报错被跳过
