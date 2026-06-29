@@ -96,7 +96,7 @@
       <!-- 自动完成浮层 -->
       <Teleport to="body">
         <div
-          v-if="autocompleteState?.show && filteredDirectives.length"
+          v-if="autocompleteState?.show && filteredSuggestions.length"
           ref="floatingEl"
           :style="floatingStyles"
           class="fixed z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 max-h-56 overflow-y-auto w-72 backdrop-blur-md flex flex-col gap-1"
@@ -104,11 +104,15 @@
           <div
             class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
           >
-            选择笔记指令
+            {{
+              autocompleteState.type === "name"
+                ? "选择笔记指令"
+                : "指令参数建议"
+            }}
           </div>
           <button
-            v-for="(h, idx) in filteredDirectives"
-            :key="h.id"
+            v-for="(sug, idx) in filteredSuggestions"
+            :key="idx"
             type="button"
             class="w-full text-left px-3 py-2 rounded-lg flex flex-col transition-colors cursor-pointer"
             :class="
@@ -116,7 +120,7 @@
                 ? 'bg-secondary-500 text-white'
                 : 'hover:bg-primary-800 text-primary-200'
             "
-            @click="insertDirective(h.directive!.name)"
+            @click="handleSelectSuggestion(sug)"
             @mouseenter="activeIndex = idx"
           >
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
@@ -124,20 +128,32 @@
                 :class="
                   idx === activeIndex ? 'text-white' : 'text-secondary-400'
                 "
-                >/{{ h.directive!.name }}</span
               >
-              <span class="text-xs opacity-75 font-normal">({{ h.name }})</span>
+                {{ sug.displayText }}
+              </span>
+              <span
+                v-if="sug.type"
+                class="text-[10px] uppercase px-1 rounded font-normal"
+                :class="
+                  idx === activeIndex
+                    ? 'bg-white/20 text-white'
+                    : 'bg-primary-800 text-primary-400'
+                "
+              >
+                {{ typeLabels[sug.type] || sug.type }}
+              </span>
             </div>
             <div
+              v-if="sug.description"
               class="text-xs opacity-80"
               :class="[
                 idx === activeIndex ? 'text-white' : 'text-primary-400',
-                filteredDirectives.length === 1
+                filteredSuggestions.length === 1
                   ? 'wrap-break-word whitespace-pre-wrap'
                   : 'truncate',
               ]"
             >
-              {{ h.directive!.usage }}
+              {{ sug.description }}
             </div>
           </button>
         </div>
@@ -157,6 +173,7 @@
         @keydown.enter="handleKeyEnter"
         @keydown.esc.prevent="handleKeyEsc"
         @blur="handleBlur"
+        @focus="handleFocus"
       ></textarea>
     </div>
   </div>
@@ -172,6 +189,18 @@ import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
 import { mdiConsole, mdiLightningBolt, mdiChevronDown } from "@mdi/js";
+import {
+  parseUsage,
+  getArgsContext,
+  getSuggestionsForRules,
+} from "@/utils/directiveAutocomplete";
+import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
+
+const typeLabels: Record<string, string> = {
+  subcommand: "子命令",
+  positional: "参数",
+  option: "选项",
+};
 
 const props = defineProps<{
   placeholder?: string;
@@ -287,25 +316,78 @@ async function triggerDispatch(hookId: string, hookName: string) {
 
 const autocompleteState = ref<{
   show: boolean;
+  type: "name" | "args";
   query: string;
   triggerIndex: number;
   selectionStart: number;
+  directiveName?: string;
 } | null>(null);
 
-const filteredDirectives = computed(() => {
+let blurTimer: ReturnType<typeof setTimeout> | null = null;
+
+const parsedRules = computed<DirectiveRule[]>(() => {
+  const rules: DirectiveRule[] = [];
+  for (const h of directives.value) {
+    if (h.directive?.usage) {
+      rules.push(...parseUsage(h.directive.usage));
+    }
+  }
+  return rules;
+});
+
+const filteredSuggestions = computed<Suggestion[]>(() => {
   if (!autocompleteState.value?.show) return [];
-  const q = autocompleteState.value.query;
-  const list = directives.value;
-  if (!q) return list;
-  return list.filter(
-    (h) => h.directive?.name.toLowerCase().includes(q) ?? false,
-  );
+
+  if (autocompleteState.value.type === "name") {
+    const q = autocompleteState.value.query;
+    const list = directives.value;
+    const matched = q
+      ? list.filter((h) => h.directive?.name.toLowerCase().includes(q))
+      : list;
+    return matched.map((h) => {
+      const dirName = h.directive?.name ?? "";
+      return {
+        type: "subcommand",
+        text: dirName,
+        displayText: `/${dirName}`,
+        description: h.name,
+      };
+    });
+  } else {
+    const dirName = autocompleteState.value.directiveName;
+    if (!dirName) return [];
+    const q = autocompleteState.value.query;
+    const rules = parsedRules.value.filter((r) => r.directive === dirName);
+
+    const el = textareaRef.value;
+    if (!el) return [];
+    const text = model.value;
+    const start = autocompleteState.value.selectionStart;
+    const textBeforeCursor = text.slice(0, start);
+    const lastNewline = textBeforeCursor.lastIndexOf("\n");
+    const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+    const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
+
+    const directiveMatch = lineTextBeforeCursor.match(
+      /^[ \t]*\/([a-zA-Z0-9_-]+)(?:\s+(.*))?$/,
+    );
+    if (!directiveMatch) return [];
+    const argsText = directiveMatch[2] ?? "";
+    const { confirmedTokens } = getArgsContext(argsText);
+
+    return getSuggestionsForRules(rules, confirmedTokens, q);
+  }
 });
 
 // 自动高度绑定
 useTextAreaAutoHeight(textareaRef, model);
 
 function checkAutocomplete() {
+  if (blurTimer) {
+    clearTimeout(blurTimer);
+    blurTimer = null;
+  }
+
   const el = textareaRef.value;
   if (!el) {
     autocompleteState.value = null;
@@ -323,16 +405,50 @@ function checkAutocomplete() {
   const text = model.value;
   const textBeforeCursor = text.slice(0, start);
 
-  // 仅在行首（前面可以有空格或制表符）输入 '/' 时触发斜杠命令，避免干扰普通文本
-  const match = textBeforeCursor.match(/(?:\r?\n|^)[ \t]*\/(\w*)$/);
-  if (match) {
-    const query = match[1];
-    const matchedStr = match[0];
-    const slashOffset = matchedStr.indexOf("/");
-    const triggerIndex = (match.index ?? 0) + slashOffset;
+  const lastNewline = textBeforeCursor.lastIndexOf("\n");
+  const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+  const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
+
+  // 1. 优先匹配已有的斜杠指令参数补全 (args 补全)
+  // 如 "  /adjust lora --"
+  const directiveMatch = lineTextBeforeCursor.match(
+    /^[ \t]*\/([a-zA-Z0-9_-]+)(?:\s+(.*))?$/,
+  );
+  if (directiveMatch) {
+    const dirName = directiveMatch[1];
+    const argsText = directiveMatch[2] ?? "";
+
+    const hasDirective = directives.value.some(
+      (h) => h.directive?.name === dirName,
+    );
+    if (hasDirective) {
+      const { currentQuery } = getArgsContext(argsText);
+      const triggerIndex =
+        lineStart + lineTextBeforeCursor.length - currentQuery.length;
+
+      autocompleteState.value = {
+        show: true,
+        type: "args",
+        query: currentQuery,
+        triggerIndex,
+        selectionStart: start,
+        directiveName: dirName,
+      };
+      activeIndex.value = 0;
+      return;
+    }
+  }
+
+  // 2. 匹配指令名称补全 (name 补全)
+  // 如 "  /a" 或 "  /"
+  const nameMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]*)$/);
+  if (nameMatch) {
+    const query = nameMatch[1];
+    const triggerIndex = lineStart + lineTextBeforeCursor.indexOf("/");
 
     autocompleteState.value = {
       show: true,
+      type: "name",
       query: query.toLowerCase(),
       triggerIndex,
       selectionStart: start,
@@ -348,6 +464,47 @@ function handleInput() {
   checkAutocomplete();
 }
 
+function handleSelectSuggestion(sug: Suggestion) {
+  const el = textareaRef.value;
+  if (!el || !autocompleteState.value) return;
+
+  const text = model.value;
+  const start = el.selectionStart;
+  const triggerIdx = autocompleteState.value.triggerIndex;
+
+  const before = text.slice(0, triggerIdx);
+  const after = text.slice(start);
+
+  let textToInsert = sug.text;
+  if (autocompleteState.value.type === "name") {
+    textToInsert = `${sug.text} `;
+  } else if (sug.type === "option" && !sug.placeholder) {
+    textToInsert = `${sug.text} `;
+  }
+
+  model.value = before + textToInsert + after;
+
+  let newSelectionStart = triggerIdx + textToInsert.length;
+  let newSelectionEnd = newSelectionStart;
+
+  if (sug.placeholder) {
+    const placeholderIdx = textToInsert.indexOf(sug.placeholder);
+    if (placeholderIdx !== -1) {
+      newSelectionStart = triggerIdx + placeholderIdx;
+      newSelectionEnd = newSelectionStart + sug.placeholder.length;
+    }
+  }
+
+  autocompleteState.value = null;
+
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(newSelectionStart, newSelectionEnd);
+    emit("input");
+    checkAutocomplete();
+  });
+}
+
 function insertDirective(dirName: string) {
   const el = textareaRef.value;
   if (!el) return;
@@ -355,28 +512,14 @@ function insertDirective(dirName: string) {
   const text = model.value;
   const start = el.selectionStart;
 
-  let before: string;
-  let after: string;
-  let newCursorPos = 0;
+  const before = text.slice(0, start);
+  const after = text.slice(start);
 
-  if (autocompleteState.value) {
-    const triggerIdx = autocompleteState.value.triggerIndex;
-    before = text.slice(0, triggerIdx);
-    after = text.slice(start);
-    model.value = before + `/${dirName} ` + after;
-    newCursorPos = triggerIdx + dirName.length + 2;
-  } else {
-    // 快捷按钮点击插入，确保指令在新行
-    before = text.slice(0, start);
-    after = text.slice(start);
+  const needsNewline = before.length > 0 && !/(?:^|\n)[ \t]*$/.test(before);
+  const prefix = needsNewline ? "\n" : "";
 
-    // 检查是否需要先换行：如果光标前不是行首（前面有非空白字符）
-    const needsNewline = before.length > 0 && !/(?:^|\n)[ \t]*$/.test(before);
-    const prefix = needsNewline ? "\n" : "";
-
-    model.value = before + prefix + `/${dirName} ` + after;
-    newCursorPos = start + prefix.length + dirName.length + 2;
-  }
+  model.value = before + prefix + `/${dirName} ` + after;
+  const newCursorPos = start + prefix.length + dirName.length + 2;
 
   autocompleteState.value = null;
 
@@ -384,30 +527,29 @@ function insertDirective(dirName: string) {
     el.focus();
     el.setSelectionRange(newCursorPos, newCursorPos);
     emit("input");
+    checkAutocomplete();
   });
 }
 
 function handleKeyUp() {
-  if (autocompleteState.value?.show && filteredDirectives.value.length) {
+  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
     activeIndex.value =
-      (activeIndex.value - 1 + filteredDirectives.value.length) %
-      filteredDirectives.value.length;
+      (activeIndex.value - 1 + filteredSuggestions.value.length) %
+      filteredSuggestions.value.length;
   }
 }
 
 function handleKeyDown() {
-  if (autocompleteState.value?.show && filteredDirectives.value.length) {
+  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
     activeIndex.value =
-      (activeIndex.value + 1) % filteredDirectives.value.length;
+      (activeIndex.value + 1) % filteredSuggestions.value.length;
   }
 }
 
 function handleKeyEnter(e: KeyboardEvent) {
-  if (autocompleteState.value?.show && filteredDirectives.value.length) {
+  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
     e.preventDefault();
-    insertDirective(
-      filteredDirectives.value[activeIndex.value].directive?.name ?? "",
-    );
+    handleSelectSuggestion(filteredSuggestions.value[activeIndex.value]);
   }
 }
 
@@ -418,10 +560,17 @@ function handleKeyEsc() {
 }
 
 function handleBlur() {
-  // 延迟关闭，确保点击浮层内指令能够成功触发 click 事件
-  setTimeout(() => {
+  blurTimer = setTimeout(() => {
     autocompleteState.value = null;
+    blurTimer = null;
   }, 200);
+}
+
+function handleFocus() {
+  if (blurTimer) {
+    clearTimeout(blurTimer);
+    blurTimer = null;
+  }
 }
 
 function focus() {

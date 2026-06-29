@@ -6,7 +6,7 @@ command = "python comfyui.py add"
 [directive]
 name = "add"
 usage = """
-/add [-S] [--neg] [--raw] [-j <N>] [--region <name>]... [--node <node-id>]... <prompt>...
+/add [-S] [--neg] [--raw] [-j <N>] [--region <region>]... [--node <node-id>]... <prompt>...
 给当前目录所有 4 星图片的 ComfyUI 工作流添加提示词后再将其入列生成。
 在会话提交后触发，也可以手动通过笔记触发。
 可传入多个提示词，多个提示词会以空格拼接为一个整体后再添加
@@ -17,7 +17,7 @@ usage = """
 --neg marker 和 node 都不匹配时，用关键词匹配负面提示词而不是正面
 --raw 不给提示词附加尾随逗号
 -j --jobs <N> 发送工作流次数，默认使用 HOOK_JOBS 环境变量值
---region <name> 指定插入区域，可多次指定；优先匹配 node，若指定了 region 则插入到对应区域
+--region <region> 指定插入区域，可多次指定；优先匹配 node，若指定了 region 则插入到对应区域
 --node <node-id> 指定插入节点，可多次指定；优先匹配 node
 未指定 --region 和 --node 时，默认使用 positive 区域（指定 --neg 时使用 negative 区域）
 """
