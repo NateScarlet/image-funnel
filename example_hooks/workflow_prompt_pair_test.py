@@ -2919,6 +2919,156 @@ class TestCoverageGaps(unittest.TestCase):
         self.assertEqual(prompt["1"]["inputs"]["filename_prefix"], "output_old")
 
 
+# #region 图像长宽比调整测试
+class TestAspectAdjustment(unittest.TestCase):
+    def test_direct_ratio_adjustment(self):
+        # 原始 512x512，比率 1:1
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [512, 512, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        # 调整为 16:9 (1.7778)
+        variants = list(pair.generate_aspect_variants("16:9"))
+        self.assertEqual(len(variants), 1)
+        # 512*512 = 262144. 16:9 对应 W=680, H=384 (680*384 = 261120，最接近 262144 且是 8 的倍数)
+        self.assertEqual(prompt["1"]["inputs"]["width"], 680)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 384)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 680)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 384)
+
+    def test_aspect_swap(self):
+        # 原始 768x1344，交换后应为 1344x768
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [768, 1344, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 768, "height": 1344, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(pair.generate_aspect_variants("swap"))
+        self.assertEqual(len(variants), 1)
+        self.assertEqual(prompt["1"]["inputs"]["width"], 1344)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 768)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 1344)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 768)
+
+    def test_aspect_step_adjustment(self):
+        # 原始 768x1344 (4:7 = 0.5714), 索引为 1
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [768, 1344, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 768, "height": 1344, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+
+        # w+1 索引增 1，到达 13:19 (0.6842)。768*1344 = 1032192 -> W = sqrt(1032192 * 13 / 19) = 840.0 -> round to 8: 840; H = 1228.2 -> round to 8: 1232
+        list(pair.generate_aspect_variants("w+1"))
+        self.assertEqual(prompt["1"]["inputs"]["width"], 840)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
+
+        # 默认不带前缀视为 w。再次 +1，到达 7:9 (0.7778) -> W=896, H=1152
+        list(pair.generate_aspect_variants("+1"))
+        self.assertEqual(prompt["1"]["inputs"]["width"], 896)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
+
+        # h+1 高度增加，代表比例索引减少 1。此时从 7:9 退回到 13:19
+        list(pair.generate_aspect_variants("h+1"))
+        self.assertEqual(prompt["1"]["inputs"]["width"], 840)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
+
+        # h-1 高度减少，代表比例索引增加 1。再次从 13:19 到达 7:9
+        list(pair.generate_aspect_variants("h-1"))
+        self.assertEqual(prompt["1"]["inputs"]["width"], 896)
+        self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
+
+    def test_aspect_symmetric_variants(self):
+        # 原始 1024x1024 (1:1), 索引为 4
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+
+        # 测试 +-1 (生成 3 个变体：7:9, 1:1, 9:7)
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(pair.generate_aspect_variants("+-1"))
+        self.assertEqual(len(variants), 3)
+
+        # 测试 +-2:2 (生成 3 个变体：13:19, 1:1, 19:13)
+        pair2 = WorkflowPromptPair(workflow, prompt)
+        variants2 = list(pair2.generate_aspect_variants("w+-2:2"))
+        self.assertEqual(len(variants2), 3)
+
+    def test_aspect_primitive_connections(self):
+        # width 和 height 分别连接到 PrimitiveInt 节点
+        workflow = {
+            "nodes": [
+                {"id": "1", "type": "EmptyLatentImage", "widgets_values": [1]},
+                {"id": "2", "type": "PrimitiveInt", "widgets_values": [512]},
+                {"id": "3", "type": "PrimitiveInt", "widgets_values": [512]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": ["2", 0], "height": ["3", 0], "batch_size": 1},
+            },
+            "2": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
+            "3": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(pair.generate_aspect_variants("16:9"))
+        self.assertEqual(len(variants), 1)
+        self.assertEqual(prompt["2"]["inputs"]["value"], 680)
+        self.assertEqual(prompt["3"]["inputs"]["value"], 384)
+        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], 680)
+        self.assertEqual(workflow["nodes"][2]["widgets_values"][0], 384)
+
+
+# #endregion
+
+
 # #endregion
 
 

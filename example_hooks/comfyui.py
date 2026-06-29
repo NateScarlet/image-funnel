@@ -540,6 +540,9 @@ def main() -> None:
             elif args.adjust_type in ("lora", "l"):
                 pair = WorkflowPromptPair(workflow, prompt)
                 variant_gen = pair.generate_lora_variants(args.name, args.weight)
+            elif args.adjust_type == "aspect":
+                pair = WorkflowPromptPair(workflow, prompt)
+                variant_gen = pair.generate_aspect_variants(args.ratio, node_ids)
             elif args.adjust_type in ("prompt", "p"):
                 is_neg = args.neg
                 raw_targets = []
@@ -988,6 +991,41 @@ def parse_args():
         default=None,
         metavar="node-id",
         help="Target KSampler node ID, can be specified multiple times; if omitted, adjusts all KSampler nodes",
+    )
+
+    # 4. adjust aspect
+    aspect_parser = adjust_subparsers.add_parser(
+        "aspect", help="Adjust image aspect ratio (total pixels unchanged)"
+    )
+    aspect_parser.add_argument(
+        "ratio",
+        help="Target ratio or range (e.g. 16:9, +1, -1, +-1, +-2:2, swap)",
+    )
+    aspect_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
+    aspect_parser.add_argument(
+        "--update-seed",
+        "-u",
+        action="store_true",
+        help="Force enable seed updating",
+    )
+    aspect_parser.add_argument(
+        "--no-skip",
+        action="store_true",
+        help="Do not skip ComfyUI submission even if no changes were made",
+    )
+    aspect_parser.add_argument(
+        "--node",
+        action="append",
+        default=None,
+        metavar="node-id",
+        help="Target latent node ID containing width and height inputs, can be specified multiple times; if omitted, adjusts all latent nodes",
     )
 
     return parser.parse_args()

@@ -1323,6 +1323,223 @@ class WorkflowPromptPair:
             self.modify_prompt_weights(target_nodes, target_prompt, w, skip_add)
             yield
 
+    def generate_aspect_variants(
+        self, ratio_expr: str, node_ids: Optional[List[str]] = None
+    ) -> Generator[None, None, None]:
+        """
+        为每个长宽比变体原地修改并 yield。
+        """
+        # 1. 寻找所有含有 width 和 height inputs 的非 disabled 节点
+        latent_nodes: List[str] = []
+        for nid, node_info in self._nodes_cache.items():
+            if node_ids is not None and nid not in node_ids:
+                continue
+            if "width" in node_info.inputs and "height" in node_info.inputs:
+                latent_nodes.append(nid)
+
+        if not latent_nodes:
+            return
+
+        # 2. 为每个节点计算目标宽高变体列表
+        node_variants_map: Dict[str, List[Tuple[int, int]]] = {}
+        for nid in latent_nodes:
+            w_nid, w_key = find_terminal_input(self.prompt, nid, "width")
+            h_nid, h_key = find_terminal_input(self.prompt, nid, "height")
+            w_val = self.prompt[w_nid]["inputs"].get(w_key)
+            h_val = self.prompt[h_nid]["inputs"].get(h_key)
+
+            if not isinstance(w_val, (int, float)) or not isinstance(
+                h_val, (int, float)
+            ):
+                continue
+
+            W = float(w_val)
+            H = float(h_val)
+            S = W * H
+            R_curr = W / H
+
+            COMMON_RATIOS = [
+                "5:12",
+                "4:7",
+                "13:19",
+                "7:9",
+                "1:1",
+                "9:7",
+                "19:13",
+                "7:4",
+                "12:5",
+            ]
+            COMMON_VALUES = [
+                5 / 12,
+                4 / 7,
+                13 / 19,
+                7 / 9,
+                1.0,
+                9 / 7,
+                19 / 13,
+                1.75,
+                2.4,
+            ]
+
+            # 寻找与当前长宽比最接近的预设比例索引
+            diffs = [abs(v - R_curr) for v in COMMON_VALUES]
+            curr_idx = diffs.index(min(diffs))
+
+            target_ratios: List[float] = []
+            ratio_expr_clean = ratio_expr.strip()
+
+            # 交换宽高模式
+            if ratio_expr_clean.lower() in ("swap", "exchange"):
+                node_variants_map[nid] = [(int(round(H)), int(round(W)))]
+                continue
+
+            # 解析对称浮动模式，支持 "w+-2:2" 这种形式以及默认 w 前缀，支持步长指定
+            # 对称语法正则：^(?P<prefix>[wh]?)\+-(?P<delta>\d+)(?::(?P<step>\d+))?$
+            import re
+
+            m_sym = re.match(r"^([wh]?)\+-(\d+)(?::(\d+))?$", ratio_expr_clean)
+            if m_sym:
+                prefix = m_sym.group(1) or "w"
+                delta = int(m_sym.group(2))
+                step = int(m_sym.group(3)) if m_sym.group(3) else 1
+
+                # 对称浮动在比例索引上计算变体
+                start_idx = max(0, curr_idx - delta)
+                end_idx = min(len(COMMON_RATIOS) - 1, curr_idx + delta)
+
+                # 以 step 为步长生成索引序列，并确保 curr_idx 被包含或基于其对称分布
+                indices: List[int] = []
+                for offset in range(0, delta + 1, step):
+                    l_idx = curr_idx - offset
+                    if l_idx >= start_idx:
+                        indices.append(l_idx)
+                    r_idx = curr_idx + offset
+                    if r_idx <= end_idx:
+                        indices.append(r_idx)
+
+                # 排序并去重
+                indices = sorted(list(set(indices)))
+                target_ratios = [COMMON_VALUES[idx] for idx in indices]
+
+            # 解析升降档语法，如 "+1", "w-2", "h+1" 等
+            # 正则：^(?P<prefix>[wh]?)(?P<shift>[+-]\d+)$
+            else:
+                m_shift = re.match(r"^([wh]?)([+-]\d+)$", ratio_expr_clean)
+                if m_shift:
+                    prefix = m_shift.group(1) or "w"
+                    shift = int(m_shift.group(2))
+
+                    # 如果前缀为 h，由于高度增加代表长宽比减小，因此索引变化方向取反
+                    effective_shift = -shift if prefix == "h" else shift
+                    target_idx = max(
+                        0, min(len(COMMON_RATIOS) - 1, curr_idx + effective_shift)
+                    )
+                    target_ratios = [COMMON_VALUES[target_idx]]
+
+                # 解析直接指定比例模式，如 "16:9"
+                elif ":" in ratio_expr_clean:
+                    try:
+                        w_part, h_part = ratio_expr_clean.split(":", 1)
+                        rw = float(w_part)
+                        rh = float(h_part)
+                        if rw <= 0 or rh <= 0:
+                            raise ValueError()
+                        target_ratios = [rw / rh]
+                    except ValueError:
+                        raise ValueError(
+                            f"Invalid aspect ratio format: '{ratio_expr_clean}'"
+                        )
+                else:
+                    raise ValueError(
+                        f"Invalid aspect ratio expression: '{ratio_expr_clean}'"
+                    )
+
+            # 根据目标比例计算宽高，四舍五入到最接近的 8 的倍数以符合 SD 神经网络要求
+            variants: List[Tuple[int, int]] = []
+            for R in target_ratios:
+                import math
+
+                W_raw = math.sqrt(S * R)
+                H_raw = math.sqrt(S / R)
+                W_new = int(round(W_raw / 8) * 8)
+                H_new = int(round(H_raw / 8) * 8)
+                W_new = max(8, W_new)
+                H_new = max(8, H_new)
+                variants.append((W_new, H_new))
+
+            node_variants_map[nid] = variants
+
+        if not node_variants_map:
+            return
+
+        # 验证所有节点的变体数量相同，以确保可以同步修改
+        lengths = {nid: len(vts) for nid, vts in node_variants_map.items()}
+        unique_lengths = set(lengths.values())
+        if len(unique_lengths) > 1:
+            details = ", ".join(
+                f"node {nid}: {l} versions" for nid, l in lengths.items()
+            )
+            raise ValueError(
+                f"Inconsistent aspect ratio version counts generated for latent nodes ({details}) "
+                f"under expression '{ratio_expr}'."
+            )
+
+        first_variants = list(node_variants_map.values())[0]
+        for vi in range(len(first_variants)):
+            for nid, variants in node_variants_map.items():
+                w_target, h_target = variants[vi]
+                self.modify_aspect_ratio(w_target, h_target, [nid])
+            yield
+
+    def modify_aspect_ratio(
+        self,
+        target_width: int,
+        target_height: int,
+        node_ids: Optional[List[str]] = None,
+    ) -> None:
+        """
+        修改指定包含 width 和 height 的节点的长宽比，直接修改原对象。
+        """
+        sources: List[Tuple[str, Tuple[str, str], Tuple[str, str]]] = []
+        for nid, node_info in self._nodes_cache.items():
+            if node_ids is not None and nid not in node_ids:
+                continue
+            if "width" in node_info.inputs and "height" in node_info.inputs:
+                w_nid, w_key = find_terminal_input(self.prompt, nid, "width")
+                h_nid, h_key = find_terminal_input(self.prompt, nid, "height")
+                sources.append((nid, (w_nid, w_key), (h_nid, h_key)))
+
+        # 更新 prompt 中的输入源头值
+        for nid, (w_nid, w_key), (h_nid, h_key) in sources:
+            if w_nid in self.prompt:
+                self.prompt[w_nid]["inputs"][w_key] = target_width
+            if h_nid in self.prompt:
+                self.prompt[h_nid]["inputs"][h_key] = target_height
+
+        # 更新 workflow 结构中的对应 widgets_values
+        for nid, (w_nid, w_key), (h_nid, h_key) in sources:
+            node_info = self._nodes_cache.get(nid)
+            if node_info and not node_info.is_disabled:
+                wv = node_info.widgets_values
+                if wv and len(wv) >= 2:
+                    # 如果 width / height 没有外接 Primitive 节点，则直接修改 widget 数组
+                    if w_nid == nid and isinstance(wv[0], (int, float)):
+                        wv[0] = target_width
+                    if h_nid == nid and isinstance(wv[1], (int, float)):
+                        wv[1] = target_height
+
+            # 如果接了 Primitive 节点，需要更新 Primitive 节点的 widget 值
+            for node_info in self._nodes_cache.values():
+                if node_info.is_disabled:
+                    continue
+                if node_info.class_type in KNOWN_PRIMITIVE_TYPES:
+                    wv = node_info.widgets_values
+                    if wv and isinstance(wv[0], (int, float)):
+                        if node_info.node_id == w_nid:
+                            wv[0] = target_width
+                        elif node_info.node_id == h_nid:
+                            wv[0] = target_height
+
     # #endregion
 
     # #region 提交方法
