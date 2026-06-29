@@ -74,6 +74,10 @@ func handleImage(
 			http.Error(w, "request canceled", http.StatusRequestTimeout)
 			return
 		}
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "image not found", http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			logger.Error("process image", zap.Error(err))
