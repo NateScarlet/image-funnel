@@ -176,14 +176,14 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   }
 
   /**
-   * 获取当前生效的图片筛选配置。
+   * 当前生效的图片筛选配置。
    * 1. 本地临时编辑暂存中的筛选（browse.filterBy）优先级最高。
    *    若暂存 buffer 的 id 与当前目录匹配，说明用户曾主动操作过筛选，
    *    此时直接返回暂存值（即使为 undefined 表示已清除），不再回退到服务端。
    * 2. 服务端查询到的最新配置优先级第二。
    * 3. 服务端查询到的最新会话 filter 优先级第三（回退）。
    */
-  function getImageFilters(): ImageFiltersInput | undefined {
+  const imageFilters = computed<ImageFiltersInput | undefined>(() => {
     // 当前目录有暂存状态时，直接使用暂存，不回退到服务端
     if (currentBrowseBuffer.value.id === dirIdRef.value) {
       return currentBrowseBuffer.value.browse.filterBy;
@@ -226,12 +226,12 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     }
 
     return undefined;
-  }
+  });
 
   // 评星过滤器，默认使用上次会话设置（若未修改过任何筛选条件）
   const filterRating = computed<number[]>({
     get() {
-      return getImageFilters()?.rating || [];
+      return imageFilters.value?.rating || [];
     },
     set(val) {
       updateDirectoryState((state) => {
@@ -247,7 +247,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   // 颜色标签过滤器，默认使用上次会话设置（若未修改过任何筛选条件）
   const filterLabels = computed<string[]>({
     get() {
-      return getImageFilters()?.label || [];
+      return imageFilters.value?.label || [];
     },
     set(val) {
       updateDirectoryState((state) => {
@@ -263,7 +263,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   // 搜索关键字，默认使用上次会话设置（若未修改过任何筛选条件）
   const searchQuery = computed<string>({
     get() {
-      return getImageFilters()?.query || "";
+      return imageFilters.value?.query || "";
     },
     set(val) {
       updateDirectoryState((state) => {
@@ -314,6 +314,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     filterRating,
     filterLabels,
     searchQuery,
+    imageFilters,
     showHiddenNotes,
     hasActiveFilters,
     clearFilters,

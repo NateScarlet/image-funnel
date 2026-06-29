@@ -220,7 +220,6 @@ import type {
 } from "@/graphql/generated";
 import MoveImagesForm from "./MoveImagesForm.vue";
 import useModalDialog from "@/composables/useModalDialog";
-import optionalArray from "@/utils/optionalArray.ts";
 import { useClipboard } from "@/composables/useClipboard";
 import useNotification from "@/composables/useNotification";
 import useTrashImages from "@/composables/useTrashImages";
@@ -237,8 +236,9 @@ const props = defineProps<{
 // #endregion
 
 // #region 筛选状态（模块级单例，与 ImageGridHeader 共享）
-const { filterRating, filterLabels, searchQuery, clearFilters } =
-  useDirectoryState(() => props.directoryId);
+const { imageFilters, searchQuery, clearFilters } = useDirectoryState(
+  () => props.directoryId,
+);
 // #endregion
 
 // #region 图片加载
@@ -250,11 +250,7 @@ onMounted(() => {
 });
 
 const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
-  const filterBy: ImageFiltersInput = {
-    rating: optionalArray(filterRating.value),
-    label: optionalArray(filterLabels.value),
-    query: searchQuery.value || undefined,
-  };
+  const filterBy: ImageFiltersInput = imageFilters.value ?? {};
   return {
     id: props.directoryId,
     filterBy,
