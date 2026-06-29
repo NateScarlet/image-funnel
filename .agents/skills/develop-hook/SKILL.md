@@ -36,9 +36,9 @@ usage = """
 指令的详细用法和参数说明。
 """
 # 动作指令执行成功/失败后的处理行为（可选，默认为 "COMMENT_OUT"）。支持以下三种显式选项：
-# - "COMMENT_OUT": 将指令行自动转化为笔记注释，例如 `%% /your_directive %%`。
+# - "COMMENT_OUT": 将指令行注释（%% ... %%），并在其后追加脚本 stdout/stderr 的 alert 语法块（`>[!stdout]` / `>[!stderr]`）。
 # - "REMOVE": 从笔记中彻底删除这一行指令。
-# - "KEEP": 保留本行指令内容不变（常用于需持续触发的场景）。
+# - "KEEP": 保留本行指令内容不变，并在其后追加脚本 stdout/stderr 的 alert 语法块。
 # 脚本成功执行后，可通过向 IMAGE_FUNNEL_ACTION 环境变量指向的文件写入操作名称来覆盖此行为。
 on_success_action = "REMOVE"        
 on_fail_action = "KEEP"            

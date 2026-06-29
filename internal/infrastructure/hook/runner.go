@@ -87,6 +87,8 @@ type hookEvent struct {
 type hookExecutionResult struct {
 	Error  error  // 脚本执行错误，nil 表示成功
 	Action string // 脚本通过 IMAGE_FUNNEL_ACTION 文件指定的操作，空字符串表示未覆盖
+	Stdout string // 脚本标准输出
+	Stderr string // 脚本标准错误输出
 }
 
 // hookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
@@ -224,14 +226,14 @@ func NewRunner(
 		fileChangedSub:     fileChangedSub,
 		graphqlURL:         graphqlURL,
 		tokenSource:        tokenSource,
-		imgRepo:     imgRepo,
-		dirSvc:      dirSvc,
-		dirRepo:     dirRepo,
-		ch:          make(chan hookExecutionTask, 1024),
-		ctx:         ctx,
-		cancel:      cancel,
-		writeIgnore: make(map[string]writeIgnoreItem),
-		activeTasks: make(map[string]*activeTask),
+		imgRepo:            imgRepo,
+		dirSvc:             dirSvc,
+		dirRepo:            dirRepo,
+		ch:                 make(chan hookExecutionTask, 1024),
+		ctx:                ctx,
+		cancel:             cancel,
+		writeIgnore:        make(map[string]writeIgnoreItem),
+		activeTasks:        make(map[string]*activeTask),
 	}
 
 	r.debouncer = newDebouncer(100*time.Millisecond, r.onDebounceTrigger)
@@ -323,7 +325,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		})
 	}
 
-	_, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", "", "", "")
+	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", "", "", "")
 	return err
 }
 
@@ -388,14 +390,14 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 
 		if !executed {
 			r.logger.Debug("TriggerForNote not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			_, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
+			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
 			return err
 		}
 		return nil
 	}
 
 	r.logger.Debug("TriggerForNote no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	_, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
+	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
 	return err
 }
 
@@ -489,7 +491,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 		}
 
 		for _, h := range noDirectiveHooks {
-			_, err = r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
+			_, _, _, err = r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
 			if err != nil {
 				r.logger.Error("failed to execute no-directive post_update_note hook", zap.String("hook_id", h.ID), zap.Error(err))
 			}
@@ -585,7 +587,10 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 		relPath     string
 		dirID       string
 		dirRelPath  string
-		action      string // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
+		action      string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
+		stdout      string    // 脚本标准输出
+		stderr      string    // 脚本标准错误输出
+		executedAt  time.Time // 脚本执行时间
 	}
 
 	var pending []pendingHook
@@ -736,11 +741,14 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
 	for i, p := range pending {
-		action, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
+		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
 		if err != nil {
 			r.logger.Error("failed to execute hook for directive", zap.String("hook_id", p.config.ID), zap.Error(err))
 		}
 		pending[i].action = action
+		pending[i].stdout = stdout
+		pending[i].stderr = stderr
+		pending[i].executedAt = time.Now()
 	}
 
 	// 5. 执行完成后，在 activeTask 关联的所有路径上执行擦除
@@ -782,7 +790,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 			pTask := pending[idx]
 			idx++
 
-			return applyDirectiveAction(pTask.action, matchedLine)
+			return applyDirectiveAction(pTask.action, matchedLine, pTask.stdout, pTask.stderr, pTask.executedAt)
 		})
 
 		// 擦除 hook-run-id
@@ -807,9 +815,9 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 	return true, nil
 }
 
-// executeHookSync 同步执行钩子并返回解析后的操作
+// executeHookSync 同步执行钩子并返回解析后的操作、stdout 和 stderr
 // 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
-func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (string, error) {
+func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (action string, stdout string, stderr string, err error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
@@ -849,20 +857,20 @@ func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []h
 		if result.Error != nil {
 			// 失败时总是使用 on_fail_action
 			if hook.Directive != nil {
-				return hook.Directive.OnFailAction, result.Error
+				return hook.Directive.OnFailAction, result.Stdout, result.Stderr, result.Error
 			}
-			return "", result.Error
+			return "", result.Stdout, result.Stderr, result.Error
 		}
 		// 成功：脚本覆盖优先，否则使用 on_success_action
 		if result.Action != "" {
-			return result.Action, nil
+			return result.Action, result.Stdout, result.Stderr, nil
 		}
 		if hook.Directive != nil {
-			return hook.Directive.OnSuccessAction, nil
+			return hook.Directive.OnSuccessAction, result.Stdout, result.Stderr, nil
 		}
-		return "", nil
+		return "", result.Stdout, result.Stderr, nil
 	case <-r.ctx.Done():
-		return "", r.ctx.Err()
+		return "", "", "", r.ctx.Err()
 	}
 }
 
@@ -1154,19 +1162,22 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		}
 	}()
 
+	stdoutStr := stdout.String()
+	stderrStr := stderr.String()
+
 	if err != nil {
 		r.logger.Error("external hook command failed",
 			zap.String("hook_id", task.HookID),
 			zap.Duration("duration", duration),
 			zap.Error(err),
-			zap.String("stdout", stdout.String()),
-			zap.String("stderr", stderr.String()),
+			zap.String("stdout", stdoutStr),
+			zap.String("stderr", stderrStr),
 		)
-		stderrStr := strings.TrimSpace(stderr.String())
-		if stderrStr != "" {
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrStr)}
+		stderrTrimmed := strings.TrimSpace(stderrStr)
+		if stderrTrimmed != "" {
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrTrimmed), Stdout: stdoutStr, Stderr: stderrStr}
 		} else {
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err)}
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err), Stdout: stdoutStr, Stderr: stderrStr}
 		}
 		return
 	}
@@ -1174,10 +1185,10 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	r.logger.Info("external hook command completed",
 		zap.String("hook_id", task.HookID),
 		zap.Duration("duration", duration),
-		zap.String("stdout", stdout.String()),
+		zap.String("stdout", stdoutStr),
 	)
 	// 开发环境通过 Debug 级别输出 stderr，生产环境自动过滤
-	if stderrStr := stderr.String(); stderrStr != "" {
+	if stderrStr != "" {
 		r.logger.Debug("external hook stderr",
 			zap.String("hook_id", task.HookID),
 			zap.String("stderr", stderrStr),
@@ -1193,7 +1204,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		} else {
 			errMsg := fmt.Sprintf("failed to read IMAGE_FUNNEL_ACTION file: %v", readErr)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID), zap.String("path", actionFilePath))
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg), Stdout: stdoutStr, Stderr: stderrStr}
 			return
 		}
 	} else {
@@ -1201,12 +1212,12 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		if overrideAction != "" && !isValidDirectiveAction(overrideAction) {
 			errMsg := fmt.Sprintf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", overrideAction)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID))
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg)}
+			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg), Stdout: stdoutStr, Stderr: stderrStr}
 			return
 		}
 	}
 
-	task.resultChan <- hookExecutionResult{Action: overrideAction}
+	task.resultChan <- hookExecutionResult{Action: overrideAction, Stdout: stdoutStr, Stderr: stderrStr}
 }
 
 // isValidDirectiveAction 检查操作是否为支持的指令操作
@@ -1251,7 +1262,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 		if len(pureCommitHooks) > 0 {
 			// 彻底禁止为了钩子加载目录下所有图片！仅传入空列表和会话目录信息，由脚本端自行 GraphQL 按需过滤
 			for _, h := range pureCommitHooks {
-				_, err = r.executeHookSync(h, "post_commit_session", nil, nil, "", dirID.String(), dirRelPath, "")
+				_, _, _, err = r.executeHookSync(h, "post_commit_session", nil, nil, "", dirID.String(), dirRelPath, "")
 				if err != nil {
 					r.logger.Error("failed to execute pure post_commit_session hook", zap.String("hook_id", h.ID), zap.Error(err))
 				}
@@ -1305,7 +1316,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 					r.logger.Error("failed to get associated image for commit scan hook", zap.String("note_path", noteRelPath), zap.Error(err))
 				}
 				for _, h := range noDirectiveNoteScanHooks {
-					_, err = r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dirID.String(), dirRelPath, "")
+					_, _, _, err = r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dirID.String(), dirRelPath, "")
 					if err != nil {
 						r.logger.Error("failed to execute no-directive post_commit_session note_scan hook", zap.String("hook_id", h.ID), zap.Error(err))
 					}
@@ -1319,22 +1330,61 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 }
 
 // applyDirectiveAction 根据指令动作（REMOVE/KEEP/COMMENT_OUT）返回替换后的文本行
-func applyDirectiveAction(action string, matchedLine string) string {
+// COMMENT_OUT 将指令行注释（%% ... %%），并追加 stdout/stderr 的 alert 语法块
+// KEEP 保留原指令行，并追加 stdout/stderr 的 alert 语法块
+func applyDirectiveAction(action string, matchedLine string, stdout string, stderr string, executedAt time.Time) string {
+	if action == "REMOVE" {
+		return ""
+	}
+
+	var newline string
+	if strings.HasSuffix(matchedLine, "\r\n") {
+		newline = "\r\n"
+	} else if strings.HasSuffix(matchedLine, "\n") {
+		newline = "\n"
+	}
+
+	// 构建 alert 语法块（stdout + stderr）
+	var alertBlock string
+	ts := executedAt.Format("2006-01-02T15:04:05")
+	stdoutTrimmed := strings.TrimRight(stdout, "\r\n")
+	if stdoutTrimmed != "" {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, ">[!stdout]%s%s", ts, newline)
+		for line := range strings.SplitSeq(stdoutTrimmed, "\n") {
+			line = strings.TrimSuffix(line, "\r")
+			fmt.Fprintf(&sb, "> %s%s", line, newline)
+		}
+		alertBlock = sb.String()
+	}
+	stderrTrimmed := strings.TrimRight(stderr, "\r\n")
+	if stderrTrimmed != "" {
+		var sb strings.Builder
+		sb.WriteString(alertBlock)
+		fmt.Fprintf(&sb, ">[!stderr]%s%s", ts, newline)
+		for line := range strings.SplitSeq(stderrTrimmed, "\n") {
+			line = strings.TrimSuffix(line, "\r")
+			fmt.Fprintf(&sb, "> %s%s", line, newline)
+		}
+		alertBlock = sb.String()
+	}
+
 	switch action {
 	case "REMOVE":
-		return ""
+		panic("should returned early")
 	case "KEEP":
+		if alertBlock != "" {
+			return matchedLine + alertBlock
+		}
 		return matchedLine
 	default: // COMMENT_OUT
-		var newline string
-		if strings.HasSuffix(matchedLine, "\r\n") {
-			newline = "\r\n"
-		} else if strings.HasSuffix(matchedLine, "\n") {
-			newline = "\n"
-		}
 		lineWithoutNL := strings.TrimSuffix(matchedLine, newline)
 		trimmed := strings.TrimSpace(lineWithoutNL)
-		return fmt.Sprintf("%%%% %s %%%%"+newline, trimmed)
+		commented := fmt.Sprintf("%%%% %s %%%%"+newline, trimmed)
+		if alertBlock != "" {
+			return commented + alertBlock
+		}
+		return commented
 	}
 }
 
@@ -1584,7 +1634,7 @@ func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, 
 		if failedDirectives != nil && failedDirectives[cmdName] {
 			action = hookConfig.Directive.OnFailAction
 		}
-		return applyDirectiveAction(action, matchedLine)
+		return applyDirectiveAction(action, matchedLine, "", "", time.Time{})
 	})
 
 	finalContent = removeHookRunID(finalContent)
