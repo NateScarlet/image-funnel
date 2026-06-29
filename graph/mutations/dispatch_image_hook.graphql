@@ -5,8 +5,8 @@ extend type Mutation {
 
 "手动派发图片钩子的输入"
 input DispatchImageHookInput {
-  "图片 ID 列表"
-  ids: [ID!]!
+  "图片筛选条件"
+  filterBy: ImageFiltersInput!
   "要触发的钩子 ID"
   hookId: ID!
   "客户端突变标识"

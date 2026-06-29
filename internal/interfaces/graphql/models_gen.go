@@ -111,8 +111,8 @@ type DeletedImage struct {
 
 // 手动派发图片钩子的输入
 type DispatchImageHookInput struct {
-	// 图片 ID 列表
-	Ids []*scalar.ID `json:"ids"`
+	// 图片筛选条件
+	FilterBy *shared.ImageFilters `json:"filterBy"`
 	// 要触发的钩子 ID
 	HookID scalar.ID `json:"hookId"`
 	// 客户端突变标识
@@ -322,6 +322,23 @@ type UpdateImageMetadataInput struct {
 	Rating *int `json:"rating,omitempty"`
 	// 新的颜色标签，为null表示不修改
 	Label *string `json:"label,omitempty"`
+}
+
+// 批量更新符合条件的图片的元数据
+type UpdateImagesMetadataInput struct {
+	// 过滤条件
+	FilterBy *shared.ImageFilters `json:"filterBy"`
+	// 新的评分值（0-5），为null表示不修改
+	Rating *int `json:"rating,omitempty"`
+	// 新的颜色标签，为null表示不修改
+	Label            *string `json:"label,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UpdateImagesMetadataPayload struct {
+	// 更新成功的图片数量
+	UpdatedCount     int     `json:"updatedCount"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 更新会话配置（目标保留数量、筛选条件）

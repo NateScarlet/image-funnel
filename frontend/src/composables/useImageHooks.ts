@@ -2,7 +2,11 @@ import { ref, computed, toValue, type MaybeRefOrGetter } from "vue";
 import useQuery from "@/graphql/utils/useQuery";
 import mutate from "@/graphql/utils/mutate";
 import useNotification from "@/composables/useNotification";
-import { HooksDocument, DispatchImageHookDocument } from "@/graphql/generated";
+import {
+  HooksDocument,
+  DispatchImageHookDocument,
+  type ImageFiltersInput,
+} from "@/graphql/generated";
 import { useHotkeys } from "@/composables/useHotkeys";
 import useStorage from "@/composables/useStorage";
 
@@ -18,7 +22,7 @@ const { model: lastDispatchedHook } = useStorage<LastHook>(
 );
 
 export interface UseImageHooksOptions {
-  imageIds?: MaybeRefOrGetter<string[]>;
+  selectedFilterBy?: MaybeRefOrGetter<ImageFiltersInput | undefined>;
 }
 
 /**
@@ -41,9 +45,9 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
   async function dispatch(
     hookId: string,
     hookName: string,
-    imageIds: string[],
+    filterBy: ImageFiltersInput,
   ) {
-    if (imageIds.length === 0 || isDispatching.value) return;
+    if (isDispatching.value) return;
     isDispatching.value = true;
     currentDispatchingHookId.value = hookId;
 
@@ -55,7 +59,7 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
         variables: {
           input: {
             hookId,
-            ids: imageIds,
+            filterBy,
           },
         },
       });
@@ -64,11 +68,16 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
         showError(`执行动作 ${hookName} 失败：${error.message}`);
       } else {
         lastDispatchedHook.value = { id: hookId, name: hookName };
-        const count = imageIds.length;
-        if (count === 1) {
-          showSuccess(`动作 ${hookName} 已成功触发`);
+        const ids = filterBy.id;
+        if (ids && Array.isArray(ids)) {
+          const count = ids.length;
+          if (count === 1) {
+            showSuccess(`动作 ${hookName} 已成功触发`);
+          } else {
+            showSuccess(`已成功对 ${count} 张图片触发动作 ${hookName}`);
+          }
         } else {
-          showSuccess(`已成功对 ${count} 张图片触发动作 ${hookName}`);
+          showSuccess(`已成功触发动作 ${hookName}`);
         }
       }
     } catch (err) {
@@ -85,13 +94,6 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
     }
   }
 
-  const targetImageIds = computed(() => {
-    if (options.imageIds) {
-      return toValue(options.imageIds);
-    }
-    return [];
-  });
-
   // 绑定 F4 快捷键重复上一次动作
   useHotkeys(
     {
@@ -102,21 +104,23 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
           showError("没有可以重复的上一个动作");
           return;
         }
-        const ids = targetImageIds.value;
-        if (ids.length === 0) {
+        const filter = toValue(options.selectedFilterBy);
+        if (!filter) {
           return;
         }
         await dispatch(
           lastDispatchedHook.value.id,
           lastDispatchedHook.value.name,
-          ids,
+          filter,
         );
       },
     },
     {
       description: "重复上一次动作",
       category: "图片操作",
-      enabled: computed(() => targetImageIds.value.length > 0),
+      enabled: computed(() => {
+        return !!toValue(options.selectedFilterBy);
+      }),
     },
   );
 

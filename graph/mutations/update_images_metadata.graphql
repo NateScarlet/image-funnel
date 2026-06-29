@@ -1,0 +1,20 @@
+"批量更新符合条件的图片的元数据"
+input UpdateImagesMetadataInput {
+  "过滤条件"
+  filterBy: ImageFiltersInput!
+  "新的评分值（0-5），为null表示不修改"
+  rating: Int
+  "新的颜色标签，为null表示不修改"
+  label: String
+  clientMutationId: String
+}
+
+type UpdateImagesMetadataPayload {
+  "更新成功的图片数量"
+  updatedCount: Int!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  updateImagesMetadata(input: UpdateImagesMetadataInput!): UpdateImagesMetadataPayload!
+}

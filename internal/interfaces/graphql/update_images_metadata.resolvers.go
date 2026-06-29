@@ -10,28 +10,20 @@ import (
 	"main/internal/shared"
 )
 
-// DispatchImageHook is the resolver for the dispatchImageHook field.
-func (r *mutationResolver) DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error) {
+// UpdateImagesMetadata is the resolver for the updateImagesMetadata field.
+func (r *mutationResolver) UpdateImagesMetadata(ctx context.Context, input UpdateImagesMetadataInput) (*UpdateImagesMetadataPayload, error) {
 	filterBy := shared.ImageFilters{}
 	if input.FilterBy != nil {
 		filterBy = *input.FilterBy
 	}
 
-	matched, err := r.app.FindMatchedImages(ctx, filterBy)
+	count, err := r.app.UpdateImagesMetadata(ctx, filterBy, input.Rating, input.Label)
 	if err != nil {
 		return nil, err
 	}
 
-	var ids []string
-	for _, img := range matched {
-		ids = append(ids, img.ID().String())
-	}
-
-	err = r.app.Dispatch(ctx, ids, input.HookID, "image_dispatch")
-	if err != nil {
-		return nil, err
-	}
-	return &DispatchImageHookPayload{
+	return &UpdateImagesMetadataPayload{
+		UpdatedCount:     count,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

@@ -265,7 +265,7 @@
             :key="img.id"
             class="group relative bg-primary-800/40 hover:bg-primary-800/90 border rounded-xl overflow-hidden aspect-square cursor-pointer transition-all hover:scale-105 hover:shadow-lg hover:shadow-black/40 flex flex-col justify-between"
             :class="[
-              isBulkMode && selectedImageIds.includes(img.id)
+              isBulkMode && isSelected(img.id)
                 ? 'border-secondary-500 ring-2 ring-secondary-500/50 bg-primary-800/90 scale-105'
                 : 'border-primary-800 hover:border-primary-600/80',
               outOfFilterImageIds.has(img.id)
@@ -276,7 +276,7 @@
           >
             <!-- 选中态的整体外框 overlay，防止被 overflow-hidden 裁剪或子元素遮挡 -->
             <div
-              v-if="isBulkMode && selectedImageIds.includes(img.id)"
+              v-if="isBulkMode && isSelected(img.id)"
               class="absolute inset-0 border-2 border-secondary-500 rounded-xl pointer-events-none z-10"
             ></div>
             <!-- 缩略图加载 -->
@@ -288,7 +288,7 @@
                 v-if="isBulkMode"
                 class="absolute top-2 left-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 border cursor-pointer"
                 :class="[
-                  selectedImageIds.includes(img.id)
+                  isSelected(img.id)
                     ? 'bg-secondary-500 border-secondary-400 text-white shadow-[0_2px_8px_rgba(235,94,85,0.4)] scale-110'
                     : 'bg-black/40 border-white/20 text-white/50 opacity-0 group-hover:opacity-100 hover:scale-105',
                 ]"
@@ -471,7 +471,7 @@
     >
       <MoveImagesForm
         :directory-id="directoryId"
-        :filter-by="moveImagesFilterBy"
+        :filter-by="selectedFilterBy || {}"
         :match-count="moveImagesMatchCount"
         :is-approximate="!isBulkMode && hasNextPage"
         @close="handleMoveClose"
@@ -491,9 +491,9 @@
           <div class="flex items-center justify-between md:justify-start gap-4">
             <div class="flex items-center gap-2">
               <span
-                class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-secondary-500/20 border border-secondary-500/30 text-xs font-bold text-secondary-400 animate-pulse"
+                class="inline-flex items-center justify-center w-max min-w-6 px-1.5 h-6 rounded-full bg-secondary-500/20 border border-secondary-500/30 text-xs font-bold text-secondary-400 animate-pulse"
               >
-                {{ selectedImageIds.length }}
+                {{ selectedCountText }}
               </span>
               <span class="text-xs text-primary-200 font-medium"
                 >张图片已选中</span
@@ -502,12 +502,21 @@
             <div class="h-4 w-px bg-primary-700 hidden md:block"></div>
             <div class="flex items-center gap-2">
               <button
+                v-if="!isAllMatchingSelected"
                 class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
                 @click="selectAll"
               >
                 全选
               </button>
               <button
+                v-if="isAllMatchingSelected"
+                class="px-2 py-1 text-xs text-red-300 hover:text-white bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 rounded-lg transition-colors cursor-pointer select-none font-semibold"
+                @click="deselectAll"
+              >
+                清除
+              </button>
+              <button
+                v-if="!isAllMatchingSelected"
                 class="px-2 py-1 text-xs text-primary-300 hover:text-white bg-primary-800 hover:bg-primary-700 border border-primary-700/60 rounded-lg transition-colors cursor-pointer select-none"
                 @click="invertSelection"
               >
@@ -522,11 +531,9 @@
             <div class="relative group/rating">
               <button
                 class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-                :disabled="selectedImageIds.length === 0 || isUpdating"
+                :disabled="!selectedFilterBy || isUpdating"
                 :class="[
-                  selectedImageIds.length === 0
-                    ? 'opacity-40 cursor-not-allowed'
-                    : '',
+                  !selectedFilterBy ? 'opacity-40 cursor-not-allowed' : '',
                   activeDropdown === 'rating'
                     ? 'border-secondary-500/50 text-white bg-primary-700'
                     : '',
@@ -541,7 +548,7 @@
 
               <!-- 评分悬浮窗 -->
               <div
-                v-if="selectedImageIds.length > 0"
+                v-if="selectedFilterBy"
                 class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
                 :class="[
                   activeDropdown === 'rating'
@@ -558,11 +565,9 @@
             <div class="relative group/label">
               <button
                 class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-                :disabled="selectedImageIds.length === 0 || isUpdating"
+                :disabled="!selectedFilterBy || isUpdating"
                 :class="[
-                  selectedImageIds.length === 0
-                    ? 'opacity-40 cursor-not-allowed'
-                    : '',
+                  !selectedFilterBy ? 'opacity-40 cursor-not-allowed' : '',
                   activeDropdown === 'label'
                     ? 'border-secondary-500/50 text-white bg-primary-700'
                     : '',
@@ -577,7 +582,7 @@
 
               <!-- 标签悬浮窗 -->
               <div
-                v-if="selectedImageIds.length > 0"
+                v-if="selectedFilterBy"
                 class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-max"
                 :class="[
                   activeDropdown === 'label'
@@ -609,12 +614,8 @@
             <!-- 批量移动 -->
             <button
               class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="selectedImageIds.length === 0 || isUpdating"
-              :class="
-                selectedImageIds.length === 0
-                  ? 'opacity-40 cursor-not-allowed'
-                  : ''
-              "
+              :disabled="!selectedFilterBy || isUpdating"
+              :class="!selectedFilterBy ? 'opacity-40 cursor-not-allowed' : ''"
               @click="moveImagesDialog.open()"
             >
               <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
@@ -626,9 +627,9 @@
             <!-- 批量复制 -->
             <button
               class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
-              :disabled="selectedImageIds.length === 0 || isCopying"
+              :disabled="!selectedFilterBy || isCopying"
               :class="
-                selectedImageIds.length === 0 || isCopying
+                !selectedFilterBy || isCopying
                   ? 'opacity-40 cursor-not-allowed'
                   : 'cursor-pointer hover:border-secondary-500/50'
               "
@@ -658,9 +659,9 @@
             >
               <button
                 class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
-                :disabled="selectedImageIds.length === 0 || isBulkDispatching"
+                :disabled="!selectedFilterBy || isBulkDispatching"
                 :class="[
-                  selectedImageIds.length === 0 || isBulkDispatching
+                  !selectedFilterBy || isBulkDispatching
                     ? 'opacity-40 cursor-not-allowed'
                     : 'cursor-pointer hover:border-secondary-500/50',
                   activeDropdown === 'hook'
@@ -694,7 +695,7 @@
 
               <!-- 动作悬浮窗 -->
               <div
-                v-if="selectedImageIds.length > 0"
+                v-if="selectedFilterBy"
                 class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-52 flex flex-col gap-1 text-left"
                 :class="[
                   activeDropdown === 'hook'
@@ -797,8 +798,6 @@ import useModalFullscreen from "@/composables/useModalFullscreen";
 import { openImageViewerByFilename } from "@/events";
 import useLocationHash from "@/composables/useLocationHash";
 import optionalArray from "@/utils/optionalArray.ts";
-import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument } from "@/graphql/generated";
 import useImageHooks from "@/composables/useImageHooks";
 import { useClipboard } from "@/composables/useClipboard";
 import useNotification from "@/composables/useNotification";
@@ -975,8 +974,12 @@ useInfiniteScroll(containerRef, async () => {
 // #region 批量操作状态与逻辑管理
 const {
   isBulkMode,
-  selectedImageIds,
+  selectedFilterBy,
+  selectedImages,
+  isSelected,
+  selectedCountText,
   isUpdating,
+  isAllMatchingSelected,
   toggleBulkMode,
   toggleSelectImage,
   selectAll,
@@ -984,17 +987,32 @@ const {
   invertSelection,
   bulkSetRating,
   bulkSetLabel,
-} = useBulkOperations(images, () => props.directoryId);
+} = useBulkOperations(
+  images,
+  () => props.directoryId,
+  () => imagesVariables.value.filterBy || {},
+  () => hasNextPage.value || false,
+);
+
+const moveImagesMatchCount = computed(() => {
+  if (isBulkMode.value) {
+    return selectedImages.value.length;
+  }
+  return images.value.length;
+});
 
 // #region 批量触发动作
 const {
   dispatchableHooks,
   isDispatching: isBulkDispatching,
   dispatch,
-} = useImageHooks({ imageIds: selectedImageIds });
+} = useImageHooks({
+  selectedFilterBy,
+});
 
 async function bulkDispatch(hookId: string, hookName: string) {
-  await dispatch(hookId, hookName, selectedImageIds.value);
+  if (!selectedFilterBy.value) return;
+  await dispatch(hookId, hookName, selectedFilterBy.value);
 }
 // #endregion
 
@@ -1017,15 +1035,12 @@ function closeDropdowns() {
 // 批量评分计算属性，用于绑定 RatingSelector 组件
 const bulkRating = computed<number>({
   get() {
-    if (selectedImageIds.value.length === 0) return 0;
-    const firstId = selectedImageIds.value[0];
-    const firstImg = images.value.find((img) => img.id === firstId);
-    if (!firstImg) return 0;
+    if (selectedImages.value.length === 0) return 0;
+    const firstImg = selectedImages.value[0];
     const rating = firstImg.currentRating || 0;
-    const allSame = selectedImageIds.value.every((id) => {
-      const img = images.value.find((i) => i.id === id);
-      return (img?.currentRating || 0) === rating;
-    });
+    const allSame = selectedImages.value.every(
+      (img) => (img.currentRating || 0) === rating,
+    );
     return allSame ? rating : 0;
   },
   set(val) {
@@ -1056,42 +1071,10 @@ useEventListeners(document, ({ on }) => {
 });
 
 // 监听批量状态，如果退出批量模式或没有选中图片，则关闭下拉菜单
-watch(
-  [isBulkMode, selectedImageIds],
-  () => {
-    if (!isBulkMode.value || selectedImageIds.value.length === 0) {
-      closeDropdowns();
-    }
-  },
-  { deep: true },
-);
-
-// 获取服务器元数据，用于解析物理绝对路径
-const metaLoadingCount = ref(0);
-const { data: metaData } = useQuery(MetaDocument, {
-  loadingCount: metaLoadingCount,
-});
-
-// 计算所有选中图片的物理绝对路径
-const selectedImagePaths = computed(() => {
-  const rootPath = metaData.value?.meta?.rootAbsPath;
-  if (!rootPath) return [];
-
-  const isWindows = rootPath.includes("\\");
-
-  return selectedImageIds.value
-    .map((id) => {
-      const img = images.value.find((i) => i.id === id);
-      if (!img) return null;
-      const relPath = img.relPath;
-      if (!relPath) return null;
-
-      if (isWindows) {
-        return rootPath + "\\" + relPath.replace(/\//g, "\\");
-      }
-      return rootPath + "/" + relPath.replace(/\\/g, "/");
-    })
-    .filter((p): p is string => p !== null);
+watch([isBulkMode, selectedFilterBy], () => {
+  if (!isBulkMode.value || !selectedFilterBy.value) {
+    closeDropdowns();
+  }
 });
 
 const copyLoadingCount = ref(0);
@@ -1103,37 +1086,40 @@ const isCopying = computed(() => copyLoadingCount.value > 0);
 
 // 复制所有选中的图片到剪贴板
 async function copySelectedImages() {
-  if (isCopying.value) return;
-  const paths = selectedImagePaths.value;
+  if (isCopying.value || !selectedFilterBy.value) return;
+
+  // 如果是全选匹配状态，且还有未加载的页面
+  if (isAllMatchingSelected.value && hasNextPage.value) {
+    let fetchCount = 0;
+
+    // 循环加载所有页面直到加载到底，每加载 3 页询问一次用户，防止大数据量卡死
+    let limit = 2;
+    while (hasNextPage.value) {
+      await fetchMore();
+      fetchCount++;
+
+      if (fetchCount >= limit) {
+        const ok = confirm(
+          `已自动加载 ${fetchCount} 页，是否继续加载更多图片并复制？\n\n点击【确定】继续加载；\n点击【取消】仅复制当前已加载的 ${images.value.length} 张图片。`,
+        );
+        if (!ok) {
+          break; // 用户取消，停止加载，直接复制已加载的
+        }
+        limit = Math.max(8, limit * 2);
+      }
+    }
+  }
+
+  const paths = selectedImages.value.map((img) => img.relPath);
   if (paths.length === 0) return;
   await copyFiles(...paths);
 }
 
-// 在批量模式下，根据选中的图片 ID 动态生成 filterBy 和匹配图片数量
-const moveImagesFilterBy = computed<ImageFiltersInput>(() => {
-  if (isBulkMode.value) {
-    return {
-      id: selectedImageIds.value,
-    };
-  }
-  return imagesVariables.value.filterBy || {};
-});
-
-const moveImagesMatchCount = computed(() => {
-  if (isBulkMode.value) {
-    return selectedImageIds.value.length;
-  }
-  return images.value.length;
-});
-
-// 批量模式下移动成功后，关闭弹框，过滤掉已不存在于当前列表的图片ID并保持批量模式
+// 批量模式下移动成功后，关闭弹框，并清空选择状态
 function handleMoveClose() {
   moveImagesDialog.close();
   if (isBulkMode.value) {
-    const currentIds = images.value.map((img) => img.id);
-    selectedImageIds.value = selectedImageIds.value.filter((id) =>
-      currentIds.includes(id),
-    );
+    deselectAll();
   }
 }
 
@@ -1154,13 +1140,8 @@ function handleImageClick(img: ImageFragment, event?: MouseEvent) {
   }
 }
 
-// 重新应用本地筛选，并过滤掉不再可见的图片已选中的批量 ID
+// 重新应用本地筛选
 function handleApplyLocalFilter() {
-  if (isBulkMode.value) {
-    selectedImageIds.value = selectedImageIds.value.filter(
-      (id) => !outOfFilterImageIds.value.has(id),
-    );
-  }
   applyLocalFilter();
 }
 // #endregion
@@ -1361,9 +1342,7 @@ useHotkeys(
     preventDefault: false,
     stopPropagation: false,
     description: "复制选中的图片文件",
-    enabled: computed(
-      () => isBulkMode.value && selectedImageIds.value.length > 0,
-    ),
+    enabled: computed(() => isBulkMode.value && !!selectedFilterBy.value),
     category: "批量操作",
   },
 );
@@ -1388,14 +1367,11 @@ const isBulkDeleting = ref(false);
 useHotkeys(
   {
     delete: async () => {
-      const ids = selectedImageIds.value;
-      if (ids.length === 0 || isBulkDeleting.value) return;
+      if (!selectedFilterBy.value || isBulkDeleting.value) return;
 
       isBulkDeleting.value = true;
       try {
-        await trashImages(props.directoryId, {
-          id: ids,
-        });
+        await trashImages(props.directoryId, selectedFilterBy.value);
         // 删除成功后取消选中，避免对已删除图片的后续操作
         deselectAll();
       } catch (err) {
@@ -1414,7 +1390,7 @@ useHotkeys(
     enabled: computed(
       () =>
         isBulkMode.value &&
-        selectedImageIds.value.length > 0 &&
+        !!selectedFilterBy.value &&
         !isBulkDeleting.value &&
         !imageViewerDialog.visible.value &&
         !moveImagesDialog.visible.value,
@@ -1423,11 +1399,11 @@ useHotkeys(
   },
 );
 
-// 批量模式下 Delete 键删除的 loading 状态也纳入考量
+// 批量模式下 Delete 键删除 Rar 状态也纳入考量
 const isBulkActionEnabled = computed(() => {
   return (
     isBulkMode.value &&
-    selectedImageIds.value.length > 0 &&
+    !!selectedFilterBy.value &&
     !isBulkDeleting.value &&
     !imageViewerDialog.visible.value &&
     !moveImagesDialog.visible.value

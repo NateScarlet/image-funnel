@@ -1,0 +1,6 @@
+mutation UpdateImagesMetadata($input: UpdateImagesMetadataInput!) {
+  updateImagesMetadata(input: $input) {
+    updatedCount
+    clientMutationId
+  }
+}

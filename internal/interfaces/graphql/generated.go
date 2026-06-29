@@ -279,6 +279,7 @@ type ComplexityRoot struct {
 		Undo                       func(childComplexity int, input UndoInput) int
 		UndoTrash                  func(childComplexity int, input UndoTrashInput) int
 		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
+		UpdateImagesMetadata       func(childComplexity int, input UpdateImagesMetadataInput) int
 		UpdateNote                 func(childComplexity int, id scalar.ID, content string) int
 		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
 	}
@@ -430,6 +431,11 @@ type ComplexityRoot struct {
 		RestoredCount    func(childComplexity int) int
 	}
 
+	UpdateImagesMetadataPayload struct {
+		ClientMutationID func(childComplexity int) int
+		UpdatedCount     func(childComplexity int) int
+	}
+
 	UpdateSessionPayload struct {
 		ClientMutationID func(childComplexity int) int
 		Session          func(childComplexity int) int
@@ -486,6 +492,7 @@ type MutationResolver interface {
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
+	UpdateImagesMetadata(ctx context.Context, input UpdateImagesMetadataInput) (*UpdateImagesMetadataPayload, error)
 	UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
@@ -1491,6 +1498,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateImageMetadata(childComplexity, args["input"].(UpdateImageMetadataInput)), true
+	case "Mutation.updateImagesMetadata":
+		if e.complexity.Mutation.UpdateImagesMetadata == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateImagesMetadata_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateImagesMetadata(childComplexity, args["input"].(UpdateImagesMetadataInput)), true
 	case "Mutation.updateNote":
 		if e.complexity.Mutation.UpdateNote == nil {
 			break
@@ -2165,6 +2183,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.UndoTrashPayload.RestoredCount(childComplexity), true
 
+	case "UpdateImagesMetadataPayload.clientMutationId":
+		if e.complexity.UpdateImagesMetadataPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UpdateImagesMetadataPayload.ClientMutationID(childComplexity), true
+	case "UpdateImagesMetadataPayload.updatedCount":
+		if e.complexity.UpdateImagesMetadataPayload.UpdatedCount == nil {
+			break
+		}
+
+		return e.complexity.UpdateImagesMetadataPayload.UpdatedCount(childComplexity), true
+
 	case "UpdateSessionPayload.clientMutationId":
 		if e.complexity.UpdateSessionPayload.ClientMutationID == nil {
 			break
@@ -2233,6 +2264,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUndoTrashInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
+		ec.unmarshalInputUpdateImagesMetadataInput,
 		ec.unmarshalInputUpdateSessionInput,
 		ec.unmarshalInputWriteActionsInput,
 	)
@@ -3120,8 +3152,8 @@ input DeleteDeviceInput {
 
 "手动派发图片钩子的输入"
 input DispatchImageHookInput {
-  "图片 ID 列表"
-  ids: [ID!]!
+  "图片筛选条件"
+  filterBy: ImageFiltersInput!
   "要触发的钩子 ID"
   hookId: ID!
   "客户端突变标识"
@@ -3403,6 +3435,27 @@ input UpdateImageMetadataInput {
   "新的颜色标签，为null表示不修改"
   label: String
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_images_metadata.graphql", Input: `"批量更新符合条件的图片的元数据"
+input UpdateImagesMetadataInput {
+  "过滤条件"
+  filterBy: ImageFiltersInput!
+  "新的评分值（0-5），为null表示不修改"
+  rating: Int
+  "新的颜色标签，为null表示不修改"
+  label: String
+  clientMutationId: String
+}
+
+type UpdateImagesMetadataPayload {
+  "更新成功的图片数量"
+  updatedCount: Int!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  updateImagesMetadata(input: UpdateImagesMetadataInput!): UpdateImagesMetadataPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_note.graphql", Input: `extend type Mutation {
   """
   更新笔记内容。操作即时写入 Markdown 文件，不参与会话提交。
@@ -3754,6 +3807,17 @@ func (ec *executionContext) field_Mutation_updateImageMetadata_args(ctx context.
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateImageMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateImagesMetadata_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateImagesMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataInput)
 	if err != nil {
 		return nil, err
 	}
@@ -8903,6 +8967,53 @@ func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updateImagesMetadata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateImagesMetadata,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateImagesMetadata(ctx, fc.Args["input"].(UpdateImagesMetadataInput))
+		},
+		nil,
+		ec.marshalNUpdateImagesMetadataPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateImagesMetadata(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "updatedCount":
+				return ec.fieldContext_UpdateImagesMetadataPayload_updatedCount(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UpdateImagesMetadataPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UpdateImagesMetadataPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateImagesMetadata_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_updateNote(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12804,6 +12915,64 @@ func (ec *executionContext) fieldContext_UndoTrashPayload_clientMutationId(_ con
 	return fc, nil
 }
 
+func (ec *executionContext) _UpdateImagesMetadataPayload_updatedCount(ctx context.Context, field graphql.CollectedField, obj *UpdateImagesMetadataPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateImagesMetadataPayload_updatedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateImagesMetadataPayload_updatedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateImagesMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateImagesMetadataPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UpdateImagesMetadataPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateImagesMetadataPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateImagesMetadataPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateImagesMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UpdateSessionPayload_session(ctx context.Context, field graphql.CollectedField, obj *UpdateSessionPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14846,20 +15015,20 @@ func (ec *executionContext) unmarshalInputDispatchImageHookInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"ids", "hookId", "clientMutationId"}
+	fieldsInOrder := [...]string{"filterBy", "hookId", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "ids":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ids"))
-			data, err := ec.unmarshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx, v)
+		case "filterBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterBy"))
+			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.Ids = data
+			it.FilterBy = data
 		case "hookId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hookId"))
 			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
@@ -15468,6 +15637,54 @@ func (ec *executionContext) unmarshalInputUpdateImageMetadataInput(ctx context.C
 				return it, err
 			}
 			it.Label = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateImagesMetadataInput(ctx context.Context, obj any) (UpdateImagesMetadataInput, error) {
+	var it UpdateImagesMetadataInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"filterBy", "rating", "label", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "filterBy":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filterBy"))
+			data, err := ec.unmarshalNImageFiltersInput2ᚖmainᚋinternalᚋsharedᚐImageFilters(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilterBy = data
+		case "rating":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rating"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Rating = data
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Label = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -17613,6 +17830,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateImagesMetadata":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateImagesMetadata(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateNote":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateNote(ctx, field)
@@ -19114,6 +19338,47 @@ func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var updateImagesMetadataPayloadImplementors = []string{"UpdateImagesMetadataPayload"}
+
+func (ec *executionContext) _UpdateImagesMetadataPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateImagesMetadataPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, updateImagesMetadataPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UpdateImagesMetadataPayload")
+		case "updatedCount":
+			out.Values[i] = ec._UpdateImagesMetadataPayload_updatedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UpdateImagesMetadataPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var updateSessionPayloadImplementors = []string{"UpdateSessionPayload"}
 
 func (ec *executionContext) _UpdateSessionPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateSessionPayload) graphql.Marshaler {
@@ -20082,36 +20347,6 @@ func (ec *executionContext) marshalNID2mainᚋinternalᚋscalarᚐID(ctx context
 	return v
 }
 
-func (ec *executionContext) unmarshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, v any) ([]*scalar.ID, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]*scalar.ID, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) marshalNID2ᚕᚖmainᚋinternalᚋscalarᚐIDᚄ(ctx context.Context, sel ast.SelectionSet, v []*scalar.ID) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	for i := range v {
-		ret[i] = ec.marshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx, sel, v[i])
-	}
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
 func (ec *executionContext) unmarshalNID2ᚖmainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (*scalar.ID, error) {
 	var res = new(scalar.ID)
 	err := res.UnmarshalGQL(v)
@@ -20993,6 +21228,25 @@ func (ec *executionContext) marshalNUndoTrashPayload2ᚖmainᚋinternalᚋshared
 func (ec *executionContext) unmarshalNUpdateImageMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataInput(ctx context.Context, v any) (UpdateImageMetadataInput, error) {
 	res, err := ec.unmarshalInputUpdateImageMetadataInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateImagesMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataInput(ctx context.Context, v any) (UpdateImagesMetadataInput, error) {
+	res, err := ec.unmarshalInputUpdateImagesMetadataInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUpdateImagesMetadataPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataPayload(ctx context.Context, sel ast.SelectionSet, v UpdateImagesMetadataPayload) graphql.Marshaler {
+	return ec._UpdateImagesMetadataPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUpdateImagesMetadataPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataPayload(ctx context.Context, sel ast.SelectionSet, v *UpdateImagesMetadataPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UpdateImagesMetadataPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionInput(ctx context.Context, v any) (UpdateSessionInput, error) {

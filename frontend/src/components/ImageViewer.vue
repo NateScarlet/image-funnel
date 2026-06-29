@@ -924,7 +924,9 @@ useEventListeners(containerRef, ({ on }) => {
 
 // #region 外部后置动作
 const { dispatchableHooks, isDispatching, currentDispatchingHookId, dispatch } =
-  useImageHooks({ imageIds: () => [image.id] });
+  useImageHooks({
+    selectedFilterBy: () => ({ id: [image.id] }),
+  });
 
 const showActionPopover = ref(false);
 const actionPopoverContainerRef = useTemplateRef<HTMLElement>(
@@ -935,7 +937,7 @@ useClickOutside(actionPopoverContainerRef, () => {
 });
 
 async function handleDispatch(hookId: string, hookName: string) {
-  await dispatch(hookId, hookName, [image.id]);
+  await dispatch(hookId, hookName, { id: [image.id] });
   if (!isDispatching.value) {
     showActionPopover.value = false;
   }
