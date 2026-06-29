@@ -177,14 +177,16 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
   /**
    * 获取当前生效的图片筛选配置。
-   * 1. 本地临时编辑暂存中的筛选（browse.filterBy，即使是空对象）优先级最高。
+   * 1. 本地临时编辑暂存中的筛选（browse.filterBy）优先级最高。
+   *    若暂存 buffer 的 id 与当前目录匹配，说明用户曾主动操作过筛选，
+   *    此时直接返回暂存值（即使为 undefined 表示已清除），不再回退到服务端。
    * 2. 服务端查询到的最新配置优先级第二。
    * 3. 服务端查询到的最新会话 filter 优先级第三（回退）。
    */
   function getImageFilters(): ImageFiltersInput | undefined {
-    const dirState = currentBrowse.value;
-    if (dirState.filterBy) {
-      return dirState.filterBy;
+    // 当前目录有暂存状态时，直接使用暂存，不回退到服务端
+    if (currentBrowseBuffer.value.id === dirIdRef.value) {
+      return currentBrowseBuffer.value.browse.filterBy;
     }
 
     const sState = serverState.value;
