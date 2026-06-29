@@ -16,7 +16,7 @@ func encodeID(relPath string) scalar.ID {
 	if relPath == "" {
 		relPath = "."
 	}
-	return scalar.ToID(idPrefix + relPath)
+	return scalar.ToID(idPrefix + filepath.ToSlash(relPath))
 }
 
 func decodeID(id scalar.ID) (string, error) {
@@ -34,5 +34,5 @@ func decodeID(id scalar.ID) (string, error) {
 		return "", fmt.Errorf("absolute path not allowed in directory ID: %s", relPath)
 	}
 
-	return relPath, nil
+	return filepath.ToSlash(relPath), nil
 }

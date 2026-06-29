@@ -51,9 +51,10 @@ func FromRepository(relPath string) *Directory {
 	if relPath == "" {
 		relPath = "."
 	}
+	relPath = filepath.ToSlash(relPath)
 	var parentID scalar.ID
 	if relPath != "." {
-		parentPath := filepath.Dir(relPath)
+		parentPath := filepath.ToSlash(filepath.Dir(relPath))
 		parentID = encodeID(parentPath)
 	}
 	return &Directory{

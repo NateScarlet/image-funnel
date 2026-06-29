@@ -74,10 +74,10 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 			continue
 		}
 
-		// 构建应用层事件
+		// 构建应用层事件，将 RelPath 统一标准化为正斜杠格式
 		event := &shared.FileChangedEvent{
 			DirectoryID: dir.ID(),
-			RelPath:     relPath,
+			RelPath:     filepath.ToSlash(relPath),
 			Action:      fileChange.action,
 			OccurredAt:  fileChange.occurredAt,
 		}

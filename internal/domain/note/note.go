@@ -25,7 +25,7 @@ func FromRepository(relPath string, absPath string, content string) *Note {
 	hidden, parsedContent := ParseContent(content)
 	return &Note{
 		id:         encodeID(relPath),
-		relPath:    relPath,
+		relPath:    filepath.ToSlash(relPath),
 		absPath:    absPath,
 		content:    parsedContent,
 		rawContent: content,
@@ -119,5 +119,5 @@ func decodeID(id scalar.ID) (string, error) {
 		return "", apperror.New("INVALID_NOTE_ID", "invalid note ID format", "笔记 ID 格式无效")
 	}
 
-	return strings.TrimPrefix(idStr, idPrefix) + ".md", nil
+	return filepath.ToSlash(strings.TrimPrefix(idStr, idPrefix) + ".md"), nil
 }

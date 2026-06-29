@@ -257,7 +257,7 @@ func (s *ImageMover) Trash(
 		TrashedAt:      time.Now(),
 		TotalFileCount: -1,
 		TotalFileSize:  -1,
-		SrcRelPath:     relPath,
+		SrcRelPath:     filepath.ToSlash(relPath),
 		Images:         nil,
 	}
 
@@ -352,7 +352,7 @@ func (s *ImageMover) Trash(
 		TrashedAt:      time.Now(),
 		TotalFileCount: movedFilesCount,
 		TotalFileSize:  totalSize,
-		SrcRelPath:     relPath,
+		SrcRelPath:     filepath.ToSlash(relPath),
 		Images:         trashedImages,
 	}
 
@@ -542,7 +542,7 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 				ImageCount:          imageCount,
 				AssociatedFileCount: associatedCount,
 				CoverImageAbsPath:   coverImageAbsPath,
-				SrcRelPath:          meta.SrcRelPath,
+				SrcRelPath:          filepath.ToSlash(meta.SrcRelPath),
 			}
 
 			if !yield(item, nil) {

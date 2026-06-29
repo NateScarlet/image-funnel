@@ -28,7 +28,7 @@ func New(id scalar.ID, filename, relPath string, directoryID scalar.ID, size int
 	return &Image{
 		id:          id,
 		filename:    filename,
-		relPath:     relPath,
+		relPath:     filepath.ToSlash(relPath),
 		directoryID: directoryID,
 		size:        size,
 		modTime:     modTime,
@@ -40,10 +40,11 @@ func New(id scalar.ID, filename, relPath string, directoryID scalar.ID, size int
 
 // FromRelPath 从相对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
 func FromRelPath(filename, relPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
+	normalizedPath := filepath.ToSlash(relPath)
 	return &Image{
-		id:          encodeID(relPath, modTime),
+		id:          encodeID(normalizedPath, modTime),
 		filename:    filename,
-		relPath:     relPath,
+		relPath:     normalizedPath,
 		directoryID: directoryID,
 		size:        size,
 		modTime:     modTime,
@@ -112,7 +113,7 @@ func (i *Image) Height() int {
 
 // encodeID 将图片相对路径和修改时间转换为明文格式的 ID
 func encodeID(relPath string, modTime time.Time) scalar.ID {
-	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), relPath)
+	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), filepath.ToSlash(relPath))
 	return scalar.ToID(str)
 }
 
@@ -138,7 +139,7 @@ func decodeID(id scalar.ID) (string, time.Time, error) {
 		return "", time.Time{}, fmt.Errorf("absolute path not allowed in image ID: %s", relPath)
 	}
 
-	return relPath, time.Unix(0, nano), nil
+	return filepath.ToSlash(relPath), time.Unix(0, nano), nil
 }
 
 // #endregion
