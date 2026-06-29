@@ -2,6 +2,7 @@
   <div>
     <button
       :disabled="marking"
+      data-filter-action="true"
       class="btn-action flex-1 p-2 bg-red-600 hover:bg-red-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.REJECT)"
     >
@@ -16,6 +17,7 @@
 
     <button
       :disabled="marking"
+      data-filter-action="true"
       class="btn-action flex-1 p-2 bg-yellow-600 hover:bg-yellow-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.SHELVE)"
     >
@@ -30,6 +32,7 @@
 
     <button
       :disabled="marking"
+      data-filter-action="true"
       class="btn-action flex-1 p-2 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold text-lg flex items-center justify-center gap-2 whitespace-nowrap transition-colors"
       @click="$emit('mark', ImageAction.KEEP)"
     >

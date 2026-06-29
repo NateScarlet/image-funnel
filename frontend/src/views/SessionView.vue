@@ -10,9 +10,68 @@
       @undo="undo"
     >
       <template #extra>
-        <div class="mr-4">
+        <div class="mr-4 flex items-center gap-3">
+          <!-- 自动播放控制面板 -->
+          <div
+            v-if="showAutoRejectControl"
+            class="relative overflow-hidden flex items-center md:gap-1 bg-primary-950 border border-primary-700 rounded-lg"
+            data-filter-action="true"
+          >
+            <!-- 自动播放/暂停按钮 -->
+            <button
+              class="relative z-10 overflow-hidden px-3 py-2 md:px-4 md:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 isolate"
+              :class="
+                autoRejectEnabled
+                  ? 'bg-orange-600/35 hover:bg-orange-600/40 text-orange-200'
+                  : 'bg-primary-700 hover:bg-primary-600 text-primary-200'
+              "
+              @click="autoRejectEnabled = !autoRejectEnabled"
+            >
+              <!-- 绝对定位的工具栏背景倒计时条 -->
+              <div
+                v-if="isAutoRejectActive && currentImage"
+                :key="`${currentImageId}-${autoRejectTimeoutSeconds}`"
+                class="absolute inset-y-0 left-0 bg-orange-600/20 pointer-events-none countdown-progress"
+                :style="{
+                  animationDuration: `${autoRejectTimeoutSeconds}s`,
+                }"
+              ></div>
+              <span
+                class="relative z-10 flex items-center gap-2 whitespace-nowrap"
+              >
+                <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24">
+                  <path
+                    :d="autoRejectEnabled ? mdiPause : mdiPlay"
+                    fill="currentColor"
+                  />
+                </svg>
+                <span class="hidden sm:inline">{{
+                  autoRejectEnabled ? "暂停自动" : "自动排除"
+                }}</span>
+                <span class="sm:hidden">{{
+                  autoRejectEnabled ? "暂停" : "自动"
+                }}</span>
+              </span>
+            </button>
+
+            <!-- 时间输入框/调节器 -->
+            <div
+              class="relative z-10 flex mx-1 items-center text-xs md:text-sm text-primary-300"
+            >
+              <NumberInput
+                v-model="autoRejectTimeoutSeconds"
+                :min="0.1"
+                :step="0.1"
+                class="w-8 md:w-10 text-center bg-transparent border-0 focus:ring-0 focus:outline-none text-white font-mono"
+                @focus="autoRejectEnabled = false"
+              />
+              <span class="text-primary-500 select-none">秒</span>
+            </div>
+          </div>
+
+          <!-- 全部保留按钮 -->
           <button
-            v-if="showEarlyFinish"
+            v-else-if="showEarlyFinish"
             class="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
             :disabled="earlyFinishing"
             @click="earlyFinish"
@@ -52,7 +111,11 @@
           @image-loaded="(e) => (lastImageLoadedEvent = e)"
         >
           <template #progress>
-            <SessionProgressBar v-if="session" :session />
+            <SessionProgressBar
+              v-if="session"
+              :session
+              class="pointer-events-none"
+            />
           </template>
           <template #info="{ isFullscreen }">
             <span class="lg:min-w-24 hidden md:block">
@@ -246,15 +309,26 @@
   </div>
 </template>
 
+<script lang="ts">
+import useStorage from "../composables/useStorage";
+
+const { model: autoRejectTimeoutSeconds } = useStorage<number>(
+  localStorage,
+  "auto_exclude_timeout_d2e1a3",
+  () => 1,
+);
+</script>
+
 <script setup lang="ts">
 import "core-js/actual/disposable-stack";
-import { ref, shallowRef, computed, useTemplateRef } from "vue";
+import { ref, shallowRef, computed, useTemplateRef, watch } from "vue";
 
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument, ImageAction } from "../graphql/generated";
 import ImageViewer from "../components/ImageViewer.vue";
 import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
+import NumberInput from "../components/NumberInput.vue";
 
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
@@ -265,7 +339,7 @@ import useModalDialog from "@/composables/useModalDialog";
 import useEventListeners from "../composables/useEventListeners";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { formatDate } from "../utils/date";
-import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
+import { mdiCheckAll, mdiHome, mdiLoading, mdiPlay, mdiPause } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
@@ -273,6 +347,7 @@ import Time from "@/utils/Time";
 import useNotification from "@/composables/useNotification";
 
 const rendererEl = useFullscreenRendererElement();
+const autoRejectEnabled = ref(false);
 
 const props = defineProps<{
   id: string;
@@ -451,6 +526,26 @@ useEventListeners(window, ({ on }) => {
   on("touchcancel", () => {
     swiping.value = false;
   });
+
+  on("keydown", (e) => {
+    if (!autoRejectEnabled.value) return;
+    if (["ArrowUp", "ArrowDown", "ArrowRight"].includes(e.key)) {
+      return;
+    }
+    autoRejectEnabled.value = false;
+  });
+
+  on("pointerdown", (e) => {
+    if (!autoRejectEnabled.value) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("[data-filter-action]")) {
+      return;
+    }
+    if (insideSwipeArea(e)) {
+      return;
+    }
+    autoRejectEnabled.value = false;
+  });
 });
 
 const lastImageLoadedEvent = shallowRef<{ id: string; time: Time }>();
@@ -505,6 +600,7 @@ const { show: showNotification, remove: removeNotification } =
 const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
   if (!canUndo.value) return;
+  autoRejectEnabled.value = false;
   undoing.value = true;
 
   using stack = new DisposableStack();
@@ -570,4 +666,64 @@ function handleGesture() {
   }
   didUseGesture.value = true;
 }
+
+// #region 自动排除相关逻辑
+const showAutoRejectControl = computed(() => {
+  const s = session.value;
+  if (!s || !currentImage.value) return false;
+  return s.stats.totalKept + s.stats.currentRoundRemaining > s.targetKeep * 2;
+});
+
+const isAutoRejectActive = computed(() => {
+  return autoRejectEnabled.value && showAutoRejectControl.value;
+});
+
+// 监听图片加载、超时时长、实际是否生效，内联控制定时器启动与清理
+watch(
+  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent],
+  ([active, timeout, loadedEvent], _, onCleanup) => {
+    if (!active || !loadedEvent || !currentImage.value) {
+      return;
+    }
+
+    const imageId = currentImageId.value;
+    const timeoutMs = (timeout ?? 1) * 1000;
+
+    // 使用词法作用域局部常量存储定时器 ID，由每个 watch 实例自己负责清理自己
+    const timer = window.setTimeout(async () => {
+      const currentId = currentImageId.value;
+      // 触发时检验：确认图片未被手动切换，未处于标记中，且自动排除依旧生效
+      if (
+        currentId &&
+        currentId === imageId &&
+        !marking.value &&
+        isAutoRejectActive.value
+      ) {
+        await markImage(currentId, ImageAction.REJECT);
+      }
+    }, timeoutMs);
+
+    // 3. 注册清理函数：当下一次 watch 被触发（状态改变）或组件销毁时，自动清理
+    onCleanup(() => {
+      clearTimeout(timer);
+    });
+  },
+  { immediate: true },
+);
+// #endregion
 </script>
+
+<style scoped>
+.countdown-progress {
+  animation: shrinkWidth linear forwards;
+}
+
+@keyframes shrinkWidth {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}
+</style>
