@@ -66,8 +66,9 @@
     <!-- 图片尺寸和缩放操作 -->
     <div
       data-no-gesture
-      class="flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
+      class="relative overflow-hidden flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
+      <slot name="control-bg"></slot>
       <button
         class="hover:bg-white/20 w-6 h-6 items-center justify-center rounded transition-colors hidden md:flex"
         title="缩小"

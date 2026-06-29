@@ -11,61 +11,30 @@
     >
       <template #extra>
         <div class="mr-4 flex items-center gap-3">
-          <!-- 自动播放控制面板 -->
+          <!-- 自动排除控制面板 -->
           <div
             v-if="showAutoRejectControl"
-            class="relative overflow-hidden flex items-center md:gap-1 bg-primary-950 border border-primary-700 rounded-lg"
+            class="flex items-center gap-2 md:gap-4 select-none"
             data-filter-action="true"
           >
-            <!-- 自动播放/暂停按钮 -->
-            <button
-              class="relative z-10 overflow-hidden px-3 py-2 md:px-4 md:py-2 rounded-lg font-medium transition-colors flex items-center gap-2 isolate"
-              :class="
-                autoRejectEnabled
-                  ? 'bg-orange-600/35 hover:bg-orange-600/40 text-orange-200'
-                  : 'bg-primary-700 hover:bg-primary-600 text-primary-200'
-              "
-              @click="autoRejectEnabled = !autoRejectEnabled"
+            <!-- 自动排除开关 -->
+            <ToggleSwitch
+              v-model="autoRejectEnabled"
+              class="text-xs md:text-sm text-primary-200"
             >
-              <!-- 绝对定位的工具栏背景倒计时条 -->
-              <div
-                v-if="isAutoRejectActive && currentImage"
-                :key="`${currentImageId}-${autoRejectTimeoutSeconds}`"
-                class="absolute inset-y-0 left-0 bg-orange-600/20 pointer-events-none countdown-progress"
-                :style="{
-                  animationDuration: `${autoRejectTimeoutSeconds}s`,
-                }"
-              ></div>
-              <span
-                class="relative z-10 flex items-center gap-2 whitespace-nowrap"
-              >
-                <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24">
-                  <path
-                    :d="autoRejectEnabled ? mdiPause : mdiPlay"
-                    fill="currentColor"
-                  />
-                </svg>
-                <span class="hidden sm:inline">{{
-                  autoRejectEnabled ? "暂停自动" : "自动排除"
-                }}</span>
-                <span class="sm:hidden">{{
-                  autoRejectEnabled ? "暂停" : "自动"
-                }}</span>
-              </span>
-            </button>
+              <span class="hidden sm:inline">自动排除</span>
+            </ToggleSwitch>
 
             <!-- 时间输入框/调节器 -->
-            <div
-              class="relative z-10 flex mx-1 items-center text-xs md:text-sm text-primary-300"
-            >
+            <div class="flex items-center text-xs md:text-sm text-primary-300">
               <NumberInput
                 v-model="autoRejectTimeoutSeconds"
                 :min="0.1"
                 :step="0.1"
-                class="w-8 md:w-10 text-center bg-transparent border-0 focus:ring-0 focus:outline-none text-white font-mono"
-                @focus="autoRejectEnabled = false"
+                class="w-10 text-center bg-primary-800 border border-primary-700 rounded-lg py-1 text-white font-mono text-xs focus:outline-none focus:border-secondary-500"
+                @focus="autoRejectRunning = false"
               />
-              <span class="text-primary-500 select-none">秒</span>
+              <span class="text-primary-400 select-none ml-1">秒</span>
             </div>
           </div>
 
@@ -110,6 +79,16 @@
           :allow-pan="handleAllowPan"
           @image-loaded="(e) => (lastImageLoadedEvent = e)"
         >
+          <template #control-bg>
+            <div
+              v-if="isAutoRejectActive && currentImage && !swiping"
+              :key="`${currentImageId}-${autoRejectTimeoutSeconds}`"
+              class="absolute inset-y-0 left-0 bg-orange-600/15 pointer-events-none countdown-progress z-0"
+              :style="{
+                animationDuration: `${autoRejectTimeoutSeconds}s`,
+              }"
+            ></div>
+          </template>
           <template #progress>
             <SessionProgressBar
               v-if="session"
@@ -317,6 +296,11 @@ const { model: autoRejectTimeoutSeconds } = useStorage<number>(
   "auto_exclude_timeout_d2e1a3",
   () => 1,
 );
+const { model: autoRejectEnabled } = useStorage(
+  localStorage,
+  "auto_reject_enabled_29c75583fa91",
+  false,
+);
 </script>
 
 <script setup lang="ts">
@@ -329,6 +313,7 @@ import ImageViewer from "../components/ImageViewer.vue";
 import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
 import NumberInput from "../components/NumberInput.vue";
+import ToggleSwitch from "../components/ToggleSwitch.vue";
 
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";
@@ -339,7 +324,7 @@ import useModalDialog from "@/composables/useModalDialog";
 import useEventListeners from "../composables/useEventListeners";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { formatDate } from "../utils/date";
-import { mdiCheckAll, mdiHome, mdiLoading, mdiPlay, mdiPause } from "@mdi/js";
+import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/useSession";
 import useMarkImage from "@/composables/useMarkImage";
@@ -347,7 +332,14 @@ import Time from "@/utils/Time";
 import useNotification from "@/composables/useNotification";
 
 const rendererEl = useFullscreenRendererElement();
-const autoRejectEnabled = ref(false);
+
+const autoRejectRunningBuffer = ref(false);
+const autoRejectRunning = computed({
+  get: () => autoRejectEnabled.value && autoRejectRunningBuffer.value,
+  set: (val) => {
+    autoRejectRunningBuffer.value = val;
+  },
+});
 
 const props = defineProps<{
   id: string;
@@ -528,15 +520,15 @@ useEventListeners(window, ({ on }) => {
   });
 
   on("keydown", (e) => {
-    if (!autoRejectEnabled.value) return;
+    if (!autoRejectRunning.value) return;
     if (["ArrowUp", "ArrowDown", "ArrowRight"].includes(e.key)) {
       return;
     }
-    autoRejectEnabled.value = false;
+    autoRejectRunning.value = false;
   });
 
   on("pointerdown", (e) => {
-    if (!autoRejectEnabled.value) return;
+    if (!autoRejectRunning.value) return;
     const target = e.target as HTMLElement;
     if (target.closest("[data-filter-action]")) {
       return;
@@ -544,7 +536,7 @@ useEventListeners(window, ({ on }) => {
     if (insideSwipeArea(e)) {
       return;
     }
-    autoRejectEnabled.value = false;
+    autoRejectRunning.value = false;
   });
 });
 
@@ -556,7 +548,16 @@ const imageLoadedAt = computed(() => {
   }
   return undefined;
 });
-const { marking, mark: markImage } = useMarkImage(sessionId, imageLoadedAt);
+const { marking, mark: originalMarkImage } = useMarkImage(
+  sessionId,
+  imageLoadedAt,
+);
+async function markImage(id: string, action: ImageAction) {
+  if (autoRejectEnabled.value) {
+    autoRejectRunning.value = true;
+  }
+  await originalMarkImage(id, action);
+}
 
 const completedView =
   useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
@@ -600,7 +601,7 @@ const { show: showNotification, remove: removeNotification } =
 const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
   if (!canUndo.value) return;
-  autoRejectEnabled.value = false;
+  autoRejectRunning.value = false;
   undoing.value = true;
 
   using stack = new DisposableStack();
@@ -675,14 +676,14 @@ const showAutoRejectControl = computed(() => {
 });
 
 const isAutoRejectActive = computed(() => {
-  return autoRejectEnabled.value && showAutoRejectControl.value;
+  return autoRejectRunning.value && showAutoRejectControl.value;
 });
 
 // 监听图片加载、超时时长、实际是否生效，内联控制定时器启动与清理
 watch(
-  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent],
-  ([active, timeout, loadedEvent], _, onCleanup) => {
-    if (!active || !loadedEvent || !currentImage.value) {
+  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent, swiping],
+  ([active, timeout, loadedEvent, isSwiping], _, onCleanup) => {
+    if (!active || !loadedEvent || !currentImage.value || isSwiping) {
       return;
     }
 
