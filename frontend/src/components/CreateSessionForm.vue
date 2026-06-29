@@ -34,11 +34,11 @@
       <label class="block text-sm font-medium text-primary-300 mb-2">
         保留目标数量
       </label>
-      <input
-        v-model.number="targetKeep"
-        type="number"
-        min="1"
-        max="100"
+      <NumberInput
+        v-model="targetKeep"
+        :min="1"
+        :max="100"
+        :step="1"
         class="w-full px-4 py-2 bg-primary-700 border border-primary-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary-500 text-white"
       />
     </div>
@@ -89,6 +89,7 @@ import { mdiLoading, mdiFolder } from "@mdi/js";
 import { useRouter } from "vue-router";
 import useQuery from "../graphql/utils/useQuery";
 import { MetaDocument, RootDirectoryDocument } from "../graphql/generated";
+import NumberInput from "./NumberInput.vue";
 import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";

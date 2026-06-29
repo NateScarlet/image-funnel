@@ -44,11 +44,11 @@
         <ToggleSwitch v-model="showLargeUnrated">
           <span class="text-sm text-primary-400">
             显示未评级图片 &gt;
-            <input
-              v-model.number="maxUnratedCount"
-              type="number"
+            <NumberInput
+              v-model="maxUnratedCount"
+              :min="0"
+              :step="1"
               class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500 mx-1"
-              min="0"
               @click.stop
             />
             的目录（{{ largeUnratedCount }}）
@@ -164,6 +164,7 @@ import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
 import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
+import NumberInput from "./NumberInput.vue";
 import useDirectories, {
   maxUnratedCount,
   showLargeUnrated,

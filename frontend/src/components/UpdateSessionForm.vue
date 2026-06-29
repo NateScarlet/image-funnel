@@ -39,10 +39,10 @@
             >({{ session.stats?.totalKept ?? 0 }} / {{ targetKeep }})</span
           >
         </label>
-        <input
-          v-model.number="targetKeep"
-          type="number"
-          min="1"
+        <NumberInput
+          v-model="targetKeep"
+          :min="1"
+          :step="1"
           class="w-full rounded-lg border border-primary-600 bg-primary-700 px-4 py-2 text-white focus:border-transparent focus:ring-2 focus:ring-secondary-500"
           placeholder="输入要保留的图片数量"
         />
@@ -86,6 +86,7 @@ import mutate from "../graphql/utils/mutate";
 import { UpdateSessionDocument } from "../graphql/generated";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import RatingSelector from "./RatingSelector.vue";
+import NumberInput from "./NumberInput.vue";
 
 interface Props {
   session: SessionFragment;

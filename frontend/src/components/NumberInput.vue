@@ -3,7 +3,7 @@
     ref="inputEl"
     v-model.lazy="valueAsString"
     type="text"
-    class="text-center bg-transparent border-0 focus:ring-0 focus:outline-none text-white font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    class="text-center font-mono"
     @keydown="onKeydown"
     @wheel="onWheel"
     @blur="onBlur"

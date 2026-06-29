@@ -9,11 +9,11 @@
         <ToggleSwitch v-model="showSmallUnrated">
           <span class="text-sm text-primary-400">
             显示未评级图片 &lt;
-            <input
-              v-model.number="minUnratedCount"
-              type="number"
+            <NumberInput
+              v-model="minUnratedCount"
+              :min="0"
+              :step="1"
               class="w-12 bg-primary-800 text-primary-100 border border-primary-600 rounded px-2 py-0.5 text-xs focus:outline-none focus:border-secondary-500 mx-1"
-              min="0"
               @click.stop
             />
             的目录（{{ smallUnratedCount }}）
@@ -148,6 +148,7 @@ import { computed, ref, watch, useTemplateRef } from "vue";
 import { sortBy } from "es-toolkit";
 import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
+import NumberInput from "./NumberInput.vue";
 import useStorage from "../composables/useStorage";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
 import useDirectoryStats from "../composables/useDirectoryStats";
