@@ -291,15 +291,15 @@
 <script lang="ts">
 import useStorage from "../composables/useStorage";
 
-const { model: autoRejectTimeoutSeconds } = useStorage<number>(
-  localStorage,
-  "auto_exclude_timeout_d2e1a3",
-  () => 1,
-);
 const { model: autoRejectEnabled } = useStorage(
   localStorage,
   "auto_reject_enabled_29c75583fa91",
   false,
+);
+const { model: autoRejectTimeoutSeconds } = useStorage<number>(
+  localStorage,
+  "auto_reject_timeout_29c75583fa91",
+  () => 1,
 );
 </script>
 
@@ -562,13 +562,16 @@ async function markImage(id: string, action: ImageAction) {
 const completedView =
   useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
 
+const currentRoundKept = computed(() => {
+  const s = session.value;
+  if (!s) return 0;
+  return s.currentRoundActions.filter((a) => a === ImageAction.KEEP).length;
+});
+
 const showEarlyFinish = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
-  const currentRoundKept = s.currentRoundActions.filter(
-    (a) => a === ImageAction.KEEP,
-  ).length;
-  return currentRoundKept + s.stats.currentRoundRemaining <= s.targetKeep;
+  return currentRoundKept.value + s.stats.currentRoundRemaining <= s.targetKeep;
 });
 
 const earlyFinishing = ref(false);
@@ -672,7 +675,9 @@ function handleGesture() {
 const showAutoRejectControl = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
-  return s.stats.totalKept + s.stats.currentRoundRemaining > s.targetKeep * 2;
+  return (
+    currentRoundKept.value + s.stats.currentRoundRemaining > s.targetKeep * 2
+  );
 });
 
 const isAutoRejectActive = computed(() => {
