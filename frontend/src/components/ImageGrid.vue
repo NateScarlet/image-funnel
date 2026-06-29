@@ -824,8 +824,9 @@ function toggleRatingFilter(rating: number) {
   if (index >= 0) {
     filterRating.value = filterRating.value.filter((r) => r !== rating);
   } else {
+    const previousRating = filterRating.value;
     clearFilters();
-    filterRating.value = [...filterRating.value, rating].sort((a, b) => a - b);
+    filterRating.value = [...previousRating, rating].sort((a, b) => a - b);
   }
 }
 
