@@ -191,7 +191,7 @@
     >
       <MoveImagesForm
         :directory-id="directoryId"
-        :filter-by="selectedFilterBy || {}"
+        :filter-by="selectedFilterBy || imagesVariables.filterBy || { id: [] }"
         :match-count="moveImagesMatchCount"
         :is-approximate="!isBulkMode && hasNextPage"
         @close="handleMoveClose"
