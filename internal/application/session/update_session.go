@@ -44,5 +44,19 @@ func (h *Handler) UpdateSession(
 		options = append(options, session.WithFilter(filter))
 	}
 
-	return h.sessionService.Update(ctx, sessionID, options...)
+	err = h.sessionService.Update(ctx, sessionID, options...)
+	if err != nil {
+		return err
+	}
+
+	// 自动同步修改后的会话配置到历史存储中，用作下次创建会话时的回退配置
+	if h.lastSessionSaver != nil {
+		sess, release, errAcquire := h.sessionService.Acquire(ctx, sessionID)
+		if errAcquire == nil {
+			_ = h.lastSessionSaver.SaveLastSession(ctx, sess.DirectoryID(), sessionID, sess.Filter(), sess.TargetKeep())
+			release()
+		}
+	}
+
+	return nil
 }

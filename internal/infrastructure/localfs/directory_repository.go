@@ -89,55 +89,109 @@ func (d *DirectoryRepository) ReadState(ctx context.Context, relPath string) (*s
 		return nil, err
 	}
 
-	// 先尝试解析为最新版本（主要场景，性能最优）
+	// 先尝试解析为最新版本（主要场景，性能最优，仅进行一次解析）
 	var state shared.DirectoryStateDTO
 	if err := json.Unmarshal(data, &state); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
 
-	// 如果是旧版本，根据版本号进行迁移
-	if state.Version < 2 {
-		return d.migrateToV2(data), nil
+	switch state.Version {
+	case 1:
+		return d.readStateV1(data)
+	case 2:
+		return d.readStateV2(data)
+	case 3:
+		return &state, nil
+	default:
+		return nil, fmt.Errorf("got unexpected state version %d", state.Version)
 	}
 
-	return &state, nil
 }
 
-// migrateToV2 根据版本号将旧版本的 state 迁移到 v2
-func (d *DirectoryRepository) migrateToV2(data []byte) *shared.DirectoryStateDTO {
-	// 尝试解析为 v1 版本
+func (d *DirectoryRepository) readStateV1(data []byte) (*shared.DirectoryStateDTO, error) {
 	var stateV1 DirectoryStateDTOV1
-	if err := json.Unmarshal(data, &stateV1); err != nil || stateV1.Version != 1 {
-		// 解析失败或不是 v1，返回空的 v2 state
-		return &shared.DirectoryStateDTO{Version: 2}
+	if err := json.Unmarshal(data, &stateV1); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state v1: %w", err)
+	}
+	if stateV1.Version != 1 {
+		return nil, fmt.Errorf("expected version 1, got %d", stateV1.Version)
 	}
 
-	browseV2 := &shared.DirectoryStateBrowseDTO{}
+	browseV3 := &shared.DirectoryStateBrowseDTO{}
 	if stateV1.Browse != nil {
-		// 直接复制，因为 v1 和 v2 的数据结构相同，只需重命名字段
-		browseV2.FilterBy = stateV1.Browse.FilterBy
-		browseV2.FilterNoteBy = stateV1.Browse.FilterMemoBy // filterMemoBy -> filterNoteBy
+		browseV3.FilterBy = stateV1.Browse.FilterBy
+		browseV3.FilterNoteBy = stateV1.Browse.FilterMemoBy // filterMemoBy -> filterNoteBy
 	}
 
-	// 转换 LastSession
-	var lastSession *shared.DirectoryStateLastSessionDTO
+	var lastSessionV3 *shared.DirectoryStateLastSessionDTO
 	if stateV1.LastSession != nil {
-		lastSession = &shared.DirectoryStateLastSessionDTO{
+		lastSessionV3 = &shared.DirectoryStateLastSessionDTO{
 			ID:         scalar.ToID(stateV1.LastSession.ID),
 			TargetKeep: stateV1.LastSession.TargetKeep,
 		}
 		if stateV1.LastSession.Filter != nil {
 			filterJSON, _ := json.Marshal(stateV1.LastSession.Filter)
-			json.Unmarshal(filterJSON, &lastSession.Filter)
+			if err := json.Unmarshal(filterJSON, &lastSessionV3.Filter); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal filter from state v1: %w", err)
+			}
 		}
 	}
 
 	return &shared.DirectoryStateDTO{
-		Version:     2,
-		Browse:      browseV2,
-		LastSession: lastSession,
+		Version:     3,
+		Browse:      browseV3,
+		LastSession: lastSessionV3,
 		UpdatedAt:   stateV1.UpdatedAt,
+	}, nil
+}
+
+func (d *DirectoryRepository) readStateV2(data []byte) (*shared.DirectoryStateDTO, error) {
+	var stateV2 DirectoryStateDTOV2
+	if err := json.Unmarshal(data, &stateV2); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state v2: %w", err)
 	}
+	if stateV2.Version != 2 {
+		return nil, fmt.Errorf("expected version 2, got %d", stateV2.Version)
+	}
+
+	// 提取老版本中的 actions 并整合到全新的前端管理 Default 顶级配置中
+	var defaultV3 *shared.DirectoryStateDefaultDTO
+	if stateV2.LastSession != nil {
+		var actionsToUse *shared.WriteActions
+		if stateV2.LastSession.CommitActions != nil {
+			actionsToUse = stateV2.LastSession.CommitActions
+		} else if stateV2.LastSession.CreateActions != nil {
+			actionsToUse = stateV2.LastSession.CreateActions
+		}
+
+		if actionsToUse != nil {
+			defaultV3 = &shared.DirectoryStateDefaultDTO{
+				WriteActions: actionsToUse,
+			}
+		}
+	}
+
+	// 转换 lastSession
+	var lastSessionV3 *shared.DirectoryStateLastSessionDTO
+	if stateV2.LastSession != nil {
+		var idStr string
+		if stateV2.LastSession.ID != nil {
+			idStr, _ = stateV2.LastSession.ID.(string)
+		}
+		lastSessionV3 = &shared.DirectoryStateLastSessionDTO{
+			ID:         scalar.ToID(idStr),
+			Filter:     stateV2.LastSession.Filter,
+			TargetKeep: stateV2.LastSession.TargetKeep,
+		}
+	}
+
+	return &shared.DirectoryStateDTO{
+		Version:     3,
+		Browse:      stateV2.Browse,
+		LastSession: lastSessionV3,
+		Default:     defaultV3,
+		UpdatedAt:   stateV2.UpdatedAt,
+	}, nil
 }
 
 // WriteState implements [directory.Repository].
@@ -155,7 +209,7 @@ func (d *DirectoryRepository) WriteState(ctx context.Context, relPath string, st
 		return nil
 	}
 
-	state.Version = 2
+	state.Version = 3
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
@@ -164,4 +218,3 @@ func (d *DirectoryRepository) WriteState(ctx context.Context, relPath string, st
 }
 
 var _ directory.Repository = (*DirectoryRepository)(nil)
-

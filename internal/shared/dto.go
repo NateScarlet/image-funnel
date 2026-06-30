@@ -208,6 +208,7 @@ type DirectoryStateDTO struct {
 	Version     int                           `json:"version"`
 	Browse      *DirectoryStateBrowseDTO      `json:"browse,omitempty"`
 	LastSession *DirectoryStateLastSessionDTO `json:"lastSession,omitempty"`
+	Default     *DirectoryStateDefaultDTO     `json:"default,omitempty"`
 	UpdatedAt   time.Time                     `json:"updatedAt"`
 }
 
@@ -219,11 +220,14 @@ type DirectoryStateBrowseDTO struct {
 
 // DirectoryStateLastSessionDTO 状态中的最近会话配置
 type DirectoryStateLastSessionDTO struct {
-	ID            scalar.ID     `json:"id"`
-	Filter        ImageFilters  `json:"filter"`
-	TargetKeep    int           `json:"targetKeep"`
-	CommitActions *WriteActions `json:"commitActions,omitempty"`
-	CreateActions *WriteActions `json:"createActions,omitempty"`
+	ID         scalar.ID    `json:"id"`
+	Filter     ImageFilters `json:"filter"`
+	TargetKeep int          `json:"targetKeep"`
+}
+
+// DirectoryStateDefaultDTO 前端自主管理的默认操作状态
+type DirectoryStateDefaultDTO struct {
+	WriteActions *WriteActions `json:"writeActions,omitempty"`
 }
 
 // UndoTrashResultDTO 撤销回收站的结果数据传输对象

@@ -43,6 +43,7 @@ type Config struct {
 type ResolverRoot interface {
 	Device() DeviceResolver
 	Directory() DirectoryResolver
+	DirectoryStateLastSession() DirectoryStateLastSessionResolver
 	DirectoryStats() DirectoryStatsResolver
 	Image() ImageResolver
 	Mutation() MutationResolver
@@ -51,6 +52,7 @@ type ResolverRoot interface {
 	Session() SessionResolver
 	Subscription() SubscriptionResolver
 	TrashHistoryItem() TrashHistoryItemResolver
+	DirectoryStateLastSessionInput() DirectoryStateLastSessionInputResolver
 }
 
 type DirectiveRoot struct {
@@ -134,6 +136,7 @@ type ComplexityRoot struct {
 
 	DirectoryState struct {
 		Browse      func(childComplexity int) int
+		Default     func(childComplexity int) int
 		LastSession func(childComplexity int) int
 		UpdatedAt   func(childComplexity int) int
 	}
@@ -141,6 +144,10 @@ type ComplexityRoot struct {
 	DirectoryStateBrowse struct {
 		FilterBy     func(childComplexity int) int
 		FilterNoteBy func(childComplexity int) int
+	}
+
+	DirectoryStateDefault struct {
+		WriteActions func(childComplexity int) int
 	}
 
 	DirectoryStateLastSession struct {
@@ -460,6 +467,10 @@ type DirectoryResolver interface {
 	Notes(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.NoteFilters, first *int, after *string) (*shared.NoteConnectionDTO, error)
 	LastSession(ctx context.Context, obj *shared.DirectoryDTO) (*shared.SessionDTO, error)
 }
+type DirectoryStateLastSessionResolver interface {
+	CommitActions(ctx context.Context, obj *shared.DirectoryStateLastSessionDTO) (*shared.WriteActions, error)
+	CreateActions(ctx context.Context, obj *shared.DirectoryStateLastSessionDTO) (*shared.WriteActions, error)
+}
 type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
 }
@@ -537,6 +548,10 @@ type SubscriptionResolver interface {
 }
 type TrashHistoryItemResolver interface {
 	CoverImage(ctx context.Context, obj *shared.TrashHistoryItemDTO) (*shared.ImageDTO, error)
+}
+
+type DirectoryStateLastSessionInputResolver interface {
+	CreateActions(ctx context.Context, obj *shared.DirectoryStateLastSessionDTO, data *shared.WriteActions) error
 }
 
 type executableSchema struct {
@@ -819,6 +834,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DirectoryState.Browse(childComplexity), true
+	case "DirectoryState.default":
+		if e.complexity.DirectoryState.Default == nil {
+			break
+		}
+
+		return e.complexity.DirectoryState.Default(childComplexity), true
 	case "DirectoryState.lastSession":
 		if e.complexity.DirectoryState.LastSession == nil {
 			break
@@ -844,6 +865,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DirectoryStateBrowse.FilterNoteBy(childComplexity), true
+
+	case "DirectoryStateDefault.writeActions":
+		if e.complexity.DirectoryStateDefault.WriteActions == nil {
+			break
+		}
+
+		return e.complexity.DirectoryStateDefault.WriteActions(childComplexity), true
 
 	case "DirectoryStateLastSession.commitActions":
 		if e.complexity.DirectoryStateLastSession.CommitActions == nil {
@@ -2246,6 +2274,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDeleteDeviceInput,
 		ec.unmarshalInputDirectoryFilters,
 		ec.unmarshalInputDirectoryStateBrowseInput,
+		ec.unmarshalInputDirectoryStateDefaultInput,
 		ec.unmarshalInputDirectoryStateInput,
 		ec.unmarshalInputDirectoryStateLastSessionInput,
 		ec.unmarshalInputDispatchImageHookInput,
@@ -2535,6 +2564,8 @@ type DirectoryState @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   browse: DirectoryStateBrowse
   "上一次活跃会话的历史配置（客户端只读，服务端自动同步）"
   lastSession: DirectoryStateLastSession
+  "前端管理的数据，如默认操作配置等"
+  default: DirectoryStateDefault
   "最后更新时间"
   updatedAt: Time!
 }
@@ -2547,9 +2578,9 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
   "目标保留数量"
   targetKeep: Int!
   "上一次提交时使用的动作"
-  commitActions: WriteActions
+  commitActions: WriteActions @deprecated(reason: "use default instead")
   "上一次创建时由客户端主动上报的预设对应的动作"
-  createActions: WriteActions
+  createActions: WriteActions @deprecated(reason: "use default instead")
 }
 
 """
@@ -2562,11 +2593,18 @@ type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBr
   filterNoteBy: NoteFilters
 }
 
+type DirectoryStateDefault @goModel(model: "main/internal/shared.DirectoryStateDefaultDTO") {
+  "默认的写入操作配置"
+  writeActions: WriteActions
+}
+
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   "浏览/过滤配置"
   browse: DirectoryStateBrowseInput
   "上一次会话输入数据（客户端主动上报预设动作）"
-  lastSession: DirectoryStateLastSessionInput
+  lastSession: DirectoryStateLastSessionInput @deprecated(reason: "use default instead")
+  "前端管理的数据"
+  default: DirectoryStateDefaultInput
 }
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
@@ -2576,8 +2614,13 @@ input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryS
 
 input DirectoryStateLastSessionInput @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
   "上一次创建时由客户端主动上报的预设对应的动作"
-  createActions: WriteActionsInput
+  createActions: WriteActionsInput @deprecated(reason: "use default instead")
 }
+
+input DirectoryStateDefaultInput @goModel(model: "main/internal/shared.DirectoryStateDefaultDTO") {
+  writeActions: WriteActionsInput
+}
+
 
 `, BuiltIn: false},
 	{Name: "../../../graph/types/directory_stats.graphql", Input: `"目录统计信息"
@@ -3186,9 +3229,9 @@ type DispatchNoteHookPayload {
   "客户端突变标识"
   clientMutationId: String
 }`, BuiltIn: false},
-	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站，将所有暂存文件移到系统回收站"
+	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站"
 type EmptyTrashPayload {
-  "此次被真正清理进系统回收站的历史数量"
+  "此次被真正清理的历史数量"
   clearedCount: Int!
   clientMutationId: String
 }
@@ -4978,6 +5021,8 @@ func (ec *executionContext) fieldContext_Directory_state(_ context.Context, fiel
 				return ec.fieldContext_DirectoryState_browse(ctx, field)
 			case "lastSession":
 				return ec.fieldContext_DirectoryState_lastSession(ctx, field)
+			case "default":
+				return ec.fieldContext_DirectoryState_default(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_DirectoryState_updatedAt(ctx, field)
 			}
@@ -5582,6 +5627,39 @@ func (ec *executionContext) fieldContext_DirectoryState_lastSession(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _DirectoryState_default(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryState_default,
+		func(ctx context.Context) (any, error) {
+			return obj.Default, nil
+		},
+		nil,
+		ec.marshalODirectoryStateDefault2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDefaultDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryState_default(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryState",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "writeActions":
+				return ec.fieldContext_DirectoryStateDefault_writeActions(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DirectoryStateDefault", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DirectoryState_updatedAt(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5684,6 +5762,43 @@ func (ec *executionContext) fieldContext_DirectoryStateBrowse_filterNoteBy(_ con
 				return ec.fieldContext_NoteFilters_hidden(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type NoteFilters", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DirectoryStateDefault_writeActions(ctx context.Context, field graphql.CollectedField, obj *shared.DirectoryStateDefaultDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DirectoryStateDefault_writeActions,
+		func(ctx context.Context) (any, error) {
+			return obj.WriteActions, nil
+		},
+		nil,
+		ec.marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DirectoryStateDefault_writeActions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DirectoryStateDefault",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "keepRating":
+				return ec.fieldContext_WriteActions_keepRating(ctx, field)
+			case "shelveRating":
+				return ec.fieldContext_WriteActions_shelveRating(ctx, field)
+			case "rejectRating":
+				return ec.fieldContext_WriteActions_rejectRating(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WriteActions", field.Name)
 		},
 	}
 	return fc, nil
@@ -5795,7 +5910,7 @@ func (ec *executionContext) _DirectoryStateLastSession_commitActions(ctx context
 		field,
 		ec.fieldContext_DirectoryStateLastSession_commitActions,
 		func(ctx context.Context) (any, error) {
-			return obj.CommitActions, nil
+			return ec.resolvers.DirectoryStateLastSession().CommitActions(ctx, obj)
 		},
 		nil,
 		ec.marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions,
@@ -5808,8 +5923,8 @@ func (ec *executionContext) fieldContext_DirectoryStateLastSession_commitActions
 	fc = &graphql.FieldContext{
 		Object:     "DirectoryStateLastSession",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "keepRating":
@@ -5832,7 +5947,7 @@ func (ec *executionContext) _DirectoryStateLastSession_createActions(ctx context
 		field,
 		ec.fieldContext_DirectoryStateLastSession_createActions,
 		func(ctx context.Context) (any, error) {
-			return obj.CreateActions, nil
+			return ec.resolvers.DirectoryStateLastSession().CreateActions(ctx, obj)
 		},
 		nil,
 		ec.marshalOWriteActions2ᚖmainᚋinternalᚋsharedᚐWriteActions,
@@ -5845,8 +5960,8 @@ func (ec *executionContext) fieldContext_DirectoryStateLastSession_createActions
 	fc = &graphql.FieldContext{
 		Object:     "DirectoryStateLastSession",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "keepRating":
@@ -14947,6 +15062,33 @@ func (ec *executionContext) unmarshalInputDirectoryStateBrowseInput(ctx context.
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputDirectoryStateDefaultInput(ctx context.Context, obj any) (shared.DirectoryStateDefaultDTO, error) {
+	var it shared.DirectoryStateDefaultDTO
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"writeActions"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "writeActions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("writeActions"))
+			data, err := ec.unmarshalOWriteActionsInput2ᚖmainᚋinternalᚋsharedᚐWriteActions(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WriteActions = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Context, obj any) (shared.DirectoryStateDTO, error) {
 	var it shared.DirectoryStateDTO
 	asMap := map[string]any{}
@@ -14954,7 +15096,7 @@ func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"browse", "lastSession"}
+	fieldsInOrder := [...]string{"browse", "lastSession", "default"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -14975,6 +15117,13 @@ func (ec *executionContext) unmarshalInputDirectoryStateInput(ctx context.Contex
 				return it, err
 			}
 			it.LastSession = data
+		case "default":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("default"))
+			data, err := ec.unmarshalODirectoryStateDefaultInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDefaultDTO(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Default = data
 		}
 	}
 
@@ -15001,7 +15150,9 @@ func (ec *executionContext) unmarshalInputDirectoryStateLastSessionInput(ctx con
 			if err != nil {
 				return it, err
 			}
-			it.CreateActions = data
+			if err = ec.resolvers.DirectoryStateLastSessionInput().CreateActions(ctx, &it, data); err != nil {
+				return it, err
+			}
 		}
 	}
 
@@ -16664,6 +16815,8 @@ func (ec *executionContext) _DirectoryState(ctx context.Context, sel ast.Selecti
 			out.Values[i] = ec._DirectoryState_browse(ctx, field, obj)
 		case "lastSession":
 			out.Values[i] = ec._DirectoryState_lastSession(ctx, field, obj)
+		case "default":
+			out.Values[i] = ec._DirectoryState_default(ctx, field, obj)
 		case "updatedAt":
 			out.Values[i] = ec._DirectoryState_updatedAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -16730,6 +16883,42 @@ func (ec *executionContext) _DirectoryStateBrowse(ctx context.Context, sel ast.S
 	return out
 }
 
+var directoryStateDefaultImplementors = []string{"DirectoryStateDefault"}
+
+func (ec *executionContext) _DirectoryStateDefault(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStateDefaultDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, directoryStateDefaultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DirectoryStateDefault")
+		case "writeActions":
+			out.Values[i] = ec._DirectoryStateDefault_writeActions(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var directoryStateLastSessionImplementors = []string{"DirectoryStateLastSession"}
 
 func (ec *executionContext) _DirectoryStateLastSession(ctx context.Context, sel ast.SelectionSet, obj *shared.DirectoryStateLastSessionDTO) graphql.Marshaler {
@@ -16744,22 +16933,84 @@ func (ec *executionContext) _DirectoryStateLastSession(ctx context.Context, sel 
 		case "id":
 			out.Values[i] = ec._DirectoryStateLastSession_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "filter":
 			out.Values[i] = ec._DirectoryStateLastSession_filter(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "targetKeep":
 			out.Values[i] = ec._DirectoryStateLastSession_targetKeep(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "commitActions":
-			out.Values[i] = ec._DirectoryStateLastSession_commitActions(ctx, field, obj)
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._DirectoryStateLastSession_commitActions(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createActions":
-			out.Values[i] = ec._DirectoryStateLastSession_createActions(ctx, field, obj)
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._DirectoryStateLastSession_createActions(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -21630,6 +21881,21 @@ func (ec *executionContext) unmarshalODirectoryStateBrowseInput2ᚖmainᚋintern
 		return nil, nil
 	}
 	res, err := ec.unmarshalInputDirectoryStateBrowseInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODirectoryStateDefault2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDefaultDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DirectoryStateDefaultDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DirectoryStateDefault(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalODirectoryStateDefaultInput2ᚖmainᚋinternalᚋsharedᚐDirectoryStateDefaultDTO(ctx context.Context, v any) (*shared.DirectoryStateDefaultDTO, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputDirectoryStateDefaultInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 

@@ -21,12 +21,6 @@ type LastSessionSaver interface {
 		filter *shared.ImageFilters,
 		targetKeep int,
 	) error
-	SaveLastSessionCommitActions(
-		ctx context.Context,
-		directoryID scalar.ID,
-		sessionID scalar.ID,
-		commitActions *shared.WriteActions,
-	) error
 }
 
 type Handler struct {

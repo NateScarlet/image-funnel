@@ -52,9 +52,7 @@ func (h *Handler) Commit(
 		return 0, err
 	}
 
-	if h.lastSessionSaver != nil {
-		_ = h.lastSessionSaver.SaveLastSessionCommitActions(ctx, sess.DirectoryID(), sessionID, writeActions)
-	}
+
 
 	return successCount, nil
 }

@@ -83,7 +83,10 @@
 import { ref } from "vue";
 import type { SessionFragment } from "../graphql/generated";
 import mutate from "../graphql/utils/mutate";
-import { UpdateSessionDocument } from "../graphql/generated";
+import {
+  UpdateSessionDocument,
+  SetDirectoryStateDocument,
+} from "../graphql/generated";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import RatingSelector from "./RatingSelector.vue";
 import NumberInput from "./NumberInput.vue";
@@ -96,9 +99,8 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<(e: "close" | "updated") => void>();
 
-const { presets, selectedPresetId, targetKeep, rating } = useSessionConfig(
-  () => props.session,
-);
+const { presets, selectedPresetId, selectedPreset, targetKeep, rating } =
+  useSessionConfig(() => props.session);
 
 const updating = ref<boolean>(false);
 
@@ -120,6 +122,28 @@ async function update() {
         },
       },
     });
+
+    if (selectedPreset.value?.writeActions) {
+      try {
+        await mutate(SetDirectoryStateDocument, {
+          variables: {
+            input: {
+              id: props.session.directory.id,
+              state: {
+                default: {
+                  writeActions: selectedPreset.value.writeActions,
+                },
+              },
+            },
+          },
+        });
+      } catch (err) {
+        console.error(
+          `Failed to sync default actions to directory state for ${props.session.directory.id}:`,
+          err,
+        );
+      }
+    }
 
     emit("updated");
   } finally {

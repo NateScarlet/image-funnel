@@ -68,6 +68,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   });
 
   const lastSessionState = computed(() => serverState.value?.lastSession);
+  const defaultState = computed(() => serverState.value?.default);
 
   // 从服务器异步查询当前目录的最新会话信息
   const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
@@ -200,9 +201,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
     const lastSessState = serverState.value?.lastSession;
     if (lastSessState) {
-      const keepRating =
-        lastSessState.commitActions?.keepRating ??
-        lastSessState.createActions?.keepRating;
+      const keepRating = serverState.value?.default?.writeActions?.keepRating;
       const baseFilter = lastSessState.filter;
       return {
         rating:
@@ -320,5 +319,6 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     clearFilters,
     lastSession,
     lastSessionState,
+    defaultState,
   };
 }

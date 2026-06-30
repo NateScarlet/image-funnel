@@ -56,8 +56,8 @@ func TestDirectoryRepository_State(t *testing.T) {
 	if loadedState == nil {
 		t.Fatal("expected state to be loaded, got nil")
 	}
-	if loadedState.Version != 2 {
-		t.Errorf("expected Version to be 2, got %d", loadedState.Version)
+	if loadedState.Version != 3 {
+		t.Errorf("expected Version to be 3, got %d", loadedState.Version)
 	}
 	if loadedState.Browse == nil || loadedState.Browse.FilterBy == nil {
 		t.Fatal("browse filterBy is missing")
@@ -112,9 +112,9 @@ func TestDirectoryRepository_MigrateStateFromV1(t *testing.T) {
 		t.Fatal("expected state to be loaded, got nil")
 	}
 
-	// 验证版本已升级到 2
-	if loadedState.Version != 2 {
-		t.Errorf("expected Version to be 2, got %d", loadedState.Version)
+	// 验证版本已升级到 3
+	if loadedState.Version != 3 {
+		t.Errorf("expected Version to be 3, got %d", loadedState.Version)
 	}
 
 	// 验证 filterBy 已正确迁移

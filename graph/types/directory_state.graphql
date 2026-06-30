@@ -6,6 +6,8 @@ type DirectoryState @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   browse: DirectoryStateBrowse
   "上一次活跃会话的历史配置（客户端只读，服务端自动同步）"
   lastSession: DirectoryStateLastSession
+  "前端管理的数据，如默认操作配置等"
+  default: DirectoryStateDefault
   "最后更新时间"
   updatedAt: Time!
 }
@@ -18,9 +20,9 @@ type DirectoryStateLastSession @goModel(model: "main/internal/shared.DirectorySt
   "目标保留数量"
   targetKeep: Int!
   "上一次提交时使用的动作"
-  commitActions: WriteActions
+  commitActions: WriteActions @deprecated(reason: "use default instead")
   "上一次创建时由客户端主动上报的预设对应的动作"
-  createActions: WriteActions
+  createActions: WriteActions @deprecated(reason: "use default instead")
 }
 
 """
@@ -33,11 +35,18 @@ type DirectoryStateBrowse @goModel(model: "main/internal/shared.DirectoryStateBr
   filterNoteBy: NoteFilters
 }
 
+type DirectoryStateDefault @goModel(model: "main/internal/shared.DirectoryStateDefaultDTO") {
+  "默认的写入操作配置"
+  writeActions: WriteActions
+}
+
 input DirectoryStateInput @goModel(model: "main/internal/shared.DirectoryStateDTO") {
   "浏览/过滤配置"
   browse: DirectoryStateBrowseInput
   "上一次会话输入数据（客户端主动上报预设动作）"
-  lastSession: DirectoryStateLastSessionInput
+  lastSession: DirectoryStateLastSessionInput @deprecated(reason: "use default instead")
+  "前端管理的数据"
+  default: DirectoryStateDefaultInput
 }
 
 input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryStateBrowseDTO") {
@@ -47,6 +56,11 @@ input DirectoryStateBrowseInput @goModel(model: "main/internal/shared.DirectoryS
 
 input DirectoryStateLastSessionInput @goModel(model: "main/internal/shared.DirectoryStateLastSessionDTO") {
   "上一次创建时由客户端主动上报的预设对应的动作"
-  createActions: WriteActionsInput
+  createActions: WriteActionsInput @deprecated(reason: "use default instead")
 }
+
+input DirectoryStateDefaultInput @goModel(model: "main/internal/shared.DirectoryStateDefaultDTO") {
+  writeActions: WriteActionsInput
+}
+
 

@@ -44,8 +44,8 @@ export function useCreateSession() {
                 input: {
                   id: options.directoryId,
                   state: {
-                    lastSession: {
-                      createActions: options.createActions,
+                    default: {
+                      writeActions: options.createActions,
                     },
                   },
                 },

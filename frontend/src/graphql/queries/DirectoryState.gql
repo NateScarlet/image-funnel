@@ -24,12 +24,9 @@ query DirectoryState($id: ID!) {
             query
           }
           targetKeep
-          commitActions {
-            keepRating
-            shelveRating
-            rejectRating
-          }
-          createActions {
+        }
+        default {
+          writeActions {
             keepRating
             shelveRating
             rejectRating

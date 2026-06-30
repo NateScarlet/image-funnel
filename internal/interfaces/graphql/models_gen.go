@@ -141,9 +141,9 @@ type DispatchNoteHookPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
-// 手动清空回收站，将所有暂存文件移到系统回收站
+// 手动清空回收站
 type EmptyTrashPayload struct {
-	// 此次被真正清理进系统回收站的历史数量
+	// 此次被真正清理的历史数量
 	ClearedCount     int     `json:"clearedCount"`
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }

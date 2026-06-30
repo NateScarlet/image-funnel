@@ -136,7 +136,7 @@ const {
 
 const emit = defineEmits<(e: "committed") => void>();
 const { getPreset, lastSelectedPresetId } = usePresets();
-const { lastSessionState } = useDirectoryState(
+const { defaultState } = useDirectoryState(
   computed(() => session.directory.id),
 );
 
@@ -158,8 +158,7 @@ const keepRatingBuffer = ref<number>();
 const keepRating = computed({
   get: () =>
     keepRatingBuffer.value ??
-    lastSessionState.value?.commitActions?.keepRating ??
-    lastSessionState.value?.createActions?.keepRating ??
+    defaultState.value?.writeActions?.keepRating ??
     selectedPreset.value?.writeActions.keepRating ??
     0,
   set: (v: number) => {
@@ -171,8 +170,7 @@ const shelveRatingBuffer = ref<number>();
 const shelveRating = computed({
   get: () =>
     shelveRatingBuffer.value ??
-    lastSessionState.value?.commitActions?.shelveRating ??
-    lastSessionState.value?.createActions?.shelveRating ??
+    defaultState.value?.writeActions?.shelveRating ??
     selectedPreset.value?.writeActions.shelveRating ??
     0,
   set: (v: number) => {
@@ -184,8 +182,7 @@ const rejectRatingBuffer = ref<number>();
 const rejectRating = computed({
   get: () =>
     rejectRatingBuffer.value ??
-    lastSessionState.value?.commitActions?.rejectRating ??
-    lastSessionState.value?.createActions?.rejectRating ??
+    defaultState.value?.writeActions?.rejectRating ??
     selectedPreset.value?.writeActions.rejectRating ??
     0,
   set: (v: number) => {
