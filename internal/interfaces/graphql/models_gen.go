@@ -69,6 +69,8 @@ type CommitChangesInput struct {
 type CommitChangesPayload struct {
 	// 实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）
 	Written int `json:"written"`
+	// 本次提交成功处理的图片总数（包括实际修改和匹配无需修改的图片）
+	Matched int `json:"matched"`
 	// 提交后的会话对象
 	Session          *shared.SessionDTO `json:"session,omitempty"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`

@@ -13,10 +13,10 @@ import (
 func (h *Handler) Commit(
 	ctx context.Context,
 	sessionID scalar.ID,
-	keepRating int,
-	shelveRating int,
-	rejectRating int,
-) (success int, err error) {
+	keepRating *int,
+	shelveRating *int,
+	rejectRating *int,
+) (written int, matched int, err error) {
 	startTime := time.Now()
 
 	defer func() {
@@ -24,21 +24,23 @@ func (h *Handler) Commit(
 			h.logger.Error("commit session failed",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
-				zap.Int("success", success),
+				zap.Int("written", written),
+				zap.Int("matched", matched),
 				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did commit session",
 				zap.Stringer("sessionID", sessionID),
 				zap.Duration("duration", time.Since(startTime)),
-				zap.Int("success", success),
+				zap.Int("written", written),
+				zap.Int("matched", matched),
 			)
 		}
 	}()
 
 	sess, release, err := h.sessionService.Acquire(ctx, sessionID)
 	if err != nil {
-		return 0, fmt.Errorf("session not found: %w", err)
+		return 0, 0, fmt.Errorf("session not found: %w", err)
 	}
 	defer release()
 
@@ -47,12 +49,12 @@ func (h *Handler) Commit(
 		ShelveRating: shelveRating,
 		RejectRating: rejectRating,
 	}
-	successCount, err := h.sessionService.Commit(ctx, sess, writeActions)
+	written, matched, err = h.sessionService.Commit(ctx, sess, writeActions)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 
 
-	return successCount, nil
+	return written, matched, nil
 }

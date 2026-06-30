@@ -8,9 +8,9 @@ export interface Preset {
     rating: number[];
   };
   writeActions: {
-    keepRating: number;
-    shelveRating: number;
-    rejectRating: number;
+    keepRating: number | null;
+    shelveRating: number | null;
+    rejectRating: number | null;
   };
   targetKeep: number;
 }

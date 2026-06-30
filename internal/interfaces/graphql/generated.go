@@ -83,6 +83,7 @@ type ComplexityRoot struct {
 
 	CommitChangesPayload struct {
 		ClientMutationID func(childComplexity int) int
+		Matched          func(childComplexity int) int
 		Session          func(childComplexity int) int
 		Written          func(childComplexity int) int
 	}
@@ -637,6 +638,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CommitChangesPayload.ClientMutationID(childComplexity), true
+	case "CommitChangesPayload.matched":
+		if e.complexity.CommitChangesPayload.Matched == nil {
+			break
+		}
+
+		return e.complexity.CommitChangesPayload.Matched(childComplexity), true
 	case "CommitChangesPayload.session":
 		if e.complexity.CommitChangesPayload.Session == nil {
 			break
@@ -2893,11 +2900,11 @@ type TrashHistoryConnection @goModel(model: "main/internal/shared.TrashHistoryCo
 	{Name: "../../../graph/types/write_actions.graphql", Input: `"提交时将操作映射到 XMP 评分的配置"
 type WriteActions @goModel(model: "main/internal/shared.WriteActions") {
   "保留操作写入的评分值"
-  keepRating: Int!
+  keepRating: Int
   "搁置操作写入的评分值"
-  shelveRating: Int!
+  shelveRating: Int
   "排除操作写入的评分值"
-  rejectRating: Int!
+  rejectRating: Int
 }`, BuiltIn: false},
 	{Name: "../../../graph/enums/image_action.graphql", Input: `"""
 图片筛选操作类型，对应三态分类决策。
@@ -3127,16 +3134,18 @@ input CommitChangesInput {
 
 input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
   "保留操作写入的评分值"
-  keepRating: Int!
+  keepRating: Int
   "搁置操作写入的评分值"
-  shelveRating: Int!
+  shelveRating: Int
   "排除操作写入的评分值"
-  rejectRating: Int!
+  rejectRating: Int
 }
 
 type CommitChangesPayload {
   "实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）"
   written: Int!
+  "本次提交成功处理的图片总数（包括实际修改和匹配无需修改的图片）"
+  matched: Int!
   "提交后的会话对象"
   session: Session
   clientMutationId: String
@@ -4416,6 +4425,35 @@ func (ec *executionContext) _CommitChangesPayload_written(ctx context.Context, f
 }
 
 func (ec *executionContext) fieldContext_CommitChangesPayload_written(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitChangesPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitChangesPayload_matched(ctx context.Context, field graphql.CollectedField, obj *CommitChangesPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitChangesPayload_matched,
+		func(ctx context.Context) (any, error) {
+			return obj.Matched, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitChangesPayload_matched(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "CommitChangesPayload",
 		Field:      field,
@@ -8209,6 +8247,8 @@ func (ec *executionContext) fieldContext_Mutation_commitChanges(ctx context.Cont
 			switch field.Name {
 			case "written":
 				return ec.fieldContext_CommitChangesPayload_written(ctx, field)
+			case "matched":
+				return ec.fieldContext_CommitChangesPayload_matched(ctx, field)
 			case "session":
 				return ec.fieldContext_CommitChangesPayload_session(ctx, field)
 			case "clientMutationId":
@@ -13192,9 +13232,9 @@ func (ec *executionContext) _WriteActions_keepRating(ctx context.Context, field 
 			return obj.KeepRating, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalOInt2ᚖint,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -13221,9 +13261,9 @@ func (ec *executionContext) _WriteActions_shelveRating(ctx context.Context, fiel
 			return obj.ShelveRating, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalOInt2ᚖint,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -13250,9 +13290,9 @@ func (ec *executionContext) _WriteActions_rejectRating(ctx context.Context, fiel
 			return obj.RejectRating, nil
 		},
 		nil,
-		ec.marshalNInt2int,
+		ec.marshalOInt2ᚖint,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -15906,21 +15946,21 @@ func (ec *executionContext) unmarshalInputWriteActionsInput(ctx context.Context,
 		switch k {
 		case "keepRating":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keepRating"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.KeepRating = data
 		case "shelveRating":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("shelveRating"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ShelveRating = data
 		case "rejectRating":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rejectRating"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -16164,6 +16204,11 @@ func (ec *executionContext) _CommitChangesPayload(ctx context.Context, sel ast.S
 			out.Values[i] = graphql.MarshalString("CommitChangesPayload")
 		case "written":
 			out.Values[i] = ec._CommitChangesPayload_written(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "matched":
+			out.Values[i] = ec._CommitChangesPayload_matched(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -19684,19 +19729,10 @@ func (ec *executionContext) _WriteActions(ctx context.Context, sel ast.Selection
 			out.Values[i] = graphql.MarshalString("WriteActions")
 		case "keepRating":
 			out.Values[i] = ec._WriteActions_keepRating(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "shelveRating":
 			out.Values[i] = ec._WriteActions_shelveRating(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "rejectRating":
 			out.Values[i] = ec._WriteActions_rejectRating(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -20712,13 +20748,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

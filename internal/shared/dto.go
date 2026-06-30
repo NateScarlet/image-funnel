@@ -93,9 +93,9 @@ type StatsDTO struct {
 
 // WriteActions 写入操作配置
 type WriteActions struct {
-	KeepRating   int `json:"keepRating"`
-	ShelveRating int `json:"shelveRating"`
-	RejectRating int `json:"rejectRating"`
+	KeepRating   *int `json:"keepRating"`
+	ShelveRating *int `json:"shelveRating"`
+	RejectRating *int `json:"rejectRating"`
 }
 
 // ImageMeta 图片元数据

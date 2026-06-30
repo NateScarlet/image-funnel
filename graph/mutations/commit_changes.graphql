@@ -12,16 +12,18 @@ input CommitChangesInput {
 
 input WriteActionsInput @goModel(model: "main/internal/shared.WriteActions") {
   "保留操作写入的评分值"
-  keepRating: Int!
+  keepRating: Int
   "搁置操作写入的评分值"
-  shelveRating: Int!
+  shelveRating: Int
   "排除操作写入的评分值"
-  rejectRating: Int!
+  rejectRating: Int
 }
 
 type CommitChangesPayload {
   "实际写入磁盘的 XMP 文件数量（跳过已符合目标评分的图片）"
   written: Int!
+  "本次提交成功处理的图片总数（包括实际修改和匹配无需修改的图片）"
+  matched: Int!
   "提交后的会话对象"
   session: Session
   clientMutationId: String

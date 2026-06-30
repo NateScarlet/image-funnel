@@ -47,23 +47,28 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 
 // #endregion
 
-func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (int, error) {
+func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (written int, matched int, err error) {
 	var errs []error
-	var successCount int
 
 	// 遍历所有持有且符合当前筛选条件的图片操作
 	for img, action := range session.Actions() {
 		session.MarkCommitted(img.ID())
 
-		var rating int
+		var targetRating *int
 		switch action {
 		case shared.ImageActionKeep:
-			rating = writeActions.KeepRating
+			targetRating = writeActions.KeepRating
 		case shared.ImageActionShelve:
-			rating = writeActions.ShelveRating
+			targetRating = writeActions.ShelveRating
 		case shared.ImageActionReject:
-			rating = writeActions.RejectRating
+			targetRating = writeActions.RejectRating
 		}
+
+		if targetRating == nil {
+			matched++
+			continue
+		}
+		rating := *targetRating
 
 		// 显式重新加载图片最新状态
 		// Session 中存储的是相对路径
@@ -85,6 +90,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		// 如果当前磁盘状态（即刚刚加载的状态）已经符合目标 Rating，跳过写入
 		if rating == currentImg.Rating() {
+			matched++
 			continue
 		}
 
@@ -113,7 +119,8 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			}(),
 		})
 
-		successCount++
+		written++
+		matched++
 
 		// 写入成功后，构建新的 Image 对象并直接更新内存
 		// 强制使用新 Rating，但保留原图其他信息（如 ModTime，等待 FileWatcher 慢慢更新）
@@ -146,5 +153,5 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		}
 	}
 
-	return successCount, errors.Join(errs...)
+	return written, matched, errors.Join(errs...)
 }

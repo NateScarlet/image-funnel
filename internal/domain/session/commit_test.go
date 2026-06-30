@@ -150,15 +150,16 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	sess.actions[img3.ID()] = shared.ImageActionReject
 
 	writeActions := &shared.WriteActions{
-		KeepRating:   5,
-		ShelveRating: 0,
-		RejectRating: -1,
+		KeepRating:   ptr(5),
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
 	}
 
-	success, errs := svc.Commit(context.Background(), sess, writeActions)
+	success, matched, errs := svc.Commit(context.Background(), sess, writeActions)
 
 	require.Empty(t, errs)
 	require.Equal(t, 2, success, "Should successfully write matching images")
+	require.Equal(t, 2, matched)
 
 	require.Contains(t, fakeMeta.Data, file1)
 	require.Equal(t, 5, fakeMeta.Data[file1].Rating())
@@ -205,14 +206,15 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	sess.MarkImage(img1.ID(), shared.ImageActionKeep)
 
 	writeActions := &shared.WriteActions{
-		KeepRating:   5,
-		ShelveRating: 0,
-		RejectRating: -1,
+		KeepRating:   ptr(5),
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
 	}
 
-	success, errs := svc.Commit(context.Background(), sess, writeActions)
+	success, matched, errs := svc.Commit(context.Background(), sess, writeActions)
 	require.Empty(t, errs)
 	require.Equal(t, 1, success)
+	require.Equal(t, 1, matched)
 
 	require.Equal(t, 5, fakeMeta.Data[file1].Rating())
 
@@ -264,15 +266,16 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	require.True(t, sess.Stats().IsCompleted)
 
 	writeActions := &shared.WriteActions{
-		KeepRating:   1,
-		ShelveRating: 0,
-		RejectRating: -1,
+		KeepRating:   ptr(1),
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
 	}
 
 	// 第一次提交
-	success, errs := svc.Commit(context.Background(), sess, writeActions)
+	success, matched, errs := svc.Commit(context.Background(), sess, writeActions)
 	require.Empty(t, errs)
 	require.Equal(t, 2, success)
+	require.Equal(t, 2, matched)
 	require.Equal(t, 1, fakeMeta.Data[file1].Rating())
 	require.Equal(t, -1, fakeMeta.Data[file2].Rating())
 
@@ -291,11 +294,78 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	require.Equal(t, 1, sess.Stats().TotalKept)
 
 	// 第二次提交
-	success2, errs2 := svc.Commit(context.Background(), sess, writeActions)
+	success2, matched2, errs2 := svc.Commit(context.Background(), sess, writeActions)
 	require.Empty(t, errs2)
 	require.Equal(t, 2, success2)
+	require.Equal(t, 2, matched2)
 
 	// 验证最终磁盘上的 Rating 符合第二次标记预期
 	require.Equal(t, -1, fakeMeta.Data[file1].Rating())
 	require.Equal(t, 1, fakeMeta.Data[file2].Rating())
+}
+
+func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_test_null")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	file2 := filepath.Join(tempDir, "test2.jpg")
+	os.WriteFile(file1, []byte("fake"), 0644)
+	os.WriteFile(file2, []byte("fake"), 0644)
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeSessionRepo := NewFakeSessionRepo()
+	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
+	defer cleanup()
+
+	fakeScanner := &FakeImageRepo{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[string]*image.Image),
+	}
+
+	imageFb := image.NewFilterBuilder()
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	defer cleanupService()
+
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+
+	fakeScanner.Images[img1.RelPath()] = img1
+	fakeScanner.Images[img2.RelPath()] = img2
+
+	filter := &shared.ImageFilters{Rating: []int{0}}
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, []*image.Image{img1, img2}, imageFb)
+
+	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(img2.ID(), shared.ImageActionReject))
+
+	writeActions := &shared.WriteActions{
+		KeepRating:   nil, // nil 代表不操作
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
+	}
+
+	success, matched, errs := svc.Commit(context.Background(), sess, writeActions)
+	require.Empty(t, errs)
+	require.Equal(t, 1, success, "Only reject action should be written")
+	require.Equal(t, 2, matched, "Both keep (skipped) and reject (written) should be matched")
+
+	// img1 (keep) has nil rating config, so its XMP metadata should not be created/modified
+	require.NotContains(t, fakeMeta.Data, file1)
+
+	// img2 (reject) has -1 rating config, it should be successfully written
+	require.Contains(t, fakeMeta.Data, file2)
+	require.Equal(t, -1, fakeMeta.Data[file2].Rating())
+
+	// Both images should be marked as committed
+	require.True(t, sess.IsCommitted(img1.ID()))
+	require.True(t, sess.IsCommitted(img2.ID()))
+}
+
+func ptr(i int) *int {
+	return &i
 }

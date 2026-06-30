@@ -91,6 +91,14 @@ func (s *Session) MarkCommitted(id scalar.ID) {
 	s.committed[id] = true
 }
 
+// IsCommitted 判断图片在本会话中是否已经提交过
+func (s *Session) IsCommitted(id scalar.ID) bool {
+	if s.committed == nil {
+		return false
+	}
+	return s.committed[id]
+}
+
 func (s *Session) ID() scalar.ID {
 	return s.id
 }

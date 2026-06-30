@@ -13,7 +13,7 @@ import (
 
 // CommitChanges is the resolver for the commitChanges field.
 func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error) {
-	written, err := r.app.Commit(
+	written, matched, err := r.app.Commit(
 		ctx,
 		input.SessionID,
 		input.WriteActions.KeepRating,
@@ -31,6 +31,7 @@ func (r *mutationResolver) CommitChanges(ctx context.Context, input CommitChange
 
 	return &CommitChangesPayload{
 		Written:          written,
+		Matched:          matched,
 		Session:          sess,
 		ClientMutationID: input.ClientMutationID,
 	}, nil

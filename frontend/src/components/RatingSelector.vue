@@ -1,13 +1,29 @@
 <template>
-  <div class="flex items-center gap-1" role="input">
-    <label
-      v-for="item in items"
-      :key="item.key"
-      class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 cursor-pointer"
+  <div class="flex items-center gap-2" role="input">
+    <button
+      v-if="allowNull"
+      type="button"
+      :disabled="readonly"
+      class="px-2 py-1 text-xs rounded border transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 animate-pulse-subtle"
+      :class="
+        model === null
+          ? 'bg-red-500/20 border-red-500 text-red-300 font-bold shadow-[0_0_8px_rgba(239,68,68,0.2)]'
+          : 'border-primary-600/50 text-primary-300 hover:border-primary-400 hover:text-white'
+      "
+      @click="model = null"
     >
-      <RatingIcon v-bind="item.iconAttrs" />
-      <input class="hidden" v-bind="item.inputAttrs" />
-    </label>
+      不操作
+    </button>
+    <div class="flex items-center gap-1">
+      <label
+        v-for="item in items"
+        :key="item.key"
+        class="w-8 h-8 flex items-center justify-center rounded transition-all hover:scale-110 cursor-pointer"
+      >
+        <RatingIcon v-bind="item.iconAttrs" />
+        <input class="hidden" v-bind="item.inputAttrs" />
+      </label>
+    </div>
   </div>
 </template>
 
@@ -16,21 +32,25 @@ import { computed, InputHTMLAttributes } from "vue";
 import { STAR_CONFIGS } from "../utils/starConfig";
 import RatingIcon from "./RatingIcon.vue";
 
-const { readonly = false } = defineProps<{
+const { readonly = false, allowNull = false } = defineProps<{
   readonly?: boolean;
+  allowNull?: boolean;
 }>();
 
-const model = defineModel<number | readonly number[]>();
+const model = defineModel<number | null | readonly number[]>();
 
 const arrayModel = computed({
   get() {
+    if (model.value === null || model.value === undefined) {
+      return [];
+    }
     return Array.isArray(model.value) ? model.value : [model.value];
   },
   set(value) {
     if (Array.isArray(model.value)) {
       model.value = value;
     } else {
-      model.value = value[0] ?? 0;
+      model.value = value[0] ?? (allowNull ? null : 0);
     }
   },
 });

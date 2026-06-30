@@ -16,9 +16,9 @@ export function useCreateSession() {
     filter: ImageFiltersInput;
     targetKeep: number;
     createActions?: {
-      keepRating: number;
-      shelveRating: number;
-      rejectRating: number;
+      keepRating: number | null;
+      shelveRating: number | null;
+      rejectRating: number | null;
     };
   }): Promise<SessionFragment | null> {
     creating.value = true;

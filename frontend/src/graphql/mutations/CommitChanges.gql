@@ -1,6 +1,7 @@
 mutation CommitChanges($input: CommitChangesInput!) {
   commitChanges(input: $input) {
     written
+    matched
     session {
       ...Session
     }
