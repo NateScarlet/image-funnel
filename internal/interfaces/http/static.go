@@ -27,7 +27,7 @@ func (srw staticResponseWriter) WriteHeader(statusCode int) {
 	srw.w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
 	if statusCode == http.StatusOK || statusCode == http.StatusPartialContent {
 		if strings.Contains(srw.w.Header().Get("Content-Type"), "text/html") {
-			srw.w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			srw.w.Header().Set("Cache-Control", "no-cache")
 		} else {
 			srw.w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
@@ -60,7 +60,8 @@ func serveIndex(w http.ResponseWriter, r *http.Request, frontendDir string) {
 	}
 
 	w.Header().Set("ETag", weakETag(stat))
-	http.ServeContent(w, r, "index.html", stat.ModTime(), f)
+	srw := staticResponseWriter{w: w}
+	http.ServeContent(srw, r, "index.html", stat.ModTime(), f)
 }
 
 func addStaticRoutes(r *mux.Router, frontendDir string) {
