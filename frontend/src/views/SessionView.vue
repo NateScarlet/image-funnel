@@ -83,7 +83,7 @@
             <div
               v-if="isAutoRejectActive && currentImage && !swiping"
               :key="`${currentImageId}-${autoRejectTimeoutSeconds}`"
-              class="absolute inset-y-0 left-0 bg-orange-600/15 pointer-events-none countdown-progress z-0"
+              class="absolute inset-y-0 left-0 bg-secondary-500/50 pointer-events-none countdown-progress"
               :style="{
                 animationDuration: `${autoRejectTimeoutSeconds}s`,
               }"
