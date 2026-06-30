@@ -1337,11 +1337,9 @@ func applyDirectiveAction(action string, matchedLine string, stdout string, stde
 		return ""
 	}
 
-	var newline string
+	var newline = "\n"
 	if strings.HasSuffix(matchedLine, "\r\n") {
 		newline = "\r\n"
-	} else if strings.HasSuffix(matchedLine, "\n") {
-		newline = "\n"
 	}
 
 	// 构建 alert 语法块（stdout + stderr）
