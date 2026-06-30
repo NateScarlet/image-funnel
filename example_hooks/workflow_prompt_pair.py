@@ -7,6 +7,7 @@ WorkflowPromptPair 类：封装 ComfyUI workflow 和 prompt 配对操作。
 所有修改操作直接在原对象上进行，不需要深拷贝。
 """
 
+import os
 import datetime
 import json
 import logging
@@ -509,6 +510,43 @@ class WorkflowPromptPair:
                                 regex_pattern, new_date_str, prefix_val
                             )
                             src_inputs[src_key] = new_prefix
+
+    def adjust_output_directory(self, rel_dir: str) -> None:
+        """
+        根据计算好的相对路径 rel_dir，自动调整 prompt 和 workflow 中所有输出节点的 filename_prefix。
+        """
+        for node_id, node in self.prompt.items():
+            inputs = node.get("inputs", {})
+            if "filename_prefix" in inputs:
+                src_node_id, src_key = find_terminal_input(
+                    self.prompt, node_id, "filename_prefix"
+                )
+                src_node = self.prompt.get(src_node_id)
+                if src_node:
+                    src_inputs = src_node.setdefault("inputs", {})
+                    original_val = src_inputs.get(src_key)
+                    if isinstance(original_val, str):
+                        original_basename = os.path.basename(original_val)
+                        new_val = (
+                            f"{rel_dir}/{original_basename}"
+                            if rel_dir and rel_dir != "."
+                            else original_basename
+                        )
+                        src_inputs[src_key] = new_val
+
+                        # 同步修改 workflow 结构
+                        src_node_info = self._nodes_cache.get(src_node_id)
+                        if src_node_info and src_node_info.widgets_values:
+                            for idx, val in enumerate(src_node_info.widgets_values):
+                                if isinstance(val, str):
+                                    parts = re.split(r"[\\/]", val)
+                                    basename = parts[-1] if parts else val
+                                    new_wf_val = (
+                                        f"{rel_dir}/{basename}"
+                                        if rel_dir and rel_dir != "."
+                                        else basename
+                                    )
+                                    src_node_info.widgets_values[idx] = new_wf_val
 
     def _convert_comfy_date_format_to_python(self, comfy_fmt: str) -> Tuple[str, str]:
         """

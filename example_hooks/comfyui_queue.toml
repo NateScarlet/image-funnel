@@ -24,6 +24,8 @@ ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义�
 [on.image_dispatch]
 
 [env]
+# COMFYUI_OUTPUT_DIR = ""  # ComfyUI 的输出根目录。若未提供，自动为图片绝对路径中最后一个名为 output 的目录。显式提供时会校验图片及目标目录是否在其中。
+# HOOK_OUTPUT_DIR = ""     # 覆盖目标输出目录。默认不指定时，输出到图片当前所在目录；指定相对路径时，该路径相对于 ComfyUI 的输出根目录；若设为绝对路径，则必须在输出根目录内部，否则报错；若设为 :inherit:，则完全关闭目录自动调整功能。
 HOOK_JOBS = "4"
 HOOK_IMAGE_SET_LABEL = "Red"
 HOOK_MAX_MATCH = "4"

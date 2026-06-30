@@ -14,6 +14,7 @@ from comfyui import (
     get_workflow_node_text,
     get_target_clip_node,
     strip_comments_for_prompt,
+    get_relative_output_dir,
 )
 
 
@@ -309,6 +310,74 @@ class TestComfyUIHook(unittest.TestCase):
                 comfyui.main()
             self.assertEqual(cm.exception.code, 1)
             mock_override.assert_not_called()
+
+
+class TestComfyUIOutputDirectory(unittest.TestCase):
+
+    def setUp(self):
+        # 备份环境变量以防污染
+        self.orig_env = {
+            "COMFYUI_OUTPUT_DIR": os.environ.get("COMFYUI_OUTPUT_DIR"),
+            "HOOK_OUTPUT_DIR": os.environ.get("HOOK_OUTPUT_DIR"),
+        }
+        for k in ["COMFYUI_OUTPUT_DIR", "HOOK_OUTPUT_DIR"]:
+            if k in os.environ:
+                del os.environ[k]
+
+    def tearDown(self):
+        # 恢复环境变量
+        for k, v in self.orig_env.items():
+            if v is None:
+                if k in os.environ:
+                    del os.environ[k]
+            else:
+                os.environ[k] = v
+
+    def test_auto_find_output_dir(self):
+        img_path = os.path.normpath("C:/project/output/sub1/sub2/image.png")
+        rel_dir = get_relative_output_dir(img_path, "", "")
+        self.assertEqual(rel_dir, "sub1/sub2")
+
+    def test_auto_find_output_dir_multiple_output(self):
+        img_path = os.path.normpath("C:/project/output/sub1/output/sub2/image.png")
+        rel_dir = get_relative_output_dir(img_path, "", "")
+        self.assertEqual(rel_dir, "sub2")
+
+    def test_missing_output_dir_raises_error(self):
+        img_path = os.path.normpath("C:/project/no_out_dir/image.png")
+        with self.assertRaises(ValueError):
+            get_relative_output_dir(img_path, "", "")
+
+    def test_comfyui_output_dir_valid(self):
+        img_path = os.path.normpath("C:/custom_output/my_project/image.png")
+        rel_dir = get_relative_output_dir(
+            img_path, os.path.normpath("C:/custom_output"), ""
+        )
+        self.assertEqual(rel_dir, "my_project")
+
+    def test_comfyui_output_dir_invalid(self):
+        img_path = os.path.normpath("C:/other_folder/my_project/image.png")
+        with self.assertRaises(ValueError):
+            get_relative_output_dir(img_path, os.path.normpath("C:/custom_output"), "")
+
+    def test_hook_output_dir_override_absolute_valid(self):
+        img_path = os.path.normpath("C:/project/output/sub1/image.png")
+        rel_dir = get_relative_output_dir(
+            img_path, "", os.path.normpath("C:/project/output/override_dir")
+        )
+        self.assertEqual(rel_dir, "override_dir")
+
+    def test_hook_output_dir_override_absolute_invalid(self):
+        img_path = os.path.normpath("C:/project/output/sub1/image.png")
+        with self.assertRaises(ValueError):
+            get_relative_output_dir(
+                img_path, "", os.path.normpath("C:/other_project/override_dir")
+            )
+
+    def test_hook_output_dir_override_relative(self):
+        img_path = os.path.normpath("C:/project/output/sub1/image.png")
+        rel_dir = get_relative_output_dir(img_path, "", "relative_override/sub")
+        self.assertEqual(rel_dir, "relative_override/sub")
 
 
 if __name__ == "__main__":

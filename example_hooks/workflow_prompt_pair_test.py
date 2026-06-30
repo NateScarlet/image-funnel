@@ -3072,5 +3072,110 @@ class TestAspectAdjustment(unittest.TestCase):
 # #endregion
 
 
+# #region 输出目录调整测试
+class TestAdjustOutputDirectory(unittest.TestCase):
+
+    def test_adjust_output_directory_simple(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["ComfyUI"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ComfyUI"}}
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("sub1/sub2")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub1/sub2/ComfyUI")
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
+
+    def test_adjust_output_directory_primitive_connection(self):
+        workflow = {
+            "nodes": [
+                {"id": "9", "type": "SaveImage", "widgets_values": []},
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["ComfyUI"]},
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": ["2", 0]},
+            },
+            "2": {"class_type": "PrimitiveString", "inputs": {"value": "ComfyUI"}},
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("sub1/sub2")
+        self.assertEqual(prompt["2"]["inputs"]["value"], "sub1/sub2/ComfyUI")
+        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "sub1/sub2/ComfyUI")
+
+    def test_samples_workflow(self):
+        # 获取一个样本图片的路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        samples_dir = os.path.join(current_dir, "samples")
+        png_files = [
+            os.path.join(samples_dir, f)
+            for f in os.listdir(samples_dir)
+            if f.lower().endswith(".png")
+        ]
+        self.assertTrue(len(png_files) > 0)
+        sample_path = png_files[0]
+
+        # 读取图片元数据
+        with Image.open(sample_path) as img:
+            prompt_str = img.info.get("prompt")
+            workflow_str = img.info.get("workflow")
+            self.assertIsNotNone(prompt_str)
+            self.assertIsNotNone(workflow_str)
+            assert isinstance(prompt_str, str)
+            assert isinstance(workflow_str, str)
+            prompt = json.loads(prompt_str)
+            workflow = json.loads(workflow_str)
+
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("sub_folder")
+
+        # 校验：调整后，所有的 filename_prefix 前面都加上了 sub_folder/
+        found_prefix = False
+        for node_id, node in prompt.items():
+            inputs = node.get("inputs", {})
+            if "filename_prefix" in inputs:
+                src_id, src_key = find_terminal_input(
+                    prompt, node_id, "filename_prefix"
+                )
+                val = prompt[src_id]["inputs"][src_key]
+                self.assertTrue(
+                    val.startswith("sub_folder/"),
+                    f"Value '{val}' does not start with 'sub_folder/'",
+                )
+                found_prefix = True
+
+                # 验证 workflow 中的对应节点值也更新了
+                wf_node = None
+                for n in workflow.get("nodes", []):
+                    if str(n.get("id")) == src_id:
+                        wf_node = n
+                        break
+                if wf_node:
+                    wv = wf_node.get("widgets_values")
+                    self.assertIsNotNone(wv)
+                    self.assertTrue(
+                        any(
+                            isinstance(v, str) and v.startswith("sub_folder/")
+                            for v in wv
+                        )
+                    )
+
+        self.assertTrue(
+            found_prefix, "Should have adjusted at least one filename_prefix"
+        )
+
+
+# #endregion
+
+
 if __name__ == "__main__":
     unittest.main()
