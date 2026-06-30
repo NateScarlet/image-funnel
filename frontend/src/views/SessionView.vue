@@ -331,21 +331,24 @@ import useMarkImage from "@/composables/useMarkImage";
 import Time from "@/utils/Time";
 import useNotification from "@/composables/useNotification";
 
-const rendererEl = useFullscreenRendererElement();
-
-const autoRejectRunningBuffer = ref(false);
-const autoRejectRunning = computed({
-  get: () => autoRejectEnabled.value && autoRejectRunningBuffer.value,
-  set: (val) => {
-    autoRejectRunningBuffer.value = val;
-  },
-});
-
 const props = defineProps<{
   id: string;
 }>();
 
 const sessionId = computed(() => props.id);
+
+const rendererEl = useFullscreenRendererElement();
+
+const autoRejectRunningBuffer = ref({ id: props.id, running: false });
+const autoRejectRunning = computed({
+  get: () =>
+    autoRejectEnabled.value &&
+    autoRejectRunningBuffer.value.id === props.id &&
+    autoRejectRunningBuffer.value.running,
+  set: (val) => {
+    autoRejectRunningBuffer.value = { id: props.id, running: val };
+  },
+});
 
 const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
