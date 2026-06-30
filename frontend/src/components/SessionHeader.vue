@@ -87,6 +87,22 @@
     </div>
     <menuDialog.component container-class="p-6 sm:max-w-sm">
       <div class="space-y-3">
+        <div
+          class="p-3 bg-primary-900 rounded-lg border border-primary-700 flex flex-col gap-1 select-text"
+        >
+          <span class="text-xs text-primary-400 font-medium">当前目录</span>
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 shrink-0 text-primary-300" viewBox="0 0 24 24">
+              <path :d="mdiFolder" fill="currentColor" />
+            </svg>
+            <span
+              class="text-sm text-primary-100 break-all font-semibold leading-normal"
+            >
+              {{ displayName }}
+            </span>
+          </div>
+        </div>
+
         <DeviceManagerButton variant="menu-item" @click="menuDialog.close()" />
         <button
           :disabled="!session?.canUndo || undoing"
@@ -144,6 +160,7 @@ import {
   mdiLoading,
   mdiCogOutline,
   mdiHome,
+  mdiFolder,
 } from "@mdi/js";
 import { computed } from "vue";
 import basename from "@/utils/basename";
