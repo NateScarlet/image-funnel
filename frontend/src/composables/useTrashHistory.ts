@@ -51,7 +51,7 @@ export default function useTrashHistory() {
     }
   }
 
-  // 清空回收站，移入系统回收站
+  // 清空回收站
   async function empty() {
     try {
       const res = await mutate(EmptyTrashDocument, {
@@ -61,9 +61,7 @@ export default function useTrashHistory() {
       });
       if (res?.data?.emptyTrash) {
         const clearedCount = res.data.emptyTrash.clearedCount;
-        showSuccess(
-          `已成功清理 ${clearedCount} 项历史图片及其伴随文件至系统回收站`,
-        );
+        showSuccess(`已成功清理 ${clearedCount} 项历史图片及其伴随文件`);
         void refresh();
       }
     } catch (err: unknown) {
