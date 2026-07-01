@@ -76,7 +76,9 @@
         <span>{{ commitResult.success ? "✓ 提交成功" : "✗ 提交失败" }}</span>
       </div>
       <div class="text-sm text-primary-400">
-        修改数量: {{ commitResult.written }} | 匹配数量: {{ skippedCount }}
+        <span> 匹配: {{ commitResult.matched }} </span>
+        <span>|</span>
+        <span> 修改: {{ commitResult.written }} </span>
       </div>
       <div
         v-if="commitResult.errors.length > 0"
@@ -175,11 +177,6 @@ const totalActions = computed(() => {
     (session.stats.totalShelved ?? 0) +
     (session.stats.totalRejected ?? 0)
   );
-});
-
-const skippedCount = computed(() => {
-  if (!commitResult.value) return 0;
-  return Math.max(0, commitResult.value.matched - commitResult.value.written);
 });
 
 // #region Rating Computeds
