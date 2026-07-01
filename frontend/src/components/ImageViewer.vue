@@ -117,7 +117,7 @@
 
       <!-- 复制按钮 -->
       <button
-        class="flex items-center gap-2 select-none transition-colors"
+        class="hidden md:flex items-center gap-2 select-none transition-colors"
         :class="[
           isCopying
             ? 'text-white/50 opacity-40 cursor-not-allowed'
@@ -144,11 +144,11 @@
           isCopying ? "正在复制..." : isCopied ? "已复制" : "复制"
         }}</span>
       </button>
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
+      <div class="hidden md:block w-px h-4 bg-white/30 mx-1"></div>
 
       <!-- 打开文件按钮 (在资源管理器中定位并聚焦) -->
       <button
-        class="flex items-center gap-2 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
+        class="hidden md:flex items-center gap-2 cursor-pointer select-none text-white/50 hover:text-white transition-colors"
         title="在资源管理器中定位此文件"
         @click="revealInExplorer(fullFilePath)"
       >
@@ -157,7 +157,7 @@
         </svg>
         <span class="text-xs">打开</span>
       </button>
-      <div class="w-px h-4 bg-white/30 mx-1"></div>
+      <div class="hidden md:block w-px h-4 bg-white/30 mx-1"></div>
 
       <!-- 评星操作区 (仅在无会话模式下展示和操作) -->
       <template v-if="!sessionId">
@@ -322,7 +322,7 @@
       <div
         v-if="dispatchableHooks.length > 0"
         ref="actionPopoverContainerRef"
-        class="relative flex items-center select-none"
+        class="hidden md:flex relative items-center select-none"
         data-no-gesture
       >
         <!-- 触发按钮 -->
@@ -396,7 +396,7 @@
       </div>
       <div
         v-if="dispatchableHooks.length > 0"
-        class="w-px h-4 bg-white/30 mx-1"
+        class="hidden md:block w-px h-4 bg-white/30 mx-1"
       ></div>
 
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
@@ -450,6 +450,99 @@
             v-if="showOverflowMenu"
             class="absolute bottom-full mb-2 right-0 z-50 w-80 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
           >
+            <!-- 小屏设备：动作、复制、打开 -->
+            <div class="md:hidden flex flex-col gap-1">
+              <!-- 动作列表 -->
+              <template v-if="dispatchableHooks.length > 0">
+                <div
+                  class="text-xs font-bold text-white/40 tracking-wider uppercase select-none"
+                >
+                  执行动作
+                </div>
+                <button
+                  v-for="hook in dispatchableHooks"
+                  :key="hook.id"
+                  :disabled="isDispatching"
+                  class="px-2 py-1.5 text-xs text-left text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed select-none cursor-pointer"
+                  :title="hook.description || hook.name"
+                  @click="handleDispatch(hook.id, hook.name)"
+                >
+                  <span class="truncate pr-2">{{ hook.name }}</span>
+                  <svg
+                    v-if="isDispatching && currentDispatchingHookId === hook.id"
+                    class="w-3.5 h-3.5 animate-spin shrink-0 text-secondary-400"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <path
+                      :d="mdiLoading"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <svg
+                    v-else
+                    class="w-3.5 h-3.5 shrink-0 text-white/40"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path :d="mdiPlayOutline" />
+                  </svg>
+                </button>
+                <div class="border-t border-white/10 my-1"></div>
+              </template>
+
+              <!-- 复制按钮 -->
+              <button
+                class="flex items-center gap-2 select-none transition-colors rounded-lg px-2 py-1.5 text-left"
+                :class="[
+                  isCopying
+                    ? 'text-white/50 opacity-40 cursor-not-allowed'
+                    : isCopied
+                      ? 'text-secondary-400 hover:text-secondary-300 hover:bg-white/10 cursor-pointer'
+                      : 'text-white/80 hover:text-white hover:bg-white/10 cursor-pointer',
+                ]"
+                :disabled="isCopying"
+                @click="handleCopy"
+              >
+                <svg
+                  v-if="isCopying"
+                  class="w-4 h-4 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path :d="mdiLoading" />
+                </svg>
+                <svg
+                  v-else
+                  class="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path :d="mdiContentCopy" />
+                </svg>
+                <span class="text-xs">{{
+                  isCopying ? "正在复制..." : isCopied ? "已复制" : "复制"
+                }}</span>
+              </button>
+
+              <!-- 打开按钮 -->
+              <button
+                class="flex items-center gap-2 cursor-pointer select-none text-white/80 hover:text-white hover:bg-white/10 px-2 py-1.5 rounded-lg transition-colors text-left"
+                title="在资源管理器中定位此文件"
+                @click="handleOpen"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path :d="mdiOpenInNew" />
+                </svg>
+                <span class="text-xs">打开</span>
+              </button>
+
+              <div class="border-t border-white/10 my-1"></div>
+            </div>
+
             <label
               class="flex items-center gap-2 cursor-pointer select-none text-white/70 hover:text-white transition-colors"
             >
@@ -593,11 +686,17 @@ const isCopied = computed(() => copiedImageIds.value.includes(image.id));
 async function handleCopy() {
   if (isCopying.value) return;
   await copyWorkflowOrFile(fullFilePath.value, image.id);
+  showOverflowMenu.value = false;
 }
 
 async function copyAbsoluteFilePath() {
   if (isCopying.value) return;
   await copyFiles(fullFilePath.value);
+}
+
+function handleOpen() {
+  revealInExplorer(fullFilePath.value);
+  showOverflowMenu.value = false;
 }
 
 // #region 快捷键复制
@@ -941,6 +1040,7 @@ async function handleDispatch(hookId: string, hookName: string) {
   await dispatch(hookId, hookName, { id: [image.id] });
   if (!isDispatching.value) {
     showActionPopover.value = false;
+    showOverflowMenu.value = false;
   }
 }
 // #endregion
