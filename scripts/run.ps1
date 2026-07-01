@@ -201,9 +201,6 @@ while ($true) {
                         } catch {}
                         $shouldRestart = $true
                         break
-                    } else {
-                        # 如果没有新提交，则重置最后日志时间为当前时间，避免在此后的每次循环里都运行 Git 检查
-                        $sharedState.LastLogTime = [DateTime]::Now
                     }
                 }
             }
