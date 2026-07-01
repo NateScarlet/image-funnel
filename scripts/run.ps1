@@ -30,6 +30,56 @@ if (-not (Test-Path $SECRET_FILE)) {
 $env:IMAGE_FUNNEL_SECRET_KEY = Get-Content $SECRET_FILE -Raw
 # #endregion
 
+# #region Git Hook 设置
+function Register-GitHook {
+    try {
+        $gitArgs = "-C", "$ROOT_DIR"
+        $gitPathResult = git $gitArgs rev-parse --git-path hooks/post-commit
+        if ($LASTEXITCODE -ne 0 -or -not $gitPathResult) {
+            return
+        }
+        $hookFile = $gitPathResult.Trim()
+        $hooksDir = Split-Path -Parent $hookFile
+        if (-not (Test-Path $hooksDir)) {
+            New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null
+        }
+        
+        $hookCode = @'
+# #region rebuild-trigger-e6fe8b49e7bf
+REPO_DIR=$(git rev-parse --show-toplevel)
+if [ -z "$(git status --porcelain -- ':(exclude)build' ':(exclude)scripts/run.ps1')" ]; then
+    rm -f "$REPO_DIR/build/run/.delete_to_rebuild"
+fi
+# #endregion
+'@
+        $hookCode = $hookCode.Replace("`r`n", "`n")
+
+        if (Test-Path $hookFile) {
+            $content = [System.IO.File]::ReadAllText($hookFile)
+            $content = $content.Replace("`r`n", "`n")
+            
+            $pattern = "(?s)#\s*#region\s+rebuild-trigger-e6fe8b49e7bf.*?#\s*#endregion"
+            if ($content -match $pattern) {
+                $content = $content -replace $pattern, $hookCode
+            } else {
+                if ($content -and -not $content.EndsWith("`n")) {
+                    $content += "`n"
+                }
+                $content += $hookCode
+            }
+            [System.IO.File]::WriteAllText($hookFile, $content)
+        } else {
+            $content = "#!/bin/sh`n" + $hookCode
+            [System.IO.File]::WriteAllText($hookFile, $content)
+        }
+    } catch {
+        Write-Warning "自动设置 Git Hook 失败: $_"
+    }
+}
+
+Register-GitHook
+# #endregion
+
 # #region 辅助函数
 function Test-NeedsBuild {
     param(
@@ -134,6 +184,10 @@ while ($true) {
         Write-Host "正在准备运行环境 (目录: $RUN_DIR)..." -ForegroundColor Cyan
         Copy-Item -Path "$BUILD_DIR\*" -Destination $RUN_DIR -Recurse -Force -ProgressAction SilentlyContinue
 
+        # 重新生成标记文件供下一次通知
+        $rebuildFlagFile = Join-Path $RUN_DIR ".delete_to_rebuild"
+        New-Item -ItemType File -Path $rebuildFlagFile -Force | Out-Null
+
         $runBinary = Join-Path $RUN_DIR "image-funnel.exe"
         
         Write-Host "--- 开始运行 ---" -ForegroundColor Green
@@ -141,6 +195,7 @@ while ($true) {
         # 共享状态对象，用于事件与主线程通信
         $sharedState = [PSCustomObject]@{
             LastLogTime = [DateTime]::Now
+            NeedsRebuild = $false
         }
 
         # 创建 .NET 进程实例
@@ -174,36 +229,69 @@ while ($true) {
             }
         }
 
+        # 启用退出事件并注册到专属事件源
+        $process.EnableRaisingEvents = $true
+        Get-EventSubscriber -SourceIdentifier "ProcessExited" -ErrorAction SilentlyContinue | Unregister-Event
+        $exitEvent = Register-ObjectEvent -InputObject $process -EventName Exited -SourceIdentifier "ProcessExited"
+
         # 启动进程并开始读取
         $process.Start() | Out-Null
         $process.BeginOutputReadLine()
         $process.BeginErrorReadLine()
         
-        $lastGitCheckTime = [DateTime]::MinValue
+        # 创建文件系统事件监听器以检测标记文件是否被删除
+        $watcher = New-Object System.IO.FileSystemWatcher
+        $watcher.Path = $RUN_DIR
+        $watcher.Filter = ".delete_to_rebuild"
+        $watcher.EnableRaisingEvents = $true
+        
+        Get-EventSubscriber -SourceIdentifier "RebuildIndicatorDeleted" -ErrorAction SilentlyContinue | Unregister-Event
+        $watcherEvent = Register-ObjectEvent -InputObject $watcher -EventName Deleted -SourceIdentifier "RebuildIndicatorDeleted"
+        
+        # 防漏初始检查：如果在设置监听前标记文件已经不存在，则直接标记需要重建
+        if (-not (Test-Path $rebuildFlagFile)) {
+            $sharedState.NeedsRebuild = $true
+        }
 
-        # 主循环：等待进程退出，并定期检查闲置与构建更新
+        # 初始清理事件队列
+        Get-Event | Remove-Event -ErrorAction SilentlyContinue
+
+        # 主循环：挂起等待事件唤醒
         while (-not $process.HasExited) {
-            Start-Sleep -Milliseconds 200
-            
-            # 检查是否闲置超时
-            $idleDuration = [DateTime]::Now - $sharedState.LastLogTime
-            if ($idleDuration.TotalMinutes -ge $IDLE_TIMEOUT_MINUTES) {
-                # 限制 Git 检查频率，每 30 秒最多检查一次，避免过度占用 CPU
-                if (([DateTime]::Now - $lastGitCheckTime).TotalSeconds -ge 30) {
-                    $lastGitCheckTime = [DateTime]::Now
-                    
-                    # 检查代码仓库是否有比当前构建更新的提交
-                    if (Test-NeedsBuild -Verbose $false) {
-                        Write-Host ("`n[自动更新] 检测到服务端日志已闲置超过 {0} 分钟，且代码仓库有新提交。正在重启服务..." -f $IDLE_TIMEOUT_MINUTES) -ForegroundColor Yellow
-                        try {
-                            $process.Kill()
-                            $null = $process.WaitForExit(5000)
-                        } catch {}
-                        $shouldRestart = $true
-                        break
-                    }
+            # 1. 检查事件队列中是否收到了删除标记文件事件
+            $rebuildEvents = Get-Event -SourceIdentifier "RebuildIndicatorDeleted" -ErrorAction SilentlyContinue
+            if ($rebuildEvents) {
+                $sharedState.NeedsRebuild = $true
+                $rebuildEvents | Remove-Event
+            }
+
+            if (-not $sharedState.NeedsRebuild) {
+                # 如果不需要重建，主线程无限期等待事件到达（进程退出、日志输出、或者标记文件被删除）
+                $null = Wait-Event
+            } else {
+                # 如果需要重建，计算距离超时的剩余时间
+                $idleDuration = [DateTime]::Now - $sharedState.LastLogTime
+                $timeoutSeconds = $IDLE_TIMEOUT_MINUTES * 60
+                $remainingSeconds = $timeoutSeconds - $idleDuration.TotalSeconds
+                
+                if ($remainingSeconds -le 0) {
+                    Write-Host ("`n[自动更新] 检测到服务端日志已闲置超过 {0} 分钟，且已收到构建更新通知。正在重启服务..." -f $IDLE_TIMEOUT_MINUTES) -ForegroundColor Yellow
+                    try {
+                        $process.Kill()
+                        $null = $process.WaitForExit(5000)
+                    } catch {}
+                    $shouldRestart = $true
+                    break
+                } else {
+                    # 还有剩余时间，精准等待剩余秒数
+                    # 期间若有日志产生或进程退出，会立刻唤醒主线程以便重新计算防抖时间或退出
+                    $null = Wait-Event -Timeout $remainingSeconds
                 }
             }
+            
+            # 仅清理已被消费的 stdout 和 stderr 日志事件，避免内存泄露，同时不影响控制事件
+            if ($stdoutEvent) { $null = Get-Event -SourceIdentifier $stdoutEvent.Name -ErrorAction SilentlyContinue | Remove-Event }
+            if ($stderrEvent) { $null = Get-Event -SourceIdentifier $stderrEvent.Name -ErrorAction SilentlyContinue | Remove-Event }
         }
         
         # 记录程序退出码（只在非自动更新重启时记录）
@@ -219,8 +307,18 @@ while ($true) {
         # 1. 注销事件
         if ($stdoutEvent) { Unregister-Event -SourceIdentifier $stdoutEvent.Name -ErrorAction SilentlyContinue }
         if ($stderrEvent) { Unregister-Event -SourceIdentifier $stderrEvent.Name -ErrorAction SilentlyContinue }
+        if ($watcherEvent) { Unregister-Event -SourceIdentifier $watcherEvent.Name -ErrorAction SilentlyContinue }
+        if ($exitEvent) { Unregister-Event -SourceIdentifier $exitEvent.Name -ErrorAction SilentlyContinue }
         
-        # 2. 确保释放进程句柄并终止它
+        # 2. 释放 watcher 资源
+        if ($watcher) {
+            try {
+                $watcher.EnableRaisingEvents = $false
+                $watcher.Dispose()
+            } catch {}
+        }
+        
+        # 3. 确保释放进程句柄并终止它
         if ($process) {
             if (-not $process.HasExited) {
                 try {
@@ -231,7 +329,10 @@ while ($true) {
             try { $process.Dispose() } catch {}
         }
         
-        # 3. 清理临时目录
+        # 4. 清理并移除事件队列中的所有事件
+        $null = Get-Event | Remove-Event -ErrorAction SilentlyContinue
+
+        # 5. 清理临时目录
         if (Test-Path $RUN_DIR) {
             Remove-Item -Path $RUN_DIR -Recurse -Force -ErrorAction SilentlyContinue
             Write-Host "`n--- 运行结束，清理完成 ---" -ForegroundColor Gray
