@@ -13,36 +13,45 @@
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-green-400">保留</span>
+            <span
+              class="text-sm font-bold"
+              :class="keepRating === null ? 'text-primary-500' : 'text-green-400'"
+            >保留</span>
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
               {{ session?.stats.totalKept || 0 }} 张
             </span>
           </div>
-          <RatingSelector v-model="keepRating" allow-null />
+          <RatingSelector v-model="keepRating" clearable />
         </div>
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-yellow-400">搁置</span>
+            <span
+              class="text-sm font-bold"
+              :class="shelveRating === null ? 'text-primary-500' : 'text-yellow-400'"
+            >搁置</span>
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
               {{ session?.stats.totalShelved || 0 }} 张
             </span>
           </div>
-          <RatingSelector v-model="shelveRating" allow-null />
+          <RatingSelector v-model="shelveRating" clearable />
         </div>
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-red-400">排除</span>
+            <span
+              class="text-sm font-bold"
+              :class="rejectRating === null ? 'text-primary-500' : 'text-red-400'"
+            >排除</span>
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
               {{ session?.stats.totalRejected || 0 }} 张
             </span>
           </div>
-          <RatingSelector v-model="rejectRating" allow-null />
+          <RatingSelector v-model="rejectRating" clearable />
         </div>
       </div>
     </div>
