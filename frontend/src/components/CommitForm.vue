@@ -9,14 +9,20 @@
     </div>
 
     <div v-if="!commitResult" class="bg-primary-700/50 rounded-lg p-4">
-      <h3 class="font-medium mb-4">写入操作设置</h3>
+      <div class="flex items-end gap-2 mb-4">
+        <h3 class="font-medium">写入操作设置</h3>
+        <span class="text-xs text-primary-500">取消选择以跳过操作</span>
+      </div>
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="keepRating === null ? 'text-primary-500' : 'text-green-400'"
-            >保留</span>
+              :class="
+                keepRating === null ? 'text-primary-500' : 'text-green-400'
+              "
+              >保留</span
+            >
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
@@ -29,8 +35,11 @@
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="shelveRating === null ? 'text-primary-500' : 'text-yellow-400'"
-            >搁置</span>
+              :class="
+                shelveRating === null ? 'text-primary-500' : 'text-yellow-400'
+              "
+              >搁置</span
+            >
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
@@ -43,8 +52,11 @@
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="rejectRating === null ? 'text-primary-500' : 'text-red-400'"
-            >排除</span>
+              :class="
+                rejectRating === null ? 'text-primary-500' : 'text-red-400'
+              "
+              >排除</span
+            >
             <span
               class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
             >
