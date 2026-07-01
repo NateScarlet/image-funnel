@@ -36,8 +36,11 @@ def parse_args():
 
 
 def main() -> None:
+    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
+    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_str, logging.WARNING)
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -61,7 +64,7 @@ def main() -> None:
         _LOGGER.error("No image IDs to process.")
         sys.exit(1)
 
-    _LOGGER.info(f"Received {len(image_ids)} image(s) to fork with suffix: {suffix}")
+    _LOGGER.debug("Received %d image(s) to fork with suffix: %s", len(image_ids), suffix)
 
     # 确定目标相对路径
     dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
@@ -79,8 +82,10 @@ def main() -> None:
         for img_id in image_ids:
             update_image_label(img_id, label_to_set)
 
-    _LOGGER.info(
-        f"Moving {len(image_ids)} image(s) to relative path '{dest_dir}' using GraphQL..."
+    _LOGGER.debug(
+        "Moving %d image(s) to relative path '%s' using GraphQL...",
+        len(image_ids),
+        dest_dir,
     )
     move_images(image_ids, dest_dir)
 

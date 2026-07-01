@@ -1,6 +1,6 @@
 ---
-name: develop-hook
-description: 指导 AI 助手如何在 ImageFunnel 项目中定义、编写、优化和调试各类 Hook 配置文件与外部执行脚本。
+name: "develop-hook"
+description: "指导 AI 助手如何在 ImageFunnel 项目中定义、编写、优化和调试各类 Hook 配置文件与外部执行脚本。"
 ---
 
 # Hook 开发指南
@@ -147,8 +147,24 @@ HOOK_CUSTOM_ENV_VAR = "some-value" # 注入给脚本的静态自定义配置环�
   - 脚本应添加 `--max-match` 参数，默认值从 `HOOK_MAX_MATCH` 环境变量读取，未设置时默认为 `4`。
   - `0` 代表不限制匹配数量。
   - 负数或非法值应立即报错退出。
-  - 当匹配的图片数量超过 `max-match` 时，脚本应跳过执行并在 stdout 中输出跳过原因。
+  - 当匹配的图片数量超过 `max-match` 时，脚本应跳过执行并在 stderr 中输出跳过原因。
   - 在 TOML 配置文件的 `[env]` 节中设置 `HOOK_MAX_MATCH` 可覆盖默认值。
+
+### 4.6 日志输出策略 (stdout / stderr 分离)
+* **核心规范**：脚本的 stdout 与 stderr 有明确分工，因为脚本执行结果是在完成后才显示给用户的，过程状态是噪音。
+* **stdout**：只输出可解析的结果数据（Unix 风格），如 `processed 3/5`。用户可能关心的结构化数据通过 stdout 输出。
+* **stderr**：用于调试和错误信息。所有 `logging` 输出默认发送到 stderr，通过 `HOOK_LOGGING_LEVEL` 环境变量控制可见级别。
+* **日志级别**：脚本应通过 `HOOK_LOGGING_LEVEL` 环境变量控制日志级别，默认 `WARNING`。过程进度信息使用 `_LOGGER.debug()`，仅在用户显式设置 `HOOK_LOGGING_LEVEL=DEBUG` 时可见。
+* **做法**：
+  ```python
+  log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+  log_level = getattr(logging, log_level_str, logging.WARNING)
+  logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(message)s")
+  ```
+  - 过程进度消息（如 `[1/5] Processing image`）使用 `_LOGGER.debug()`
+  - 跳过/警告信息使用 `_LOGGER.warning()`
+  - 错误信息使用 `_LOGGER.error()`
+  - 最终结果使用 `print()` 输出到 stdout
 
 ---
 
@@ -176,9 +192,13 @@ def parse_args():
     return parser.parse_args()
 
 def main() -> None:
+    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
+    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_str, logging.WARNING)
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     args = parse_args()
@@ -195,12 +215,14 @@ def main() -> None:
     try:
         image_ids: List[str] = json.loads(image_ids_str)
     except Exception as e:
-        _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_IDS: {e}")
+        _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_IDS: %s", e)
         sys.exit(1)
 
     if not image_ids:
         _LOGGER.error("No image IDs to process.")
         sys.exit(1)
+
+    _LOGGER.debug("Received %d image(s) to fork with suffix: %s", len(image_ids), suffix)
 
     # 2. 相对路径推算：利用 IMAGE_FUNNEL_DIRECTORY_REL_PATH 规避绝对路径处理
     dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
@@ -216,10 +238,10 @@ def main() -> None:
     dest_dir = os.path.normpath(dest_dir)
 
     # 3. 批量高效调用 GraphQL：单次请求移动所有图片
-    _LOGGER.info(f"Moving {len(image_ids)} image(s) to relative path '{dest_dir}'...")
+    _LOGGER.debug("Moving %d image(s) to relative path '%s'...", len(image_ids), dest_dir)
     move_images(image_ids, dest_dir)  # GraphQL 执行 relativeToRoot 变更
 
-    print(f"Successfully processed {len(image_ids)} images.")
+    print(f"processed {len(image_ids)} image(s) successfully.")
     sys.exit(0)
 
 if __name__ == "__main__":

@@ -1071,8 +1071,9 @@ class WorkflowPromptPair:
                 after_marker = workflow_text[end_idx + len(end_marker) :]
 
                 if contains_prompt(marker_content) and not no_skip:
-                    _LOGGER.info(
-                        f"Prompt '{prompt_str_arg}' already exists in marker region, skipping."
+                    _LOGGER.debug(
+                        "Prompt '%s' already exists in marker region, skipping.",
+                        prompt_str_arg,
                     )
                     return False
 
@@ -1127,8 +1128,9 @@ class WorkflowPromptPair:
                             )
             else:
                 if contains_prompt(workflow_text) and not no_skip:
-                    _LOGGER.info(
-                        f"Prompt '{prompt_str_arg}' already exists in text, skipping."
+                    _LOGGER.debug(
+                        "Prompt '%s' already exists in text, skipping.",
+                        prompt_str_arg,
                     )
                     return False
 
@@ -1161,11 +1163,13 @@ class WorkflowPromptPair:
 
                 if not contains_prompt(marker_content):
                     _LOGGER.debug(
-                        f"remove: prompt '{prompt_str_arg}' not found in marker region (has_marker=True)"
+                        "remove: prompt '%s' not found in marker region (has_marker=True)",
+                        prompt_str_arg,
                     )
                     if not no_skip:
-                        _LOGGER.info(
-                            f"Prompt '{prompt_str_arg}' not found in marker region, skipping."
+                        _LOGGER.debug(
+                            "Prompt '%s' not found in marker region, skipping.",
+                            prompt_str_arg,
                         )
                         return False
                     new_content_prompt = marker_content
@@ -1224,10 +1228,13 @@ class WorkflowPromptPair:
             else:
                 if not contains_prompt(workflow_text):
                     _LOGGER.debug(
-                        f"remove: prompt '{prompt_str_arg}' not found in full text (has_marker=False)"
+                        "remove: prompt '%s' not found in full text (has_marker=False)",
+                        prompt_str_arg,
                     )
                     if not no_skip:
-                        _LOGGER.info(f"Prompt '{prompt_str_arg}' not found, skipping.")
+                        _LOGGER.debug(
+                            "Prompt '%s' not found, skipping.", prompt_str_arg
+                        )
                         return False
                     new_content_prompt = workflow_text
                 else:

@@ -451,7 +451,7 @@ def submit_workflow(
     has_error = False
     for q_idx in range(jobs):
         if jobs > 1:
-            _LOGGER.info(f"  -> Queueing run {q_idx+1}/{jobs}")
+            _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, jobs)
         if pair.update_seeds() == 0:
             _LOGGER.error(
                 f"Failed to update any seeds for image: {image_path}. Cannot queue duplicate workflow without changing seeds."
@@ -467,8 +467,11 @@ def submit_workflow(
 
 
 def main() -> None:
+    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
+    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_str, logging.WARNING)
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -511,7 +514,7 @@ def main() -> None:
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
     if args.command in ["add", "remove", "adjust"]:
-        _LOGGER.info(f"Command is {args.command}, fetching images via GraphQL...")
+        _LOGGER.debug(f"Command is {args.command}, fetching images via GraphQL...")
         targets = fetch_images(required_rating)
     else:
         # queue 场景
@@ -521,8 +524,10 @@ def main() -> None:
                 targets.append((img_id, path))
 
     if max_match > 0 and len(targets) > max_match:
-        print(
-            f"Skipping: matched {len(targets)} images exceeds --max-match limit of {max_match}"
+        _LOGGER.warning(
+            "Skipping: matched %d images exceeds --max-match limit of %d",
+            len(targets),
+            max_match,
         )
         _write_action_override("KEEP")
         sys.exit(0)
@@ -540,7 +545,7 @@ def main() -> None:
             _LOGGER.error("No images found to process.")
             sys.exit(1)
 
-    _LOGGER.info(f"Found {len(targets)} image(s) to process, command: {args.command}")
+    _LOGGER.debug("Found %d image(s) to process, command: %s", len(targets), args.command)
 
     has_errors = False
     success_count = 0
@@ -550,8 +555,7 @@ def main() -> None:
             _LOGGER.error(f"File does not exist: {path}")
             has_errors = True
             continue
-        print(path)
-        _LOGGER.info(f"[{idx+1}/{len(targets)}] Processing image: {path}")
+        _LOGGER.debug("[%d/%d] Processing image: %s", idx + 1, len(targets), path)
 
         prompt: Dict[str, Any]
         workflow: Dict[str, Any]
@@ -595,7 +599,7 @@ def main() -> None:
         try:
             hook_output_dir = os.getenv("HOOK_OUTPUT_DIR", "")
             if hook_output_dir == ":inherit:":
-                _LOGGER.info(
+                _LOGGER.debug(
                     "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
                 )
             else:
@@ -672,8 +676,11 @@ def main() -> None:
 
                 for q_idx in range(jobs):
                     if jobs > 1 or variant_count > 1:
-                        _LOGGER.info(
-                            f"  -> Queueing variant {variant_count} run {q_idx + 1}/{jobs}"
+                        _LOGGER.debug(
+                            "  -> Queueing variant %d run %d/%d",
+                            variant_count,
+                            q_idx + 1,
+                            jobs,
                         )
                     if enable_seed_update:
                         if pair.update_seeds() == 0:
@@ -689,13 +696,14 @@ def main() -> None:
                         has_errors = True
 
             if variant_count == 0 and args.no_skip:
-                _LOGGER.info(
-                    f"No variants generated for image {path}, sending original workflow (--no-skip)."
+                _LOGGER.debug(
+                    "No variants generated for image %s, sending original workflow (--no-skip).",
+                    path,
                 )
                 pair = WorkflowPromptPair(workflow, prompt)
                 for q_idx in range(jobs):
                     if jobs > 1:
-                        _LOGGER.info(f"  -> Queueing original run {q_idx + 1}/{jobs}")
+                        _LOGGER.debug("  -> Queueing original run %d/%d", q_idx + 1, jobs)
                     if enable_seed_update:
                         if pair.update_seeds() == 0:
                             _LOGGER.error(
@@ -709,8 +717,8 @@ def main() -> None:
                     else:
                         has_errors = True
             elif variant_count == 0:
-                _LOGGER.info(
-                    f"No variants generated for image {path}, skipping submission."
+                _LOGGER.debug(
+                    "No variants generated for image %s, skipping submission.", path
                 )
 
             if any_image_success:
@@ -795,13 +803,13 @@ def main() -> None:
                 remove_prompts: Set[str] = set()
                 for p in args.prompt:
                     remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
-                _LOGGER.info(f"Remove prompts (variants): {remove_prompts}")
+                _LOGGER.debug("Remove prompts (variants): %s", remove_prompts)
 
                 pair = WorkflowPromptPair(workflow, prompt)
                 for node_id, start_marker, end_marker, use_markers in nodes_to_process:
                     for prompt_str_arg in remove_prompts:
-                        _LOGGER.info(
-                            f"Trying to remove '{prompt_str_arg}' from node {node_id}"
+                        _LOGGER.debug(
+                            "Trying to remove '%s' from node %s", prompt_str_arg, node_id
                         )
                         if pair.process_double_track(
                             node_id,
@@ -814,17 +822,19 @@ def main() -> None:
                             hard,
                             use_markers,
                         ):
-                            _LOGGER.info(
-                                f"Removed '{prompt_str_arg}' from node {node_id}"
+                            _LOGGER.debug(
+                                "Removed '%s' from node %s", prompt_str_arg, node_id
                             )
                             any_processed = True
                         else:
-                            _LOGGER.info(
-                                f"Skipped '{prompt_str_arg}' in node {node_id} (not found or skipped)"
+                            _LOGGER.debug(
+                                "Skipped '%s' in node %s (not found or skipped)",
+                                prompt_str_arg,
+                                node_id,
                             )
 
                 if not any_processed:
-                    _LOGGER.info("No prompts were removed, skipping submission.")
+                    _LOGGER.debug("No prompts were removed, skipping submission.")
                     continue
 
             # 提交到 ComfyUI
