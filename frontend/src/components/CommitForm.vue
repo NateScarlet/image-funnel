@@ -131,6 +131,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
+import useFormState from "../utils/useFormState";
 import {
   CommitChangesDocument,
   type SessionFragment,
@@ -179,56 +180,39 @@ const totalActions = computed(() => {
   );
 });
 
+const { createBuffer, reset } = useFormState();
+
+// 为每一个评分字段创建 buffer
+const keepRatingBuffer = createBuffer<number | null>();
+const shelveRatingBuffer = createBuffer<number | null>();
+const rejectRatingBuffer = createBuffer<number | null>();
+
 // #region Rating Computeds
-// 为每一个评分字段创建单独的计算属性，以便 v-model 正确工作
-const keepRatingBuffer = ref<number | null>();
-const keepRating = computed({
-  get: () =>
-    keepRatingBuffer.value !== undefined
-      ? keepRatingBuffer.value
-      : defaultState.value?.writeActions?.keepRating !== undefined &&
-          defaultState.value?.writeActions?.keepRating !== null
-        ? defaultState.value?.writeActions?.keepRating
-        : (selectedPreset.value?.writeActions?.keepRating ?? null),
-  set: (v: number | null) => {
-    keepRatingBuffer.value = v;
-  },
-});
+const ratingBufferMap = {
+  keepRating: keepRatingBuffer,
+  shelveRating: shelveRatingBuffer,
+  rejectRating: rejectRatingBuffer,
+} as const;
 
-const shelveRatingBuffer = ref<number | null>();
-const shelveRating = computed({
-  get: () =>
-    shelveRatingBuffer.value !== undefined
-      ? shelveRatingBuffer.value
-      : defaultState.value?.writeActions?.shelveRating !== undefined &&
-          defaultState.value?.writeActions?.shelveRating !== null
-        ? defaultState.value?.writeActions?.shelveRating
-        : (selectedPreset.value?.writeActions?.shelveRating ?? null),
-  set: (v: number | null) => {
-    shelveRatingBuffer.value = v;
-  },
-});
-
-const rejectRatingBuffer = ref<number | null>();
-const rejectRating = computed({
-  get: () =>
-    rejectRatingBuffer.value !== undefined
-      ? rejectRatingBuffer.value
-      : defaultState.value?.writeActions?.rejectRating !== undefined &&
-          defaultState.value?.writeActions?.rejectRating !== null
-        ? defaultState.value?.writeActions?.rejectRating
-        : (selectedPreset.value?.writeActions?.rejectRating ?? null),
-  set: (v: number | null) => {
-    rejectRatingBuffer.value = v;
-  },
-});
-// #endregion
-
-function reset() {
-  keepRatingBuffer.value = undefined;
-  shelveRatingBuffer.value = undefined;
-  rejectRatingBuffer.value = undefined;
+function createRatingComputed(key: keyof typeof ratingBufferMap) {
+  const buffer = ratingBufferMap[key];
+  return computed({
+    get: () => {
+      if (buffer.value !== undefined) return buffer.value;
+      const stateVal = defaultState.value?.writeActions?.[key];
+      if (stateVal !== undefined && stateVal !== null) return stateVal;
+      return selectedPreset.value?.writeActions?.[key] ?? null;
+    },
+    set: (v: number | null) => {
+      buffer.value = v;
+    },
+  });
 }
+
+const keepRating = createRatingComputed("keepRating");
+const shelveRating = createRatingComputed("shelveRating");
+const rejectRating = createRatingComputed("rejectRating");
+// #endregion
 
 async function commit() {
   if (committing.value) return;
