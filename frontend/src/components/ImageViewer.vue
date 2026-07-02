@@ -222,7 +222,7 @@
         >
           <div
             v-if="showPopover"
-            class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-50 w-52 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
+            class="fixed inset-x-2 bottom-16 z-50 min-w-0 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto md:absolute md:inset-x-auto md:bottom-full md:mb-2 md:left-1/2 md:-translate-x-1/2 md:w-52"
           >
             <div
               class="text-xs font-bold text-white/40 tracking-wider uppercase select-none text-left"
@@ -450,7 +450,7 @@
         >
           <div
             v-if="showOverflowMenu"
-            class="absolute bottom-full mb-2 right-0 z-50 w-80 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto"
+            class="fixed inset-x-2 bottom-16 z-50 min-w-0 bg-primary-950/90 border border-white/10 backdrop-blur-md rounded-xl p-3 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] flex flex-col gap-2 pointer-events-auto overflow-x-hidden md:absolute md:inset-x-auto md:bottom-full md:mb-2 md:right-0 md:w-80"
           >
             <!-- 小屏设备：动作、复制、打开 -->
             <div class="md:hidden flex flex-col gap-1">
