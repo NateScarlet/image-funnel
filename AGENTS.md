@@ -197,3 +197,17 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **ID**: 客户端不应尝试解析 ID，格式不固定
 - **不修改生成的代码**: 使用对应脚本重新生成
 - **构建**: 优先使用 `scripts/build.ps1`，避免直接运行底层命令
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues (no external PR triage). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. See `docs/agents/domain.md`.
