@@ -151,7 +151,7 @@ import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
 import useStorage from "../composables/useStorage";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
-import useDirectoryStats from "../composables/useDirectoryStats";
+import { useDirectoryStats } from "../composables/domain/useDirectoryBrowse";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import useDirectories from "../composables/useDirectories";
 import useInfiniteScroll from "../composables/useInfiniteScroll";

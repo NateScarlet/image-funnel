@@ -144,7 +144,7 @@ import {
   SuggestDirectoriesDocument,
   type PathInput,
 } from "@/graphql/generated";
-import useDirectoryStats from "@/composables/useDirectoryStats";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 
 // #region 属性与事件定义
 const props = defineProps<{

@@ -230,8 +230,8 @@ import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
 import RatingFilter from "./RatingFilter.vue";
 import { useDirectoryState } from "@/composables/useDirectoryState";
-import useDirectoryStats from "@/composables/useDirectoryStats";
-import useTrashImages from "@/composables/useTrashImages";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
+import useTrash from "@/composables/domain/useTrash";
 import useNotification from "@/composables/useNotification";
 
 const props = defineProps<{
@@ -300,7 +300,7 @@ const sortedRatingCounts = computed(() => {
 
 // #region 删除低星级图片
 const { show: showNotification } = useNotification();
-const { trashImages } = useTrashImages();
+const { trashImages } = useTrash();
 const deletingUnmatchedBuffer = ref({
   directoryId: props.directoryId,
   value: false,

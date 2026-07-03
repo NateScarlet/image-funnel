@@ -98,7 +98,7 @@ import { sortBy } from "es-toolkit";
 import RatingIcon from "./RatingIcon.vue";
 import { formatDate } from "../utils/date";
 import type { RatingCountFragment } from "../graphql/generated";
-import useDirectoryStats from "../composables/useDirectoryStats";
+import { useDirectoryStats } from "../composables/domain/useDirectoryBrowse";
 
 interface Directory {
   id: string;

@@ -170,7 +170,7 @@ import useDirectories, {
   showLargeUnrated,
 } from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
-import useDirectoryStats from "@/composables/useDirectoryStats";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{

@@ -1,4 +1,4 @@
-import { computed, toValue, type MaybeRefOrGetter } from "vue";
+import { computed, toValue, type MaybeRefOrGetter, type Ref } from "vue";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
 import mutate from "@/graphql/utils/mutate";
@@ -6,13 +6,10 @@ import {
   NoteDocument,
   NoteSavedDocument,
   UpdateNoteDocument,
-  type NoteQuery,
+  BrowseNotesDocument,
 } from "@/graphql/generated";
+import type { BrowseNotesQueryVariables } from "@/graphql/generated";
 
-/**
- * useNote 提供笔记的查询、实时订阅和更新功能
- * @param id 笔记 ID 或其 Getter
- */
 export default function useNote(id: MaybeRefOrGetter<string | undefined>) {
   const { data } = useQuery(NoteDocument, {
     variables: () => {
@@ -22,7 +19,6 @@ export default function useNote(id: MaybeRefOrGetter<string | undefined>) {
     },
   });
 
-  // 监听外部更新
   useSubscription(NoteSavedDocument, {
     variables: () => {
       const v = toValue(id);
@@ -32,24 +28,27 @@ export default function useNote(id: MaybeRefOrGetter<string | undefined>) {
   });
 
   const note = computed(() => {
-    const node = (data.value as NoteQuery | undefined)?.node;
+    const node = data.value?.node;
     return node?.__typename === "Note" ? node : undefined;
   });
 
-  const updateNote = async (content: string) => {
+  async function updateNote(content: string) {
     const v = toValue(id);
     if (!v) return;
-
     return mutate(UpdateNoteDocument, {
-      variables: {
-        id: v,
-        content,
-      },
+      variables: { id: v, content },
     });
-  };
+  }
 
-  return {
-    note,
-    updateNote,
-  };
+  return { note, updateNote };
+}
+
+export function useNoteBrowse(
+  variables: MaybeRefOrGetter<BrowseNotesQueryVariables>,
+  options?: { loadingCount?: Ref<number> },
+) {
+  return useQuery(BrowseNotesDocument, {
+    variables: () => toValue(variables),
+    loadingCount: options?.loadingCount,
+  });
 }

@@ -617,7 +617,7 @@ import {
 } from "@mdi/js";
 import type { ImageFragment } from "@/graphql/generated";
 import useImageLabel, { PRESET_COLORS } from "@/composables/useImageLabel";
-import useImageRating from "@/composables/useImageRating";
+import useImage from "@/composables/domain/useImage";
 import useClickOutside from "@/composables/useClickOutside";
 import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
@@ -629,7 +629,7 @@ import useImageHooks from "@/composables/useImageHooks";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useOpenDir } from "@/composables/useOpenDir";
 import NoteForm from "./NoteForm.vue";
-import useNote from "@/composables/useNote";
+import useNote from "@/composables/domain/useNote";
 import useModalDialog from "@/composables/useModalDialog";
 import { useClipboard } from "@/composables/useClipboard";
 
@@ -751,7 +751,7 @@ useHotkeys(
 // #endregion
 
 // 使用 composable 提取的 XMP 评分管理逻辑
-const { setRating } = useImageRating(() => image);
+const { setRating } = useImage(() => image);
 
 const ratingModel = computed({
   get() {

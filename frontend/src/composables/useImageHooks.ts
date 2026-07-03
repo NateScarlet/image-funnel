@@ -1,14 +1,9 @@
 import { ref, computed, toValue, type MaybeRefOrGetter } from "vue";
-import useQuery from "@/graphql/utils/useQuery";
-import mutate from "@/graphql/utils/mutate";
+import type { ImageFiltersInput } from "@/graphql/generated";
 import useNotification from "@/composables/useNotification";
-import {
-  HooksDocument,
-  DispatchImageHookDocument,
-  type ImageFiltersInput,
-} from "@/graphql/generated";
 import { useHotkeys } from "@/composables/useHotkeys";
 import useStorage from "@/composables/useStorage";
+import useImage from "./domain/useImage";
 
 interface LastHook {
   id: string;
@@ -29,14 +24,11 @@ export interface UseImageHooksOptions {
  * useImageHooks 用于管理图片的外部脚本钩子派发与执行
  */
 export default function useImageHooks(options: UseImageHooksOptions = {}) {
-  const hooksLoadingCount = ref(0);
-  const { data: hooksData } = useQuery(HooksDocument, {
-    loadingCount: hooksLoadingCount,
-  });
-
-  const dispatchableHooks = computed(() => {
-    return hooksData.value?.hooks.filter((h) => h.canDispatchByImage) || [];
-  });
+  const {
+    dispatchableHooks,
+    dispatch: domainDispatch,
+    hooksLoadingCountRef,
+  } = useImage();
 
   const isDispatching = ref(false);
   const currentDispatchingHookId = ref("");
@@ -55,30 +47,18 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
     const infoNotificationId = showInfo(`正在执行动作 ${hookName}...`, 0);
 
     try {
-      const { error } = await mutate(DispatchImageHookDocument, {
-        variables: {
-          input: {
-            hookId,
-            filterBy,
-          },
-        },
-      });
-
-      if (error) {
-        showError(`执行动作 ${hookName} 失败：${error.message}`);
-      } else {
-        lastDispatchedHook.value = { id: hookId, name: hookName };
-        const ids = filterBy.id;
-        if (ids && Array.isArray(ids)) {
-          const count = ids.length;
-          if (count === 1) {
-            showSuccess(`动作 ${hookName} 已成功触发`);
-          } else {
-            showSuccess(`已成功对 ${count} 张图片触发动作 ${hookName}`);
-          }
+      await domainDispatch(hookId, filterBy);
+      lastDispatchedHook.value = { id: hookId, name: hookName };
+      const ids = filterBy.id;
+      if (ids && Array.isArray(ids)) {
+        const count = ids.length;
+        if (count === 1) {
+          showSuccess(`动作 ${hookName} 已成功触发`);
         } else {
-          showSuccess(`已成功触发动作 ${hookName}`);
+          showSuccess(`已成功对 ${count} 张图片触发动作 ${hookName}`);
         }
+      } else {
+        showSuccess(`已成功触发动作 ${hookName}`);
       }
     } catch (err) {
       showError(
@@ -87,7 +67,6 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
         }`,
       );
     } finally {
-      // 移除“正在执行”的通知，恢复派发状态
       remove(infoNotificationId);
       isDispatching.value = false;
       currentDispatchingHookId.value = "";
@@ -125,7 +104,7 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
   );
 
   return {
-    hooksLoadingCount,
+    hooksLoadingCount: hooksLoadingCountRef,
     dispatchableHooks,
     isDispatching,
     currentDispatchingHookId,

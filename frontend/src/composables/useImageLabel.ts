@@ -1,8 +1,7 @@
 import { ref, computed, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
-import { UpdateImageMetadataDocument } from "@/graphql/generated";
-import mutate from "@/graphql/utils/mutate";
 import { useHotkeys } from "./useHotkeys";
+import useImage from "./domain/useImage";
 
 // 预设的图片标签颜色映射
 export const PRESET_COLORS: Record<string, string> = {
@@ -66,18 +65,12 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
    * 提交设置图片标签的 mutation 更改
    * @param label 目标标签字符串，传入空值代表清除标签
    */
+  const { setLabel: domainSetLabelFn } = useImage(image);
+
   async function setLabel(label: string) {
-    const img = toValue(image);
     showPopover.value = false;
     try {
-      await mutate(UpdateImageMetadataDocument, {
-        variables: {
-          input: {
-            id: img.id,
-            label: label,
-          },
-        },
-      });
+      await domainSetLabelFn(label);
     } catch (err) {
       console.error("Failed to update label:", err);
     }

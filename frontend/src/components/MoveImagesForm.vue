@@ -166,7 +166,7 @@ import {
 } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
-import useTrashImages from "@/composables/useTrashImages";
+import useTrash from "@/composables/domain/useTrash";
 import PathSelector from "./PathSelector.vue";
 
 // #region 属性与事件定义
@@ -188,7 +188,7 @@ const moveError = ref("");
 
 const { show: showNotification } = useNotification();
 const { revealInExplorer } = useOpenDir();
-const { trashImages } = useTrashImages();
+const { trashImages } = useTrash();
 // #endregion
 
 // #region 执行移动图片操作

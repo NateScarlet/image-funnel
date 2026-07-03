@@ -66,7 +66,7 @@ import DirectoryDisplay from "./DirectoryDisplay.vue";
 import useQuery from "../graphql/utils/useQuery";
 import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
-import useDirectoryStats from "@/composables/useDirectoryStats";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 
 const {
   directory,

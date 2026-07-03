@@ -94,7 +94,7 @@ import RatingSelector from "./RatingSelector.vue";
 import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import useRouteQuery from "../composables/useRouteQuery";
-import { useCreateSession } from "../composables/useCreateSession";
+import useSession from "../composables/domain/useSession";
 
 type Emits = (e: "created") => void;
 
@@ -110,7 +110,8 @@ const {
   rating: filterRating,
 } = useSessionConfig();
 
-const { createSession, creating: creatingSession } = useCreateSession();
+const creatingSession = ref(false);
+const { createSession } = useSession("");
 
 const loadingCount = ref(0);
 
@@ -141,18 +142,23 @@ const canCreate = computed(() => {
 });
 
 async function handleCreate() {
-  const session = await createSession({
-    directoryId: selectedDirectoryId.value,
-    filter: {
-      rating: filterRating.value.slice(),
-    },
-    targetKeep: targetKeep.value,
-    createActions: selectedPreset.value?.writeActions,
-  });
+  creatingSession.value = true;
+  try {
+    const session = await createSession({
+      directoryId: selectedDirectoryId.value,
+      filter: {
+        rating: filterRating.value.slice(),
+      },
+      targetKeep: targetKeep.value,
+      createActions: selectedPreset.value?.writeActions,
+    });
 
-  if (session) {
-    router.push(`/session/${session.id}`);
-    emit("created");
+    if (session) {
+      router.push(`/session/${session.id}`);
+      emit("created");
+    }
+  } finally {
+    creatingSession.value = false;
   }
 }
 </script>

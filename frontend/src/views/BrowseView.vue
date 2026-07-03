@@ -316,7 +316,7 @@ import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
-import useDirectoryStats from "@/composables/useDirectoryStats";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import { sortBy } from "es-toolkit";
 
 const { pairingRequests } = useDevices();

@@ -138,7 +138,7 @@ import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
 import { useDirectoryState } from "../composables/useDirectoryState";
-import { useCreateSession } from "../composables/useCreateSession";
+import useSession from "../composables/domain/useSession";
 import { usePresets } from "../composables/usePresets";
 
 const { session } = defineProps<{
@@ -166,7 +166,7 @@ const commitForm =
 
 const { getPreset, lastSelectedPresetId } = usePresets();
 const selectedPreset = computed(() => getPreset(lastSelectedPresetId.value));
-const { createSession } = useCreateSession();
+const { createSession } = useSession("");
 
 const showConfirm = ref(false);
 let pendingCommit: (() => void) | null = null;

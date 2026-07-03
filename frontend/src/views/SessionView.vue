@@ -326,7 +326,7 @@ import { useHotkeys } from "@/composables/useHotkeys";
 import { formatDate } from "../utils/date";
 import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
-import useSession from "../composables/useSession";
+import useSession from "../composables/domain/useSession";
 import useMarkImage from "@/composables/useMarkImage";
 import Time from "@/utils/Time";
 import useNotification from "@/composables/useNotification";

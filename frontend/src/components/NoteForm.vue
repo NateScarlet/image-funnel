@@ -87,7 +87,7 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { NoteFragment as Note } from "../graphql/generated";
-import useNote from "@/composables/useNote";
+import useNote from "@/composables/domain/useNote";
 import NoteEditor from "./NoteEditor.vue";
 import {
   mdiNoteTextOutline,

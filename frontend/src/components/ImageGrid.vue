@@ -222,7 +222,7 @@ import MoveImagesForm from "./MoveImagesForm.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import { useClipboard } from "@/composables/useClipboard";
 import useNotification from "@/composables/useNotification";
-import useTrashImages from "@/composables/useTrashImages";
+import useTrash from "@/composables/domain/useTrash";
 import { PRESET_COLORS, COLOR_NAMES_CN } from "@/composables/useImageLabel";
 import useImageViewer from "@/composables/useImageViewer";
 import ImageGridHeader from "./ImageGridHeader.vue";
@@ -461,7 +461,7 @@ useHotkeys(
 
 // 批量模式下删除选中图片（Delete 键）
 const { show: showNotification } = useNotification();
-const { trashImages } = useTrashImages();
+const { trashImages } = useTrash();
 const isBulkDeleting = ref(false);
 
 useHotkeys(
