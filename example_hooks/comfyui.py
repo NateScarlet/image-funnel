@@ -720,6 +720,7 @@ def main() -> None:
                 _LOGGER.debug(
                     "No variants generated for image %s, skipping submission.", path
                 )
+                _write_action_override("KEEP")
 
             if any_image_success:
                 success_count += 1
