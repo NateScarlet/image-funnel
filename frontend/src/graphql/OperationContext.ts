@@ -1,4 +1,4 @@
-import { GraphQLFormattedError } from "graphql";
+import type { GraphQLFormattedError } from "graphql";
 
 export default interface OperationContext {
   fetchOptions?: RequestInit;

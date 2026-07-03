@@ -3,9 +3,7 @@
   <section
     class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
   >
-    <div
-      class="flex items-center justify-between border-b border-primary-700/50 pb-3"
-    >
+    <div class="flex items-center justify-between border-b border-primary-700/50 pb-3">
       <h2
         class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
       >
@@ -32,10 +30,7 @@
     </div>
 
     <!-- 暂无笔记状态 -->
-    <div
-      v-if="notes.length === 0"
-      class="py-6 text-center text-primary-500 text-sm italic"
-    >
+    <div v-if="notes.length === 0" class="py-6 text-center text-primary-500 text-sm italic">
       暂无任何笔记
     </div>
 
@@ -87,10 +82,7 @@
             @click.stop="toggleNoteHidden(noteItem)"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
-              <path
-                :d="noteItem.hidden ? mdiEye : mdiEyeOff"
-                fill="currentColor"
-              />
+              <path :d="noteItem.hidden ? mdiEye : mdiEyeOff" fill="currentColor" />
             </svg>
           </button>
           <!-- 编辑提示：触屏设备始终可见，hover 设备悬停时显示 -->
@@ -222,10 +214,9 @@ const loadingCount = ref(0);
 const loading = computed(() => loadingCount.value > 0);
 
 // 调用 composable 查询并订阅笔记数据的变化
-const { notes, toggleNoteHidden, hasNextPage, fetchMore } = useBrowseNotes(
-  notesVariables,
-  { loadingCount },
-);
+const { notes, toggleNoteHidden, hasNextPage, fetchMore } = useBrowseNotes(notesVariables, {
+  loadingCount,
+});
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 
@@ -238,8 +229,7 @@ useInfiniteScroll(containerRef, async () => {
 
 // #region 笔记编辑弹出框管理
 const selectedNote = ref<NoteFragment | null>(null);
-const noteDialogRef =
-  useTemplateRef<InstanceType<typeof NoteForm>>("noteDialogRef");
+const noteDialogRef = useTemplateRef<InstanceType<typeof NoteForm>>("noteDialogRef");
 
 const noteDialog = useModalDialog({
   onDidOpen() {
@@ -268,8 +258,7 @@ function openImageViewerForNote(noteItem: NoteFragment) {
 }
 
 // #region 新建笔记弹出框管理
-const createDialogRef =
-  useTemplateRef<InstanceType<typeof CreateNoteForm>>("createDialogRef");
+const createDialogRef = useTemplateRef<InstanceType<typeof CreateNoteForm>>("createDialogRef");
 
 const createDialog = useModalDialog({
   onDidOpen() {

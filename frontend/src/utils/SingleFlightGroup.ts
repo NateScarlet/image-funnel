@@ -12,11 +12,7 @@ interface Flight<T> {
 export default class SingleFlightGroup<T = void> {
   private m = new Map<string, Flight<T>>();
 
-  async do(
-    key: string,
-    execute: (signal: AbortSignal) => Promise<T>,
-    signal?: AbortSignal,
-  ) {
+  async do(key: string, execute: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal) {
     if (signal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
     }
@@ -66,10 +62,7 @@ export default class SingleFlightGroup<T = void> {
     };
   }
 
-  private obtainFlight(
-    key: string,
-    execute: (signal: AbortSignal) => Promise<T>,
-  ): Flight<T> {
+  private obtainFlight(key: string, execute: (signal: AbortSignal) => Promise<T>): Flight<T> {
     const existed = this.m.get(key);
     if (existed) {
       return existed;

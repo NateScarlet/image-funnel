@@ -22,10 +22,7 @@
         type="button"
         @click="emit('close')"
       >
-        <svg
-          class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4"
-          viewBox="0 0 24 24"
-        >
+        <svg class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4" viewBox="0 0 24 24">
           <path :d="mdiClose" fill="currentColor" />
         </svg>
       </button>
@@ -47,8 +44,7 @@
         <div
           class="absolute bottom-2 sm:bottom-6 right-3 sm:right-8 text-xs sm:text-sm uppercase tracking-wider font-bold transition-all duration-300 flex items-center gap-2"
           :class="{
-            'text-secondary-400 opacity-100':
-              currentStatus === SaveStatus.SAVING,
+            'text-secondary-400 opacity-100': currentStatus === SaveStatus.SAVING,
             'text-success-400 opacity-100': currentStatus === SaveStatus.SAVED,
             'text-error-400 opacity-100': currentStatus === SaveStatus.ERROR,
             'opacity-0': currentStatus === SaveStatus.IDLE,
@@ -89,13 +85,7 @@ import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { NoteFragment as Note } from "../graphql/generated";
 import useNote from "@/composables/domain/useNote";
 import NoteEditor from "./NoteEditor.vue";
-import {
-  mdiNoteTextOutline,
-  mdiClose,
-  mdiLoading,
-  mdiCheck,
-  mdiAlertCircleOutline,
-} from "@mdi/js";
+import { mdiNoteTextOutline, mdiClose, mdiLoading, mdiCheck, mdiAlertCircleOutline } from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
 
 // #region 属性与事件定义
@@ -182,10 +172,7 @@ const performSave = async (newContent: string, targetId: string) => {
   isSaving.value = true;
   try {
     await updateNote(newContent);
-    if (
-      contentBuffer.value?.id === targetId &&
-      contentBuffer.value?.content === newContent
-    ) {
+    if (contentBuffer.value?.id === targetId && contentBuffer.value?.content === newContent) {
       contentBuffer.value = undefined;
     }
     lastSaved.value = { id: targetId, at: Date.now() };

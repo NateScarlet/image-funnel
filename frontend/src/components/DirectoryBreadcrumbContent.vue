@@ -3,11 +3,7 @@
   <template v-if="parentID">
     <DirectoryBreadcrumbContent :directory-id="parentID" />
     <!-- 仅当当前节点不是 Root 且父节点不是 Root 时渲染分隔符 -->
-    <span
-      v-if="needsSeparatorBefore"
-      class="text-primary-600 select-none mx-0.5"
-      >/</span
-    >
+    <span v-if="needsSeparatorBefore" class="text-primary-600 select-none mx-0.5">/</span>
   </template>
   <!-- #endregion -->
 

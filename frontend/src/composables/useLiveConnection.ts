@@ -1,9 +1,7 @@
 import stableComputed from "./stableComputed";
 import useLiveArrayV3 from "./useLiveArray";
 
-export default function useLiveConnection<
-  T extends { id: string; isRedacted?: boolean },
->(
+export default function useLiveConnection<T extends { id: string; isRedacted?: boolean }>(
   nodes: () => T[],
   {
     compare,
@@ -16,10 +14,7 @@ export default function useLiveConnection<
     filter?: (i: T) => boolean;
     onNodeDidLeave?: (i: T) => void;
     identity?: (i: T) => string;
-    subscribe?: (
-      item: T,
-      callback: (v: T) => void,
-    ) => Disposable | (() => void);
+    subscribe?: (item: T, callback: (v: T) => void) => Disposable | (() => void);
   } = {},
 ) {
   const resolvedIdentity = identity ?? ((i: T) => i.id);
@@ -56,9 +51,7 @@ export default function useLiveConnection<
       return onSaved(i);
     }
   };
-  const filteredNodes = stableComputed<T[]>(() =>
-    items.value.filter((i) => !i.isRedacted),
-  );
+  const filteredNodes = stableComputed<T[]>(() => items.value.filter((i) => !i.isRedacted));
   return {
     nodes: filteredNodes,
     reset,

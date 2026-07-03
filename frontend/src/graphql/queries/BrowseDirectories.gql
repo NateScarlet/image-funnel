@@ -1,9 +1,4 @@
-query BrowseDirectories(
-  $id: ID!
-  $filterBy: DirectoryFilters
-  $first: Int
-  $after: String
-) {
+query BrowseDirectories($id: ID!, $filterBy: DirectoryFilters, $first: Int, $after: String) {
   node(id: $id) {
     id
     ... on Directory {

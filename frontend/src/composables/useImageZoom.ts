@@ -59,10 +59,7 @@ export default function useImageZoom({
 
       const scrollLeft = imageX - offsetX;
       const scrollTop = imageY - offsetY;
-      if (
-        Math.abs(scrollLeft - el.scrollLeft) >= 1 ||
-        Math.abs(scrollTop - el.scrollTop) >= 1
-      ) {
+      if (Math.abs(scrollLeft - el.scrollLeft) >= 1 || Math.abs(scrollTop - el.scrollTop) >= 1) {
         el.scrollLeft = imageX - offsetX;
         el.scrollTop = imageY - offsetY;
       }
@@ -75,10 +72,7 @@ export default function useImageZoom({
     if (!value || value.width <= 0 || value.height <= 0) {
       return;
     }
-    return Math.min(
-      contentBoxWidth.value / value.width,
-      contentBoxHeight.value / value.height,
-    );
+    return Math.min(contentBoxWidth.value / value.width, contentBoxHeight.value / value.height);
   });
   const zoomModel = computed({
     get() {
@@ -107,9 +101,7 @@ export default function useImageZoom({
   });
   const fitContainerModel = computed({
     get() {
-      return (
-        fitContainerBuffer.value ?? zoomModel.value === fitContainerScale.value
-      );
+      return fitContainerBuffer.value ?? zoomModel.value === fitContainerScale.value;
     },
     set(v) {
       fitContainerBuffer.value = v;
@@ -117,8 +109,7 @@ export default function useImageZoom({
   });
 
   function next(v: number, direction: 1 | -1) {
-    const match =
-      direction > 0 ? levels.find((i) => i > v) : levels.findLast((i) => i < v);
+    const match = direction > 0 ? levels.find((i) => i > v) : levels.findLast((i) => i < v);
     if (match != null) {
       return match;
     }
@@ -138,18 +129,14 @@ export default function useImageZoom({
         x:
           el.scrollWidth > el.clientWidth
             ? roundDecimal(
-                (el.scrollLeft - 0.5 * (el.scrollWidth - el.clientWidth)) /
-                  el.scrollWidth +
-                  0.5,
+                (el.scrollLeft - 0.5 * (el.scrollWidth - el.clientWidth)) / el.scrollWidth + 0.5,
                 2,
               )
             : 0.5,
         y:
           el.scrollHeight > el.clientHeight
             ? roundDecimal(
-                (el.scrollTop - 0.5 * (el.scrollHeight - el.clientHeight)) /
-                  el.scrollHeight +
-                  0.5,
+                (el.scrollTop - 0.5 * (el.scrollHeight - el.clientHeight)) / el.scrollHeight + 0.5,
                 2,
               )
             : 0.5,

@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="min-h-screen bg-primary-900 text-primary-100 flex flex-col font-sans"
-  >
+  <div class="min-h-screen bg-primary-900 text-primary-100 flex flex-col font-sans">
     <!-- 顶部导航栏 -->
     <header
       class="flex-none bg-primary-900/80 backdrop-blur-md border-b border-primary-700/50 px-4 py-3 sticky top-0 z-10 relative"
@@ -88,9 +86,7 @@
                 : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
             "
             :title="
-              prevSibling
-                ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}`
-                : '没有上一个目录'
+              prevSibling ? `上一个目录 ([): ${getDirName(prevSibling.relPath)}` : '没有上一个目录'
             "
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -106,9 +102,7 @@
                 : 'bg-primary-900 border-primary-800 text-primary-700 cursor-not-allowed opacity-40 pointer-events-none'
             "
             :title="
-              nextSibling
-                ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}`
-                : '没有下一个目录'
+              nextSibling ? `下一个目录 (]): ${getDirName(nextSibling.relPath)}` : '没有下一个目录'
             "
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -244,14 +238,9 @@
       </div>
     </header>
 
-    <main
-      class="flex-1 w-full max-w-400 mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden"
-    >
+    <main class="flex-1 w-full max-w-400 mx-auto p-4 md:p-6 space-y-6 overflow-x-hidden">
       <!-- 子目录容器区 -->
-      <SubdirectoryGrid
-        :directory-id="currentDirectoryId"
-        :filter-rating="filterRating"
-      />
+      <SubdirectoryGrid :directory-id="currentDirectoryId" :filter-rating="filterRating" />
 
       <!-- 笔记列表容器区 -->
       <NoteList :directory-id="currentDirectoryId" />
@@ -263,10 +252,7 @@
     <moreMenuDialog.component container-class="p-6 sm:max-w-sm">
       <div class="space-y-3">
         <!-- 移动端设备管理项 -->
-        <DeviceManagerButton
-          variant="menu-item"
-          @click="moreMenuDialog.close()"
-        />
+        <DeviceManagerButton variant="menu-item" @click="moreMenuDialog.close()" />
 
         <!-- 在资源管理器中打开当前目录 -->
         <button
@@ -304,10 +290,7 @@ import {
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
 import { MetaDocument } from "../graphql/generated";
-import useDirectories, {
-  maxUnratedCount,
-  showLargeUnrated,
-} from "@/composables/useDirectories";
+import useDirectories, { maxUnratedCount, showLargeUnrated } from "@/composables/useDirectories";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
@@ -419,9 +402,8 @@ const processedSiblings = computed(() => {
   const items = dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
     const unratedCount =
-      stats?.ratingCounts.find(
-        (rc: { rating: number; count: number }) => rc.rating === 0,
-      )?.count ?? 0;
+      stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)?.count ??
+      0;
 
     // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
     // 说明它本来该被过滤掉，但因为有子目录而被保留显示。
@@ -439,16 +421,12 @@ const processedSiblings = computed(() => {
   });
 
   // 把 isFilteredOutButShown 的排在最后，以保持与 SubdirectoryGrid 一致
-  return sortBy(items, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map(
-    (item) => item.dir,
-  );
+  return sortBy(items, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map((item) => item.dir);
 });
 
 // 当前目录在排序后同级目录中的索引位置
 const currentSiblingIndex = computed(() => {
-  return processedSiblings.value.findIndex(
-    (dir) => dir.id === currentDirectoryId.value,
-  );
+  return processedSiblings.value.findIndex((dir) => dir.id === currentDirectoryId.value);
 });
 
 // 上一个同级目录

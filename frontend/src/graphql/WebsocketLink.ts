@@ -54,11 +54,8 @@ export default class WebSocketLink extends ApolloLink {
     });
   }
 
-  public readonly request = (
-    operation: ApolloLink.Operation,
-  ): Observable<ApolloLink.Result> => {
-    const { includeQuery } =
-      (operation.getContext() as OperationContext).http ?? {};
+  public readonly request = (operation: ApolloLink.Operation): Observable<ApolloLink.Result> => {
+    const { includeQuery } = (operation.getContext() as OperationContext).http ?? {};
     return new Observable((observer) => {
       return this.client.subscribe(
         {

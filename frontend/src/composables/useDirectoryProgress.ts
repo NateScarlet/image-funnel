@@ -13,10 +13,7 @@ function recordDirectoryOrder(parentId: string, directoryIds: string[]): void {
   }
 }
 
-function getNextDirectory(
-  parentId: string,
-  currentDirectoryId: string,
-): string | undefined {
+function getNextDirectory(parentId: string, currentDirectoryId: string): string | undefined {
   const key = getStorageKey(parentId);
   const rawValue = localStorage.getItem(key);
   if (!rawValue) {
@@ -25,9 +22,7 @@ function getNextDirectory(
 
   try {
     const directoryIds = JSON.parse(rawValue) as string[];
-    const currentIndex = directoryIds.findIndex(
-      (id) => id === currentDirectoryId,
-    );
+    const currentIndex = directoryIds.findIndex((id) => id === currentDirectoryId);
     if (currentIndex === -1 || currentIndex === directoryIds.length - 1) {
       return undefined;
     }

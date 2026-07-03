@@ -5,8 +5,7 @@ import createEventListeners from "@/utils/createEventListeners";
 export default function useElementFullscreen(el: Ref<HTMLElement | undefined>) {
   const isFullscreen = ref(false);
   const updateFullscreen = () => {
-    isFullscreen.value =
-      el.value != null && document.fullscreenElement === el.value;
+    isFullscreen.value = el.value != null && document.fullscreenElement === el.value;
   };
   const requestFullscreen = async () => {
     await el.value?.requestFullscreen();

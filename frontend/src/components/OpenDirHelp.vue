@@ -2,13 +2,8 @@
   <div class="space-y-4">
     <!-- 弹窗标题栏 -->
     <div class="flex justify-between items-start">
-      <h3
-        class="text-base font-bold text-white flex items-center gap-2 select-none"
-      >
-        <svg
-          class="w-5 h-5 text-secondary-400 animate-pulse"
-          viewBox="0 0 24 24"
-        >
+      <h3 class="text-base font-bold text-white flex items-center gap-2 select-none">
+        <svg class="w-5 h-5 text-secondary-400 animate-pulse" viewBox="0 0 24 24">
           <path :d="mdiFolderOpen" fill="currentColor" />
         </svg>
         需要安装本地路径插件
@@ -42,9 +37,7 @@
         <p class="flex gap-2">
           <span class="text-secondary-400 font-bold">2.</span>
           <span
-            ><span class="text-secondary-400 font-semibold"
-              >必须解压到单独文件夹</span
-            >
+            ><span class="text-secondary-400 font-semibold">必须解压到单独文件夹</span>
             后再运行，不支持在压缩包内直接安装；</span
           >
         </p>
@@ -52,8 +45,7 @@
           <span class="text-secondary-400 font-bold">3.</span>
           <span
             >双击运行
-            <code
-              class="bg-primary-800 px-1 py-0.5 rounded font-mono text-white select-all"
+            <code class="bg-primary-800 px-1 py-0.5 rounded font-mono text-white select-all"
               >安装.cmd</code
             >
             并允许注册表修改。</span

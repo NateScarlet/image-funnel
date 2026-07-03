@@ -13,10 +13,7 @@
     ]"
     @click="select"
   >
-    <DirectoryDisplay
-      :directory="{ id: directory.id }"
-      :filter-rating="filterRating"
-    >
+    <DirectoryDisplay :directory="{ id: directory.id }" :filter-rating="filterRating">
       <template #badge>
         <div
           v-if="isTargetMet"
@@ -98,13 +95,8 @@ const isTargetMet = computed(() => {
     return false;
   }
   const matchedCount = statsV.ratingCounts
-    .filter((rc: { rating: number; count: number }) =>
-      filterRating.includes(rc.rating),
-    )
-    .reduce(
-      (sum: number, rc: { rating: number; count: number }) => sum + rc.count,
-      0,
-    );
+    .filter((rc: { rating: number; count: number }) => filterRating.includes(rc.rating))
+    .reduce((sum: number, rc: { rating: number; count: number }) => sum + rc.count, 0);
   return matchedCount <= targetKeep;
 });
 

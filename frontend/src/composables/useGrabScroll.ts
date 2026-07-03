@@ -1,11 +1,6 @@
 import "core-js/actual/disposable-stack";
 
-import {
-  getCurrentInstance,
-  onUnmounted,
-  watch,
-  type MaybeRefOrGetter,
-} from "vue";
+import { getCurrentInstance, onUnmounted, watch, type MaybeRefOrGetter } from "vue";
 import createEventListeners from "@/utils/createEventListeners";
 import isWatchSource from "@/utils/isWatchSource";
 

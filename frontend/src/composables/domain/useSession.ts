@@ -77,11 +77,7 @@ export default function useSession(
     return null;
   }
 
-  async function markImage(
-    imageId: string,
-    action: ImageAction,
-    duration?: string,
-  ) {
+  async function markImage(imageId: string, action: ImageAction, duration?: string) {
     if (!resolvedId.value) return;
     await mutate(MarkImageDocument, {
       variables: {

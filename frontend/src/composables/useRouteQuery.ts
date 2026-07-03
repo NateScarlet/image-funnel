@@ -22,12 +22,7 @@ const flush = debounce((router: Router) => {
   pushHistory = false;
 }, 1);
 
-function setRouteQuery(
-  router: Router,
-  name: string,
-  values: string[],
-  pushHistoryArg: boolean,
-) {
+function setRouteQuery(router: Router, name: string, values: string[], pushHistoryArg: boolean) {
   buffer[name] = values;
   pushHistory ||= pushHistoryArg;
   flush(router);

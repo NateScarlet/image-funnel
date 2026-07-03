@@ -15,9 +15,7 @@
             >
               {{ bulkOps.selectedCountText }}
             </span>
-            <span class="text-xs text-primary-200 font-medium"
-              >张图片已选中</span
-            >
+            <span class="text-xs text-primary-200 font-medium">张图片已选中</span>
           </div>
           <div class="h-4 w-px bg-primary-700 hidden md:block"></div>
           <div class="flex items-center gap-2">
@@ -51,13 +49,9 @@
           <div class="relative group/rating">
             <button
               class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="
-                !bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value
-              "
+              :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
               :class="[
-                !bulkOps.selectedFilterBy.value
-                  ? 'opacity-40 cursor-not-allowed'
-                  : '',
+                !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
                 activeDropdown === 'rating'
                   ? 'border-secondary-500/50 text-white bg-primary-700'
                   : '',
@@ -89,13 +83,9 @@
           <div class="relative group/label">
             <button
               class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="
-                !bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value
-              "
+              :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
               :class="[
-                !bulkOps.selectedFilterBy.value
-                  ? 'opacity-40 cursor-not-allowed'
-                  : '',
+                !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
                 activeDropdown === 'label'
                   ? 'border-secondary-500/50 text-white bg-primary-700'
                   : '',
@@ -142,14 +132,8 @@
           <!-- 批量移动 -->
           <button
             class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-            :disabled="
-              !bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value
-            "
-            :class="
-              !bulkOps.selectedFilterBy.value
-                ? 'opacity-40 cursor-not-allowed'
-                : ''
-            "
+            :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
+            :class="!bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : ''"
             @click="$emit('move')"
           >
             <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
@@ -161,9 +145,7 @@
           <!-- 批量复制 -->
           <button
             class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
-            :disabled="
-              !bulkOps.selectedFilterBy.value || bulkOps.isCopying.value
-            "
+            :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isCopying.value"
             :class="
               !bulkOps.selectedFilterBy.value || bulkOps.isCopying.value
                 ? 'opacity-40 cursor-not-allowed'
@@ -212,11 +194,7 @@
                   stroke-linecap="round"
                 />
               </svg>
-              <svg
-                v-else
-                class="w-4 h-4 text-secondary-400"
-                viewBox="0 0 24 24"
-              >
+              <svg v-else class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
                 <path :d="mdiPlayOutline" fill="currentColor" />
               </svg>
               <span>动作</span>
@@ -337,17 +315,11 @@ useEventListeners(document, ({ on }) => {
   on("click", closeDropdowns);
 });
 
-watch(
-  [() => props.bulkOps.isBulkMode.value, props.bulkOps.selectedFilterBy],
-  () => {
-    if (
-      !props.bulkOps.isBulkMode.value ||
-      !props.bulkOps.selectedFilterBy.value
-    ) {
-      closeDropdowns();
-    }
-  },
-);
+watch([() => props.bulkOps.isBulkMode.value, props.bulkOps.selectedFilterBy], () => {
+  if (!props.bulkOps.isBulkMode.value || !props.bulkOps.selectedFilterBy.value) {
+    closeDropdowns();
+  }
+});
 // #endregion
 
 // #region 批量评分 computed

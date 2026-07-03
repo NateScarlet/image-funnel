@@ -41,9 +41,7 @@ async function approveRequest(code: string) {
   await mutate(ApprovePairingRequestDocument, {
     variables: { input: { code } },
   });
-  pairingRequests.value = pairingRequests.value.filter(
-    (req) => req.code !== code,
-  );
+  pairingRequests.value = pairingRequests.value.filter((req) => req.code !== code);
   refreshDevices();
 }
 
@@ -51,9 +49,7 @@ async function rejectRequest(code: string) {
   await mutate(RejectPairingRequestDocument, {
     variables: { input: { code } },
   });
-  pairingRequests.value = pairingRequests.value.filter(
-    (req) => req.code !== code,
-  );
+  pairingRequests.value = pairingRequests.value.filter((req) => req.code !== code);
 }
 
 async function deleteDevice(id: string) {
@@ -70,11 +66,7 @@ function formatDate(isoStr: string) {
   });
 }
 
-const {
-  authenticate,
-  errorMsg: authError,
-  isActionLoading: authLoading,
-} = useAuthenticate();
+const { authenticate, errorMsg: authError, isActionLoading: authLoading } = useAuthenticate();
 
 async function handleRegister() {
   await authenticate(async () => {
@@ -94,15 +86,10 @@ async function handleRegister() {
       </div>
 
       <div v-if="!isTrustedDevice" class="mb-6">
-        <div
-          class="rounded-xl border border-primary-700/60 bg-primary-900/30 p-4"
-        >
-          <h3 class="mb-2 text-sm font-semibold text-primary-100">
-            当前设备未注册
-          </h3>
+        <div class="rounded-xl border border-primary-700/60 bg-primary-900/30 p-4">
+          <h3 class="mb-2 text-sm font-semibold text-primary-100">当前设备未注册</h3>
           <p class="mb-4 text-xs text-primary-400">
-            您目前通过信任 IP
-            访问，但当前设备尚未注册凭证。注册后可以在非信任网络下安全访问。
+            您目前通过信任 IP 访问，但当前设备尚未注册凭证。注册后可以在非信任网络下安全访问。
           </p>
           <div
             v-if="authError"
@@ -118,16 +105,13 @@ async function handleRegister() {
             {{ authLoading ? "处理中..." : "注册当前设备" }}
           </button>
           <p class="mt-2 text-xs text-primary-400">
-            提示：注册新设备时，浏览器可能会弹出 1–3
-            次系统确认请求，请按照提示操作直到全部完成。
+            提示：注册新设备时，浏览器可能会弹出 1–3 次系统确认请求，请按照提示操作直到全部完成。
           </p>
         </div>
       </div>
 
       <div v-if="pairingRequests.length > 0" class="mb-8">
-        <h3
-          class="mb-4 text-xs font-semibold uppercase tracking-wider text-primary-400"
-        >
+        <h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-primary-400">
           配对请求
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -137,13 +121,10 @@ async function handleRegister() {
             class="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 shadow-md transition-all hover:border-yellow-500/40"
           >
             <div class="mb-2 flex items-center justify-between">
-              <span
-                class="font-mono text-lg font-bold tracking-widest text-yellow-400"
-                >{{ req.code }}</span
-              >
-              <span class="text-xs text-yellow-500/80">{{
-                formatDate(req.createdAt)
+              <span class="font-mono text-lg font-bold tracking-widest text-yellow-400">{{
+                req.code
               }}</span>
+              <span class="text-xs text-yellow-500/80">{{ formatDate(req.createdAt) }}</span>
             </div>
             <p class="mb-4 text-xs text-yellow-200/80">
               新设备正在请求配对，请核对设备上的配对码。
@@ -167,9 +148,7 @@ async function handleRegister() {
       </div>
 
       <div>
-        <h3
-          class="mb-4 text-xs font-semibold uppercase tracking-wider text-primary-400"
-        >
+        <h3 class="mb-4 text-xs font-semibold uppercase tracking-wider text-primary-400">
           已配对设备
         </h3>
         <div
@@ -206,9 +185,7 @@ async function handleRegister() {
                 <div>最后登录: {{ formatDate(device.lastLoginAt) }}</div>
                 <div class="flex items-center gap-1.5 truncate">
                   <span>IP:</span>
-                  <span class="font-mono text-primary-300">{{
-                    device.lastLoginIp || "未知"
-                  }}</span>
+                  <span class="font-mono text-primary-300">{{ device.lastLoginIp || "未知" }}</span>
                 </div>
               </div>
             </div>
@@ -217,12 +194,7 @@ async function handleRegister() {
               title="删除设备"
               @click="deleteDevice(device.id)"
             >
-              <svg
-                class="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"

@@ -27,9 +27,7 @@ export default function useBrowseNotes(
 
   const notesConnection = useRelayConnection(
     () =>
-      notesData.value?.node?.__typename === "Directory"
-        ? notesData.value.node.notes
-        : undefined,
+      notesData.value?.node?.__typename === "Directory" ? notesData.value.node.notes : undefined,
     () => notesQuery,
   );
 
@@ -52,9 +50,7 @@ export default function useBrowseNotes(
 
   useSubscription(NoteSavedDocument, {
     variables: () => ({
-      filterBy: directoryId.value
-        ? { directoryId: [directoryId.value] }
-        : undefined,
+      filterBy: directoryId.value ? { directoryId: [directoryId.value] } : undefined,
     }),
     onNext: (result) => {
       const savedNote = result.data?.noteSaved;
@@ -118,9 +114,7 @@ export default function useBrowseNotes(
               found = true;
               if (newHidden) {
                 const indent = line.slice(0, line.indexOf(line.trim()));
-                newLines.push(
-                  `${indent}${line.slice(0, colonIndex).trim()}: true`,
-                );
+                newLines.push(`${indent}${line.slice(0, colonIndex).trim()}: true`);
               }
               continue;
             }
@@ -130,10 +124,7 @@ export default function useBrowseNotes(
 
         if (!found) {
           if (newHidden) {
-            if (
-              newLines.length > 0 &&
-              newLines[newLines.length - 1].trim() === ""
-            ) {
+            if (newLines.length > 0 && newLines[newLines.length - 1].trim() === "") {
               newLines[newLines.length - 1] = "hidden: true";
               newLines.push("");
             } else {
@@ -164,10 +155,7 @@ export default function useBrowseNotes(
 
   async function toggleNoteHidden(noteItem: NoteFragment) {
     const newHidden = !noteItem.hidden;
-    const newRawContent = toggleFrontmatterHidden(
-      noteItem.rawContent,
-      newHidden,
-    );
+    const newRawContent = toggleFrontmatterHidden(noteItem.rawContent, newHidden);
 
     await mutate(UpdateNoteDocument, {
       variables: {

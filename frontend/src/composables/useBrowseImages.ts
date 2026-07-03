@@ -1,9 +1,6 @@
 import { computed, toValue, ref, type MaybeRefOrGetter, type Ref } from "vue";
 import { useImageBrowse } from "./domain/useImage";
-import type {
-  BrowseImagesQueryVariables,
-  ImageFragment,
-} from "@/graphql/generated";
+import type { BrowseImagesQueryVariables, ImageFragment } from "@/graphql/generated";
 
 export default function useBrowseImages(
   variables: MaybeRefOrGetter<BrowseImagesQueryVariables>,

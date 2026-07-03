@@ -2,11 +2,7 @@
   <!-- #region 开关容器 -->
   <div class="flex items-center gap-2 select-none">
     <!-- 纯文本 label 使用 label 并绑定 for -->
-    <label
-      v-if="label"
-      :for="id"
-      class="text-sm text-primary-400 cursor-pointer"
-    >
+    <label v-if="label" :for="id" class="text-sm text-primary-400 cursor-pointer">
       {{ label }}
     </label>
     <!-- 自定义插槽使用 span 包裹，不绑定 for，避免内部交互元素冲突 -->

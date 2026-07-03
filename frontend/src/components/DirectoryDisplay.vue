@@ -8,10 +8,7 @@
         loading="lazy"
         class="w-20 bg-primary-700 object-cover"
       />
-      <div
-        v-else-if="loading"
-        class="w-20 h-20 shrink-0 bg-primary-700 rounded overflow-hidden"
-      >
+      <div v-else-if="loading" class="w-20 h-20 shrink-0 bg-primary-700 rounded overflow-hidden">
         <div class="w-full h-full animate-pulse bg-primary-600"></div>
       </div>
       <!-- 加载提示：当显示缓存数据的同时正在后台更新时显示 -->
@@ -45,9 +42,7 @@
     </div>
     <div class="flex-1 min-w-0">
       <!-- 标题区域：支持外部自定义插槽，并在右侧自适应显示子目录数量 -->
-      <h3
-        class="font-semibold text-lg mb-1 flex items-center justify-between gap-2"
-      >
+      <h3 class="font-semibold text-lg mb-1 flex items-center justify-between gap-2">
         <div class="min-w-0 flex-1">
           <slot name="title">
             <span class="block break-all">{{ directoryPath }}</span>
@@ -66,19 +61,13 @@
           <div v-if="stats.latestImage?.modTime">
             {{ formatDate(stats.latestImage.modTime) }}
           </div>
-          <div
-            v-if="stats.ratingCounts.length > 0"
-            class="flex flex-wrap gap-2 mt-2"
-          >
+          <div v-if="stats.ratingCounts.length > 0" class="flex flex-wrap gap-2 mt-2">
             <div
               v-for="rc in sortedRatingCounts(stats.ratingCounts)"
               :key="rc.rating"
               class="flex items-center gap-1 px-2 py-1 rounded bg-primary-700/50"
             >
-              <RatingIcon
-                :rating="rc.rating"
-                :filled="filterRating.includes(rc.rating)"
-              />
+              <RatingIcon :rating="rc.rating" :filled="filterRating.includes(rc.rating)" />
               <span class="text-xs">{{ rc.count }}</span>
             </div>
           </div>
@@ -120,14 +109,10 @@ const directoryData = computed(() => {
   return node?.__typename === "Directory" ? node : undefined;
 });
 const stats = computed(() => directoryData.value?.stats);
-const loading = computed(
-  () => loadingCount.value > 0 || isStatsLoading(directory.id),
-);
+const loading = computed(() => loadingCount.value > 0 || isStatsLoading(directory.id));
 const directoryPath = computed(() => directoryData.value?.relPath ?? "");
 
-function sortedRatingCounts(
-  ratingCounts: RatingCountFragment[],
-): RatingCountFragment[] {
+function sortedRatingCounts(ratingCounts: RatingCountFragment[]): RatingCountFragment[] {
   return sortBy(ratingCounts, [(rc) => rc.rating]);
 }
 </script>

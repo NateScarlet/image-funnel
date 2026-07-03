@@ -31,9 +31,7 @@
         class="rounded-xl bg-primary-900/40 border border-primary-800/30 p-4 text-sm text-primary-200 leading-relaxed"
       >
         <span class="font-medium text-secondary-400">待移动图片：</span>
-        <span class="font-bold"
-          >{{ isApproximate ? "> " : "" }}{{ matchCount }} 张</span
-        >
+        <span class="font-bold">{{ isApproximate ? "> " : "" }}{{ matchCount }} 张</span>
         <p class="mt-1 text-xs text-primary-400 leading-relaxed">
           提示：图片对应的配套伴随文件（如同名
           .txt，.json，或者带有当前图片完整名称及额外扩展名的文件）也将同步移动。
@@ -42,9 +40,7 @@
 
       <!-- 操作模式选择 -->
       <div>
-        <label class="mb-2 block text-xs font-semibold text-primary-300">
-          操作模式
-        </label>
+        <label class="mb-2 block text-xs font-semibold text-primary-300"> 操作模式 </label>
         <div
           class="grid grid-cols-2 gap-2 bg-primary-900/50 p-1 rounded-xl border border-primary-800"
         >
@@ -97,10 +93,7 @@
         v-else
         class="rounded-xl bg-primary-900/20 border border-primary-800/20 p-4 text-xs text-primary-300 leading-relaxed flex gap-2 items-start"
       >
-        <svg
-          class="w-4 h-4 text-secondary-400 shrink-0 mt-0.5"
-          viewBox="0 0 24 24"
-        >
+        <svg class="w-4 h-4 text-secondary-400 shrink-0 mt-0.5" viewBox="0 0 24 24">
           <path :d="mdiDelete" fill="currentColor" />
         </svg>
         <div>
@@ -135,12 +128,7 @@
         :disabled="moving || (!toTrash && !pathInput)"
         @click="handleMoveImages"
       >
-        <svg
-          v-if="moving"
-          class="w-4 h-4 animate-spin text-white"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
+        <svg v-if="moving" class="w-4 h-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
           <path
             :d="mdiLoading"
             fill="none"
@@ -159,11 +147,7 @@
 import { ref } from "vue";
 import { mdiFolderMove, mdiClose, mdiLoading, mdiDelete } from "@mdi/js";
 import mutate from "@/graphql/utils/mutate";
-import {
-  MoveImagesDocument,
-  type ImageFiltersInput,
-  type PathInput,
-} from "@/graphql/generated";
+import { MoveImagesDocument, type ImageFiltersInput, type PathInput } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
 import useTrash from "@/composables/domain/useTrash";
@@ -218,8 +202,7 @@ async function handleMoveImages() {
       });
 
       const movedCount = result.data?.moveImages.movedCount ?? 0;
-      const targetAbsoluteDirectory =
-        result.data?.moveImages.targetAbsoluteDirectory;
+      const targetAbsoluteDirectory = result.data?.moveImages.targetAbsoluteDirectory;
 
       emit("close");
 

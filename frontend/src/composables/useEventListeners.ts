@@ -5,11 +5,7 @@ import isWatchSource from "@/utils/isWatchSource";
 
 export default function useEventListeners<T extends EventTarget>(
   target: MaybeRefOrGetter<T | null | undefined>,
-  init: (ctx: {
-    target: T;
-    on: T["addEventListener"];
-    stack: DisposableStack;
-  }) => void,
+  init: (ctx: { target: T; on: T["addEventListener"]; stack: DisposableStack }) => void,
 ): Disposable {
   function setup(stack: DisposableStack, v: T) {
     stack.use(

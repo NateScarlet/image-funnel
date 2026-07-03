@@ -2,9 +2,7 @@
   <section
     class="space-y-3 bg-primary-800/30 border border-primary-700/50 rounded-2xl p-4 sm:p-6 backdrop-blur-sm"
   >
-    <div
-      class="flex items-center justify-between border-b border-primary-700/50 pb-3"
-    >
+    <div class="flex items-center justify-between border-b border-primary-700/50 pb-3">
       <h2
         class="text-base font-bold text-primary-200 tracking-wider flex items-center gap-2 select-none"
       >
@@ -62,10 +60,7 @@
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4"
       >
         <RouterLink
-          v-for="{
-            dir: subDir,
-            isFilteredOutButShown,
-          } in processedSubdirectories"
+          v-for="{ dir: subDir, isFilteredOutButShown } in processedSubdirectories"
           :key="subDir.id"
           :to="{
             path: '/browse',
@@ -84,9 +79,7 @@
             :loading="loading"
           >
             <template #title>
-              <span
-                class="text-sm font-semibold text-primary-200 group-hover:text-white truncate"
-              >
+              <span class="text-sm font-semibold text-primary-200 group-hover:text-white truncate">
                 {{ getDirName(subDir.relPath) }}
               </span>
             </template>
@@ -101,11 +94,7 @@
       >
         <template v-if="loading">
           <!-- 正在加载动画 -->
-          <svg
-            class="w-8 h-8 animate-spin text-secondary-500"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
+          <svg class="w-8 h-8 animate-spin text-secondary-500" viewBox="0 0 24 24" fill="none">
             <path
               :d="mdiLoading"
               fill="none"
@@ -127,10 +116,7 @@
       </div>
 
       <!-- 加载更多分页控制 -->
-      <div
-        v-if="hasNextPage"
-        class="mt-4 flex justify-center border-t border-primary-700/30 pt-3"
-      >
+      <div v-if="hasNextPage" class="mt-4 flex justify-center border-t border-primary-700/30 pt-3">
         <button
           :disabled="loading"
           class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -165,10 +151,7 @@ import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
-import useDirectories, {
-  maxUnratedCount,
-  showLargeUnrated,
-} from "@/composables/useDirectories";
+import useDirectories, { maxUnratedCount, showLargeUnrated } from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 
@@ -182,9 +165,7 @@ const { directoryId, filterRating } = defineProps<{
 const searchQueryBuffer = ref({ id: directoryId, query: "" });
 const searchQuery = computed({
   get() {
-    return searchQueryBuffer.value.id === directoryId
-      ? searchQueryBuffer.value.query
-      : "";
+    return searchQueryBuffer.value.id === directoryId ? searchQueryBuffer.value.query : "";
   },
   set(val) {
     searchQueryBuffer.value = {
@@ -197,20 +178,19 @@ const searchQuery = computed({
 const subdirectoryLoadingCount = ref(0);
 
 // 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
-const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } =
-  useDirectories(
-    () => ({
-      id: directoryId,
-      filterBy: {
-        query: searchQuery.value || undefined,
-      },
-    }),
-    {
-      loadingCount: subdirectoryLoadingCount,
-      maxUnratedCount: maxUnratedCount,
-      showLargeUnrated,
+const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } = useDirectories(
+  () => ({
+    id: directoryId,
+    filterBy: {
+      query: searchQuery.value || undefined,
     },
-  );
+  }),
+  {
+    loadingCount: subdirectoryLoadingCount,
+    maxUnratedCount: maxUnratedCount,
+    showLargeUnrated,
+  },
+);
 
 const loading = computed(() => subdirectoryLoadingCount.value > 0);
 
@@ -224,9 +204,8 @@ const processedSubdirectories = computed(() => {
   const items = dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
     const unratedCount =
-      stats?.ratingCounts.find(
-        (rc: { rating: number; count: number }) => rc.rating === 0,
-      )?.count ?? 0;
+      stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)?.count ??
+      0;
 
     // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
     // 说明它本来该被过滤掉，但因为有子目录而被保留显示。

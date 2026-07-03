@@ -1,9 +1,6 @@
 <template>
   <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full">
-    <div
-      v-if="notifications.length > 1"
-      class="flex justify-end items-center gap-2 px-2"
-    >
+    <div v-if="notifications.length > 1" class="flex justify-end items-center gap-2 px-2">
       <span
         v-if="hiddenCount > 0"
         class="text-xs text-white/80 bg-black/20 px-2 py-1 rounded-full backdrop-blur-sm"
@@ -15,11 +12,7 @@
         class="text-xs text-white/80 hover:text-white flex items-center gap-1 transition-colors bg-black/20 hover:bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm"
         @click="clear"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          class="w-4 h-4"
-        >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-4 h-4">
           <path :d="mdiBroom" fill="currentColor" />
         </svg>
         清除全部
@@ -36,11 +29,7 @@
         @click="remove(notification.id)"
       >
         <div class="shrink-0">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            class="w-6 h-6"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-6 h-6">
             <path :d="iconPaths[notification.type]" fill="currentColor" />
           </svg>
         </div>
@@ -59,11 +48,7 @@
           class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           @click.stop="remove(notification.id)"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            class="w-5 h-5"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5">
             <path :d="mdiClose" fill="currentColor" />
           </svg>
         </button>

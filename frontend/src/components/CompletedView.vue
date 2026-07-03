@@ -20,12 +20,7 @@
       <div
         class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
       >
-        <CommitForm
-          ref="commitForm"
-          :session
-          title=""
-          @committed="handleCommitted"
-        >
+        <CommitForm ref="commitForm" :session title="" @committed="handleCommitted">
           <template #actions="{ committing, commitResult, commit }">
             <button
               v-if="!commitResult"
@@ -34,11 +29,7 @@
               type="button"
               @click="interceptCommit(commit)"
             >
-              <svg
-                v-if="committing"
-                class="w-5 h-5 animate-spin"
-                viewBox="0 0 24 24"
-              >
+              <svg v-if="committing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
                 <path :d="mdiLoading" fill="currentColor" />
               </svg>
               <span>确认提交</span>
@@ -57,19 +48,14 @@
 
       <div v-if="nextDirectoryId" class="mt-6">
         <p class="text-sm text-primary-400 mb-3">下一个目录</p>
-        <div
-          class="p-4 rounded-lg transition-all border-2 bg-primary-600 border-primary-500"
-        >
+        <div class="p-4 rounded-lg transition-all border-2 bg-primary-600 border-primary-500">
           <DirectoryDisplay :directory="{ id: nextDirectoryId }" />
         </div>
       </div>
     </div>
 
     <div v-if="session.stats.totalKept > 0" class="w-full max-w-6xl px-4 mt-8">
-      <KeptImagesGrid
-        :session-id="session.id"
-        :total-kept="session.stats.totalKept"
-      />
+      <KeptImagesGrid :session-id="session.id" :total-kept="session.stats.totalKept" />
     </div>
 
     <!-- 确认对话框 -->
@@ -99,12 +85,10 @@
                   <path :d="mdiAlertOutline" fill="currentColor" />
                 </svg>
               </div>
-              <h3 class="text-xl font-bold mb-2 text-white">
-                确认排除所有图片？
-              </h3>
+              <h3 class="text-xl font-bold mb-2 text-white">确认排除所有图片？</h3>
               <p class="text-primary-300 mb-8 leading-relaxed">
-                您当前没有保留任何图片，这将会把目录下的所有图片标记为排除并更新
-                XMP 文件。提交后，如果需要找回这些图片，您可能需要重新开始筛选。
+                您当前没有保留任何图片，这将会把目录下的所有图片标记为排除并更新 XMP
+                文件。提交后，如果需要找回这些图片，您可能需要重新开始筛选。
               </p>
               <div class="flex gap-3">
                 <button
@@ -151,18 +135,12 @@ const router = useRouter();
 const { getNextDirectory } = useDirectoryProgress();
 
 const nextDirectoryId = computed(() => {
-  return getNextDirectory(
-    session.directory.parentId ?? "",
-    session.directory.id,
-  );
+  return getNextDirectory(session.directory.parentId ?? "", session.directory.id);
 });
 
-const { lastSession: nextDirLastSession } = useDirectoryState(
-  () => nextDirectoryId.value ?? "",
-);
+const { lastSession: nextDirLastSession } = useDirectoryState(() => nextDirectoryId.value ?? "");
 
-const commitForm =
-  useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
+const commitForm = useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
 
 const { getPreset, lastSelectedPresetId } = usePresets();
 const selectedPreset = computed(() => getPreset(lastSelectedPresetId.value));
@@ -201,8 +179,7 @@ async function handleCommitted() {
   const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
-    const nextRating =
-      nextDirLastSession.value?.filter?.rating ?? filter.rating ?? [];
+    const nextRating = nextDirLastSession.value?.filter?.rating ?? filter.rating ?? [];
     const nextTargetKeep = nextDirLastSession.value?.targetKeep ?? targetKeep;
 
     const nextSession = await createSession({

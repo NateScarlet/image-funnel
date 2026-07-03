@@ -12,12 +12,9 @@ interface TokenStore {
   refreshTokenExpiresAt: string;
 }
 
-export const { model: tokenStore } = useStorage<TokenStore>(
-  localStorage,
-  "token_store_8b54ed",
-);
+export const { model: tokenStore } = useStorage<TokenStore>(localStorage, "token_store_8b54ed");
 
-const flight = new SingleFlightGroup<void>();
+const flight = new SingleFlightGroup();
 const lockKey = "refresh_token_lock_8b54ed";
 
 export async function getValidToken(): Promise<string | undefined> {
@@ -83,13 +80,9 @@ export async function refreshToken() {
           } = res.data.refreshToken;
           tokenStore.value = {
             accessToken: newAccessToken,
-            accessTokenExpiresAt: new Date(
-              Date.now() + newAccessExpiresIn * 1000,
-            ).toISOString(),
+            accessTokenExpiresAt: new Date(Date.now() + newAccessExpiresIn * 1000).toISOString(),
             refreshToken: newRefreshToken,
-            refreshTokenExpiresAt: new Date(
-              Date.now() + newRefreshExpiresIn * 1000,
-            ).toISOString(),
+            refreshTokenExpiresAt: new Date(Date.now() + newRefreshExpiresIn * 1000).toISOString(),
           };
         }
       } catch (err) {

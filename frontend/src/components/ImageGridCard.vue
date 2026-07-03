@@ -29,12 +29,7 @@
         ]"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24">
-          <path
-            :d="mdiCheck"
-            fill="currentColor"
-            stroke="currentColor"
-            stroke-width="2"
-          />
+          <path :d="mdiCheck" fill="currentColor" stroke="currentColor" stroke-width="2" />
         </svg>
       </div>
 
@@ -50,11 +45,7 @@
         class="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none opacity-90 group-hover:opacity-100 transition-opacity"
       >
         <!-- 评分图标 -->
-        <RatingIcon
-          v-if="img.currentRating"
-          :rating="img.currentRating"
-          filled
-        />
+        <RatingIcon v-if="img.currentRating" :rating="img.currentRating" filled />
 
         <!-- 颜色标签：使用白色边框 + 黑色描边 ring 增强对比度，以防与图片背景颜色融为一体 -->
         <span

@@ -1,9 +1,5 @@
 import toStableValue from "@/utils/toStableValue";
-import {
-  computed,
-  type ComputedGetter,
-  type WritableComputedOptions,
-} from "vue";
+import { computed, type ComputedGetter, type WritableComputedOptions } from "vue";
 
 export default function stableComputed<T>(
   getter: ComputedGetter<T>,

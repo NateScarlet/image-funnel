@@ -8,7 +8,7 @@ export default async function openURL(
     timeout?: number;
   } = {},
 ): Promise<boolean> {
-  if (navigator.userActivation?.isActive === false) {
+  if (!navigator.userActivation?.isActive) {
     return false;
   }
   return new Promise((resolve) => {

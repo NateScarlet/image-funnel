@@ -18,20 +18,13 @@
       />
 
       <!-- 滚动容器：包裹列表、空状态、骨架图与加载更多按钮 -->
-      <div
-        ref="containerRef"
-        class="max-h-[60vh] overflow-y-auto pr-1 space-y-4"
-      >
+      <div ref="containerRef" class="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
         <!-- 骨架图加载指示，避免布局抖动 -->
         <div
           v-if="loading && images.length === 0"
           class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 animate-pulse p-4"
         >
-          <div
-            v-for="n in 16"
-            :key="n"
-            class="aspect-square bg-primary-800/50 rounded-xl"
-          ></div>
+          <div v-for="n in 16" :key="n" class="aspect-square bg-primary-800/50 rounded-xl"></div>
         </div>
 
         <!-- 无图片空状态 -->
@@ -39,12 +32,7 @@
           v-else-if="images.length === 0"
           class="flex flex-col items-center justify-center py-20 text-primary-500 gap-2"
         >
-          <svg
-            class="w-12 h-12 stroke-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-12 h-12 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -128,10 +116,7 @@
 
         <!-- 下一张按钮 -->
         <button
-          v-if="
-            currentImageIndex >= 0 &&
-            (currentImageIndex < images.length - 1 || hasNextPage)
-          "
+          v-if="currentImageIndex >= 0 && (currentImageIndex < images.length - 1 || hasNextPage)"
           class="absolute right-4 top-1/2 -translate-y-1/2 z-60 p-3 rounded-xl bg-white/5 hover:bg-white/10 hover:scale-105 active:scale-95 text-white/80 hover:text-white transition-all border border-white/10"
           title="下一张图片 (ArrowRight)"
           @click="nextImage"
@@ -163,10 +148,7 @@
           @request-next="nextImage"
         >
           <template #info>
-            <span
-              class="truncate max-w-72 font-semibold"
-              :title="currentImage.filename"
-            >
+            <span class="truncate max-w-72 font-semibold" :title="currentImage.filename">
               {{ currentImage.filename }}
             </span>
             <div class="w-px h-4 bg-white/30 mx-1"></div>
@@ -185,10 +167,7 @@
     </imageViewerDialog.component>
 
     <!-- 移动图片模态框 -->
-    <moveImagesDialog.component
-      container-class="sm:max-w-md p-6"
-      overflow-visible
-    >
+    <moveImagesDialog.component container-class="sm:max-w-md p-6" overflow-visible>
       <MoveImagesForm
         :directory-id="directoryId"
         :filter-by="selectedFilterBy || imagesVariables.filterBy || { id: [] }"
@@ -236,9 +215,7 @@ const props = defineProps<{
 // #endregion
 
 // #region 筛选状态（模块级单例，与 ImageGridHeader 共享）
-const { imageFilters, searchQuery, clearFilters } = useDirectoryState(
-  () => props.directoryId,
-);
+const { imageFilters, searchQuery, clearFilters } = useDirectoryState(() => props.directoryId);
 // #endregion
 
 // #region 图片加载
@@ -260,15 +237,12 @@ const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
 
 const loading = computed(() => loadingCount.value > 0);
 
-const {
-  images,
-  hasNextPage,
-  fetchMore,
-  outOfFilterImageIds,
-  applyLocalFilter,
-} = useBrowseImages(imagesVariables, {
-  loadingCount,
-});
+const { images, hasNextPage, fetchMore, outOfFilterImageIds, applyLocalFilter } = useBrowseImages(
+  imagesVariables,
+  {
+    loadingCount,
+  },
+);
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 
@@ -474,10 +448,7 @@ useHotkeys(
         await trashImages(props.directoryId, selectedFilterBy.value);
         deselectAll();
       } catch (err) {
-        showNotification(
-          err instanceof Error ? err.message : "批量删除图片失败",
-          "error",
-        );
+        showNotification(err instanceof Error ? err.message : "批量删除图片失败", "error");
       } finally {
         isBulkDeleting.value = false;
       }

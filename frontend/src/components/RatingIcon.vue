@@ -1,10 +1,5 @@
 <template>
-  <svg
-    class="w-6 h-6"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    :class="getStarColorClass(rating)"
-  >
+  <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" :class="getStarColorClass(rating)">
     <path :d="filled ? starConfig?.filledIcon : starConfig?.outlineIcon" />
     <text
       v-if="filled"

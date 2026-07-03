@@ -16,9 +16,7 @@ export default function useBulkOperations(
   const isBulkMode = computed({
     get: () => {
       const dirId = toValue(directoryId);
-      return bulkModeBuffer.value.directoryId === dirId
-        ? bulkModeBuffer.value.enabled
-        : false;
+      return bulkModeBuffer.value.directoryId === dirId ? bulkModeBuffer.value.enabled : false;
     },
     set: (val) => {
       bulkModeBuffer.value = {
@@ -32,9 +30,7 @@ export default function useBulkOperations(
   const selectedImageIds = computed<string[]>({
     get: () => {
       const dirId = toValue(directoryId);
-      return selectedBuffer.value.directoryId === dirId
-        ? selectedBuffer.value.ids
-        : [];
+      return selectedBuffer.value.directoryId === dirId ? selectedBuffer.value.ids : [];
     },
     set: (val) => {
       selectedBuffer.value = {
@@ -109,9 +105,7 @@ export default function useBulkOperations(
     if (isAllMatchingSelected.value) {
       isAllMatchingSelected.value = false;
       const allCurrentIds = toValue(images).map((img) => img.id);
-      selectedImageIds.value = allCurrentIds.filter(
-        (currentId) => currentId !== id,
-      );
+      selectedImageIds.value = allCurrentIds.filter((currentId) => currentId !== id);
     } else {
       const current = [...selectedImageIds.value];
       const index = current.indexOf(id);
@@ -158,9 +152,7 @@ export default function useBulkOperations(
       const updatedCount = res.data?.updateImagesMetadata?.updatedCount ?? 0;
 
       showNotification(
-        `已成功将 ${updatedCount} 张图片的星级设为 ${
-          rating === 0 ? "无评分" : rating + "星"
-        }`,
+        `已成功将 ${updatedCount} 张图片的星级设为 ${rating === 0 ? "无评分" : rating + "星"}`,
         "success",
       );
       onSuccess?.();

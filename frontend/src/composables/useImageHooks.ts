@@ -24,21 +24,13 @@ export interface UseImageHooksOptions {
  * useImageHooks 用于管理图片的外部脚本钩子派发与执行
  */
 export default function useImageHooks(options: UseImageHooksOptions = {}) {
-  const {
-    dispatchableHooks,
-    dispatch: domainDispatch,
-    hooksLoadingCountRef,
-  } = useImage();
+  const { dispatchableHooks, dispatch: domainDispatch, hooksLoadingCountRef } = useImage();
 
   const isDispatching = ref(false);
   const currentDispatchingHookId = ref("");
   const { showSuccess, showError, showInfo, remove } = useNotification();
 
-  async function dispatch(
-    hookId: string,
-    hookName: string,
-    filterBy: ImageFiltersInput,
-  ) {
+  async function dispatch(hookId: string, hookName: string, filterBy: ImageFiltersInput) {
     if (isDispatching.value) return;
     isDispatching.value = true;
     currentDispatchingHookId.value = hookId;
@@ -81,11 +73,7 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
         if (!filter) {
           return;
         }
-        await dispatch(
-          lastDispatchedHook.value.id,
-          lastDispatchedHook.value.name,
-          filter,
-        );
+        await dispatch(lastDispatchedHook.value.id, lastDispatchedHook.value.name, filter);
       },
     },
     {

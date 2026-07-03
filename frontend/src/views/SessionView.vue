@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden"
-  >
+  <div class="h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden">
     <SessionHeader
       :session
       :undoing="undoing"
@@ -18,10 +16,7 @@
             data-filter-action="true"
           >
             <!-- 自动排除开关 -->
-            <ToggleSwitch
-              v-model="autoRejectEnabled"
-              class="text-xs md:text-sm text-primary-200"
-            >
+            <ToggleSwitch v-model="autoRejectEnabled" class="text-xs md:text-sm text-primary-200">
               <span class="hidden sm:inline">自动排除</span>
             </ToggleSwitch>
 
@@ -45,11 +40,7 @@
             :disabled="earlyFinishing"
             @click="earlyFinish"
           >
-            <svg
-              v-if="earlyFinishing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            <svg v-if="earlyFinishing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
@@ -90,11 +81,7 @@
             ></div>
           </template>
           <template #progress>
-            <SessionProgressBar
-              v-if="session"
-              :session
-              class="pointer-events-none"
-            />
+            <SessionProgressBar v-if="session" :session class="pointer-events-none" />
           </template>
           <template #info="{ isFullscreen }">
             <span class="lg:min-w-24 hidden md:block">
@@ -140,9 +127,7 @@
       </Teleport>
 
       <template v-if="currentImage">
-        <div
-          class="text-center text-xs md:text-sm text-primary-400 hidden md:block mb-2"
-        >
+        <div class="text-center text-xs md:text-sm text-primary-400 hidden md:block mb-2">
           {{ currentImage?.filename || "" }}
         </div>
 
@@ -154,10 +139,7 @@
         />
       </template>
 
-      <div
-        v-else
-        class="min-h-full flex flex-col items-center justify-center w-full"
-      >
+      <div v-else class="min-h-full flex flex-col items-center justify-center w-full">
         <template v-if="loading">
           <div class="text-center text-primary-400">加载中...</div>
         </template>
@@ -233,11 +215,7 @@
     </footer>
 
     <commitDialog.component v-if="session" container-class="sm:max-w-md p-6">
-      <CommitForm
-        :session="session"
-        title="提交更改"
-        @committed="commitDialog.close"
-      >
+      <CommitForm :session="session" title="提交更改" @committed="commitDialog.close">
         <template #actions="{ committing, commitResult }">
           <button
             v-if="!commitResult"
@@ -254,11 +232,7 @@
             class="flex-2 px-4 py-2 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg flex items-center justify-center gap-2 transition-colors font-bold"
             type="submit"
           >
-            <svg
-              v-if="committing"
-              class="w-5 h-5 animate-spin"
-              viewBox="0 0 24 24"
-            >
+            <svg v-if="committing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
             <span>确认提交</span>
@@ -275,10 +249,7 @@
       </CommitForm>
     </commitDialog.component>
 
-    <updateSessionDialog.component
-      v-if="session"
-      container-class="sm:max-w-md p-6"
-    >
+    <updateSessionDialog.component v-if="session" container-class="sm:max-w-md p-6">
       <UpdateSessionForm
         :session="session"
         @close="updateSessionDialog.close"
@@ -388,9 +359,7 @@ const { session } = useSession(sessionId, { loadingCount });
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
 // 优先使用已加载完成的图片 id，避免在图片切换瞬间使用错误的 id
-const currentImageId = computed(
-  () => lastImageLoadedEvent.value?.id ?? currentImage.value?.id,
-);
+const currentImageId = computed(() => lastImageLoadedEvent.value?.id ?? currentImage.value?.id);
 
 const swipeEl = useTemplateRef("swipeEl");
 
@@ -548,10 +517,7 @@ const imageLoadedAt = computed(() => {
   }
   return undefined;
 });
-const { marking, mark: originalMarkImage } = useMarkImage(
-  sessionId,
-  imageLoadedAt,
-);
+const { marking, mark: originalMarkImage } = useMarkImage(sessionId, imageLoadedAt);
 async function markImage(id: string, action: ImageAction) {
   if (autoRejectEnabled.value) {
     autoRejectRunning.value = true;
@@ -559,8 +525,7 @@ async function markImage(id: string, action: ImageAction) {
   await originalMarkImage(id, action);
 }
 
-const completedView =
-  useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
+const completedView = useTemplateRef<InstanceType<typeof CompletedView>>("completedView");
 
 const currentRoundKept = computed(() => {
   const s = session.value;
@@ -598,8 +563,7 @@ function handleCommit() {
   }
 }
 
-const { show: showNotification, remove: removeNotification } =
-  useNotification();
+const { show: showNotification, remove: removeNotification } = useNotification();
 
 const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
@@ -675,9 +639,7 @@ function handleGesture() {
 const showAutoRejectControl = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
-  return (
-    currentRoundKept.value + s.stats.currentRoundRemaining > s.targetKeep * 2
-  );
+  return currentRoundKept.value + s.stats.currentRoundRemaining > s.targetKeep * 2;
 });
 
 const isAutoRejectActive = computed(() => {
@@ -699,12 +661,7 @@ watch(
     const timer = window.setTimeout(async () => {
       const currentId = currentImageId.value;
       // 触发时检验：确认图片未被手动切换，未处于标记中，且自动排除依旧生效
-      if (
-        currentId &&
-        currentId === imageId &&
-        !marking.value &&
-        isAutoRejectActive.value
-      ) {
+      if (currentId && currentId === imageId && !marking.value && isAutoRejectActive.value) {
         await markImage(currentId, ImageAction.REJECT);
       }
     }, timeoutMs);

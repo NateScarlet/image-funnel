@@ -118,10 +118,7 @@ export function parseUsage(usage: string): DirectiveRule[] {
     const rawTokens = cleanedRemaining.split(/\s+/).filter(Boolean);
 
     for (const token of rawTokens) {
-      if (
-        token.startsWith("<") &&
-        (token.endsWith(">") || token.endsWith(">..."))
-      ) {
+      if (token.startsWith("<") && (token.endsWith(">") || token.endsWith(">..."))) {
         patternTokens.push({
           type: "positional",
           value: token,
@@ -202,18 +199,13 @@ export function getArgsContext(argsText: string): {
 /**
  * 根据已输入完毕的 tokens 列表，过滤出特定规则模式下的模式匹配 token 序列
  */
-function getPatternTokens(
-  confirmedTokens: string[],
-  rule: DirectiveRule,
-): string[] {
+function getPatternTokens(confirmedTokens: string[], rule: DirectiveRule): string[] {
   const result: string[] = [];
   let i = 0;
   while (i < confirmedTokens.length) {
     const token = confirmedTokens[i];
     // 匹配选项定义（同时支持长选项与短选项匹配识别）
-    const opt = rule.options.find(
-      (o) => o.name === token || o.shortName === token,
-    );
+    const opt = rule.options.find((o) => o.name === token || o.shortName === token);
     if (opt) {
       if (opt.placeholder) {
         // 如果是带参选项，忽略它自己和它的参数值
@@ -270,9 +262,7 @@ export function getSuggestionsForRules(
         if (isMatch) {
           // 检查该选项是否已经存在于 confirmedTokens 中（如果是可多次指定的如 --region，允许再次出现）
           const isRepeatable =
-            opt.raw.includes("...") ||
-            opt.name === "--region" ||
-            opt.name === "--node";
+            opt.raw.includes("...") || opt.name === "--region" || opt.name === "--node";
 
           const hasAlready =
             confirmedTokens.includes(opt.name) ||
@@ -281,12 +271,8 @@ export function getSuggestionsForRules(
             continue;
           }
 
-          const optionText = opt.placeholder
-            ? `${opt.name} ${opt.placeholder}`
-            : opt.name;
-          const display = opt.shortName
-            ? `${optionText} (${opt.shortName})`
-            : optionText;
+          const optionText = opt.placeholder ? `${opt.name} ${opt.placeholder}` : opt.name;
+          const display = opt.shortName ? `${optionText} (${opt.shortName})` : optionText;
 
           list.push({
             type: "option",
@@ -317,11 +303,7 @@ export function getSuggestionsForRules(
           const val = nextPattern.value;
           // 去除 < > 并移除尾随的 ... 得到名字
           const cleanName = val.replace(/[<>]/g, "").replace(/\.\.\.$/, "");
-          if (
-            !q ||
-            cleanName.toLowerCase().startsWith(q) ||
-            val.toLowerCase().startsWith(q)
-          ) {
+          if (!q || cleanName.toLowerCase().startsWith(q) || val.toLowerCase().startsWith(q)) {
             list.push({
               type: "positional",
               text: val,
@@ -336,9 +318,7 @@ export function getSuggestionsForRules(
       // 我们也同时匹配符合 query 的选项（例如用户输入 'reg' 或 '-j' 时，匹配出 '--region <region>'）
       for (const opt of rule.options) {
         const isRepeatable =
-          opt.raw.includes("...") ||
-          opt.name === "--region" ||
-          opt.name === "--node";
+          opt.raw.includes("...") || opt.name === "--region" || opt.name === "--node";
 
         const hasAlready =
           confirmedTokens.includes(opt.name) ||
@@ -354,12 +334,8 @@ export function getSuggestionsForRules(
           (opt.shortName && opt.shortName.toLowerCase().includes(q)) ||
           opt.raw.toLowerCase().includes(q);
         if (isMatch) {
-          const optionText = opt.placeholder
-            ? `${opt.name} ${opt.placeholder}`
-            : opt.name;
-          const display = opt.shortName
-            ? `${optionText} (${opt.shortName})`
-            : optionText;
+          const optionText = opt.placeholder ? `${opt.name} ${opt.placeholder}` : opt.name;
+          const display = opt.shortName ? `${optionText} (${opt.shortName})` : optionText;
 
           list.push({
             type: "option",
@@ -385,7 +361,7 @@ export function getSuggestionsForRules(
   }
 
   // 排序：优先子命令/位置参数，然后是选项；如果相同类型，则按 text 长度或匹配关联性排序
-  return uniqueList.sort((a, b) => {
+  return uniqueList.toSorted((a, b) => {
     const typeOrder = { subcommand: 1, positional: 2, option: 3 };
     const aOrder = typeOrder[a.type];
     const bOrder = typeOrder[b.type];

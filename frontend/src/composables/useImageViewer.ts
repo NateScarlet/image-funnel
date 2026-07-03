@@ -1,12 +1,4 @@
-import {
-  ref,
-  computed,
-  watchEffect,
-  onMounted,
-  nextTick,
-  type Ref,
-  type ComputedRef,
-} from "vue";
+import { ref, computed, watchEffect, onMounted, nextTick, type Ref, type ComputedRef } from "vue";
 import type { ImageFragment } from "@/graphql/generated";
 import { useHotkeys } from "@/composables/useHotkeys";
 import useModalFullscreen from "@/composables/useModalFullscreen";
@@ -23,8 +15,7 @@ interface UseImageViewerInput {
 }
 
 export default function useImageViewer(input: UseImageViewerInput) {
-  const { images, hasNextPage, loading, fetchMore, clearFilters, searchQuery } =
-    input;
+  const { images, hasNextPage, loading, fetchMore, clearFilters, searchQuery } = input;
 
   const imageViewerDialog = useModalFullscreen();
 
@@ -82,12 +73,7 @@ export default function useImageViewer(input: UseImageViewerInput) {
 
   // 预载下一页：若目标图片是当前列表的最后一张，且有后续页面未加载，则在后台静默发起加载请求
   function checkAndFetchMore(index: number) {
-    if (
-      index !== -1 &&
-      index === images.value.length - 1 &&
-      hasNextPage.value &&
-      !loading.value
-    ) {
+    if (index !== -1 && index === images.value.length - 1 && hasNextPage.value && !loading.value) {
       fetchMore();
     }
   }
@@ -143,9 +129,7 @@ export default function useImageViewer(input: UseImageViewerInput) {
   // #region 通过文件名搜索并打开查看器
   function tryOpenViewerByFilename(filename: string): boolean {
     console.log("try open", filename);
-    const image = images.value.find(
-      (img: ImageFragment) => img.filename === filename,
-    );
+    const image = images.value.find((img: ImageFragment) => img.filename === filename);
     if (image) {
       openViewer(image);
       return true;
@@ -198,9 +182,7 @@ export default function useImageViewer(input: UseImageViewerInput) {
         let pageCount = 0;
         while (hasNextPage.value) {
           if (pageCount > 0 && pageCount % 10 === 0) {
-            const shouldContinue = confirm(
-              `已经自动加载了 ${pageCount} 页图片，是否继续加载？`,
-            );
+            const shouldContinue = confirm(`已经自动加载了 ${pageCount} 页图片，是否继续加载？`);
             if (!shouldContinue) {
               break;
             }

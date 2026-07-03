@@ -47,10 +47,7 @@ export interface HotkeyOptions {
    */
   enabled?:
     | MaybeRefOrGetter<boolean>
-    | ((ctx: {
-        topmostScope: string | undefined;
-        activeScopes: string[];
-      }) => boolean);
+    | ((ctx: { topmostScope: string | undefined; activeScopes: string[] }) => boolean);
   /**
    * 是否是全局快捷键，全局快捷键在任何 active scope 之下都可以被触发。
    * @default false
@@ -100,10 +97,7 @@ interface RegisteredHotkey {
   stopPropagation: boolean;
   enabled?:
     | MaybeRefOrGetter<boolean>
-    | ((ctx: {
-        topmostScope: string | undefined;
-        activeScopes: string[];
-      }) => boolean);
+    | ((ctx: { topmostScope: string | undefined; activeScopes: string[] }) => boolean);
   global: boolean;
   getScope: () => string | undefined;
 }
@@ -118,10 +112,7 @@ export interface ActiveHotkey {
   category?: string;
   enabled?:
     | MaybeRefOrGetter<boolean>
-    | ((ctx: {
-        topmostScope: string | undefined;
-        activeScopes: string[];
-      }) => boolean);
+    | ((ctx: { topmostScope: string | undefined; activeScopes: string[] }) => boolean);
 }
 
 // 依赖注入标识
@@ -169,9 +160,7 @@ function parseHotkey(shortcut: string): HotkeyCombination {
  */
 function globalKeydownHandler(e: KeyboardEvent) {
   const topmostScope =
-    activeScopes.value.length > 0
-      ? activeScopes.value[activeScopes.value.length - 1]
-      : undefined;
+    activeScopes.value.length > 0 ? activeScopes.value[activeScopes.value.length - 1] : undefined;
 
   for (let i = registeredHotkeys.length - 1; i >= 0; i--) {
     const hotkey = registeredHotkeys[i];
@@ -198,8 +187,7 @@ function globalKeydownHandler(e: KeyboardEvent) {
     }
 
     // 2. 检查 Scope。如果 enabled 是 context 过滤函数且带参数，我们绕过默认的 scope 匹配规则
-    const isContextFn =
-      typeof hotkey.enabled === "function" && hotkey.enabled.length > 0;
+    const isContextFn = typeof hotkey.enabled === "function" && hotkey.enabled.length > 0;
     if (!isContextFn) {
       const hotkeyScope = hotkey.getScope();
       if (topmostScope !== undefined) {
@@ -236,9 +224,7 @@ function globalKeydownHandler(e: KeyboardEvent) {
 
       // 针对数字键的特殊兼容
       if (!matchesKey && /^[0-9]$/.test(combination.key)) {
-        matchesKey =
-          e.code === `Digit${combination.key}` ||
-          e.code === `Numpad${combination.key}`;
+        matchesKey = e.code === `Digit${combination.key}` || e.code === `Numpad${combination.key}`;
       }
 
       // 针对物理键码的前缀精确匹配
@@ -250,13 +236,7 @@ function globalKeydownHandler(e: KeyboardEvent) {
         matchesKey = e.code.toLowerCase() === combination.key.toLowerCase();
       }
 
-      if (
-        matchesCtrl &&
-        matchesShift &&
-        matchesAlt &&
-        matchesMeta &&
-        matchesKey
-      ) {
+      if (matchesCtrl && matchesShift && matchesAlt && matchesMeta && matchesKey) {
         matched = true;
         break;
       }
@@ -370,9 +350,7 @@ function registerSingleHotkey(
         registeredHotkeys.splice(index, 1);
       }
       if (description) {
-        activeHotkeys.value = activeHotkeys.value.filter(
-          (item) => item.id !== id,
-        );
+        activeHotkeys.value = activeHotkeys.value.filter((item) => item.id !== id);
       }
     });
   }
@@ -411,10 +389,7 @@ export function useHotkeys(
     defineScope?: MaybeRefOrGetter<string | undefined>;
   },
 ): Ref<string | undefined> {
-  let bindings:
-    | HotkeyBinding[]
-    | Record<string, (e: KeyboardEvent) => void>
-    | null = null;
+  let bindings: HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void> | null = null;
   let options: HotkeyOptions & {
     defineScope?: MaybeRefOrGetter<string | undefined>;
   };
@@ -426,13 +401,9 @@ export function useHotkeys(
     !("keys" in bindingsOrOptions) &&
     "defineScope" in (bindingsOrOptions as Record<string, unknown>)
   ) {
-    options = bindingsOrOptions as HotkeyOptions & {
-      defineScope: MaybeRefOrGetter<string | undefined>;
-    };
+    options = bindingsOrOptions;
   } else {
-    bindings = bindingsOrOptions as
-      | HotkeyBinding[]
-      | Record<string, (e: KeyboardEvent) => void>;
+    bindings = bindingsOrOptions as HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>;
     options = optionsOrUndefined || {};
   }
 
@@ -488,8 +459,7 @@ export function useHotkeys(
       const hotkeyScope = computed(() => {
         if (hotkeyOptions.global) return undefined;
         if (defineScope !== undefined) return localScopeId.value;
-        if (hotkeyOptions.scope !== undefined)
-          return toValue(hotkeyOptions.scope);
+        if (hotkeyOptions.scope !== undefined) return toValue(hotkeyOptions.scope);
         return toValue(injectedScope);
       });
 

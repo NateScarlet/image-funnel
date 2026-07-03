@@ -1,9 +1,7 @@
 <template>
   <div>
     <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
-      <label class="block text-sm font-medium text-primary-300">
-        选择目录
-      </label>
+      <label class="block text-sm font-medium text-primary-300"> 选择目录 </label>
       <div class="flex flex-wrap items-center gap-4">
         <!-- 筛选未评级图片目录开关 -->
         <ToggleSwitch v-model="showSmallUnrated">
@@ -34,12 +32,7 @@
           class="text-secondary-400 hover:text-secondary-300 text-sm flex items-center gap-1"
           @click="goToParent"
         >
-          <svg
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -71,11 +64,7 @@
         />
       </div>
 
-      <div
-        v-if="items.length > 0"
-        ref="containerRef"
-        class="max-h-[60vh] overflow-y-auto pr-1"
-      >
+      <div v-if="items.length > 0" ref="containerRef" class="max-h-[60vh] overflow-y-auto pr-1">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <template v-for="item in visibleFilteredItems" :key="item.key">
             <DirectoryItem
@@ -186,9 +175,7 @@ const searchState = ref({ query: "", directoryId: "" });
 
 const searchQuery = computed({
   get: () =>
-    searchState.value.directoryId === (selectedId.value ?? "")
-      ? searchState.value.query
-      : "",
+    searchState.value.directoryId === (selectedId.value ?? "") ? searchState.value.query : "",
   set: (val: string) => {
     searchState.value = {
       query: val,
@@ -236,14 +223,11 @@ const items = computed(() => {
         ) ?? 0;
 
       const unratedCount =
-        stats?.ratingCounts.find(
-          (rc: { rating: number; count: number }) => rc.rating === 0,
-        )?.count ?? 0;
+        stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)
+          ?.count ?? 0;
 
-      const isCompleted =
-        stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
-      const isSmallUnrated =
-        stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
+      const isCompleted = stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
+      const isSmallUnrated = stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
 
       // 判定是否本身不满足筛选（已达标或未评级图片过少），但由于有子目录而必须显示
       const isFilteredOutButShown =

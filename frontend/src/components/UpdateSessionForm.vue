@@ -8,9 +8,7 @@
     <div class="space-y-4">
       <!-- 预设选择 -->
       <div>
-        <label class="mb-2 block text-sm font-medium text-primary-300">
-          选择预设
-        </label>
+        <label class="mb-2 block text-sm font-medium text-primary-300"> 选择预设 </label>
         <div class="grid grid-cols-2 gap-3">
           <div
             v-for="preset in presets"
@@ -51,9 +49,7 @@
       <!-- 筛选条件 -->
       <div class="rounded-lg bg-primary-700/50 p-4">
         <div class="mb-2 flex items-center justify-between">
-          <span class="block text-sm font-medium text-primary-300">
-            筛选条件
-          </span>
+          <span class="block text-sm font-medium text-primary-300"> 筛选条件 </span>
         </div>
         <RatingSelector v-model="rating" />
       </div>
@@ -83,10 +79,7 @@
 import { ref } from "vue";
 import type { SessionFragment } from "../graphql/generated";
 import mutate from "../graphql/utils/mutate";
-import {
-  UpdateSessionDocument,
-  SetDirectoryStateDocument,
-} from "../graphql/generated";
+import { UpdateSessionDocument, SetDirectoryStateDocument } from "../graphql/generated";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import RatingSelector from "./RatingSelector.vue";
 import NumberInput from "./NumberInput.vue";
@@ -99,8 +92,9 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<(e: "close" | "updated") => void>();
 
-const { presets, selectedPresetId, selectedPreset, targetKeep, rating } =
-  useSessionConfig(() => props.session);
+const { presets, selectedPresetId, selectedPreset, targetKeep, rating } = useSessionConfig(
+  () => props.session,
+);
 
 const updating = ref<boolean>(false);
 

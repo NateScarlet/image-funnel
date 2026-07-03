@@ -14,10 +14,7 @@ import {
   onScopeDispose,
 } from "vue";
 
-export type FormState = Omit<
-  ReturnType<typeof useFormState>,
-  typeof Symbol.dispose | "dispose"
->;
+export type FormState = Omit<ReturnType<typeof useFormState>, typeof Symbol.dispose | "dispose">;
 
 const key: InjectionKey<{
   buffers: ShallowReactive<Set<ShallowRef<unknown>>>;

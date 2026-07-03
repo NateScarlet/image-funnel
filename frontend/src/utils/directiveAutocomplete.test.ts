@@ -1,9 +1,5 @@
 import { describe, test, expect } from "vitest";
-import {
-  parseUsage,
-  getArgsContext,
-  getSuggestionsForRules,
-} from "./directiveAutocomplete";
+import { parseUsage, getArgsContext, getSuggestionsForRules } from "./directiveAutocomplete";
 
 const sampleUsage = `
 /adjust lora <name> <weight> [-u] [-j <N>] [--no-skip]
@@ -84,9 +80,7 @@ describe("directiveAutocomplete", () => {
 
     // 1. 输入 "/adjust " 推荐所有可选子命令
     const sugs1 = getSuggestionsForRules(rules, [], "");
-    const cmdNames = sugs1
-      .filter((s) => s.type === "subcommand")
-      .map((s) => s.text);
+    const cmdNames = sugs1.filter((s) => s.type === "subcommand").map((s) => s.text);
     expect(cmdNames).toEqual(["cfg", "lora", "prompt"]);
 
     // 2. 输入 "/adjust l" 匹配 "lora"
@@ -100,44 +94,28 @@ describe("directiveAutocomplete", () => {
     expect(sugs3[0].type).toBe("positional");
     expect(sugs3[0].text).toBe("<name>");
     expect(sugs3[0].placeholder).toBe("<name>");
-    expect(
-      sugs3.some((s) => s.type === "option" && s.text === "--no-skip"),
-    ).toBe(true);
+    expect(sugs3.some((s) => s.type === "option" && s.text === "--no-skip")).toBe(true);
 
     // 4. 输入 "/adjust lora name " 推荐下一个位置参数 "<weight>" 同时也推荐所有可选选项
     const sugs4 = getSuggestionsForRules(rules, ["lora", "name"], "");
     expect(sugs4.length).toBeGreaterThan(1);
     expect(sugs4[0].text).toBe("<weight>");
-    expect(
-      sugs4.some((s) => s.type === "option" && s.text === "--no-skip"),
-    ).toBe(true);
+    expect(sugs4.some((s) => s.type === "option" && s.text === "--no-skip")).toBe(true);
 
     // 5. 输入 "/adjust lora name weight --" 过滤出该分支下的所有选项
-    const sugs5 = getSuggestionsForRules(
-      rules,
-      ["lora", "name", "weight"],
-      "--",
-    );
+    const sugs5 = getSuggestionsForRules(rules, ["lora", "name", "weight"], "--");
     const optNames = sugs5.map((s) => s.text);
     expect(optNames).toContain("--no-skip");
     expect(optNames).not.toContain("--region <region>");
 
     // 6. 输入 "/adjust prompt name weight --re" 过滤出 "--region <region>"
-    const sugs6 = getSuggestionsForRules(
-      rules,
-      ["prompt", "name", "weight"],
-      "--re",
-    );
+    const sugs6 = getSuggestionsForRules(rules, ["prompt", "name", "weight"], "--re");
     expect(sugs6).toHaveLength(1);
     expect(sugs6[0].text).toBe("--region <region>");
     expect(sugs6[0].placeholder).toBe("<region>");
 
     // 7. 测试涉及到 region 的查询，即使没输入 '-'，输入 "reg" 也应该能召回
-    const sugs7 = getSuggestionsForRules(
-      rules,
-      ["prompt", "name", "weight"],
-      "reg",
-    );
+    const sugs7 = getSuggestionsForRules(rules, ["prompt", "name", "weight"], "reg");
     const regSugs = sugs7.filter((s) => s.text.startsWith("--region"));
     expect(regSugs).toHaveLength(1);
     expect(regSugs[0].text).toBe("--region <region>");

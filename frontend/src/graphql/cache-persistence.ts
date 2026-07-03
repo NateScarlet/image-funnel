@@ -62,10 +62,9 @@ export class PersistentCache extends InMemoryCache {
 
   // #region 重写会修改缓存的方法，触发持久化
 
-  override write<
-    TData = unknown,
-    TVariables extends OperationVariables = OperationVariables,
-  >(options: Cache.WriteOptions<TData, TVariables>): Reference | undefined {
+  override write<TData = unknown, TVariables extends OperationVariables = OperationVariables>(
+    options: Cache.WriteOptions<TData, TVariables>,
+  ): Reference | undefined {
     const result = super.write(options);
     this.save();
     return result;
@@ -105,10 +104,7 @@ export class PersistentCache extends InMemoryCache {
     return result;
   }
 
-  override recordOptimisticTransaction(
-    transaction: Transaction,
-    optimisticId: string,
-  ): void {
+  override recordOptimisticTransaction(transaction: Transaction, optimisticId: string): void {
     super.recordOptimisticTransaction(transaction, optimisticId);
     this.save();
   }
@@ -119,9 +115,9 @@ export class PersistentCache extends InMemoryCache {
     return result;
   }
 
-  override modify<
-    Entity extends Record<string, unknown> = Record<string, unknown>,
-  >(options: Cache.ModifyOptions<Entity>): boolean {
+  override modify<Entity extends Record<string, unknown> = Record<string, unknown>>(
+    options: Cache.ModifyOptions<Entity>,
+  ): boolean {
     const result = super.modify(options);
     if (result) {
       this.save();

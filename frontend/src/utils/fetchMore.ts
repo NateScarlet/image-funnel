@@ -19,9 +19,7 @@ function mergeResultDeep<T extends object>(
       if (isRelayConnection(v) && isRelayConnection(more)) {
         return [
           k,
-          backward
-            ? concatRelayConnection(more, v as typeof more)
-            : concatRelayConnection(v, more),
+          backward ? concatRelayConnection(more, v as typeof more) : concatRelayConnection(v, more),
         ];
       }
 
@@ -42,10 +40,7 @@ export default async function fetchMore<
     last?: number | null;
     before?: string | null;
   },
->(
-  query: Pick<ObservableQuery<T, V>, "fetchMore">,
-  pageInfo: PageInfo,
-): Promise<void> {
+>(query: Pick<ObservableQuery<T, V>, "fetchMore">, pageInfo: PageInfo): Promise<void> {
   try {
     if (pageInfo.hasNextPage) {
       await query.fetchMore({

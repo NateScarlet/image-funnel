@@ -1,9 +1,5 @@
 export type TimeInput = Date | Time | number | string;
-export type TimeSource =
-  | TimeInput
-  | null
-  | undefined
-  | Iterable<TimeInput | null | undefined>;
+export type TimeSource = TimeInput | null | undefined | Iterable<TimeInput | null | undefined>;
 
 export default class Time {
   constructor(
@@ -64,9 +60,7 @@ export default class Time {
     return new this(Date.now(), performance.timeOrigin + performance.now());
   }
 
-  public static max(
-    values: Iterable<Time | null | undefined>,
-  ): Time | undefined {
+  public static max(values: Iterable<Time | null | undefined>): Time | undefined {
     let ret: Time | undefined;
     for (const value of values) {
       if (value == null) {
@@ -79,9 +73,7 @@ export default class Time {
     return ret;
   }
 
-  public static min(
-    values: Iterable<Time | null | undefined>,
-  ): Time | undefined {
+  public static min(values: Iterable<Time | null | undefined>): Time | undefined {
     let ret: Time | undefined;
     for (const value of values) {
       if (value == null) {

@@ -1,9 +1,7 @@
 <template>
   <div class="flex flex-col max-h-[80vh]">
     <!-- 头部区域 -->
-    <div
-      class="flex items-center justify-between border-b border-primary-700 pb-3 mb-4 shrink-0"
-    >
+    <div class="flex items-center justify-between border-b border-primary-700 pb-3 mb-4 shrink-0">
       <h3 class="text-lg font-bold text-primary-50 flex items-center gap-2">
         <svg class="w-5 h-5 text-secondary-400" viewBox="0 0 24 24">
           <path :d="mdiKeyboardOutline" fill="currentColor" />
@@ -23,19 +21,10 @@
 
     <!-- 快捷键列表内容区 -->
     <div class="flex-1 overflow-y-auto pr-1 scrollbar-thin">
-      <div
-        v-if="groupedHotkeys.length > 0"
-        class="grid grid-cols-1 md:grid-cols-2 gap-6 py-2"
-      >
-        <div
-          v-for="group in groupedHotkeys"
-          :key="group.name"
-          class="space-y-2"
-        >
+      <div v-if="groupedHotkeys.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-6 py-2">
+        <div v-for="group in groupedHotkeys" :key="group.name" class="space-y-2">
           <!-- 分组标题 -->
-          <h4
-            class="text-xs font-bold text-primary-400 tracking-wider uppercase px-2 select-none"
-          >
+          <h4 class="text-xs font-bold text-primary-400 tracking-wider uppercase px-2 select-none">
             {{ group.name }}
           </h4>
           <!-- 分组内快捷键列表 -->
@@ -45,10 +34,9 @@
               :key="item.id"
               class="flex items-center justify-between py-2 px-4 bg-primary-900/40 hover:bg-primary-900/80 border border-primary-800/30 hover:border-primary-700/40 rounded-xl transition-all duration-200"
             >
-              <span
-                class="text-xs md:text-sm text-primary-200 font-medium mr-4"
-                >{{ item.description }}</span
-              >
+              <span class="text-xs md:text-sm text-primary-200 font-medium mr-4">{{
+                item.description
+              }}</span>
               <div class="flex items-center gap-2 flex-wrap justify-end">
                 <div
                   v-for="(combo, comboIdx) in item.keys"
@@ -56,15 +44,11 @@
                   class="flex items-center gap-1"
                 >
                   <!-- 支持多组快捷键的 or 拼接 -->
-                  <span
-                    v-if="comboIdx > 0"
-                    class="text-primary-500 text-xs px-1 select-none"
+                  <span v-if="comboIdx > 0" class="text-primary-500 text-xs px-1 select-none"
                     >/</span
                   >
                   <template v-for="(keyName, keyIdx) in combo" :key="keyIdx">
-                    <span
-                      v-if="keyIdx > 0"
-                      class="text-primary-500 text-xs font-light select-none"
+                    <span v-if="keyIdx > 0" class="text-primary-500 text-xs font-light select-none"
                       >+</span
                     >
                     <kbd
@@ -79,9 +63,7 @@
           </div>
         </div>
       </div>
-      <div v-else class="text-center py-8 text-primary-400 text-sm">
-        当前页面无可用快捷键
-      </div>
+      <div v-else class="text-center py-8 text-primary-400 text-sm">当前页面无可用快捷键</div>
     </div>
 
     <!-- 底部提示 -->
@@ -128,7 +110,7 @@ const groupedHotkeys = computed(() => {
   ];
 
   return Object.keys(groups)
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       const idxA = categoryOrder.indexOf(a);
       const idxB = categoryOrder.indexOf(b);
       const orderA = idxA !== -1 ? idxA : 999;

@@ -18,14 +18,10 @@
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="
-                keepRating === null ? 'text-primary-500' : 'text-green-400'
-              "
+              :class="keepRating === null ? 'text-primary-500' : 'text-green-400'"
               >保留</span
             >
-            <span
-              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
-            >
+            <span class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full">
               {{ session?.stats.totalKept || 0 }} 张
             </span>
           </div>
@@ -35,14 +31,10 @@
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="
-                shelveRating === null ? 'text-primary-500' : 'text-yellow-400'
-              "
+              :class="shelveRating === null ? 'text-primary-500' : 'text-yellow-400'"
               >搁置</span
             >
-            <span
-              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
-            >
+            <span class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full">
               {{ session?.stats.totalShelved || 0 }} 张
             </span>
           </div>
@@ -52,14 +44,10 @@
           <div class="flex items-center gap-2">
             <span
               class="text-sm font-bold"
-              :class="
-                rejectRating === null ? 'text-primary-500' : 'text-red-400'
-              "
+              :class="rejectRating === null ? 'text-primary-500' : 'text-red-400'"
               >排除</span
             >
-            <span
-              class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full"
-            >
+            <span class="text-xs bg-primary-800 text-primary-300 px-2 py-1 rounded-full">
               {{ session?.stats.totalRejected || 0 }} 张
             </span>
           </div>
@@ -80,38 +68,22 @@
         <span>|</span>
         <span> 修改: {{ commitResult.written }} </span>
       </div>
-      <div
-        v-if="commitResult.errors.length > 0"
-        class="mt-2 text-sm text-red-300 space-y-1"
-      >
-        <div
-          v-for="(err, i) in commitResult.errors"
-          :key="i"
-          class="bg-red-900/20 p-2 rounded"
-        >
+      <div v-if="commitResult.errors.length > 0" class="mt-2 text-sm text-red-300 space-y-1">
+        <div v-for="(err, i) in commitResult.errors" :key="i" class="bg-red-900/20 p-2 rounded">
           {{ err }}
         </div>
       </div>
     </div>
 
     <div class="flex gap-3">
-      <slot
-        name="actions"
-        :committing="committing"
-        :commit-result="commitResult"
-        :commit="commit"
-      >
+      <slot name="actions" :committing="committing" :commit-result="commitResult" :commit="commit">
         <button
           v-if="!commitResult"
           :disabled="committing"
           class="flex-1 px-4 py-3 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-bold flex items-center justify-center gap-2 transition-colors"
           type="submit"
         >
-          <svg
-            v-if="committing"
-            class="w-5 h-5 animate-spin"
-            viewBox="0 0 24 24"
-          >
+          <svg v-if="committing" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
             <path :d="mdiLoading" fill="currentColor" />
           </svg>
           <span>确认提交</span>
@@ -132,10 +104,7 @@
 import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
 import useFormState from "../utils/useFormState";
-import {
-  CommitChangesDocument,
-  type SessionFragment,
-} from "../graphql/generated";
+import { CommitChangesDocument, type SessionFragment } from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import RatingSelector from "./RatingSelector.vue";
@@ -155,9 +124,7 @@ const {
 
 const emit = defineEmits<(e: "committed") => void>();
 const { getPreset, lastSelectedPresetId } = usePresets();
-const { defaultState } = useDirectoryState(
-  computed(() => session.directory.id),
-);
+const { defaultState } = useDirectoryState(computed(() => session.directory.id));
 
 const committing = ref(false);
 const commitResult = ref<{

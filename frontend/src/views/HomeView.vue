@@ -9,10 +9,7 @@
       <header class="mb-8">
         <h1 class="text-3xl md:text-4xl font-bold text-center mb-2">
           ImageFunnel
-          <span
-            v-if="version"
-            class="text-lg md:text-xl text-primary-400 font-normal ml-2"
-          >
+          <span v-if="version" class="text-lg md:text-xl text-primary-400 font-normal ml-2">
             {{ version }}
           </span>
         </h1>

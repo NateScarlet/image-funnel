@@ -12,14 +12,18 @@ import {
 } from "@/graphql/generated";
 
 // 在模块级持久化保存上次确认不支持增强剪贴板的服务器启动时间
-const { model: lastUnsupportedServerStartTime } = useStorage<
-  string | undefined
->(localStorage, "last_unsupported_start_time_u2h8a9", () => undefined);
+const { model: lastUnsupportedServerStartTime } = useStorage<string | undefined>(
+  localStorage,
+  "last_unsupported_start_time_u2h8a9",
+  () => undefined,
+);
 
 // 模块级保存当前会话曾复制过的图片 ID 列表，以实现跨组件、跨查看周期的共享状态
-const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<
-  string[]
->(sessionStorage, "copied_image_ids_s7f8g9", () => []);
+const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<string[]>(
+  sessionStorage,
+  "copied_image_ids_s7f8g9",
+  () => [],
+);
 
 export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   const { showSuccess } = useNotification();
@@ -152,7 +156,7 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
         },
       });
       const supported = res.data?.attachFileToClipboard?.supported ?? false;
-      if (supported === false) {
+      if (!supported) {
         const serverStartTime = metaData.value?.meta?.serverStartTime;
         if (serverStartTime) {
           lastUnsupportedServerStartTime.value = serverStartTime;

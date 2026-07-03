@@ -26,10 +26,10 @@ export default function useDirectoryBrowse(
   const directoryId = computed(() => toValue(variables).id);
   const loadingCount = options?.loadingCount;
 
-  const { data: directoriesData, query: directoriesQuery } = useQuery(
-    BrowseDirectoriesDocument,
-    { variables, loadingCount },
-  );
+  const { data: directoriesData, query: directoriesQuery } = useQuery(BrowseDirectoriesDocument, {
+    variables,
+    loadingCount,
+  });
 
   const currentDirectory = computed(() => {
     const node = directoriesData.value?.node;
@@ -50,8 +50,7 @@ export default function useDirectoryBrowse(
     onDeleted,
   } = useLiveConnection(() => directoryConnection.nodes.value, {
     identity: (d: DirectoryFragment) => d.relPath,
-    compare: (a: DirectoryFragment, b: DirectoryFragment) =>
-      a.relPath.localeCompare(b.relPath),
+    compare: (a: DirectoryFragment, b: DirectoryFragment) => a.relPath.localeCompare(b.relPath),
     subscribe: (item, callback) => {
       const observable = client.watchFragment<DirectoryFragment>({
         fragment: DirectoryFragmentDoc,
@@ -133,10 +132,7 @@ export function useDirectoryStats() {
     return (loadingStates[directoryId] || 0) > 0;
   }
 
-  function useStats(
-    directoryId: MaybeRefOrGetter<string>,
-    loadingCount?: Ref<number>,
-  ) {
+  function useStats(directoryId: MaybeRefOrGetter<string>, loadingCount?: Ref<number>) {
     const { data, refresh } = useQuery(DirectoryStatsDocument, {
       variables: () => ({ id: toValue(directoryId) }),
       loadingCount,
@@ -164,20 +160,15 @@ export function useDirectoryStats() {
   const stack = new DisposableStack();
   onScopeDispose(() => stack.dispose());
 
-  const statsCache = shallowReactive(
-    new Map<string, DirectoryStatsFragment | undefined>(),
-  );
+  const statsCache = shallowReactive(new Map<string, DirectoryStatsFragment | undefined>());
 
-  function getCachedStats(
-    directoryId: string,
-  ): DirectoryStatsFragment | undefined {
+  function getCachedStats(directoryId: string): DirectoryStatsFragment | undefined {
     if (!statsCache.has(directoryId)) {
       const initialNode = client.readQuery({
         query: DirectoryStatsDocument,
         variables: { id: directoryId },
       })?.node;
-      const initial =
-        initialNode?.__typename === "Directory" ? initialNode.stats : undefined;
+      const initial = initialNode?.__typename === "Directory" ? initialNode.stats : undefined;
       statsCache.set(directoryId, initial || undefined);
 
       stack.adopt(
@@ -192,8 +183,7 @@ export function useDirectoryStats() {
             statsCache.set(
               directoryId,
               toStableValue(
-                (node?.__typename === "Directory" ? node.stats : undefined) ||
-                  undefined,
+                (node?.__typename === "Directory" ? node.stats : undefined) || undefined,
                 statsCache.get(directoryId),
               ),
             );
@@ -204,10 +194,7 @@ export function useDirectoryStats() {
     return statsCache.get(directoryId);
   }
 
-  async function refetchStats(
-    directoryIds: string[],
-    signal?: AbortSignal,
-  ): Promise<void> {
+  async function refetchStats(directoryIds: string[], signal?: AbortSignal): Promise<void> {
     directoryIds.forEach((id) => {
       loadingStates[id] = (loadingStates[id] || 0) + 1;
     });

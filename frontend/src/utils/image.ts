@@ -1,9 +1,6 @@
 import type { ImageFragment } from "@/graphql/generated";
 
-export function getImageUrlByZoom(
-  image: ImageFragment,
-  zoomLevel: number,
-): string {
+export function getImageUrlByZoom(image: ImageFragment, zoomLevel: number): string {
   const targetWidth = Math.ceil(image.width * zoomLevel);
 
   if (targetWidth <= 256) {

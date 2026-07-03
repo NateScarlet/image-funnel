@@ -65,8 +65,10 @@ image-funnel/
 # 前端
 pnpm dev                 # 启动 Vite 开发服务器 (端口 8080)
 pnpm build               # 生产环境构建
-pnpm check               # TypeScript 类型检查 + ESLint (修改前端后必须运行)
-pnpm lint                # 仅 ESLint
+pnpm check               # oxlint 类型检查 + lint 自动修复 (修改前端后必须运行)
+pnpm lint                # 仅 oxlint
+pnpm lint:fix            # oxlint auto-fix
+pnpm fmt                 # 使用 oxfmt 格式化代码
 
 # 后端
 go test --timeout 30s ./...      # 运行所有 Go 测试 (修改后端后必须运行)

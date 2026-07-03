@@ -1,9 +1,6 @@
 <template>
   <div class="flex flex-wrap items-center gap-1">
-    <DirectoryBreadcrumbContent
-      :directory-id="directoryId"
-      :is-current="isCurrent"
-    />
+    <DirectoryBreadcrumbContent :directory-id="directoryId" :is-current="isCurrent" />
   </div>
 </template>
 

@@ -1,7 +1,4 @@
-export default function containsDeepChildNode(
-  container: ParentNode,
-  v: Node,
-): boolean {
+export default function containsDeepChildNode(container: ParentNode, v: Node): boolean {
   let c = v.parentNode;
   while (c) {
     if (c === container) {

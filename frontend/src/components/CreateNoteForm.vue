@@ -20,10 +20,7 @@
         type="button"
         @click="emit('close')"
       >
-        <svg
-          class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4"
-          viewBox="0 0 24 24"
-        >
+        <svg class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4" viewBox="0 0 24 24">
           <path :d="mdiClose" fill="currentColor" />
         </svg>
       </button>
@@ -51,8 +48,7 @@
             placeholder="README"
             @keydown.enter.prevent="focusContent"
           />
-          <span
-            class="text-xs sm:text-sm text-primary-400 select-none font-mono font-medium ml-1"
+          <span class="text-xs sm:text-sm text-primary-400 select-none font-mono font-medium ml-1"
             >.md</span
           >
         </div>
@@ -65,11 +61,7 @@
         >
           笔记内容
         </label>
-        <NoteEditor
-          ref="noteEditor"
-          v-model="content"
-          placeholder="输入笔记内容..."
-        />
+        <NoteEditor ref="noteEditor" v-model="content" placeholder="输入笔记内容..." />
       </div>
 
       <!-- 操作按钮区 -->
@@ -150,12 +142,8 @@ async function saveNote() {
   }
 
   // 计算目录相对路径并查重
-  const dirRelPath = props.directoryId
-    ? props.directoryId.replace(/^dir:/, "")
-    : "";
-  const finalRelPath = dirRelPath
-    ? `${dirRelPath}/${cleanName}.md`
-    : `${cleanName}.md`;
+  const dirRelPath = props.directoryId ? props.directoryId.replace(/^dir:/, "") : "";
+  const finalRelPath = dirRelPath ? `${dirRelPath}/${cleanName}.md` : `${cleanName}.md`;
   const isDuplicate = props.existingNotes.some(
     (n) => n.relPath.toLowerCase() === finalRelPath.toLowerCase(),
   );

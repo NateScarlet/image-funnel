@@ -31,10 +31,7 @@
       >
         <div
           class="relative w-full pointer-events-auto bg-primary-900 border-t border-x sm:border border-primary-700 rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[95dvh] sm:max-h-[85vh] short:max-h-dvh text-left"
-          :class="[
-            containerClass,
-            overflowVisible ? 'overflow-visible' : 'overflow-hidden',
-          ]"
+          :class="[containerClass, overflowVisible ? 'overflow-visible' : 'overflow-hidden']"
         >
           <slot></slot>
         </div>

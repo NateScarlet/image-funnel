@@ -49,12 +49,7 @@
 
 <script setup lang="ts">
 import { ImageAction } from "@/graphql/generated";
-import {
-  mdiDeleteOutline,
-  mdiClockOutline,
-  mdiHeartOutline,
-  mdiLoading,
-} from "@mdi/js";
+import { mdiDeleteOutline, mdiClockOutline, mdiHeartOutline, mdiLoading } from "@mdi/js";
 
 const { marking } = defineProps<{
   marking: boolean;

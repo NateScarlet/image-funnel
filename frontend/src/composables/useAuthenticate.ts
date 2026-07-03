@@ -1,8 +1,5 @@
 import { ref } from "vue";
-import {
-  startRegistration,
-  startAuthentication,
-} from "@simplewebauthn/browser";
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import mutate from "@/graphql/utils/mutate";
 import { tokenStore } from "@/graphql/client";
 import {
@@ -70,9 +67,7 @@ async function login(): Promise<boolean> {
   const { options, sessionKey } = beginRes.data.beginWebAuthnLogin;
 
   const asseResp = await startAuthentication({
-    optionsJSON: options as Parameters<
-      typeof startAuthentication
-    >[0]["optionsJSON"],
+    optionsJSON: options as Parameters<typeof startAuthentication>[0]["optionsJSON"],
   });
 
   const finishRes = await mutate(FinishWebAuthnLoginDocument, {
@@ -116,9 +111,7 @@ async function register(
   let attResp;
   try {
     attResp = await startRegistration({
-      optionsJSON: options as Parameters<
-        typeof startRegistration
-      >[0]["optionsJSON"],
+      optionsJSON: options as Parameters<typeof startRegistration>[0]["optionsJSON"],
     });
   } catch (err) {
     console.error("regisration failed, try login", err);
@@ -193,8 +186,7 @@ export function useAuthenticate() {
       const storedId = registeredDeviceId.model.value;
 
       // 如果提供了设备列表，仅当存储的 ID 仍在列表中时才尝试登录；否则只要注册过就尝试登录
-      const shouldTryLogin =
-        storedId && (!deviceList || deviceList.some((d) => d.id === storedId));
+      const shouldTryLogin = storedId && (!deviceList || deviceList.some((d) => d.id === storedId));
 
       const success = shouldTryLogin
         ? await tryLogin(setupToken, pairingCode)

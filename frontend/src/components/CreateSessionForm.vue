@@ -1,9 +1,7 @@
 <template>
   <div class="space-y-6">
     <div>
-      <label class="block text-sm font-medium text-primary-300 mb-4">
-        选择评分预设
-      </label>
+      <label class="block text-sm font-medium text-primary-300 mb-4"> 选择评分预设 </label>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div
           v-for="preset in presets"
@@ -31,9 +29,7 @@
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-primary-300 mb-2">
-        保留目标数量
-      </label>
+      <label class="block text-sm font-medium text-primary-300 mb-2"> 保留目标数量 </label>
       <NumberInput
         v-model="targetKeep"
         :min="1"
@@ -70,11 +66,7 @@
         class="flex-1 py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
         @click="handleCreate"
       >
-        <svg
-          v-if="creatingSession"
-          class="w-5 h-5 animate-spin"
-          viewBox="0 0 24 24"
-        >
+        <svg v-if="creatingSession" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
           <path :d="mdiLoading" fill="currentColor" />
         </svg>
         <span>{{ creatingSession ? "创建中..." : "开始筛选" }}</span>

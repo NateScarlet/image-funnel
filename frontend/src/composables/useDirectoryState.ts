@@ -80,8 +80,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
   const lastSession = computed(() => {
     const node = lastSessionData.value?.node;
-    const activeSession =
-      node?.__typename === "Directory" ? node.lastSession : undefined;
+    const activeSession = node?.__typename === "Directory" ? node.lastSession : undefined;
     if (activeSession) {
       return activeSession;
     }
@@ -119,9 +118,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
    */
   function compactDirectoryState(state: DirectoryState) {
     if (state.filterBy) {
-      const hasFilter = Object.values(state.filterBy).some(
-        (v) => v !== undefined,
-      );
+      const hasFilter = Object.values(state.filterBy).some((v) => v !== undefined);
       if (!hasFilter) {
         state.filterBy = undefined;
       }
@@ -198,11 +195,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       const baseFilter = lastSessState.filter;
       return {
         rating:
-          keepRating != null
-            ? [keepRating]
-            : baseFilter
-              ? optionalArray(baseFilter.rating)
-              : [],
+          keepRating != null ? [keepRating] : baseFilter ? optionalArray(baseFilter.rating) : [],
         label: baseFilter ? optionalArray(baseFilter.label) : [],
         query: baseFilter?.query || undefined,
       };

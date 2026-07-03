@@ -44,10 +44,7 @@
           <div
             class="transform translate-y-0 transition-transform duration-200 pointer-events-auto [@media(hover:hover)]:translate-y-2 [@media(hover:hover)]:group-hover:translate-y-0"
           >
-            <div
-              class="text-white text-sm font-medium truncate mb-1"
-              :title="image.filename"
-            >
+            <div class="text-white text-sm font-medium truncate mb-1" :title="image.filename">
               {{ image.filename }}
             </div>
 
@@ -156,10 +153,7 @@ async function loadMore() {
         ...prev,
         session: {
           ...prev.session,
-          keptImages: [
-            ...(prev.session.keptImages ?? []),
-            ...fetchMoreResult.session.keptImages,
-          ],
+          keptImages: [...(prev.session.keptImages ?? []), ...fetchMoreResult.session.keptImages],
         },
       };
     },

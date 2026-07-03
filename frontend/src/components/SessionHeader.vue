@@ -7,9 +7,7 @@
       <RouterLink
         :to="{
           path: '/',
-          query: props.session?.directory?.id
-            ? { dir: props.session.directory.id }
-            : undefined,
+          query: props.session?.directory?.id ? { dir: props.session.directory.id } : undefined,
         }"
         class="text-primary-100 hover:text-white p-1 hover:bg-primary-700 rounded-lg transition-colors mr-2 flex items-center"
       >
@@ -25,8 +23,7 @@
         <div class="text-sm md:text-lg font-semibold truncate">
           {{ session?.currentIndex || 0 }} / {{ session?.currentSize || 0 }}
           <span class="text-green-400 ml-2"
-            >保留: {{ session?.stats.totalKept || 0 }} /
-            {{ session?.targetKeep || 0 }}</span
+            >保留: {{ session?.stats.totalKept || 0 }} / {{ session?.targetKeep || 0 }}</span
           >
         </div>
       </div>
@@ -37,12 +34,7 @@
         class="md:hidden p-2 rounded-lg hover:bg-primary-700 transition-colors"
         @click="menuDialog.open"
       >
-        <svg
-          class="w-6 h-6"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path :d="mdiMenu" fill="currentColor" />
         </svg>
       </button>
@@ -95,9 +87,7 @@
             <svg class="w-4 h-4 shrink-0 text-primary-300" viewBox="0 0 24 24">
               <path :d="mdiFolder" fill="currentColor" />
             </svg>
-            <span
-              class="text-sm text-primary-100 break-all font-semibold leading-normal"
-            >
+            <span class="text-sm text-primary-100 break-all font-semibold leading-normal">
               {{ displayName }}
             </span>
           </div>
@@ -153,15 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  mdiMenu,
-  mdiUndo,
-  mdiCheck,
-  mdiLoading,
-  mdiCogOutline,
-  mdiHome,
-  mdiFolder,
-} from "@mdi/js";
+import { mdiMenu, mdiUndo, mdiCheck, mdiLoading, mdiCogOutline, mdiHome, mdiFolder } from "@mdi/js";
 import { computed } from "vue";
 import basename from "@/utils/basename";
 import useQuery from "@/graphql/utils/useQuery";
@@ -177,9 +159,7 @@ const props = defineProps<{
 const session = computed(() => props.session);
 const undoing = computed(() => props.undoing);
 
-defineEmits<
-  (e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void
->();
+defineEmits<(e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void>();
 
 const menuDialog = useModalDialog();
 

@@ -36,14 +36,9 @@ export default function useTextAreaAutoHeight(
       onCleanup(async () => {
         const lastHeight = el.style.height;
         const lastOverflowY = el.style.overflowY;
-        await Promise.allSettled(
-          el.getAnimations().map((anim) => anim.finished),
-        );
+        await Promise.allSettled(el.getAnimations().map((anim) => anim.finished));
         // 仅在没有干扰的情况下还原
-        if (
-          lastHeight === el.style.height &&
-          lastOverflowY === el.style.overflowY
-        ) {
+        if (lastHeight === el.style.height && lastOverflowY === el.style.overflowY) {
           el.style.height = originalHeight;
           el.style.overflowY = originalOverflowY;
         }

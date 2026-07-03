@@ -4,9 +4,7 @@ export interface Connection {
   pageInfo?: PageInfo;
 }
 
-export default function extractPageInfo(
-  connection: Connection | null | undefined,
-): PageInfo {
+export default function extractPageInfo(connection: Connection | null | undefined): PageInfo {
   return (
     connection?.pageInfo ?? {
       __typename: "PageInfo",

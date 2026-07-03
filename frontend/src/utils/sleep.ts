@@ -17,11 +17,7 @@ export default async function sleep(
   }
   using stack = new DisposableStack();
   await new Promise((resolve, reject) => {
-    stack.use(
-      createEventListeners(signal, ({ on }) => [
-        on("abort", reject, { once: true }),
-      ]),
-    );
+    stack.use(createEventListeners(signal, ({ on }) => [on("abort", reject, { once: true })]));
     stack.adopt(setTimeout(resolve, durationMs), clearTimeout);
   });
 }

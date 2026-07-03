@@ -3,9 +3,7 @@ import { ref, watch } from "vue";
 import addResizeListener from "@/utils/addResizeListener";
 import isWatchSource from "@/utils/isWatchSource";
 
-export default function useElementSize(
-  el: MaybeRefOrGetter<Element | null | undefined>,
-) {
+export default function useElementSize(el: MaybeRefOrGetter<Element | null | undefined>) {
   const borderBoxWidth = ref(0);
   const borderBoxHeight = ref(0);
   const contentBoxWidth = ref(0);

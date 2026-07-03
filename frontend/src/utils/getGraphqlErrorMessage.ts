@@ -6,9 +6,9 @@ export default function getGraphqlErrorMessage(
 ): string {
   if ("extensions" in e) {
     return (
-      ((e.extensions?.locales as Record<string, unknown> | undefined)?.[
-        getUILanguage()
-      ] as string | undefined) ?? e.message
+      ((e.extensions?.locales as Record<string, unknown> | undefined)?.[getUILanguage()] as
+        | string
+        | undefined) ?? e.message
     );
   }
   return e.message;

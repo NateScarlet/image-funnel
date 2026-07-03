@@ -1,7 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter, type Ref } from "vue";
-import useDirectoryBrowse, {
-  useDirectoryStats,
-} from "./domain/useDirectoryBrowse";
+import useDirectoryBrowse, { useDirectoryStats } from "./domain/useDirectoryBrowse";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useStorage from "@/composables/useStorage";
 import { sortBy } from "es-toolkit";
@@ -29,8 +27,10 @@ export default function useDirectories(
 ) {
   const maxUnratedCountVal = computed(() => toValue(options?.maxUnratedCount));
 
-  const { currentDirectory, liveDirectories, hasNextPage, fetchMore } =
-    useDirectoryBrowse(variables, { loadingCount: options?.loadingCount });
+  const { currentDirectory, liveDirectories, hasNextPage, fetchMore } = useDirectoryBrowse(
+    variables,
+    { loadingCount: options?.loadingCount },
+  );
   const { getCachedStats, refetchStats } = useDirectoryStats();
 
   const largeUnratedCount = computed(() => {
@@ -40,8 +40,7 @@ export default function useDirectories(
     return dirs.filter((dir) => {
       const stats = getCachedStats(dir.id);
       if (!stats) return false;
-      const unratedCount =
-        stats.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
+      const unratedCount = stats.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       return stats.subdirectoryCount === 0 && unratedCount > limit;
     }).length;
   });
@@ -64,13 +63,9 @@ export default function useDirectories(
 
     const items = dirs.map((dir) => {
       const stats = getCachedStats(dir.id);
-      const unratedCount =
-        stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
+      const unratedCount = stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       const isLargeUnrated =
-        !showLarge &&
-        limit !== undefined &&
-        stats?.subdirectoryCount === 0 &&
-        unratedCount > limit;
+        !showLarge && limit !== undefined && stats?.subdirectoryCount === 0 && unratedCount > limit;
       return { dir, stats, isLargeUnrated };
     });
 

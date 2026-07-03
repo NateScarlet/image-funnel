@@ -5,29 +5,17 @@ import type {
   RendererElement,
   TeleportProps,
 } from "vue";
-import {
-  Comment,
-  Teleport,
-  Transition,
-  h,
-  inject,
-  provide,
-  ref,
-  toValue,
-} from "vue";
+import { Comment, Teleport, Transition, h, inject, provide, ref, toValue } from "vue";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 
 // #region 渲染目标依赖注入配置
-const rendererKey: InjectionKey<() => string | RendererElement> =
-  Symbol("modalRenderer");
+const rendererKey: InjectionKey<() => string | RendererElement> = Symbol("modalRenderer");
 
 /**
  * 提供模态框渲染挂载的自定义容器
  * @param renderer 目标容器或其获取器
  */
-export function provideModalRenderer(
-  renderer: MaybeRefOrGetter<string | RendererElement>,
-) {
+export function provideModalRenderer(renderer: MaybeRefOrGetter<string | RendererElement>) {
   const parent = inject(rendererKey);
   provide(rendererKey, () => toValue(renderer) ?? parent?.());
 }
@@ -64,9 +52,8 @@ export default function useModal() {
       {
         ...props.teleport,
         to:
-          (props.teleport?.to === ":provide"
-            ? inject(rendererKey)?.()
-            : props.teleport?.to) ?? defaultRenderer.value,
+          (props.teleport?.to === ":provide" ? inject(rendererKey)?.() : props.teleport?.to) ??
+          defaultRenderer.value,
       },
       h(
         Transition,

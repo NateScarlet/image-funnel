@@ -13,9 +13,7 @@
     <div
       class="absolute top-full right-0 mt-2 invisible group-hover/trash-history:visible opacity-0 group-hover/trash-history:opacity-100 transition-all duration-300 bg-primary-900/95 backdrop-blur-xl border border-primary-700/80 p-4 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-60 w-80 space-y-3"
     >
-      <div
-        class="flex justify-between items-center border-b border-primary-800/50 pb-2"
-      >
+      <div class="flex justify-between items-center border-b border-primary-800/50 pb-2">
         <h4 class="text-xs font-bold text-primary-200">回收站</h4>
         <span class="text-xs text-primary-500 font-mono">
           {{ formatTrashSize(totalTrashSize) }}
@@ -46,9 +44,7 @@
 
           <!-- 详细信息 -->
           <div class="flex-1 min-w-0 space-y-0.5">
-            <div
-              class="text-primary-200 font-medium truncate flex items-center gap-1"
-            >
+            <div class="text-primary-200 font-medium truncate flex items-center gap-1">
               <span>{{ item.imageCount }} 张图片</span>
               <span
                 v-if="item.associatedFileCount > 0"
@@ -62,17 +58,12 @@
               class="text-primary-400 truncate flex items-center gap-1"
               :title="item.srcRelPath || '根目录'"
             >
-              <svg
-                class="w-3.5 h-3.5 text-primary-500 shrink-0"
-                viewBox="0 0 24 24"
-              >
+              <svg class="w-3.5 h-3.5 text-primary-500 shrink-0" viewBox="0 0 24 24">
                 <path :d="mdiFolder" fill="currentColor" />
               </svg>
               <span class="truncate">{{ item.srcRelPath || "/" }}</span>
             </div>
-            <div
-              class="flex items-center justify-between text-primary-500 font-mono"
-            >
+            <div class="flex items-center justify-between text-primary-500 font-mono">
               <span>{{ formatTrashSize(item.totalFileSize) }}</span>
               <span>{{ formatTime(item.trashedAt) }}</span>
             </div>
@@ -92,9 +83,7 @@
       <!-- 清空与期限配置区 -->
       <div class="pt-2 border-t border-primary-800/50 space-y-2">
         <div class="flex items-center justify-between gap-2">
-          <label class="text-xs text-primary-400 select-none"
-            >清空保留期:</label
-          >
+          <label class="text-xs text-primary-400 select-none">清空保留期:</label>
           <select
             v-model="trashMinAge"
             class="bg-primary-800 border border-primary-700 text-xs text-primary-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-secondary-500"
@@ -140,11 +129,7 @@ const { model: trashMinAge, flush: saveMinAge } = useStorage<string>(
 );
 
 const { showSuccess } = useNotification();
-const {
-  data: trashHistoryData,
-  undo: domainUndo,
-  empty: domainEmpty,
-} = useTrash();
+const { data: trashHistoryData, undo: domainUndo, empty: domainEmpty } = useTrash();
 
 async function undoTrashHistory(historyId: string) {
   const result = await domainUndo(historyId);

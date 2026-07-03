@@ -61,8 +61,7 @@ export default function useAsyncTask<
 
   const {
     args,
-    argsEqual = (a, b) =>
-      a.length === b.length && a.every((_, index) => a[index] === b[index]),
+    argsEqual = (a, b) => a.length === b.length && a.every((_, index) => a[index] === b[index]),
     task,
     defaultValue,
     keepLatest,
@@ -140,9 +139,7 @@ export default function useAsyncTask<
     if (newArgs.length === 0) {
       currentArgs = currentArgs ?? args?.();
       if (currentArgs == null) {
-        throw new Error(
-          "restart async task requires args, but args() returned undefined",
-        );
+        throw new Error("restart async task requires args, but args() returned undefined");
       }
       return run(ctx, ...currentArgs);
     }
@@ -154,10 +151,7 @@ export default function useAsyncTask<
     watch(
       args,
       (newArgs, oldArgs) => {
-        if (
-          newArgs == null ||
-          (oldArgs != null && argsEqual(newArgs, oldArgs))
-        ) {
+        if (newArgs == null || (oldArgs != null && argsEqual(newArgs, oldArgs))) {
           return;
         }
         restart(...newArgs);

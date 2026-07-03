@@ -1,8 +1,6 @@
 <template>
   <div class="relative">
-    <label class="mb-2 block text-xs font-semibold text-primary-300">
-      目标目录路径
-    </label>
+    <label class="mb-2 block text-xs font-semibold text-primary-300"> 目标目录路径 </label>
 
     <!-- 路径输入模式选择 -->
     <div
@@ -140,10 +138,7 @@
 import { ref, computed, watch } from "vue";
 import { debounce } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
-import {
-  SuggestDirectoriesDocument,
-  type PathInput,
-} from "@/graphql/generated";
+import { SuggestDirectoriesDocument, type PathInput } from "@/graphql/generated";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 
 // #region 属性与事件定义
@@ -176,10 +171,7 @@ const queryBuffer = ref<{
 });
 
 // 辅助函数：只读比较两个 PathInput 的内容是否完全相同，防止多余更新与回流
-function isSamePath(
-  a: PathInput | null | undefined,
-  b: PathInput | null | undefined,
-): boolean {
+function isSamePath(a: PathInput | null | undefined, b: PathInput | null | undefined): boolean {
   if (!a && !b) return true;
   if (!a || !b) return false;
   return (
@@ -348,22 +340,17 @@ function selectSuggestion(item: { id: string; relPath: string }) {
 
 function onKeyDownDown() {
   if (!suggestions.value.length) return;
-  activeSuggestionIndex.value =
-    (activeSuggestionIndex.value + 1) % suggestions.value.length;
+  activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % suggestions.value.length;
 }
 
 function onKeyDownUp() {
   if (!suggestions.value.length) return;
   activeSuggestionIndex.value =
-    (activeSuggestionIndex.value - 1 + suggestions.value.length) %
-    suggestions.value.length;
+    (activeSuggestionIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
 }
 
 function onKeyDownEnter() {
-  if (
-    activeSuggestionIndex.value >= 0 &&
-    activeSuggestionIndex.value < suggestions.value.length
-  ) {
+  if (activeSuggestionIndex.value >= 0 && activeSuggestionIndex.value < suggestions.value.length) {
     selectSuggestion(suggestions.value[activeSuggestionIndex.value]);
   } else {
     emit("submit");

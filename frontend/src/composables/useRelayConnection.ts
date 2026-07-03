@@ -12,9 +12,7 @@ export default function useRelayConnection<
   TNode extends RelayNode,
 >(
   connection: () => RelayConnection<TNode> | null | undefined,
-  query: () =>
-    | Pick<ObservableQuery<TData, TVariables>, "fetchMore">
-    | undefined,
+  query: () => Pick<ObservableQuery<TData, TVariables>, "fetchMore"> | undefined,
 ) {
   const nodes = computed(() => extractNodes(connection()));
   const pageInfo = computed(() => extractPageInfo(connection()));

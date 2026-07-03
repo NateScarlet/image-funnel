@@ -2,7 +2,7 @@ import "core-js/actual/disposable-stack";
 import { ref, shallowRef, type MaybeRefOrGetter, toValue } from "vue";
 import Time from "@/utils/Time";
 import useDocumentVisibility from "@/composables/useDocumentVisibility";
-import { ImageAction } from "@/graphql/generated";
+import type { ImageAction } from "@/graphql/generated";
 import Duration from "@/utils/Duration";
 import useNotification from "@/composables/useNotification";
 import useSession from "./domain/useSession";

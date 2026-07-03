@@ -1,10 +1,4 @@
-import {
-  shallowReactive,
-  shallowRef,
-  computed,
-  watch,
-  onScopeDispose,
-} from "vue";
+import { shallowReactive, shallowRef, computed, watch, onScopeDispose } from "vue";
 import replaceArrayItemBy from "@/utils/replaceArrayItemBy";
 import equalArray from "@/utils/equalArray";
 import { isEqual, uniqBy } from "es-toolkit";
@@ -20,10 +14,7 @@ export default function useLiveArray<T extends { id: string }>(
     compare?: (a: T, b: T) => number;
     filter?: (i: T) => boolean;
     identity?: (i: T) => string;
-    subscribe?: (
-      item: T,
-      callback: (v: T) => void,
-    ) => Disposable | (() => void);
+    subscribe?: (item: T, callback: (v: T) => void) => Disposable | (() => void);
   } = {},
 ) {
   const liveDeletedID = shallowReactive(new Set<string>());
@@ -33,12 +24,9 @@ export default function useLiveArray<T extends { id: string }>(
   const liveItems = shallowRef<T[]>([]);
   const addItem = (v: T) => {
     liveDeletedID.delete(v.id);
-    liveItems.value = replaceArrayItemBy(
-      liveItems.value,
-      (i) => identity(i) === identity(v),
-      v,
-      { whenNoMatch: "prepend" },
-    );
+    liveItems.value = replaceArrayItemBy(liveItems.value, (i) => identity(i) === identity(v), v, {
+      whenNoMatch: "prepend",
+    });
   };
 
   if (subscribe) {
@@ -71,9 +59,7 @@ export default function useLiveArray<T extends { id: string }>(
 
             subs.set(k, {
               unsubscribe:
-                Symbol.dispose in unsubscribe
-                  ? () => unsubscribe[Symbol.dispose]()
-                  : unsubscribe,
+                Symbol.dispose in unsubscribe ? () => unsubscribe[Symbol.dispose]() : unsubscribe,
               id: v.id,
             });
             skipOnce = false;
@@ -109,11 +95,7 @@ export default function useLiveArray<T extends { id: string }>(
       const activeItem = itemByKey.get(identity(item));
       // 仅当原始查询项存在、其 ID 与实时最新项的 ID 完全一致，且未被逻辑删除时，才使用原始查询数据覆盖。
       // 如果 ID 不一致，说明原始查询已过时（例如还停留在旧的修改时间戳 ID），必须直接返回代表实时最新版本的 item。
-      if (
-        activeItem &&
-        activeItem.id === item.id &&
-        !liveDeletedID.has(activeItem.id)
-      ) {
+      if (activeItem && activeItem.id === item.id && !liveDeletedID.has(activeItem.id)) {
         return activeItem;
       }
       return item;
@@ -122,7 +104,7 @@ export default function useLiveArray<T extends { id: string }>(
     return mapped
       .filter((i) => !liveDeletedID.has(i.id))
       .filter(filter)
-      .sort((a, b) => {
+      .toSorted((a, b) => {
         const aKey = identity(a);
         const bKey = identity(b);
         const aIndex = indexByKey.get(aKey);

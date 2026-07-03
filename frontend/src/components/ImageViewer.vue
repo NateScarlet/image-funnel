@@ -8,9 +8,7 @@
       class="relative flex-1 w-full min-h-0"
       :class="[
         // 修复火狐全屏时竖屏高度计算错误
-        isFullscreen
-          ? 'portrait:order-1 portrait:max-h-[calc(100dvh-var(--spacing)*14)]'
-          : '',
+        isFullscreen ? 'portrait:order-1 portrait:max-h-[calc(100dvh-var(--spacing)*14)]' : '',
       ]"
     >
       <div
@@ -46,11 +44,7 @@
           <div
             class="absolute inset-0 flex items-center justify-center bg-primary-900/25 backdrop-blur-sm"
           >
-            <svg
-              class="w-12 h-12 animate-spin text-secondary-400"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
+            <svg class="w-12 h-12 animate-spin text-secondary-400" viewBox="0 0 24 24" fill="none">
               <path
                 :d="mdiLoading"
                 fill="none"
@@ -76,18 +70,8 @@
         title="缩小"
         @click="zoomOut"
       >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M20 12H4"
-          />
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
         </svg>
       </button>
       <span
@@ -101,12 +85,7 @@
         title="放大"
         @click="zoomIn"
       >
-        <svg
-          class="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -131,20 +110,13 @@
         title="复制"
         @click="handleCopy"
       >
-        <svg
-          v-if="isCopying"
-          class="w-4 h-4 animate-spin"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
+        <svg v-if="isCopying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiLoading" />
         </svg>
         <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{
-          isCopying ? "正在复制..." : isCopied ? "已复制" : "复制"
-        }}</span>
+        <span class="text-xs">{{ isCopying ? "正在复制..." : isCopied ? "已复制" : "复制" }}</span>
       </button>
       <div class="hidden md:block w-px h-4 bg-white/30 mx-1"></div>
 
@@ -172,11 +144,7 @@
       </template>
 
       <!-- 颜色标签 -->
-      <div
-        ref="popoverContainerRef"
-        class="relative flex items-center select-none"
-        data-no-gesture
-      >
+      <div ref="popoverContainerRef" class="relative flex items-center select-none" data-no-gesture>
         <!-- 触发按钮 -->
         <button
           class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 z-40"
@@ -259,12 +227,8 @@
             </div>
 
             <!-- 输入自定义文本 -->
-            <div
-              class="flex flex-col gap-1 border-t border-white/10 pt-2 text-left"
-            >
-              <div
-                class="text-xs font-bold text-white/40 tracking-wider uppercase select-none"
-              >
+            <div class="flex flex-col gap-1 border-t border-white/10 pt-2 text-left">
+              <div class="text-xs font-bold text-white/40 tracking-wider uppercase select-none">
                 自定义标签
               </div>
               <div class="flex gap-1">
@@ -303,11 +267,7 @@
       <!-- 笔记按钮 -->
       <button
         class="hover:bg-white/10 px-2 py-1 rounded flex items-center gap-2 transition-all active:scale-95 text-white/50 hover:text-white shrink-0 cursor-pointer"
-        :class="
-          image.note.content
-            ? 'text-secondary-400 hover:text-secondary-300'
-            : ''
-        "
+        :class="image.note.content ? 'text-secondary-400 hover:text-secondary-300' : ''"
         :title="image.note.content ? '编辑笔记' : '添加笔记'"
         @click="noteDialog.open()"
       >
@@ -404,10 +364,7 @@
       <span class="min-w-16">{{ image.width }} × {{ image.height }}</span>
       <div class="w-px h-4 bg-white/30 mx-1 hidden md:block"></div>
       <slot name="info" :is-fullscreen />
-      <div
-        class="w-px h-4 bg-white/30 mx-1"
-        :class="isFullscreen ? 'hidden md:block' : ''"
-      ></div>
+      <div class="w-px h-4 bg-white/30 mx-1" :class="isFullscreen ? 'hidden md:block' : ''"></div>
       <button
         class="hover:bg-white/20 w-6 h-6 flex items-center justify-center rounded transition-colors"
         :title="locked ? '解锁位置' : '锁定位置'"
@@ -456,9 +413,7 @@
             <div class="md:hidden flex flex-col gap-1">
               <!-- 动作列表 -->
               <template v-if="dispatchableHooks.length > 0">
-                <div
-                  class="text-xs font-bold text-white/40 tracking-wider uppercase select-none"
-                >
+                <div class="text-xs font-bold text-white/40 tracking-wider uppercase select-none">
                   执行动作
                 </div>
                 <button
@@ -517,12 +472,7 @@
                 >
                   <path :d="mdiLoading" />
                 </svg>
-                <svg
-                  v-else
-                  class="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+                <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                   <path :d="mdiContentCopy" />
                 </svg>
                 <span class="text-xs">{{
@@ -556,9 +506,7 @@
               <span class="text-xs">原图</span>
             </label>
             <div class="border-t border-white/10 pt-2">
-              <div
-                class="text-xs font-bold text-white/40 tracking-wider uppercase mb-1"
-              >
+              <div class="text-xs font-bold text-white/40 tracking-wider uppercase mb-1">
                 文件路径
               </div>
               <div
@@ -575,12 +523,7 @@
 
     <!-- 笔记编辑对话框 -->
     <noteDialog.component container-class="sm:max-w-3xl short:max-w-none">
-      <NoteForm
-        v-if="image"
-        ref="noteDialogRef"
-        :note="image.note"
-        @close="noteDialog.close"
-      />
+      <NoteForm v-if="image" ref="noteDialogRef" :note="image.note" @close="noteDialog.close" />
     </noteDialog.component>
   </div>
 </template>
@@ -588,14 +531,7 @@
 <script setup lang="ts">
 import RatingIcon from "./RatingIcon.vue";
 import RatingSelector from "./RatingSelector.vue";
-import {
-  ref,
-  computed,
-  useTemplateRef,
-  shallowRef,
-  watch,
-  nextTick,
-} from "vue";
+import { ref, computed, useTemplateRef, shallowRef, watch, nextTick } from "vue";
 import useImageZoom from "../composables/useImageZoom";
 import useGrabScroll from "../composables/useGrabScroll";
 import useEventListeners from "../composables/useEventListeners";
@@ -837,37 +773,22 @@ const zoom = useImageZoom({
   size: () => image,
   allowTransition: () => loaded.value && !isPinching.value,
 });
-const {
-  containerAttrs,
-  zoomAsPercent,
-  toggleZoom,
-  zoomIn,
-  zoomOut,
-  zoomAttrs,
-} = zoom;
+const { containerAttrs, zoomAsPercent, toggleZoom, zoomIn, zoomOut, zoomAttrs } = zoom;
 
 const src = computed(() =>
-  useRawImage.value
-    ? image.rawURL || image.url
-    : getImageUrlByZoom(image, zoom.zoom.value),
+  useRawImage.value ? image.rawURL || image.url : getImageUrlByZoom(image, zoom.zoom.value),
 );
 
-const activeContainer = computed(() =>
-  locked.value ? null : containerRef.value,
-);
+const activeContainer = computed(() => (locked.value ? null : containerRef.value));
 
 // 主动按顺序预加载后续图片
 useAsyncTask({
   args() {
     return [
       [
-        useRawImage.value
-          ? image.rawURL || image.url
-          : getImageUrlByZoom(image, zoom.zoom.value),
+        useRawImage.value ? image.rawURL || image.url : getImageUrlByZoom(image, zoom.zoom.value),
         ...preloadImages.map((img) =>
-          useRawImage.value
-            ? img.rawURL || img.url
-            : getImageUrlByZoom(img, zoom.zoom.value),
+          useRawImage.value ? img.rawURL || img.url : getImageUrlByZoom(img, zoom.zoom.value),
         ),
       ],
     ];
@@ -1025,15 +946,12 @@ useEventListeners(containerRef, ({ on }) => {
 });
 
 // #region 外部后置动作
-const { dispatchableHooks, isDispatching, currentDispatchingHookId, dispatch } =
-  useImageHooks({
-    selectedFilterBy: () => ({ id: [image.id] }),
-  });
+const { dispatchableHooks, isDispatching, currentDispatchingHookId, dispatch } = useImageHooks({
+  selectedFilterBy: () => ({ id: [image.id] }),
+});
 
 const showActionPopover = ref(false);
-const actionPopoverContainerRef = useTemplateRef<HTMLElement>(
-  "actionPopoverContainerRef",
-);
+const actionPopoverContainerRef = useTemplateRef<HTMLElement>("actionPopoverContainerRef");
 useClickOutside(actionPopoverContainerRef, () => {
   showActionPopover.value = false;
 });
@@ -1060,8 +978,7 @@ const noteDialog = useModalDialog({
   },
 });
 
-const noteDialogRef =
-  useTemplateRef<InstanceType<typeof NoteForm>>("noteDialogRef");
+const noteDialogRef = useTemplateRef<InstanceType<typeof NoteForm>>("noteDialogRef");
 
 // 开启当前查看图片的笔记实时订阅，保证外部修改时能自动同步
 useNote(() => image.note.id);

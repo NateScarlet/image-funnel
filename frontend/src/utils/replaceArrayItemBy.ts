@@ -7,9 +7,7 @@ export default function replaceArrayItemBy<T>(
   array: readonly T[],
   predicate: Parameters<(readonly T[])["findIndex"]>[0],
   item: T,
-  {
-    whenNoMatch = "append",
-  }: { whenNoMatch?: "append" | "prepend" | "ignore" } = {},
+  { whenNoMatch = "append" }: { whenNoMatch?: "append" | "prepend" | "ignore" } = {},
 ): T[] {
   const index = array.findIndex(predicate);
   if (index < 0) {

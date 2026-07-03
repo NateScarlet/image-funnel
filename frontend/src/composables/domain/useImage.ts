@@ -71,19 +71,14 @@ export function useImageBrowse(
   const resolvedVariables = computed(() => toValue(variables));
   const directoryId = computed(() => resolvedVariables.value.id);
 
-  const { data: imagesData, query: imagesQuery } = useQuery(
-    BrowseImagesDocument,
-    {
-      variables: () => resolvedVariables.value,
-      loadingCount: options?.loadingCount,
-    },
-  );
+  const { data: imagesData, query: imagesQuery } = useQuery(BrowseImagesDocument, {
+    variables: () => resolvedVariables.value,
+    loadingCount: options?.loadingCount,
+  });
 
   const imageConnection = useRelayConnection(
     () =>
-      imagesData.value?.node?.__typename === "Directory"
-        ? imagesData.value.node.images
-        : undefined,
+      imagesData.value?.node?.__typename === "Directory" ? imagesData.value.node.images : undefined,
     () => imagesQuery,
   );
 

@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="h-1 w-full bg-black/20 pointer-events-none relative overflow-hidden"
-  >
+  <div class="h-1 w-full bg-black/20 pointer-events-none relative overflow-hidden">
     <!-- 背景层：展示目标达成状态 -->
     <div
       class="absolute inset-0 transition-all duration-700"
@@ -55,9 +53,7 @@ const props = defineProps<{
 
 const currentRoundActions = computed(() => props.session.currentRoundActions);
 const currentSize = computed(() => props.session.currentSize);
-const isTargetMet = computed(
-  () => props.session.stats.totalKept >= props.session.targetKeep,
-);
+const isTargetMet = computed(() => props.session.stats.totalKept >= props.session.targetKeep);
 
 // 识别是否为批量修改
 const isBatchChange = ref(false);
@@ -123,8 +119,7 @@ const animatedActions = computed(() => splitState.value.animatedActions);
 const historyKey = computed(() => {
   const roundPrefix = `r${props.session.currentRound}`;
   // 批量修改时，通过改变 key 触发整体淡入动画
-  if (isBatchChange.value)
-    return `${roundPrefix}-batch-${currentRoundActions.value.length}`;
+  if (isBatchChange.value) return `${roundPrefix}-batch-${currentRoundActions.value.length}`;
   // 单步修改时保持 key 不变，确保底层稳定
   return `${roundPrefix}-stable`;
 });

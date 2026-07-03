@@ -26,10 +26,7 @@
           "
           @click="toggleRatingFilter(rc.rating)"
         >
-          <RatingIcon
-            :rating="rc.rating"
-            :filled="filterRating.includes(rc.rating)"
-          />
+          <RatingIcon :rating="rc.rating" :filled="filterRating.includes(rc.rating)" />
           <span class="text-xs">{{ rc.count }}</span>
         </button>
       </div>
@@ -61,11 +58,7 @@
           <path :d="mdiDelete" fill="currentColor" />
         </svg>
         <span>删除</span>
-        <RatingIcon
-          :rating="deleteUnmatchedInfo.maxUnmatched"
-          filled
-          class="w-4 h-4"
-        />
+        <RatingIcon :rating="deleteUnmatchedInfo.maxUnmatched" filled class="w-4 h-4" />
         <span>以下的图片</span>
       </button>
 
@@ -110,11 +103,7 @@
             ? 'bg-secondary-600 hover:bg-secondary-700 border-secondary-500 text-white shadow-[0_0_10px_rgba(235,94,85,0.3)] font-semibold'
             : 'bg-primary-800 hover:bg-primary-700 border-primary-700 text-primary-200',
         ]"
-        :title="
-          bulkMode.isBulkMode
-            ? '退出批量管理模式'
-            : '进入批量管理模式，对多张图片执行操作'
-        "
+        :title="bulkMode.isBulkMode ? '退出批量管理模式' : '进入批量管理模式，对多张图片执行操作'"
         @click="bulkMode.toggle()"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24">
@@ -189,9 +178,7 @@
             class="w-3 h-3 rounded-full transition-all border border-white/20 relative"
             :style="{
               backgroundColor: colorHex,
-              borderColor: filterLabels.includes(colorName)
-                ? 'white'
-                : undefined,
+              borderColor: filterLabels.includes(colorName) ? 'white' : undefined,
             }"
             :class="[
               filterLabels.includes(colorName)
@@ -252,13 +239,8 @@ defineEmits<{
 }>();
 
 // #region 筛选状态（模块级单例，与父组件共享）
-const {
-  filterRating,
-  filterLabels,
-  searchQuery,
-  hasActiveFilters,
-  clearFilters,
-} = useDirectoryState(() => props.directoryId);
+const { filterRating, filterLabels, searchQuery, hasActiveFilters, clearFilters } =
+  useDirectoryState(() => props.directoryId);
 
 function toggleRatingFilter(rating: number) {
   const index = filterRating.value.indexOf(rating);
@@ -267,7 +249,7 @@ function toggleRatingFilter(rating: number) {
   } else {
     const previousRating = filterRating.value;
     clearFilters();
-    filterRating.value = [...previousRating, rating].sort((a, b) => a - b);
+    filterRating.value = [...previousRating, rating].toSorted((a, b) => a - b);
   }
 }
 
@@ -293,7 +275,7 @@ const stats = computed(() => {
 
 const sortedRatingCounts = computed(() => {
   if (!stats.value?.ratingCounts) return [];
-  return [...stats.value.ratingCounts].sort((a, b) => a.rating - b.rating);
+  return [...stats.value.ratingCounts].toSorted((a, b) => a.rating - b.rating);
 });
 // #endregion
 
@@ -317,21 +299,14 @@ const isDeletingUnmatched = computed({
 });
 
 const deleteUnmatchedInfo = computed(() => {
-  if (!stats.value?.ratingCounts || filterRating.value.length === 0)
-    return null;
+  if (!stats.value?.ratingCounts || filterRating.value.length === 0) return null;
 
-  const existingRatingsWithCount = stats.value.ratingCounts.filter(
-    (rc) => rc.count > 0,
-  );
+  const existingRatingsWithCount = stats.value.ratingCounts.filter((rc) => rc.count > 0);
   if (existingRatingsWithCount.length === 0) return null;
 
   const existingRatings = existingRatingsWithCount.map((rc) => rc.rating);
-  const matchedRatings = existingRatings.filter((r) =>
-    filterRating.value.includes(r),
-  );
-  const unmatchedRatings = existingRatings.filter(
-    (r) => !filterRating.value.includes(r),
-  );
+  const matchedRatings = existingRatings.filter((r) => filterRating.value.includes(r));
+  const unmatchedRatings = existingRatings.filter((r) => !filterRating.value.includes(r));
 
   if (matchedRatings.length === 0 || unmatchedRatings.length === 0) return null;
 
@@ -358,10 +333,7 @@ async function handleDeleteUnmatched() {
 
   isDeletingUnmatched.value = true;
   try {
-    const ratingsToDelete = Array.from(
-      { length: info.maxUnmatched + 1 },
-      (_, i) => i,
-    );
+    const ratingsToDelete = Array.from({ length: info.maxUnmatched + 1 }, (_, i) => i);
 
     await trashImages(props.directoryId, {
       rating: ratingsToDelete,

@@ -16,12 +16,9 @@ export function useOpenDir() {
     if (!path) return false;
 
     // 调用现有的 openURL 尝试调起注册协议
-    const success = await openURL(
-      `io.github.natescarlet.open-dir:${encodeURIComponent(path)}`,
-      {
-        timeout: 1500, // 若 1.5 秒内未发生跳转或失焦则判定失败
-      },
-    );
+    const success = await openURL(`io.github.natescarlet.open-dir:${encodeURIComponent(path)}`, {
+      timeout: 1500, // 若 1.5 秒内未发生跳转或失焦则判定失败
+    });
 
     // 失败则弹出安装帮助引导
     if (!success) {

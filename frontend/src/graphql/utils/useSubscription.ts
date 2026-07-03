@@ -14,10 +14,7 @@ import toStableValue from "@/utils/toStableValue";
 import type { OperationContext } from "../client";
 import { client } from "../client";
 
-export default function useSubscription<
-  TData,
-  TVariables extends OperationVariables,
->(
+export default function useSubscription<TData, TVariables extends OperationVariables>(
   document: TypedDocumentNode<TData, TVariables>,
   options: {
     onNext?: (v: ApolloLink.Result<TData>) => void;

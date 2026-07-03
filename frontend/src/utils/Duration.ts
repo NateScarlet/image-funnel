@@ -44,7 +44,7 @@ function leadingFraction(s: string): [x: number, scale: number, rem: string] {
   let overflow = false;
   for (; i < s.length; i += 1) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const c = s[i]!;
+    const c = s[i];
     if (c < "0" || c > "9") {
       break;
     }
@@ -321,8 +321,7 @@ export default class Duration {
             break;
           case "S":
             d.seconds += v;
-            d.milliseconds +=
-              f * (Duration.SECOND / Duration.MILLISECOND / scale);
+            d.milliseconds += f * (Duration.SECOND / Duration.MILLISECOND / scale);
             break;
           default:
             d.invalid = true;
@@ -398,10 +397,7 @@ export default class Duration {
     }
     // S
     if (this.seconds || this.milliseconds) {
-      b += roundDecimal(
-        this.seconds + this.milliseconds / Duration.SECOND,
-        3,
-      ).toString();
+      b += roundDecimal(this.seconds + this.milliseconds / Duration.SECOND, 3).toString();
       b += "S";
     }
     if (b.length === prefixWidth) {
@@ -475,15 +471,11 @@ export default class Duration {
   };
 
   public add = (other: DurationInput): Duration => {
-    return Duration.fromMilliseconds(
-      this.toMilliseconds() + Duration.cast(other).toMilliseconds(),
-    );
+    return Duration.fromMilliseconds(this.toMilliseconds() + Duration.cast(other).toMilliseconds());
   };
 
   public sub = (other: DurationInput): Duration => {
-    return Duration.fromMilliseconds(
-      this.toMilliseconds() - Duration.cast(other).toMilliseconds(),
-    );
+    return Duration.fromMilliseconds(this.toMilliseconds() - Duration.cast(other).toMilliseconds());
   };
 
   public abs = (): Duration => {

@@ -11,12 +11,7 @@ export default async function withWebLock<T>(
   } = {},
 ): Promise<Awaited<T>> {
   if (typeof navigator.locks === "undefined") {
-    return withStorageLock(
-      localStorage,
-      `web-lock-fallback-${key}`,
-      cb,
-      fallbackOptions,
-    );
+    return withStorageLock(localStorage, `web-lock-fallback-${key}`, cb, fallbackOptions);
   }
   return await navigator.locks.request(key, () => {
     return cb();

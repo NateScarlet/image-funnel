@@ -21,29 +21,27 @@ export type Device = DeviceFragment;
 const init = once(() => {
   const pairingRequests = ref<{ code: string; createdAt: string }[]>([]);
 
-  const { data: authData, refresh: refreshAuthStatus } = useQuery(
-    AuthStatusDocument,
-    { fetchPolicy: "network-only" },
-  );
+  const { data: authData, refresh: refreshAuthStatus } = useQuery(AuthStatusDocument, {
+    fetchPolicy: "network-only",
+  });
 
-  const { data: devicesData, refresh: refreshDevices } = useQuery(
-    DevicesDocument,
-    { fetchPolicy: "network-only" },
-  );
+  const { data: devicesData, refresh: refreshDevices } = useQuery(DevicesDocument, {
+    fetchPolicy: "network-only",
+  });
 
-  const isTrustedDevice = computed(
-    () => authData.value?.authStatus?.isTrustedDevice,
-  );
+  const isTrustedDevice = computed(() => authData.value?.authStatus?.isTrustedDevice);
   const isTrustedIP = computed(() => authData.value?.authStatus?.isTrustedIP);
   const canManageDevices = stableComputed(() => {
     return isTrustedDevice.value === true || isTrustedIP.value === true;
   });
 
-  const { data: pairingRequestsData, refresh: refreshPairingRequests } =
-    useQuery(PairingRequestsDocument, {
+  const { data: pairingRequestsData, refresh: refreshPairingRequests } = useQuery(
+    PairingRequestsDocument,
+    {
       variables: () => (canManageDevices.value ? {} : undefined),
       fetchPolicy: "network-only",
-    });
+    },
+  );
 
   watch(
     () => pairingRequestsData.value?.pairingRequests,

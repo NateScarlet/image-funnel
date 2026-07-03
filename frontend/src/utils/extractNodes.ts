@@ -25,11 +25,7 @@ export default function extractNodes<T>(
     return [];
   }
   const nodes: T[] = [];
-  (
-    connection.nodes ||
-    (connection.edges || []).map((i) => i && i.node) ||
-    []
-  ).forEach((node) => {
+  (connection.nodes || (connection.edges || []).map((i) => i && i.node) || []).forEach((node) => {
     if (node) {
       nodes.push(node);
     }

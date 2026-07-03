@@ -1,9 +1,4 @@
-query BrowseNotes(
-  $id: ID!
-  $filterBy: NoteFiltersInput
-  $first: Int
-  $after: String
-) {
+query BrowseNotes($id: ID!, $filterBy: NoteFiltersInput, $first: Int, $after: String) {
   node(id: $id) {
     id
     ... on Directory {

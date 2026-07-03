@@ -21,11 +21,7 @@
         class="transition-all hover:scale-125 p-0.5 rounded cursor-pointer group relative flex items-center justify-center"
         @click="handleStarClick(star)"
       >
-        <RatingIcon
-          :rating="star"
-          :filled="isStarActive(star)"
-          class="w-5! h-5!"
-        />
+        <RatingIcon :rating="star" :filled="isStarActive(star)" class="w-5! h-5!" />
 
         <!-- 悬浮微型文字指示，特别是非等号模式时提示范围 -->
         <span
@@ -79,7 +75,7 @@ const configs: Record<Operator, OperatorConfig> = {
       if (idx >= 0) {
         return currentVal.filter((v) => v !== star);
       } else {
-        return [...currentVal, star].sort((a, b) => a - b);
+        return [...currentVal, star].toSorted((a, b) => a - b);
       }
     },
     getBaseStar(currentVal) {
@@ -97,10 +93,7 @@ const configs: Record<Operator, OperatorConfig> = {
     title: "模式: 大于等于",
     handleClick(currentVal, star) {
       const expected = this.getValuesForStar(star) ?? [];
-      if (
-        currentVal.length === expected.length &&
-        currentVal.every((v, i) => v === expected[i])
-      ) {
+      if (currentVal.length === expected.length && currentVal.every((v, i) => v === expected[i])) {
         return [];
       }
       return expected;
@@ -127,10 +120,7 @@ const configs: Record<Operator, OperatorConfig> = {
     title: "模式: 小于等于",
     handleClick(currentVal, star) {
       const expected = this.getValuesForStar(star) ?? [];
-      if (
-        currentVal.length === expected.length &&
-        currentVal.every((v, i) => v === expected[i])
-      ) {
+      if (currentVal.length === expected.length && currentVal.every((v, i) => v === expected[i])) {
         return [];
       }
       return expected;

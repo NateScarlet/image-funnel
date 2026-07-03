@@ -12,7 +12,7 @@ import { HttpLink } from "@apollo/client";
 import sha256Hash from "@/utils/sha256Hash";
 import getGraphqlErrorMessage from "@/utils/getGraphqlErrorMessage";
 import isAbortError from "@/utils/isAbortError";
-import OperationContext from "./OperationContext";
+import type OperationContext from "./OperationContext";
 export type { OperationContext };
 import WebSocketLink from "./WebsocketLink";
 import { getValidToken, refreshToken, tokenStore } from "./tokenManager";
@@ -71,8 +71,7 @@ const httpOrBatchLink = ApolloLink.split(
   ({ query, variables, getContext }) => {
     const definition = getMainDefinition(query);
     const isMutation =
-      definition.kind === "OperationDefinition" &&
-      definition.operation === "mutation";
+      definition.kind === "OperationDefinition" && definition.operation === "mutation";
     return (
       (getContext() as OperationContext).transport === "http" ||
       isMutation ||
@@ -89,10 +88,7 @@ const link = ApolloLink.split(
       return true;
     }
     const definition = getMainDefinition(query);
-    return (
-      definition.kind === "OperationDefinition" &&
-      definition.operation === "subscription"
-    );
+    return definition.kind === "OperationDefinition" && definition.operation === "subscription";
   },
   wsLink,
   httpOrBatchLink,
@@ -126,9 +122,7 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
 
   if (graphQLErrors) {
     const hasAuthError = graphQLErrors.some(
-      (i) =>
-        i.extensions?.code === "UNAUTHORIZED" ||
-        i.extensions?.code === "INVALID_TOKEN",
+      (i) => i.extensions?.code === "UNAUTHORIZED" || i.extensions?.code === "INVALID_TOKEN",
     );
 
     if (hasAuthError && !context.anonymous && !context.tokenRefreshed) {
