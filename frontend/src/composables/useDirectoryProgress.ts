@@ -21,7 +21,7 @@ function getNextDirectory(parentId: string, currentDirectoryId: string): string 
   }
 
   try {
-    const directoryIds = JSON.parse(rawValue) as string[];
+    const directoryIds = JSON.parse(rawValue) as unknown as string[];
     const currentIndex = directoryIds.findIndex((id) => id === currentDirectoryId);
     if (currentIndex === -1 || currentIndex === directoryIds.length - 1) {
       return undefined;

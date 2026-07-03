@@ -80,8 +80,8 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   stack.defer(
     watch(
       skip,
-      (skip, _, onCleanup) => {
-        if (skip) {
+      (shouldSkip, _, onCleanup) => {
+        if (shouldSkip) {
           result.value = undefined;
           return;
         }
@@ -139,10 +139,11 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   }
   return {
     data: stableComputed(() => {
-      if (result.value?.dataState === "complete") {
-        return result.value.data;
-      }
-    }),
+        if (result.value?.dataState === "complete") {
+          return result.value.data;
+        }
+        return undefined;
+      }),
     query,
     refresh,
     [Symbol.dispose]: () => stack.dispose(),

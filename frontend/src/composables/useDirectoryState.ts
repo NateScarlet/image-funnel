@@ -35,6 +35,18 @@ export function updateLastSession(session: SessionFragment) {
   void session;
 }
 
+/**
+ * 整理暂存中的空对象
+ */
+function compactDirectoryState(state: DirectoryState) {
+  if (state.filterBy) {
+    const hasFilter = Object.values(state.filterBy).some((v) => v !== undefined);
+    if (!hasFilter) {
+      state.filterBy = undefined;
+    }
+  }
+}
+
 // #region 主钩子导出
 export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
   const dirIdRef = computed(() => toValue(directoryId));
@@ -111,18 +123,6 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     compactDirectoryState(dirState);
     currentBrowse.value = dirState;
     triggerSaveState(dirIdRef.value);
-  }
-
-  /**
-   * 整理暂存中的空对象
-   */
-  function compactDirectoryState(state: DirectoryState) {
-    if (state.filterBy) {
-      const hasFilter = Object.values(state.filterBy).some((v) => v !== undefined);
-      if (!hasFilter) {
-        state.filterBy = undefined;
-      }
-    }
   }
 
   /**

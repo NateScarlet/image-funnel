@@ -4,7 +4,7 @@ function toArray<T>(v: T[] | T | null | undefined): T[] {
   if (v == null) {
     return [];
   }
-  if (v instanceof Array) {
+  if (Array.isArray(v)) {
     return v;
   }
   return [v];

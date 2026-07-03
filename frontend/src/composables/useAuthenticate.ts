@@ -67,7 +67,7 @@ async function login(): Promise<boolean> {
   const { options, sessionKey } = beginRes.data.beginWebAuthnLogin;
 
   const asseResp = await startAuthentication({
-    optionsJSON: options as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+    optionsJSON: options as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
   });
 
   const finishRes = await mutate(FinishWebAuthnLoginDocument, {
@@ -111,7 +111,7 @@ async function register(
   let attResp;
   try {
     attResp = await startRegistration({
-      optionsJSON: options as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      optionsJSON: options as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
     });
   } catch (err) {
     console.error("regisration failed, try login", err);

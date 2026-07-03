@@ -15,11 +15,11 @@ function mergeResultDeep<T extends object>(
 
   return Object.fromEntries(
     Object.entries(previousResult).map(([k, v]) => {
-      const more = fetchMoreResult[k as keyof T];
+      const more = fetchMoreResult[k as unknown as keyof T];
       if (isRelayConnection(v) && isRelayConnection(more)) {
         return [
           k,
-          backward ? concatRelayConnection(more, v as typeof more) : concatRelayConnection(v, more),
+          backward ? concatRelayConnection(more, v as unknown as typeof more) : concatRelayConnection(v, more),
         ];
       }
 
@@ -29,7 +29,7 @@ function mergeResultDeep<T extends object>(
 
       return [k, v];
     }),
-  ) as T;
+  ) as unknown as T;
 }
 
 export default async function fetchMore<
@@ -46,7 +46,7 @@ export default async function fetchMore<
       await query.fetchMore({
         variables: {
           after: pageInfo.endCursor,
-        } as Partial<V>,
+        } as unknown as Partial<V>,
 
         updateQuery(previousResult, { fetchMoreResult }) {
           return mergeResultDeep(previousResult, fetchMoreResult, false);
@@ -56,7 +56,7 @@ export default async function fetchMore<
       await query.fetchMore({
         variables: {
           before: pageInfo.startCursor,
-        } as Partial<V>,
+        } as unknown as Partial<V>,
         updateQuery(previousResult, { fetchMoreResult }) {
           return mergeResultDeep(previousResult, fetchMoreResult, true);
         },

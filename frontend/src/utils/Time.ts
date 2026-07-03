@@ -9,7 +9,7 @@ export default class Time {
 
   public static from(input: TimeInput | null | undefined): Time | undefined {
     if (input == null) {
-      return;
+      return undefined;
     }
     if (input instanceof Time) {
       return input;
@@ -17,7 +17,7 @@ export default class Time {
     if (input instanceof Date) {
       const t = input.getTime();
       if (!Number.isFinite(t)) {
-        return;
+        return undefined;
       }
       return new Time(t);
     }

@@ -12,7 +12,9 @@
     "typescript/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
     "typescript/consistent-type-imports": "error",
     "typescript/no-unnecessary-type-assertion": "off",
-    "no-console": "warn",
+    "typescript/no-unsafe-type-assertion": "off",
+    "eslint/no-underscore-dangle": ["error", { "allow": ["__typename"] }],
+    "no-console": "off",
     "no-debugger": "error"
   },
   "env": {

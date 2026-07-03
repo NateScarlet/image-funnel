@@ -29,26 +29,26 @@ export default function useSubscription<TData, TVariables extends OperationVaria
   onScopeDispose(() => stack.dispose(), true);
   import.meta.hot?.dispose(() => stack.dispose());
 
-  function run(stack: DisposableStack, variables?: TVariables) {
+  function run(innerStack: DisposableStack, variables?: TVariables) {
     const ob = client.subscribe({
       ...options,
       query: document,
       variables: variables as TVariables,
     } satisfies ApolloClient.SubscribeOptions<TData, TVariables>);
-    stack.adopt(
+    innerStack.adopt(
       ob.subscribe({
         next(v) {
-          if (stack.disposed) {
+          if (innerStack.disposed) {
             return;
           }
           options.onNext?.(v);
         },
         error(err) {
-          if (stack.disposed) {
+          if (innerStack.disposed) {
             return;
           }
           options.onError?.(err);
-          stack.dispose();
+          innerStack.dispose();
         },
       }),
       (i) => i.unsubscribe(),

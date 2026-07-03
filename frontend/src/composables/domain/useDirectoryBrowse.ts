@@ -127,34 +127,34 @@ export default function useDirectoryBrowse(
 
 const loadingStates = shallowReactive<Record<string, number>>({});
 
+function useStats(directoryId: MaybeRefOrGetter<string>, loadingCount?: Ref<number>) {
+  const { data, refresh } = useQuery(DirectoryStatsDocument, {
+    variables: () => ({ id: toValue(directoryId) }),
+    loadingCount,
+    fetchPolicy: "cache-first",
+    context: { transport: "batch-http:direcotry-stats" },
+  });
+
+  const debouncedRefetch = debounce(() => {
+    void refresh();
+  }, 1000);
+
+  useSubscription(DirectoryChangedDocument, {
+    variables: () => ({ id: [toValue(directoryId)] }),
+    onNext: (result) => {
+      const changedId = result.data?.directoryChanged.id;
+      if (changedId === toValue(directoryId)) {
+        debouncedRefetch();
+      }
+    },
+  });
+
+  return data;
+}
+
 export function useDirectoryStats() {
   function isStatsLoading(directoryId: string): boolean {
     return (loadingStates[directoryId] || 0) > 0;
-  }
-
-  function useStats(directoryId: MaybeRefOrGetter<string>, loadingCount?: Ref<number>) {
-    const { data, refresh } = useQuery(DirectoryStatsDocument, {
-      variables: () => ({ id: toValue(directoryId) }),
-      loadingCount,
-      fetchPolicy: "cache-first",
-      context: { transport: "batch-http:direcotry-stats" },
-    });
-
-    const debouncedRefetch = debounce(() => {
-      refresh();
-    }, 1000);
-
-    useSubscription(DirectoryChangedDocument, {
-      variables: () => ({ id: [toValue(directoryId)] }),
-      onNext: (result) => {
-        const changedId = result.data?.directoryChanged.id;
-        if (changedId === toValue(directoryId)) {
-          debouncedRefetch();
-        }
-      },
-    });
-
-    return data;
   }
 
   const stack = new DisposableStack();
@@ -168,6 +168,7 @@ export function useDirectoryStats() {
         query: DirectoryStatsDocument,
         variables: { id: directoryId },
       })?.node;
+      // eslint-disable-next-line no-underscore-dangle
       const initial = initialNode?.__typename === "Directory" ? initialNode.stats : undefined;
       statsCache.set(directoryId, initial || undefined);
 
@@ -179,7 +180,7 @@ export function useDirectoryStats() {
             fetchPolicy: "cache-only",
           })
           .subscribe((result) => {
-            const node = (result.data as DirectoryStatsQuery)?.node;
+            const node = (result.data as unknown as DirectoryStatsQuery)?.node;
             statsCache.set(
               directoryId,
               toStableValue(
@@ -199,8 +200,8 @@ export function useDirectoryStats() {
       loadingStates[id] = (loadingStates[id] || 0) + 1;
     });
 
-    using stack = new DisposableStack();
-    const queue = stack.adopt([...directoryIds], (q) => {
+    using batchStack = new DisposableStack();
+    const queue = batchStack.adopt([...directoryIds], (q) => {
       q.forEach((id) => {
         loadingStates[id] = (loadingStates[id] || 0) - 1;
       });

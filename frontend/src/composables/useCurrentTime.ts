@@ -88,8 +88,8 @@ export default function useCurrentTime() {
       stack.defer(
         watch(
           t,
-          (t, _, onCleanup) => {
-            for (const i of Time.collect(t)) {
+          (val, _, onCleanup) => {
+            for (const i of Time.collect(val)) {
               onCleanup(schedule(i));
             }
           },

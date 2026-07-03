@@ -15,8 +15,8 @@ export function useDevices() {
   } = useDevice();
 
   function open() {
-    refreshDevices();
-    refreshPairingRequests();
+    void refreshDevices();
+    void refreshPairingRequests();
     visible.value = true;
   }
 

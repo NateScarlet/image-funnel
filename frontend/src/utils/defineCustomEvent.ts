@@ -19,9 +19,9 @@ export default function defineCustomEvent<T = undefined>(
     listener: (e: CustomEvent<T>) => void,
     options?: AddEventListenerOptions,
   ): () => void {
-    target.addEventListener(type, listener as EventListener, options);
+    target.addEventListener(type, listener as unknown as EventListener, options);
     return () => {
-      target.removeEventListener(type, listener as EventListener, options);
+      target.removeEventListener(type, listener as unknown as EventListener, options);
     };
   }
   return {

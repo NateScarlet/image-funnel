@@ -69,7 +69,7 @@ export default function useAsyncTask<
   } = options;
 
   const error = shallowRef<unknown>();
-  const value = shallowRef<T | TDefault>(defaultValue?.() as TDefault);
+  const value = shallowRef<T | TDefault>(defaultValue?.() as unknown as TDefault);
   let ctx = new TaskContext();
   let currentArgs: TArgs | undefined;
 
@@ -82,11 +82,11 @@ export default function useAsyncTask<
 
   /**
    * 执行异步任务
-   * @param ctx 当前任务上下文
-   * @param args 任务参数
+   * @param taskCtx 当前任务上下文
+   * @param taskArgs 任务参数
    */
-  async function run(ctx: TaskContext, ...args: TArgs) {
-    currentArgs = args;
+  async function run(taskCtx: TaskContext, ...taskArgs: TArgs) {
+    currentArgs = taskArgs;
     // 处理加载状态计数
     if (loadingCount) {
       loadingCount.value += 1;
@@ -97,21 +97,21 @@ export default function useAsyncTask<
         value.value = defaultValue?.();
       }
       try {
-        const res = await task(...args, ctx);
-        if (ctx.stack.disposed) {
+        const res = await task(...taskArgs, taskCtx);
+        if (taskCtx.stack.disposed) {
           // 如果上下文已被销毁（任务已被取消），则忽略结果
           return;
         }
         value.value = res;
       } catch (err) {
-        if (ctx.stack.disposed) {
+        if (taskCtx.stack.disposed) {
           return;
         }
         if (import.meta.env.DEV) {
           console.error({
             message: "Error in async task",
             task,
-            args,
+            args: taskArgs,
             error: err,
           });
         }
@@ -154,13 +154,13 @@ export default function useAsyncTask<
         if (newArgs == null || (oldArgs != null && argsEqual(newArgs, oldArgs))) {
           return;
         }
-        restart(...newArgs);
+        void restart(...newArgs);
       },
       { immediate: true },
     );
   } else {
     // @ts-expect-error 无参数的 run 必定支持直接执行
-    run(ctx);
+    void run(ctx);
   }
 
   return {

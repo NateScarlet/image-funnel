@@ -77,7 +77,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
    */
   function saveCustomLabel() {
     const val = customLabelInput.value.trim();
-    setLabel(val);
+    void setLabel(val);
   }
 
   // #region 快捷键注册
@@ -90,7 +90,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
     useHotkeys(
       {
         [`ctrl+shift+${i + 1}`]: () => {
-          setLabel(colorName);
+          void setLabel(colorName);
         },
       },
       {
@@ -103,7 +103,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
   useHotkeys(
     {
       "ctrl+shift+0": () => {
-        setLabel("");
+        void setLabel("");
       },
     },
     {

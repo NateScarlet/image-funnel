@@ -8,7 +8,7 @@ export default function toStableValue<T>(
 ): T {
   const newValue = toValue(getter);
   if (isEqual(newValue, oldValue)) {
-    return oldValue as T;
+    return oldValue as unknown as T;
   }
   return newValue;
 }

@@ -27,9 +27,9 @@ export default function useEventListeners<T extends EventTarget>(
           if (!v) {
             return;
           }
-          const stack = new DisposableStack();
-          onCleanup(() => stack.dispose());
-          setup(stack, v);
+          const inner = new DisposableStack();
+          onCleanup(() => inner.dispose());
+          setup(inner, v);
         },
         { immediate: true },
       ),

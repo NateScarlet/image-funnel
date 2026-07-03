@@ -256,10 +256,10 @@ export function getSuggestionsForRules(
     // 情况 A：用户正在输入选项 (query 以 '-' 开头)
     if (q.startsWith("-")) {
       for (const opt of rule.options) {
-        const isMatch =
+        const matchesOption =
           opt.name.toLowerCase().includes(q) ||
           (opt.shortName && opt.shortName.toLowerCase().includes(q));
-        if (isMatch) {
+        if (matchesOption) {
           // 检查该选项是否已经存在于 confirmedTokens 中（如果是可多次指定的如 --region，允许再次出现）
           const isRepeatable =
             opt.raw.includes("...") || opt.name === "--region" || opt.name === "--node";
@@ -328,12 +328,12 @@ export function getSuggestionsForRules(
         }
 
         // 无论 q 是否为空，都推荐选项（若 q 为空，则推荐所有选项；若不为空，则进行过滤，支持匹配长选项和短选项）
-        const isMatch =
+        const matchesOption =
           !q ||
           opt.name.toLowerCase().includes(q) ||
           (opt.shortName && opt.shortName.toLowerCase().includes(q)) ||
           opt.raw.toLowerCase().includes(q);
-        if (isMatch) {
+        if (matchesOption) {
           const optionText = opt.placeholder ? `${opt.name} ${opt.placeholder}` : opt.name;
           const display = opt.shortName ? `${optionText} (${opt.shortName})` : optionText;
 

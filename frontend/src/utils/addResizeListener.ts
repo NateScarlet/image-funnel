@@ -13,19 +13,20 @@ export default function addResizeListener(
   fn: (entry: ResizeObserverEntry) => void,
 ): () => void {
   const stack = new DisposableStack();
-  loadResizeObserver().then((Observer) => {
+  void loadResizeObserver().then((Observer) => {
     if (stack.disposed) {
       return;
     }
-    const ob = stack.adopt(
+    const observer = stack.adopt(
       new Observer((entries): void => {
         entries.forEach((i) => {
           fn(i);
         });
       }),
-      (ob) => ob.disconnect(),
+      (o) => o.disconnect(),
     );
-    ob.observe(el);
+    observer.observe(el);
+
   });
   return () => stack.dispose();
 }

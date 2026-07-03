@@ -174,10 +174,10 @@ function globalKeydownHandler(e: KeyboardEvent) {
           activeScopes: activeScopes.value,
         });
       } else {
-        isEnabled = !!(hotkey.enabled as () => boolean)();
+        isEnabled = (hotkey.enabled as () => boolean)();
       }
     } else if (hotkey.enabled !== undefined) {
-      isEnabled = !!toValue(hotkey.enabled);
+      isEnabled = toValue(hotkey.enabled);
     } else {
       isEnabled = true;
     }
@@ -215,10 +215,10 @@ function globalKeydownHandler(e: KeyboardEvent) {
     // 4. 匹配按键组合
     let matched = false;
     for (const combination of hotkey.combinations) {
-      const matchesCtrl = !!e.ctrlKey === !!combination.ctrl;
-      const matchesShift = !!e.shiftKey === !!combination.shift;
-      const matchesAlt = !!e.altKey === !!combination.alt;
-      const matchesMeta = !!e.metaKey === !!combination.meta;
+      const matchesCtrl = e.ctrlKey === !!combination.ctrl;
+      const matchesShift = e.shiftKey === !!combination.shift;
+      const matchesAlt = e.altKey === !!combination.alt;
+      const matchesMeta = e.metaKey === !!combination.meta;
 
       let matchesKey = e.key.toLowerCase() === combination.key.toLowerCase();
 
@@ -263,6 +263,29 @@ if (typeof window !== "undefined") {
   window.addEventListener("keydown", globalKeydownHandler);
 }
 
+function parseCombinationToKeys(comb: HotkeyCombination): string[] {
+  const parts: string[] = [];
+  if (comb.ctrl) parts.push("Ctrl");
+  if (comb.shift) parts.push("Shift");
+  if (comb.alt) parts.push("Alt");
+  if (comb.meta) parts.push("Meta");
+
+  const keyName = comb.key.toLowerCase();
+  if (keyName === "arrowup") parts.push("↑");
+  else if (keyName === "arrowdown") parts.push("↓");
+  else if (keyName === "arrowleft") parts.push("←");
+  else if (keyName === "arrowright") parts.push("→");
+  else if (keyName.startsWith("numpad")) {
+    parts.push("Num " + keyName.slice(6));
+  } else if (keyName.startsWith("digit")) {
+    parts.push(keyName.slice(5));
+  } else {
+    parts.push(comb.key.toUpperCase());
+  }
+
+  return parts;
+}
+
 /**
  * 内部快捷键注册方法
  */
@@ -305,29 +328,6 @@ function registerSingleHotkey(
   // 收集快捷键配置以展示到帮助列表中
   const description = options.description;
   if (description) {
-    const parseCombinationToKeys = (comb: HotkeyCombination): string[] => {
-      const parts: string[] = [];
-      if (comb.ctrl) parts.push("Ctrl");
-      if (comb.shift) parts.push("Shift");
-      if (comb.alt) parts.push("Alt");
-      if (comb.meta) parts.push("Meta");
-
-      const keyName = comb.key.toLowerCase();
-      if (keyName === "arrowup") parts.push("↑");
-      else if (keyName === "arrowdown") parts.push("↓");
-      else if (keyName === "arrowleft") parts.push("←");
-      else if (keyName === "arrowright") parts.push("→");
-      else if (keyName.startsWith("numpad")) {
-        parts.push("Num " + keyName.slice(6));
-      } else if (keyName.startsWith("digit")) {
-        parts.push(keyName.slice(5));
-      } else {
-        parts.push(comb.key.toUpperCase());
-      }
-
-      return parts;
-    };
-
     const keysList = combinations.map(parseCombinationToKeys);
 
     activeHotkeys.value = [
@@ -390,7 +390,7 @@ export function useHotkeys(
   },
 ): Ref<string | undefined> {
   let bindings: HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void> | null = null;
-  let options: HotkeyOptions & {
+  let resolvedOptions: HotkeyOptions & {
     defineScope?: MaybeRefOrGetter<string | undefined>;
   };
 
@@ -399,15 +399,15 @@ export function useHotkeys(
     typeof bindingsOrOptions === "object" &&
     !Array.isArray(bindingsOrOptions) &&
     !("keys" in bindingsOrOptions) &&
-    "defineScope" in (bindingsOrOptions as Record<string, unknown>)
+    "defineScope" in (bindingsOrOptions as unknown as Record<string, unknown>)
   ) {
-    options = bindingsOrOptions;
+    resolvedOptions = bindingsOrOptions;
   } else {
-    bindings = bindingsOrOptions as HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>;
-    options = optionsOrUndefined || {};
+    bindings = bindingsOrOptions as unknown as HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>;
+    resolvedOptions = optionsOrUndefined || {};
   }
 
-  const { defineScope, ...hotkeyOptions } = options;
+  const { defineScope, ...hotkeyOptions } = resolvedOptions;
 
   const localScopeId = ref<string | undefined>(undefined);
 
@@ -464,10 +464,10 @@ export function useHotkeys(
       });
 
       const hotkeyId = useId();
-      const options = "options" in item ? item.options : undefined;
+      const itemOptions = "options" in item ? item.options : undefined;
       registerSingleHotkey(hotkeyId, item.keys, item.handler, {
         ...hotkeyOptions,
-        ...options,
+        ...itemOptions,
         scope: hotkeyScope,
       });
     }

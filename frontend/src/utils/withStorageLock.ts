@@ -25,11 +25,12 @@ export default async function withStorageLock<T>(
   } = {},
 ): Promise<Awaited<T>> {
   const id = randomUUID();
-  while (!signal?.aborted) {
+  for (;;) {
+    if (signal?.aborted) break;
     const existing = storage.getItem(key);
     if (existing) {
       // 有非法值说明不是由当前函数创建的，直接报错
-      const { expiresAt } = JSON.parse(existing) as Lock;
+      const { expiresAt } = JSON.parse(existing) as unknown as Lock;
       if (expiresAt > Date.now()) {
         await sleep(checkIntervalMs, { signal });
         continue;
@@ -70,5 +71,5 @@ export default async function withStorageLock<T>(
     return await f();
   }
   signal.throwIfAborted();
-  requireNever();
+  return requireNever();
 }

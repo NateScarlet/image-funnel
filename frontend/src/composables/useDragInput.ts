@@ -19,19 +19,19 @@ export default function useDragInput({
     stack.defer(
       watch(
         [() => toValue(cursorStyle), dragging, el],
-        ([cursorStyle, v, el], _, onCleanup) => {
-          if (!el) {
+        ([cs, v, targetEl], _, onCleanup) => {
+          if (!targetEl) {
             return;
           }
           const oldBodyCursor = document.body.style.cursor;
-          const oldElCursor = el.style.cursor;
+          const oldElCursor = targetEl.style.cursor;
           onCleanup(() => {
             document.body.style.cursor = oldBodyCursor;
-            el.style.cursor = oldElCursor;
+            targetEl.style.cursor = oldElCursor;
           });
-          el.style.cursor = cursorStyle;
+          targetEl.style.cursor = cs;
           if (v) {
-            document.body.style.cursor = cursorStyle;
+            document.body.style.cursor = cs;
           }
         },
         { immediate: true },
@@ -39,20 +39,20 @@ export default function useDragInput({
     );
   }
   stack.defer(
-    watch(el, (el, _, onCleanup) => {
-      if (!el) {
+    watch(el, (targetEl, _, onCleanup) => {
+      if (!targetEl) {
         return;
       }
       let startX: number | undefined;
       let startY: number | undefined;
       let originX = 0;
       let originY = 0;
-      const stack = new DisposableStack();
-      onCleanup(() => stack.dispose());
-      stack.use(
-        createEventListeners(el, ({ on }) => {
+      const innerStack = new DisposableStack();
+      onCleanup(() => innerStack.dispose());
+      innerStack.use(
+        createEventListeners(targetEl, ({ on }) => {
           on("pointerdown", (e) => {
-            if (e.target === el) {
+            if (e.target === targetEl) {
               e.preventDefault();
             }
             dragging.value = true;
@@ -63,7 +63,7 @@ export default function useDragInput({
           });
         }),
       );
-      stack.use(
+      innerStack.use(
         createEventListeners(window, ({ on }) => {
           on("pointerup", () => {
             dragging.value = false;

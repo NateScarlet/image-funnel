@@ -71,7 +71,7 @@ export default function useModal() {
         },
         () => {
           if (!visible.value) {
-            return;
+            return undefined;
           }
           return h(
             "div",

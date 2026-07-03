@@ -8,27 +8,27 @@ import {
   type ImageFiltersInput,
 } from "@/graphql/generated";
 
+async function trashImages(directoryId: string, filterBy: ImageFiltersInput) {
+  const result = await mutate(TrashImagesDocument, {
+    variables: {
+      input: {
+        directoryId,
+        filterBy,
+      },
+    },
+  });
+
+  const movedCount = result.data?.trashImages.movedCount ?? 0;
+  const historyId = result.data?.trashImages.historyId;
+
+  return { movedCount, historyId };
+}
+
 export default function useTrash() {
   const { data, refresh } = useQuery(TrashHistoryDocument, {
     variables: () => ({ first: 100 }),
     fetchPolicy: "cache-and-network",
   });
-
-  async function trashImages(directoryId: string, filterBy: ImageFiltersInput) {
-    const result = await mutate(TrashImagesDocument, {
-      variables: {
-        input: {
-          directoryId,
-          filterBy,
-        },
-      },
-    });
-
-    const movedCount = result.data?.trashImages.movedCount ?? 0;
-    const historyId = result.data?.trashImages.historyId;
-
-    return { movedCount, historyId };
-  }
 
   async function undo(historyId: string) {
     const res = await mutate(UndoTrashDocument, {

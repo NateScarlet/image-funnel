@@ -25,32 +25,32 @@ const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<string[
   () => [],
 );
 
+// 将文本（和可选的 HTML）写入剪贴板
+async function writeToClipboard(text: string, html?: string) {
+  try {
+    if (html) {
+      const data = new ClipboardItem({
+        "text/plain": new Blob([text], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+      });
+      await window.navigator.clipboard.write([data]);
+    } else {
+      await window.navigator.clipboard.writeText(text);
+    }
+    return true;
+  } catch {
+    try {
+      await window.navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   const { showSuccess } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
-
-  // 将文本（和可选的 HTML）写入剪贴板
-  async function writeToClipboard(text: string, html?: string) {
-    try {
-      if (html) {
-        const data = new ClipboardItem({
-          "text/plain": new Blob([text], { type: "text/plain" }),
-          "text/html": new Blob([html], { type: "text/html" }),
-        });
-        await window.navigator.clipboard.write([data]);
-      } else {
-        await window.navigator.clipboard.writeText(text);
-      }
-      return true;
-    } catch {
-      try {
-        await window.navigator.clipboard.writeText(text);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-  }
 
   function addCopiedImageId(id: string) {
     if (!id) return;

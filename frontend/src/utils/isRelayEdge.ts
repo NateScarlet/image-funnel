@@ -11,9 +11,10 @@ export interface RelayEdge<T extends RelayNode = RelayNode> {
 
 export default function isRelayEdge(v: unknown): v is RelayEdge {
   try {
+    const obj = v as unknown as Record<string, unknown>;
     return (
-      isRelayNode((v as { node: unknown }).node) &&
-      isUnion((v as { cursor: unknown }).cursor, isString, isUndefined)
+      isRelayNode(obj.node) &&
+      isUnion(obj.cursor, isString, isUndefined)
     );
   } catch {
     return false;

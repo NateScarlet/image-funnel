@@ -11,9 +11,9 @@ export default function useElementSize(el: MaybeRefOrGetter<Element | null | und
   const scrollWidth = ref(0);
   const scrollHeight = ref(0);
 
-  const update = (el: Element, entry?: ResizeObserverEntry) => {
-    scrollWidth.value = el.scrollWidth;
-    scrollHeight.value = el.scrollHeight;
+  const update = (targetEl: Element, entry?: ResizeObserverEntry) => {
+    scrollWidth.value = targetEl.scrollWidth;
+    scrollHeight.value = targetEl.scrollHeight;
     // 元素被切割为多片段时，暂时只使用首个片段的大小
     const borderBox = entry?.borderBoxSize[0];
     const contentBox = entry?.contentBoxSize[0];
@@ -24,27 +24,27 @@ export default function useElementSize(el: MaybeRefOrGetter<Element | null | und
       contentBoxHeight.value = contentBox.blockSize;
       return;
     }
-    const bBox = el.getBoundingClientRect();
+    const bBox = targetEl.getBoundingClientRect();
     borderBoxWidth.value = bBox.width;
     borderBoxHeight.value = bBox.height;
     // 行内元素有内容时的clientWidth 也会是0，只能用边框代替
-    contentBoxWidth.value = el.clientWidth || bBox.width;
-    contentBoxHeight.value = el.clientHeight || bBox.height;
+    contentBoxWidth.value = targetEl.clientWidth || bBox.width;
+    contentBoxHeight.value = targetEl.clientHeight || bBox.height;
   };
 
   if (isWatchSource(el)) {
     watch(
       el,
-      (el, _, onCleanup) => {
-        if (!el) {
+      (targetEl, _, onCleanup) => {
+        if (!targetEl) {
           return;
         }
-        update(el);
+        update(targetEl);
         onCleanup(
           // avoid forced reflow.
-          addResizeListener(el, (entry) => {
+          addResizeListener(targetEl, (entry) => {
             requestAnimationFrame(() => {
-              update(el, entry);
+              update(targetEl, entry);
             });
           }),
         );

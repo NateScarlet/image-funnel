@@ -7,26 +7,26 @@ export default function useTextAreaAutoHeight(
 ) {
   watch(
     () => toValue(el),
-    (el, _, onCleanup) => {
-      if (!el) {
+    (targetEl, _, onCleanup) => {
+      if (!targetEl) {
         return;
       }
-      const originalHeight = el.style.height;
-      const originalOverflowY = el.style.overflowY;
+      const originalHeight = targetEl.style.height;
+      const originalOverflowY = targetEl.style.overflowY;
       onCleanup(
         watch(
           () => toValue(text),
           () => {
-            const { scrollHeight } = el;
-            const computedStyle = window.getComputedStyle(el);
+            const { scrollHeight } = targetEl;
+            const computedStyle = window.getComputedStyle(targetEl);
             const maxHeight = parseFloat(computedStyle.maxHeight) || Infinity;
 
             if (scrollHeight > maxHeight) {
-              el.style.height = `${maxHeight}px`;
-              el.style.overflowY = "auto";
+              targetEl.style.height = `${maxHeight}px`;
+              targetEl.style.overflowY = "auto";
             } else {
-              el.style.height = `${scrollHeight}px`;
-              el.style.overflowY = "hidden";
+              targetEl.style.height = `${scrollHeight}px`;
+              targetEl.style.overflowY = "hidden";
             }
           },
           { immediate: true },
@@ -34,13 +34,13 @@ export default function useTextAreaAutoHeight(
       );
 
       onCleanup(async () => {
-        const lastHeight = el.style.height;
-        const lastOverflowY = el.style.overflowY;
-        await Promise.allSettled(el.getAnimations().map((anim) => anim.finished));
+        const lastHeight = targetEl.style.height;
+        const lastOverflowY = targetEl.style.overflowY;
+        await Promise.allSettled(targetEl.getAnimations().map((anim) => anim.finished));
         // 仅在没有干扰的情况下还原
-        if (lastHeight === el.style.height && lastOverflowY === el.style.overflowY) {
-          el.style.height = originalHeight;
-          el.style.overflowY = originalOverflowY;
+        if (lastHeight === targetEl.style.height && lastOverflowY === targetEl.style.overflowY) {
+          targetEl.style.height = originalHeight;
+          targetEl.style.overflowY = originalOverflowY;
         }
       });
     },

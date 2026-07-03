@@ -8,7 +8,7 @@ const sha256HashBytes: (data: Uint8Array) => Promise<ArrayBufferLike> = (() => {
     typeof crypto.subtle?.digest === "function"
   ) {
     return async (data: Uint8Array) =>
-      crypto.subtle.digest("SHA-256", data as Uint8Array<ArrayBuffer>);
+      crypto.subtle.digest("SHA-256", data as unknown as Uint8Array<ArrayBuffer>);
   }
   return async (data: Uint8Array) => sha256(data).buffer;
 })();

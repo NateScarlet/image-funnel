@@ -272,9 +272,9 @@ export default class Duration {
       // Consume (\.[0-9]*)?
       if (s.startsWith(".")) {
         s = s.slice(1);
-        const pl = s.length;
+        const afterPeriodPos = s.length;
         [f, scale, s] = leadingFraction(s);
-        post = pl !== s.length;
+        post = afterPeriodPos !== s.length;
         if (neg) {
           f = -f;
         }
@@ -490,6 +490,7 @@ export default class Duration {
     if (this.valid) {
       return this;
     }
+    return undefined;
   };
 
   public truncate = (unitMs: number): Duration => {

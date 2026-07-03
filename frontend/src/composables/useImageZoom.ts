@@ -70,7 +70,7 @@ export default function useImageZoom({
   const fitContainerScale = computed(() => {
     const value = toValue(size);
     if (!value || value.width <= 0 || value.height <= 0) {
-      return;
+      return undefined;
     }
     return Math.min(contentBoxWidth.value / value.width, contentBoxHeight.value / value.height);
   });
@@ -147,7 +147,7 @@ export default function useImageZoom({
   function anchorFromClientPosition(pos: { clientX: number; clientY: number }) {
     const el = toValue(renderer);
     if (!el) {
-      return;
+      return undefined;
     }
     const { left, top } = el.getBoundingClientRect();
     const imageX = pos.clientX - left + el.scrollLeft;

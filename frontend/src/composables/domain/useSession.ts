@@ -13,6 +13,53 @@ import {
   type SessionFragment,
 } from "@/graphql/generated";
 
+async function createSession(sessionOptions: {
+  directoryId: string;
+  filter: ImageFiltersInput;
+  targetKeep: number;
+  createActions?: {
+    keepRating: number | null;
+    shelveRating: number | null;
+    rejectRating: number | null;
+  };
+}): Promise<SessionFragment | null> {
+  const res = await mutate(CreateSessionDocument, {
+    variables: {
+      input: {
+        directoryId: sessionOptions.directoryId,
+        filter: sessionOptions.filter,
+        targetKeep: sessionOptions.targetKeep,
+      },
+    },
+  });
+
+  if (res.data?.createSession) {
+    const sess = res.data.createSession.session;
+
+    if (sessionOptions.createActions) {
+      try {
+        await mutate(SetDirectoryStateDocument, {
+          variables: {
+            input: {
+              id: sessionOptions.directoryId,
+              state: {
+                default: {
+                  writeActions: sessionOptions.createActions,
+                },
+              },
+            },
+          },
+        });
+      } catch {
+        // 保存默认写操作失败不影响会话创建
+      }
+    }
+
+    return sess;
+  }
+  return null;
+}
+
 export default function useSession(
   id: MaybeRefOrGetter<string | undefined>,
   options: { loadingCount?: Ref<number> } = {},
@@ -29,53 +76,6 @@ export default function useSession(
   });
 
   const session = computed(() => data.value?.session);
-
-  async function createSession(options: {
-    directoryId: string;
-    filter: ImageFiltersInput;
-    targetKeep: number;
-    createActions?: {
-      keepRating: number | null;
-      shelveRating: number | null;
-      rejectRating: number | null;
-    };
-  }): Promise<SessionFragment | null> {
-    const res = await mutate(CreateSessionDocument, {
-      variables: {
-        input: {
-          directoryId: options.directoryId,
-          filter: options.filter,
-          targetKeep: options.targetKeep,
-        },
-      },
-    });
-
-    if (res.data?.createSession) {
-      const sess = res.data.createSession.session;
-
-      if (options.createActions) {
-        try {
-          await mutate(SetDirectoryStateDocument, {
-            variables: {
-              input: {
-                id: options.directoryId,
-                state: {
-                  default: {
-                    writeActions: options.createActions,
-                  },
-                },
-              },
-            },
-          });
-        } catch {
-          // 保存默认写操作失败不影响会话创建
-        }
-      }
-
-      return sess;
-    }
-    return null;
-  }
 
   async function markImage(imageId: string, action: ImageAction, duration?: string) {
     if (!resolvedId.value) return;

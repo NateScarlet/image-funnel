@@ -25,13 +25,13 @@ export default function useFormState() {
   const { buffers, isDirty } = inject(
     key,
     () => {
-      const buffers = shallowReactive(new Set<ShallowRef<unknown>>());
-      const isDirty = computed(() => {
-        return Iterator.from(buffers).some((i) => i.value !== undefined);
+      const b = shallowReactive(new Set<ShallowRef<unknown>>());
+      const dirty = computed(() => {
+        return Iterator.from(b).some((i) => i.value !== undefined);
       });
       return {
-        buffers,
-        isDirty,
+        buffers: b,
+        isDirty: dirty,
       };
     },
     true,

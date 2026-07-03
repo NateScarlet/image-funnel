@@ -11,13 +11,12 @@ let buffer: Record<string, string[]> = {};
 let pushHistory = false;
 const flush = debounce((router: Router) => {
   const cr = router.currentRoute.value;
-  (pushHistory ? router.push : router.replace)({
-    ...cr,
-    query: {
-      ...cr.query,
-      ...buffer,
-    },
-  });
+  const query = { ...cr.query, ...buffer };
+  if (pushHistory) {
+    void router.push({ path: cr.path, query, hash: cr.hash });
+  } else {
+    void router.replace({ path: cr.path, query, hash: cr.hash });
+  }
   buffer = {};
   pushHistory = false;
 }, 1);
@@ -31,7 +30,7 @@ function setRouteQuery(router: Router, name: string, values: string[], pushHisto
 export default function useRouteQuery(
   name: string,
   {
-    pushHistory = false,
+    pushHistory: pushHistoryArg = false,
     defaultValue = [],
   }: { pushHistory?: boolean; defaultValue?: string[] } = {},
 ): Ref<string[]> {
@@ -55,7 +54,7 @@ export default function useRouteQuery(
       if (equalArray(values.value, v)) {
         return;
       }
-      setRouteQuery(router, name, v, pushHistory);
+      setRouteQuery(router, name, v, pushHistoryArg);
     },
   });
 

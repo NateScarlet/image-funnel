@@ -11,7 +11,7 @@ export default function useTemplateRefs<T>() {
   });
   const ref: VNodeRef = (node) => {
     if (node) {
-      refs.push(node as T);
+      refs.push(node as unknown as T);
     }
   };
   return computed(() => Object.assign(refs, { ref }));

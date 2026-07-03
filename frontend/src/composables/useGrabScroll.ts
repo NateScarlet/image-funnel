@@ -17,26 +17,26 @@ export default function useGrabScroll(
     beforeStart?: (e: PointerEvent) => boolean;
   },
 ): Disposable {
-  function setup(stack: DisposableStack, el: HTMLElement) {
-    const oldCursor = el.style.cursor;
-    const oldUserSelect = el.style.userSelect;
+  function setup(stack: DisposableStack, targetEl: HTMLElement) {
+    const oldCursor = targetEl.style.cursor;
+    const oldUserSelect = targetEl.style.userSelect;
     stack.defer(() => {
-      el.style.cursor = oldCursor;
-      el.style.userSelect = oldUserSelect;
+      targetEl.style.cursor = oldCursor;
+      targetEl.style.userSelect = oldUserSelect;
     });
     let lastPos = { x: 0, y: 0 };
     let isGrabbing = false;
     function render() {
-      el.style.userSelect = "none";
+      targetEl.style.userSelect = "none";
       if (isGrabbing) {
-        el.style.cursor = "grabbing";
+        targetEl.style.cursor = "grabbing";
       } else {
-        el.style.cursor = "grab";
+        targetEl.style.cursor = "grab";
       }
     }
     render();
     stack.use(
-      createEventListeners(el, ({ on }) => {
+      createEventListeners(targetEl, ({ on }) => {
         on("pointerdown", (e) => {
           if (!e.isPrimary) return;
           if (options?.beforeStart && !options.beforeStart(e)) return;
@@ -52,8 +52,8 @@ export default function useGrabScroll(
           const pos = posOf(e);
           const dy = pos.y - lastPos.y;
           const dx = pos.x - lastPos.x;
-          el.scrollTop -= dy;
-          el.scrollLeft -= dx;
+          targetEl.scrollTop -= dy;
+          targetEl.scrollLeft -= dx;
           lastPos = pos;
         });
         on("pointerup", () => {
@@ -76,13 +76,13 @@ export default function useGrabScroll(
 
   if (isWatchSource(el)) {
     stack.defer(
-      watch(el, (el, _, onCleanup) => {
-        if (!el) {
+      watch(el, (targetEl, _, onCleanup) => {
+        if (!targetEl) {
           return;
         }
-        const stack = new DisposableStack();
-        onCleanup(() => stack.dispose());
-        setup(stack, el);
+        const innerStack = new DisposableStack();
+        onCleanup(() => innerStack.dispose());
+        setup(innerStack, targetEl);
       }),
     );
   } else if (el) {

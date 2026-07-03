@@ -35,7 +35,7 @@ export default function useNote(id: MaybeRefOrGetter<string | undefined>) {
   async function updateNote(content: string) {
     const v = toValue(id);
     if (!v) return;
-    return mutate(UpdateNoteDocument, {
+    await mutate(UpdateNoteDocument, {
       variables: { id: v, content },
     });
   }

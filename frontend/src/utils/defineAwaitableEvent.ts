@@ -29,12 +29,12 @@ export default function defineAwaitableEvent<
       e.detail.cb(
         (async () => {
           return await handle(...e.detail.args);
-        })() as Return,
+        })() as unknown as Return,
       );
     }
-    target.addEventListener(type, listener as EventListener, options);
+    target.addEventListener(type, listener as unknown as EventListener, options);
     return () => {
-      target.removeEventListener(type, listener as EventListener, options);
+      target.removeEventListener(type, listener as unknown as EventListener, options);
     };
   }
   return {

@@ -21,6 +21,12 @@ import {
 } from "@/graphql/generated";
 import { throttle } from "es-toolkit";
 
+async function dispatch(hookId: string, filterBy: ImageFiltersInput) {
+  await mutate(DispatchImageHookDocument, {
+    variables: { input: { hookId, filterBy } },
+  });
+}
+
 export default function useImage(image?: MaybeRefOrGetter<ImageFragment>) {
   const hooksLoadingCountRef = ref(0);
   const { data: hooksData } = useQuery(HooksDocument, {
@@ -44,12 +50,6 @@ export default function useImage(image?: MaybeRefOrGetter<ImageFragment>) {
     const img = toValue(image);
     await mutate(UpdateImageMetadataDocument, {
       variables: { input: { id: img.id, label } },
-    });
-  }
-
-  async function dispatch(hookId: string, filterBy: ImageFiltersInput) {
-    await mutate(DispatchImageHookDocument, {
-      variables: { input: { hookId, filterBy } },
     });
   }
 
@@ -163,17 +163,17 @@ export function useImageBrowse(
 // #endregion
 
 // #region 批量操作
-export function useBulkImage() {
-  async function updateMetadata(options: {
-    filterBy: ImageFiltersInput;
-    rating?: number;
-    label?: string;
-  }) {
-    return mutate(UpdateImagesMetadataDocument, {
-      variables: { input: options },
-    });
-  }
+async function updateMetadata(options: {
+  filterBy: ImageFiltersInput;
+  rating?: number;
+  label?: string;
+}) {
+  return mutate(UpdateImagesMetadataDocument, {
+    variables: { input: options },
+  });
+}
 
+export function useBulkImage() {
   return { updateMetadata };
 }
 // #endregion

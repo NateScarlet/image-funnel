@@ -74,7 +74,7 @@ export default function useImageViewer(input: UseImageViewerInput) {
   // 预载下一页：若目标图片是当前列表的最后一张，且有后续页面未加载，则在后台静默发起加载请求
   function checkAndFetchMore(index: number) {
     if (index !== -1 && index === images.value.length - 1 && hasNextPage.value && !loading.value) {
-      fetchMore();
+      void fetchMore();
     }
   }
 
@@ -110,14 +110,14 @@ export default function useImageViewer(input: UseImageViewerInput) {
   function openViewer(image: ImageFragment) {
     currentImageId.value = image.id;
     viewerHash.value = image.filename;
-    imageViewerDialog.open();
+    void imageViewerDialog.open();
 
     const index = images.value.findIndex((img) => img.id === image.id);
     checkAndFetchMore(index);
   }
 
   function closeViewer() {
-    imageViewerDialog.close();
+    void imageViewerDialog.close();
   }
 
   function handleViewerAfterLeave() {
@@ -169,7 +169,7 @@ export default function useImageViewer(input: UseImageViewerInput) {
         prevImage();
       },
       arrowright: () => {
-        nextImage();
+        void nextImage();
       },
       home: () => {
         if (images.value.length > 0) {
@@ -214,14 +214,14 @@ export default function useImageViewer(input: UseImageViewerInput) {
   onMounted(async () => {
     if (viewerHash.value) {
       await waitLoading();
-      searchAndOpenViewer(viewerHash.value);
+      void searchAndOpenViewer(viewerHash.value);
     }
   });
 
   // 响应 NoteList 打开图片查看器的事件
   watchEffect((onCleanup) => {
     const unsubscribe = openImageViewerByFilename.subscribe((event) => {
-      searchAndOpenViewer(event.detail.filename);
+      void searchAndOpenViewer(event.detail.filename);
     });
     onCleanup(unsubscribe);
   });

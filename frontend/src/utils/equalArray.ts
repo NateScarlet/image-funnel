@@ -2,7 +2,7 @@ export default function equalArray<T extends unknown[]>(
   a: readonly [...T],
   b: readonly [...T],
   {
-    equal = (a, b) => a === b,
+    equal = (x, y) => x === y,
   }: {
     equal?: (a: T[number], b: T[number]) => boolean;
   } = {},

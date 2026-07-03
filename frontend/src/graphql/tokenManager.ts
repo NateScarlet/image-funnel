@@ -19,7 +19,7 @@ const lockKey = "refresh_token_lock_8b54ed";
 
 export async function getValidToken(): Promise<string | undefined> {
   if (!tokenStore.value) {
-    return;
+    return undefined;
   }
 
   const expiresAt = new Date(tokenStore.value.accessTokenExpiresAt);
@@ -32,12 +32,12 @@ export async function getValidToken(): Promise<string | undefined> {
 }
 
 export async function refreshToken() {
-  const refreshToken = tokenStore.value?.refreshToken;
-  if (!refreshToken) return;
+  const storedRefreshToken = tokenStore.value?.refreshToken;
+  if (!storedRefreshToken) return;
 
-  await flight.do(refreshToken, async () => {
+  await flight.do(storedRefreshToken, async () => {
     await withWebLock(lockKey, async () => {
-      if (tokenStore.value?.refreshToken != refreshToken) {
+      if (tokenStore.value?.refreshToken != storedRefreshToken) {
         // 等待期间已经刷新了
         return;
       }
@@ -46,7 +46,7 @@ export async function refreshToken() {
           mutation: RefreshTokenDocument,
           variables: {
             input: {
-              refreshToken,
+              refreshToken: storedRefreshToken,
             },
           },
           context: {

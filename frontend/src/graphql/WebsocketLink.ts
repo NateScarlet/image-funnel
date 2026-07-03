@@ -33,7 +33,7 @@ export default class WebSocketLink extends ApolloLink {
           while (this.onOpenedOnce.length) {
             this.onOpenedOnce.pop()?.();
           }
-          const s = socket as WebSocket;
+          const s = socket as unknown as WebSocket;
           this.restartFn = async () => {
             if (s.readyState !== WebSocket.OPEN) {
               this.restartRequested = true;
@@ -46,7 +46,7 @@ export default class WebSocketLink extends ApolloLink {
           };
           if (this.restartRequested) {
             this.restartRequested = false;
-            this.restartFn();
+            void this.restartFn();
           }
           options.on?.opened?.(socket);
         },
@@ -67,7 +67,7 @@ export default class WebSocketLink extends ApolloLink {
           complete: observer.complete.bind(observer),
           error: (err) => {
             if (Array.isArray(err)) {
-              observer.next({ errors: err as GraphQLError[] });
+              observer.next({ errors: err as unknown as GraphQLError[] });
               observer.complete();
             } else {
               observer.error(err);

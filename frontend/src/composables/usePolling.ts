@@ -23,9 +23,9 @@ export class PollingContext {
 
 export default function usePolling({
   update,
-  scheduleNext = (update) => {
+  scheduleNext = (scheduleUpdate) => {
     const stack = new DisposableStack();
-    stack.adopt(requestAnimationFrame(update), cancelAnimationFrame);
+    stack.adopt(requestAnimationFrame(scheduleUpdate), cancelAnimationFrame);
     return stack;
   },
   paused = () => false,
@@ -80,7 +80,7 @@ export default function usePolling({
           onError?.(err);
         }
       }
-      run();
+      void run();
     },
     { immediate: true },
   );

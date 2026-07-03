@@ -73,7 +73,7 @@ function useStorage<T>(
       const str = raw.value;
       if (str != null) {
         try {
-          return JSON.parse(str) as T;
+          return JSON.parse(str) as unknown as T;
         } catch (err) {
           if (import.meta.env.DEV) {
             console.error({

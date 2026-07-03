@@ -14,6 +14,72 @@ import {
 import { throttle } from "es-toolkit";
 import { useNoteBrowse } from "./domain/useNote";
 
+function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
+  const isCRLF = raw.includes("\r\n");
+  const normalized = raw.replace(/\r\n/g, "\n");
+
+  if (normalized.startsWith("---\n")) {
+    const parts = normalized.split("---\n");
+    if (parts.length >= 3) {
+      const frontmatter = parts[1];
+      const body = parts.slice(2).join("---\n");
+
+      const lines = frontmatter.split("\n");
+      let found = false;
+      const newLines: string[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed === "" || trimmed.startsWith("#")) {
+          newLines.push(line);
+          continue;
+        }
+        const colonIndex = line.indexOf(":");
+        if (colonIndex !== -1) {
+          const key = line.slice(0, colonIndex).trim().toLowerCase();
+          if (key === "hidden" || key === "hide") {
+            found = true;
+            if (newHidden) {
+              const indent = line.slice(0, line.indexOf(line.trim()));
+              newLines.push(`${indent}${line.slice(0, colonIndex).trim()}: true`);
+            }
+            continue;
+          }
+        }
+        newLines.push(line);
+      }
+
+      if (!found) {
+        if (newHidden) {
+          if (newLines.length > 0 && newLines[newLines.length - 1].trim() === "") {
+            newLines[newLines.length - 1] = "hidden: true";
+            newLines.push("");
+          } else {
+            newLines.push("hidden: true");
+          }
+        } else {
+          return raw;
+        }
+      }
+
+      if (newLines.every((l) => l.trim() === "")) {
+        const result = body;
+        return isCRLF ? result.replace(/\n/g, "\r\n") : result;
+      }
+
+      const newFrontmatter = newLines.join("\n");
+      const result = `---\n${newFrontmatter}---\n${body}`;
+      return isCRLF ? result.replace(/\n/g, "\r\n") : result;
+    }
+  }
+
+  if (!newHidden) return raw;
+
+  const newFrontmatter = `---\nhidden: true\n---\n`;
+  const result = newFrontmatter + normalized;
+  return isCRLF ? result.replace(/\n/g, "\r\n") : result;
+}
+
 export default function useBrowseNotes(
   variables: MaybeRefOrGetter<BrowseNotesQueryVariables>,
   options?: { loadingCount?: Ref<number> },
@@ -86,72 +152,6 @@ export default function useBrowseNotes(
       }
     },
   });
-
-  function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
-    const isCRLF = raw.includes("\r\n");
-    const normalized = raw.replace(/\r\n/g, "\n");
-
-    if (normalized.startsWith("---\n")) {
-      const parts = normalized.split("---\n");
-      if (parts.length >= 3) {
-        const frontmatter = parts[1];
-        const body = parts.slice(2).join("---\n");
-
-        const lines = frontmatter.split("\n");
-        let found = false;
-        const newLines: string[] = [];
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed === "" || trimmed.startsWith("#")) {
-            newLines.push(line);
-            continue;
-          }
-          const colonIndex = line.indexOf(":");
-          if (colonIndex !== -1) {
-            const key = line.slice(0, colonIndex).trim().toLowerCase();
-            if (key === "hidden" || key === "hide") {
-              found = true;
-              if (newHidden) {
-                const indent = line.slice(0, line.indexOf(line.trim()));
-                newLines.push(`${indent}${line.slice(0, colonIndex).trim()}: true`);
-              }
-              continue;
-            }
-          }
-          newLines.push(line);
-        }
-
-        if (!found) {
-          if (newHidden) {
-            if (newLines.length > 0 && newLines[newLines.length - 1].trim() === "") {
-              newLines[newLines.length - 1] = "hidden: true";
-              newLines.push("");
-            } else {
-              newLines.push("hidden: true");
-            }
-          } else {
-            return raw;
-          }
-        }
-
-        if (newLines.every((l) => l.trim() === "")) {
-          const result = body;
-          return isCRLF ? result.replace(/\n/g, "\r\n") : result;
-        }
-
-        const newFrontmatter = newLines.join("\n");
-        const result = `---\n${newFrontmatter}---\n${body}`;
-        return isCRLF ? result.replace(/\n/g, "\r\n") : result;
-      }
-    }
-
-    if (!newHidden) return raw;
-
-    const newFrontmatter = `---\nhidden: true\n---\n`;
-    const result = newFrontmatter + normalized;
-    return isCRLF ? result.replace(/\n/g, "\r\n") : result;
-  }
 
   async function toggleNoteHidden(noteItem: NoteFragment) {
     const newHidden = !noteItem.hidden;

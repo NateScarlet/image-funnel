@@ -14,12 +14,13 @@ export interface PageInfo {
 
 export default function isPageInfo(v: unknown): v is PageInfo {
   try {
+    const obj = v as unknown as Record<string, unknown>;
     return (
-      (v as { __typename: string }).__typename === "PageInfo" &&
-      isUnion((v as { hasNextPage: unknown }).hasNextPage, isBoolean, isUndefined) &&
-      isUnion((v as { hasPreviousPage: unknown }).hasPreviousPage, isBoolean, isUndefined) &&
-      isUnion((v as { startCursor: unknown }).startCursor, isString, isNull, isUndefined) &&
-      isUnion((v as { endCursor: unknown }).endCursor, isString, isNull, isUndefined)
+      obj.__typename === "PageInfo" &&
+      isUnion(obj.hasNextPage, isBoolean, isUndefined) &&
+      isUnion(obj.hasPreviousPage, isBoolean, isUndefined) &&
+      isUnion(obj.startCursor, isString, isNull, isUndefined) &&
+      isUnion(obj.endCursor, isString, isNull, isUndefined)
     );
   } catch {
     return false;
