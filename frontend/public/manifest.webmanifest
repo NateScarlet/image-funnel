@@ -1,0 +1,21 @@
+{
+  "name": "ImageFunnel - 图片筛选工具",
+  "short_name": "ImageFunnel",
+  "description": "AI 生成图片筛选工具，通过简单的工作流从大量生成结果中快速筛选出优质图片",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

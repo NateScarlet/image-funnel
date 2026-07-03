@@ -79,7 +79,11 @@ func addStaticRoutes(r *mux.Router, frontendDir string) {
 	r.Handle("/favicon.ico", customStaticHandler)
 	r.Handle("/sw.js", customStaticHandler)
 	r.Handle("/sw.js.map", customStaticHandler)
-	r.Handle("/manifest.webmanifest", customStaticHandler)
+	r.Handle("/manifest.webmanifest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/manifest+json")
+		w.Header().Set("Cache-Control", "no-cache")
+		staticHandler.ServeHTTP(w, r)
+	}))
 
 	// Catch-all route for single-page application
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

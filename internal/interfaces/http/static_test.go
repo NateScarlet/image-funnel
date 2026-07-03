@@ -36,6 +36,13 @@ func TestStaticRoutes(t *testing.T) {
 		t.Fatalf("failed to write mock JS: %v", err)
 	}
 
+	// Write mock manifest.webmanifest
+	manifestContent := `{"name":"test","icons":[]}`
+	err = os.WriteFile(filepath.Join(tempDir, "manifest.webmanifest"), []byte(manifestContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to write mock manifest.webmanifest: %v", err)
+	}
+
 	// Create router and register static routes
 	r := mux.NewRouter()
 	addStaticRoutes(r, tempDir)
@@ -63,6 +70,14 @@ func TestStaticRoutes(t *testing.T) {
 			expectedCache:       "public, max-age=31536000, immutable",
 			expectedContentType: "text/javascript",
 			expectedBody:        jsContent,
+		},
+		{
+			name:                "Manifest webmanifest with no-cache",
+			path:                "/manifest.webmanifest",
+			expectedStatus:      http.StatusOK,
+			expectedCache:       "no-cache",
+			expectedContentType: "application/manifest+json",
+			expectedBody:        manifestContent,
 		},
 		{
 			name:                "SPA routing fallback to index.html",
