@@ -124,25 +124,18 @@ async function update() {
     });
 
     if (selectedPreset.value?.writeActions) {
-      try {
-        await mutate(SetDirectoryStateDocument, {
-          variables: {
-            input: {
-              id: props.session.directory.id,
-              state: {
-                default: {
-                  writeActions: selectedPreset.value.writeActions,
-                },
+      await mutate(SetDirectoryStateDocument, {
+        variables: {
+          input: {
+            id: props.session.directory.id,
+            state: {
+              default: {
+                writeActions: selectedPreset.value.writeActions,
               },
             },
           },
-        });
-      } catch (err) {
-        console.error(
-          `Failed to sync default actions to directory state for ${props.session.directory.id}:`,
-          err,
-        );
-      }
+        },
+      });
     }
 
     emit("updated");

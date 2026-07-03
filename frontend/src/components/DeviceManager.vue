@@ -38,41 +38,29 @@ watch(globalVisible, (val) => {
 });
 
 async function approveRequest(code: string) {
-  try {
-    await mutate(ApprovePairingRequestDocument, {
-      variables: { input: { code } },
-    });
-    pairingRequests.value = pairingRequests.value.filter(
-      (req) => req.code !== code,
-    );
-    refreshDevices();
-  } catch (err) {
-    console.error(err);
-  }
+  await mutate(ApprovePairingRequestDocument, {
+    variables: { input: { code } },
+  });
+  pairingRequests.value = pairingRequests.value.filter(
+    (req) => req.code !== code,
+  );
+  refreshDevices();
 }
 
 async function rejectRequest(code: string) {
-  try {
-    await mutate(RejectPairingRequestDocument, {
-      variables: { input: { code } },
-    });
-    pairingRequests.value = pairingRequests.value.filter(
-      (req) => req.code !== code,
-    );
-  } catch (err) {
-    console.error(err);
-  }
+  await mutate(RejectPairingRequestDocument, {
+    variables: { input: { code } },
+  });
+  pairingRequests.value = pairingRequests.value.filter(
+    (req) => req.code !== code,
+  );
 }
 
 async function deleteDevice(id: string) {
   if (!confirm("确定要删除此设备吗？删除后该设备将被强制登出。")) return;
-  try {
-    await mutate(DeleteDeviceDocument, { variables: { input: { id } } });
-    refreshDevices();
-    refreshAuthStatus();
-  } catch (err) {
-    console.error(err);
-  }
+  await mutate(DeleteDeviceDocument, { variables: { input: { id } } });
+  refreshDevices();
+  refreshAuthStatus();
 }
 
 function formatDate(isoStr: string) {

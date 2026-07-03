@@ -75,8 +75,8 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
           fetchPolicy: "cache-first",
         });
         workflow = result.data?.comfyUIWorkflow;
-      } catch (err) {
-        console.error("获取工作流数据失败", err);
+      } catch {
+        // 获取失败则降级复制图片文件/路径
       }
 
       if (workflow) {
@@ -159,8 +159,8 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
         }
       }
       return supported;
-    } catch (err) {
-      console.error("增强剪贴板失败", err);
+    } catch {
+      // 错误由全局 ErrorLink 显示
       return false;
     }
   }

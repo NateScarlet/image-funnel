@@ -288,7 +288,7 @@ async function triggerDispatch(hookId: string, hookName: string) {
   const infoNotificationId = showInfo(`正在执行动作 ${hookName}...`, 0);
 
   try {
-    const { error } = await mutate(DispatchNoteHookDocument, {
+    await mutate(DispatchNoteHookDocument, {
       variables: {
         input: {
           hookId,
@@ -297,17 +297,7 @@ async function triggerDispatch(hookId: string, hookName: string) {
       },
     });
 
-    if (error) {
-      showError(`执行动作 ${hookName} 失败：${error.message}`);
-    } else {
-      showSuccess(`动作 ${hookName} 已成功触发`);
-    }
-  } catch (err) {
-    showError(
-      `执行动作 ${hookName} 出错：${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    showSuccess(`动作 ${hookName} 已成功触发`);
   } finally {
     remove(infoNotificationId);
     isDispatching.value = false;

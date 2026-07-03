@@ -232,7 +232,6 @@ import RatingFilter from "./RatingFilter.vue";
 import { useDirectoryState } from "@/composables/useDirectoryState";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import useTrash from "@/composables/domain/useTrash";
-import useNotification from "@/composables/useNotification";
 
 const props = defineProps<{
   directoryId: string;
@@ -299,7 +298,6 @@ const sortedRatingCounts = computed(() => {
 // #endregion
 
 // #region 删除低星级图片
-const { show: showNotification } = useNotification();
 const { trashImages } = useTrash();
 const deletingUnmatchedBuffer = ref({
   directoryId: props.directoryId,
@@ -368,11 +366,6 @@ async function handleDeleteUnmatched() {
     await trashImages(props.directoryId, {
       rating: ratingsToDelete,
     });
-  } catch (err) {
-    showNotification(
-      err instanceof Error ? err.message : "删除图片失败",
-      "error",
-    );
   } finally {
     isDeletingUnmatched.value = false;
   }

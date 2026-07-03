@@ -164,9 +164,6 @@ export default function useBulkOperations(
         "success",
       );
       onSuccess?.();
-    } catch (err) {
-      showNotification("批量设置星级失败，请重试", "error");
-      console.error("Bulk update rating failed:", err);
     } finally {
       isUpdating.value = false;
     }
@@ -188,9 +185,6 @@ export default function useBulkOperations(
         "success",
       );
       onSuccess?.();
-    } catch (err) {
-      showNotification("批量设置颜色标签失败，请重试", "error");
-      console.error("Bulk update label failed:", err);
     } finally {
       isUpdating.value = false;
     }

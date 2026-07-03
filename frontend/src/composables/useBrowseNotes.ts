@@ -169,16 +169,12 @@ export default function useBrowseNotes(
       newHidden,
     );
 
-    try {
-      await mutate(UpdateNoteDocument, {
-        variables: {
-          id: noteItem.id,
-          content: newRawContent,
-        },
-      });
-    } catch (err) {
-      console.error("Failed to toggle note hidden:", err);
-    }
+    await mutate(UpdateNoteDocument, {
+      variables: {
+        id: noteItem.id,
+        content: newRawContent,
+      },
+    });
   }
 
   return {

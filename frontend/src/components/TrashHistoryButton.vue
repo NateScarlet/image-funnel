@@ -139,7 +139,7 @@ const { model: trashMinAge, flush: saveMinAge } = useStorage<string>(
   () => "P7D",
 );
 
-const { showSuccess, showError } = useNotification();
+const { showSuccess } = useNotification();
 const {
   data: trashHistoryData,
   undo: domainUndo,
@@ -147,34 +147,24 @@ const {
 } = useTrash();
 
 async function undoTrashHistory(historyId: string) {
-  try {
-    const result = await domainUndo(historyId);
-    if (result) {
-      const { restoredCount, conflictCount, conflictDirName } = result;
-      if (conflictCount > 0) {
-        showSuccess(
-          `成功还原了 ${restoredCount} 张图片，另有 ${conflictCount} 个文件存在冲突，已移入对应的 ${conflictDirName} 目录下，请手动处理`,
-        );
-      } else {
-        showSuccess(`成功还原了 ${restoredCount} 张图片及其配套文件`);
-      }
+  const result = await domainUndo(historyId);
+  if (result) {
+    const { restoredCount, conflictCount, conflictDirName } = result;
+    if (conflictCount > 0) {
+      showSuccess(
+        `成功还原了 ${restoredCount} 张图片，另有 ${conflictCount} 个文件存在冲突，已移入对应的 ${conflictDirName} 目录下，请手动处理`,
+      );
+    } else {
+      showSuccess(`成功还原了 ${restoredCount} 张图片及其配套文件`);
     }
-  } catch (err: unknown) {
-    showError(err instanceof Error ? err.message : "还原失败，可能有文件冲突");
   }
 }
 
 async function emptyTrashHistory() {
-  try {
-    const result = await domainEmpty(trashMinAge.value);
-    if (result) {
-      const clearedCount = result.clearedCount;
-      showSuccess(`已成功清理 ${clearedCount} 项历史图片及其伴随文件`);
-    }
-  } catch (err: unknown) {
-    showError(
-      err instanceof Error ? err.message : "清理失败，可能有同名文件冲突",
-    );
+  const result = await domainEmpty(trashMinAge.value);
+  if (result) {
+    const clearedCount = result.clearedCount;
+    showSuccess(`已成功清理 ${clearedCount} 项历史图片及其伴随文件`);
   }
 }
 

@@ -163,7 +163,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **lodash 替代**: 使用 `es-toolkit`
 - **组件复用原则**: 若新建资源表单与已有编辑表单的提交模式（如新建采用手动保存，编辑采用自动保存）或输入字段有明显差异，应创建独立的表单组件，避免过度复用引入复杂的条件分支与防御性逻辑。
 - **缓存策略优先**: 对于已提供 GraphQL 查询的数据（如工作流数据），应直接查询并依赖 Apollo Client 缓存，（可配置 `cache-first` 策略避免重复查询）避免在组件内声明多余的本地响应式状态进行二次缓存。这可以规避组件复用但 Prop（如 ID）切换时，本地状态未及时清理导致显示/复制旧数据的问题。
-- **通知机制**: 成功和出错通知优先使用全局通知组件（如 `useNotification`），避免通过临时修改按钮文本等零散状态做交互，或仅用 `console.error` 打印错误。
+- **通知机制**: 成功和出错通知优先使用全局通知组件（如 `useNotification`），避免通过临时修改按钮文本等零散状态做交互，或仅用 `console.error` 打印错误。对于 GraphQL 操作，参考下方「错误通知去重」规则。
 - **Tailwind 样式规范**: 没有特殊理由，不得使用带有 `.5`（如 `gap-1.5`、`p-2.5` 等）的间距/尺寸值或非标准的 `X50` 色彩数值（如 `bg-primary-750`、`bg-primary-850` 等）。同时，不得在没有特殊理由的情况下使用任意值语法，尤其是用像素指定尺寸（如 `text-[10px]`、`w-[100px]` 等）。应该默认使用基本单位的整数倍数（如 `gap-2`、`p-3`、`bg-primary-700` 等），保持样式尺度的统一。
 - **导航组件统一**: 前端中静态且直接的页面导航，应该统一并尽可能使用 `<RouterLink>` 组件，而不是通过 JS 编程式触发（`router.push`），以保留浏览器原生的超链接体验（如支持 Ctrl+点击 和右键在新标签页中打开）。
 - **导航禁用规范**: 当需要禁用某个导航项时，不应在 `RouterLink` 与 `button/div` 之间切换标签类型，应保持 `<RouterLink>` 的语义，并通过 CSS 样式类（如 `pointer-events-none opacity-40 cursor-not-allowed`）从浏览器层面对其禁用。同时，已被 `pointer-events-none` 禁用的元素上不得添加额外的 `@click` 防御性事件阻止逻辑，避免过度防御。
@@ -184,6 +184,10 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
+- **错误通知去重**: Apollo Client 的全局 `ErrorLink`（`frontend/src/graphql/client.ts`）会自动捕获所有 GraphQL 和网络错误并通过 `showError` 显示。因此：
+   - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知
+   - 调用方**禁止**仅使用 `console.error` 吞掉错误，这会阻止用户看到错误
+   - 若调用方需要自行处理错误（如本地状态、特殊降级），应以 `context: { suppressError: true }` 传递给 `mutate()` / `query()` 以抑制全局通知，避免双重提示
 
 ### Python
 

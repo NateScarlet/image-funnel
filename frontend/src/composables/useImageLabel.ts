@@ -69,11 +69,7 @@ export default function useImageLabel(image: MaybeRefOrGetter<ImageFragment>) {
 
   async function setLabel(label: string) {
     showPopover.value = false;
-    try {
-      await domainSetLabelFn(label);
-    } catch (err) {
-      console.error("Failed to update label:", err);
-    }
+    await domainSetLabelFn(label);
   }
 
   /**

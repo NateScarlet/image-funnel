@@ -60,12 +60,6 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
       } else {
         showSuccess(`已成功触发动作 ${hookName}`);
       }
-    } catch (err) {
-      showError(
-        `执行动作 ${hookName} 出错：${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
     } finally {
       remove(infoNotificationId);
       isDispatching.value = false;

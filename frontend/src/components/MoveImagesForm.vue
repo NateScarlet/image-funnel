@@ -240,8 +240,7 @@ async function handleMoveImages() {
       );
     }
   } catch (err: unknown) {
-    moveError.value =
-      err instanceof Error ? err.message : "操作失败，请检查路径或文件冲突";
+    moveError.value = err instanceof Error ? err.message : String(err);
   } finally {
     moving.value = false;
   }

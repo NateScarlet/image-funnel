@@ -155,21 +155,14 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
               : undefined,
         };
 
-        try {
-          await mutate(SetDirectoryStateDocument, {
-            variables: {
-              input: {
-                id: dirId,
-                state: inputState,
-              },
+        await mutate(SetDirectoryStateDocument, {
+          variables: {
+            input: {
+              id: dirId,
+              state: inputState,
             },
-          });
-        } catch (err) {
-          console.error(
-            `Failed to sync directory state to server for ${dirId}:`,
-            err,
-          );
-        }
+          },
+        });
       }, 500);
       debouncers.set(dirId, fn);
     }

@@ -184,10 +184,6 @@ async function saveNote() {
 
     showSuccess("新建笔记成功");
     emit("saved");
-  } catch (err) {
-    console.error("Failed to create note:", err);
-    const msg = err instanceof Error ? err.message : "创建笔记失败";
-    showError(msg);
   } finally {
     isSaving.value = false;
   }

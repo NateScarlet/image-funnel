@@ -191,8 +191,8 @@ const performSave = async (newContent: string, targetId: string) => {
     lastSaved.value = { id: targetId, at: Date.now() };
     lastError.value = undefined;
     emit("saved");
-  } catch (err) {
-    console.error("Failed to save note:", err);
+  } catch {
+    // 错误由全局 ErrorLink 显示
     lastError.value = { id: targetId, at: Date.now() };
   } finally {
     isSaving.value = false;
