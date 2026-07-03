@@ -536,9 +536,6 @@ useEventListeners(window, ({ on }) => {
     if (target.closest("[data-filter-action]")) {
       return;
     }
-    if (insideSwipeArea(e)) {
-      return;
-    }
     autoRejectRunning.value = false;
   });
 });
