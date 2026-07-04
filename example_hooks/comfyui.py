@@ -477,6 +477,7 @@ def main() -> None:
     )
 
     args = parse_args()
+    _LOGGER.debug("args %s", (args,))
 
     # 解析 --max-match：默认从 HOOK_MAX_MATCH 环境变量读取，未设置则为 4
     max_match = args.max_match
@@ -533,19 +534,21 @@ def main() -> None:
         sys.exit(0)
 
     if not targets:
+        _write_action_override("KEEP")
         trigger = os.getenv("IMAGE_FUNNEL_TRIGGER", "")
         if not trigger:
             raise ValueError("Environment variable IMAGE_FUNNEL_TRIGGER is missing")
         is_non_manual = trigger not in ["image_dispatch", "note_dispatch"]
         if is_non_manual:
             _LOGGER.info("No images found to process. Skipping.")
-            _write_action_override("KEEP")
             sys.exit(0)
         else:
             _LOGGER.error("No images found to process.")
             sys.exit(1)
 
-    _LOGGER.debug("Found %d image(s) to process, command: %s", len(targets), args.command)
+    _LOGGER.debug(
+        "Found %d image(s) to process, command: %s", len(targets), args.command
+    )
 
     has_errors = False
     success_count = 0
@@ -703,7 +706,9 @@ def main() -> None:
                 pair = WorkflowPromptPair(workflow, prompt)
                 for q_idx in range(jobs):
                     if jobs > 1:
-                        _LOGGER.debug("  -> Queueing original run %d/%d", q_idx + 1, jobs)
+                        _LOGGER.debug(
+                            "  -> Queueing original run %d/%d", q_idx + 1, jobs
+                        )
                     if enable_seed_update:
                         if pair.update_seeds() == 0:
                             _LOGGER.error(
@@ -810,7 +815,9 @@ def main() -> None:
                 for node_id, start_marker, end_marker, use_markers in nodes_to_process:
                     for prompt_str_arg in remove_prompts:
                         _LOGGER.debug(
-                            "Trying to remove '%s' from node %s", prompt_str_arg, node_id
+                            "Trying to remove '%s' from node %s",
+                            prompt_str_arg,
+                            node_id,
                         )
                         if pair.process_double_track(
                             node_id,
@@ -851,7 +858,10 @@ def main() -> None:
 
     print(f"processed {success_count}/{len(targets)} image(s) successfully.")
 
-    if has_errors or success_count == 0:
+    if success_count == 0:
+        _write_action_override("KEEP")
+
+    if has_errors:
         sys.exit(1)
     else:
         sys.exit(0)
