@@ -13,6 +13,7 @@ import (
 
 	domhook "main/internal/domain/hook"
 	"main/internal/scalar"
+	"main/internal/util"
 
 	"go.uber.org/zap"
 )
@@ -96,7 +97,9 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 
 		// 1b2. 若步骤 3 已完毕，执行后置迟到擦除
 		r.logger.Debug("executing late path cleanup for known hook-run-id", zap.String("path", relPath), zap.String("run_id", runID))
-		r.postProcessNoteDirectives(ctx, noteAbsPath, runID, triggerType, hookMap, failedDirectives)
+		if err := r.postProcessNoteDirectives(ctx, noteAbsPath, runID, triggerType, hookMap, failedDirectives); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 
@@ -262,14 +265,11 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 	}()
 
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
-	var hookErr error
+	errB := util.NewErrorsBuilder(len(pending))
 	for i, p := range pending {
 		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
 		if err != nil {
-			r.logger.Error("failed to execute hook for directive", zap.String("hook_id", p.config.ID), zap.Error(err))
-			if hookErr == nil {
-				hookErr = err
-			}
+			errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, err))
 		}
 		pending[i].action = action
 		pending[i].stdout = stdout
@@ -297,17 +297,16 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 			if os.IsNotExist(err) {
 				continue
 			}
-			r.logger.Error("failed to read file during directive cleanup", zap.String("path", p), zap.Error(err))
+			errB.Add(fmt.Errorf("failed to read file during directive cleanup %s: %w", p, err))
 			continue
 		}
 
 		fileContent := string(contentBytes)
 		currentID := getHookRunID(fileContent)
 		if currentID != runID {
-			continue // 3b. 如果不一致，说明该路径已被覆盖，忽略之
+			continue
 		}
 
-		// 3a. 擦除指令和 hook-run-id 并写入文件
 		idx := 0
 		finalContent := directiveReg.ReplaceAllStringFunc(fileContent, func(matchedLine string) string {
 			if idx >= len(pending) {
@@ -319,42 +318,38 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 			return applyDirectiveAction(pTask.action, matchedLine, pTask.stdout, pTask.stderr, pTask.executedAt)
 		})
 
-		// 擦除 hook-run-id
 		finalContent = removeHookRunID(finalContent)
 
 		if finalContent != fileContent {
 			if finalContent == "" {
-				// 处理后的内容为空，直接删除文件
 				if err := os.Remove(p); err != nil {
-					r.logger.Error("failed to delete empty note file after directive cleanup", zap.String("path", p), zap.Error(err))
+					errB.Add(fmt.Errorf("failed to delete empty note file after directive cleanup %s: %w", p, err))
 				}
 				continue
 			}
-			// 在写回磁盘前，计算 xxhash 并注册为忽略事件，自防循环
 			finalContentBytes := []byte(finalContent)
 			if err := r.writeFileWithIgnore(p, finalContentBytes, 0644); err != nil {
-				r.logger.Error("failed to write clean content to note file during cleanup", zap.String("path", p), zap.Error(err))
+				errB.Add(fmt.Errorf("failed to write clean content to note file during cleanup %s: %w", p, err))
 			}
 		}
 	}
 
-	return true, hookErr
+	return true, errB.Build()
 }
 
-func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]hookConfig, failedDirectives map[string]bool) {
+func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]hookConfig, failedDirectives map[string]bool) error {
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return
+			return nil
 		}
-		r.logger.Error("failed to read file during late task cleanup", zap.String("path", absPath), zap.Error(err))
-		return
+		return fmt.Errorf("failed to read file during late task cleanup: %w", err)
 	}
 
 	fileContent := string(contentBytes)
 	currentID := getHookRunID(fileContent)
 	if currentID != runID {
-		return
+		return nil
 	}
 
 	finalContent := directiveReg.ReplaceAllStringFunc(fileContent, func(matchedLine string) string {
@@ -379,15 +374,15 @@ func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, 
 
 	if finalContent != fileContent {
 		if finalContent == "" {
-			// 处理后的内容为空，直接删除文件
 			if err := os.Remove(absPath); err != nil {
-				r.logger.Error("failed to delete empty note file during late cleanup", zap.String("path", absPath), zap.Error(err))
+				return fmt.Errorf("failed to delete empty note file during late cleanup: %w", err)
 			}
-			return
+			return nil
 		}
 		finalContentBytes := []byte(finalContent)
 		if err := r.writeFileWithIgnore(absPath, finalContentBytes, 0644); err != nil {
-			r.logger.Error("failed to write clean content to note file during late cleanup", zap.String("path", absPath), zap.Error(err))
+			return fmt.Errorf("failed to write clean content to note file during late cleanup: %w", err)
 		}
 	}
+	return nil
 }

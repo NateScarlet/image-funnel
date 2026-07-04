@@ -361,7 +361,9 @@ func (s *Service) ApproveRequest(ctx context.Context, code string) error {
 			return err
 		}
 		if bytes.Equal(d.CredentialID(), newDevice.CredentialID()) {
-			_ = s.pairingSvc.Delete(ctx, code, shared.PairingRequestStatusApproved)
+			if err := s.pairingSvc.Delete(ctx, code, shared.PairingRequestStatusApproved); err != nil {
+				return fmt.Errorf("failed to delete pairing request after device already exists: %w", err)
+			}
 			return nil // Already registered
 		}
 	}

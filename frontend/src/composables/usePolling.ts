@@ -30,9 +30,7 @@ export default function usePolling({
   },
   paused = () => false,
   onError = (err) => {
-    if (import.meta.env.DEV) {
-      console.error("error during polling", err, update);
-    }
+    console.error("error during polling", err, update);
   },
 }: {
   update: (ctx: PollingContext) => Promise<void> | void;

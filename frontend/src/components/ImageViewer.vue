@@ -811,8 +811,8 @@ useAsyncTask({
         img.src = url;
         try {
           await img.decode();
-        } catch {
-          // ignore
+        } catch (err) {
+          console.error("图片 decode 失败", url, err);
         }
       }
     };

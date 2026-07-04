@@ -130,7 +130,10 @@ func (d *DirectoryRepository) readStateV1(data []byte) (*shared.DirectoryStateDT
 			TargetKeep: stateV1.LastSession.TargetKeep,
 		}
 		if stateV1.LastSession.Filter != nil {
-			filterJSON, _ := json.Marshal(stateV1.LastSession.Filter)
+			filterJSON, err := json.Marshal(stateV1.LastSession.Filter)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal filter from state v1: %w", err)
+			}
 			if err := json.Unmarshal(filterJSON, &lastSessionV3.Filter); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal filter from state v1: %w", err)
 			}

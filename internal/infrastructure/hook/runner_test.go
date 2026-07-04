@@ -591,10 +591,11 @@ Other text.`
 	}
 
 	// 触发 late cleanup
-	runner.postProcessNoteDirectives(context.Background(), noteAbsPath, runID, "post_update_note", hookMap, map[string]bool{
+	err = runner.postProcessNoteDirectives(context.Background(), noteAbsPath, runID, "post_update_note", hookMap, map[string]bool{
 		"fork":    false,
 		"comfyui": true,
 	})
+	assert.NoError(t, err)
 
 	// 再次检查迟到清理后的文件内容
 	contentBytes, err = os.ReadFile(noteAbsPath)

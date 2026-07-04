@@ -13,20 +13,23 @@ export default function addResizeListener(
   fn: (entry: ResizeObserverEntry) => void,
 ): () => void {
   const stack = new DisposableStack();
-  void loadResizeObserver().then((Observer) => {
-    if (stack.disposed) {
-      return;
-    }
-    const observer = stack.adopt(
-      new Observer((entries): void => {
-        entries.forEach((i) => {
-          fn(i);
-        });
-      }),
-      (o) => o.disconnect(),
-    );
-    observer.observe(el);
-
-  });
+  loadResizeObserver()
+    .then((Observer) => {
+      if (stack.disposed) {
+        return;
+      }
+      const observer = stack.adopt(
+        new Observer((entries): void => {
+          entries.forEach((i) => {
+            fn(i);
+          });
+        }),
+        (o) => o.disconnect(),
+      );
+      observer.observe(el);
+    })
+    .catch((err: unknown) => {
+      console.error("ResizeObserver polyfill 加载失败:", err);
+    });
   return () => stack.dispose();
 }

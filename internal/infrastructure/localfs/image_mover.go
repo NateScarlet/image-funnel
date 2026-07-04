@@ -462,10 +462,11 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.U
 func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error) {
 	trashRoot := filepath.Join(s.rootDir, trashDirName)
 
+	errB := util.NewErrorsBuilder(16)
 	// 使用 dirEntries 进行流式分批遍历目录项，避免一次性读入全部条目到内存中
 	for entry, scanErr := range dirEntries(ctx, trashRoot) {
 		if scanErr != nil {
-			return clearedCount, scanErr
+			return clearedCount, errors.Join(errB.Build(), scanErr)
 		}
 		if !entry.IsDir() {
 			continue
@@ -476,24 +477,26 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 
 		metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
 		if err != nil {
-			// 忽略可能已经被删除或元数据损坏的目录项
+			errB.Add(fmt.Errorf("failed to read meta.json for trash history %s: %w", historyId, err))
 			continue
 		}
 		var meta trashMeta
 		if err := json.Unmarshal(metaBytes, &meta); err != nil {
+			errB.Add(fmt.Errorf("failed to parse meta.json for trash history %s: %w", historyId, err))
 			continue
 		}
 
 		// 如果存留时间超过设定时长，立即流式删除，不进行在内存中的全量收集
 		if time.Since(meta.TrashedAt) >= minAge {
 			if err := trashOrDelete([]string{historyDir}, s.useSystemRecycleBin); err != nil {
-				return clearedCount, fmt.Errorf("failed to delete history directory: %w", err)
+				errB.Add(fmt.Errorf("failed to delete history directory %s: %w", historyId, err))
+				continue
 			}
 			clearedCount++
 		}
 	}
 
-	return clearedCount, nil
+	return clearedCount, errB.Build()
 }
 
 // FindTrashHistory 获取历史记录列表迭代器

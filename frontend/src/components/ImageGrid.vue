@@ -447,8 +447,6 @@ useHotkeys(
       try {
         await trashImages(props.directoryId, selectedFilterBy.value);
         deselectAll();
-      } catch (err) {
-        showNotification(err instanceof Error ? err.message : "批量删除图片失败", "error");
       } finally {
         isBulkDeleting.value = false;
       }

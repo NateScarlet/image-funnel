@@ -258,7 +258,9 @@ func (r *Runner) runListener(ctx context.Context) {
 				}
 				continue
 			}
-			r.handleFileChanged(event)
+			if err := r.handleFileChanged(event); err != nil {
+				r.logger.Error("failed to handle file changed event", zap.Error(err))
+			}
 		}
 	}()
 

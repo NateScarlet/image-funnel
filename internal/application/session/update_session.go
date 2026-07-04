@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"main/internal/domain/session"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -53,7 +54,10 @@ func (h *Handler) UpdateSession(
 	if h.lastSessionSaver != nil {
 		sess, release, errAcquire := h.sessionService.Acquire(ctx, sessionID)
 		if errAcquire == nil {
-			_ = h.lastSessionSaver.SaveLastSession(ctx, sess.DirectoryID(), sessionID, sess.Filter(), sess.TargetKeep())
+			if err := h.lastSessionSaver.SaveLastSession(ctx, sess.DirectoryID(), sessionID, sess.Filter(), sess.TargetKeep()); err != nil {
+				release()
+				return fmt.Errorf("failed to save last session: %w", err)
+			}
 			release()
 		}
 	}

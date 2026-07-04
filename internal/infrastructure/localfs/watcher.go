@@ -55,7 +55,8 @@ func (w *Watcher) Watch(ctx context.Context, dir string) iter.Seq2[*directory.Fi
 			}
 			if d.IsDir() {
 				if err := fsWatcher.Add(path); err != nil {
-					w.logger.Warn("failed to add watch path", zap.String("path", path), zap.Error(err))
+					w.logger.Error("failed to add watch path, aborting watch setup", zap.String("path", path), zap.Error(err))
+					return err
 				}
 			}
 			return nil

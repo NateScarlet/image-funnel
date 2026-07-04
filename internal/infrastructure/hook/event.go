@@ -1,32 +1,33 @@
 package hook
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/util"
 
 	"go.uber.org/zap"
 )
 
-func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
+func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 	if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
-		return
+		return nil
 	}
 	if strings.ToLower(filepath.Ext(event.RelPath)) != ".md" {
-		return
+		return nil
 	}
 
 	noteAbsPath := filepath.Join(r.rootDir, event.RelPath)
 	contentBytes, err := os.ReadFile(noteAbsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return
+			return nil
 		}
-		r.logger.Error("failed to read note file for directive processing", zap.String("path", event.RelPath), zap.Error(err))
-		return
+		return fmt.Errorf("failed to read note file for directive processing: %w", err)
 	}
 
 	content := string(contentBytes)
@@ -34,7 +35,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	// 0. 检查内容哈希防重入列表，若是自身写入触发的事件则直接忽略
 	if r.shouldIgnoreEvent(noteAbsPath, contentBytes) {
 		r.logger.Debug("ignoring change event as it was triggered by our own write", zap.String("path", event.RelPath))
-		return
+		return nil
 	}
 
 	dirRelPath := filepath.Dir(event.RelPath)
@@ -43,17 +44,15 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	}
 
 	// 1. 处理包含指令的钩子：执行指令并回写文本
-	// 磁盘写回职责已完全收拢至 processSingleNote 内部，外层不再负责二次写入
 	_, err = r.executeNoteDirectives(r.ctx, event.DirectoryID, dirRelPath, event.RelPath, content, "post_update_note", scalar.ID{})
 	if err != nil {
-		r.logger.Error("failed to process note directives for file change", zap.String("path", event.RelPath), zap.Error(err))
-		return
+		return fmt.Errorf("failed to process note directives: %w", err)
 	}
 
-	// 2. 触发无指令要求的笔记修改钩子 (h.Directive == nil 或 requires_directive = false)
+	// 2. 触发无指令要求的笔记修改钩子
 	hooks, err := r.loadHooks()
 	if err != nil {
-		return
+		return fmt.Errorf("failed to load hooks: %w", err)
 	}
 
 	var noDirectiveHooks []hookConfig
@@ -69,16 +68,19 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) {
 	if len(noDirectiveHooks) > 0 {
 		evs, err := r.findAssociatedImageEvents(r.ctx, event.RelPath)
 		if err != nil {
-			r.logger.Error("failed to get associated image for note update hook", zap.String("note_path", event.RelPath), zap.Error(err))
+			return fmt.Errorf("failed to get associated image for note update hook: %w", err)
 		}
-
+		errB := util.NewErrorsBuilder(len(noDirectiveHooks))
 		for _, h := range noDirectiveHooks {
-			_, _, _, err = r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, "")
-			if err != nil {
-				r.logger.Error("failed to execute no-directive post_update_note hook", zap.String("hook_id", h.ID), zap.Error(err))
+			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, ""); hookErr != nil {
+				errB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 			}
 		}
+		if err := errB.Build(); err != nil {
+			return fmt.Errorf("failed to execute non-directive hooks: %w", err)
+		}
 	}
+	return nil
 }
 
 func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {

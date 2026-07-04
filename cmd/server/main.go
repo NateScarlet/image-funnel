@@ -235,7 +235,11 @@ func main() {
 	// 首次启动时自动拉起浏览器
 	go func() {
 		count, err := authService.Count(context.Background())
-		if err == nil && count == 0 {
+		if err != nil {
+			logger.Error("failed to check user count for first-launch browser", zap.Error(err))
+			return
+		}
+		if count == 0 {
 			setupToken := authService.SetupToken()
 			if setupToken != "" {
 				url := fmt.Sprintf("%s/auth?setup_token=%s", cfg.BaseURL, setupToken)

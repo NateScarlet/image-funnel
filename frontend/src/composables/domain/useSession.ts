@@ -50,8 +50,8 @@ async function createSession(sessionOptions: {
             },
           },
         });
-      } catch {
-        // 保存默认写操作失败不影响会话创建
+      } catch (err) {
+        console.error("保存默认写操作失败", err);
       }
     }
 
