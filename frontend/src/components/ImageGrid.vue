@@ -264,6 +264,7 @@ const {
   isAllMatchingSelected,
   toggleBulkMode,
   toggleSelectImage,
+  selectRange,
   selectAll,
   deselectAll,
   invertSelection,
@@ -275,6 +276,8 @@ const {
   () => imagesVariables.value.filterBy || {},
   () => hasNextPage.value || false,
 );
+
+const anchorImageId = ref<string | null>(null);
 
 const moveImagesMatchCount = computed(() => {
   if (isBulkMode.value) {
@@ -335,18 +338,26 @@ function handleMoveClose() {
 // #region 图片点击
 function handleImageClick(img: ImageFragment, event?: MouseEvent) {
   const isCtrlPressed = event ? event.ctrlKey || event.metaKey : false;
+  const isShiftPressed = event ? event.shiftKey : false;
 
-  if (isCtrlPressed) {
-    if (!isBulkMode.value) {
-      deselectAll();
-      isBulkMode.value = true;
-    }
-    toggleSelectImage(img.id);
-  } else if (isBulkMode.value) {
-    toggleSelectImage(img.id);
-  } else {
-    openViewer(img);
+  if ((isCtrlPressed || isShiftPressed) && !isBulkMode.value) {
+    deselectAll();
+    isBulkMode.value = true;
   }
+
+  if (isShiftPressed && isBulkMode.value && anchorImageId.value !== null) {
+    selectRange(anchorImageId.value, img.id);
+    return;
+  }
+
+  if (isCtrlPressed || isBulkMode.value) {
+    toggleSelectImage(img.id);
+    anchorImageId.value = img.id;
+    return;
+  }
+
+  openViewer(img);
+  anchorImageId.value = null;
 }
 // #endregion
 
@@ -423,6 +434,7 @@ useHotkeys(
   {
     escape: () => {
       isBulkMode.value = false;
+      anchorImageId.value = null;
     },
   },
   {

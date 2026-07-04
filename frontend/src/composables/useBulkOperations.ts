@@ -101,6 +101,22 @@ export default function useBulkOperations(
     isBulkMode.value = !isBulkMode.value;
   }
 
+  function selectRange(fromId: string, toId: string) {
+    if (isAllMatchingSelected.value) return;
+    const allIds = toValue(images).map((img) => img.id);
+    const fromIndex = allIds.indexOf(fromId);
+    const toIndex = allIds.indexOf(toId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [start, end] = fromIndex <= toIndex ? [fromIndex, toIndex] : [toIndex, fromIndex];
+    const rangeIds = allIds.slice(start, end + 1);
+    const currentSet = new Set(selectedImageIds.value);
+    for (const id of rangeIds) {
+      currentSet.add(id);
+    }
+    selectedImageIds.value = Array.from(currentSet);
+  }
+
   function toggleSelectImage(id: string) {
     if (isAllMatchingSelected.value) {
       isAllMatchingSelected.value = false;
@@ -192,6 +208,7 @@ export default function useBulkOperations(
     isAllMatchingSelected,
     toggleBulkMode,
     toggleSelectImage,
+    selectRange,
     selectAll,
     deselectAll,
     invertSelection,
