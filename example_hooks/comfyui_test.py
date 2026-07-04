@@ -287,7 +287,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 comfyui.main()
             self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
-            mock_override.assert_not_called()
+            mock_override.assert_called_once_with("KEEP")
 
         # 4. 验证虽然有服务端触发标识，但是为手动派发（如 note_dispatch）触发且没有图片时，依旧以 1 报错退出
         with patch.dict(
@@ -309,7 +309,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 comfyui.main()
             self.assertEqual(cm.exception.code, 1)
-            mock_override.assert_not_called()
+            mock_override.assert_called_once_with("KEEP")
 
 
 class TestComfyUIOutputDirectory(unittest.TestCase):

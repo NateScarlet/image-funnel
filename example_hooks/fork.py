@@ -64,7 +64,9 @@ def main() -> None:
         _LOGGER.error("No image IDs to process.")
         sys.exit(1)
 
-    _LOGGER.debug("Received %d image(s) to fork with suffix: %s", len(image_ids), suffix)
+    _LOGGER.debug(
+        "Received %d image(s) to fork with suffix: %s", len(image_ids), suffix
+    )
 
     # 确定目标相对路径
     dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")

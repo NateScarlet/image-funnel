@@ -798,7 +798,8 @@ class WorkflowPromptPair:
                 return 1.0
 
             # 匹配裸词 → 默认权重 1.0
-            pattern_bare = re.compile(rf"\b{escaped}\b", re.IGNORECASE)
+            # 不能用 \b 因为目标文本可能以非单词字符结尾（如 `\(text\)`），会导致边界断言失败
+            pattern_bare = re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
             if pattern_bare.search(workflow_text):
                 return 1.0
 
@@ -903,8 +904,9 @@ class WorkflowPromptPair:
             )
             return new_text, True
 
-        # 3. 匹配裸词，两边使用单词边界以防匹配子串 (caterpillar vs cat)
-        pattern_bare = re.compile(rf"\b{escaped_target}\b", re.IGNORECASE)
+        # 3. 匹配裸词，两边使用负向环视以防匹配子串 (caterpillar vs cat)
+        # 不能用 \b 因为目标文本可能以非单词字符结尾（如 `\(text\)`），会导致边界断言失败
+        pattern_bare = re.compile(rf"(?<!\w){escaped_target}(?!\w)", re.IGNORECASE)
         if pattern_bare.search(text):
             new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
             return new_text, True
