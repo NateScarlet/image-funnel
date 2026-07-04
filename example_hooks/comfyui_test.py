@@ -21,25 +21,35 @@ from comfyui import (
 class TestComfyUIHook(unittest.TestCase):
 
     def setUp(self):
-        # 寻找 samples 目录的绝对路径（其在测试目录下）
-        self.samples_dir = os.path.join(current_dir, "samples")
-        self.assertTrue(
-            os.path.exists(self.samples_dir),
-            f"Samples directory not found at: {self.samples_dir}",
-        )
-
-        # 扫描该目录下的所有 .png 文件
-        self.png_files = [
-            os.path.join(self.samples_dir, f)
-            for f in os.listdir(self.samples_dir)
-            if f.lower().endswith(".png")
-        ]
-        self.assertTrue(
-            len(self.png_files) > 0, "No PNG sample files found in samples directory"
-        )
+        # 支持通过环境变量 HOOK_TEST_IMAGES_DIR 指定测试图片目录
+        custom_dir = os.environ.get("HOOK_TEST_IMAGES_DIR")
+        if custom_dir:
+            self.samples_dir = custom_dir
+            if not os.path.exists(self.samples_dir):
+                self.fail(f"指定的测试样本目录不存在: {self.samples_dir}")
+            self.png_files = [
+                os.path.join(self.samples_dir, f)
+                for f in os.listdir(self.samples_dir)
+                if f.lower().endswith(".png")
+            ]
+            if not self.png_files:
+                self.fail(f"指定的测试样本目录中没有 PNG 文件: {self.samples_dir}")
+        else:
+            # 未指定时使用默认 samples 目录（可选）
+            self.samples_dir = os.path.join(current_dir, "samples")
+            self.png_files = []
+            if os.path.exists(self.samples_dir):
+                self.png_files = [
+                    os.path.join(self.samples_dir, f)
+                    for f in os.listdir(self.samples_dir)
+                    if f.lower().endswith(".png")
+                ]
 
     def test_strip_comments_equivalence(self):
         # 验证剥离注释行后得到的 prompt_text 是否与原图现有的 prompt 一致
+        if not self.png_files:
+            self.skipTest("没有 PNG 样本文件，跳过测试")
+
         for png_path in self.png_files:
             with self.subTest(png_path=png_path):
                 with Image.open(png_path) as img:
@@ -47,14 +57,15 @@ class TestComfyUIHook(unittest.TestCase):
                     prompt_str = info.get("prompt")
                     workflow_str = info.get("workflow")
 
-                    self.assertIsNotNone(prompt_str)
-                    self.assertIsNotNone(workflow_str)
+                # 用户提供的样本必须包含必要元数据，否则视为无效样本
+                self.assertIsNotNone(prompt_str, f"{png_path} 缺少 prompt 元数据")
+                self.assertIsNotNone(workflow_str, f"{png_path} 缺少 workflow 元数据")
 
-                    assert prompt_str is not None
-                    assert workflow_str is not None
+                assert prompt_str is not None
+                assert workflow_str is not None
 
-                    prompt = json.loads(prompt_str)
-                    workflow = json.loads(workflow_str)
+                prompt = json.loads(prompt_str)
+                workflow = json.loads(workflow_str)
 
                 # 获取 workflow 中的提示词节点和 prompt 中对应的提示词节点
                 # 我们这里针对所有正向和反向的 CLIPTextEncode 节点比对
