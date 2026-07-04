@@ -546,7 +546,7 @@ Other text.`
 
 	// 运行指令处理
 	ok, err := runner.executeNoteDirectives(context.Background(), scalar.ToID("dir:1"), "", noteRelPath, initialContent, "post_update_note", scalar.ID{})
-	assert.NoError(t, err)
+	assert.Error(t, err)
 	assert.True(t, ok)
 
 	// 检查同步清理后的内容：

@@ -262,10 +262,14 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 	}()
 
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
+	var hookErr error
 	for i, p := range pending {
 		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
 		if err != nil {
 			r.logger.Error("failed to execute hook for directive", zap.String("hook_id", p.config.ID), zap.Error(err))
+			if hookErr == nil {
+				hookErr = err
+			}
 		}
 		pending[i].action = action
 		pending[i].stdout = stdout
@@ -334,7 +338,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 		}
 	}
 
-	return true, nil
+	return true, hookErr
 }
 
 func (r *Runner) postProcessNoteDirectives(ctx context.Context, absPath string, runID string, triggerType string, hookMap map[string]hookConfig, failedDirectives map[string]bool) {
