@@ -1,0 +1,11 @@
+"自动完成建议"
+type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSuggestionDTO") {
+  "插入到文本框的文本"
+  text: String!
+  "浮层中显示的友好文本"
+  displayText: String!
+  "建议的描述信息"
+  description: String
+  "建议类型，如 region / lora"
+  type: String
+}

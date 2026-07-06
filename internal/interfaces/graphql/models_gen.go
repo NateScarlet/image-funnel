@@ -188,6 +188,18 @@ type FinishWebAuthnRegistrationPayload struct {
 	PairingRequest *shared.PairingRequestDTO `json:"pairingRequest,omitempty"`
 }
 
+// 指令参数自动完成输入
+type HookAutocompleteInput struct {
+	// 钩子 ID
+	HookID scalar.ID `json:"hookId"`
+	// 笔记 ID
+	NoteID scalar.ID `json:"noteId"`
+	// 光标前的当前行完整文本
+	LinePrefix string `json:"linePrefix"`
+	// 当前正在输入的词
+	Query string `json:"query"`
+}
+
 // 对当前图片执行分类操作（保留/搁置/排除）
 type MarkImageInput struct {
 	// 会话ID

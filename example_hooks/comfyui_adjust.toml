@@ -1,10 +1,11 @@
 id = "comfyui-adjust"
 name = "调整 ComfyUI 提示词或 Lora 权重"
 description = "在会话提交时运行 /adjust 指令"
-command = "python comfyui.py adjust"
+command = "uv run comfyui.py adjust"
 
 [directive]
 name = "adjust"
+on_success_action = "COMMENT_OUT"
 usage = """
 /adjust lora <name> <weight> [-j <N>] [--no-skip] [-u]
 /adjust prompt <text> <weight> [--neg] [--region <region>]... [-j <N>] [--node <node-id>]... [--no-skip] [--skip-add] [-u]
@@ -25,7 +26,9 @@ usage = """
 --skip-add             提示词不存在时跳过添加，默认不存在时会添加
 -u --update-seed       强制启用随机种子更新（在生成多个 job 时会自动启用）
 """
-on_success_action = "COMMENT_OUT"
+
+[directive.autocomplete]
+command = "uv run comfyui.py autocomplete"
 
 [on.post_commit_session.note_scan]
 ignore_directive = false

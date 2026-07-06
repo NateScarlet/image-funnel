@@ -7,12 +7,21 @@ import (
 	"main/internal/scalar"
 )
 
+// AutocompleteSuggestion 自动完成建议值对象
+type AutocompleteSuggestion struct {
+	Text        string
+	DisplayText string
+	Description string
+	Type        string
+}
+
 // Directive 钩子提供的笔记指令值对象
 type Directive struct {
 	Name            string // 指令名称，用于 slash command 匹配
 	Usage           string // 使用说明，包含参数格式和选项描述
 	OnSuccessAction string // 执行成功后的行为，如 COMMENT_OUT, REMOVE, KEEP
 	OnFailAction    string // 执行失败后的行为，如 COMMENT_OUT, REMOVE, KEEP
+	Autocomplete    bool   // 是否支持指令参数自动补全
 }
 
 // Hook 外部钩子领域实体
@@ -79,4 +88,5 @@ type Runner interface {
 	Trigger(ctx context.Context, ids []string, paths []string, hookID scalar.ID, triggerName string) error
 	OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error
 	TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error
+	Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*AutocompleteSuggestion, error)
 }

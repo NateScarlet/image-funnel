@@ -16,7 +16,7 @@ import re
 import uuid
 import urllib.request
 from dataclasses import dataclass
-from typing import Dict, List, Any, Optional, cast, Tuple, Generator
+from typing import Dict, List, Set, Any, Optional, cast, Tuple, Generator
 
 from weight_parser import parse_weights, is_relative
 
@@ -594,9 +594,7 @@ class WorkflowPromptPair:
                             for m in re.finditer(r"%date:([^%]+)%", new_prefix):
                                 comfy_fmt = m.group(1)
                                 _, date_regex = (
-                                    self._convert_comfy_date_format_to_python(
-                                        comfy_fmt
-                                    )
+                                    self._convert_comfy_date_format_to_python(comfy_fmt)
                                 )
                                 date_m = re.search(date_regex, original_val)
                                 if date_m:
@@ -680,6 +678,39 @@ class WorkflowPromptPair:
     # #endregion
 
     # #region 权重调整方法
+    @staticmethod
+    def collect_lora_names(prompt: Dict[str, Any]) -> List[str]:
+        """
+        从 prompt 元数据中提取所有 lora 文件名。
+        支持 LoraLoader 和 Power Lora Loader (rgthree)。
+        """
+        names: List[str] = []
+        seen: Set[str] = set()
+        for node in prompt.values():
+            node_dict: Dict[str, Any] = cast("Dict[str, Any]", node)
+            class_type: str = node_dict.get("class_type", "")
+
+            if class_type == "LoraLoader":
+                lora_name: Any = node_dict.get("inputs", {}).get("lora_name", "")
+                if isinstance(lora_name, str) and lora_name and lora_name not in seen:
+                    seen.add(lora_name)
+                    names.append(lora_name)
+
+            elif class_type == "Power Lora Loader (rgthree)":
+                for k, v in node_dict.get("inputs", {}).items():
+                    if k.startswith("lora_") and isinstance(v, dict):
+                        v_dict: Dict[str, Any] = cast("Dict[str, Any]", v)
+                        lora_path: Any = v_dict.get("lora", "")
+                        if (
+                            isinstance(lora_path, str)
+                            and lora_path
+                            and lora_path not in seen
+                        ):
+                            seen.add(lora_path)
+                            names.append(lora_path)
+
+        return names
+
     def get_current_lora_weight(self, lora_name_query: str) -> Optional[float]:
         """
         在 prompt 和 workflow 中查找匹配的 Lora 节点，返回其当前权重。

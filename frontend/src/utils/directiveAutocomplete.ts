@@ -19,7 +19,7 @@ export interface DirectiveRule {
 }
 
 export interface Suggestion {
-  type: "subcommand" | "positional" | "option";
+  type: string;
   text: string; // 插入到文本框的完整文本，例如 'lora' 或 '--region <region>' 或 '<prompt>'
   displayText: string; // 浮层中显示的友好文本
   placeholder?: string; // 占位符信息，例如 '<region>'
@@ -360,12 +360,11 @@ export function getSuggestionsForRules(
     }
   }
 
-  // 排序：优先子命令/位置参数，然后是选项；如果相同类型，则按 text 长度或匹配关联性排序
+  // 排序：优先子命令/位置参数，然后是选项；同类型保持定义顺序
+  const typeOrder: Record<string, number> = { subcommand: 1, positional: 2, option: 3 };
   return uniqueList.toSorted((a, b) => {
-    const typeOrder = { subcommand: 1, positional: 2, option: 3 };
     const aOrder = typeOrder[a.type];
     const bOrder = typeOrder[b.type];
-    if (aOrder !== bOrder) return aOrder - bOrder;
-    return a.text.localeCompare(b.text);
+    return (aOrder ?? 9) - (bOrder ?? 9);
   });
 }

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 
+	"main/internal/domain/hook"
 	"main/internal/scalar"
 )
 
@@ -19,4 +20,8 @@ func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirID scalar.ID, d
 
 func (r *FakeHookRunner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
 	return nil
+}
+
+func (r *FakeHookRunner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*hook.AutocompleteSuggestion, error) {
+	return nil, nil
 }

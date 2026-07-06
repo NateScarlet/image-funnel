@@ -19,12 +19,18 @@ import (
 type imageDispatchTrigger struct {
 }
 
+// autocompleteConfig 自动完成脚本配置
+type autocompleteConfig struct {
+	Command string `toml:"command"`
+}
+
 // directiveConfig 钩子提供的笔记指令配置
 type directiveConfig struct {
-	Name            string `toml:"name"`
-	Usage           string `toml:"usage"`
-	OnSuccessAction string `toml:"on_success_action"`
-	OnFailAction    string `toml:"on_fail_action"`
+	Name            string              `toml:"name"`
+	Usage           string              `toml:"usage"`
+	OnSuccessAction string              `toml:"on_success_action"`
+	OnFailAction    string              `toml:"on_fail_action"`
+	Autocomplete    *autocompleteConfig `toml:"autocomplete"`
 }
 
 // hookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
@@ -163,10 +169,12 @@ func toDomainDirective(cfg *directiveConfig) *domhook.Directive {
 	if cfg == nil {
 		return nil
 	}
+	autocomplete := cfg.Autocomplete != nil && cfg.Autocomplete.Command != ""
 	return &domhook.Directive{
 		Name:            cfg.Name,
 		Usage:           cfg.Usage,
 		OnSuccessAction: cfg.OnSuccessAction,
 		OnFailAction:    cfg.OnFailAction,
+		Autocomplete:    autocomplete,
 	}
 }

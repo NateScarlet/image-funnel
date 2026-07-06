@@ -3259,7 +3259,10 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             ]
         }
         prompt = {
-            "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "sub/ComfyUI"}}
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "sub/ComfyUI"},
+            }
         }
         pair = WorkflowPromptPair(workflow, prompt)
         pair.adjust_output_directory("sub")
@@ -3430,9 +3433,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
                 {
                     "id": "1",
                     "type": "SaveImage",
-                    "widgets_values": [
-                        "%Project.value%/%date:yyyyMMdd_hhmmss%"
-                    ],
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
                 },
             ]
         }
@@ -3586,7 +3587,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             },
             "5": {
                 "class_type": "PrimitiveString",
-                "inputs": {"value": "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"},
+                "inputs": {
+                    "value": "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                },
             },
             "6": {
                 "class_type": "PrimitiveString",

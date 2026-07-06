@@ -56,4 +56,7 @@ export default defineConfig((env) => ({
     include: ["@apollo/client"],
   },
   assetsInclude: ["**/*.gql"],
+  test: {
+    environment: "jsdom",
+  },
 }));

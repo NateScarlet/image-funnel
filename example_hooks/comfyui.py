@@ -1,5 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env -S uv run
 # -*- coding: utf-8 -*-
+# /// script
+# dependencies = [
+#   "Pillow",
+# ]
+# ///
 
 import os
 import sys
@@ -20,7 +25,8 @@ if sys.platform.startswith("win"):
             pass
 
 import json
-from typing import Dict, List, Tuple, Any, Optional, Set, cast
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast
 import logging
 import argparse
 
@@ -28,6 +34,13 @@ from graphql_utils import update_image_label, fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
 
 _LOGGER = logging.getLogger(__name__)
+
+_DEFAULT_START_REGION_PREFIX = "//#region hook-"
+_DEFAULT_END_REGION_PREFIX = "//#endregion hook-"
+_START_REGION_PREFIX = os.getenv(
+    "HOOK_START_REGION_PREFIX", _DEFAULT_START_REGION_PREFIX
+)
+_END_REGION_PREFIX = os.getenv("HOOK_END_REGION_PREFIX", _DEFAULT_END_REGION_PREFIX)
 
 
 def _write_action_override(action: str) -> None:
@@ -177,9 +190,7 @@ def get_region_markers(region_name: str) -> Tuple[str, str]:
     根据区域名称拼装 marker 字符串。
     使用 HOOK_START_REGION_PREFIX / HOOK_END_REGION_PREFIX 环境变量作为前缀，追加区域名。
     """
-    prefix_start = os.getenv("HOOK_START_REGION_PREFIX", "//#region hook-")
-    prefix_end = os.getenv("HOOK_END_REGION_PREFIX", "//#endregion hook-")
-    return prefix_start + region_name, prefix_end + region_name
+    return _START_REGION_PREFIX + region_name, _END_REGION_PREFIX + region_name
 
 
 def find_nodes_with_region(
@@ -466,6 +477,113 @@ def submit_workflow(
     return any_success, has_error
 
 
+def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
+    """
+    从图片的 workflow 元数据中扫描区域标记，逐个 yield 区域名称。
+    区域标记由 `_START_REGION_PREFIX` 定义，存储在 CLIPTextEncode 节点的文本 widget 中。
+    """
+    seen: Set[str] = set()
+    for path in image_paths:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with Image.open(path) as img:
+                workflow_str = img.info.get("workflow")
+                if not workflow_str:
+                    continue
+                workflow = json.loads(workflow_str)
+                for node in workflow.get("nodes", []):
+                    widgets_values = node.get("widgets_values")
+                    if not isinstance(widgets_values, list):
+                        continue
+                    widget_values_list: list[Any] = cast("list[Any]", widgets_values)
+                    for raw_val in widget_values_list:
+                        if not isinstance(raw_val, str):
+                            continue
+                        val_text: str = raw_val
+                        if _START_REGION_PREFIX not in val_text:
+                            continue
+                        for line in val_text.splitlines():
+                            stripped = line.strip()
+                            if stripped.startswith(_START_REGION_PREFIX):
+                                name = stripped[len(_START_REGION_PREFIX) :].strip()
+                                if name and name not in seen:
+                                    seen.add(name)
+                                    yield name
+        except Exception:
+            continue
+
+
+def _extract_lora_names(image_paths: List[str]) -> Iterator[str]:
+    """
+    从图片的 prompt 元数据中提取所有 lora 文件名（不含扩展名），逐个 yield。
+    委托 WorkflowPromptPair.collect_lora_names 处理。
+    """
+    seen: Set[str] = set()
+    for path in image_paths:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with Image.open(path) as img:
+                prompt_str = img.info.get("prompt")
+                if not prompt_str:
+                    continue
+                prompt_data: Dict[str, Any] = json.loads(prompt_str)
+                for n in WorkflowPromptPair.collect_lora_names(prompt_data):
+                    name_no_ext, _ = os.path.splitext(n)
+                    if name_no_ext not in seen:
+                        seen.add(name_no_ext)
+                        yield name_no_ext
+        except Exception:
+            continue
+
+
+@dataclass
+class AutocompleteSuggestion:
+    text: str
+    displayText: str
+    description: str
+    type: str
+
+
+def autocomplete() -> Iterator[AutocompleteSuggestion]:
+    """
+    autocomplete 子命令：读取环境变量，生成自动完成建议。
+    调用方（main）负责遍历并输出 JSONL。
+    """
+    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+
+    image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
+    try:
+        image_paths: List[str] = json.loads(image_paths_str)
+    except Exception:
+        image_paths = []
+
+    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
+
+    if prev_word == "--region":
+        regions = extract_region_names_from_images(image_paths)
+        for r in regions:
+            if not query or query.lower() in r.lower():
+                yield AutocompleteSuggestion(
+                    text=r,
+                    displayText=r,
+                    description=f"区域: {r}",
+                    type="region",
+                )
+
+    elif prev_word == "lora":
+        loras = _extract_lora_names(image_paths)
+        for l in loras:
+            if not query or query.lower() in l.lower():
+                yield AutocompleteSuggestion(
+                    text=l,
+                    displayText=l,
+                    description=f"Lora: {l}",
+                    type="lora",
+                )
+
+
 def main() -> None:
     # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
     log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
@@ -478,6 +596,21 @@ def main() -> None:
 
     args = parse_args()
     _LOGGER.debug("args %s", (args,))
+
+    if args.command == "autocomplete":
+        for s in autocomplete():
+            print(
+                json.dumps(
+                    {
+                        "text": s.text,
+                        "displayText": s.displayText,
+                        "description": s.description,
+                        "type": s.type,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        return
 
     # 解析 --max-match：默认从 HOOK_MAX_MATCH 环境变量读取，未设置则为 4
     max_match = args.max_match
@@ -1102,6 +1235,11 @@ def parse_args():
         default=None,
         metavar="node-id",
         help="Target KSampler node ID, can be specified multiple times; if omitted, adjusts all KSampler nodes",
+    )
+
+    # 5. autocomplete
+    subparsers.add_parser(
+        "autocomplete", help="Provide autocomplete suggestions for directive parameters"
     )
 
     # 4. adjust aspect

@@ -19,8 +19,9 @@ func (f *DTOFactory) New(h *domain.Hook) *shared.HookDTO {
 	var dir *shared.HookDirectiveDTO
 	if h.Directive() != nil {
 		dir = &shared.HookDirectiveDTO{
-			Name:  h.Directive().Name,
-			Usage: h.Directive().Usage,
+			Name:         h.Directive().Name,
+			Usage:        h.Directive().Usage,
+			Autocomplete: h.Directive().Autocomplete,
 		}
 	}
 	return &shared.HookDTO{
@@ -30,5 +31,17 @@ func (f *DTOFactory) New(h *domain.Hook) *shared.HookDTO {
 		CanDispatchByImage: h.CanDispatchByImage(),
 		CanDispatchByNote:  h.CanDispatchByNote(),
 		Directive:          dir,
+	}
+}
+
+func (f *DTOFactory) NewAutocompleteSuggestion(s *domain.AutocompleteSuggestion) *shared.AutocompleteSuggestionDTO {
+	if s == nil {
+		return nil
+	}
+	return &shared.AutocompleteSuggestionDTO{
+		Text:        s.Text,
+		DisplayText: s.DisplayText,
+		Description: s.Description,
+		Type:        s.Type,
 	}
 }

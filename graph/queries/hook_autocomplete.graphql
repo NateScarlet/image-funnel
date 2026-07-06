@@ -1,0 +1,16 @@
+"指令参数自动完成输入"
+input HookAutocompleteInput {
+  "钩子 ID"
+  hookId: ID!
+  "笔记 ID"
+  noteId: ID!
+  "光标前的当前行完整文本"
+  linePrefix: String!
+  "当前正在输入的词"
+  query: String!
+}
+
+extend type Query {
+  "通过钩子脚本获取指令参数自动完成建议"
+  hookAutocomplete(input: HookAutocompleteInput!): [AutocompleteSuggestion!]!
+}

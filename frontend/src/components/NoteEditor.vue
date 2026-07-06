@@ -33,7 +33,11 @@
       </template>
 
       <!-- 派发按钮：可即时触发的笔记钩子，放入二级菜单防止误触 -->
-      <div v-if="dispatchableHooks.length" ref="dispatchMenuRef" class="relative">
+      <div
+        v-if="dispatchableHooks.length"
+        ref="dispatchMenuRef"
+        class="relative"
+      >
         <button
           type="button"
           class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
@@ -75,7 +79,10 @@
               showDispatchMenu = false;
             "
           >
-            <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
+            <svg
+              class="w-4 h-4 text-secondary-400 shrink-0"
+              viewBox="0 0 24 24"
+            >
               <path :d="mdiLightningBolt" fill="currentColor" />
             </svg>
             <span>{{ h.name }}</span>
@@ -89,18 +96,34 @@
       <!-- 自动完成浮层 -->
       <Teleport to="body">
         <div
-          v-if="autocompleteState?.show && filteredSuggestions.length"
           ref="floatingEl"
           :style="floatingStyles"
-          class="fixed z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 max-h-56 overflow-y-auto w-72 backdrop-blur-md flex flex-col gap-1"
+          v-if="
+            (autocompleteState?.show && suggestions.length) ||
+            (autocompleteEnabled && dynamicLoading)
+          "
+          class="fixed z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 max-h-56 sm:max-h-80 overflow-y-auto min-w-48 max-w-[calc(100vw-2rem)] backdrop-blur-md flex flex-col gap-1"
         >
           <div
             class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
           >
-            {{ autocompleteState.type === "name" ? "选择笔记指令" : "指令参数建议" }}
+            {{
+              autocompleteState?.type === "name"
+                ? "选择笔记指令"
+                : "指令参数建议"
+            }}
+          </div>
+          <div
+            v-if="dynamicLoading"
+            class="px-3 py-2 text-xs text-primary-400 flex items-center gap-2"
+          >
+            <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24">
+              <path :d="mdiLoading" fill="currentColor" />
+            </svg>
+            加载中...
           </div>
           <button
-            v-for="(sug, idx) in filteredSuggestions"
+            v-for="(sug, idx) in suggestions"
             :key="idx"
             type="button"
             class="w-full text-left px-3 py-2 rounded-lg flex flex-col transition-colors cursor-pointer"
@@ -113,14 +136,20 @@
             @mouseenter="activeIndex = idx"
           >
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
-              <span :class="idx === activeIndex ? 'text-white' : 'text-secondary-400'">
+              <span
+                :class="
+                  idx === activeIndex ? 'text-white' : 'text-secondary-400'
+                "
+              >
                 {{ sug.displayText }}
               </span>
               <span
                 v-if="sug.type"
                 class="text-[10px] uppercase px-1 rounded font-normal"
                 :class="
-                  idx === activeIndex ? 'bg-white/20 text-white' : 'bg-primary-800 text-primary-400'
+                  idx === activeIndex
+                    ? 'bg-white/20 text-white'
+                    : 'bg-primary-800 text-primary-400'
                 "
               >
                 {{ typeLabels[sug.type] || sug.type }}
@@ -128,13 +157,8 @@
             </div>
             <div
               v-if="sug.description"
-              class="text-xs opacity-80"
-              :class="[
-                idx === activeIndex ? 'text-white' : 'text-primary-400',
-                filteredSuggestions.length === 1
-                  ? 'wrap-break-word whitespace-pre-wrap'
-                  : 'truncate',
-              ]"
+              class="text-xs opacity-80 wrap-break-word whitespace-pre-wrap"
+              :class="idx === activeIndex ? 'text-white' : 'text-primary-400'"
             >
               {{ sug.description }}
             </div>
@@ -149,12 +173,13 @@
         :placeholder="placeholder"
         data-no-gesture
         @input="handleInput"
-        @keyup="checkAutocomplete"
-        @click="checkAutocomplete"
+        @keyup="onCursorChange"
+        @click="onCursorChange"
         @keydown.up.prevent="handleKeyUp"
         @keydown.down.prevent="handleKeyDown"
         @keydown.enter="handleKeyEnter"
         @keydown.esc.prevent="handleKeyEsc"
+        @keydown.space="handleKeySpace"
         @blur="handleBlur"
         @focus="handleFocus"
       ></textarea>
@@ -163,16 +188,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, useTemplateRef } from "vue";
+import { ref, computed, nextTick, useTemplateRef, shallowRef } from "vue";
 import { useFloating, offset, flip, shift, autoUpdate } from "@floating-ui/vue";
 import useQuery from "@/graphql/utils/useQuery";
+import query from "@/graphql/utils/query";
 import mutate from "@/graphql/utils/mutate";
-import { HooksDocument, DispatchNoteHookDocument } from "@/graphql/generated";
+import {
+  HooksDocument,
+  DispatchNoteHookDocument,
+  HookAutocompleteDocument,
+} from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
-import { mdiConsole, mdiLightningBolt, mdiChevronDown } from "@mdi/js";
-import { parseUsage, getArgsContext, getSuggestionsForRules } from "@/utils/directiveAutocomplete";
+import {
+  mdiConsole,
+  mdiLightningBolt,
+  mdiChevronDown,
+  mdiLoading,
+} from "@mdi/js";
+import { debounce } from "es-toolkit";
+import useCurrentTime from "@/composables/useCurrentTime";
+import Time from "@/utils/Time";
+import {
+  parseUsage,
+  getArgsContext,
+  getSuggestionsForRules,
+} from "@/utils/directiveAutocomplete";
 import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
 
 const typeLabels: Record<string, string> = {
@@ -194,7 +236,6 @@ const emit = defineEmits<(e: "input") => void>();
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const floatingEl = ref<HTMLElement | null>(null);
-const activeIndex = ref(0);
 
 const { floatingStyles } = useFloating(textareaRef, floatingEl, {
   placement: "top-start",
@@ -219,6 +260,18 @@ const directives = computed(() => {
   return hooksData.value?.hooks.filter((h) => h.directive != null) || [];
 });
 
+const currentHook = computed(() => {
+  const dirName = autocompleteState.value?.directiveName;
+  if (!dirName) return null;
+  return (
+    hooksData.value?.hooks.find((h) => h.directive?.name === dirName) ?? null
+  );
+});
+
+const autocompleteEnabled = computed(() => {
+  return currentHook.value?.directive?.autocomplete ?? false;
+});
+
 // 可即时派发的钩子：canDispatchByNote 且当前笔记已保存（有 noteId）
 const dispatchableHooks = computed(() => {
   if (!props.noteId) return [];
@@ -227,7 +280,10 @@ const dispatchableHooks = computed(() => {
       if (!h.canDispatchByNote) return false;
       if (!h.directive) return false;
       // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
-      const escapedName = h.directive.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedName = h.directive.name.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
       const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
       return regex.test(model.value);
     }) || []
@@ -253,7 +309,9 @@ async function triggerDispatch(hookId: string, hookName: string) {
     try {
       await props.onBeforeDispatch();
     } catch (err) {
-      showError(`保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`);
+      showError(
+        `保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`
+      );
       isDispatching.value = false;
       return;
     }
@@ -278,16 +336,129 @@ async function triggerDispatch(hookId: string, hookName: string) {
   }
 }
 
-const autocompleteState = ref<{
+// #region 原始数据
+const cursorStart = ref(0);
+const cursorEnd = ref(0);
+const isFocused = ref(false);
+const { currentTime, refreshOn } = useCurrentTime();
+const blurAt = shallowRef<Time | null>(null);
+const menuVisible = computed(() => {
+  if (isFocused.value) return true;
+  if (blurAt.value == null) return false;
+  return currentTime.value.sub(blurAt.value) < 200;
+});
+const autocompleteDismissed = ref(false);
+
+function onCursorChange() {
+  const el = textareaRef.value;
+  if (!el) return;
+  cursorStart.value = el.selectionStart;
+  cursorEnd.value = el.selectionEnd;
+  autocompleteDismissed.value = false;
+}
+// #endregion
+
+// #region 自动完成状态（纯推导）
+const autocompleteState = computed<{
   show: boolean;
   type: "name" | "args";
   query: string;
   triggerIndex: number;
   selectionStart: number;
   directiveName?: string;
-} | null>(null);
+  argsText?: string;
+} | null>(() => {
+  if (!menuVisible.value || autocompleteDismissed.value) return null;
 
-let blurTimer: ReturnType<typeof setTimeout> | null = null;
+  const text = model.value;
+  const start = cursorStart.value;
+  const textBeforeCursor = text.slice(0, start);
+  const lastNewline = textBeforeCursor.lastIndexOf("\n");
+  const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
+  const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
+
+  // 1. 优先匹配指令参数补全
+  const directiveMatch = lineTextBeforeCursor.match(
+    /^[ \t]*\/([a-zA-Z0-9_-]+)\s+(.*)$/
+  );
+  if (directiveMatch) {
+    const dirName = directiveMatch[1];
+    const argsText = directiveMatch[2] ?? "";
+    if (directives.value.some((h) => h.directive?.name === dirName)) {
+      const { currentQuery } = getArgsContext(argsText);
+      return {
+        show: true,
+        type: "args" as const,
+        query: currentQuery,
+        triggerIndex:
+          lineStart + lineTextBeforeCursor.length - currentQuery.length,
+        selectionStart: start,
+        directiveName: dirName,
+        argsText,
+      };
+    }
+  }
+
+  // 2. 匹配指令名补全
+  const nameMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]*)$/);
+  if (nameMatch) {
+    return {
+      show: true,
+      type: "name" as const,
+      query: nameMatch[1].toLowerCase(),
+      triggerIndex: lineStart + lineTextBeforeCursor.indexOf("/") + 1,
+      selectionStart: start,
+    };
+  }
+
+  return null;
+});
+
+// activeIndex 声明式重置：query 变化时自动归零
+const activeIndexBuffer = ref({ queryKey: "", index: 0 });
+const activeIndex = computed({
+  get: () => {
+    const key = autocompleteState.value?.query ?? "";
+    return activeIndexBuffer.value.queryKey === key
+      ? activeIndexBuffer.value.index
+      : 0;
+  },
+  set: (val: number) => {
+    const key = autocompleteState.value?.query ?? "";
+    activeIndexBuffer.value = { queryKey: key, index: val };
+  },
+});
+// #endregion
+
+// #region 动态补全结果（声明式：context 变化时自动归零）
+const autocompleteContext = computed(() => {
+  const state = autocompleteState.value;
+  if (!state || state.type !== "args") return null;
+  return `${currentHook.value?.id}|${getLinePrefix()}`;
+});
+
+const dynamicBuffer = ref<{
+  contextKey: string | null;
+  suggestions: Suggestion[];
+}>({ contextKey: null, suggestions: [] });
+
+const apiSuggestions = computed(() => {
+  if (dynamicBuffer.value.contextKey !== autocompleteContext.value) return [];
+  const state = autocompleteState.value;
+  if (!state || state.type !== "args") return [];
+  if (!state.query) return dynamicBuffer.value.suggestions;
+  const q = state.query.toLowerCase();
+  return dynamicBuffer.value.suggestions.filter((s) => {
+    if (s.text.toLowerCase() === q) return false;
+    return (
+      s.text.toLowerCase().startsWith(q) ||
+      s.displayText.toLowerCase().includes(q)
+    );
+  });
+});
+
+const dynamicLoading = ref(false);
+// #endregion
 
 const parsedRules = computed<DirectiveRule[]>(() => {
   const rules: DirectiveRule[] = [];
@@ -299,13 +470,15 @@ const parsedRules = computed<DirectiveRule[]>(() => {
   return rules;
 });
 
-const filteredSuggestions = computed<Suggestion[]>(() => {
+const suggestions = computed<Suggestion[]>(() => {
   if (!autocompleteState.value?.show) return [];
 
   if (autocompleteState.value.type === "name") {
     const q = autocompleteState.value.query;
     const list = directives.value;
-    const matched = q ? list.filter((h) => h.directive?.name.toLowerCase().includes(q)) : list;
+    const matched = q
+      ? list.filter((h) => h.directive?.name.toLowerCase().includes(q))
+      : list;
     return matched.map((h) => {
       const dirName = h.directive?.name ?? "";
       return {
@@ -321,102 +494,98 @@ const filteredSuggestions = computed<Suggestion[]>(() => {
     const q = autocompleteState.value.query;
     const rules = parsedRules.value.filter((r) => r.directive === dirName);
 
-    const el = textareaRef.value;
-    if (!el) return [];
-    const text = model.value;
-    const start = autocompleteState.value.selectionStart;
-    const textBeforeCursor = text.slice(0, start);
-    const lastNewline = textBeforeCursor.lastIndexOf("\n");
-    const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
-    const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
-
-    const directiveMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]+)(?:\s+(.*))?$/);
-    if (!directiveMatch) return [];
-    const argsText = directiveMatch[2] ?? "";
+    const argsText = autocompleteState.value.argsText ?? "";
     const { confirmedTokens } = getArgsContext(argsText);
 
-    return getSuggestionsForRules(rules, confirmedTokens, q);
+    const staticResults = getSuggestionsForRules(rules, confirmedTokens, q);
+
+    // 动态补全结果替换位置参数占位符
+    if (
+      autocompleteEnabled.value &&
+      !autocompleteState.value.query.startsWith("-") &&
+      apiSuggestions.value.length > 0
+    ) {
+      const nonPositional = staticResults.filter(
+        (s) => s.type !== "positional"
+      );
+      return [...apiSuggestions.value, ...nonPositional];
+    }
+
+    return staticResults;
   }
 });
 
 // 自动高度绑定
 useTextAreaAutoHeight(textareaRef, model);
 
-function checkAutocomplete() {
-  if (blurTimer) {
-    clearTimeout(blurTimer);
-    blurTimer = null;
-  }
-
-  const el = textareaRef.value;
-  if (!el) {
-    autocompleteState.value = null;
-    return;
-  }
-
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-
-  if (start !== end) {
-    autocompleteState.value = null;
-    return;
-  }
-
+function getLinePrefix(): string {
   const text = model.value;
+  const start = cursorStart.value;
   const textBeforeCursor = text.slice(0, start);
-
   const lastNewline = textBeforeCursor.lastIndexOf("\n");
   const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
-  const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
+  return textBeforeCursor.slice(lineStart);
+}
 
-  // 1. 优先匹配已有的斜杠指令参数补全 (args 补全)
-  // 如 "  /adjust lora --"
-  const directiveMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]+)(?:\s+(.*))?$/);
-  if (directiveMatch) {
-    const dirName = directiveMatch[1];
-    const argsText = directiveMatch[2] ?? "";
+async function executeAutocomplete() {
+  const state = autocompleteState.value;
+  if (!state || !autocompleteEnabled.value || state.type !== "args") return;
+  if (state.query.startsWith("-")) return;
 
-    const hasDirective = directives.value.some((h) => h.directive?.name === dirName);
-    if (hasDirective) {
-      const { currentQuery } = getArgsContext(argsText);
-      const triggerIndex = lineStart + lineTextBeforeCursor.length - currentQuery.length;
-
-      autocompleteState.value = {
-        show: true,
-        type: "args",
-        query: currentQuery,
-        triggerIndex,
-        selectionStart: start,
-        directiveName: dirName,
-      };
-      activeIndex.value = 0;
-      return;
-    }
+  // 本地缓存足够好（过滤后 ≥50%）就跳过 API 请求
+  const buf = dynamicBuffer.value;
+  if (
+    buf.suggestions.length > 0 &&
+    apiSuggestions.value.length >= buf.suggestions.length * 0.5
+  ) {
+    return;
   }
 
-  // 2. 匹配指令名称补全 (name 补全)
-  // 如 "  /a" 或 "  /"
-  const nameMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]*)$/);
-  if (nameMatch) {
-    const query = nameMatch[1];
-    const triggerIndex = lineStart + lineTextBeforeCursor.indexOf("/");
+  const hookId = currentHook.value?.id;
+  if (!hookId) return;
 
-    autocompleteState.value = {
-      show: true,
-      type: "name",
-      query: query.toLowerCase(),
-      triggerIndex,
-      selectionStart: start,
-    };
-    activeIndex.value = 0;
-  } else {
-    autocompleteState.value = null;
+  dynamicLoading.value = true;
+  try {
+    const result = await query(HookAutocompleteDocument, {
+      variables: {
+        input: {
+          hookId,
+          noteId: props.noteId ?? "",
+          linePrefix: getLinePrefix(),
+          query: state.query,
+        },
+      },
+    });
+
+    if (result.data?.hookAutocomplete) {
+      const results: Suggestion[] = result.data.hookAutocomplete.map(
+        (s) => ({
+          type: s.type ?? "positional",
+          text: s.text,
+          displayText: s.displayText,
+          description: s.description ?? undefined,
+        })
+      );
+      dynamicBuffer.value = {
+        contextKey: autocompleteContext.value,
+        suggestions: results,
+      };
+    }
+  } catch {
+    // 全局 ErrorLink 已处理通知
+  } finally {
+    dynamicLoading.value = false;
   }
 }
 
+const triggerDynamicAutocomplete = debounce(executeAutocomplete, 300);
+
 function handleInput() {
   emit("input");
-  checkAutocomplete();
+  onCursorChange();
+  if (autocompleteState.value?.type === "args") {
+    triggerDynamicAutocomplete();
+  }
 }
 
 function handleSelectSuggestion(sug: Suggestion) {
@@ -428,7 +597,7 @@ function handleSelectSuggestion(sug: Suggestion) {
   const triggerIdx = autocompleteState.value.triggerIndex;
 
   const before = text.slice(0, triggerIdx);
-  const after = text.slice(start);
+  const after = text.slice(el.selectionEnd);
 
   let textToInsert = sug.text;
   if (autocompleteState.value.type === "name") {
@@ -450,13 +619,17 @@ function handleSelectSuggestion(sug: Suggestion) {
     }
   }
 
-  autocompleteState.value = null;
+  const hasPlaceholder = sug.placeholder !== undefined;
 
   nextTick(() => {
     el.focus();
     el.setSelectionRange(newSelectionStart, newSelectionEnd);
+    onCursorChange();
     emit("input");
-    checkAutocomplete();
+    if (hasPlaceholder && autocompleteState.value?.type === "args") {
+      triggerDynamicAutocomplete();
+      triggerDynamicAutocomplete.flush();
+    }
   });
 }
 
@@ -476,54 +649,65 @@ function insertDirective(dirName: string) {
   model.value = before + prefix + `/${dirName} ` + after;
   const newCursorPos = start + prefix.length + dirName.length + 2;
 
-  autocompleteState.value = null;
-
   nextTick(() => {
     el.focus();
     el.setSelectionRange(newCursorPos, newCursorPos);
+    onCursorChange();
     emit("input");
-    checkAutocomplete();
+    // computed autocompleteState 会自动检测到指令，并在 handleInput 中触发动态补全
   });
 }
 
 function handleKeyUp() {
-  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
+  if (autocompleteState.value?.show && suggestions.value.length) {
     activeIndex.value =
-      (activeIndex.value - 1 + filteredSuggestions.value.length) % filteredSuggestions.value.length;
+      (activeIndex.value - 1 + suggestions.value.length) %
+      suggestions.value.length;
   }
 }
 
 function handleKeyDown() {
-  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
-    activeIndex.value = (activeIndex.value + 1) % filteredSuggestions.value.length;
+  if (autocompleteState.value?.show && suggestions.value.length) {
+    activeIndex.value =
+      (activeIndex.value + 1) % suggestions.value.length;
+  }
+}
+
+function handleKeySpace(e: KeyboardEvent) {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  autocompleteDismissed.value = false;
+
+  // 已在指令内 → 立即触发动态补全
+  if (autocompleteState.value?.type === "args") {
+    triggerDynamicAutocomplete();
+    triggerDynamicAutocomplete.flush();
   }
 }
 
 function handleKeyEnter(e: KeyboardEvent) {
-  if (autocompleteState.value?.show && filteredSuggestions.value.length) {
+  if (autocompleteState.value?.show && suggestions.value.length) {
     e.preventDefault();
-    handleSelectSuggestion(filteredSuggestions.value[activeIndex.value]);
+    handleSelectSuggestion(suggestions.value[activeIndex.value]);
   }
 }
 
 function handleKeyEsc() {
   if (autocompleteState.value?.show) {
-    autocompleteState.value = null;
+    autocompleteDismissed.value = true;
   }
 }
 
 function handleBlur() {
-  blurTimer = setTimeout(() => {
-    autocompleteState.value = null;
-    blurTimer = null;
-  }, 200);
+  isFocused.value = false;
+  blurAt.value = Time.now();
+  refreshOn(blurAt.value.add(200));
 }
 
 function handleFocus() {
-  if (blurTimer) {
-    clearTimeout(blurTimer);
-    blurTimer = null;
-  }
+  isFocused.value = true;
+  blurAt.value = null;
+  onCursorChange();
 }
 
 function focus() {

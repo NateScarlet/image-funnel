@@ -4,4 +4,6 @@ type HookDirective @goModel(model: "main/internal/shared.HookDirectiveDTO") {
   name: String!
   "使用说明，包含参数格式和选项描述"
   usage: String!
+  "是否支持指令参数自动完成"
+  autocomplete: Boolean!
 }

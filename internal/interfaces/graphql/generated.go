@@ -71,6 +71,13 @@ type ComplexityRoot struct {
 		IsTrustedIP     func(childComplexity int) int
 	}
 
+	AutocompleteSuggestion struct {
+		Description func(childComplexity int) int
+		DisplayText func(childComplexity int) int
+		Text        func(childComplexity int) int
+		Type        func(childComplexity int) int
+	}
+
 	BeginWebAuthnLoginPayload struct {
 		Options    func(childComplexity int) int
 		SessionKey func(childComplexity int) int
@@ -206,8 +213,9 @@ type ComplexityRoot struct {
 	}
 
 	HookDirective struct {
-		Name  func(childComplexity int) int
-		Usage func(childComplexity int) int
+		Autocomplete func(childComplexity int) int
+		Name         func(childComplexity int) int
+		Usage        func(childComplexity int) int
 	}
 
 	Image struct {
@@ -335,6 +343,7 @@ type ComplexityRoot struct {
 		AuthStatus         func(childComplexity int) int
 		ComfyUIWorkflow    func(childComplexity int, id scalar.ID) int
 		Devices            func(childComplexity int) int
+		HookAutocomplete   func(childComplexity int, input HookAutocompleteInput) int
 		Hooks              func(childComplexity int) int
 		Meta               func(childComplexity int) int
 		Node               func(childComplexity int, id scalar.ID) int
@@ -516,6 +525,7 @@ type QueryResolver interface {
 	AuthStatus(ctx context.Context) (*AuthStatus, error)
 	ComfyUIWorkflow(ctx context.Context, id scalar.ID) (*string, error)
 	Devices(ctx context.Context) ([]*shared.DeviceDTO, error)
+	HookAutocomplete(ctx context.Context, input HookAutocompleteInput) ([]*shared.AutocompleteSuggestionDTO, error)
 	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
@@ -605,6 +615,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.AuthStatus.IsTrustedIP(childComplexity), true
+
+	case "AutocompleteSuggestion.description":
+		if e.complexity.AutocompleteSuggestion.Description == nil {
+			break
+		}
+
+		return e.complexity.AutocompleteSuggestion.Description(childComplexity), true
+	case "AutocompleteSuggestion.displayText":
+		if e.complexity.AutocompleteSuggestion.DisplayText == nil {
+			break
+		}
+
+		return e.complexity.AutocompleteSuggestion.DisplayText(childComplexity), true
+	case "AutocompleteSuggestion.text":
+		if e.complexity.AutocompleteSuggestion.Text == nil {
+			break
+		}
+
+		return e.complexity.AutocompleteSuggestion.Text(childComplexity), true
+	case "AutocompleteSuggestion.type":
+		if e.complexity.AutocompleteSuggestion.Type == nil {
+			break
+		}
+
+		return e.complexity.AutocompleteSuggestion.Type(childComplexity), true
 
 	case "BeginWebAuthnLoginPayload.options":
 		if e.complexity.BeginWebAuthnLoginPayload.Options == nil {
@@ -1068,6 +1103,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Hook.Name(childComplexity), true
 
+	case "HookDirective.autocomplete":
+		if e.complexity.HookDirective.Autocomplete == nil {
+			break
+		}
+
+		return e.complexity.HookDirective.Autocomplete(childComplexity), true
 	case "HookDirective.name":
 		if e.complexity.HookDirective.Name == nil {
 			break
@@ -1722,6 +1763,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Devices(childComplexity), true
+	case "Query.hookAutocomplete":
+		if e.complexity.Query.HookAutocomplete == nil {
+			break
+		}
+
+		args, err := ec.field_Query_hookAutocomplete_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.HookAutocomplete(childComplexity, args["input"].(HookAutocompleteInput)), true
 	case "Query.hooks":
 		if e.complexity.Query.Hooks == nil {
 			break
@@ -2288,6 +2340,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDispatchNoteHookInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
+		ec.unmarshalInputHookAutocompleteInput,
 		ec.unmarshalInputImageFiltersInput,
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMoveImagesInput,
@@ -2447,6 +2500,18 @@ directive @oneOf on INPUT_OBJECT
   isTrustedDevice: Boolean!
   isTrustedIP: Boolean!
   canAccess: Boolean!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/autocomplete_suggestion.graphql", Input: `"自动完成建议"
+type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSuggestionDTO") {
+  "插入到文本框的文本"
+  text: String!
+  "浮层中显示的友好文本"
+  displayText: String!
+  "建议的描述信息"
+  description: String
+  "建议类型，如 region / lora"
+  type: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/device.graphql", Input: `type Device @goModel(model: "main/internal/shared.DeviceDTO") {
@@ -2660,6 +2725,8 @@ type HookDirective @goModel(model: "main/internal/shared.HookDirectiveDTO") {
   name: String!
   "使用说明，包含参数格式和选项描述"
   usage: String!
+  "是否支持指令参数自动完成"
+  autocomplete: Boolean!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/image.graphql", Input: `"""
@@ -2942,6 +3009,23 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
 }`, BuiltIn: false},
 	{Name: "../../../graph/queries/devices.graphql", Input: `extend type Query {
   devices: [Device!]!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/queries/hook_autocomplete.graphql", Input: `"指令参数自动完成输入"
+input HookAutocompleteInput {
+  "钩子 ID"
+  hookId: ID!
+  "笔记 ID"
+  noteId: ID!
+  "光标前的当前行完整文本"
+  linePrefix: String!
+  "当前正在输入的词"
+  query: String!
+}
+
+extend type Query {
+  "通过钩子脚本获取指令参数自动完成建议"
+  hookAutocomplete(input: HookAutocompleteInput!): [AutocompleteSuggestion!]!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/queries/hooks.graphql", Input: `extend type Query {
@@ -3926,6 +4010,17 @@ func (ec *executionContext) field_Query_comfyUIWorkflow_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_hookAutocomplete_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNHookAutocompleteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐHookAutocompleteInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_node_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4287,6 +4382,122 @@ func (ec *executionContext) fieldContext_AuthStatus_canAccess(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AutocompleteSuggestion_text(ctx context.Context, field graphql.CollectedField, obj *shared.AutocompleteSuggestionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AutocompleteSuggestion_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AutocompleteSuggestion_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AutocompleteSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AutocompleteSuggestion_displayText(ctx context.Context, field graphql.CollectedField, obj *shared.AutocompleteSuggestionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AutocompleteSuggestion_displayText,
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayText, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AutocompleteSuggestion_displayText(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AutocompleteSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AutocompleteSuggestion_description(ctx context.Context, field graphql.CollectedField, obj *shared.AutocompleteSuggestionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AutocompleteSuggestion_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AutocompleteSuggestion_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AutocompleteSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AutocompleteSuggestion_type(ctx context.Context, field graphql.CollectedField, obj *shared.AutocompleteSuggestionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AutocompleteSuggestion_type,
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AutocompleteSuggestion_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AutocompleteSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6809,6 +7020,8 @@ func (ec *executionContext) fieldContext_Hook_directive(_ context.Context, field
 				return ec.fieldContext_HookDirective_name(ctx, field)
 			case "usage":
 				return ec.fieldContext_HookDirective_usage(ctx, field)
+			case "autocomplete":
+				return ec.fieldContext_HookDirective_autocomplete(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type HookDirective", field.Name)
 		},
@@ -6869,6 +7082,35 @@ func (ec *executionContext) fieldContext_HookDirective_usage(_ context.Context, 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _HookDirective_autocomplete(ctx context.Context, field graphql.CollectedField, obj *shared.HookDirectiveDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_HookDirective_autocomplete,
+		func(ctx context.Context) (any, error) {
+			return obj.Autocomplete, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_HookDirective_autocomplete(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "HookDirective",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10095,6 +10337,57 @@ func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field 
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_hookAutocomplete(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_hookAutocomplete,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().HookAutocomplete(ctx, fc.Args["input"].(HookAutocompleteInput))
+		},
+		nil,
+		ec.marshalNAutocompleteSuggestion2ᚕᚖmainᚋinternalᚋsharedᚐAutocompleteSuggestionDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_hookAutocomplete(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "text":
+				return ec.fieldContext_AutocompleteSuggestion_text(ctx, field)
+			case "displayText":
+				return ec.fieldContext_AutocompleteSuggestion_displayText(ctx, field)
+			case "description":
+				return ec.fieldContext_AutocompleteSuggestion_description(ctx, field)
+			case "type":
+				return ec.fieldContext_AutocompleteSuggestion_type(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AutocompleteSuggestion", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_hookAutocomplete_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -15356,6 +15649,54 @@ func (ec *executionContext) unmarshalInputFinishWebAuthnRegistrationInput(ctx co
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputHookAutocompleteInput(ctx context.Context, obj any) (HookAutocompleteInput, error) {
+	var it HookAutocompleteInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"hookId", "noteId", "linePrefix", "query"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "hookId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hookId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.HookID = data
+		case "noteId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noteId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NoteID = data
+		case "linePrefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("linePrefix"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LinePrefix = data
+		case "query":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("query"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Query = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputImageFiltersInput(ctx context.Context, obj any) (shared.ImageFilters, error) {
 	var it shared.ImageFilters
 	asMap := map[string]any{}
@@ -16080,6 +16421,54 @@ func (ec *executionContext) _AuthStatus(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var autocompleteSuggestionImplementors = []string{"AutocompleteSuggestion"}
+
+func (ec *executionContext) _AutocompleteSuggestion(ctx context.Context, sel ast.SelectionSet, obj *shared.AutocompleteSuggestionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, autocompleteSuggestionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AutocompleteSuggestion")
+		case "text":
+			out.Values[i] = ec._AutocompleteSuggestion_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayText":
+			out.Values[i] = ec._AutocompleteSuggestion_displayText(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._AutocompleteSuggestion_description(ctx, field, obj)
+		case "type":
+			out.Values[i] = ec._AutocompleteSuggestion_type(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -17461,6 +17850,11 @@ func (ec *executionContext) _HookDirective(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "autocomplete":
+			out.Values[i] = ec._HookDirective_autocomplete(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -18584,6 +18978,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_devices(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "hookAutocomplete":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_hookAutocomplete(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -20151,6 +20567,60 @@ func (ec *executionContext) marshalNAuthStatus2ᚖmainᚋinternalᚋinterfaces�
 	return ec._AuthStatus(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNAutocompleteSuggestion2ᚕᚖmainᚋinternalᚋsharedᚐAutocompleteSuggestionDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.AutocompleteSuggestionDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAutocompleteSuggestion2ᚖmainᚋinternalᚋsharedᚐAutocompleteSuggestionDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAutocompleteSuggestion2ᚖmainᚋinternalᚋsharedᚐAutocompleteSuggestionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.AutocompleteSuggestionDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AutocompleteSuggestion(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNBeginWebAuthnLoginInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐBeginWebAuthnLoginInput(ctx context.Context, v any) (BeginWebAuthnLoginInput, error) {
 	res, err := ec.unmarshalInputBeginWebAuthnLoginInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -20662,6 +21132,11 @@ func (ec *executionContext) marshalNHook2ᚖmainᚋinternalᚋsharedᚐHookDTO(c
 		return graphql.Null
 	}
 	return ec._Hook(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNHookAutocompleteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐHookAutocompleteInput(ctx context.Context, v any) (HookAutocompleteInput, error) {
+	res, err := ec.unmarshalInputHookAutocompleteInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx context.Context, v any) (scalar.ID, error) {

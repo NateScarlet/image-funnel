@@ -247,3 +247,156 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+---
+
+## 6. 程序化自动完成
+
+当用户在笔记编辑器中输入指令参数时，自动完成系统不仅支持基于 `usage` 语法的静态补全，还可以通过外部脚本提供动态建议，例如从后端 API 获取可用区域名、Lora 名称、已缓存的工作流节点 ID 等。
+
+### 6.1 启用自动完成脚本
+
+在 TOML 配置文件的 `[directive]` 下添加 `[directive.autocomplete]` 节：
+
+```toml
+[directive]
+name = "adjust"
+usage = "/adjust lora <name> <weight> [--region <region>]..."
+
+[directive.autocomplete]
+command = "uv run your_script.py autocomplete"
+```
+
+`command` 中的 `autocomplete` 子命令用于告诉脚本入口当前处于自动完成模式（而非执行模式）。如果脚本不支持自动完成，可以不配置此节，系统将仅使用 `usage` 的静态补全。
+
+### 6.2 自动完成注入的环境变量
+
+自动完成脚本运行时，除了常规 Hook 环境变量外，还会额外注入以下上下文变量：
+
+| 环境变量 | 格式 | 说明 |
+|---|---|---|
+| `IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS` | JSON 字符串数组 | 当前行已完成的单词列表（类似 bash `COMP_WORDS`），例如 `["--region", "<region>", "--node"]` |
+| `IMAGE_FUNNEL_AUTOCOMPLETE_CWORD_IDX` | 整数 | 当前正在输入的单词在 `CWORDS` 中的索引（类似 bash `COMP_CWORD`） |
+| `IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD` | 字符串 | 当前光标前一个完整单词，常用于判断上下文（如识别到 `--region` 则应补全区域名） |
+| `IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX` | 字符串 | 当前行光标前的完整文本（包括指令名），例如 `/adjust lora --region ` |
+| `IMAGE_FUNNEL_AUTOCOMPLETE_QUERY` | 字符串 | 当前正在输入的单词片段（用户已键入但未完成的文本） |
+
+此外还会注入 `IMAGE_FUNNEL_ROOT_DIR`、`IMAGE_FUNNEL_GRAPHQL_URL`（用于脚本自行查询服务端数据）、`IMAGE_FUNNEL_NOTE_PATHS`、`IMAGE_FUNNEL_IMAGE_PATHS`（若当前笔记有配套图片）以及 TOML `[env]` 中定义的自定义变量。
+
+### 6.3 输出格式 (JSONL)
+
+脚本的 **stdout** 必须输出 **JSONL**（每行一个 JSON 对象），每行代表一个建议项。空行会被跳过。
+
+```jsonl
+{"text": "positive", "displayText": "positive", "description": "正向提示词区域"}
+{"text": "negative", "displayText": "negative", "description": "负向提示词区域"}
+```
+
+每个 JSON 对象的字段：
+
+| 字段 | 必需 | 类型 | 说明 |
+|---|---|---|---|
+| `text` | 是 | 字符串 | 插入到文本框的完整文本（选项、值等）。如果当前用户在输入选项值（如 `--region` 之后），给出具体的值 |
+| `displayText` | 否 | 字符串 | 浮层中显示的友好文本。未提供时默认使用 `text` 的值 |
+| `description` | 否 | 字符串 | 建议项的描述，显示在浮层中 `displayText` 下方 |
+| `type` | 否 | 字符串 | 类型标签，用于显示分类标识。不提供时不显示标签。常见值如 `"region"`、`"lora"`、`"node"` 等 |
+
+脚本的 **stderr** 不会影响自动完成结果，但会被记录到服务端日志中，适用于调试信息。
+
+### 6.4 与静态补全的集成
+
+动态 API 建议与 `usage` 静态补全共同显示在同一菜单中。API 返回的建议会排在位置参数建议前面，取代 `<>` 占位符建议，而选项（`[--option]`）和子命令建议始终显示。
+
+在典型工作流中，用户：
+1. 在 `usage` 静态定义的提示下选择 `--region <region>` 选项
+2. `--region <region>` 被插入文本框，其中 `<region>` 占位符自动选中
+3. 自动完成脚本被立即调用
+4. 返回的建议（如区域名 `"positive"`、`"negative"`）出现在菜单中
+5. 用户选择一个建议项，`<region>` 占位符被替换为所选值
+
+### 6.5 Python 示例
+
+以下是一个典型的 `autocomplete` 子命令实现，它读取解析上下文，根据当前光标前的单词决定返回何种建议：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import json
+import sys
+from typing import Iterator
+
+
+# JSONL 输出的推荐数据结构
+class AutocompleteSuggestion:
+    def __init__(self, text: str, display_text: str, description: str = "", type: str = ""):
+        self.text = text
+        self.displayText = display_text
+        self.description = description
+        self.type = type
+
+    def to_jsonl(self) -> str:
+        return json.dumps({
+            "text": self.text,
+            "displayText": self.displayText,
+            "description": self.description,
+            "type": self.type,
+        }, ensure_ascii=False)
+
+
+def autocomplete() -> Iterator[AutocompleteSuggestion]:
+    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+    cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
+    cword_idx = int(os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORD_IDX", "0"))
+    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
+
+    cwords: list[str] = json.loads(cwords_str)
+    q = query.lower()
+
+    # 示例：识别到 --region 选项时补全区域名称
+    if prev_word == "--region":
+        regions = ["positive", "negative", "inpaint"]
+        for name in regions:
+            if q and not name.startswith(q):
+                continue
+            yield AutocompleteSuggestion(
+                text=name,
+                display_text=name,
+                description=f"{name} 区域",
+                type="region",
+            )
+
+    # 示例：识别到 lora 子命令时补全 Lora 名称
+    if prev_word == "lora" or (len(cwords) >= 1 and cwords[0] == "lora"):
+        loras = get_available_loras()
+        for lora_name in loras:
+            if q and not lora_name.lower().startswith(q):
+                continue
+            yield AutocompleteSuggestion(
+                text=lora_name,
+                display_text=lora_name,
+                description="可用 Lora",
+                type="lora",
+            )
+
+
+def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "autocomplete":
+        for s in autocomplete():
+            print(s.to_jsonl())
+        sys.exit(0)
+
+    # 正常执行模式
+    # ...
+
+
+if __name__ == "__main__":
+    main()
+```
+
+### 6.6 错误处理
+
+- 脚本退出码非 0 时，Runner 会记录错误日志并返回空结果（不会阻塞用户输入）。
+- JSONL 中某一行解析失败会导致整个自动完成请求出错，并返回错误给前端。
+- 脚本应使用 `stderr` 输出调试或错误日志，不要污染 `stdout`，因 `stdout` 的全部内容必须为有效的 JSONL。

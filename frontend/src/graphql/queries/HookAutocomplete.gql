@@ -1,0 +1,8 @@
+query HookAutocomplete($input: HookAutocompleteInput!) {
+  hookAutocomplete(input: $input) {
+    text
+    displayText
+    description
+    type
+  }
+}

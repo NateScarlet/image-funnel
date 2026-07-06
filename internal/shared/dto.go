@@ -238,10 +238,19 @@ type UndoTrashResultDTO struct {
 	ClientMutationID *string
 }
 
+// AutocompleteSuggestionDTO 自动完成建议数据传输对象
+type AutocompleteSuggestionDTO struct {
+	Text        string
+	DisplayText string
+	Description string
+	Type        string
+}
+
 // HookDirectiveDTO 外部钩子提供的笔记指令数据传输对象
 type HookDirectiveDTO struct {
-	Name  string
-	Usage string
+	Name         string
+	Usage        string
+	Autocomplete bool
 }
 
 // HookDTO 外部钩子配置数据传输对象

@@ -29,7 +29,7 @@ type hookExecutionResult struct {
 type hookExecutionTask struct {
 	HookID       string
 	HookName     string
-	Command      string   // 基础命令（如 "python comfyui.py remove"）
+	Command      string   // 基础命令（如 "uv run comfyui.py remove"）
 	ExtraArgs    []string // 额外参数，原样传递给命令
 	TriggerName  string
 	Events       []hookEvent
