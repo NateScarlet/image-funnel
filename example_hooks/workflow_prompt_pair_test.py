@@ -230,6 +230,39 @@ class TestAnalyzeNodes(unittest.TestCase):
         self.assertEqual(len(pair._date_filename_nodes), 1)
         self.assertEqual(pair._date_filename_nodes[0].node_id, "1")
 
+    def test_date_filename_detection_mixed(self):
+        """混合非日期变量和日期模板的文件名节点仍可检测"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+                {
+                    "id": "2",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%"],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO//20260602_000533"},
+            },
+            "2": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        # 只有带 %date: 的节点应被检测
+        self.assertEqual(len(pair._date_filename_nodes), 1)
+        self.assertEqual(pair._date_filename_nodes[0].node_id, "1")
+
     def test_subgraph_nodes_analyzed(self):
         """子图节点被正确分析"""
         workflow = {
@@ -3214,6 +3247,25 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
+    def test_adjust_output_directory_simple_already_matched(self):
+        """无模板时前缀与当前目录已匹配则不变"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["sub/ComfyUI"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "sub/ComfyUI"}}
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("sub")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub/ComfyUI")
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub/ComfyUI")
+
     def test_adjust_output_directory_primitive_connection(self):
         workflow = {
             "nodes": [
@@ -3233,72 +3285,334 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         self.assertEqual(prompt["2"]["inputs"]["value"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
-    def test_samples_workflow(self):
-        custom_dir = os.environ.get("HOOK_TEST_IMAGES_DIR")
-        if custom_dir:
-            samples_dir = custom_dir
-        else:
-            samples_dir = os.path.join(current_dir, "samples")
-        if not os.path.exists(samples_dir):
-            self.skipTest("没有样本目录，跳过测试")
-
-        png_files = [
-            os.path.join(samples_dir, f)
-            for f in os.listdir(samples_dir)
-            if f.lower().endswith(".png")
-        ]
-        if not png_files:
-            self.skipTest("没有 PNG 样本文件，跳过测试")
-
-        sample_path = png_files[0]
-
-        # 读取图片元数据
-        with Image.open(sample_path) as img:
-            prompt_str = img.info.get("prompt")
-            workflow_str = img.info.get("workflow")
-            self.assertIsNotNone(prompt_str, f"{sample_path} 缺少 prompt 元数据")
-            self.assertIsNotNone(workflow_str, f"{sample_path} 缺少 workflow 元数据")
-            assert isinstance(prompt_str, str)
-            assert isinstance(workflow_str, str)
-            prompt = json.loads(prompt_str)
-            workflow = json.loads(workflow_str)
-
+    def test_adjust_output_directory_with_template_vars(self):
+        """含非日期模板变量的节点：更新源节点值并重建 filename_prefix"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO//20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": ""},
+                "_meta": {"title": "Title"},
+            },
+        }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("sub_folder")
+        pair.adjust_output_directory("NewProject/NewTitle")
 
-        # 校验：调整后，所有的 filename_prefix 前面都加上了 sub_folder/
-        found_prefix = False
-        for node_id, node in prompt.items():
-            inputs = node.get("inputs", {})
-            if "filename_prefix" in inputs:
-                src_id, src_key = find_terminal_input(
-                    prompt, node_id, "filename_prefix"
-                )
-                val = prompt[src_id]["inputs"][src_key]
-                self.assertTrue(
-                    val.startswith("sub_folder/"),
-                    f"Value '{val}' does not start with 'sub_folder/'",
-                )
-                found_prefix = True
+        # 源节点值被更新
+        self.assertEqual(prompt["2"]["inputs"]["value"], "NewProject")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "NewTitle")
+        # filename_prefix 被重建，日期部分保留
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"],
+            "NewProject/NewTitle/20260601_120000",
+        )
+        # workflow widget 不变（模板保留）
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
+        )
 
-                # 验证 workflow 中的对应节点值也更新了
-                wf_node = None
-                for n in workflow.get("nodes", []):
-                    if str(n.get("id")) == src_id:
-                        wf_node = n
-                        break
-                if wf_node:
-                    wv = wf_node.get("widgets_values")
-                    self.assertIsNotNone(wv)
-                    self.assertTrue(
-                        any(
-                            isinstance(v, str) and v.startswith("sub_folder/")
-                            for v in wv
-                        )
-                    )
+    def test_adjust_output_directory_template_vars_already_matched(self):
+        """模板变量值与 rel_dir 分段已匹配时不变"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "MyProj/MyTitle/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "MyProj"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "MyTitle"},
+                "_meta": {"title": "Title"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("MyProj/MyTitle")
+        # 值不变
+        self.assertEqual(prompt["2"]["inputs"]["value"], "MyProj")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "MyTitle")
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"],
+            "MyProj/MyTitle/20260601_120000",
+        )
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
+        )
 
-        self.assertTrue(
-            found_prefix, "Should have adjusted at least one filename_prefix"
+    def test_adjust_output_directory_template_vars_count_mismatch(self):
+        """rel_dir 分段数与模板变量数不匹配时将路径分隔符替换为 __"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO//20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": ""},
+                "_meta": {"title": "Title"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+
+        # 只有一段，但模板有两个非日期变量 -> 展平路径分隔符并拼入 rel_dir
+        pair.adjust_output_directory("SingleDir")
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"],
+            "SingleDir/TODO____20260601_120000",
+        )
+        # workflow widget 也拼入 rel_dir
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "SingleDir/%Project.value%__%Title.value%__%date:yyyyMMdd_hhmmss%",
+        )
+        # 源节点值不被更新
+        self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "")
+
+    def test_adjust_output_directory_template_vars_node_not_found(self):
+        """模板变量引用的节点在 prompt 中不存在时将路径分隔符替换为 __"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+            },
+            # 没有 _meta.title 为 Project 的节点
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("NewProj")
+        # 变量源节点未找到 -> 展平并拼入 rel_dir
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"],
+            "NewProj/TODO__20260601_120000",
+        )
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "NewProj/%Project.value%__%date:yyyyMMdd_hhmmss%",
+        )
+
+    def test_adjust_output_directory_template_vars_partial_not_found(self):
+        """多个变量中部分源节点不存在时，已存在的节点不被意外修改"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO//20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            # 没有 _meta.title 为 Title 的节点
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("NewProj/NewTitle")
+        # 部分缺失 -> 展平并拼入 rel_dir
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"],
+            "NewProj/NewTitle/TODO____20260601_120000",
+        )
+        # Project.value 不应被修改
+        self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
+        # workflow widget 也拼入 rel_dir
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "NewProj/NewTitle/%Project.value%__%Title.value%__%date:yyyyMMdd_hhmmss%",
+        )
+
+    def test_adjust_output_directory_template_vars_through_primitive(self):
+        """PrimitiveString 连接时终端节点无模板，走简单回退"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+                {
+                    "id": "5",
+                    "type": "PrimitiveString",
+                    "widgets_values": ["TODO//20260601_120000"],
+                },
+                {
+                    "id": "6",
+                    "type": "PrimitiveString",
+                    "widgets_values": [""],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": ["5", 0]},
+                "_meta": {"title": "Save Image"},
+            },
+            "5": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO//20260601_120000"},
+                "_meta": {"title": "Project"},
+            },
+            "6": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": ""},
+                "_meta": {"title": "Title"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("NewProj/NewTitle")
+        # 源节点得到 rel_dir + basename（无模板可用，走简单回退）
+        self.assertEqual(
+            prompt["5"]["inputs"]["value"], "NewProj/NewTitle/20260601_120000"
+        )
+        # 模板变量节点不被修改
+        self.assertEqual(prompt["6"]["inputs"]["value"], "")
+        # 终端节点的 workflow widget 同步更新
+        self.assertEqual(
+            workflow["nodes"][1]["widgets_values"][0],
+            "NewProj/NewTitle/20260601_120000",
+        )
+
+    def test_adjust_output_directory_template_vars_in_terminal(self):
+        """终端节点（PrimitiveString）自身含模板语法时也正确重组路径"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [],
+                },
+                {
+                    "id": "5",
+                    "type": "PrimitiveString",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+                {
+                    "id": "6",
+                    "type": "PrimitiveString",
+                    "widgets_values": ["DefaultTitle"],
+                },
+                {
+                    "id": "7",
+                    "type": "PrimitiveString",
+                    "widgets_values": ["DefaultProj"],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": ["5", 0]},
+                "_meta": {"title": "Save Image"},
+            },
+            "5": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"},
+            },
+            "6": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DefaultTitle"},
+                "_meta": {"title": "Title"},
+            },
+            "7": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DefaultProj"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.adjust_output_directory("MyProj/MyTitle")
+        # 模板变量被更新
+        self.assertEqual(prompt["6"]["inputs"]["value"], "MyTitle")
+        self.assertEqual(prompt["7"]["inputs"]["value"], "MyProj")
+        # 终端节点得到重组后的路径，日期保留为占位符
+        self.assertEqual(
+            prompt["5"]["inputs"]["value"],
+            "MyProj/MyTitle/%date:yyyyMMdd_hhmmss%",
+        )
+        # workflow widget 不变（保留模板）
+        self.assertEqual(
+            workflow["nodes"][1]["widgets_values"][0],
+            "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
         )
 
 

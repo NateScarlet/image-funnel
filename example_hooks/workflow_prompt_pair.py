@@ -123,6 +123,8 @@ class WorkflowPromptPair:
         self.prompt = prompt
         # 缓存节点信息，避免重复遍历
         self._nodes_cache: Dict[str, NodeInfo] = {}
+        # _meta.title → node_id 映射，供按标题查找用
+        self._title_to_node: Dict[str, str] = {}
         # 缓存种子节点信息
         self._seed_nodes: List[NodeInfo] = []
         # 缓存文件名节点信息（带日期模板）
@@ -244,6 +246,12 @@ class WorkflowPromptPair:
                         if isinstance(val, str) and "%date:" in val:
                             self._date_filename_nodes.append(node_info)
                             break
+
+        # 3. 构建 _meta.title → node_id 映射（遍历所有 prompt 节点，包括非 workflow 节点）
+        for pid, pnode in self.prompt.items():
+            title = pnode.get("_meta", {}).get("title")
+            if title:
+                self._title_to_node[title] = pid
 
     def find_nodes(self, **criteria: Any) -> List[NodeInfo]:
         """根据条件筛选节点"""
@@ -513,40 +521,141 @@ class WorkflowPromptPair:
 
     def adjust_output_directory(self, rel_dir: str) -> None:
         """
-        根据计算好的相对路径 rel_dir，自动调整 prompt 和 workflow 中所有输出节点的 filename_prefix。
+        根据相对路径 rel_dir 调整所有输出节点的 filename_prefix。
+        模板始终从终端节点的 workflow widget 读取（终端节点即 find_terminal_input 返回的节点），
+        含 %...% 语法的按非日期变量和 rel_dir 分段一一对应更新源节点值并重建前缀，
+        日期部分保留占位符（由节点在队列时自行求值）。
+        模板变量数与分段数不匹配或变量源节点未找到时展平路径分隔符为 __ 并拼入 rel_dir。
+        无模板的节点回退为旧的前缀追加行为。
         """
         for node_id, node in self.prompt.items():
             inputs = node.get("inputs", {})
-            if "filename_prefix" in inputs:
-                src_node_id, src_key = find_terminal_input(
-                    self.prompt, node_id, "filename_prefix"
-                )
-                src_node = self.prompt.get(src_node_id)
-                if src_node:
-                    src_inputs = src_node.setdefault("inputs", {})
-                    original_val = src_inputs.get(src_key)
-                    if isinstance(original_val, str):
-                        original_basename = os.path.basename(original_val)
-                        new_val = (
-                            f"{rel_dir}/{original_basename}"
-                            if rel_dir and rel_dir != "."
-                            else original_basename
-                        )
-                        src_inputs[src_key] = new_val
+            if "filename_prefix" not in inputs:
+                continue
 
-                        # 同步修改 workflow 结构
-                        src_node_info = self._nodes_cache.get(src_node_id)
-                        if src_node_info and src_node_info.widgets_values:
-                            for idx, val in enumerate(src_node_info.widgets_values):
-                                if isinstance(val, str):
-                                    parts = re.split(r"[\\/]", val)
-                                    basename = parts[-1] if parts else val
-                                    new_wf_val = (
-                                        f"{rel_dir}/{basename}"
-                                        if rel_dir and rel_dir != "."
-                                        else basename
+            src_node_id, src_key = find_terminal_input(
+                self.prompt, node_id, "filename_prefix"
+            )
+            src_node = self.prompt.get(src_node_id)
+            if not src_node:
+                continue
+
+            src_inputs = src_node.setdefault("inputs", {})
+            original_val = src_inputs.get(src_key)
+            if not isinstance(original_val, str):
+                continue
+
+            # 模板始终从终端节点的 workflow widget 读取
+            terminal_info = self._nodes_cache.get(src_node_id)
+            wf_template: Optional[str] = None
+            if terminal_info and terminal_info.widgets_values:
+                for val in terminal_info.widgets_values:
+                    if isinstance(val, str) and "%" in val:
+                        wf_template = val
+                        break
+
+            if wf_template:
+                # 解析非日期模板变量
+                non_date_vars: List[str] = []
+                var_placeholders: List[str] = []
+                for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
+                    var_name = m.group(1)
+                    if not var_name.startswith("date:"):
+                        non_date_vars.append(var_name)
+                        var_placeholders.append(m.group(0))
+
+                if non_date_vars:
+                    rel_parts = [p for p in rel_dir.split("/") if p]
+
+                    if len(rel_parts) == len(non_date_vars):
+                        # 通过标题缓存一次查找全部，全部找到才统一更新
+                        updates: List[Tuple[str, str, str]] = []
+                        for i, var_name in enumerate(non_date_vars):
+                            node_title = var_name.rsplit(".", 1)[0]
+                            pid = self._title_to_node.get(node_title)
+                            if pid is None:
+                                updates.clear()
+                                break
+                            input_key = (
+                                var_name.rsplit(".", 1)[1]
+                                if "." in var_name
+                                else "value"
+                            )
+                            updates.append((pid, input_key, rel_parts[i]))
+
+                        if updates:
+                            for pid, input_key, val in updates:
+                                self.prompt[pid].setdefault("inputs", {})[
+                                    input_key
+                                ] = val
+                            # 重建 prompt filename_prefix
+                            # 保留已解析的日期部分，替换非日期变量为 rel_dir 对应段
+                            new_prefix = wf_template
+                            for m in re.finditer(r"%date:([^%]+)%", new_prefix):
+                                comfy_fmt = m.group(1)
+                                _, date_regex = (
+                                    self._convert_comfy_date_format_to_python(
+                                        comfy_fmt
                                     )
-                                    src_node_info.widgets_values[idx] = new_wf_val
+                                )
+                                date_m = re.search(date_regex, original_val)
+                                if date_m:
+                                    new_prefix = new_prefix.replace(
+                                        m.group(0), date_m.group(0), 1
+                                    )
+                            for i, placeholder in enumerate(var_placeholders):
+                                if i < len(rel_parts):
+                                    new_prefix = new_prefix.replace(
+                                        placeholder, rel_parts[i], 1
+                                    )
+
+                            src_inputs[src_key] = new_prefix
+                            continue
+
+                    # 非日期变量数与 rel_dir 分段数不匹配或变量源节点未找到
+                    # 展平路径分隔符并拼入 rel_dir，使输出在目标目录而不是其子目录
+                    flat_val = original_val.replace("/", "__").replace("\\", "__")
+                    new_val = (
+                        f"{rel_dir}/{flat_val}"
+                        if rel_dir and rel_dir != "."
+                        else flat_val
+                    )
+                    src_inputs[src_key] = new_val
+
+                    # 同步修改终端节点的 workflow widget
+                    if terminal_info and terminal_info.widgets_values:
+                        for idx, val in enumerate(terminal_info.widgets_values):
+                            if isinstance(val, str):
+                                flat_wf = val.replace("/", "__").replace("\\", "__")
+                                terminal_info.widgets_values[idx] = (
+                                    f"{rel_dir}/{flat_wf}"
+                                    if rel_dir and rel_dir != "."
+                                    else flat_wf
+                                )
+                    continue
+
+            # 回退：旧的目录前缀追加行为
+            original_basename = os.path.basename(original_val)
+            new_val = (
+                f"{rel_dir}/{original_basename}"
+                if rel_dir and rel_dir != "."
+                else original_basename
+            )
+            src_inputs[src_key] = new_val
+
+            # 同步修改 workflow 结构
+            wf_src_info = self._nodes_cache.get(src_node_id)
+            if wf_src_info and wf_src_info.widgets_values:
+                for idx, val in enumerate(wf_src_info.widgets_values):
+                    if isinstance(val, str):
+                        parts = re.split(r"[\\/]", val)
+                        basename = parts[-1] if parts else val
+                        new_wf_val = (
+                            f"{rel_dir}/{basename}"
+                            if rel_dir and rel_dir != "."
+                            else basename
+                        )
+                        wf_src_info.widgets_values[idx] = new_wf_val
 
     def _convert_comfy_date_format_to_python(self, comfy_fmt: str) -> Tuple[str, str]:
         """
