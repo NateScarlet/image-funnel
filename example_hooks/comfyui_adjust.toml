@@ -6,10 +6,10 @@ command = "python comfyui.py adjust"
 [directive]
 name = "adjust"
 usage = """
-/adjust lora <name> <weight> [-u] [-j <N>] [--no-skip]
-/adjust prompt <text> <weight> [-u] [-j <N>] [--skip-add] [--no-skip] [--neg] [--region <region>]... [--node <node-id>]...
-/adjust cfg <weight> [-u] [-j <N>] [--no-skip] [--node <node-id>]...
-/adjust aspect <ratio> [-u] [-j <N>] [--no-skip] [--node <node-id>]...
+/adjust lora <name> <weight> [-j <N>] [--no-skip] [-u]
+/adjust prompt <text> <weight> [--neg] [--region <region>]... [-j <N>] [--node <node-id>]... [--no-skip] [--skip-add] [-u]
+/adjust cfg <weight> [-j <N>] [--node <node-id>]... [--no-skip] [-u]
+/adjust aspect <ratio> [-j <N>] [--node <node-id>]... [--no-skip] [-u]
 调整当前目录所有 4 星图片的 ComfyUI 工作流中的提示词权重、Lora 权重、KSampler 的 CFG 权重或者图像长宽比。
 权重（weight）或者是比例（ratio）可以是精确值（例如 0.8、16:9），也可以是范围（对于权重例如 0.5:1.0:0.1，对于比例例如 +-2:1）。
 对于长宽比，还支持交换宽高（swap）、升降档（如 +1, -1, w+1, h-1）和对称相对调整（如 +-1, w+-2:2），常见比例序列为：5:12, 4:7, 13:19, 7:9, 1:1, 9:7, 19:13, 7:4, 12:5。
@@ -17,13 +17,13 @@ usage = """
 支持上下对称浮动的快捷语法：+-0.3:0.1 代表 x-0.3:x+0.3:0.1，也支持简略形式 +-0.3。
 
 选项说明：
---skip-add             提示词不存在时跳过添加，默认不存在时会添加
---no-skip              即使没有任何修改也强制发送给 ComfyUI，默认如果没有修改则跳过发送
--u --update-seed       强制启用随机种子更新（在生成多个 job 时会自动启用）
--j --jobs <N>          每个权重版本发送工作流次数，默认使用 HOOK_JOBS 环境变量值
 --neg                  当没有 region 或 node 匹配时，提示词调整匹配负向区域而不是正向
 --region <region>        指定提示词目标区域，可多次指定
+-j --jobs <N>          每个权重版本发送工作流次数，默认使用 HOOK_JOBS 环境变量值
 --node <node-id>       指定提示词目标节点，可多次指定
+--no-skip              即使没有任何修改也强制发送给 ComfyUI，默认如果没有修改则跳过发送
+--skip-add             提示词不存在时跳过添加，默认不存在时会添加
+-u --update-seed       强制启用随机种子更新（在生成多个 job 时会自动启用）
 """
 on_success_action = "COMMENT_OUT"
 
