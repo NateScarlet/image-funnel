@@ -177,15 +177,27 @@ export function getArgsContext(argsText: string): {
   const cleaned = argsText.replace(/^\s/, "");
   const tokens: string[] = [];
   let current = "";
+  let inQuote: string | null = null;
 
-  for (const char of cleaned) {
-    if (/\s/.test(char)) {
-      if (current !== "") {
-        tokens.push(current);
-        current = "";
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (inQuote) {
+      current += char;
+      if (char === inQuote) {
+        inQuote = null;
       }
     } else {
-      current += char;
+      if (char === '"' || char === "'") {
+        inQuote = char;
+        current += char;
+      } else if (/\s/.test(char)) {
+        if (current !== "") {
+          tokens.push(current);
+          current = "";
+        }
+      } else {
+        current += char;
+      }
     }
   }
   tokens.push(current); // 最后一个即使是空也保留，代表正在输入

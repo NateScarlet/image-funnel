@@ -73,6 +73,16 @@ describe("directiveAutocomplete", () => {
     const ctx4 = getArgsContext(" lora name --re");
     expect(ctx4.confirmedTokens).toEqual(["lora", "name"]);
     expect(ctx4.currentQuery).toBe("--re");
+
+    // 5. 输入了带双引号包裹且带空格的参数
+    const ctx5 = getArgsContext(' lora "some name with spaces" --re');
+    expect(ctx5.confirmedTokens).toEqual(["lora", '"some name with spaces"']);
+    expect(ctx5.currentQuery).toBe("--re");
+
+    // 6. 输入了带单引号包裹且包含空格但未闭合的参数
+    const ctx6 = getArgsContext(" lora 'some name with");
+    expect(ctx6.confirmedTokens).toEqual(["lora"]);
+    expect(ctx6.currentQuery).toBe("'some name with");
   });
 
   test("getSuggestionsForRules", () => {
@@ -81,7 +91,7 @@ describe("directiveAutocomplete", () => {
     // 1. 输入 "/adjust " 推荐所有可选子命令
     const sugs1 = getSuggestionsForRules(rules, [], "");
     const cmdNames = sugs1.filter((s) => s.type === "subcommand").map((s) => s.text);
-    expect(cmdNames).toEqual(["cfg", "lora", "prompt"]);
+    expect(cmdNames).toEqual(["lora", "prompt", "cfg"]);
 
     // 2. 输入 "/adjust l" 匹配 "lora"
     const sugs2 = getSuggestionsForRules(rules, [], "l");
