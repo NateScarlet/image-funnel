@@ -602,26 +602,59 @@ def autocomplete(
     # 过滤 Docopt 静态占位符如 <region>, <node-id> 等，避免被误解析为 prompt 位置参数
     cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
 
-    # 检查是否为 remove 指令且当前是补全 prompt 参数的时机
+    # 检查是否为 remove 或者是 adjust prompt 指令，且当前是补全 prompt 参数的时机
     # 如果已输入了 "--" 区分标志，那么后面的所有输入（即使以 "-" 开头）都是普通 prompt 位置参数，而不是选项本身
     is_remove_cmd = target_command == "remove"
+    is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
     is_option_input = query.startswith("-") and "--" not in cleaned_cwords
+
+    # 检查 prev_word 是否真的是一个生效的选项参数键
+    # 如果 CWORDS 中有 "--" 且该 "--" 位于 prev_word 之前，则它不是生效的选项键，其后输入的也是位置参数
+    is_real_option_prev = False
+    if prev_word in [
+        "--region",
+        "--node",
+        "-j",
+        "--jobs",
+        "--max-match",
+        "--skip-add",
+        "--neg",
+    ]:
+        try:
+            is_real_option_prev = "--" not in cleaned_cwords or cleaned_cwords.index(
+                "--"
+            ) > cleaned_cwords.index(prev_word)
+        except ValueError:
+            is_real_option_prev = True
+
     if (
-        is_remove_cmd
-        and prev_word not in ["--region", "--node", "-j", "--jobs", "--max-match"]
+        (is_remove_cmd or is_adjust_prompt_cmd)
+        and not is_real_option_prev
         and not is_option_input
     ):
-        # 将 args_to_parse 构建为以 target_command 为首词，再加上除了指令名之外的其余输入词，最后垫入 "dummy_prompt"
+        # 将 args_to_parse 构建为以 target_command 为首词，再加上除了指令名之外的其余输入词，最后垫底占位符参数以绕过必需参数校验
         args_to_parse = (
-            [target_command] + cleaned_cwords[1:] + ["dummy_prompt"]
+            [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
             if target_command
-            else cleaned_cwords + ["dummy_prompt"]
+            else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
         )
         try:
             parser = get_parser()
             parsed_args, _ = parser.parse_known_args(args_to_parse)
         except (Exception, SystemExit):
             parsed_args = None
+
+        # 对于 adjust prompt，如果 text 已经输入完毕，或已开始输入 weight 参数，则跳过提示词自动完成
+        if is_adjust_prompt_cmd and parsed_args:
+            text_val = getattr(parsed_args, "text", None)
+            weight_val = getattr(parsed_args, "weight", None)
+            if weight_val and weight_val != "dummy_weight":
+                parsed_args = None
+            elif text_val and text_val != "dummy_prompt" and not query:
+                parsed_args = None
+
+        if parsed_args is None:
+            return
 
         is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
         is_all = getattr(parsed_args, "all", False) if parsed_args else False

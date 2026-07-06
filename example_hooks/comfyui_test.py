@@ -496,6 +496,113 @@ class TestComfyUIHook(unittest.TestCase):
                 self.assertEqual(len(suggestions), 1)
                 self.assertEqual(texts[0], "-a_cute_girl")
 
+    def test_autocomplete_adjust_prompt(self):
+        from unittest.mock import patch, MagicMock
+
+        mock_prompt = {
+            "node_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "1girl, masterpiece, score_7, cute\n// this is a comment\n\n  another prompt line , "
+                },
+            }
+        }
+        mock_workflow = {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "1girl, masterpiece, score_7, cute\n// this is a comment\n\n  another prompt line , "
+                    ],
+                }
+            ]
+        }
+
+        mock_image = MagicMock()
+        mock_image.info = {
+            "prompt": json.dumps(mock_prompt),
+            "workflow": json.dumps(mock_workflow),
+        }
+        mock_image.__enter__.return_value = mock_image
+
+        from comfyui import autocomplete
+
+        # 1. 验证常规 adjust prompt 补全提示词阶段
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust prompt ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/adjust", "prompt"]),
+            },
+        ):
+            suggestions = list(autocomplete("adjust"))
+            texts = [s.text for s in suggestions]
+            self.assertEqual(len(suggestions), 2)
+            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+            self.assertIn('"another prompt line"', texts)
+
+        # 2. 验证当 text 参数已经完全输入并敲了空格（即 query 为空且 text 存在）时，应当跳过
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": '"another prompt line"',
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": '/adjust prompt "another prompt line" ',
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/adjust", "prompt", '"another prompt line"']
+                ),
+            },
+        ):
+            suggestions = list(autocomplete("adjust"))
+            self.assertEqual(len(suggestions), 0)
+
+        # 3. 验证当已经开始输入 weight 参数时，应当跳过
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "1",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": '"another prompt line"',
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": '/adjust prompt "another prompt line" 1',
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/adjust", "prompt", '"another prompt line"', "1"]
+                ),
+            },
+        ):
+            suggestions = list(autocomplete("adjust"))
+            self.assertEqual(len(suggestions), 0)
+
+        # 4. 验证当输入为 "/remove -- --region a" 时，即便 prev_word 是 "--region"，但由于前面有 "--"，所以 "--region" 不属于选项，应照常进行 prompt 补全
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "a",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--region",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove -- --region a",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/remove", "--", "--region"]
+                ),
+            },
+        ):
+            suggestions = list(autocomplete("remove"))
+            texts = [s.text for s in suggestions]
+            self.assertEqual(len(suggestions), 2)
+            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+
 
 class TestComfyUIOutputDirectory(unittest.TestCase):
 
