@@ -8,4 +8,6 @@ type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSu
   description: String
   "建议类型，如 region / lora"
   type: String
+  "额外的样式类，例如 exists 表示已存在于工作流"
+  style: String
 }

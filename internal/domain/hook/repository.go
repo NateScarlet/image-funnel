@@ -13,6 +13,7 @@ type AutocompleteSuggestion struct {
 	DisplayText string
 	Description string
 	Type        string
+	Style       string
 }
 
 // Directive 钩子提供的笔记指令值对象

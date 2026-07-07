@@ -74,6 +74,7 @@ type ComplexityRoot struct {
 	AutocompleteSuggestion struct {
 		Description func(childComplexity int) int
 		DisplayText func(childComplexity int) int
+		Style       func(childComplexity int) int
 		Text        func(childComplexity int) int
 		Type        func(childComplexity int) int
 	}
@@ -628,6 +629,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.AutocompleteSuggestion.DisplayText(childComplexity), true
+	case "AutocompleteSuggestion.style":
+		if e.complexity.AutocompleteSuggestion.Style == nil {
+			break
+		}
+
+		return e.complexity.AutocompleteSuggestion.Style(childComplexity), true
 	case "AutocompleteSuggestion.text":
 		if e.complexity.AutocompleteSuggestion.Text == nil {
 			break
@@ -2512,6 +2519,8 @@ type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSu
   description: String
   "建议类型，如 region / lora"
   type: String
+  "额外的样式类，例如 exists 表示已存在于工作流"
+  style: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/device.graphql", Input: `type Device @goModel(model: "main/internal/shared.DeviceDTO") {
@@ -4491,6 +4500,35 @@ func (ec *executionContext) _AutocompleteSuggestion_type(ctx context.Context, fi
 }
 
 func (ec *executionContext) fieldContext_AutocompleteSuggestion_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AutocompleteSuggestion",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AutocompleteSuggestion_style(ctx context.Context, field graphql.CollectedField, obj *shared.AutocompleteSuggestionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AutocompleteSuggestion_style,
+		func(ctx context.Context) (any, error) {
+			return obj.Style, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AutocompleteSuggestion_style(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "AutocompleteSuggestion",
 		Field:      field,
@@ -10374,6 +10412,8 @@ func (ec *executionContext) fieldContext_Query_hookAutocomplete(ctx context.Cont
 				return ec.fieldContext_AutocompleteSuggestion_description(ctx, field)
 			case "type":
 				return ec.fieldContext_AutocompleteSuggestion_type(ctx, field)
+			case "style":
+				return ec.fieldContext_AutocompleteSuggestion_style(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AutocompleteSuggestion", field.Name)
 		},
@@ -16469,6 +16509,8 @@ func (ec *executionContext) _AutocompleteSuggestion(ctx context.Context, sel ast
 			out.Values[i] = ec._AutocompleteSuggestion_description(ctx, field, obj)
 		case "type":
 			out.Values[i] = ec._AutocompleteSuggestion_type(ctx, field, obj)
+		case "style":
+			out.Values[i] = ec._AutocompleteSuggestion_style(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -21223,13 +21265,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

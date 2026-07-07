@@ -24,6 +24,7 @@ export interface Suggestion {
   displayText: string; // 浮层中显示的友好文本
   placeholder?: string; // 占位符信息，例如 '<region>'
   description?: string; // 提示的描述文本
+  style?: string; // 额外的视觉显示样式状态，如 'muted'
 }
 
 /**

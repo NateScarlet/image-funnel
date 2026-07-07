@@ -43,5 +43,6 @@ func (f *DTOFactory) NewAutocompleteSuggestion(s *domain.AutocompleteSuggestion)
 		DisplayText: s.DisplayText,
 		Description: s.Description,
 		Type:        s.Type,
+		Style:       s.Style,
 	}
 }

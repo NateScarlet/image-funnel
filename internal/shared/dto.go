@@ -244,6 +244,7 @@ type AutocompleteSuggestionDTO struct {
 	DisplayText string
 	Description string
 	Type        string
+	Style       string
 }
 
 // HookDirectiveDTO 外部钩子提供的笔记指令数据传输对象

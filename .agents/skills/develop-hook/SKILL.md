@@ -300,6 +300,7 @@ command = "uv run your_script.py autocomplete"
 | `displayText` | 否 | 字符串 | 浮层中显示的友好文本。未提供时默认使用 `text` 的值 |
 | `description` | 否 | 字符串 | 建议项的描述，显示在浮层中 `displayText` 下方 |
 | `type` | 否 | 字符串 | 类型标签，用于显示分类标识。不提供时不显示标签。常见值如 `"region"`、`"lora"`、`"node"` 等 |
+| `style` | 否 | 字符串 | 额外的样式类名称。例如，`"muted"` 表示此提示词已存在于工作流对应目标区域中，前端会以此应用特定置灰样式 |
 
 脚本的 **stderr** 不会影响自动完成结果，但会被记录到服务端日志中，适用于调试信息。
 
@@ -330,11 +331,12 @@ from typing import Iterator
 
 # JSONL 输出的推荐数据结构
 class AutocompleteSuggestion:
-    def __init__(self, text: str, display_text: str, description: str = "", type: str = ""):
+    def __init__(self, text: str, display_text: str, description: str = "", type: str = "", style: str = ""):
         self.text = text
         self.displayText = display_text
         self.description = description
         self.type = type
+        self.style = style
 
     def to_jsonl(self) -> str:
         return json.dumps({
@@ -342,6 +344,7 @@ class AutocompleteSuggestion:
             "displayText": self.displayText,
             "description": self.description,
             "type": self.type,
+            "style": self.style,
         }, ensure_ascii=False)
 
 

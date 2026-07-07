@@ -3,6 +3,7 @@
 # /// script
 # dependencies = [
 #   "Pillow",
+#   "requests",
 # ]
 # ///
 
@@ -29,6 +30,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast
 import logging
 import argparse
+import requests
 
 from graphql_utils import update_image_label, fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
@@ -553,6 +555,58 @@ def quote_if_needed(val: str) -> str:
     return val
 
 
+def _fetch_danbooru_suggestions(
+    query: str, search_url: str
+) -> Iterator[AutocompleteSuggestion]:
+    if not query.strip():
+        return
+
+    search_url = search_url.rstrip("/")
+    api_url = f"{search_url}/api/search"
+
+    payload = {
+        "query": query,
+        "top_k": 20,
+        "limit": 20,
+        "popularity_weight": 0.15,
+        "show_nsfw": True,
+        "use_segmentation": False,
+    }
+
+    _LOGGER.debug(
+        "Fetching Danbooru suggestions for query: %r from URL: %r",
+        query,
+        api_url,
+    )
+    try:
+        # 用户指明：不需要超时，应该是前端取消时才取消。
+        # 因此，此处直接 requests.post(api_url, json=payload) 而不提供 timeout 参数。
+        response = requests.post(api_url, json=payload)
+        _LOGGER.debug("Danbooru response status: %d", response.status_code)
+        response.raise_for_status()
+        res_json = response.json()
+        results = res_json.get("results", [])
+        _LOGGER.debug("Danbooru search returned %d items", len(results))
+        for item in results:
+            tag = item.get("tag", "")
+            if not tag:
+                continue
+            cn_name = item.get("cn_name", "")
+            wiki = item.get("wiki", "")
+
+            display = f"{tag} ({cn_name})" if cn_name else tag
+            desc = wiki if wiki else "Danbooru 标签"
+
+            yield AutocompleteSuggestion(
+                text=quote_if_needed(tag),
+                displayText=display,
+                description=desc,
+                type="danbooru",
+            )
+    except Exception as e:
+        _LOGGER.warning("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
+
+
 def autocomplete(
     target_command: Optional[str] = None,
 ) -> Iterator[AutocompleteSuggestion]:
@@ -764,6 +818,13 @@ def autocomplete(
                                 description=f"来自{label}中的提示词",
                                 type="prompt",
                             )
+
+    is_add_cmd = target_command == "add"
+    if is_add_cmd and not is_real_option_prev and not is_option_input:
+        danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
+        if danbooru_url:
+            for s in _fetch_danbooru_suggestions(query, danbooru_url):
+                yield s
 
 
 def main() -> None:

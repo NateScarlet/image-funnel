@@ -4,5 +4,6 @@ query HookAutocomplete($input: HookAutocompleteInput!) {
     displayText
     description
     type
+    style
   }
 }

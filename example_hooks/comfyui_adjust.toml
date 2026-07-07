@@ -28,7 +28,7 @@ usage = """
 """
 
 [directive.autocomplete]
-command = "uv run comfyui.py autocomplete adjust"
+command = "uv run comfyui_autocomplete.py adjust"
 
 [on.post_commit_session.note_scan]
 ignore_directive = false

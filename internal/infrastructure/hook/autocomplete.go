@@ -22,6 +22,7 @@ type autocompleteSuggestionRaw struct {
 	DisplayText string `json:"displayText"`
 	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"`
+	Style       string `json:"style,omitempty"`
 }
 
 // Autocomplete 通过钩子脚本获取指令参数自动完成建议
@@ -84,6 +85,13 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 			zap.String("stderr", stderr.String()),
 		)
 		return nil, fmt.Errorf("autocomplete script failed: %w, stderr: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	if stderr.Len() > 0 {
+		r.logger.Debug("autocomplete stderr",
+			zap.String("hook_id", targetHook.ID),
+			zap.String("stderr", stderr.String()),
+		)
 	}
 
 	return parseAutocompleteJSONL(stdout.Bytes())
@@ -172,6 +180,7 @@ func parseAutocompleteJSONL(data []byte) ([]*hook.AutocompleteSuggestion, error)
 			DisplayText: displayText,
 			Description: raw.Description,
 			Type:        raw.Type,
+			Style:       raw.Style,
 		})
 	}
 	return suggestions, scanner.Err()

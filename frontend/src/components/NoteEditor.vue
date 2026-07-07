@@ -137,9 +137,10 @@
           >
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
               <span
-                :class="
-                  idx === activeIndex ? 'text-white' : 'text-secondary-400'
-                "
+                :class="[
+                  idx === activeIndex ? 'text-white' : 'text-secondary-400',
+                  sug.style === 'muted' ? (idx === activeIndex ? 'line-through font-normal opacity-70' : 'line-through font-normal opacity-40') : ''
+                ]"
               >
                 {{ sug.displayText }}
               </span>
@@ -439,14 +440,21 @@ const autocompleteContext = computed(() => {
 
 const dynamicBuffer = ref<{
   contextKey: string | null;
+  query: string;
   suggestions: Suggestion[];
-}>({ contextKey: null, suggestions: [] });
+}>({ contextKey: null, query: "", suggestions: [] });
 
 const apiSuggestions = computed(() => {
   if (dynamicBuffer.value.contextKey !== autocompleteContext.value) return [];
   const state = autocompleteState.value;
   if (!state || state.type !== "args") return [];
   if (!state.query) return dynamicBuffer.value.suggestions;
+
+  // 如果当前的 query 与获取 suggestions 时的 query 相同，说明这是针对当前 query 的一手搜索结果，不需要在本地做字符串过滤
+  if (state.query === dynamicBuffer.value.query) {
+    return dynamicBuffer.value.suggestions;
+  }
+
   const q = state.query.toLowerCase();
   return dynamicBuffer.value.suggestions.filter((s) => {
     if (s.text.toLowerCase() === q) return false;
@@ -564,10 +572,12 @@ async function executeAutocomplete() {
           text: s.text,
           displayText: s.displayText,
           description: s.description ?? undefined,
+          style: s.style ?? undefined,
         })
       );
       dynamicBuffer.value = {
         contextKey: autocompleteContext.value,
+        query: state.query,
         suggestions: results,
       };
     }
