@@ -16,6 +16,7 @@ export interface DirectiveRule {
   pattern: PatternToken[];
   options: OptionInfo[];
   description: string; // 整体描述
+  generalDescription?: string; // 通用说明
 }
 
 export interface Suggestion {
@@ -32,9 +33,7 @@ export interface Suggestion {
  */
 export function parseUsage(usage: string): DirectiveRule[] {
   const lines = usage.split(/\r?\n/);
-  const ruleLines: string[] = [];
   const optionDescriptions = new Map<string, string>();
-  const generalLines: string[] = [];
   const shortToLong = new Map<string, string>();
   const longToShort = new Map<string, string>();
 
@@ -46,15 +45,87 @@ export function parseUsage(usage: string): DirectiveRule[] {
   const optionDescRegex =
     /^[ \t]*(?:(-[a-zA-Z0-9])(?:,?\s+(--[a-zA-Z0-9_-]+))?|(--[a-zA-Z0-9_-]+))(?:\s+(<[^>]+>))?\s+(.+)$/;
 
+  const rules: DirectiveRule[] = [];
+  const rulePrivateDescs = new Map<DirectiveRule, string[]>();
+  const generalDescLines: string[] = [];
+
+  let currentRule: DirectiveRule | null = null;
+  let isCollectingDesc = false;
+
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      isCollectingDesc = false;
+      continue;
+    }
 
     if (trimmed.startsWith("/")) {
-      ruleLines.push(trimmed);
+      // 匹配并解析规则行
+      const dirMatch = trimmed.match(/^\/([a-zA-Z0-9_-]+)(.*)$/);
+      if (dirMatch) {
+        const directive = dirMatch[1];
+        const remaining = dirMatch[2].trim();
+        const options: OptionInfo[] = [];
+
+        // 匹配并移除所有中括号包裹的可选选项，如 [-u] 或 [--region <region>]...
+        const optRegex = /\[([^\]]+)\](?:\.\.\.)?/g;
+        let optMatch;
+
+        while ((optMatch = optRegex.exec(remaining)) !== null) {
+          const inner = optMatch[1].trim();
+          const parts = inner.split(/\s+/);
+          if (parts.length === 0) continue;
+
+          const name = parts[0];
+          let placeholder: string | undefined;
+          if (parts.length > 1) {
+            placeholder = parts.slice(1).join(" ");
+          }
+
+          options.push({
+            name,
+            placeholder,
+            raw: inner,
+          });
+        }
+
+        // 移除所有方括号块
+        const cleanedRemaining = remaining.replace(optRegex, "").trim();
+
+        // 此时 cleanedRemaining 只有子命令和位置参数，如 "lora <name> <weight>"
+        const patternTokens: PatternToken[] = [];
+        const rawTokens = cleanedRemaining.split(/\s+/).filter(Boolean);
+
+        for (const token of rawTokens) {
+          if (token.startsWith("<") && (token.endsWith(">") || token.endsWith(">..."))) {
+            patternTokens.push({
+              type: "positional",
+              value: token,
+            });
+          } else {
+            patternTokens.push({
+              type: "subcommand",
+              value: token,
+            });
+          }
+        }
+
+        const rule: DirectiveRule = {
+          directive,
+          pattern: patternTokens,
+          options,
+          description: "", // 稍后填充
+        };
+
+        rules.push(rule);
+        rulePrivateDescs.set(rule, []);
+        currentRule = rule;
+        isCollectingDesc = true;
+      }
     } else {
       const match = line.match(optionDescRegex);
       if (match) {
+        isCollectingDesc = false;
         const shortOpt = match[1]; // 例如 '-u'
         const longOpt = match[2] || match[3]; // 例如 '--update-seed'
         const desc = match[5].trim();
@@ -71,69 +142,26 @@ export function parseUsage(usage: string): DirectiveRule[] {
         }
       } else {
         // 普通描述行
-        generalLines.push(trimmed);
+        const isOptionsHeader = /^[ \t]*选项(说明)?[：:]?$/.test(trimmed);
+        if (!isOptionsHeader) {
+          if (isCollectingDesc && currentRule) {
+            const descs = rulePrivateDescs.get(currentRule);
+            if (descs) {
+              descs.push(trimmed);
+            }
+          } else {
+            generalDescLines.push(trimmed);
+          }
+        }
       }
     }
   }
 
-  const generalDescription = generalLines.join("\n");
-  const rules: DirectiveRule[] = [];
+  const generalDescription = generalDescLines.join("\n");
 
-  for (const ruleLine of ruleLines) {
-    // 匹配如: "/adjust lora <name> <weight> [-u]"
-    const dirMatch = ruleLine.match(/^\/([a-zA-Z0-9_-]+)(.*)$/);
-    if (!dirMatch) continue;
-
-    const directive = dirMatch[1];
-    const remaining = dirMatch[2].trim();
-
-    const options: OptionInfo[] = [];
-
-    // 匹配并移除所有中括号包裹的可选选项，如 [-u] 或 [--region <region>]...
-    const optRegex = /\[([^\]]+)\](?:\.\.\.)?/g;
-    let optMatch;
-
-    while ((optMatch = optRegex.exec(remaining)) !== null) {
-      const inner = optMatch[1].trim();
-      const parts = inner.split(/\s+/);
-      if (parts.length === 0) continue;
-
-      const name = parts[0];
-      let placeholder: string | undefined;
-      if (parts.length > 1) {
-        placeholder = parts.slice(1).join(" ");
-      }
-
-      options.push({
-        name,
-        placeholder,
-        raw: inner,
-      });
-    }
-
-    // 移除所有方括号块
-    const cleanedRemaining = remaining.replace(optRegex, "").trim();
-
-    // 此时 cleanedRemaining 只有子命令和位置参数，如 "lora <name> <weight>"
-    const patternTokens: PatternToken[] = [];
-    const rawTokens = cleanedRemaining.split(/\s+/).filter(Boolean);
-
-    for (const token of rawTokens) {
-      if (token.startsWith("<") && (token.endsWith(">") || token.endsWith(">..."))) {
-        patternTokens.push({
-          type: "positional",
-          value: token,
-        });
-      } else {
-        patternTokens.push({
-          type: "subcommand",
-          value: token,
-        });
-      }
-    }
-
+  for (const rule of rules) {
     // 规范化选项名称：短选项规范为长选项，并保存 alias 短选项
-    for (const opt of options) {
+    for (const opt of rule.options) {
       const longName = shortToLong.get(opt.name);
       if (longName) {
         opt.shortName = opt.name;
@@ -147,7 +175,7 @@ export function parseUsage(usage: string): DirectiveRule[] {
     }
 
     // 填充选项的专属说明
-    for (const opt of options) {
+    for (const opt of rule.options) {
       const desc =
         optionDescriptions.get(opt.name) ||
         (opt.shortName ? optionDescriptions.get(opt.shortName) : undefined);
@@ -156,12 +184,14 @@ export function parseUsage(usage: string): DirectiveRule[] {
       }
     }
 
-    rules.push({
-      directive,
-      pattern: patternTokens,
-      options,
-      description: generalDescription,
-    });
+    // 组装最终描述
+    const privateDesc = rulePrivateDescs.get(rule)?.join("\n") || "";
+    rule.generalDescription = generalDescription;
+    if (privateDesc) {
+      rule.description = privateDesc;
+    } else {
+      rule.description = generalDescription;
+    }
   }
 
   return rules;

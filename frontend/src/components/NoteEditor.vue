@@ -489,11 +489,17 @@ const suggestions = computed<Suggestion[]>(() => {
       : list;
     return matched.map((h) => {
       const dirName = h.directive?.name ?? "";
+      const relatedRule = parsedRules.value.find((r) => r.directive === dirName);
+      
+      const header = h.name;
+      const body = relatedRule?.generalDescription || h.directive?.description || "";
+      const desc = body ? `${header}\n\n${body}` : header;
+
       return {
         type: "subcommand",
         text: dirName,
         displayText: `/${dirName}`,
-        description: h.name,
+        description: desc,
       };
     });
   } else {

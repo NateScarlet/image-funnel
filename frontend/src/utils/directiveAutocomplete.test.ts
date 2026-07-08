@@ -131,4 +131,41 @@ describe("directiveAutocomplete", () => {
     expect(regSugs[0].text).toBe("--region <region>");
     expect(regSugs[0].placeholder).toBe("<region>");
   });
+
+  test("parseUsage with subcommand-specific docs", () => {
+    const customUsage = `
+/adjust lora <name> <weight> [-u]
+调整 Lora 权重的专属说明。
+
+/adjust prompt <text> <weight> [--neg]
+调整 提示词 的专属说明。
+第二行专属说明。
+
+/adjust cfg <weight>
+调整 CFG 专属说明。
+
+通用说明段落一。
+通用说明段落二。
+
+选项说明：
+-u --update-seed       强制启用随机种子更新
+`;
+    const rules = parseUsage(customUsage);
+    expect(rules).toHaveLength(3);
+
+    const loraRule = rules[0];
+    expect(loraRule.directive).toBe("adjust");
+    expect(loraRule.description).toBe("调整 Lora 权重的专属说明。");
+    expect(loraRule.generalDescription).toContain("通用说明段落一。");
+    expect(loraRule.generalDescription).toContain("通用说明段落二。");
+
+    const promptRule = rules[1];
+    expect(promptRule.description).toBe("调整 提示词 的专属说明。\n第二行专属说明。");
+    expect(promptRule.generalDescription).toContain("通用说明段落一。");
+
+    const cfgRule = rules[2];
+    expect(cfgRule.description).toBe("调整 CFG 专属说明。");
+    expect(cfgRule.generalDescription).toContain("通用说明段落一。");
+  });
 });
+

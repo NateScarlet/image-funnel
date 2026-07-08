@@ -8,10 +8,17 @@ name = "adjust"
 on_success_action = "COMMENT_OUT"
 usage = """
 /adjust lora <name> <weight> [-j <N>] [--no-skip] [-u]
+调整当前目录所有 4 星图片的 ComfyUI 工作流中的 Lora 权重。
+
 /adjust prompt <text> <weight> [--neg] [--region <region>]... [-j <N>] [--node <node-id>]... [--no-skip] [--skip-add] [-u]
+调整当前目录所有 4 星图片的 ComfyUI 工作流中的提示词权重。
+
 /adjust cfg <weight> [-j <N>] [--node <node-id>]... [--no-skip] [-u]
+调整当前目录所有 4 星图片的 ComfyUI 工作流中 KSampler 的 CFG 权重。
+
 /adjust aspect <ratio> [-j <N>] [--node <node-id>]... [--no-skip] [-u]
-调整当前目录所有 4 星图片的 ComfyUI 工作流中的提示词权重、Lora 权重、KSampler 的 CFG 权重或者图像长宽比。
+调整当前目录所有 4 星图片的图像长宽比。
+
 权重（weight）或者是比例（ratio）可以是精确值（例如 0.8、16:9），也可以是范围（对于权重例如 0.5:1.0:0.1，对于比例例如 +-2:1）。
 对于长宽比，还支持交换宽高（swap）、升降档（如 +1, -1, w+1, h-1）和对称相对调整（如 +-1, w+-2:2），常见比例序列为：5:12, 4:7, 13:19, 7:9, 1:1, 9:7, 19:13, 7:4, 12:5。
 支持基于当前值的相对表达式：x 代表当前值，如 x-0.1:x+0.2:0.1（从当前值-0.1 到当前值+0.2，步进 0.1），也支持简略形式 x-0.1:x+0.2 和 x-0.1。
