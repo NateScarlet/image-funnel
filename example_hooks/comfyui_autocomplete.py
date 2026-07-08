@@ -29,7 +29,8 @@ if sys.platform.startswith("win"):
 import json
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any, Optional, Iterator, cast
+import argparse
+from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, cast
 import requests
 from PIL import Image
 
@@ -55,17 +56,43 @@ class AutocompleteSuggestion:
     style: str = ""
 
 
-def _extract_prompt_tags(cwords: List[str]) -> List[str]:
+def _collect_active_parsers(
+    parser: argparse.ArgumentParser, cwords: List[str]
+) -> List[argparse.ArgumentParser]:
+    # 递归收集当前已输入词列表所匹配的所有活跃 ArgumentParser 实例
+    active: List[argparse.ArgumentParser] = [parser]
+    current: argparse.ArgumentParser = parser
+
+    words_to_match: List[str] = []
+    for w in cwords:
+        w_clean = w.lstrip("/").strip()
+        if w_clean:
+            words_to_match.append(w_clean)
+
+    for w in words_to_match:
+        found_subparser: Optional[argparse.ArgumentParser] = None
+        # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
+        for action in current._actions:
+            if isinstance(
+                action,
+                argparse._SubParsersAction,  # pyright: ignore[reportPrivateUsage]
+            ):
+                if w in action.choices:  # pyright: ignore[reportUnknownMemberType]
+                    found_subparser = cast(
+                        argparse.ArgumentParser,
+                        action.choices[w],  # pyright: ignore[reportUnknownMemberType]
+                    )
+                    break
+        if found_subparser:
+            active.append(found_subparser)
+            current = found_subparser
+    return active
+
+
+def _extract_prompt_tags(cwords: List[str], option_with_args: Set[str]) -> List[str]:
+    # 动态排除命令行选项及其参数，提取可能已输入的提示词 tags
     if not cwords:
         return []
-
-    option_with_args = {
-        "--region",
-        "--node",
-        "-j",
-        "--jobs",
-        "--max-match",
-    }
 
     tags: List[str] = []
     skip_next = False
@@ -219,18 +246,28 @@ def autocomplete(
     is_add_cmd = target_command == "add"
     prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
 
+    # 动态分析当前活跃命令行路径下的选项参数，避免硬编码
+    parser = get_parser()
+    active_parsers = _collect_active_parsers(parser, cwords)
+    option_with_args: Set[str] = set()
+    option_without_args: Set[str] = set()
+
+    for p in active_parsers:
+        # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
+        for action in p._actions:
+            if not action.option_strings:
+                continue
+            if action.nargs == 0:
+                for opt in action.option_strings:
+                    option_without_args.add(opt)
+            else:
+                for opt in action.option_strings:
+                    option_with_args.add(opt)
+
     # 检查 prev_word 是否真的是一个生效的选项参数键
     # 如果 CWORDS 中有 "--" 且该 "--" 位于 prev_word 之前，则它不是生效的选项键，其后输入的也是位置参数
     is_real_option_prev = False
-    if prev_word in [
-        "--region",
-        "--node",
-        "-j",
-        "--jobs",
-        "--max-match",
-        "--skip-add",
-        "--neg",
-    ]:
+    if prev_word in (option_with_args | option_without_args):
         try:
             is_real_option_prev = "--" not in cleaned_cwords or cleaned_cwords.index(
                 "--"
@@ -416,15 +453,12 @@ def autocomplete(
 
     # 3. 如果是 add 命令，我们调用 DanbooruSearch
     is_option_input = prev_word.startswith("-")
+    # 如果前一个词是已知的不带参数的开关选项，其后依旧应该补全位置参数，因此重置 option 标志
+    if prev_word in option_without_args:
+        is_option_input = False
+
     is_real_option_arg_prev = False
     if is_option_input:
-        option_with_args = {
-            "--region",
-            "--node",
-            "-j",
-            "--jobs",
-            "--max-match",
-        }
         is_real_option_arg_prev = prev_word in option_with_args
 
     if is_add_cmd and not is_real_option_arg_prev and not is_option_input:
@@ -438,7 +472,7 @@ def autocomplete(
                     yield s
             else:
                 # 当前词未输入，执行关联联想
-                prompt_tags = _extract_prompt_tags(cleaned_cwords)
+                prompt_tags = _extract_prompt_tags(cleaned_cwords, option_with_args)
                 if not prompt_tags and workflow_loaded:
                     # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
                     raw_tags: List[str] = []

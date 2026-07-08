@@ -480,6 +480,33 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(len(suggestions), 1)
             self.assertEqual(suggestions[0].text, "solo")
 
+    def test_autocomplete_add_prompt_with_neg_flag(self):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--neg",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --neg girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--neg"]),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+            texts = [s.text for s in suggestions]
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(texts[0], "1girl")
+            mock_post.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
