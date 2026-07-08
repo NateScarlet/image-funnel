@@ -837,7 +837,15 @@ class TestLoraWeight(unittest.TestCase):
                 },
             }
         }
-        workflow = {"nodes": []}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "LoraLoader",
+                    "widgets_values": ["my_style.safetensors", 0.8, 0.8],
+                }
+            ]
+        }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.8)
@@ -854,7 +862,16 @@ class TestLoraWeight(unittest.TestCase):
             },
             "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.75}},
         }
-        workflow = {"nodes": []}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "LoraLoader",
+                    "widgets_values": ["my_style.safetensors", 0.75, 0.75],
+                },
+                {"id": "2", "type": "PrimitiveFloat", "widgets_values": [0.75]},
+            ]
+        }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.75)
@@ -866,7 +883,17 @@ class TestLoraWeight(unittest.TestCase):
                 "inputs": {"lora_1": {"lora": "my_style.safetensors", "strength": 0.9}},
             }
         }
-        workflow = {"nodes": []}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "Power Lora Loader (rgthree)",
+                    "widgets_values": [
+                        {"lora": "my_style.safetensors", "strength": 0.9}
+                    ],
+                }
+            ]
+        }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.9)
@@ -884,7 +911,7 @@ class TestLoraWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_lora_weight("my_style")
-        self.assertEqual(weight, 0.6)
+        self.assertIsNone(weight)
 
     def test_get_current_lora_weight_power_lora_workflow(self):
         prompt = {}
@@ -901,7 +928,7 @@ class TestLoraWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_lora_weight("my_style")
-        self.assertEqual(weight, 0.7)
+        self.assertIsNone(weight)
 
     def test_get_current_lora_weight_not_found(self):
         prompt = {}
@@ -2627,8 +2654,50 @@ class TestCoverageGaps(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         pair.modify_lora_weights("my_style", 0.5)
-        self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.5)
+        self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.8)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.8)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][2], 0.8)
+
+    def test_modify_lora_weights_power_lora_disabled_node(self):
+        prompt = {
+            "1": {
+                "class_type": "Power Lora Loader (rgthree)",
+                "inputs": {"lora_1": {"lora": "my_style.safetensors", "strength": 0.8}},
+            }
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "Power Lora Loader (rgthree)",
+                    "mode": 2,
+                    "widgets_values": [
+                        {"lora": "my_style.safetensors", "strength": 0.8}
+                    ],
+                }
+            ]
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.modify_lora_weights("my_style", 0.5)
+        self.assertEqual(prompt["1"]["inputs"]["lora_1"]["strength"], 0.8)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0]["strength"], 0.8)
+
+    def test_modify_lora_weights_no_workflow(self):
+        prompt = {
+            "1": {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "lora_name": "my_style.safetensors",
+                    "strength_model": 0.8,
+                    "strength_clip": 0.8,
+                },
+            }
+        }
+        workflow = {}
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.modify_lora_weights("my_style", 0.5)
+        # 应该直接忽略而不报错
+        self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.8)
 
     def test_get_current_cfg_weight_node_ids_skip(self):
         """node_ids 过滤时跳过不匹配的节点"""

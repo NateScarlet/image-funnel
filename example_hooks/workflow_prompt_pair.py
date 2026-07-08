@@ -17,6 +17,7 @@ import uuid
 import urllib.request
 from dataclasses import dataclass
 from typing import Dict, List, Set, Any, Optional, cast, Tuple, Generator
+from abc import ABC, abstractmethod
 
 from weight_parser import parse_weights, is_relative
 
@@ -115,6 +116,216 @@ def find_terminal_input(
     return (node_id, input_key)
 
 
+class LoraLoaderHandler(ABC):
+    """Lora 节点处理抽象接口"""
+
+    @property
+    @abstractmethod
+    def node_types(self) -> Set[str]:
+        """该处理器能处理的 ComfyUI 节点类型集合"""
+        pass
+
+    @abstractmethod
+    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
+        """从 prompt 节点中提取所有的 Lora 文件名"""
+        pass
+
+    @abstractmethod
+    def get_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+    ) -> Optional[float]:
+        """从节点信息中获取匹配的 Lora 权重"""
+        pass
+
+    @abstractmethod
+    def modify_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+        weight: float,
+    ) -> bool:
+        """同时修改 prompt 和 workflow 中的 Lora 权重，修改成功返回 True"""
+        pass
+
+
+class NativeLoraLoaderHandler(LoraLoaderHandler):
+    """原生 LoraLoader 节点处理器"""
+
+    @property
+    def node_types(self) -> Set[str]:
+        return {"LoraLoader"}
+
+    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
+        lora_name = node_dict.get("inputs", {}).get("lora_name", "")
+        if isinstance(lora_name, str) and lora_name:
+            return [lora_name]
+        return []
+
+    def get_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+    ) -> Optional[float]:
+        # 1. 只从参与运行的 prompt 提取数据
+        if node_info.prompt_data:
+            inputs = node_info.prompt_data.get("inputs", {})
+            lora_name = inputs.get("lora_name", "")
+            if isinstance(lora_name, str) and query_lower in lora_name.lower():
+                for ik in ["strength_model", "strength_clip"]:
+                    if ik in inputs:
+                        src_nid, src_key = find_terminal_input(
+                            pair.prompt, node_info.node_id, ik
+                        )
+                        val = pair.prompt[src_nid]["inputs"].get(src_key)
+                        if isinstance(val, (int, float)):
+                            return float(val)
+        return None
+
+    def modify_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+        weight: float,
+    ) -> bool:
+        # 如果 prompt_data 缺失（说明节点不参与实际执行图），直接跳过不予修改
+        if not node_info.prompt_data:
+            return False
+
+        modified = False
+        inputs = node_info.prompt_data.get("inputs", {})
+        lora_name = inputs.get("lora_name", "")
+        if isinstance(lora_name, str) and query_lower in lora_name.lower():
+            for ik in ["strength_model", "strength_clip"]:
+                if ik in inputs:
+                    src_nid, src_key = find_terminal_input(
+                        pair.prompt, node_info.node_id, ik
+                    )
+                    pair.prompt[src_nid]["inputs"][src_key] = weight
+                    if src_nid != node_info.node_id:
+                        wf_node = pair.get_node_by_id(src_nid)
+                        if wf_node and wf_node.widgets_values:
+                            wf_node.widgets_values[0] = weight
+                    modified = True
+
+            # 只有在修改 prompt 成功后，才同步修改该节点在 workflow 中的 widgets_values
+            if modified:
+                if (
+                    not node_info.widgets_values
+                    or not isinstance(node_info.widgets_values[0], str)
+                    or query_lower not in node_info.widgets_values[0].lower()
+                ):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for LoraLoader node {node_info.node_id}"
+                    )
+                if len(node_info.widgets_values) > 1 and isinstance(
+                    node_info.widgets_values[1], (int, float)
+                ):
+                    node_info.widgets_values[1] = weight
+                if len(node_info.widgets_values) > 2 and isinstance(
+                    node_info.widgets_values[2], (int, float)
+                ):
+                    node_info.widgets_values[2] = weight
+
+        return modified
+
+
+class PowerLoraLoaderHandler(LoraLoaderHandler):
+    """Power Lora Loader (rgthree) 节点处理器"""
+
+    @property
+    def node_types(self) -> Set[str]:
+        return {"Power Lora Loader (rgthree)"}
+
+    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
+        names: List[str] = []
+        for k, v in node_dict.get("inputs", {}).items():
+            if k.startswith("lora_") and isinstance(v, dict):
+                v_dict = cast(Dict[str, Any], v)
+                lora_path = v_dict.get("lora", "")
+                if isinstance(lora_path, str) and lora_path:
+                    names.append(lora_path)
+        return names
+
+    def get_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+    ) -> Optional[float]:
+        # 1. 只从参与运行的 prompt 提取数据
+        if node_info.prompt_data:
+            inputs = node_info.prompt_data.get("inputs", {})
+            for k, v in inputs.items():
+                if k.startswith("lora_") and isinstance(v, dict):
+                    v_dict = cast(Dict[str, Any], v)
+                    lora_path = v_dict.get("lora", "")
+                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
+                        strength = v_dict.get("strength")
+                        if isinstance(strength, (int, float)):
+                            return float(strength)
+        return None
+
+    def modify_weight(
+        self,
+        node_info: NodeInfo,
+        pair: "WorkflowPromptPair",
+        query_lower: str,
+        weight: float,
+    ) -> bool:
+        # 如果 prompt_data 缺失（说明节点不参与实际执行图），直接跳过不予修改
+        if not node_info.prompt_data:
+            return False
+
+        modified = False
+        inputs = node_info.prompt_data.get("inputs", {})
+        modified_loras: List[str] = []
+        for k, v in list(inputs.items()):
+            if k.startswith("lora_") and isinstance(v, dict):
+                v_dict = cast(Dict[str, Any], v)
+                lora_path = v_dict.get("lora", "")
+                if isinstance(lora_path, str) and query_lower in lora_path.lower():
+                    v_dict["strength"] = weight
+                    modified_loras.append(lora_path)
+                    modified = True
+
+        # 只有在修改 prompt 成功后，才同步修改该节点在 workflow 中的 widgets_values
+        if modified:
+            if not node_info.widgets_values:
+                raise ValueError(
+                    f"Workflow widgets values are missing for rgthree node {node_info.node_id}"
+                )
+            for ml in modified_loras:
+                slot_found = False
+                for val in node_info.widgets_values:
+                    if isinstance(val, dict) and "lora" in val:
+                        val_dict = cast(Dict[str, Any], val)
+                        lora_path = val_dict.get("lora", "")
+                        if (
+                            isinstance(lora_path, str)
+                            and ml.lower() in lora_path.lower()
+                        ):
+                            val_dict["strength"] = weight
+                            slot_found = True
+                if not slot_found:
+                    raise ValueError(
+                        f"Workflow Lora slot for '{ml}' is out of sync with prompt in rgthree node {node_info.node_id}"
+                    )
+
+        return modified
+
+
+LORA_HANDLERS: List[LoraLoaderHandler] = [
+    NativeLoraLoaderHandler(),
+    PowerLoraLoaderHandler(),
+]
+
+
 class WorkflowPromptPair:
     """封装 ComfyUI workflow 和 prompt 配对操作"""
 
@@ -136,8 +347,7 @@ class WorkflowPromptPair:
         # 1. 收集工作流顶层节点
         for node in self.workflow.get("nodes", []):
             node_id_str = str(node.get("id"))
-            if is_node_disabled(node):
-                continue
+            is_disabled = is_node_disabled(node)
 
             node_type = node.get("type", "")
             widgets_values_raw: Any = node.get("widgets_values")
@@ -156,7 +366,7 @@ class WorkflowPromptPair:
                 prompt_data=prompt_data,
                 node_type=node_type,
                 class_type=class_type,
-                is_disabled=False,  # 已过滤 disabled 节点
+                is_disabled=is_disabled,
                 is_subgraph=False,
                 subgraph_id=None,
                 widgets_values=widgets_values,
@@ -166,7 +376,7 @@ class WorkflowPromptPair:
             self._nodes_cache[node_id_str] = node_info
 
             # 检查是否是种子节点
-            if widgets_values:
+            if not is_disabled and widgets_values:
                 for idx in range(len(widgets_values) - 1):
                     val = widgets_values[idx]
                     val_next = widgets_values[idx + 1]
@@ -180,7 +390,7 @@ class WorkflowPromptPair:
                         break
 
             # 检查是否是文件名节点（带日期模板）
-            if widgets_values:
+            if not is_disabled and widgets_values:
                 for val in widgets_values:
                     if isinstance(val, str) and "%date:" in val:
                         self._date_filename_nodes.append(node_info)
@@ -194,8 +404,7 @@ class WorkflowPromptPair:
             subgraph_id = subgraph.get("id")
             for node in subgraph.get("nodes", []):
                 child_node_id_str = str(node.get("id"))
-                if is_node_disabled(node):
-                    continue
+                is_disabled = is_node_disabled(node)
 
                 node_type = node.get("type", "")
                 widgets_values_raw: Any = node.get("widgets_values")
@@ -215,7 +424,7 @@ class WorkflowPromptPair:
                     prompt_data=prompt_data,
                     node_type=node_type,
                     class_type=class_type,
-                    is_disabled=False,
+                    is_disabled=is_disabled,
                     is_subgraph=True,
                     subgraph_id=subgraph_id,
                     widgets_values=widgets_values,
@@ -227,7 +436,7 @@ class WorkflowPromptPair:
                 )
 
                 # 检查是否是种子节点
-                if widgets_values:
+                if not is_disabled and widgets_values:
                     for idx in range(len(widgets_values) - 1):
                         val = widgets_values[idx]
                         val_next = widgets_values[idx + 1]
@@ -687,28 +896,15 @@ class WorkflowPromptPair:
         names: List[str] = []
         seen: Set[str] = set()
         for node in prompt.values():
-            node_dict: Dict[str, Any] = cast("Dict[str, Any]", node)
-            class_type: str = node_dict.get("class_type", "")
-
-            if class_type == "LoraLoader":
-                lora_name: Any = node_dict.get("inputs", {}).get("lora_name", "")
-                if isinstance(lora_name, str) and lora_name and lora_name not in seen:
-                    seen.add(lora_name)
-                    names.append(lora_name)
-
-            elif class_type == "Power Lora Loader (rgthree)":
-                for k, v in node_dict.get("inputs", {}).items():
-                    if k.startswith("lora_") and isinstance(v, dict):
-                        v_dict: Dict[str, Any] = cast("Dict[str, Any]", v)
-                        lora_path: Any = v_dict.get("lora", "")
-                        if (
-                            isinstance(lora_path, str)
-                            and lora_path
-                            and lora_path not in seen
-                        ):
-                            seen.add(lora_path)
-                            names.append(lora_path)
-
+            node_dict = cast(Dict[str, Any], node)
+            class_type = node_dict.get("class_type", "")
+            for handler in LORA_HANDLERS:
+                if class_type in handler.node_types:
+                    for name in handler.collect_names(node_dict):
+                        if name and name not in seen:
+                            seen.add(name)
+                            names.append(name)
+                    break
         return names
 
     def get_current_lora_weight(self, lora_name_query: str) -> Optional[float]:
@@ -718,57 +914,19 @@ class WorkflowPromptPair:
         """
         query_lower = lora_name_query.lower()
 
-        # 1. 从 prompt (API 结构) 中查找
-        for nid, node in self.prompt.items():
-            node_dict = cast(Dict[str, Any], node)
-            class_type = node_dict.get("class_type", "")
-            if class_type == "LoraLoader":
-                inputs = node_dict.get("inputs", {})
-                lora_name = inputs.get("lora_name", "")
-                if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                    for ik in ["strength_model", "strength_clip"]:
-                        if ik in inputs:
-                            src_nid, src_key = find_terminal_input(self.prompt, nid, ik)
-                            val = self.prompt[src_nid]["inputs"].get(src_key)
-                            if isinstance(val, (int, float)):
-                                return float(val)
-            elif class_type == "Power Lora Loader (rgthree)":
-                inputs = node_dict.get("inputs", {})
-                for k, v in inputs.items():
-                    if k.startswith("lora_") and isinstance(v, dict):
-                        v_dict = cast(Dict[str, Any], v)
-                        lora_path = v_dict.get("lora", "")
-                        if (
-                            isinstance(lora_path, str)
-                            and query_lower in lora_path.lower()
-                        ):
-                            strength = v_dict.get("strength")
-                            if isinstance(strength, (int, float)):
-                                return float(strength)
-
-        # 2. 从 workflow (UI 结构) 中查找
-        for node in self.workflow.get("nodes", []):
-            if is_node_disabled(node):
+        # 优先在已分析节点的缓存中查找
+        for node_info in self._nodes_cache.values():
+            if node_info.is_disabled:
                 continue
-            node_type = node.get("type", "")
-            widgets_values = node.get("widgets_values")
-            if not isinstance(widgets_values, list):
-                continue
-            wv = cast(List[Any], widgets_values)
-
-            if node_type == "LoraLoader":
-                if wv and isinstance(wv[0], str) and query_lower in wv[0].lower():
-                    if len(wv) > 1 and isinstance(wv[1], (int, float)):
-                        return float(wv[1])
-            elif node_type == "Power Lora Loader (rgthree)":
-                for val in wv:
-                    if isinstance(val, dict) and "lora" in val:
-                        val_dict = cast(Dict[str, Any], val)
-                        if query_lower in str(val_dict.get("lora", "")).lower():
-                            strength = val_dict.get("strength")
-                            if isinstance(strength, (int, float)):
-                                return float(strength)
-
+            for handler in LORA_HANDLERS:
+                if (
+                    node_info.node_type in handler.node_types
+                    or node_info.class_type in handler.node_types
+                ):
+                    val = handler.get_weight(node_info, self, query_lower)
+                    if val is not None:
+                        return val
+                    break
         return None
 
     def modify_lora_weights(self, lora_name_query: str, weight: float) -> None:
@@ -777,61 +935,17 @@ class WorkflowPromptPair:
         """
         query_lower = lora_name_query.lower()
 
-        # 修改 prompt 中的 LoraLoader
-        for nid, node in self.prompt.items():
-            node_dict = cast(Dict[str, Any], node)
-            class_type = node_dict.get("class_type", "")
-            if class_type == "LoraLoader":
-                inputs = node_dict.get("inputs", {})
-                lora_name = inputs.get("lora_name", "")
-                if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                    for ik in ["strength_model", "strength_clip"]:
-                        if ik in inputs:
-                            src_nid, src_key = find_terminal_input(self.prompt, nid, ik)
-                            self.prompt[src_nid]["inputs"][src_key] = weight
-                            # 同步更新 workflow 中对应 Primitive 节点的 widgets_values
-                            if src_nid != nid:
-                                wf_node = self.get_node_by_id(src_nid)
-                                if wf_node and wf_node.widgets_values:
-                                    wf_node.widgets_values[0] = weight
-            elif class_type == "Power Lora Loader (rgthree)":
-                inputs = node_dict.get("inputs", {})
-                for k, v in list(inputs.items()):
-                    if k.startswith("lora_") and isinstance(v, dict):
-                        v_dict = cast(Dict[str, Any], v)
-                        lora_path = v_dict.get("lora", "")
-                        if (
-                            isinstance(lora_path, str)
-                            and query_lower in lora_path.lower()
-                        ):
-                            v_dict["strength"] = weight
-
-        # 修改 workflow 中的节点
+        # 优先使用 _nodes_cache 进行修改
         for node_info in self._nodes_cache.values():
             if node_info.is_disabled:
                 continue
-
-            if node_info.node_type == "LoraLoader":
-                wv = node_info.widgets_values
-                if wv and isinstance(wv[0], str) and query_lower in wv[0].lower():
-                    # strength_model 和 strength_clip 通常在 index 1 和 2
-                    if len(wv) > 1 and isinstance(wv[1], (int, float)):
-                        wv[1] = weight
-                    if len(wv) > 2 and isinstance(wv[2], (int, float)):
-                        wv[2] = weight
-
-            elif node_info.node_type == "Power Lora Loader (rgthree)":
-                wv = node_info.widgets_values
-                if wv:
-                    for val in wv:
-                        if isinstance(val, dict) and "lora" in val:
-                            val_dict = cast(Dict[str, Any], val)
-                            lora_path = val_dict.get("lora", "")
-                            if (
-                                isinstance(lora_path, str)
-                                and query_lower in lora_path.lower()
-                            ):
-                                val_dict["strength"] = weight
+            for handler in LORA_HANDLERS:
+                if (
+                    node_info.node_type in handler.node_types
+                    or node_info.class_type in handler.node_types
+                ):
+                    handler.modify_weight(node_info, self, query_lower, weight)
+                    break
 
     def get_current_cfg_weight(
         self, node_ids: Optional[List[str]] = None
