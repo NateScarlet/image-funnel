@@ -79,6 +79,13 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 
 	err = cmd.Run()
 	if err != nil {
+		if ctx.Err() != nil {
+			r.logger.Debug("autocomplete command canceled by context",
+				zap.String("hook_id", targetHook.ID),
+				zap.Error(ctx.Err()),
+			)
+			return nil, ctx.Err()
+		}
 		r.logger.Warn("autocomplete command failed",
 			zap.String("hook_id", targetHook.ID),
 			zap.Error(err),

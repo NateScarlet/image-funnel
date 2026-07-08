@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -642,4 +643,102 @@ name = "strict"
 	for _, c := range configs {
 		assert.NotEqual(t, "strict-test", c.ID)
 	}
+}
+
+func TestRunner_Autocomplete_Cancel(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-auto-cancel-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	pidFile := filepath.Join(tempDir, "pid.txt")
+
+	// 根据操作系统，指定一个能将 PID 写入文件并延迟退出的命令
+	var cmdStr string
+	if filepath.Separator == '\\' {
+		// Windows: 使用 powershell 写入当前 PID 并休眠 5 秒
+		cmdStr = fmt.Sprintf(`powershell -Command "$PID | Out-File -FilePath '%s' -Encoding utf8; Start-Sleep -Seconds 5"`, strings.ReplaceAll(pidFile, "\\", "\\\\"))
+	} else {
+		// Unix: 写入当前 PID 到文件并休眠 5 秒
+		cmdStr = fmt.Sprintf(`sh -c "echo $$ > '%s' && sleep 5"`, pidFile)
+	}
+
+	tomlContent := fmt.Sprintf(`
+id = "auto-cancel-test"
+name = "自动补全取消测试"
+command = "echo fallback"
+
+[directive]
+name = "test"
+
+[directive.autocomplete]
+command = '''%s'''
+`, cmdStr)
+
+	tomlPath := filepath.Join(hooksDir, "autocomplete_cancel.toml")
+	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
+	defer runner.Close()
+
+	// 启动一个会被取消的 context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 模拟在运行一小段时间后 cancel 掉（等子进程起来并把 PID 写入文件）
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		cancel()
+	}()
+
+	hookID := scalar.ToID("hk:auto-cancel-test")
+	start := time.Now()
+	suggestions, err := runner.Autocomplete(ctx, hookID, "", "", "")
+	duration := time.Since(start)
+
+	// 验证：
+	// 1. 应该返回 context.Canceled 错误
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, suggestions)
+
+	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时大约在 300ms + 几毫秒内，绝对小于 2 秒
+	assert.Less(t, duration, 2*time.Second, "cancellation should stop execution within graceful period")
+
+	// 3. 验证进程是否已经被真的关闭了
+	pidBytes, err := os.ReadFile(pidFile)
+	assert.NoError(t, err)
+	pidStr := strings.TrimSpace(string(pidBytes))
+	pidStr = strings.TrimPrefix(pidStr, "\ufeff") // 剔除可能存在的 UTF-8 BOM 头
+	var pid int
+	_, err = fmt.Sscanf(pidStr, "%d", &pid)
+	assert.NoError(t, err)
+	assert.Greater(t, pid, 0)
+
+	// 等待 1.2 秒（因为优雅期为 1.0 秒，强杀是异步触发的，所以 1.2 秒后子进程树必须全部死亡）
+	time.Sleep(1200 * time.Millisecond)
+
+	// 检测这个 PID 是否已在系统上消失
+	var exists bool
+	if filepath.Separator == '\\' {
+		// Windows: 使用 tasklist /FI "PID eq <pid>" 检测
+		chkCmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
+		output, err := chkCmd.Output()
+		if err == nil && strings.Contains(string(output), pidStr) {
+			exists = true
+		}
+	} else {
+		// Unix: 使用 ps -p <pid> 检测
+		chkCmd := exec.Command("ps", "-p", pidStr)
+		if err := chkCmd.Run(); err == nil {
+			exists = true
+		}
+	}
+
+	assert.False(t, exists, "spawned process should be terminated after cancel")
 }
