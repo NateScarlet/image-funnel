@@ -193,7 +193,7 @@ type HookAutocompleteInput struct {
 	// 钩子 ID
 	HookID scalar.ID `json:"hookId"`
 	// 笔记 ID
-	NoteID scalar.ID `json:"noteId"`
+	NoteID *scalar.ID `json:"noteId,omitempty"`
 	// 光标前的当前行完整文本
 	LinePrefix string `json:"linePrefix"`
 	// 当前正在输入的词

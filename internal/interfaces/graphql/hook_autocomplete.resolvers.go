@@ -8,14 +8,20 @@ package graphql
 import (
 	"context"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // HookAutocomplete is the resolver for the hookAutocomplete field.
 func (r *queryResolver) HookAutocomplete(ctx context.Context, input HookAutocompleteInput) ([]*shared.AutocompleteSuggestionDTO, error) {
-	note, err := r.app.Note(ctx, input.NoteID)
-	if err != nil {
-		return nil, err
+	noteID := util.UnwrapPointer(input.NoteID)
+	var noteRelPath string
+	if !noteID.IsZero() {
+		note, err := r.app.Note(ctx, noteID)
+		if err != nil {
+			return nil, err
+		}
+		noteRelPath = note.RelPath
 	}
 
-	return r.app.Autocomplete(ctx, input.HookID, note.RelPath, input.LinePrefix, input.Query)
+	return r.app.Autocomplete(ctx, input.HookID, noteRelPath, input.LinePrefix, input.Query)
 }

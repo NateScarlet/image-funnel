@@ -157,7 +157,7 @@ export type HookAutocompleteInput = {
   /** 光标前的当前行完整文本 */
   linePrefix: Scalars['String']['input'];
   /** 笔记 ID */
-  noteId: Scalars['ID']['input'];
+  noteId?: InputMaybe<Scalars['ID']['input']>;
   /** 当前正在输入的词 */
   query: Scalars['String']['input'];
 };

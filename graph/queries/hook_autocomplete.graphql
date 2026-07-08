@@ -3,7 +3,8 @@ input HookAutocompleteInput {
   "钩子 ID"
   hookId: ID!
   "笔记 ID"
-  noteId: ID!
+  noteId: ID
+
   "光标前的当前行完整文本"
   linePrefix: String!
   "当前正在输入的词"

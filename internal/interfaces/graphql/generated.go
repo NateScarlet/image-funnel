@@ -3025,7 +3025,8 @@ input HookAutocompleteInput {
   "钩子 ID"
   hookId: ID!
   "笔记 ID"
-  noteId: ID!
+  noteId: ID
+
   "光标前的当前行完整文本"
   linePrefix: String!
   "当前正在输入的词"
@@ -15712,7 +15713,7 @@ func (ec *executionContext) unmarshalInputHookAutocompleteInput(ctx context.Cont
 			it.HookID = data
 		case "noteId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noteId"))
-			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			data, err := ec.unmarshalOID2ᚖmainᚋinternalᚋscalarᚐID(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -21265,13 +21266,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

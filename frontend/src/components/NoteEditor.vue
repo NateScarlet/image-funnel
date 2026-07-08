@@ -558,8 +558,9 @@ async function executeAutocomplete() {
       variables: {
         input: {
           hookId,
-          noteId: props.noteId ?? "",
+          noteId: props.noteId,
           linePrefix: getLinePrefix(),
+
           query: state.query,
         },
       },
