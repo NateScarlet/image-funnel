@@ -2,7 +2,9 @@ package device
 
 import (
 	"context"
+	"errors"
 	"main/internal/apperror"
+	"main/internal/domain/device"
 	"main/internal/tokenrw"
 	"time"
 
@@ -35,9 +37,18 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 		return "", "", time.Time{}, time.Time{}, apperror.New("UNAUTHORIZED", "device deleted", "设备已被删除")
 	}
 
-	// 校验成功且设备存在后，吊销当前刷新令牌，防止此令牌被二次重放攻击
-	if revokeErr := h.tokenSource.RevokeRefreshToken(ctx, rawToken); revokeErr != nil {
-		h.logger.Warn("failed to revoke refresh token", zap.Error(revokeErr))
+	// 准备撤销刷新令牌，防止此令牌被二次重放攻击
+	revokeFn, err := h.service.PrepareRevoke(ctx, t.JTI(), t.Expire())
+	if err != nil {
+		forget()
+		if errors.Is(err, device.ErrTokenAlreadyRevoked) {
+			return "", "", time.Time{}, time.Time{}, apperror.New(
+				"INVALID_TOKEN",
+				"refresh token has been revoked",
+				"刷新令牌已被吊销",
+			)
+		}
+		return "", "", time.Time{}, time.Time{}, err
 	}
 
 	// 签发新令牌对
@@ -49,6 +60,19 @@ func (h *Handler) RefreshToken(ctx context.Context, tokenStr string) (accessToke
 	refreshToken, err := h.tokenSource.NewRefreshToken(ctx, deviceID)
 	if err != nil {
 		forget()
+		return "", "", time.Time{}, time.Time{}, err
+	}
+
+	// 正式吊销刷新令牌
+	if err := revokeFn(); err != nil {
+		forget()
+		if errors.Is(err, device.ErrTokenAlreadyRevoked) {
+			return "", "", time.Time{}, time.Time{}, apperror.New(
+				"INVALID_TOKEN",
+				"refresh token has been revoked",
+				"刷新令牌已被吊销",
+			)
+		}
 		return "", "", time.Time{}, time.Time{}, err
 	}
 

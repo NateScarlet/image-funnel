@@ -22,7 +22,6 @@ type TokenSource struct {
 	refreshTokenLife time.Duration
 	secret           []byte
 	signingMethod    jwt.SigningMethod
-	revocationList   device.RevocationList
 }
 
 // NewTokenSource 构造一个新的 TokenSource 实例
@@ -30,7 +29,6 @@ func NewTokenSource(
 	accessTokenLife time.Duration,
 	refreshTokenLife time.Duration,
 	secret []byte,
-	revocationList device.RevocationList,
 ) *TokenSource {
 	if secret == nil {
 		panic("secret is required")
@@ -40,7 +38,6 @@ func NewTokenSource(
 		refreshTokenLife: refreshTokenLife,
 		secret:           secret,
 		signingMethod:    jwt.SigningMethodHS256,
-		revocationList:   revocationList,
 	}
 }
 
@@ -207,21 +204,6 @@ func (ts *TokenSource) VerifyRefreshToken(ctx context.Context, rawToken string) 
 		return nil, err
 	}
 
-	// 检查吊销列表
-	if ts.revocationList != nil && claims.ID != "" {
-		revoked, err := ts.revocationList.IsRevoked(ctx, claims.ID)
-		if err != nil {
-			return nil, err
-		}
-		if revoked {
-			return nil, apperror.New(
-				"INVALID_TOKEN",
-				"refresh token has been revoked",
-				"刷新令牌已被吊销",
-			)
-		}
-	}
-
 	return token{
 		str:     rawToken,
 		userID:  deviceID,
@@ -229,31 +211,4 @@ func (ts *TokenSource) VerifyRefreshToken(ctx context.Context, rawToken string) 
 		issueAt: claims.IssuedAt.Time,
 		jti:     claims.ID,
 	}, nil
-}
-
-// RevokeRefreshToken 吊销指定的刷新令牌，将其 JTI 加入吊销列表
-func (ts *TokenSource) RevokeRefreshToken(ctx context.Context, rawToken string) error {
-	var claims jwt.RegisteredClaims
-	_, err := jwt.ParseWithClaims(
-		rawToken,
-		&claims,
-		func(t *jwt.Token) (interface{}, error) {
-			if t.Method.Alg() != ts.signingMethod.Alg() {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Method.Alg())
-			}
-			return ts.secret, nil
-		},
-		// 忽略过期校验，即使令牌已过期也应能加入吊销列表
-		jwt.WithoutClaimsValidation(),
-	)
-	if err != nil {
-		// 无法解析的令牌无需吊销
-		return nil
-	}
-
-	if ts.revocationList == nil || claims.ID == "" {
-		return nil
-	}
-
-	return ts.revocationList.Add(ctx, claims.ID, claims.ExpiresAt.Time)
 }

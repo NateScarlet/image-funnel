@@ -128,7 +128,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to create cached revocation list", zap.Error(err))
 	}
-	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey), revocationList)
+	tokenSource := jwt.NewTokenSource(10*time.Minute, 30*24*time.Hour, []byte(cfg.SecretKey))
 
 	var dirAnalyzer domdirectory.Analyzer = singleFlightDirAnalyzer
 	var statsCache *inmem.DirectoryStatsCache

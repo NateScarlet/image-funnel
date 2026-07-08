@@ -169,32 +169,42 @@ func NewCachedRevocationList(ctx context.Context, repo *RevocationRepository) (*
 	return c, nil
 }
 
-// Add 将 JTI 加入吊销列表，持久化并更新内存缓存，同时丢弃已过期条目
-func (c *CachedRevocationList) Add(ctx context.Context, jti string, expiresAt time.Time) error {
-	// 先持久化到磁盘
-	if err := c.repo.Add(ctx, jti, expiresAt); err != nil {
-		return err
-	}
-
-	// 更新内存缓存，同时清理已过期条目
-	c.mu.Lock()
-	c.entries[jti] = expiresAt
-	now := time.Now()
-	for existingJTI, exp := range c.entries {
-		if !now.Before(exp) {
-			delete(c.entries, existingJTI)
-		}
-	}
-	c.mu.Unlock()
-	return nil
-}
-
-// IsRevoked 从内存缓存中 O(1) 检查 JTI 是否已吊销
-func (c *CachedRevocationList) IsRevoked(ctx context.Context, jti string) (bool, error) {
+// PrepareRevoke 原子性地两步提交撤销一个令牌。
+// 如果令牌已被撤销（已存在），返回 device.ErrTokenAlreadyRevoked。
+func (c *CachedRevocationList) PrepareRevoke(ctx context.Context, id string, expiresAt time.Time) (device.RevokeFunc, error) {
 	c.mu.RLock()
-	_, ok := c.entries[jti]
+	_, exists := c.entries[id]
 	c.mu.RUnlock()
-	return ok, nil
+
+	if exists {
+		return nil, device.ErrTokenAlreadyRevoked
+	}
+
+	// 返回正式提交闭包
+	return func() error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+
+		// 正式提交时，双重检查判断在此期间是否已被他人正式吊销
+		if _, exists := c.entries[id]; exists {
+			return device.ErrTokenAlreadyRevoked
+		}
+
+		// 持久化到磁盘
+		if err := c.repo.Add(ctx, id, expiresAt); err != nil {
+			return err
+		}
+
+		// 更新内存缓存，同时清理已过期条目
+		c.entries[id] = expiresAt
+		now := time.Now()
+		for existingID, exp := range c.entries {
+			if !now.Before(exp) {
+				delete(c.entries, existingID)
+			}
+		}
+		return nil
+	}, nil
 }
 
 // 编译时接口检查，确保 CachedRevocationList 完整实现了 device.RevocationList 接口

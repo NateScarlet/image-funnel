@@ -25,8 +25,6 @@ type TokenSource interface {
 	NewRefreshToken(ctx context.Context, deviceID scalar.ID) (Token, error)
 	// VerifyAccessToken 校验访问令牌，仅验证签名与有效期
 	VerifyAccessToken(ctx context.Context, rawToken string) (Token, error)
-	// VerifyRefreshToken 校验刷新令牌，验证签名、有效期并检查吊销列表
+	// VerifyRefreshToken 校验刷新令牌，验证签名与有效期
 	VerifyRefreshToken(ctx context.Context, rawToken string) (Token, error)
-	// RevokeRefreshToken 吊销指定的刷新令牌，防止重放攻击
-	RevokeRefreshToken(ctx context.Context, rawToken string) error
 }
