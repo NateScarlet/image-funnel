@@ -184,4 +184,83 @@ describe("NoteEditor", () => {
     // 验证选区 `<region>` 被替换为 `positive`，而不是 `positive<region>`
     expect(wrapper.find("textarea").element.value).toBe("/add --region positive");
   });
+
+  test("uses document.execCommand to insert suggestion and preserve undo history", async () => {
+    // 手动在 document 上挂载 execCommand，因为 JSDOM 默认不提供该方法
+    const mockExec = vi.fn((commandId: string, _showUI: boolean, value?: unknown) => {
+      if (commandId === "insertText" && typeof value === "string") {
+        const textarea = wrapper.find("textarea").element;
+        const text = textarea.value;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = text.slice(0, start) + value + text.slice(end);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      }
+      return false;
+    });
+    (document as unknown as Record<string, unknown>).execCommand = mockExec;
+
+    try {
+      createWrapper();
+      const el = wrapper.find("textarea");
+      await el.trigger("focus");
+      await el.setValue("/ad");
+      el.element.selectionStart = 3;
+      el.element.selectionEnd = 3;
+      el.element.dispatchEvent(new Event("keyup", { bubbles: true }));
+      await nextTick();
+
+      // 点击弹出的第一个建议 (/adjust)
+      const menu = getSuggestionMenu();
+      expect(menu).not.toBeNull();
+      const firstButton = menu?.querySelector("button");
+      expect(firstButton).not.toBeNull();
+      firstButton?.click();
+      await nextTick();
+
+      // 验证 execCommand 被正确调用以插入文本
+      expect(mockExec).toHaveBeenCalledWith("insertText", false, "adjust ");
+      
+      // 验证内容正确被修改了
+      expect(el.element.value).toBe("/adjust ");
+    } finally {
+      delete (document as unknown as Record<string, unknown>).execCommand;
+    }
+  });
+
+  test("uses document.execCommand to insert directive", async () => {
+    const mockExec = vi.fn((commandId: string, _showUI: boolean, value?: unknown) => {
+      if (commandId === "insertText" && typeof value === "string") {
+        const textarea = wrapper.find("textarea").element;
+        const text = textarea.value;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.value = text.slice(0, start) + value + text.slice(end);
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        return true;
+      }
+      return false;
+    });
+    (document as unknown as Record<string, unknown>).execCommand = mockExec;
+
+    try {
+      createWrapper();
+      const el = wrapper.find("textarea");
+      await el.trigger("focus");
+
+      // 触发常用指令插入按钮
+      const directiveButtons = wrapper.findAll("button[title]");
+      expect(directiveButtons.length).toBeGreaterThan(0);
+      
+      // 点击第一个快捷指令 /adjust
+      await directiveButtons[0].trigger("click");
+      await nextTick();
+
+      expect(mockExec).toHaveBeenCalledWith("insertText", false, "/adjust ");
+      expect(el.element.value).toBe("/adjust ");
+    } finally {
+      delete (document as unknown as Record<string, unknown>).execCommand;
+    }
+  });
 });

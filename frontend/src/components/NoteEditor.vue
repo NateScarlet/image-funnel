@@ -603,11 +603,8 @@ function handleSelectSuggestion(sug: Suggestion) {
   if (!el || !autocompleteState.value) return;
 
   const text = model.value;
-  const start = el.selectionStart;
   const triggerIdx = autocompleteState.value.triggerIndex;
-
-  const before = text.slice(0, triggerIdx);
-  const after = text.slice(el.selectionEnd);
+  const endIdx = el.selectionEnd;
 
   let textToInsert = sug.text;
   if (autocompleteState.value.type === "name") {
@@ -616,7 +613,26 @@ function handleSelectSuggestion(sug: Suggestion) {
     textToInsert = `${sug.text} `;
   }
 
-  model.value = before + textToInsert + after;
+  // 聚焦并选中待替换的内容范围，以便 execCommand 将该范围替换
+  el.focus();
+  el.setSelectionRange(triggerIdx, endIdx);
+
+  // 使用 insertText 命令插入文本，这能被浏览器原生的撤销历史捕获。
+  // 若当前环境不支持该命令（例如 jsdom 测试环境或某些旧浏览器），则安全降级到直接修改 model.value。
+  let inserted = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      inserted = document.execCommand("insertText", false, textToInsert);
+    } catch {
+      // 忽略可能的异常并由 fallback 处理
+    }
+  }
+
+  if (!inserted) {
+    const before = text.slice(0, triggerIdx);
+    const after = text.slice(endIdx);
+    model.value = before + textToInsert + after;
+  }
 
   let newSelectionStart = triggerIdx + textToInsert.length;
   let newSelectionEnd = newSelectionStart;
@@ -649,15 +665,34 @@ function insertDirective(dirName: string) {
 
   const text = model.value;
   const start = el.selectionStart;
+  const end = el.selectionEnd;
 
   const before = text.slice(0, start);
-  const after = text.slice(start);
+  const after = text.slice(end);
 
   const needsNewline = before.length > 0 && !/(?:^|\n)[ \t]*$/.test(before);
   const prefix = needsNewline ? "\n" : "";
+  const textToInsert = prefix + `/${dirName} `;
 
-  model.value = before + prefix + `/${dirName} ` + after;
-  const newCursorPos = start + prefix.length + dirName.length + 2;
+  el.focus();
+  el.setSelectionRange(start, end);
+
+  // 使用 insertText 命令插入文本，以支持快捷指令插入的撤销操作。
+  // 若不支持该指令则安全降级到修改 model.value。
+  let inserted = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      inserted = document.execCommand("insertText", false, textToInsert);
+    } catch {
+      // 忽略可能出现的异常并交由 fallback 处理
+    }
+  }
+
+  if (!inserted) {
+    model.value = before + textToInsert + after;
+  }
+
+  const newCursorPos = start + textToInsert.length;
 
   nextTick(() => {
     el.focus();
