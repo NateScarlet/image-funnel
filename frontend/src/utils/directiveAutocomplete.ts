@@ -4,6 +4,7 @@ export interface OptionInfo {
   placeholder?: string; // 选项参数的占位符，例如 '<region>'
   raw: string; // 原始字符串，例如 '--region <region>' 或 '-u'
   description?: string; // 该选项的具体说明
+  repeatable?: boolean; // 该选项是否可多次指定，即语法定义中跟随 '...'
 }
 
 export interface PatternToken {
@@ -72,6 +73,7 @@ export function parseUsage(usage: string): DirectiveRule[] {
         let optMatch;
 
         while ((optMatch = optRegex.exec(remaining)) !== null) {
+          const matchedStr = optMatch[0];
           const inner = optMatch[1].trim();
           const parts = inner.split(/\s+/);
           if (parts.length === 0) continue;
@@ -86,6 +88,7 @@ export function parseUsage(usage: string): DirectiveRule[] {
             name,
             placeholder,
             raw: inner,
+            repeatable: matchedStr.endsWith("..."),
           });
         }
 
@@ -303,9 +306,8 @@ export function getSuggestionsForRules(
           opt.name.toLowerCase().includes(q) ||
           (opt.shortName && opt.shortName.toLowerCase().includes(q));
         if (matchesOption) {
-          // 检查该选项是否已经存在于 confirmedTokens 中（如果是可多次指定的如 --region，允许再次出现）
-          const isRepeatable =
-            opt.raw.includes("...") || opt.name === "--region" || opt.name === "--node";
+          // 检查该选项是否已经存在于 confirmedTokens 中（根据语法规则判断是否为可多次指定选项，若是则允许再次出现）
+          const isRepeatable = !!opt.repeatable;
 
           const hasAlready =
             confirmedTokens.includes(opt.name) ||
@@ -360,8 +362,7 @@ export function getSuggestionsForRules(
 
       // 我们也同时匹配符合 query 的选项（例如用户输入 'reg' 或 '-j' 时，匹配出 '--region <region>'）
       for (const opt of rule.options) {
-        const isRepeatable =
-          opt.raw.includes("...") || opt.name === "--region" || opt.name === "--node";
+        const isRepeatable = !!opt.repeatable;
 
         const hasAlready =
           confirmedTokens.includes(opt.name) ||

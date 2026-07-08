@@ -47,6 +47,10 @@ describe("directiveAutocomplete", () => {
     expect(regionOpt).toBeDefined();
     expect(regionOpt?.placeholder).toBe("<region>");
     expect(regionOpt?.description).toBe("指定提示词目标区域，可多次指定");
+    expect(regionOpt?.repeatable).toBe(true);
+
+    const jobsOptOfPrompt = skipAddRule.options.find((o) => o.name === "--jobs");
+    expect(jobsOptOfPrompt?.repeatable).toBe(false);
 
     const negOpt = skipAddRule.options.find((o) => o.name === "--neg");
     expect(negOpt).toBeDefined();
@@ -130,6 +134,18 @@ describe("directiveAutocomplete", () => {
     expect(regSugs).toHaveLength(1);
     expect(regSugs[0].text).toBe("--region <region>");
     expect(regSugs[0].placeholder).toBe("<region>");
+
+    // 8. 测试已存在可重复选项时，依然会推荐该选项
+    const sugs8 = getSuggestionsForRules(
+      rules,
+      ["prompt", "name", "weight", "--region", "pos"],
+      "--re",
+    );
+    expect(sugs8.map((s) => s.text)).toContain("--region <region>");
+
+    // 9. 测试已存在不可重复选项时，不再推荐该选项
+    const sugs9 = getSuggestionsForRules(rules, ["prompt", "name", "weight", "--neg"], "--ne");
+    expect(sugs9.map((s) => s.text)).not.toContain("--neg");
   });
 
   test("parseUsage with subcommand-specific docs", () => {
@@ -168,4 +184,3 @@ describe("directiveAutocomplete", () => {
     expect(cfgRule.generalDescription).toContain("通用说明段落一。");
   });
 });
-
