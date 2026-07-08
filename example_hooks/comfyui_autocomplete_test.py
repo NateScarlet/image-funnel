@@ -204,6 +204,32 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(len(suggestions), 1)
             self.assertEqual(texts[0], "-a_cute_girl")
 
+    def test_autocomplete_adjust_lora_no_prompt_or_danbooru(self):
+        mock_image = self._get_mock_image()
+        mock_response = MagicMock()
+        mock_post = MagicMock(return_value=mock_response)
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "my_lora",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust lora my_lora ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/adjust", "lora", "my_lora"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("adjust"))
+
+            mock_post.assert_not_called()
+            self.assertEqual(len(suggestions), 0)
+
     def test_autocomplete_adjust_prompt_normal(self):
         mock_image = self._get_mock_image()
         with patch("PIL.Image.open", return_value=mock_image), patch(

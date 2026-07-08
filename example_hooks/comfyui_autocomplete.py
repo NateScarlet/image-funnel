@@ -301,137 +301,140 @@ def autocomplete(
         return
 
     # 2. 尝试解析目标区域并提取 workflow 内已经存在的提示词
-    seen_prompts: Dict[str, str] = {}
-    workflow_loaded = False
-
-    args_to_parse = (
-        [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
-        if target_command
-        else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
-    )
-
+    is_remove_cmd = target_command == "remove"
     is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
 
-    try:
-        parser = get_parser()
-        parsed_args, _ = parser.parse_known_args(args_to_parse)
-    except (Exception, SystemExit):
-        parsed_args = None
+    seen_prompts: Dict[str, str] = {}
+    workflow_loaded = False
+    parsed_args = None
 
-    if is_adjust_prompt_cmd and parsed_args:
-        text_val = getattr(parsed_args, "text", None)
-        weight_val = getattr(parsed_args, "weight", None)
-        if weight_val and weight_val != "dummy_weight":
-            parsed_args = None
-        elif text_val and text_val != "dummy_prompt" and not query:
-            parsed_args = None
+    # 白名单设计：仅在支持提示词补全或需要工作流联想的指令下，才解析参数并加载工作流
+    need_workflow = (is_remove_cmd or is_adjust_prompt_cmd) or (is_add_cmd and not query.strip())
 
-    # 只有在非 add 且 parsed_args 为 None 时才直接 return
-    if parsed_args is None and not is_add_cmd:
-        return
+    if need_workflow:
+        args_to_parse = (
+            [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
+            if target_command
+            else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
+        )
 
-    # 从图像加载已存在的提示词
-    is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
-    is_all = getattr(parsed_args, "all", False) if parsed_args else False
-    regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
-    nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
-    regions_arg = (
-        cast(List[str], regions_raw)
-        if isinstance(regions_raw, list)
-        else cast(List[str], [])
-    )
-    nodes_arg = (
-        cast(List[str], nodes_raw)
-        if isinstance(nodes_raw, list)
-        else cast(List[str], [])
-    )
-
-    # 加载第一张有效图片的 workflow 和 prompt
-    workflow = None
-    prompt_meta = None
-    for path in image_paths:
-        if not os.path.isfile(path):
-            continue
         try:
-            with Image.open(path) as img:
-                p_str = img.info.get("prompt")
-                w_str = img.info.get("workflow")
-                if p_str and w_str:
-                    prompt_meta = json.loads(p_str)
-                    workflow = json.loads(w_str)
-                    break
-        except Exception:
-            continue
+            parser = get_parser()
+            parsed_args, _ = parser.parse_known_args(args_to_parse)
+        except (Exception, SystemExit):
+            parsed_args = None
 
-    if workflow and prompt_meta:
-        nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
-        if is_all:
-            clip_nodes = [
-                nid
-                for nid, node in prompt_meta.items()
-                if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-            ]
-            for nid in clip_nodes:
-                nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
-        else:
-            raw_targets: List[Tuple[str, str]] = []
-            for nid in nodes_arg:
-                raw_targets.append(("node", nid))
-            for rname in regions_arg:
-                raw_targets.append(("region", rname))
+        if is_adjust_prompt_cmd and parsed_args:
+            text_val = getattr(parsed_args, "text", None)
+            weight_val = getattr(parsed_args, "weight", None)
+            if weight_val and weight_val != "dummy_weight":
+                parsed_args = None
+            elif text_val and text_val != "dummy_prompt" and not query:
+                parsed_args = None
 
-            if not raw_targets:
-                default_region = "negative" if is_neg else "positive"
-                raw_targets.append(("region", default_region))
+        # 从图像加载已存在的提示词
+        if parsed_args is not None or is_add_cmd:
+            is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
+            is_all = getattr(parsed_args, "all", False) if parsed_args else False
+            regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
+            nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
+            regions_arg = (
+                cast(List[str], regions_raw)
+                if isinstance(regions_raw, list)
+                else cast(List[str], [])
+            )
+            nodes_arg = (
+                cast(List[str], nodes_raw)
+                if isinstance(nodes_raw, list)
+                else cast(List[str], [])
+            )
 
-            for target_type, target_value in raw_targets:
-                resolved = resolve_target_to_nodes(
-                    prompt_meta, workflow, target_type, target_value, is_neg
-                )
+            # 加载第一张有效图片的 workflow 和 prompt
+            workflow = None
+            prompt_meta = None
+            for path in image_paths:
+                if not os.path.isfile(path):
+                    continue
+                try:
+                    with Image.open(path) as img:
+                        p_str = img.info.get("prompt")
+                        w_str = img.info.get("workflow")
+                        if p_str and w_str:
+                            prompt_meta = json.loads(p_str)
+                            workflow = json.loads(w_str)
+                            break
+                except Exception:
+                    continue
 
-                for nid, start_marker, end_marker, use_markers in resolved:
-                    label = (
-                        f"区域: {target_value}"
-                        if target_type == "region"
-                        else f"节点: {target_value}"
-                    )
-                    nodes_to_process.append(
-                        (nid, start_marker, end_marker, use_markers, label)
-                    )
-
-        workflow_loaded = True
-        for (
-            node_id,
-            start_marker,
-            end_marker,
-            use_markers,
-            label,
-        ) in nodes_to_process:
-            workflow_text = get_workflow_node_text(workflow, node_id)
-            if not workflow_text:
-                continue
-
-            if use_markers:
-                start_idx = workflow_text.find(start_marker)
-                end_idx = workflow_text.find(end_marker)
-                if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                    content = workflow_text[start_idx + len(start_marker) : end_idx]
+            if workflow and prompt_meta:
+                nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
+                if is_all:
+                    clip_nodes = [
+                        nid
+                        for nid, node in prompt_meta.items()
+                        if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
+                    ]
+                    for nid in clip_nodes:
+                        nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
                 else:
-                    content = workflow_text
-            else:
-                content = workflow_text
+                    raw_targets: List[Tuple[str, str]] = []
+                    for nid in nodes_arg:
+                        raw_targets.append(("node", nid))
+                    for rname in regions_arg:
+                        raw_targets.append(("region", rname))
 
-            for line in content.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("//"):
-                    continue
-                cleaned = stripped.rstrip(",").rstrip("，").strip()
-                if not cleaned:
-                    continue
-                if cleaned not in seen_prompts:
-                    seen_prompts[cleaned] = label
+                    if not raw_targets:
+                        default_region = "negative" if is_neg else "positive"
+                        raw_targets.append(("region", default_region))
+
+                    for target_type, target_value in raw_targets:
+                        resolved = resolve_target_to_nodes(
+                            prompt_meta, workflow, target_type, target_value, is_neg
+                        )
+
+                        for nid, start_marker, end_marker, use_markers in resolved:
+                            label = (
+                                f"区域: {target_value}"
+                                if target_type == "region"
+                                else f"节点: {target_value}"
+                            )
+                            nodes_to_process.append(
+                                (nid, start_marker, end_marker, use_markers, label)
+                            )
+
+                workflow_loaded = True
+                for (
+                    node_id,
+                    start_marker,
+                    end_marker,
+                    use_markers,
+                    label,
+                ) in nodes_to_process:
+                    workflow_text = get_workflow_node_text(workflow, node_id)
+                    if not workflow_text:
+                        continue
+
+                    if use_markers:
+                        start_idx = workflow_text.find(start_marker)
+                        end_idx = workflow_text.find(end_marker)
+                        if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                            content = workflow_text[start_idx + len(start_marker) : end_idx]
+                        else:
+                            content = workflow_text
+                    else:
+                        content = workflow_text
+
+                    for line in content.splitlines():
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        if stripped.startswith("//"):
+                            continue
+                        cleaned = stripped.rstrip(",").rstrip("，").strip()
+                        if not cleaned:
+                            continue
+                        if cleaned not in seen_prompts:
+                            seen_prompts[cleaned] = label
 
     # 声明内嵌辅助函数，用于标记样式
     def is_in_workflow(text: str) -> bool:
@@ -440,8 +443,8 @@ def autocomplete(
         )
         return cleaned_text in seen_prompts
 
-    # 2. 如果是 remove 或 adjust，我们建议已存在的提示词项
-    if target_command in ("remove", "adjust-prompt", "adjust") and parsed_args:
+    # 2. 如果是 remove 或 adjust prompt 且处于 prompt 补全阶段，我们建议已存在的提示词项
+    if (is_remove_cmd or is_adjust_prompt_cmd) and parsed_args:
         for cleaned, label in sorted(seen_prompts.items()):
             if not query or query.lower() in cleaned.lower():
                 yield AutocompleteSuggestion(
@@ -452,44 +455,45 @@ def autocomplete(
                 )
 
     # 3. 如果是 add 命令，我们调用 DanbooruSearch
-    is_option_input = prev_word.startswith("-")
-    # 如果前一个词是已知的不带参数的开关选项，其后依旧应该补全位置参数，因此重置 option 标志
-    if prev_word in option_without_args:
-        is_option_input = False
+    if is_add_cmd:
+        is_option_input = prev_word.startswith("-")
+        # 如果前一个词是已知的不带参数的开关选项，其后依旧应该补全位置参数，因此重置 option 标志
+        if prev_word in option_without_args:
+            is_option_input = False
 
-    is_real_option_arg_prev = False
-    if is_option_input:
-        is_real_option_arg_prev = prev_word in option_with_args
+        is_real_option_arg_prev = False
+        if is_option_input:
+            is_real_option_arg_prev = prev_word in option_with_args
 
-    if is_add_cmd and not is_real_option_arg_prev and not is_option_input:
-        danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
-        if danbooru_url:
-            if query.strip():
-                # 用户正在打字，执行前缀语义搜索
-                for s in _fetch_danbooru_suggestions(query, danbooru_url):
-                    if is_in_workflow(s.text):
-                        s.style = "muted"
-                    yield s
-            else:
-                # 当前词未输入，执行关联联想
-                prompt_tags = _extract_prompt_tags(cleaned_cwords, option_with_args)
-                if not prompt_tags and workflow_loaded:
-                    # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
-                    raw_tags: List[str] = []
-                    for p in seen_prompts.keys():
-                        p_cleaned = p.strip().strip(",").strip()
-                        if p_cleaned:
-                            for part in p_cleaned.split(","):
-                                part_cleaned = part.strip()
-                                if part_cleaned and len(part_cleaned) < 50:
-                                    raw_tags.append(part_cleaned)
-                    prompt_tags = sorted(list(set(raw_tags)))
-
-                if prompt_tags:
-                    for s in _fetch_danbooru_related(prompt_tags, danbooru_url):
+        if not is_real_option_arg_prev and not is_option_input:
+            danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
+            if danbooru_url:
+                if query.strip():
+                    # 用户正在打字，执行前缀语义搜索
+                    for s in _fetch_danbooru_suggestions(query, danbooru_url):
                         if is_in_workflow(s.text):
                             s.style = "muted"
                         yield s
+                else:
+                    # 当前词未输入，执行关联联想
+                    prompt_tags = _extract_prompt_tags(cleaned_cwords, option_with_args)
+                    if not prompt_tags and workflow_loaded:
+                        # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
+                        raw_tags: List[str] = []
+                        for p in seen_prompts.keys():
+                            p_cleaned = p.strip().strip(",").strip()
+                            if p_cleaned:
+                                for part in p_cleaned.split(","):
+                                    part_cleaned = part.strip()
+                                    if part_cleaned and len(part_cleaned) < 50:
+                                        raw_tags.append(part_cleaned)
+                        prompt_tags = sorted(list(set(raw_tags)))
+
+                    if prompt_tags:
+                        for s in _fetch_danbooru_related(prompt_tags, danbooru_url):
+                            if is_in_workflow(s.text):
+                                s.style = "muted"
+                            yield s
 
 
 def main() -> None:
