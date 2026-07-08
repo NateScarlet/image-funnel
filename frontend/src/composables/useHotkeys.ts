@@ -403,7 +403,9 @@ export function useHotkeys(
   ) {
     resolvedOptions = bindingsOrOptions;
   } else {
-    bindings = bindingsOrOptions as unknown as HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>;
+    bindings = bindingsOrOptions as unknown as
+      | HotkeyBinding[]
+      | Record<string, (e: KeyboardEvent) => void>;
     resolvedOptions = optionsOrUndefined || {};
   }
 

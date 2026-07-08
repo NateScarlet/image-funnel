@@ -72,7 +72,8 @@ const httpOrBatchLink = ApolloLink.split(
   ({ query, variables, getContext }) => {
     const definition = getMainDefinition(query);
     const isMutation =
-      definition.kind === Kind.OPERATION_DEFINITION && definition.operation === OperationTypeNode.MUTATION;
+      definition.kind === Kind.OPERATION_DEFINITION &&
+      definition.operation === OperationTypeNode.MUTATION;
     return (
       (getContext() as OperationContext).transport === "http" ||
       isMutation ||
@@ -89,7 +90,10 @@ const link = ApolloLink.split(
       return true;
     }
     const definition = getMainDefinition(query);
-    return definition.kind === Kind.OPERATION_DEFINITION && definition.operation === OperationTypeNode.SUBSCRIPTION;
+    return (
+      definition.kind === Kind.OPERATION_DEFINITION &&
+      definition.operation === OperationTypeNode.SUBSCRIPTION
+    );
   },
   wsLink,
   httpOrBatchLink,
@@ -189,23 +193,23 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
     }
   }
 
-    if (networkError) {
-      let shouldSuppress = false;
-      if (typeof suppressError === "function") {
-        shouldSuppress = suppressError({ graphQLErrors: undefined });
-      } else if (suppressError === true) {
-        shouldSuppress = true;
-      }
-
-      if (!shouldSuppress && !isAbortError(networkError)) {
-        errorOnce(
-          `网络错误: ${networkError instanceof Error ? networkError.message : "Unknown error"}`,
-        );
-      }
+  if (networkError) {
+    let shouldSuppress = false;
+    if (typeof suppressError === "function") {
+      shouldSuppress = suppressError({ graphQLErrors: undefined });
+    } else if (suppressError === true) {
+      shouldSuppress = true;
     }
 
-    return undefined;
-  });
+    if (!shouldSuppress && !isAbortError(networkError)) {
+      errorOnce(
+        `网络错误: ${networkError instanceof Error ? networkError.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  return undefined;
+});
 
 const persistentCache = new PersistentCache(
   "apollo-cache-persist",

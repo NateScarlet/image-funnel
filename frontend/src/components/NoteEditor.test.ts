@@ -8,23 +8,103 @@ const refreshOn = vi.hoisted(() => vi.fn());
 const timeNow = vi.hoisted(() => ({ value: 1000000 }));
 
 const hookList = [
-  { id: "hook1", name: "调整图片", canDispatchByNote: false, directive: { name: "adjust", usage: "/adjust lora <name> <weight> [-j <N>]\n/adjust prompt <text> <weight> [--region <region>]...", autocomplete: true } },
-  { id: "hook2", name: "添加元素", canDispatchByNote: false, directive: { name: "add", usage: "/add [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n给当前目录图片添加提示词", autocomplete: true } },
-  { id: "hook3", name: "移除元素", canDispatchByNote: false, directive: { name: "remove", usage: "/remove [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n移除指定提示词", autocomplete: true } },
+  {
+    id: "hook1",
+    name: "调整图片",
+    canDispatchByNote: false,
+    directive: {
+      name: "adjust",
+      usage:
+        "/adjust lora <name> <weight> [-j <N>]\n/adjust prompt <text> <weight> [--region <region>]...",
+      autocomplete: true,
+    },
+  },
+  {
+    id: "hook2",
+    name: "添加元素",
+    canDispatchByNote: false,
+    directive: {
+      name: "add",
+      usage:
+        "/add [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n给当前目录图片添加提示词",
+      autocomplete: true,
+    },
+  },
+  {
+    id: "hook3",
+    name: "移除元素",
+    canDispatchByNote: false,
+    directive: {
+      name: "remove",
+      usage:
+        "/remove [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n移除指定提示词",
+      autocomplete: true,
+    },
+  },
   { id: "hook4", name: "无指令钩子", canDispatchByNote: false, directive: null },
 ];
 
-vi.mock("@/graphql/utils/useQuery", () => ({ default: vi.fn(() => ({ data: { value: { hooks: hookList } }, loading: { value: false } })) }));
+vi.mock("@/graphql/utils/useQuery", () => ({
+  default: vi.fn(() => ({ data: { value: { hooks: hookList } }, loading: { value: false } })),
+}));
 vi.mock("@/graphql/utils/query", () => ({ default: mockQuery }));
 vi.mock("@/graphql/utils/mutate", () => ({ default: vi.fn() }));
-vi.mock("@/graphql/generated", () => ({ HooksDocument: "HooksDocument", DispatchNoteHookDocument: "DispatchNoteHookDocument", HookAutocompleteDocument: "HookAutocompleteDocument" }));
-vi.mock("@floating-ui/vue", () => ({ useFloating: vi.fn(() => ({ floatingStyles: { value: {} }, update: vi.fn(), placement: { value: "top-start" } })), offset: vi.fn(() => vi.fn()), flip: vi.fn(() => vi.fn()), shift: vi.fn(() => vi.fn()), autoUpdate: vi.fn(() => vi.fn()) }));
+vi.mock("@/graphql/generated", () => ({
+  HooksDocument: "HooksDocument",
+  DispatchNoteHookDocument: "DispatchNoteHookDocument",
+  HookAutocompleteDocument: "HookAutocompleteDocument",
+}));
+vi.mock("@floating-ui/vue", () => ({
+  useFloating: vi.fn(() => ({
+    floatingStyles: { value: {} },
+    update: vi.fn(),
+    placement: { value: "top-start" },
+  })),
+  offset: vi.fn(() => vi.fn()),
+  flip: vi.fn(() => vi.fn()),
+  shift: vi.fn(() => vi.fn()),
+  autoUpdate: vi.fn(() => vi.fn()),
+}));
 vi.mock("@/composables/useTextAreaAutoHeight", () => ({ default: vi.fn() }));
-vi.mock("@/composables/useNotification", () => ({ default: vi.fn(() => ({ showSuccess: vi.fn(), showError: vi.fn(), showInfo: vi.fn(), remove: vi.fn() })) }));
+vi.mock("@/composables/useNotification", () => ({
+  default: vi.fn(() => ({
+    showSuccess: vi.fn(),
+    showError: vi.fn(),
+    showInfo: vi.fn(),
+    remove: vi.fn(),
+  })),
+}));
 vi.mock("@/composables/useClickOutside", () => ({ default: vi.fn() }));
-vi.mock("@/composables/useCurrentTime", () => ({ default: vi.fn(() => ({ currentTime: { get value() { return { ms: timeNow.value, sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms, add: (d: unknown) => ({ ms: timeNow.value + (d as number) }) }; } }, refreshOn })) }));
-vi.mock("@/utils/Time", () => ({ default: { now: () => ({ ms: timeNow.value, sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms, add: (d: unknown) => ({ ms: timeNow.value + (d as number) }) }), from: (input: unknown) => input } }));
-vi.mock("@mdi/js", () => ({ mdiConsole: "", mdiLightningBolt: "", mdiChevronDown: "", mdiLoading: "" }));
+vi.mock("@/composables/useCurrentTime", () => ({
+  default: vi.fn(() => ({
+    currentTime: {
+      get value() {
+        return {
+          ms: timeNow.value,
+          sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms,
+          add: (d: unknown) => ({ ms: timeNow.value + (d as number) }),
+        };
+      },
+    },
+    refreshOn,
+  })),
+}));
+vi.mock("@/utils/Time", () => ({
+  default: {
+    now: () => ({
+      ms: timeNow.value,
+      sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms,
+      add: (d: unknown) => ({ ms: timeNow.value + (d as number) }),
+    }),
+    from: (input: unknown) => input,
+  },
+}));
+vi.mock("@mdi/js", () => ({
+  mdiConsole: "",
+  mdiLightningBolt: "",
+  mdiChevronDown: "",
+  mdiLoading: "",
+}));
 
 async function typeInTextarea(wrapper: VueWrapper, text: string) {
   const el = wrapper.find("textarea");
@@ -105,7 +185,9 @@ describe("NoteEditor", () => {
   test("dismisses on escape", async () => {
     await typeInTextarea(createWrapper(), "/add ");
     expect(getSuggestionMenu()).not.toBeNull();
-    wrapper.find("textarea").element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    wrapper
+      .find("textarea")
+      .element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await nextTick();
     expect(getSuggestionMenu()).toBeNull();
   });
@@ -136,9 +218,12 @@ describe("NoteEditor", () => {
     el.element.dispatchEvent(new Event("input", { bubbles: true }));
     el.element.dispatchEvent(new Event("keyup", { bubbles: true }));
 
-    await vi.waitFor(() => {
-      expect(mockQuery).toHaveBeenCalled();
-    }, { timeout: 2000, interval: 50 });
+    await vi.waitFor(
+      () => {
+        expect(mockQuery).toHaveBeenCalled();
+      },
+      { timeout: 2000, interval: 50 },
+    );
   });
 
   test("replaces placeholder with API suggestion selection", async () => {
@@ -162,19 +247,28 @@ describe("NoteEditor", () => {
     el.element.dispatchEvent(new Event("keyup", { bubbles: true }));
 
     // 先确认 API 被调用
-    await vi.waitFor(() => {
-      expect(mockQuery).toHaveBeenCalled();
-    }, { timeout: 2000, interval: 50 });
+    await vi.waitFor(
+      () => {
+        expect(mockQuery).toHaveBeenCalled();
+      },
+      { timeout: 2000, interval: 50 },
+    );
 
     // 等待菜单更新与 API 建议
-    await vi.waitFor(() => {
-      const texts = findSuggestionTexts();
-      expect(texts.some((t) => t.includes("positive"))).toBe(true);
-    }, { timeout: 2000, interval: 50 });
+    await vi.waitFor(
+      () => {
+        const texts = findSuggestionTexts();
+        expect(texts.some((t) => t.includes("positive"))).toBe(true);
+      },
+      { timeout: 2000, interval: 50 },
+    );
 
     // 点击 positive API 建议
     const menu = getSuggestionMenu();
-    if (!menu) { expect(menu).not.toBeNull(); return; }
+    if (!menu) {
+      expect(menu).not.toBeNull();
+      return;
+    }
     const allButtons = Array.from(menu.querySelectorAll("button"));
     const positiveBtn = allButtons.find((b) => b.textContent?.includes("positive"));
     expect(positiveBtn).toBeDefined();
@@ -221,7 +315,7 @@ describe("NoteEditor", () => {
 
       // 验证 execCommand 被正确调用以插入文本
       expect(mockExec).toHaveBeenCalledWith("insertText", false, "adjust ");
-      
+
       // 验证内容正确被修改了
       expect(el.element.value).toBe("/adjust ");
     } finally {
@@ -252,7 +346,7 @@ describe("NoteEditor", () => {
       // 触发常用指令插入按钮
       const directiveButtons = wrapper.findAll("button[title]");
       expect(directiveButtons.length).toBeGreaterThan(0);
-      
+
       // 点击第一个快捷指令 /adjust
       await directiveButtons[0].trigger("click");
       await nextTick();

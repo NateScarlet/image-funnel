@@ -139,11 +139,11 @@ export default function useQuery<TData, TVariables extends OperationVariables>(
   }
   return {
     data: stableComputed(() => {
-        if (result.value?.dataState === "complete") {
-          return result.value.data;
-        }
-        return undefined;
-      }),
+      if (result.value?.dataState === "complete") {
+        return result.value.data;
+      }
+      return undefined;
+    }),
     query,
     refresh,
     [Symbol.dispose]: () => stack.dispose(),

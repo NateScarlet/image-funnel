@@ -19,7 +19,9 @@ function mergeResultDeep<T extends object>(
       if (isRelayConnection(v) && isRelayConnection(more)) {
         return [
           k,
-          backward ? concatRelayConnection(more, v as unknown as typeof more) : concatRelayConnection(v, more),
+          backward
+            ? concatRelayConnection(more, v as unknown as typeof more)
+            : concatRelayConnection(v, more),
         ];
       }
 

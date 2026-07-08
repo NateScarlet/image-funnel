@@ -33,11 +33,7 @@
       </template>
 
       <!-- 派发按钮：可即时触发的笔记钩子，放入二级菜单防止误触 -->
-      <div
-        v-if="dispatchableHooks.length"
-        ref="dispatchMenuRef"
-        class="relative"
-      >
+      <div v-if="dispatchableHooks.length" ref="dispatchMenuRef" class="relative">
         <button
           type="button"
           class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
@@ -79,10 +75,7 @@
               showDispatchMenu = false;
             "
           >
-            <svg
-              class="w-4 h-4 text-secondary-400 shrink-0"
-              viewBox="0 0 24 24"
-            >
+            <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
               <path :d="mdiLightningBolt" fill="currentColor" />
             </svg>
             <span>{{ h.name }}</span>
@@ -107,11 +100,7 @@
           <div
             class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
           >
-            {{
-              autocompleteState?.type === "name"
-                ? "选择笔记指令"
-                : "指令参数建议"
-            }}
+            {{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}
           </div>
           <div
             v-if="dynamicLoading"
@@ -139,7 +128,11 @@
               <span
                 :class="[
                   idx === activeIndex ? 'text-white' : 'text-secondary-400',
-                  sug.style === 'muted' ? (idx === activeIndex ? 'line-through font-normal opacity-70' : 'line-through font-normal opacity-40') : ''
+                  sug.style === 'muted'
+                    ? idx === activeIndex
+                      ? 'line-through font-normal opacity-70'
+                      : 'line-through font-normal opacity-40'
+                    : '',
                 ]"
               >
                 {{ sug.displayText }}
@@ -148,9 +141,7 @@
                 v-if="sug.type"
                 class="text-[10px] uppercase px-1 rounded font-normal"
                 :class="
-                  idx === activeIndex
-                    ? 'bg-white/20 text-white'
-                    : 'bg-primary-800 text-primary-400'
+                  idx === activeIndex ? 'bg-white/20 text-white' : 'bg-primary-800 text-primary-400'
                 "
               >
                 {{ typeLabels[sug.type] || sug.type }}
@@ -202,20 +193,11 @@ import {
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
-import {
-  mdiConsole,
-  mdiLightningBolt,
-  mdiChevronDown,
-  mdiLoading,
-} from "@mdi/js";
+import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
 import { debounce } from "es-toolkit";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
-import {
-  parseUsage,
-  getArgsContext,
-  getSuggestionsForRules,
-} from "@/utils/directiveAutocomplete";
+import { parseUsage, getArgsContext, getSuggestionsForRules } from "@/utils/directiveAutocomplete";
 import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
 
 const typeLabels: Record<string, string> = {
@@ -264,9 +246,7 @@ const directives = computed(() => {
 const currentHook = computed(() => {
   const dirName = autocompleteState.value?.directiveName;
   if (!dirName) return null;
-  return (
-    hooksData.value?.hooks.find((h) => h.directive?.name === dirName) ?? null
-  );
+  return hooksData.value?.hooks.find((h) => h.directive?.name === dirName) ?? null;
 });
 
 const autocompleteEnabled = computed(() => {
@@ -281,10 +261,7 @@ const dispatchableHooks = computed(() => {
       if (!h.canDispatchByNote) return false;
       if (!h.directive) return false;
       // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
-      const escapedName = h.directive.name.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
+      const escapedName = h.directive.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
       return regex.test(model.value);
     }) || []
@@ -310,9 +287,7 @@ async function triggerDispatch(hookId: string, hookName: string) {
     try {
       await props.onBeforeDispatch();
     } catch (err) {
-      showError(
-        `保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`
-      );
+      showError(`保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`);
       isDispatching.value = false;
       return;
     }
@@ -379,9 +354,7 @@ const autocompleteState = computed<{
   const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
 
   // 1. 优先匹配指令参数补全
-  const directiveMatch = lineTextBeforeCursor.match(
-    /^[ \t]*\/([a-zA-Z0-9_-]+)\s+(.*)$/
-  );
+  const directiveMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]+)\s+(.*)$/);
   if (directiveMatch) {
     const dirName = directiveMatch[1];
     const argsText = directiveMatch[2] ?? "";
@@ -391,8 +364,7 @@ const autocompleteState = computed<{
         show: true,
         type: "args" as const,
         query: currentQuery,
-        triggerIndex:
-          lineStart + lineTextBeforeCursor.length - currentQuery.length,
+        triggerIndex: lineStart + lineTextBeforeCursor.length - currentQuery.length,
         selectionStart: start,
         directiveName: dirName,
         argsText,
@@ -420,9 +392,7 @@ const activeIndexBuffer = ref({ queryKey: "", index: 0 });
 const activeIndex = computed({
   get: () => {
     const key = autocompleteState.value?.query ?? "";
-    return activeIndexBuffer.value.queryKey === key
-      ? activeIndexBuffer.value.index
-      : 0;
+    return activeIndexBuffer.value.queryKey === key ? activeIndexBuffer.value.index : 0;
   },
   set: (val: number) => {
     const key = autocompleteState.value?.query ?? "";
@@ -458,10 +428,7 @@ const apiSuggestions = computed(() => {
   const q = state.query.toLowerCase();
   return dynamicBuffer.value.suggestions.filter((s) => {
     if (s.text.toLowerCase() === q) return false;
-    return (
-      s.text.toLowerCase().startsWith(q) ||
-      s.displayText.toLowerCase().includes(q)
-    );
+    return s.text.toLowerCase().startsWith(q) || s.displayText.toLowerCase().includes(q);
   });
 });
 
@@ -484,13 +451,11 @@ const suggestions = computed<Suggestion[]>(() => {
   if (autocompleteState.value.type === "name") {
     const q = autocompleteState.value.query;
     const list = directives.value;
-    const matched = q
-      ? list.filter((h) => h.directive?.name.toLowerCase().includes(q))
-      : list;
+    const matched = q ? list.filter((h) => h.directive?.name.toLowerCase().includes(q)) : list;
     return matched.map((h) => {
       const dirName = h.directive?.name ?? "";
       const relatedRule = parsedRules.value.find((r) => r.directive === dirName);
-      
+
       const header = h.name;
       const body = relatedRule?.generalDescription || h.directive?.description || "";
       const desc = body ? `${header}\n\n${body}` : header;
@@ -519,9 +484,7 @@ const suggestions = computed<Suggestion[]>(() => {
       !autocompleteState.value.query.startsWith("-") &&
       apiSuggestions.value.length > 0
     ) {
-      const nonPositional = staticResults.filter(
-        (s) => s.type !== "positional"
-      );
+      const nonPositional = staticResults.filter((s) => s.type !== "positional");
       return [...apiSuggestions.value, ...nonPositional];
     }
 
@@ -548,10 +511,7 @@ async function executeAutocomplete() {
 
   // 本地缓存足够好（过滤后 ≥50%）就跳过 API 请求
   const buf = dynamicBuffer.value;
-  if (
-    buf.suggestions.length > 0 &&
-    apiSuggestions.value.length >= buf.suggestions.length * 0.5
-  ) {
+  if (buf.suggestions.length > 0 && apiSuggestions.value.length >= buf.suggestions.length * 0.5) {
     return;
   }
 
@@ -573,15 +533,13 @@ async function executeAutocomplete() {
     });
 
     if (result.data?.hookAutocomplete) {
-      const results: Suggestion[] = result.data.hookAutocomplete.map(
-        (s) => ({
-          type: s.type ?? "positional",
-          text: s.text,
-          displayText: s.displayText,
-          description: s.description ?? undefined,
-          style: s.style ?? undefined,
-        })
-      );
+      const results: Suggestion[] = result.data.hookAutocomplete.map((s) => ({
+        type: s.type ?? "positional",
+        text: s.text,
+        displayText: s.displayText,
+        description: s.description ?? undefined,
+        style: s.style ?? undefined,
+      }));
       dynamicBuffer.value = {
         contextKey: autocompleteContext.value,
         query: state.query,
@@ -713,15 +671,13 @@ function insertDirective(dirName: string) {
 function handleKeyUp() {
   if (autocompleteState.value?.show && suggestions.value.length) {
     activeIndex.value =
-      (activeIndex.value - 1 + suggestions.value.length) %
-      suggestions.value.length;
+      (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
   }
 }
 
 function handleKeyDown() {
   if (autocompleteState.value?.show && suggestions.value.length) {
-    activeIndex.value =
-      (activeIndex.value + 1) % suggestions.value.length;
+    activeIndex.value = (activeIndex.value + 1) % suggestions.value.length;
   }
 }
 
