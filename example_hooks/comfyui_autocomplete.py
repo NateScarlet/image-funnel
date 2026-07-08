@@ -218,104 +218,85 @@ def _fetch_danbooru_related(
         _LOGGER.warning("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
 
 
-def autocomplete(
-    target_command: Optional[str] = None,
-) -> Iterator[AutocompleteSuggestion]:
-    """
-    autocomplete 子命令：读取环境变量，生成自动完成建议。
-    调用方（main）负责输出 JSONL。
-    """
-    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+class AutocompleteContext:
+    """自动完成输入参数和状态上下文"""
 
-    image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
-    try:
-        image_paths: List[str] = json.loads(image_paths_str)
-    except Exception:
-        image_paths = []
+    def __init__(self, target_command: Optional[str] = None):
+        self.target_command: Optional[str] = target_command
+        self.query: str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+        self.prev_word: str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
 
-    cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
-    cwords: List[str] = []
-    try:
-        cwords = json.loads(cwords_str)
-    except Exception:
-        pass
-
-    # 过滤 Docopt 静态占位符如 <region>, <node-id> 等，避免被误解析为 prompt 位置参数
-    cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
-
-    is_add_cmd = target_command == "add"
-    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
-
-    # 动态分析当前活跃命令行路径下的选项参数，避免硬编码
-    parser = get_parser()
-    active_parsers = _collect_active_parsers(parser, cwords)
-    option_with_args: Set[str] = set()
-    option_without_args: Set[str] = set()
-
-    for p in active_parsers:
-        # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
-        for action in p._actions:
-            if not action.option_strings:
-                continue
-            if action.nargs == 0:
-                for opt in action.option_strings:
-                    option_without_args.add(opt)
-            else:
-                for opt in action.option_strings:
-                    option_with_args.add(opt)
-
-    # 检查 prev_word 是否真的是一个生效的选项参数键
-    # 如果 CWORDS 中有 "--" 且该 "--" 位于 prev_word 之前，则它不是生效的选项键，其后输入的也是位置参数
-    is_real_option_prev = False
-    if prev_word in (option_with_args | option_without_args):
+        image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
         try:
-            is_real_option_prev = "--" not in cleaned_cwords or cleaned_cwords.index(
-                "--"
-            ) > cleaned_cwords.index(prev_word)
-        except ValueError:
-            is_real_option_prev = True
+            self.image_paths: List[str] = json.loads(image_paths_str)
+        except Exception:
+            self.image_paths = []
 
-    # 1. 保留原本针对 regions 和 Lora 选项的静态/目录级补全建议
-    if prev_word == "--region" and is_real_option_prev:
-        regions = extract_region_names_from_images(image_paths)
-        for r in regions:
-            if not query or query.lower() in r.lower():
-                yield AutocompleteSuggestion(
-                    text=r,
-                    displayText=r,
-                    description=f"区域: {r}",
-                    type="region",
+        cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
+        try:
+            self.cwords: List[str] = json.loads(cwords_str)
+        except Exception:
+            self.cwords = []
+
+        self.cleaned_cwords: List[str] = [
+            w for w in self.cwords if not (w.startswith("<") and w.endswith(">"))
+        ]
+
+        self.is_add_cmd: bool = target_command == "add"
+        self.is_remove_cmd: bool = target_command == "remove"
+        self.is_adjust_prompt_cmd: bool = (
+            target_command == "adjust" and "prompt" in self.cleaned_cwords
+        )
+
+        # 动态解析选项参数
+        parser = get_parser()
+        active_parsers = _collect_active_parsers(parser, self.cwords)
+        self.option_with_args: Set[str] = set()
+        self.option_without_args: Set[str] = set()
+
+        for p in active_parsers:
+            # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
+            for action in p._actions:
+                if not action.option_strings:
+                    continue
+                if action.nargs == 0:
+                    for opt in action.option_strings:
+                        self.option_without_args.add(opt)
+                else:
+                    for opt in action.option_strings:
+                        self.option_with_args.add(opt)
+
+        self.is_real_option_prev: bool = False
+        if self.prev_word in (self.option_with_args | self.option_without_args):
+            try:
+                self.is_real_option_prev = (
+                    "--" not in self.cleaned_cwords
+                    or self.cleaned_cwords.index("--")
+                    > self.cleaned_cwords.index(self.prev_word)
                 )
-        return
+            except ValueError:
+                self.is_real_option_prev = True
 
-    if prev_word == "lora":
-        loras = _extract_lora_names(image_paths)
-        for l in loras:
-            if not query or query.lower() in l.lower():
-                yield AutocompleteSuggestion(
-                    text=quote_if_needed(l),
-                    displayText=l,
-                    description=f"Lora: {l}",
-                    type="lora",
-                )
-        return
+        # 延迟加载的状态
+        self._parsed_args_loaded: bool = False
+        self._parsed_args: Optional[argparse.Namespace] = None
+        self._workflow_loaded: bool = False
+        self._seen_prompts: Dict[str, str] = {}
 
-    # 2. 尝试解析目标区域并提取 workflow 内已经存在的提示词
-    is_remove_cmd = target_command == "remove"
-    is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
+    @property
+    def parsed_args(self) -> Optional[argparse.Namespace]:
+        if not self._parsed_args_loaded:
+            self._parse_arguments()
+        return self._parsed_args
 
-    seen_prompts: Dict[str, str] = {}
-    workflow_loaded = False
-    parsed_args = None
-
-    # 白名单设计：仅在支持提示词补全或需要工作流联想的指令下，才解析参数并加载工作流
-    need_workflow = (is_remove_cmd or is_adjust_prompt_cmd) or (is_add_cmd and not query.strip())
-
-    if need_workflow:
+    def _parse_arguments(self):
+        self._parsed_args_loaded = True
         args_to_parse = (
-            [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
-            if target_command
-            else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
+            [self.target_command]
+            + self.cleaned_cwords[1:]
+            + ["dummy_prompt", "dummy_weight"]
+            if self.target_command
+            else self.cleaned_cwords + ["dummy_prompt", "dummy_weight"]
         )
 
         try:
@@ -324,129 +305,214 @@ def autocomplete(
         except (Exception, SystemExit):
             parsed_args = None
 
-        if is_adjust_prompt_cmd and parsed_args:
+        if self.is_adjust_prompt_cmd and parsed_args:
             text_val = getattr(parsed_args, "text", None)
             weight_val = getattr(parsed_args, "weight", None)
             if weight_val and weight_val != "dummy_weight":
                 parsed_args = None
-            elif text_val and text_val != "dummy_prompt" and not query:
+            elif text_val and text_val != "dummy_prompt" and not self.query:
                 parsed_args = None
+        self._parsed_args = parsed_args
 
-        # 从图像加载已存在的提示词
-        if parsed_args is not None or is_add_cmd:
-            is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
-            is_all = getattr(parsed_args, "all", False) if parsed_args else False
-            regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
-            nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
-            regions_arg = (
-                cast(List[str], regions_raw)
-                if isinstance(regions_raw, list)
-                else cast(List[str], [])
-            )
-            nodes_arg = (
-                cast(List[str], nodes_raw)
-                if isinstance(nodes_raw, list)
-                else cast(List[str], [])
-            )
+    @property
+    def seen_prompts(self) -> Dict[str, str]:
+        if not self._workflow_loaded:
+            self._load_workflow()
+        return self._seen_prompts
 
-            # 加载第一张有效图片的 workflow 和 prompt
-            workflow = None
-            prompt_meta = None
-            for path in image_paths:
-                if not os.path.isfile(path):
-                    continue
-                try:
-                    with Image.open(path) as img:
-                        p_str = img.info.get("prompt")
-                        w_str = img.info.get("workflow")
-                        if p_str and w_str:
-                            prompt_meta = json.loads(p_str)
-                            workflow = json.loads(w_str)
-                            break
-                except Exception:
-                    continue
+    @property
+    def workflow_loaded(self) -> bool:
+        if not self._workflow_loaded:
+            self._load_workflow()
+        return self._workflow_loaded
 
-            if workflow and prompt_meta:
-                nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
-                if is_all:
-                    clip_nodes = [
-                        nid
-                        for nid, node in prompt_meta.items()
-                        if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-                    ]
-                    for nid in clip_nodes:
-                        nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
-                else:
-                    raw_targets: List[Tuple[str, str]] = []
-                    for nid in nodes_arg:
-                        raw_targets.append(("node", nid))
-                    for rname in regions_arg:
-                        raw_targets.append(("region", rname))
+    def _load_workflow(self):
+        self._workflow_loaded = True
+        parsed_args = self.parsed_args
+        if parsed_args is None and not self.is_add_cmd:
+            return
 
-                    if not raw_targets:
-                        default_region = "negative" if is_neg else "positive"
-                        raw_targets.append(("region", default_region))
-
-                    for target_type, target_value in raw_targets:
-                        resolved = resolve_target_to_nodes(
-                            prompt_meta, workflow, target_type, target_value, is_neg
-                        )
-
-                        for nid, start_marker, end_marker, use_markers in resolved:
-                            label = (
-                                f"区域: {target_value}"
-                                if target_type == "region"
-                                else f"节点: {target_value}"
-                            )
-                            nodes_to_process.append(
-                                (nid, start_marker, end_marker, use_markers, label)
-                            )
-
-                workflow_loaded = True
-                for (
-                    node_id,
-                    start_marker,
-                    end_marker,
-                    use_markers,
-                    label,
-                ) in nodes_to_process:
-                    workflow_text = get_workflow_node_text(workflow, node_id)
-                    if not workflow_text:
-                        continue
-
-                    if use_markers:
-                        start_idx = workflow_text.find(start_marker)
-                        end_idx = workflow_text.find(end_marker)
-                        if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                            content = workflow_text[start_idx + len(start_marker) : end_idx]
-                        else:
-                            content = workflow_text
-                    else:
-                        content = workflow_text
-
-                    for line in content.splitlines():
-                        stripped = line.strip()
-                        if not stripped:
-                            continue
-                        if stripped.startswith("//"):
-                            continue
-                        cleaned = stripped.rstrip(",").rstrip("，").strip()
-                        if not cleaned:
-                            continue
-                        if cleaned not in seen_prompts:
-                            seen_prompts[cleaned] = label
-
-    # 声明内嵌辅助函数，用于标记样式
-    def is_in_workflow(text: str) -> bool:
-        cleaned_text = (
-            text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")
+        is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
+        is_all = getattr(parsed_args, "all", False) if parsed_args else False
+        regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
+        nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
+        regions_arg = (
+            cast(List[str], regions_raw)
+            if isinstance(regions_raw, list)
+            else cast(List[str], [])
         )
-        return cleaned_text in seen_prompts
+        nodes_arg = (
+            cast(List[str], nodes_raw)
+            if isinstance(nodes_raw, list)
+            else cast(List[str], [])
+        )
 
-    # 2. 如果是 remove 或 adjust prompt 且处于 prompt 补全阶段，我们建议已存在的提示词项
-    if (is_remove_cmd or is_adjust_prompt_cmd) and parsed_args:
-        for cleaned, label in sorted(seen_prompts.items()):
-            if not query or query.lower() in cleaned.lower():
+        # 加载第一张有效图片的 workflow 和 prompt
+        workflow = None
+        prompt_meta = None
+        for path in self.image_paths:
+            if not os.path.isfile(path):
+                continue
+            try:
+                with Image.open(path) as img:
+                    p_str = img.info.get("prompt")
+                    w_str = img.info.get("workflow")
+                    if p_str and w_str:
+                        prompt_meta = json.loads(p_str)
+                        workflow = json.loads(w_str)
+                        break
+            except Exception:
+                continue
+
+        if not (workflow and prompt_meta):
+            return
+
+        nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
+        if is_all:
+            clip_nodes = [
+                nid
+                for nid, node in prompt_meta.items()
+                if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
+            ]
+            for nid in clip_nodes:
+                nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
+        else:
+            raw_targets: List[Tuple[str, str]] = []
+            for nid in nodes_arg:
+                raw_targets.append(("node", nid))
+            for rname in regions_arg:
+                raw_targets.append(("region", rname))
+
+            if not raw_targets:
+                default_region = "negative" if is_neg else "positive"
+                raw_targets.append(("region", default_region))
+
+            for target_type, target_value in raw_targets:
+                resolved = resolve_target_to_nodes(
+                    prompt_meta, workflow, target_type, target_value, is_neg
+                )
+
+                for nid, start_marker, end_marker, use_markers in resolved:
+                    label = (
+                        f"区域: {target_value}"
+                        if target_type == "region"
+                        else f"节点: {target_value}"
+                    )
+                    nodes_to_process.append(
+                        (nid, start_marker, end_marker, use_markers, label)
+                    )
+
+        for (
+            node_id,
+            start_marker,
+            end_marker,
+            use_markers,
+            label,
+        ) in nodes_to_process:
+            workflow_text = get_workflow_node_text(workflow, node_id)
+            if not workflow_text:
+                continue
+
+            if use_markers:
+                start_idx = workflow_text.find(start_marker)
+                end_idx = workflow_text.find(end_marker)
+                if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                    content = workflow_text[start_idx + len(start_marker) : end_idx]
+                else:
+                    content = workflow_text
+            else:
+                content = workflow_text
+
+            for line in content.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if stripped.startswith("//"):
+                    continue
+                cleaned = stripped.rstrip(",").rstrip("，").strip()
+                if not cleaned:
+                    continue
+                if cleaned not in self._seen_prompts:
+                    self._seen_prompts[cleaned] = label
+
+
+class AutocompleteProvider:
+    """自动完成建议提供者基类"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        """是否独占，如果提供成功则不再继续后续 Provider 补全"""
+        return False
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        raise NotImplementedError
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        raise NotImplementedError
+
+
+class RegionProvider(AutocompleteProvider):
+    """区域建议提供者"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return context.prev_word == "--region" and context.is_real_option_prev
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        regions = extract_region_names_from_images(context.image_paths)
+        for r in regions:
+            if not context.query or context.query.lower() in r.lower():
+                yield AutocompleteSuggestion(
+                    text=r,
+                    displayText=r,
+                    description=f"区域: {r}",
+                    type="region",
+                )
+
+
+class LoraProvider(AutocompleteProvider):
+    """Lora 建议提供者"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return context.prev_word == "lora"
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        loras = _extract_lora_names(context.image_paths)
+        for l in loras:
+            if not context.query or context.query.lower() in l.lower():
+                yield AutocompleteSuggestion(
+                    text=quote_if_needed(l),
+                    displayText=l,
+                    description=f"Lora: {l}",
+                    type="lora",
+                )
+
+
+class WorkflowPromptProvider(AutocompleteProvider):
+    """工作流已存在提示词推荐"""
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        if not (context.is_remove_cmd or context.is_adjust_prompt_cmd):
+            return False
+
+        is_option_input = (
+            context.query.startswith("-") and "--" not in context.cleaned_cwords
+        )
+        if is_option_input or context.is_real_option_prev:
+            return False
+
+        return context.parsed_args is not None
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        for cleaned, label in sorted(context.seen_prompts.items()):
+            if not context.query or context.query.lower() in cleaned.lower():
                 yield AutocompleteSuggestion(
                     text=quote_if_needed(cleaned),
                     displayText=cleaned,
@@ -454,46 +520,88 @@ def autocomplete(
                     type="prompt",
                 )
 
-    # 3. 如果是 add 命令，我们调用 DanbooruSearch
-    if is_add_cmd:
-        is_option_input = prev_word.startswith("-")
-        # 如果前一个词是已知的不带参数的开关选项，其后依旧应该补全位置参数，因此重置 option 标志
-        if prev_word in option_without_args:
+
+class DanbooruProvider(AutocompleteProvider):
+    """Danbooru 语义与关联补全推荐"""
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        if not context.is_add_cmd:
+            return False
+
+        is_option_input = context.prev_word.startswith("-")
+        if context.prev_word in context.option_without_args:
             is_option_input = False
 
         is_real_option_arg_prev = False
         if is_option_input:
-            is_real_option_arg_prev = prev_word in option_with_args
+            is_real_option_arg_prev = context.prev_word in context.option_with_args
 
-        if not is_real_option_arg_prev and not is_option_input:
-            danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
-            if danbooru_url:
-                if query.strip():
-                    # 用户正在打字，执行前缀语义搜索
-                    for s in _fetch_danbooru_suggestions(query, danbooru_url):
-                        if is_in_workflow(s.text):
-                            s.style = "muted"
-                        yield s
-                else:
-                    # 当前词未输入，执行关联联想
-                    prompt_tags = _extract_prompt_tags(cleaned_cwords, option_with_args)
-                    if not prompt_tags and workflow_loaded:
-                        # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
-                        raw_tags: List[str] = []
-                        for p in seen_prompts.keys():
-                            p_cleaned = p.strip().strip(",").strip()
-                            if p_cleaned:
-                                for part in p_cleaned.split(","):
-                                    part_cleaned = part.strip()
-                                    if part_cleaned and len(part_cleaned) < 50:
-                                        raw_tags.append(part_cleaned)
-                        prompt_tags = sorted(list(set(raw_tags)))
+        return not is_real_option_arg_prev and not is_option_input
 
-                    if prompt_tags:
-                        for s in _fetch_danbooru_related(prompt_tags, danbooru_url):
-                            if is_in_workflow(s.text):
-                                s.style = "muted"
-                            yield s
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
+        if not danbooru_url:
+            return
+
+        def is_in_workflow(text: str) -> bool:
+            cleaned_text = (
+                text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")
+            )
+            return cleaned_text in context.seen_prompts
+
+        if context.query.strip():
+            # 用户正在打字，执行前缀语义搜索
+            for s in _fetch_danbooru_suggestions(context.query, danbooru_url):
+                if is_in_workflow(s.text):
+                    s.style = "muted"
+                yield s
+        else:
+            # 当前词未输入，执行关联联想
+            prompt_tags = _extract_prompt_tags(
+                context.cleaned_cwords, context.option_with_args
+            )
+            if not prompt_tags and context.workflow_loaded:
+                # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
+                raw_tags: List[str] = []
+                for p in context.seen_prompts.keys():
+                    p_cleaned = p.strip().strip(",").strip()
+                    if p_cleaned:
+                        for part in p_cleaned.split(","):
+                            part_cleaned = part.strip()
+                            if part_cleaned and len(part_cleaned) < 50:
+                                raw_tags.append(part_cleaned)
+                prompt_tags = sorted(list(set(raw_tags)))
+
+            if prompt_tags:
+                for s in _fetch_danbooru_related(prompt_tags, danbooru_url):
+                    if is_in_workflow(s.text):
+                        s.style = "muted"
+                    yield s
+
+
+def autocomplete(
+    target_command: Optional[str] = None,
+) -> Iterator[AutocompleteSuggestion]:
+    """
+    autocomplete 子命令：读取环境变量，生成自动完成建议。
+    调用方（main）负责输出 JSONL。
+    """
+    context = AutocompleteContext(target_command)
+    providers: List[AutocompleteProvider] = [
+        RegionProvider(),
+        LoraProvider(),
+        WorkflowPromptProvider(),
+        DanbooruProvider(),
+    ]
+
+    for provider in providers:
+        if provider.can_provide(context):
+            has_suggestions = False
+            for suggestion in provider.provide(context):
+                has_suggestions = True
+                yield suggestion
+            if has_suggestions and provider.is_exclusive:
+                break
 
 
 def main() -> None:
