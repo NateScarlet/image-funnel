@@ -91,10 +91,7 @@
         <div
           ref="floatingEl"
           :style="floatingStyles"
-          v-if="
-            (autocompleteState?.show && suggestions.length) ||
-            (autocompleteEnabled && dynamicLoading)
-          "
+          v-if="autocompleteState?.show && (suggestions.length || isSearching)"
           class="fixed z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 max-h-56 sm:max-h-80 overflow-y-auto min-w-48 max-w-[calc(100vw-2rem)] backdrop-blur-md flex flex-col gap-1"
         >
           <div
@@ -103,7 +100,7 @@
             {{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}
           </div>
           <div
-            v-if="dynamicLoading"
+            v-if="isSearching"
             class="px-3 py-2 text-xs text-primary-400 flex items-center gap-2"
           >
             <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24">
@@ -181,6 +178,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, useTemplateRef, shallowRef } from "vue";
+
 import { useFloating, offset, flip, shift, autoUpdate } from "@floating-ui/vue";
 import useQuery from "@/graphql/utils/useQuery";
 import query from "@/graphql/utils/query";
@@ -433,6 +431,37 @@ const apiSuggestions = computed(() => {
 });
 
 const dynamicLoading = ref(false);
+// 标记是否处于防抖等待中
+const isDebouncing = ref(false);
+
+// 判断是否需要向后端请求动态补全建议（如果本地缓存足够则不需要）
+const needsDynamicLoading = computed(() => {
+  const state = autocompleteState.value;
+  if (!state || !autocompleteEnabled.value || state.type !== "args") return false;
+  if (state.query.startsWith("-")) return false;
+
+  const buf = dynamicBuffer.value;
+  if (buf.contextKey !== autocompleteContext.value) return true;
+  if (buf.suggestions.length === 0) return true;
+
+  let filteredLength = 0;
+  if (state.query === buf.query) {
+    filteredLength = buf.suggestions.length;
+  } else {
+    const q = state.query.toLowerCase();
+    filteredLength = buf.suggestions.filter((s) => {
+      if (s.text.toLowerCase() === q) return false;
+      return s.text.toLowerCase().startsWith(q) || s.displayText.toLowerCase().includes(q);
+    }).length;
+  }
+
+  return filteredLength < buf.suggestions.length * 0.5;
+});
+
+// 是否正处于防抖等待或正在请求的搜索状态中
+const isSearching = computed(() => {
+  return dynamicLoading.value || (isDebouncing.value && needsDynamicLoading.value);
+});
 // #endregion
 
 const parsedRules = computed<DirectiveRule[]>(() => {
@@ -457,7 +486,7 @@ const suggestions = computed<Suggestion[]>(() => {
       const relatedRule = parsedRules.value.find((r) => r.directive === dirName);
 
       const header = h.name;
-      const body = relatedRule?.generalDescription || h.directive?.description || "";
+      const body = relatedRule?.generalDescription || h.description || "";
       const desc = body ? `${header}\n\n${body}` : header;
 
       return {
@@ -505,6 +534,8 @@ function getLinePrefix(): string {
 }
 
 async function executeAutocomplete() {
+  // 开始执行或跳过时，结束防抖等待状态
+  isDebouncing.value = false;
   const state = autocompleteState.value;
   if (!state || !autocompleteEnabled.value || state.type !== "args") return;
   if (state.query.startsWith("-")) return;
@@ -555,12 +586,21 @@ async function executeAutocomplete() {
 
 const triggerDynamicAutocomplete = debounce(executeAutocomplete, 300);
 
+// 请求动态自动补全建议，设置防抖并处理 pending 状态
+function requestAutocomplete(flush = false) {
+  if (autocompleteState.value?.type === "args") {
+    isDebouncing.value = true;
+    triggerDynamicAutocomplete();
+    if (flush) {
+      triggerDynamicAutocomplete.flush();
+    }
+  }
+}
+
 function handleInput() {
   emit("input");
   onCursorChange();
-  if (autocompleteState.value?.type === "args") {
-    triggerDynamicAutocomplete();
-  }
+  requestAutocomplete();
 }
 
 function handleSelectSuggestion(sug: Suggestion) {
@@ -617,9 +657,8 @@ function handleSelectSuggestion(sug: Suggestion) {
     el.setSelectionRange(newSelectionStart, newSelectionEnd);
     onCursorChange();
     emit("input");
-    if (hasPlaceholder && autocompleteState.value?.type === "args") {
-      triggerDynamicAutocomplete();
-      triggerDynamicAutocomplete.flush();
+    if (hasPlaceholder) {
+      requestAutocomplete(true);
     }
   });
 }
@@ -687,10 +726,7 @@ function handleKeySpace(e: KeyboardEvent) {
   autocompleteDismissed.value = false;
 
   // 已在指令内 → 立即触发动态补全
-  if (autocompleteState.value?.type === "args") {
-    triggerDynamicAutocomplete();
-    triggerDynamicAutocomplete.flush();
-  }
+  requestAutocomplete(true);
 }
 
 function handleKeyEnter(e: KeyboardEvent) {
@@ -703,6 +739,7 @@ function handleKeyEnter(e: KeyboardEvent) {
 function handleKeyEsc() {
   if (autocompleteState.value?.show) {
     autocompleteDismissed.value = true;
+    isDebouncing.value = false;
   }
 }
 
@@ -710,6 +747,7 @@ function handleBlur() {
   isFocused.value = false;
   blurAt.value = Time.now();
   refreshOn(blurAt.value.add(200));
+  isDebouncing.value = false;
 }
 
 function handleFocus() {

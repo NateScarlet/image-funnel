@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "generate:graphql": "graphql-codegen --config codegen.ts",
-    "build:tsc": "oxlint --type-check --tsconfig=./src/tsconfig.json .",
+    "build:tsc": "vue-tsc --noEmit -p ./src/tsconfig.json",
     "check": "pnpm run lint:fix && pnpm run build:tsc",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
@@ -54,6 +54,7 @@
     "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "vue-tsc": "^3.3.7"
   }
 }

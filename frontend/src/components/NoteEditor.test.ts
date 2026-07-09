@@ -226,6 +226,33 @@ describe("NoteEditor", () => {
     );
   });
 
+  test("shows loading state during autocomplete debounce period", async () => {
+    createWrapper();
+    const el = wrapper.find("textarea");
+    await el.trigger("focus");
+    await el.setValue("/add ");
+    el.element.selectionStart = 5;
+    el.element.selectionEnd = 5;
+    
+    // 触发 input 事件以启动动态补全防抖
+    el.element.dispatchEvent(new Event("input", { bubbles: true }));
+    await nextTick();
+
+    // 在防抖期间（API 尚未被调用前），确认菜单浮层是可见的，并且包含“加载中...”
+    const menu = getSuggestionMenu();
+    expect(menu).not.toBeNull();
+    expect(menu?.textContent).toContain("加载中...");
+    expect(mockQuery).not.toHaveBeenCalled();
+
+    // 等待防抖结束并让 API 调用完成
+    await vi.waitFor(
+      () => {
+        expect(mockQuery).toHaveBeenCalled();
+      },
+      { timeout: 2000, interval: 50 },
+    );
+  });
+
   test("replaces placeholder with API suggestion selection", async () => {
     mockQuery.mockResolvedValue({
       data: {
