@@ -102,6 +102,9 @@ export default function useBrowseNotes(
     onSaved: onNoteSaved,
     onDeleted: onNoteDeleted,
   } = useLiveConnection(() => notesConnection.nodes.value, {
+    compare: (a: NoteFragment, b: NoteFragment) => {
+      return new Date(b.modTime).getTime() - new Date(a.modTime).getTime();
+    },
     filter: (n: NoteFragment) => {
       const currentVars = resolvedVariables.value;
       if (currentVars.filterBy?.hidden === false && n.hidden) {

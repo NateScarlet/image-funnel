@@ -112,6 +112,7 @@ type NoteDTO struct {
 	Content    string
 	RawContent string
 	Hidden     bool
+	ModTime    time.Time
 }
 
 // NoteConnectionDTO 笔记连接数据传输对象

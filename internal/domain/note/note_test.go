@@ -7,6 +7,7 @@ import (
 	"main/internal/scalar"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseNoteContent(t *testing.T) {
@@ -204,7 +205,7 @@ func (r *mockRepo) Write(ctx context.Context, relPath string, content string) er
 		delete(r.notes, relPath)
 		return nil
 	}
-	r.notes[relPath] = FromRepository(relPath, relPath, content)
+	r.notes[relPath] = FromRepository(relPath, relPath, content, time.Now())
 	return nil
 }
 

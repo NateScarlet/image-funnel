@@ -44,6 +44,13 @@ func (r *NoteRepository) Read(ctx context.Context, relPath string) (*note.Note, 
 		return nil, err
 	}
 	absPath := r.absPath(relPath)
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -56,7 +63,7 @@ func (r *NoteRepository) Read(ctx context.Context, relPath string) (*note.Note, 
 		return nil, apperror.New("NOT_TEXT", "file is not a valid text file", "文件不是有效的文本文件")
 	}
 
-	return note.FromRepository(relPath, absPath, string(content)), nil
+	return note.FromRepository(relPath, absPath, string(content), info.ModTime()), nil
 }
 
 func (r *NoteRepository) Write(ctx context.Context, relPath string, content string) error {
@@ -96,6 +103,13 @@ func (r *NoteRepository) Find(ctx context.Context, relPath string) iter.Seq2[*no
 			}
 
 			absFilePath := filepath.Join(absPath, entry.Name())
+			info, err := entry.Info()
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
 			contentBytes, err := os.ReadFile(absFilePath)
 			if err != nil {
 				if !yield(nil, err) {
@@ -104,7 +118,7 @@ func (r *NoteRepository) Find(ctx context.Context, relPath string) iter.Seq2[*no
 				continue
 			}
 
-			n := note.FromRepository(filepath.Join(relPath, entry.Name()), absFilePath, string(contentBytes))
+			n := note.FromRepository(filepath.Join(relPath, entry.Name()), absFilePath, string(contentBytes), info.ModTime())
 			if !yield(n, nil) {
 				return
 			}

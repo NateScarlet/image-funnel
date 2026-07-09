@@ -105,6 +105,9 @@ export default function useLiveArray<T extends { id: string }>(
       .filter((i) => !liveDeletedID.has(i.id))
       .filter(filter)
       .toSorted((a, b) => {
+        if (compare) {
+          return compare(a, b);
+        }
         const aKey = identity(a);
         const bKey = identity(b);
         const aIndex = indexByKey.get(aKey);
@@ -112,9 +115,6 @@ export default function useLiveArray<T extends { id: string }>(
         if (aIndex !== undefined && bIndex !== undefined) {
           // preserve original order
           return aIndex - bIndex;
-        }
-        if (compare) {
-          return compare(a, b);
         }
         return 0;
       });

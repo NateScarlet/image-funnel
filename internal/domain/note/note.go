@@ -5,6 +5,7 @@ import (
 	"main/internal/scalar"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const idPrefix = "note:"
@@ -12,16 +13,17 @@ const idPrefix = "note:"
 // Note 表示笔记信息
 type Note struct {
 	id         scalar.ID
-	relPath    string // 相对路径
-	absPath    string // 绝对路径
-	content    string // 剥离后的正文
-	rawContent string // 完整的原始内容
-	hidden     bool   // 是否被隐藏
+	relPath    string    // 相对路径
+	absPath    string    // 绝对路径
+	content    string    // 剥离后的正文
+	rawContent string    // 完整的原始内容
+	hidden     bool      // 是否被隐藏
+	modTime    time.Time // 最后修改时间
 }
 
 // FromRepository 从仓库加载笔记信息，ID 由领域层根据相对路径自动生成
 // 仅由 Repository 实现调用，外部不得直接构造。此处直接通过结构体字面量实例化，信任持久层数据。
-func FromRepository(relPath string, absPath string, content string) *Note {
+func FromRepository(relPath string, absPath string, content string, modTime time.Time) *Note {
 	hidden, parsedContent := ParseContent(content)
 	return &Note{
 		id:         encodeID(relPath),
@@ -30,6 +32,7 @@ func FromRepository(relPath string, absPath string, content string) *Note {
 		content:    parsedContent,
 		rawContent: content,
 		hidden:     hidden,
+		modTime:    modTime,
 	}
 }
 
@@ -102,6 +105,11 @@ func (n *Note) RawContent() string {
 // Hidden 返回是否被隐藏
 func (n *Note) Hidden() bool {
 	return n.hidden
+}
+
+// ModTime 返回最后修改时间
+func (n *Note) ModTime() time.Time {
+	return n.modTime
 }
 
 // encodeID 根据图片相对路径生成笔记 ID

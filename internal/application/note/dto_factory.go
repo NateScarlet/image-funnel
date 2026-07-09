@@ -27,5 +27,6 @@ func (f *DTOFactory) New(n *note.Note) *shared.NoteDTO {
 		Content:    n.Content(),
 		RawContent: n.RawContent(),
 		Hidden:     n.Hidden(),
+		ModTime:    n.ModTime(),
 	}
 }

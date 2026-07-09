@@ -305,6 +305,7 @@ type ComplexityRoot struct {
 		Content    func(childComplexity int) int
 		Hidden     func(childComplexity int) int
 		ID         func(childComplexity int) int
+		ModTime    func(childComplexity int) int
 		RawContent func(childComplexity int) int
 		RelPath    func(childComplexity int) int
 		Title      func(childComplexity int) int
@@ -1633,6 +1634,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Note.ID(childComplexity), true
+	case "Note.modTime":
+		if e.complexity.Note.ModTime == nil {
+			break
+		}
+
+		return e.complexity.Note.ModTime(childComplexity), true
 	case "Note.rawContent":
 		if e.complexity.Note.RawContent == nil {
 			break
@@ -2830,6 +2837,8 @@ type Note implements Node @goModel(model: "main/internal/shared.NoteDTO") {
   rawContent: String!
   "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
   hidden: Boolean!
+  "最后修改时间"
+  modTime: Time!
 }
 
 type NoteConnection @goModel(model: "main/internal/shared.NoteConnectionDTO") {
@@ -7493,6 +7502,8 @@ func (ec *executionContext) fieldContext_Image_note(_ context.Context, field gra
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -8589,6 +8600,8 @@ func (ec *executionContext) fieldContext_Mutation_createNote(ctx context.Context
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -9487,6 +9500,8 @@ func (ec *executionContext) fieldContext_Mutation_updateNote(ctx context.Context
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -9726,6 +9741,35 @@ func (ec *executionContext) fieldContext_Note_hidden(_ context.Context, field gr
 	return fc, nil
 }
 
+func (ec *executionContext) _Note_modTime(ctx context.Context, field graphql.CollectedField, obj *shared.NoteDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Note_modTime,
+		func(ctx context.Context) (any, error) {
+			return obj.ModTime, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Note_modTime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Note",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NoteConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.NoteConnectionDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9797,6 +9841,8 @@ func (ec *executionContext) fieldContext_NoteConnection_nodes(_ context.Context,
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -9879,6 +9925,8 @@ func (ec *executionContext) fieldContext_NoteEdge_node(_ context.Context, field 
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -12478,6 +12526,8 @@ func (ec *executionContext) fieldContext_Subscription_noteUpdated(ctx context.Co
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -12533,6 +12583,8 @@ func (ec *executionContext) fieldContext_Subscription_noteSaved(ctx context.Cont
 				return ec.fieldContext_Note_rawContent(ctx, field)
 			case "hidden":
 				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
 		},
@@ -18676,6 +18728,11 @@ func (ec *executionContext) _Note(ctx context.Context, sel ast.SelectionSet, obj
 			}
 		case "hidden":
 			out.Values[i] = ec._Note_hidden(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "modTime":
+			out.Values[i] = ec._Note_modTime(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}

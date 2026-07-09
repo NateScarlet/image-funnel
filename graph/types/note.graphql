@@ -13,6 +13,8 @@ type Note implements Node @goModel(model: "main/internal/shared.NoteDTO") {
   rawContent: String!
   "是否被隐藏，由 frontmatter 中 hidden/hide 字段控制"
   hidden: Boolean!
+  "最后修改时间"
+  modTime: Time!
 }
 
 type NoteConnection @goModel(model: "main/internal/shared.NoteConnectionDTO") {

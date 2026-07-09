@@ -4,4 +4,5 @@ fragment Note on Note {
   content
   rawContent
   hidden
+  modTime
 }

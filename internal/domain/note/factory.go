@@ -5,6 +5,7 @@ import (
 	"main/internal/util"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Factory 笔记实体工厂
@@ -49,5 +50,6 @@ func (f *Factory) New(
 		content:    parsedContent,
 		rawContent: content,
 		hidden:     hidden,
+		modTime:    time.Now(),
 	}, nil
 }

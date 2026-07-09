@@ -368,6 +368,7 @@ export type DirectoryStatsFragment = {
       content: string;
       rawContent: string;
       hidden: boolean;
+      modTime: string;
     };
   } | null;
   ratingCounts: Array<{ __typename: "RatingCount"; rating: number; count: number }>;
@@ -398,6 +399,7 @@ export type ImageFragment = {
     content: string;
     rawContent: string;
     hidden: boolean;
+    modTime: string;
   };
 };
 
@@ -408,6 +410,7 @@ export type NoteFragment = {
   content: string;
   rawContent: string;
   hidden: boolean;
+  modTime: string;
 };
 
 export type RatingCountFragment = { __typename: "RatingCount"; rating: number; count: number };
@@ -473,6 +476,7 @@ export type SessionFragment = {
       content: string;
       rawContent: string;
       hidden: boolean;
+      modTime: string;
     };
   } | null;
   nextImages: Array<{
@@ -500,6 +504,7 @@ export type SessionFragment = {
       content: string;
       rawContent: string;
       hidden: boolean;
+      modTime: string;
     };
   }>;
 };
@@ -678,6 +683,7 @@ export type CommitChangesMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       } | null;
       nextImages: Array<{
@@ -705,6 +711,7 @@ export type CommitChangesMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       }>;
     } | null;
@@ -724,6 +731,7 @@ export type CreateNoteMutation = {
     content: string;
     rawContent: string;
     hidden: boolean;
+    modTime: string;
   };
 };
 
@@ -797,6 +805,7 @@ export type CreateSessionMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       } | null;
       nextImages: Array<{
@@ -824,6 +833,7 @@ export type CreateSessionMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       }>;
     };
@@ -933,6 +943,7 @@ export type MarkImageMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       } | null;
       nextImages: Array<{
@@ -960,6 +971,7 @@ export type MarkImageMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       }>;
     };
@@ -1099,6 +1111,7 @@ export type UndoMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       } | null;
       nextImages: Array<{
@@ -1126,6 +1139,7 @@ export type UndoMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       }>;
     } | null;
@@ -1177,6 +1191,7 @@ export type UpdateImageMetadataMutation = {
       content: string;
       rawContent: string;
       hidden: boolean;
+      modTime: string;
     };
   };
 };
@@ -1208,6 +1223,7 @@ export type UpdateNoteMutation = {
     content: string;
     rawContent: string;
     hidden: boolean;
+    modTime: string;
   };
 };
 
@@ -1281,6 +1297,7 @@ export type UpdateSessionMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       } | null;
       nextImages: Array<{
@@ -1308,6 +1325,7 @@ export type UpdateSessionMutation = {
           content: string;
           rawContent: string;
           hidden: boolean;
+          modTime: string;
         };
       }>;
     };
@@ -1419,6 +1437,7 @@ export type BrowseImagesQuery = {
                 content: string;
                 rawContent: string;
                 hidden: boolean;
+                modTime: string;
               };
             };
           }>;
@@ -1447,6 +1466,7 @@ export type BrowseImagesQuery = {
               content: string;
               rawContent: string;
               hidden: boolean;
+              modTime: string;
             };
           }>;
           pageInfo: {
@@ -1488,6 +1508,7 @@ export type BrowseNotesQuery = {
               content: string;
               rawContent: string;
               hidden: boolean;
+              modTime: string;
             };
           }>;
           nodes: Array<{
@@ -1497,6 +1518,7 @@ export type BrowseNotesQuery = {
             content: string;
             rawContent: string;
             hidden: boolean;
+            modTime: string;
           }>;
           pageInfo: {
             __typename: "PageInfo";
@@ -1604,6 +1626,7 @@ export type DirectoryLastSessionQuery = {
               content: string;
               rawContent: string;
               hidden: boolean;
+              modTime: string;
             };
           } | null;
           nextImages: Array<{
@@ -1631,6 +1654,7 @@ export type DirectoryLastSessionQuery = {
               content: string;
               rawContent: string;
               hidden: boolean;
+              modTime: string;
             };
           }>;
         } | null;
@@ -1739,6 +1763,7 @@ export type DirectoryStatsQuery = {
               content: string;
               rawContent: string;
               hidden: boolean;
+              modTime: string;
             };
           } | null;
           ratingCounts: Array<{ __typename: "RatingCount"; rating: number; count: number }>;
@@ -1821,6 +1846,7 @@ export type KeptImagesQuery = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       };
     }>;
   } | null;
@@ -1855,6 +1881,7 @@ export type NoteQuery = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       }
     | null;
 };
@@ -1951,6 +1978,7 @@ export type SessionQuery = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       };
     } | null;
     nextImages: Array<{
@@ -1978,6 +2006,7 @@ export type SessionQuery = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       };
     }>;
   } | null;
@@ -2112,6 +2141,7 @@ export type ImageSavedSubscription = {
       content: string;
       rawContent: string;
       hidden: boolean;
+      modTime: string;
     };
   };
 };
@@ -2129,6 +2159,7 @@ export type NoteSavedSubscription = {
     content: string;
     rawContent: string;
     hidden: boolean;
+    modTime: string;
   };
 };
 
@@ -2220,6 +2251,7 @@ export type SessionUpdatedSubscription = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       };
     } | null;
     nextImages: Array<{
@@ -2247,6 +2279,7 @@ export type SessionUpdatedSubscription = {
         content: string;
         rawContent: string;
         hidden: boolean;
+        modTime: string;
       };
     }>;
   };
@@ -2288,6 +2321,7 @@ export const NoteFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -2422,6 +2456,7 @@ export const ImageFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -2493,6 +2528,7 @@ export const DirectoryStatsFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -2754,6 +2790,7 @@ export const SessionFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -3339,6 +3376,7 @@ export const CommitChangesDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -3583,6 +3621,7 @@ export const CreateNoteDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -3680,6 +3719,7 @@ export const CreateSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -4122,6 +4162,7 @@ export const MarkImageDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -4616,6 +4657,7 @@ export const UndoDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -4904,6 +4946,7 @@ export const UpdateImageMetadataDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -5129,6 +5172,7 @@ export const UpdateNoteDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -5226,6 +5270,7 @@ export const UpdateSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -5762,6 +5807,7 @@ export const BrowseImagesDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -6032,6 +6078,7 @@ export const BrowseNotesDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -6213,6 +6260,7 @@ export const DirectoryLastSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -6629,6 +6677,7 @@ export const DirectoryStatsDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -6979,6 +7028,7 @@ export const KeptImagesDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -7185,6 +7235,7 @@ export const NoteDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -7334,6 +7385,7 @@ export const SessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -7932,6 +7984,7 @@ export const ImageSavedDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -8098,6 +8151,7 @@ export const NoteSavedDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
@@ -8259,6 +8313,7 @@ export const SessionUpdatedDocument = {
           { kind: "Field", name: { kind: "Name", value: "content" } },
           { kind: "Field", name: { kind: "Name", value: "rawContent" } },
           { kind: "Field", name: { kind: "Name", value: "hidden" } },
+          { kind: "Field", name: { kind: "Name", value: "modTime" } },
         ],
       },
     },
