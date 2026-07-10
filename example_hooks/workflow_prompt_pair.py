@@ -15,7 +15,6 @@ import random
 import re
 import uuid
 import urllib.request
-from dataclasses import dataclass
 from typing import (
     Dict,
     List,
@@ -27,248 +26,20 @@ from typing import (
     Generator,
     Iterator,
     Iterable,
-    Union,
 )
-from abc import ABC, abstractmethod
 
 from weight_parser import parse_weights, is_relative
-from prompt_locator import KNOWN_PRIMITIVE_TYPES, find_terminal_input, PromptFragment
+from prompt_locator import (
+    KNOWN_PRIMITIVE_TYPES,
+    find_terminal_input,
+    NodeInfo,
+    is_node_disabled,
+)
+from prompt_locator import get_region_markers, get_target_clip_node
+from prompt_fragment import PromptFragment
+from lora_handler import LORA_HANDLERS
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class NodeInfo:
-    """节点信息缓存"""
-
-    node_id: str
-    node_data: Dict[str, Any]  # workflow 中的节点对象引用
-    prompt_data: Dict[str, Any]  # prompt 中的节点对象引用（可能为空）
-    node_type: str  # workflow 中的 type
-    class_type: str  # prompt 中的 class_type
-    is_disabled: bool
-    is_subgraph: bool
-    subgraph_id: Optional[str]
-    widgets_values: Optional[List[Any]]
-    inputs: Dict[str, Any]
-
-
-def is_node_disabled(node: Dict[str, Any]) -> bool:
-    """
-    检查节点是否被停用 (Mute/Bypass)。
-    mode 值为 2 (Never/Mute) 或 4 (Bypass)。
-    """
-    return node.get("mode") in (2, 4)
-
-
-class LoraLoaderHandler(ABC):
-    """Lora 节点处理抽象接口"""
-
-    @property
-    @abstractmethod
-    def node_types(self) -> Set[str]:
-        """该处理器能处理的 ComfyUI 节点类型集合"""
-        pass
-
-    @abstractmethod
-    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
-        """从 prompt 节点中提取所有的 Lora 文件名"""
-        pass
-
-    @abstractmethod
-    def get_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-    ) -> Optional[float]:
-        """从节点信息中获取匹配的 Lora 权重"""
-        pass
-
-    @abstractmethod
-    def modify_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-        weight: float,
-    ) -> bool:
-        """同时修改 prompt 和 workflow 中的 Lora 权重，修改成功返回 True"""
-        pass
-
-
-class NativeLoraLoaderHandler(LoraLoaderHandler):
-    """原生 LoraLoader 节点处理器"""
-
-    @property
-    def node_types(self) -> Set[str]:
-        return {"LoraLoader"}
-
-    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
-        lora_name = node_dict.get("inputs", {}).get("lora_name", "")
-        if isinstance(lora_name, str) and lora_name:
-            return [lora_name]
-        return []
-
-    def get_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-    ) -> Optional[float]:
-        # 1. 只从参与运行的 prompt 提取数据
-        if node_info.prompt_data:
-            inputs = node_info.prompt_data.get("inputs", {})
-            lora_name = inputs.get("lora_name", "")
-            if isinstance(lora_name, str) and query_lower in lora_name.lower():
-                for ik in ["strength_model", "strength_clip"]:
-                    if ik in inputs:
-                        src_nid, src_key = find_terminal_input(
-                            pair.prompt, node_info.node_id, ik
-                        )
-                        val = pair.prompt[src_nid]["inputs"].get(src_key)
-                        if isinstance(val, (int, float)):
-                            return float(val)
-        return None
-
-    def modify_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-        weight: float,
-    ) -> bool:
-        # 如果 prompt_data 缺失（说明节点不参与实际执行图），直接跳过不予修改
-        if not node_info.prompt_data:
-            return False
-
-        modified = False
-        inputs = node_info.prompt_data.get("inputs", {})
-        lora_name = inputs.get("lora_name", "")
-        if isinstance(lora_name, str) and query_lower in lora_name.lower():
-            for ik in ["strength_model", "strength_clip"]:
-                if ik in inputs:
-                    src_nid, src_key = find_terminal_input(
-                        pair.prompt, node_info.node_id, ik
-                    )
-                    pair.prompt[src_nid]["inputs"][src_key] = weight
-                    if src_nid != node_info.node_id:
-                        wf_node = pair.get_node_by_id(src_nid)
-                        if wf_node and wf_node.widgets_values:
-                            wf_node.widgets_values[0] = weight
-                    modified = True
-
-            # 只有在修改 prompt 成功后，才同步修改该节点在 workflow 中的 widgets_values
-            if modified:
-                if (
-                    not node_info.widgets_values
-                    or not isinstance(node_info.widgets_values[0], str)
-                    or query_lower not in node_info.widgets_values[0].lower()
-                ):
-                    raise ValueError(
-                        f"Workflow data is out of sync with prompt for LoraLoader node {node_info.node_id}"
-                    )
-                if len(node_info.widgets_values) > 1 and isinstance(
-                    node_info.widgets_values[1], (int, float)
-                ):
-                    node_info.widgets_values[1] = weight
-                if len(node_info.widgets_values) > 2 and isinstance(
-                    node_info.widgets_values[2], (int, float)
-                ):
-                    node_info.widgets_values[2] = weight
-
-        return modified
-
-
-class PowerLoraLoaderHandler(LoraLoaderHandler):
-    """Power Lora Loader (rgthree) 节点处理器"""
-
-    @property
-    def node_types(self) -> Set[str]:
-        return {"Power Lora Loader (rgthree)"}
-
-    def collect_names(self, node_dict: Dict[str, Any]) -> List[str]:
-        names: List[str] = []
-        for k, v in node_dict.get("inputs", {}).items():
-            if k.startswith("lora_") and isinstance(v, dict):
-                v_dict = cast(Dict[str, Any], v)
-                lora_path = v_dict.get("lora", "")
-                if isinstance(lora_path, str) and lora_path:
-                    names.append(lora_path)
-        return names
-
-    def get_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-    ) -> Optional[float]:
-        # 1. 只从参与运行的 prompt 提取数据
-        if node_info.prompt_data:
-            inputs = node_info.prompt_data.get("inputs", {})
-            for k, v in inputs.items():
-                if k.startswith("lora_") and isinstance(v, dict):
-                    v_dict = cast(Dict[str, Any], v)
-                    lora_path = v_dict.get("lora", "")
-                    if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                        strength = v_dict.get("strength")
-                        if isinstance(strength, (int, float)):
-                            return float(strength)
-        return None
-
-    def modify_weight(
-        self,
-        node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
-        query_lower: str,
-        weight: float,
-    ) -> bool:
-        # 如果 prompt_data 缺失（说明节点不参与实际执行图），直接跳过不予修改
-        if not node_info.prompt_data:
-            return False
-
-        modified = False
-        inputs = node_info.prompt_data.get("inputs", {})
-        modified_loras: List[str] = []
-        for k, v in list(inputs.items()):
-            if k.startswith("lora_") and isinstance(v, dict):
-                v_dict = cast(Dict[str, Any], v)
-                lora_path = v_dict.get("lora", "")
-                if isinstance(lora_path, str) and query_lower in lora_path.lower():
-                    v_dict["strength"] = weight
-                    modified_loras.append(lora_path)
-                    modified = True
-
-        # 只有在修改 prompt 成功后，才同步修改该节点在 workflow 中的 widgets_values
-        if modified:
-            if not node_info.widgets_values:
-                raise ValueError(
-                    f"Workflow widgets values are missing for rgthree node {node_info.node_id}"
-                )
-            for ml in modified_loras:
-                slot_found = False
-                for val in node_info.widgets_values:
-                    if isinstance(val, dict) and "lora" in val:
-                        val_dict = cast(Dict[str, Any], val)
-                        lora_path = val_dict.get("lora", "")
-                        if (
-                            isinstance(lora_path, str)
-                            and ml.lower() in lora_path.lower()
-                        ):
-                            val_dict["strength"] = weight
-                            slot_found = True
-                if not slot_found:
-                    raise ValueError(
-                        f"Workflow Lora slot for '{ml}' is out of sync with prompt in rgthree node {node_info.node_id}"
-                    )
-
-        return modified
-
-
-LORA_HANDLERS: List[LoraLoaderHandler] = [
-    NativeLoraLoaderHandler(),
-    PowerLoraLoaderHandler(),
-]
 
 
 class WorkflowPromptPair:
@@ -296,9 +67,70 @@ class WorkflowPromptPair:
         """
         定位提示词目标节点并返回 PromptFragment 迭代器。
         """
-        from prompt_locator import locate_prompt_fragments
+        raw_targets: List[Tuple[str, str]] = []
+        if nodes:
+            for nid in nodes:
+                raw_targets.append(("node", nid))
+        if regions:
+            for rname in regions:
+                raw_targets.append(("region", rname))
 
-        return locate_prompt_fragments(self, nodes, regions, is_neg)
+        if not raw_targets:
+            default_region = "negative" if is_neg else "positive"
+            raw_targets.append(("region", default_region))
+
+        for target_type, target_value in raw_targets:
+            yield from self._resolve_target_to_nodes(target_type, target_value, is_neg)
+
+    def _find_nodes_with_region(self, region_name: str) -> List[str]:
+        """
+        查找所有包含指定区域 marker 的 CLIPTextEncode 节点 ID。
+        """
+        start_marker, end_marker = get_region_markers(region_name)
+        result: List[str] = []
+        for nid, node in self.prompt.items():
+            node_dict = cast(Dict[str, Any], node)
+            if node_dict.get("class_type") == "CLIPTextEncode":
+                wf_text = self.get_workflow_node_text(nid)
+                if wf_text and start_marker in wf_text and end_marker in wf_text:
+                    result.append(nid)
+        return result
+
+    def _resolve_target_to_nodes(
+        self,
+        target_type: str,
+        target_value: str,
+        is_neg: bool,
+    ) -> List[PromptFragment]:
+        """
+        将单个目标（node 或 region）解析为 PromptFragment 列表。
+        """
+        if target_type == "node":
+            if target_value not in self.prompt:
+                _LOGGER.warning(f"Node {target_value} not found in prompt, skipping.")
+                return []
+            return [PromptFragment(self, target_value, "", "", False)]
+        else:  # region
+            start_marker, end_marker = get_region_markers(target_value)
+            matching_nodes = self._find_nodes_with_region(target_value)
+            if matching_nodes:
+                return [
+                    PromptFragment(self, nid, start_marker, end_marker, True)
+                    for nid in matching_nodes
+                ]
+            else:
+                fallback_nid = get_target_clip_node(self.prompt, is_neg)
+                if fallback_nid:
+                    return [
+                        PromptFragment(
+                            self, fallback_nid, start_marker, end_marker, True
+                        )
+                    ]
+                else:
+                    _LOGGER.warning(
+                        f"Failed to locate target node for region '{target_value}'"
+                    )
+                    return []
 
     def _analyze_nodes(self):
         """一次性分析所有节点，缓存节点信息、种子节点和文件名节点"""
@@ -978,19 +810,18 @@ class WorkflowPromptPair:
                             wv[0] = weight
 
     def get_current_prompt_weight(
-        self, target_nodes: List[Tuple[str, str, str, bool]], target_prompt: str
+        self, fragments: List[PromptFragment], target_prompt: str
     ) -> Optional[float]:
         """
         在目标节点的文本中查找匹配的提示词，返回其当前权重。
         """
-        for node_id, start_marker, end_marker, use_markers in target_nodes:
-            f = PromptFragment(self, node_id, start_marker, end_marker, use_markers)
+        for f in fragments:
             val = f.get_weight(target_prompt)
             if val is not None:
                 return val
         return None
 
-    def _get_workflow_node_text(self, node_id: str) -> Optional[str]:
+    def get_workflow_node_text(self, node_id: str) -> Optional[str]:
         """
         在 UI 结构 workflow 中获取特定节点的文本 widget 数值。
         """
@@ -1006,7 +837,7 @@ class WorkflowPromptPair:
 
     def modify_prompt_weights(
         self,
-        target_nodes: List[Tuple[str, str, str, bool]],
+        fragments: List[PromptFragment],
         target_prompt: str,
         weight: float,
         skip_add: bool,
@@ -1016,10 +847,6 @@ class WorkflowPromptPair:
         如果不存在，且未指定 skip_add 选项，则将其添加到第一个有效节点上。
         """
         any_existing_modified = False
-        fragments = [
-            PromptFragment(self, nid, start, end, use)
-            for nid, start, end, use in target_nodes
-        ]
         for f in fragments:
             if f.modify_weight(target_prompt, weight, skip_add=True):
                 any_existing_modified = True
@@ -1028,44 +855,7 @@ class WorkflowPromptPair:
             if fragments:
                 fragments[0].modify_weight(target_prompt, weight, skip_add=False)
 
-    def _adjust_prompt_weight_in_text(
-        self, text: str, target_prompt: str, new_weight: float
-    ) -> Tuple[str, bool]:
-        """
-        在文本中找到并更新特定提示词的权重为 new_weight。
-        支持匹配格式：(word:weight)、(word) 以及裸词 word。
-        返回 (new_text, is_modified)。
-        """
-        escaped_target = re.escape(target_prompt)
-
-        # 1. 优先匹配已带权重的格式, 如 (beautiful scenery:1.2) 或 (beautiful scenery:-0.5)
-        pattern_with_weight = re.compile(
-            rf"\(\s*{escaped_target}\s*:\s*[0-9.-]+\s*\)", re.IGNORECASE
-        )
-        if pattern_with_weight.search(text):
-            new_text = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", text)
-            return new_text, True
-
-        # 2. 匹配带括号但无权重的格式, 如 (beautiful scenery)
-        pattern_with_brackets = re.compile(
-            rf"\(\s*{escaped_target}\s*\)", re.IGNORECASE
-        )
-        if pattern_with_brackets.search(text):
-            new_text = pattern_with_brackets.sub(
-                f"({target_prompt}:{new_weight})", text
-            )
-            return new_text, True
-
-        # 3. 匹配裸词，两边使用负向环视以防匹配子串 (caterpillar vs cat)
-        # 不能用 \b 因为目标文本可能以非单词字符结尾（如 `\(text\)`），会导致边界断言失败
-        pattern_bare = re.compile(rf"(?<!\w){escaped_target}(?!\w)", re.IGNORECASE)
-        if pattern_bare.search(text):
-            new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
-            return new_text, True
-
-        return text, False
-
-    def _update_workflow_node_text(self, node_id: str, new_text: str) -> None:
+    def update_workflow_node_text(self, node_id: str, new_text: str) -> None:
         """
         在 UI 结构 workflow 中同步更新特定节点的文本 widget 数值。
         """
@@ -1076,351 +866,6 @@ class WorkflowPromptPair:
         widgets_values = node_info.widgets_values
         if widgets_values and len(widgets_values) > 0:
             widgets_values[0] = new_text
-
-    def _strip_comments_for_prompt(self, text: str) -> str:
-        """
-        为 prompt 剥离注释行。如果一行去除首尾空白后以 '//' 开头，该整行将被完全过滤掉。
-        """
-        lines: List[str] = []
-        for line in text.splitlines():
-            if line.strip().startswith("//"):
-                continue
-            lines.append(line)
-        return "\n".join(lines)
-
-    def _add_prompt_to_node(
-        self,
-        node_id: str,
-        added_text: str,
-        start_marker: str,
-        end_marker: str,
-        use_markers: bool,
-    ) -> None:
-        """
-        将提示词添加到节点。
-        """
-        workflow_text = self._get_workflow_node_text(node_id)
-        if workflow_text is None:
-            return
-
-        prompt_text = (
-            self.prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-        )
-        if not isinstance(prompt_text, str):
-            prompt_text = ""
-
-        start_idx = -1
-        end_idx = -1
-        if use_markers:
-            start_idx = workflow_text.find(start_marker)
-            end_idx = workflow_text.find(end_marker)
-
-        has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-
-        if has_marker:
-            before_marker = workflow_text[:start_idx]
-            marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-            after_marker = workflow_text[end_idx + len(end_marker) :]
-
-            stripped = marker_content.strip()
-            if stripped:
-                if not stripped.endswith(","):
-                    stripped += ","
-                new_content_prompt = f"{stripped}\n{added_text},"
-            else:
-                new_content_prompt = f"{added_text},"
-
-            new_workflow_text = (
-                before_marker.rstrip()
-                + f"\n{start_marker}\n"
-                + new_content_prompt
-                + f"\n{end_marker}\n"
-                + after_marker.lstrip()
-            )
-            new_prompt_text = prompt_text.rstrip()
-            if new_prompt_text and not new_prompt_text.endswith(","):
-                new_prompt_text += ","
-            new_prompt_text += f"\n{added_text},"
-        else:
-            new_workflow_text = workflow_text.rstrip()
-            if new_workflow_text and not new_workflow_text.endswith(","):
-                new_workflow_text += ","
-            new_workflow_text += f"\n{added_text},"
-
-            new_prompt_text = prompt_text.rstrip()
-            if new_prompt_text and not new_prompt_text.endswith(","):
-                new_prompt_text += ","
-            new_prompt_text += f"\n{added_text},"
-
-        self.prompt[node_id]["inputs"]["text"] = self._strip_comments_for_prompt(
-            new_prompt_text
-        )
-        self._update_workflow_node_text(node_id, new_workflow_text)
-
-    # #endregion
-
-    # #region 双轨道文本处理（add/remove 提示词）
-    def process_double_track(
-        self,
-        node_id: str,
-        command: str,
-        prompt_str_arg: str,
-        start_marker: str,
-        end_marker: str,
-        raw: bool,
-        no_skip: bool,
-        hard: bool,
-        use_markers: bool = True,
-    ) -> bool:
-        """
-        对指定节点执行 add/remove 操作，原地修改 prompt 和 workflow 文本。
-        返回 True 表示执行了操作，False 表示跳过。
-        """
-        workflow_text = self._get_workflow_node_text(node_id)
-        if workflow_text is None:
-            return False
-        prompt_text = self.prompt[node_id].get("inputs", {}).get("text", "")
-        if not isinstance(prompt_text, str):
-            prompt_text = ""
-
-        # 经过清除逻辑得到的 prompt 文本，用于做等价性比对
-        stripped_workflow = self._strip_comments_for_prompt(workflow_text)
-        workflow_cleaned = "\n".join(
-            [line.strip() for line in stripped_workflow.splitlines() if line.strip()]
-        )
-        prompt_cleaned = "\n".join(
-            [line.strip() for line in prompt_text.splitlines() if line.strip()]
-        )
-        is_equivalent = workflow_cleaned == prompt_cleaned
-
-        # 在 workflow 文本中定位 marker 区域
-        start_idx = -1
-        end_idx = -1
-        if use_markers:
-            start_idx = workflow_text.find(start_marker)
-            end_idx = workflow_text.find(end_marker)
-            has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-        else:
-            has_marker = False
-
-        # 校验提示词是否已存在
-        def contains_prompt(area: str) -> bool:
-            target_lower = prompt_str_arg.strip().lower()
-            if raw:
-                return target_lower in area.lower()
-            for line in area.splitlines():
-                if line.strip().startswith("//"):
-                    continue
-                if target_lower in line.lower():
-                    return True
-            return False
-
-        new_workflow_text = None
-        new_prompt_text = None
-
-        if command == "add":
-            if has_marker:
-                before_marker = workflow_text[:start_idx]
-                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-                after_marker = workflow_text[end_idx + len(end_marker) :]
-
-                if contains_prompt(marker_content) and not no_skip:
-                    _LOGGER.debug(
-                        "Prompt '%s' already exists in marker region, skipping.",
-                        prompt_str_arg,
-                    )
-                    return False
-
-                # 计算不带 marker 的内部拼接新文本，按行追加
-                stripped = marker_content.strip()
-                if stripped:
-                    if not stripped.endswith(","):
-                        stripped += ","
-                    new_content_prompt = f"{stripped}\n{prompt_str_arg},"
-                else:
-                    new_content_prompt = f"{prompt_str_arg},"
-
-                # 双轨道组装：分别组装带 marker 的 workflow 文本，和不带 marker 的 prompt 文本
-                new_workflow_text = (
-                    before_marker.rstrip()
-                    + f"\n{start_marker}\n"
-                    + new_content_prompt
-                    + f"\n{end_marker}\n"
-                    + after_marker.lstrip()
-                )
-
-                # 判断等价性以决定是否采用回退防御机制
-                if is_equivalent:
-                    new_prompt_text_raw = (
-                        before_marker.rstrip()
-                        + "\n"
-                        + new_content_prompt
-                        + "\n"
-                        + after_marker.lstrip()
-                    )
-                    new_prompt_text = self._strip_comments_for_prompt(
-                        new_prompt_text_raw
-                    )
-                else:
-                    # 回退：基于区域内容在 prompt 中做精确匹配
-                    target_match_content = self._strip_comments_for_prompt(
-                        marker_content
-                    ).strip()
-                    if target_match_content and target_match_content in prompt_text:
-                        new_prompt_text = prompt_text.replace(
-                            target_match_content, new_content_prompt.strip(), 1
-                        )
-                    else:
-                        # 匹配不到加在尾部
-                        if raw:
-                            new_prompt_text = (
-                                prompt_text.rstrip() + "\n" + prompt_str_arg
-                            )
-                        else:
-                            new_prompt_text = (
-                                prompt_text.rstrip() + f"\n{prompt_str_arg},"
-                            )
-            else:
-                if contains_prompt(workflow_text) and not no_skip:
-                    _LOGGER.debug(
-                        "Prompt '%s' already exists in text, skipping.",
-                        prompt_str_arg,
-                    )
-                    return False
-
-                if raw:
-                    new_content_prompt = prompt_str_arg
-                else:
-                    new_content_prompt = f"{prompt_str_arg},"
-
-                # 第一次添加，双轨道组装：workflow 附加带 marker 区域（如果 use_markers），prompt 附加不带 marker 区域
-                if use_markers:
-                    new_workflow_text = (
-                        workflow_text.rstrip()
-                        + f"\n{start_marker}\n"
-                        + new_content_prompt
-                        + f"\n{end_marker}\n"
-                    )
-                else:
-                    new_workflow_text = (
-                        workflow_text.rstrip() + "\n" + new_content_prompt
-                    )
-                # 对于无 marker，直接拼在尾部即可
-                new_prompt_text = prompt_text.rstrip() + "\n" + new_content_prompt
-
-        else:  # remove Command
-            effective_hard = hard or raw
-            if has_marker:
-                before_marker = workflow_text[:start_idx]
-                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-                after_marker = workflow_text[end_idx + len(end_marker) :]
-
-                if not contains_prompt(marker_content):
-                    _LOGGER.debug(
-                        "remove: prompt '%s' not found in marker region (has_marker=True)",
-                        prompt_str_arg,
-                    )
-                    if not no_skip:
-                        _LOGGER.debug(
-                            "Prompt '%s' not found in marker region, skipping.",
-                            prompt_str_arg,
-                        )
-                        return False
-                    new_content_prompt = marker_content
-                else:
-                    if raw:
-                        new_content_prompt = marker_content.replace(prompt_str_arg, "")
-                    else:
-                        target_lower = prompt_str_arg.strip().lower()
-                        lines = marker_content.split("\n")
-                        new_lines: List[str] = []
-                        for line in lines:
-                            if target_lower in line.lower():
-                                if effective_hard:
-                                    pass
-                                else:
-                                    stripped = line.strip()
-                                    if stripped.startswith("//"):
-                                        new_lines.append(line)
-                                    else:
-                                        indent = line[: len(line) - len(line.lstrip())]
-                                        new_lines.append(f"{indent}// {line.lstrip()}")
-                            else:
-                                new_lines.append(line)
-                        new_content_prompt = "\n".join(new_lines)
-
-                # 双轨道组装
-                new_workflow_text = (
-                    before_marker.rstrip()
-                    + f"\n{start_marker}\n"
-                    + new_content_prompt
-                    + f"\n{end_marker}\n"
-                    + after_marker.lstrip()
-                )
-
-                if is_equivalent:
-                    new_prompt_text_raw = (
-                        before_marker.rstrip()
-                        + "\n"
-                        + new_content_prompt
-                        + "\n"
-                        + after_marker.lstrip()
-                    )
-                    new_prompt_text = self._strip_comments_for_prompt(
-                        new_prompt_text_raw
-                    )
-                else:
-                    target_match_content = self._strip_comments_for_prompt(
-                        marker_content
-                    ).strip()
-                    if target_match_content and target_match_content in prompt_text:
-                        new_prompt_text = prompt_text.replace(
-                            target_match_content, new_content_prompt.strip(), 1
-                        )
-                    else:
-                        new_prompt_text = prompt_text
-            else:
-                if not contains_prompt(workflow_text):
-                    _LOGGER.debug(
-                        "remove: prompt '%s' not found in full text (has_marker=False)",
-                        prompt_str_arg,
-                    )
-                    if not no_skip:
-                        _LOGGER.debug(
-                            "Prompt '%s' not found, skipping.", prompt_str_arg
-                        )
-                        return False
-                    new_content_prompt = workflow_text
-                else:
-                    if raw:
-                        new_content_prompt = workflow_text.replace(prompt_str_arg, "")
-                    else:
-                        target_lower = prompt_str_arg.strip().lower()
-                        lines = workflow_text.split("\n")
-                        new_lines = []
-                        for line in lines:
-                            if target_lower in line.lower():
-                                if effective_hard:
-                                    pass
-                                else:
-                                    stripped = line.strip()
-                                    if stripped.startswith("//"):
-                                        new_lines.append(line)
-                                    else:
-                                        indent = line[: len(line) - len(line.lstrip())]
-                                        new_lines.append(f"{indent}// {line.lstrip()}")
-                            else:
-                                new_lines.append(line)
-                        new_content_prompt = "\n".join(new_lines)
-
-                new_workflow_text = new_content_prompt
-                new_prompt_text = new_content_prompt
-
-        new_prompt_text = self._strip_comments_for_prompt(new_prompt_text)
-
-        self.prompt[node_id]["inputs"]["text"] = new_prompt_text
-        self._update_workflow_node_text(node_id, new_workflow_text)
-        return True
 
     # #endregion
 
@@ -1494,7 +939,7 @@ class WorkflowPromptPair:
 
     def generate_prompt_variants(
         self,
-        fragments: Iterable[Union[PromptFragment, Tuple[str, str, str, bool]]],
+        fragments: Iterable[PromptFragment],
         target_prompt: str,
         weight_expr: str,
         skip_add: bool,
@@ -1503,19 +948,7 @@ class WorkflowPromptPair:
         为每个提示词权重变体原地修改并 yield。
         如果相对权重无法解析当前值，或 skip_add 时提示词不存在，不 yield 任何内容。
         """
-        # 兼容老测试用例传来的 tuple 节点目标列表
-        actual_fragments: List[PromptFragment] = []
-        for f in fragments:
-            if isinstance(f, PromptFragment):
-                actual_fragments.append(f)
-            else:
-                t = cast(Tuple[Any, ...], f)
-                if len(t) == 4:
-                    actual_fragments.append(
-                        PromptFragment(
-                            self, str(t[0]), str(t[1]), str(t[2]), bool(t[3])
-                        )
-                    )
+        actual_fragments = list(fragments)
 
         current = None
         if is_relative(weight_expr):

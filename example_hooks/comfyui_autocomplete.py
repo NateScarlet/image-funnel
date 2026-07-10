@@ -41,7 +41,7 @@ from comfyui import (
     get_parser,
 )
 from workflow_prompt_pair import WorkflowPromptPair
-from prompt_locator import PromptFragment
+from prompt_fragment import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
 

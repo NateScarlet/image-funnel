@@ -32,10 +32,8 @@ import argparse
 
 from graphql_utils import update_image_label, fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
-from prompt_locator import (
-    START_REGION_PREFIX as _START_REGION_PREFIX,
-    PromptFragment,
-)
+from prompt_fragment import PromptFragment
+from prompt_locator import START_REGION_PREFIX as _START_REGION_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,55 +57,6 @@ except ImportError:
     )
     print("      pip install Pillow", file=sys.stderr)
     sys.exit(1)
-
-KNOWN_PRIMITIVE_TYPES = {
-    "PrimitiveInt",
-    "PrimitiveFloat",
-    "PrimitiveString",
-    "PrimitiveBoolean",
-}
-KNOWN_SWITCH_TYPES = {"Any Switch (rgthree)", "ComfySwitchNode"}
-
-
-def is_node_disabled(node: Dict[str, Any]) -> bool:
-    """
-    检查节点是否被停用 (Mute/Bypass)。
-    mode 值为 2 (Never/Mute) 或 4 (Bypass)。
-    """
-    return node.get("mode") in (2, 4)
-
-
-def convert_comfy_date_format_to_python(comfy_fmt: str) -> Tuple[str, str]:
-    """
-    将 ComfyUI 的日期占位符格式 (如 yyyyMMdd_hhmmss) 转换为 Python datetime 格式和对应的正则表达式。
-    """
-    replacements = [
-        ("yyyy", "%Y", r"\d{4}"),
-        ("yy", "%y", r"\d{2}"),
-        ("MM", "%m", r"\d{2}"),
-        ("dd", "%d", r"\d{2}"),
-        ("hh", "%H", r"\d{2}"),
-        ("mm", "%M", r"\d{2}"),
-        ("ss", "%S", r"\d{2}"),
-    ]
-    py_fmt = comfy_fmt
-    regex_pattern = comfy_fmt
-    for comfy_key, py_val, regex_val in replacements:
-        py_fmt = py_fmt.replace(comfy_key, py_val)
-        regex_pattern = regex_pattern.replace(comfy_key, regex_val)
-    return py_fmt, regex_pattern
-
-
-def strip_comments_for_prompt(text: str) -> str:
-    """
-    为 prompt 剥离注释行。如果一行去除首尾空白后以 '//' 开头，该整行将被完全过滤掉。
-    """
-    lines: List[str] = []
-    for line in text.splitlines():
-        if line.strip().startswith("//"):
-            continue
-        lines.append(line)
-    return "\n".join(lines)
 
 
 def is_under_directory(child_path: str, parent_path: str) -> bool:

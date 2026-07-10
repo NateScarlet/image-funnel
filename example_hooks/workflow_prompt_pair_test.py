@@ -4,142 +4,23 @@
 workflow_prompt_pair.py 的单元测试。
 """
 
+# 只允许使用项目测试脚本运行测试
 # 测试文件允许访问被测模块的私有成员
 # pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportCallIssue=false
 
 import unittest
 import os
 import json
-import sys
 from typing import Any, Dict, List, cast
 from PIL import Image
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
 
-from workflow_prompt_pair import (
-    WorkflowPromptPair,
-    is_node_disabled,
-)
+from workflow_prompt_pair import WorkflowPromptPair
+from prompt_fragment import PromptFragment
 from prompt_locator import (
-    find_terminal_input,
     get_workflow_node_text,
     get_target_clip_node,
 )
-
-
-# #region 基础函数测试
-class TestIsNodeDisabled(unittest.TestCase):
-    def test_mode_2_disabled(self):
-        self.assertTrue(is_node_disabled({"mode": 2}))
-
-    def test_mode_4_disabled(self):
-        self.assertTrue(is_node_disabled({"mode": 4}))
-
-    def test_mode_0_enabled(self):
-        self.assertFalse(is_node_disabled({"mode": 0}))
-
-    def test_no_mode_key(self):
-        self.assertFalse(is_node_disabled({}))
-
-    def test_mode_1_enabled(self):
-        self.assertFalse(is_node_disabled({"mode": 1}))
-
-
-class TestFindTerminalInput(unittest.TestCase):
-    def test_direct_value(self):
-        prompt = {"1": {"inputs": {"value": 42}}}
-        self.assertEqual(find_terminal_input(prompt, "1", "value"), ("1", "value"))
-
-    def test_through_primitive(self):
-        prompt = {
-            "1": {"inputs": {"seed": ["2", 0]}},
-            "2": {"class_type": "PrimitiveInt", "inputs": {"value": 12345}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "seed"), ("2", "value"))
-
-    def test_through_switch_comfy_on_false(self):
-        prompt = {
-            "1": {"inputs": {"cfg": ["2", 0]}},
-            "2": {
-                "class_type": "ComfySwitchNode",
-                "inputs": {"on_false": ["3", 0]},
-            },
-            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 5.0}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "cfg"), ("3", "value"))
-
-    def test_through_switch_comfy_on_true(self):
-        prompt = {
-            "1": {"inputs": {"cfg": ["2", 0]}},
-            "2": {
-                "class_type": "ComfySwitchNode",
-                "inputs": {"on_true": ["3", 0]},
-            },
-            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 7.0}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "cfg"), ("3", "value"))
-
-    def test_through_switch_rgthree(self):
-        prompt = {
-            "1": {"inputs": {"model": ["2", 0]}},
-            "2": {
-                "class_type": "Any Switch (rgthree)",
-                "inputs": {"any_1": ["3", 0]},
-            },
-            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "model"), ("3", "value"))
-
-    def test_through_custom_node(self):
-        prompt = {
-            "1": {"inputs": {"anything": ["2", 0]}},
-            "2": {
-                "class_type": "SomeCustomNode",
-                "inputs": {"output": ["3", 0]},
-            },
-            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 1.0}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "anything"), ("3", "value"))
-
-    def test_missing_node(self):
-        prompt = {}
-        self.assertEqual(
-            find_terminal_input(prompt, "nonexistent", "key"),
-            ("nonexistent", "key"),
-        )
-
-    def test_string_value(self):
-        prompt = {"1": {"inputs": {"text": "hello"}}}
-        self.assertEqual(find_terminal_input(prompt, "1", "text"), ("1", "text"))
-
-    def test_wrong_list_format(self):
-        prompt = {"1": {"inputs": {"key": [1, 2, 3]}}}
-        self.assertEqual(find_terminal_input(prompt, "1", "key"), ("1", "key"))
-
-    def test_list_non_string_first(self):
-        prompt = {"1": {"inputs": {"key": [1, 0]}}}
-        self.assertEqual(find_terminal_input(prompt, "1", "key"), ("1", "key"))
-
-    def test_nested_switch(self):
-        """嵌套 Switch 节点的追溯"""
-        prompt = {
-            "1": {"inputs": {"seed": ["2", 0]}},
-            "2": {
-                "class_type": "ComfySwitchNode",
-                "inputs": {"on_false": ["3", 0]},
-            },
-            "3": {
-                "class_type": "Any Switch (rgthree)",
-                "inputs": {"any_1": ["4", 0]},
-            },
-            "4": {"class_type": "PrimitiveInt", "inputs": {"value": 42}},
-        }
-        self.assertEqual(find_terminal_input(prompt, "1", "seed"), ("4", "value"))
-
-
-# #endregion
 
 
 # #region 节点分析测试
@@ -827,210 +708,6 @@ class TestFilenameUpdate(unittest.TestCase):
 # #endregion
 
 
-# #region Lora 权重测试
-class TestLoraWeight(unittest.TestCase):
-    def test_get_current_lora_weight_native_lora(self):
-        prompt = {
-            "1": {
-                "class_type": "LoraLoader",
-                "inputs": {
-                    "lora_name": "my_style.safetensors",
-                    "strength_model": 0.8,
-                    "strength_clip": 0.8,
-                },
-            }
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "LoraLoader",
-                    "widgets_values": ["my_style.safetensors", 0.8, 0.8],
-                }
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
-        self.assertEqual(weight, 0.8)
-
-    def test_get_current_lora_weight_native_lora_through_primitive(self):
-        prompt = {
-            "1": {
-                "class_type": "LoraLoader",
-                "inputs": {
-                    "lora_name": "my_style.safetensors",
-                    "strength_model": ["2", 0],
-                    "strength_clip": ["2", 0],
-                },
-            },
-            "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.75}},
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "LoraLoader",
-                    "widgets_values": ["my_style.safetensors", 0.75, 0.75],
-                },
-                {"id": "2", "type": "PrimitiveFloat", "widgets_values": [0.75]},
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
-        self.assertEqual(weight, 0.75)
-
-    def test_get_current_lora_weight_power_lora(self):
-        prompt = {
-            "1": {
-                "class_type": "Power Lora Loader (rgthree)",
-                "inputs": {"lora_1": {"lora": "my_style.safetensors", "strength": 0.9}},
-            }
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "Power Lora Loader (rgthree)",
-                    "widgets_values": [
-                        {"lora": "my_style.safetensors", "strength": 0.9}
-                    ],
-                }
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
-        self.assertEqual(weight, 0.9)
-
-    def test_get_current_lora_weight_workflow_fallback(self):
-        prompt = {}
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "LoraLoader",
-                    "widgets_values": ["my_style.safetensors", 0.6, 0.6],
-                },
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
-        self.assertIsNone(weight)
-
-    def test_get_current_lora_weight_power_lora_workflow(self):
-        prompt = {}
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "Power Lora Loader (rgthree)",
-                    "widgets_values": [
-                        {"lora": "my_style.safetensors", "strength": 0.7}
-                    ],
-                }
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
-        self.assertIsNone(weight)
-
-    def test_get_current_lora_weight_not_found(self):
-        prompt = {}
-        workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("nonexistent")
-        self.assertIsNone(weight)
-
-    def test_modify_lora_weights_native_lora(self):
-        prompt = {
-            "1": {
-                "class_type": "LoraLoader",
-                "inputs": {
-                    "lora_name": "my_style.safetensors",
-                    "strength_model": 0.8,
-                    "strength_clip": 0.8,
-                },
-            }
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "LoraLoader",
-                    "widgets_values": ["my_style.safetensors", 0.8, 0.8],
-                },
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
-        self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.5)
-        self.assertEqual(prompt["1"]["inputs"]["strength_clip"], 0.5)
-        self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.5)
-        self.assertEqual(workflow["nodes"][0]["widgets_values"][2], 0.5)
-
-    def test_modify_lora_weights_native_lora_primitive(self):
-        prompt = {
-            "1": {
-                "class_type": "LoraLoader",
-                "inputs": {
-                    "lora_name": "my_style.safetensors",
-                    "strength_model": ["2", 0],
-                    "strength_clip": ["2", 0],
-                },
-            },
-            "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.8}},
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "LoraLoader",
-                    "widgets_values": ["my_style.safetensors", 0.8, 0.8],
-                },
-                {"id": "2", "type": "PrimitiveFloat", "widgets_values": [0.8]},
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
-        self.assertEqual(prompt["2"]["inputs"]["value"], 0.5)
-        self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.5)
-        self.assertEqual(workflow["nodes"][0]["widgets_values"][2], 0.5)
-        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], 0.5)
-
-    def test_modify_lora_weights_power_lora(self):
-        prompt = {
-            "1": {
-                "class_type": "Power Lora Loader (rgthree)",
-                "inputs": {"lora_1": {"lora": "my_style.safetensors", "strength": 0.8}},
-            }
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "Power Lora Loader (rgthree)",
-                    "widgets_values": [
-                        {"lora": "my_style.safetensors", "strength": 0.8}
-                    ],
-                }
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
-        self.assertEqual(prompt["1"]["inputs"]["lora_1"]["strength"], 0.5)
-        self.assertEqual(workflow["nodes"][0]["widgets_values"][0]["strength"], 0.5)
-
-    def test_generate_lora_variants_relative_no_current(self):
-        """相对权重但无法获取当前值时不生成变体"""
-        prompt = {}
-        workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_lora_variants("nonexistent", "x+0.1"))
-        self.assertEqual(len(variants), 0)
-
-
-# #endregion
-
-
 # #region CFG 权重测试
 class TestCfgWeight(unittest.TestCase):
     def test_get_current_cfg_weight_basic(self):
@@ -1232,7 +909,9 @@ class TestPromptWeight(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "beautiful")
+        weight = pair.get_current_prompt_weight(
+            [PromptFragment(pair, "1")], "beautiful"
+        )
         self.assertEqual(weight, 1.2)
 
     def test_get_current_prompt_weight_brackets(self):
@@ -1252,7 +931,9 @@ class TestPromptWeight(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "beautiful")
+        weight = pair.get_current_prompt_weight(
+            [PromptFragment(pair, "1")], "beautiful"
+        )
         self.assertEqual(weight, 1.0)
 
     def test_get_current_prompt_weight_bare(self):
@@ -1272,7 +953,9 @@ class TestPromptWeight(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "beautiful")
+        weight = pair.get_current_prompt_weight(
+            [PromptFragment(pair, "1")], "beautiful"
+        )
         self.assertEqual(weight, 1.0)
 
     def test_get_current_prompt_weight_not_found(self):
@@ -1285,14 +968,16 @@ class TestPromptWeight(unittest.TestCase):
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello world"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "nonexistent")
+        weight = pair.get_current_prompt_weight(
+            [PromptFragment(pair, "1")], "nonexistent"
+        )
         self.assertIsNone(weight)
 
     def test_get_current_prompt_weight_node_not_found(self):
         workflow = {"nodes": []}
         prompt = {}
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("999", "", "", False)], "test")
+        weight = pair.get_current_prompt_weight([PromptFragment(pair, "999")], "test")
         self.assertIsNone(weight)
 
     def test_get_current_prompt_weight_bare_with_escaped_parens(self):
@@ -1314,7 +999,7 @@ class TestPromptWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         weight = pair.get_current_prompt_weight(
-            [("1", "", "", False)], "oil painting \\(medium\\)"
+            [PromptFragment(pair, "1")], "oil painting \\(medium\\)"
         )
         self.assertEqual(weight, 1.0)
 
@@ -1336,7 +1021,9 @@ class TestPromptWeight(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "\\(medium\\)")
+        weight = pair.get_current_prompt_weight(
+            [PromptFragment(pair, "1")], "\\(medium\\)"
+        )
         self.assertEqual(weight, 1.0)
 
     def test_get_current_prompt_weight_bare_normal_still_works(self):
@@ -1358,10 +1045,10 @@ class TestPromptWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         # 匹配完整词
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "hello")
+        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "hello")
         self.assertEqual(weight, 1.0)
         # 不匹配子串（如 "world" 中的 "or" 不应匹配）
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "orl")
+        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "orl")
         self.assertIsNone(weight)
 
     def test_get_current_prompt_weight_escaped_parens_not_substring(self):
@@ -1382,62 +1069,8 @@ class TestPromptWeight(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "mediu")
+        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "mediu")
         self.assertIsNone(weight)
-
-    def test_adjust_prompt_weight_in_text_bare_word(self):
-        """裸词被转换为带权重的格式"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "hello world", "hello", 1.5
-        )
-        self.assertTrue(modified)
-        self.assertEqual(new_text, "(hello:1.5) world")
-
-    def test_adjust_prompt_weight_in_text_brackets(self):
-        """带括号无权重的格式被转换为带权重的格式"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "(hello) world", "hello", 1.5
-        )
-        self.assertTrue(modified)
-        self.assertEqual(new_text, "(hello:1.5) world")
-
-    def test_adjust_prompt_weight_in_text_existing_weight(self):
-        """已有权重的格式被更新"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "(hello:1.2) world", "hello", 1.5
-        )
-        self.assertTrue(modified)
-        self.assertEqual(new_text, "(hello:1.5) world")
-
-    def test_adjust_prompt_weight_in_text_not_found(self):
-        """未找到目标词"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "hello world", "nonexistent", 1.5
-        )
-        self.assertFalse(modified)
-        self.assertEqual(new_text, "hello world")
-
-    def test_adjust_prompt_weight_in_text_negative_weight(self):
-        """负权重"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "(hello:-0.5) world", "hello", -1.0
-        )
-        self.assertTrue(modified)
-        self.assertEqual(new_text, "(hello:-1.0) world")
-
-    def test_adjust_prompt_weight_in_text_escaped_parens(self):
-        """文本含 `\\(text\\)` 转义括号时，裸词匹配仍能正确添加权重"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        new_text, modified = pair._adjust_prompt_weight_in_text(
-            "oil painting \\(medium\\), other", "oil painting \\(medium\\)", 0.9
-        )
-        self.assertTrue(modified)
-        self.assertEqual(new_text, "(oil painting \\(medium\\):0.9), other")
 
     def test_modify_prompt_weights_skip_add(self):
         """skip_add=True 且提示词不存在时不添加"""
@@ -1451,7 +1084,7 @@ class TestPromptWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         pair.modify_prompt_weights(
-            [("1", "", "", False)], "nonexistent", 1.5, skip_add=True
+            [PromptFragment(pair, "1")], "nonexistent", 1.5, skip_add=True
         )
         self.assertNotIn("nonexistent", prompt["1"]["inputs"]["text"])
 
@@ -1467,101 +1100,10 @@ class TestPromptWeight(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         pair.modify_prompt_weights(
-            [("1", "", "", False)], "beautiful", 1.5, skip_add=False
+            [PromptFragment(pair, "1")], "beautiful", 1.5, skip_add=False
         )
         self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
         self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_strip_comments_for_prompt(self):
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        text = "hello\n// this is a comment\nworld\n// another comment"
-        result = pair._strip_comments_for_prompt(text)
-        self.assertEqual(result, "hello\nworld")
-
-    def test_add_prompt_to_node_with_marker(self):
-        """通过 marker 区域添加提示词"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece,\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair._add_prompt_to_node(
-            "1",
-            "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
-        )
-        self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
-        self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
-
-    def test_add_prompt_to_node_without_marker(self):
-        """无 marker 时直接追加"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["masterpiece, best quality"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece, best quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair._add_prompt_to_node(
-            "1",
-            "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-        )
-        self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
-        self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
-
-    def test_add_prompt_to_node_empty_marker(self):
-        """空 marker 区域"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "\nbest quality"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair._add_prompt_to_node(
-            "1",
-            "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
-        )
-        self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
-        self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
 
     def test_get_workflow_node_text_direct(self):
         workflow = {
@@ -1573,14 +1115,14 @@ class TestPromptWeight(unittest.TestCase):
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello world"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        text = pair._get_workflow_node_text("1")
+        text = pair.get_workflow_node_text("1")
         self.assertEqual(text, "hello world")
 
     def test_get_workflow_node_text_not_found(self):
         workflow = {"nodes": []}
         prompt = {}
         pair = WorkflowPromptPair(workflow, prompt)
-        text = pair._get_workflow_node_text("999")
+        text = pair.get_workflow_node_text("999")
         self.assertIsNone(text)
 
     def test_get_workflow_node_text_non_string(self):
@@ -1589,7 +1131,7 @@ class TestPromptWeight(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        text = pair._get_workflow_node_text("1")
+        text = pair.get_workflow_node_text("1")
         self.assertIsNone(text)
 
     def test_generate_prompt_variants_relative_no_current(self):
@@ -1613,591 +1155,10 @@ class TestPromptWeight(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         variants = list(
             pair.generate_prompt_variants(
-                [("1", "", "", False)], "nonexistent", "1.5", skip_add=True
+                [PromptFragment(pair, "1")], "nonexistent", "1.5", skip_add=True
             )
         )
         self.assertEqual(len(variants), 0)
-
-
-# #endregion
-
-
-# #region 双轨道文本处理测试
-class TestDoubleTrack(unittest.TestCase):
-    def setUp(self):
-        self.start_marker = "//#region hook-positive"
-        self.end_marker = "//#endregion hook-positive"
-
-    def test_add_without_markers(self):
-        """use_markers=False 时直接追加"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "add", "beautiful scenery", "", "", False, False, False, False
-        )
-        self.assertTrue(result)
-        self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-        self.assertNotIn("//#region", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_add_raw(self):
-        """raw=True 时不添加逗号"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "raw text here",
-            self.start_marker,
-            self.end_marker,
-            True,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("raw text here", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_add_no_skip(self):
-        """no_skip=True 时即使已存在也添加"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            True,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-
-    def test_add_skip_existing(self):
-        """已存在且 no_skip=False 时跳过"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertFalse(result)
-
-    def test_add_existing_no_marker_skip(self):
-        """无 marker 时已存在跳过"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["beautiful scenery, masterpiece"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery, masterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "add", "beautiful scenery", "", "", False, False, False, False
-        )
-        self.assertFalse(result)
-
-    def test_remove_hard(self):
-        """hard=True 时直接删除"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            True,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_remove_comment_out(self):
-        """hard=False 时注释掉"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-        self.assertNotIn("beautiful scenery", prompt["1"]["inputs"]["text"])
-
-    def test_remove_no_marker_hard(self):
-        """hard=True, has_marker=False"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["beautiful scenery, masterpiece"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery, masterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, False, True, False
-        )
-        self.assertTrue(result)
-        self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_remove_no_marker_comment_out(self):
-        """hard=False, has_marker=False"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["beautiful scenery, masterpiece"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery, masterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, False, False, False
-        )
-        self.assertTrue(result)
-        self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_remove_raw(self):
-        """raw=True 时做纯文本替换"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nsome raw text,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "some raw text,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "raw text",
-            self.start_marker,
-            self.end_marker,
-            True,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertNotIn("raw text", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_remove_no_skip(self):
-        """no_skip=True 时即使没找到也继续"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece,\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "nonexistent_prompt",
-            self.start_marker,
-            self.end_marker,
-            False,
-            True,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-
-    def test_remove_skip_not_found(self):
-        """没找到且 no_skip=False 时跳过"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece,"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "nonexistent",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertFalse(result)
-
-    def test_nonexistent_node(self):
-        """节点不存在时返回 False"""
-        workflow = {"nodes": []}
-        prompt = {}
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "999", "add", "test", "", "", False, False, False, False
-        )
-        self.assertFalse(result)
-
-    def test_add_with_comments_in_workflow(self):
-        """workflow 中有注释但 prompt 没有时 (is_equivalent=False) 的回退"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// comment in workflow\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece,\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn(
-            "// comment in workflow", workflow["nodes"][0]["widgets_values"][0]
-        )
-        self.assertIn("beautiful scenery", prompt["1"]["inputs"]["text"])
-
-    def test_add_non_equivalent_no_match(self):
-        """非等价情况下 marker 内容无法在 prompt 中匹配时的回退"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// some comment\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "completely different text"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("beautiful scenery", prompt["1"]["inputs"]["text"])
-
-    def test_remove_non_equivalent(self):
-        """workflow 和 prompt 文本不一致时的 remove 回退"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// comment in workflow\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn(
-            "// comment in workflow", workflow["nodes"][0]["widgets_values"][0]
-        )
-        self.assertNotIn("beautiful scenery", prompt["1"]["inputs"]["text"])
-
-    def test_remove_non_equivalent_no_match(self):
-        """非等价 remove 且 target_match_content 不在 prompt 中"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// some comment\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "completely different text"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertEqual(prompt["1"]["inputs"]["text"], "completely different text")
-
-    def test_remove_hard_raw_no_marker(self):
-        """hard=True, raw=True, has_marker=False"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["beautiful scenery, masterpiece"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery, masterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "beautiful scenery", "", "", True, False, True, False
-        )
-        self.assertTrue(result)
-        self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_remove_skip_not_found_no_marker(self):
-        """没找到 (has_marker=False) 且 no_skip=False 时跳过"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "nonexistent", "", "", False, False, False, False
-        )
-        self.assertFalse(result)
-
-    def test_remove_no_skip_not_found_no_marker(self):
-        """no_skip=True 且没找到 (has_marker=False)"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "nonexistent", "", "", False, True, False, False
-        )
-        self.assertTrue(result)
-
-    def test_add_raw_no_marker(self):
-        """raw=True, use_markers=False"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "add", "raw_text", "", "", True, False, False, False
-        )
-        self.assertTrue(result)
-        self.assertIn("raw_text", workflow["nodes"][0]["widgets_values"][0])
 
 
 # #endregion
@@ -2234,7 +1195,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
             if not self.png_files:
                 self.fail(f"指定的测试样本目录中没有 PNG 文件: {self.samples_dir}")
         else:
-            self.samples_dir = os.path.join(current_dir, "samples")
+            self.samples_dir = os.path.join(__file__, "..", "samples")
             self.png_files = []
             if os.path.exists(self.samples_dir):
                 self.png_files = [
@@ -2272,6 +1233,9 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 end_marker = "//#endregion hook-positive"
 
                 pair = WorkflowPromptPair(workflow, prompt)
+                fragment = PromptFragment(
+                    pair, target_node_id, start_marker, end_marker, True
+                )
 
                 # --- 第一次 add "beautiful scenery" ---
                 prompt_str_arg = "beautiful scenery"
@@ -2288,7 +1252,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 )
 
                 self.assertTrue(
-                    pair.process_double_track(
+                    fragment._process_double_track(
                         target_node_id,
                         "add",
                         prompt_str_arg,
@@ -2313,7 +1277,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 prompt_str_arg = "golden sunset"
 
                 self.assertTrue(
-                    pair.process_double_track(
+                    fragment._process_double_track(
                         target_node_id,
                         "add",
                         prompt_str_arg,
@@ -2339,7 +1303,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 prompt_str_arg = "beautiful scenery"
 
                 self.assertTrue(
-                    pair.process_double_track(
+                    fragment._process_double_track(
                         target_node_id,
                         "remove",
                         prompt_str_arg,
@@ -2365,7 +1329,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 prompt_str_arg = "golden sunset"
 
                 self.assertTrue(
-                    pair.process_double_track(
+                    fragment._process_double_track(
                         target_node_id,
                         "remove",
                         prompt_str_arg,
@@ -2521,14 +1485,10 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 if target_node_id is None:
                     continue
 
-                target_nodes = [
-                    (
-                        target_node_id,
-                        "//#region hook-positive",
-                        "//#endregion hook-positive",
-                        True,
-                    )
-                ]
+                pair = WorkflowPromptPair(workflow, prompt)
+                target_nodes = list(
+                    pair.locate_prompts(nodes=[target_node_id], is_neg=False)
+                )
 
                 wf_text = get_workflow_node_text(workflow, target_node_id)
                 self.assertIsNotNone(wf_text)
@@ -2548,7 +1508,6 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 if not target_word:
                     continue
 
-                pair = WorkflowPromptPair(workflow, prompt)
                 modified = pair.generate_prompt_variants(
                     target_nodes, target_word, "1.35", skip_add=True
                 )
@@ -2746,7 +1705,8 @@ class TestCoverageGaps(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([("1", "", "", False)], "test")
+        fragment = PromptFragment(pair, "1")
+        weight = pair.get_current_prompt_weight([fragment], "test")
         self.assertIsNone(weight)
 
     def test_modify_prompt_weights_no_text(self):
@@ -2756,7 +1716,8 @@ class TestCoverageGaps(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_prompt_weights([("1", "", "", False)], "test", 1.5, skip_add=False)
+        fragment = PromptFragment(pair, "1")
+        pair.modify_prompt_weights([fragment], "test", 1.5, skip_add=False)
         self.assertNotIn("test", prompt["1"].get("inputs", {}).get("text", ""))
 
     def test_modify_prompt_weights_no_node_info(self):
@@ -2768,9 +1729,8 @@ class TestCoverageGaps(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_prompt_weights(
-            [("999", "", "", False)], "test", 1.5, skip_add=False
-        )
+        fragment = PromptFragment(pair, "999")
+        pair.modify_prompt_weights([fragment], "test", 1.5, skip_add=False)
 
     def test_modify_prompt_weights_non_string_prompt_text(self):
         """prompt 中 text 不是字符串时降级为空字符串"""
@@ -2781,323 +1741,14 @@ class TestCoverageGaps(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": 123}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_prompt_weights(
-            [("1", "", "", False)], "nonexistent", 1.5, skip_add=False
-        )
+        fragment = PromptFragment(pair, "1")
+        pair.modify_prompt_weights([fragment], "nonexistent", 1.5, skip_add=False)
         self.assertIn("(nonexistent:1.5)", prompt["1"]["inputs"]["text"])
 
     def test_update_workflow_node_text_no_node(self):
         """节点不存在时不报错"""
         pair = WorkflowPromptPair({"nodes": []}, {})
-        pair._update_workflow_node_text("999", "new text")
-
-    def test_add_prompt_to_node_no_node(self):
-        """节点不存在时直接返回"""
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        pair._add_prompt_to_node("999", "test", "", "", False)
-
-    def test_add_prompt_to_node_non_string_prompt_text(self):
-        """prompt 中 text 不是字符串时降级"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["hello"]}
-            ]
-        }
-        prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": 123}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair._add_prompt_to_node("1", "(beautiful:1.5)", "", "", False)
-        self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
-
-    def test_add_prompt_to_node_marker_no_comma(self):
-        """marker 内容不以逗号结尾时自动添加"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair._add_prompt_to_node(
-            "1",
-            "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
-        )
-        self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_process_double_track_non_string_prompt_text(self):
-        """prompt_text 不是字符串时降级"""
-        workflow = {
-            "nodes": [
-                {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
-            ]
-        }
-        prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": 123}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "add", "beautiful", "", "", False, False, False, False
-        )
-        self.assertTrue(result)
-
-    def test_process_double_track_add_marker_no_comma(self):
-        """add 时 marker 内容不以逗号结尾"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("beautiful,", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_process_double_track_add_empty_marker(self):
-        """add 时 marker 区域为空"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "\nbest quality"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("beautiful,", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_process_double_track_add_non_equivalent_match(self):
-        """非等价场景下 marker 内容可在 prompt 中匹配"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// comment\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece,\nbest quality"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "beautiful",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("beautiful", prompt["1"]["inputs"]["text"])
-
-    def test_process_double_track_add_non_equivalent_no_match_raw(self):
-        """非等价场景下 marker 内容无法匹配且 raw=True"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// comment\nmasterpiece,\n//#endregion hook-positive\nbest quality"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "completely different"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "add",
-            "raw text",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("raw text", prompt["1"]["inputs"]["text"])
-
-    def test_process_double_track_remove_already_commented(self):
-        """remove 碰到已注释的行时保留原样 (no_skip=True)"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// beautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-            True,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_process_double_track_remove_non_equivalent_match(self):
-        """非等价 remove 时 target_match_content 可在 prompt 中匹配"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "//#region hook-positive\n// comment\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
-            False,
-            False,
-            True,
-        )
-        self.assertTrue(result)
-        self.assertNotIn("beautiful scenery", prompt["1"]["inputs"]["text"])
-
-    def test_process_double_track_remove_no_marker_already_commented(self):
-        """无 marker remove 时碰到已注释的行 (no_skip=True)"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["// beautiful scenery,\nmasterpiece"],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "// beautiful scenery,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, True, False, False
-        )
-        self.assertTrue(result)
-        self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-
-    def test_process_double_track_remove_no_marker_non_matching_line(self):
-        """无 marker remove 时不匹配的行保留"""
-        workflow = {
-            "nodes": [
-                {
-                    "id": "1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "beautiful scenery,\nkeep this line,\nmasterpiece"
-                    ],
-                }
-            ],
-        }
-        prompt = {
-            "1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "beautiful scenery,\nkeep this line,\nmasterpiece"},
-            }
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, False, False, False
-        )
-        self.assertTrue(result)
-        self.assertIn("keep this line", workflow["nodes"][0]["widgets_values"][0])
+        pair.update_workflow_node_text("999", "new text")
 
     def test_generate_cfg_variants_inconsistent_lengths(self):
         """不同 KSampler 节点产生不同数量的变体时抛出异常"""

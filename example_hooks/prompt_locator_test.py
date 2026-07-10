@@ -1,13 +1,13 @@
-import unittest
-from typing import Dict, Any
+# 只允许使用项目测试脚本运行测试
+# pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportCallIssue=false, reportMissingParameterType=false, reportUnknownParameterType=false
 
-from workflow_prompt_pair import WorkflowPromptPair
+import unittest
+
 from prompt_locator import (
     find_terminal_input,
     get_region_markers,
-    find_nodes_with_region,
     get_target_clip_node,
-    resolve_target_to_nodes,
+    is_node_disabled,
 )
 
 
@@ -82,32 +82,6 @@ class TestPromptLocator(unittest.TestCase):
         self.assertTrue(start.endswith("positive"))
         self.assertTrue(end.endswith("positive"))
 
-    def test_find_nodes_with_region(self):
-        prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-            },
-        }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "widgets_values": [
-                        "//#region hook-myregion\nhello\n//#endregion hook-myregion"
-                    ],
-                },
-                {
-                    "id": "node_2",
-                    "widgets_values": ["no region here"],
-                },
-            ]
-        }
-        res = find_nodes_with_region(prompt, workflow, "myregion")
-        self.assertEqual(res, ["node_1"])
-
     def test_get_target_clip_node_no_locator(self):
         prompt = {
             "node_1": {
@@ -143,122 +117,114 @@ class TestPromptLocator(unittest.TestCase):
         target_neg = get_target_clip_node(prompt_neg, is_neg=True)
         self.assertEqual(target_neg, "node_3")
 
-    def test_resolve_target_to_nodes_direct_node(self):
-        prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-            }
-        }
-        workflow: Dict[str, Any] = {}
-        res = resolve_target_to_nodes(prompt, workflow, "node", "node_1", False)
-        self.assertEqual(res, [("node_1", "", "", False)])
 
-    def test_resolve_target_to_nodes_missing_node(self):
-        prompt: Dict[str, Any] = {}
-        workflow: Dict[str, Any] = {}
-        res = resolve_target_to_nodes(prompt, workflow, "node", "node_99", False)
-        self.assertEqual(res, [])
+class TestIsNodeDisabled(unittest.TestCase):
+    def test_mode_2_disabled(self):
+        self.assertTrue(is_node_disabled({"mode": 2}))
 
-    def test_locate_prompt_fragments_default(self):
-        prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece"},
-            }
-        }
-        workflow: Dict[str, Any] = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "widgets_values": ["masterpiece"],
-                }
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        res = list(pair.locate_prompts(is_neg=False))
-        self.assertEqual(len(res), 1)
-        self.assertEqual(res[0].node_id, "node_1")
-        self.assertEqual(res[0].start_marker, "//#region hook-positive")
-        self.assertEqual(res[0].use_markers, True)
+    def test_mode_4_disabled(self):
+        self.assertTrue(is_node_disabled({"mode": 4}))
 
-    def test_locate_prompt_fragments_mixed(self):
+    def test_mode_0_enabled(self):
+        self.assertFalse(is_node_disabled({"mode": 0}))
+
+    def test_no_mode_key(self):
+        self.assertFalse(is_node_disabled({}))
+
+    def test_mode_1_enabled(self):
+        self.assertFalse(is_node_disabled({"mode": 1}))
+
+
+class TestFindTerminalInput(unittest.TestCase):
+    def test_direct_value(self):
+        prompt = {"1": {"inputs": {"value": 42}}}
+        self.assertEqual(find_terminal_input(prompt, "1", "value"), ("1", "value"))
+
+    def test_through_primitive(self):
         prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
+            "1": {"inputs": {"seed": ["2", 0]}},
+            "2": {"class_type": "PrimitiveInt", "inputs": {"value": 12345}},
+        }
+        self.assertEqual(find_terminal_input(prompt, "1", "seed"), ("2", "value"))
+
+    def test_through_switch_comfy_on_false(self):
+        prompt = {
+            "1": {"inputs": {"cfg": ["2", 0]}},
+            "2": {
+                "class_type": "ComfySwitchNode",
+                "inputs": {"on_false": ["3", 0]},
             },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-            },
+            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 5.0}},
         }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "widgets_values": ["node 1 text"],
-                },
-                {
-                    "id": "node_2",
-                    "widgets_values": [
-                        "//#region hook-myregion\nhello\n//#endregion hook-myregion"
-                    ],
-                },
-            ]
-        }
-        pair = WorkflowPromptPair(workflow, prompt)
-        res = list(pair.locate_prompts(nodes=["node_1"], regions=["myregion"]))
-        self.assertEqual(len(res), 2)
+        self.assertEqual(find_terminal_input(prompt, "1", "cfg"), ("3", "value"))
 
-        self.assertEqual(res[0].node_id, "node_1")
-        self.assertEqual(res[0].use_markers, False)
-        self.assertEqual(res[0].text, "node 1 text")
-
-        self.assertEqual(res[1].node_id, "node_2")
-        self.assertEqual(res[1].use_markers, True)
-        self.assertEqual(res[1].text, "\nhello\n")
-
-    def test_fragment_text_and_modify(self):
+    def test_through_switch_comfy_on_true(self):
         prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece"},
-            }
+            "1": {"inputs": {"cfg": ["2", 0]}},
+            "2": {
+                "class_type": "ComfySwitchNode",
+                "inputs": {"on_true": ["3", 0]},
+            },
+            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 7.0}},
         }
-        workflow = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "widgets_values": [
-                        "//#region hook-positive\nmasterpiece\n//#endregion hook-positive"
-                    ],
-                }
-            ]
+        self.assertEqual(find_terminal_input(prompt, "1", "cfg"), ("3", "value"))
+
+    def test_through_switch_rgthree(self):
+        prompt = {
+            "1": {"inputs": {"model": ["2", 0]}},
+            "2": {
+                "class_type": "Any Switch (rgthree)",
+                "inputs": {"any_1": ["3", 0]},
+            },
+            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5}},
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        fragments = list(pair.locate_prompts(is_neg=False))
-        self.assertEqual(len(fragments), 1)
-        fragment = fragments[0]
+        self.assertEqual(find_terminal_input(prompt, "1", "model"), ("3", "value"))
 
-        # 1. 验证获取文本
-        self.assertEqual(fragment.text, "\nmasterpiece\n")
+    def test_through_custom_node(self):
+        prompt = {
+            "1": {"inputs": {"anything": ["2", 0]}},
+            "2": {
+                "class_type": "SomeCustomNode",
+                "inputs": {"output": ["3", 0]},
+            },
+            "3": {"class_type": "PrimitiveFloat", "inputs": {"value": 1.0}},
+        }
+        self.assertEqual(find_terminal_input(prompt, "1", "anything"), ("3", "value"))
 
-        # 2. 验证获取权重
-        self.assertEqual(fragment.get_weight("masterpiece"), 1.0)
-        self.assertIsNone(fragment.get_weight("missing"))
+    def test_missing_node(self):
+        prompt = {}
+        self.assertEqual(
+            find_terminal_input(prompt, "nonexistent", "key"),
+            ("nonexistent", "key"),
+        )
 
-        # 3. 增加提示词并验证
-        success = fragment.add("beautiful scenery")
-        self.assertTrue(success)
-        self.assertIn("beautiful scenery", fragment.text)
+    def test_string_value(self):
+        prompt = {"1": {"inputs": {"text": "hello"}}}
+        self.assertEqual(find_terminal_input(prompt, "1", "text"), ("1", "text"))
 
-        # 4. 更改权重
-        modified = fragment.modify_weight("beautiful scenery", 1.5, skip_add=False)
-        self.assertTrue(modified)
-        self.assertEqual(fragment.get_weight("beautiful scenery"), 1.5)
+    def test_wrong_list_format(self):
+        prompt = {"1": {"inputs": {"key": [1, 2, 3]}}}
+        self.assertEqual(find_terminal_input(prompt, "1", "key"), ("1", "key"))
 
-        # 5. 移除提示词
-        removed = fragment.remove("beautiful scenery")
-        self.assertTrue(removed)
-        self.assertIsNone(fragment.get_weight("beautiful scenery"))
+    def test_list_non_string_first(self):
+        prompt = {"1": {"inputs": {"key": [1, 0]}}}
+        self.assertEqual(find_terminal_input(prompt, "1", "key"), ("1", "key"))
+
+    def test_nested_switch(self):
+        """嵌套 Switch 节点的追溯"""
+        prompt = {
+            "1": {"inputs": {"seed": ["2", 0]}},
+            "2": {
+                "class_type": "ComfySwitchNode",
+                "inputs": {"on_false": ["3", 0]},
+            },
+            "3": {
+                "class_type": "Any Switch (rgthree)",
+                "inputs": {"any_1": ["4", 0]},
+            },
+            "4": {"class_type": "PrimitiveInt", "inputs": {"value": 42}},
+        }
+        self.assertEqual(find_terminal_input(prompt, "1", "seed"), ("4", "value"))
 
 
 if __name__ == "__main__":

@@ -1,19 +1,12 @@
+# 只允许使用项目测试脚本运行测试
+
 import unittest
 import os
 import json
 from PIL import Image
 
-# 允许直接在此目录下运行，也可以在项目根目录下运行
-import sys
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
-
-from comfyui import (
-    strip_comments_for_prompt,
-    get_relative_output_dir,
-)
+from comfyui import get_relative_output_dir
+from prompt_fragment import strip_comments_for_prompt
 from prompt_locator import (
     get_workflow_node_text,
     get_target_clip_node,
@@ -38,7 +31,7 @@ class TestComfyUIHook(unittest.TestCase):
                 self.fail(f"指定的测试样本目录中没有 PNG 文件: {self.samples_dir}")
         else:
             # 未指定时使用默认 samples 目录（可选）
-            self.samples_dir = os.path.join(current_dir, "samples")
+            self.samples_dir = os.path.join(__file__, "..", "samples")
             self.png_files = []
             if os.path.exists(self.samples_dir):
                 self.png_files = [

@@ -4,19 +4,40 @@
 """
 prompt_locator 模块：封装 ComfyUI 提示词节点定位逻辑。
 
-提供 PromptFragment OOP 实体封装，使用迭代器定位并操作目标节点/区域，
-使调用者无需关心 marker 标记的具体处理。
+提供纯定位函数，用于在 prompt/workflow 结构中查找目标 CLIPTextEncode 节点，
+不涉及文本操作的任何细节。
 """
 
 import os
-import logging
-import re
-from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Any, Optional, Set, cast
 
-if TYPE_CHECKING:
-    from workflow_prompt_pair import WorkflowPromptPair
+# prompt_locator 是纯定位工具模块，不依赖其他 example_hooks 模块
 
-_LOGGER = logging.getLogger(__name__)
+
+@dataclass
+class NodeInfo:
+    """节点信息缓存"""
+
+    node_id: str
+    node_data: Dict[str, Any]  # workflow 中的节点对象引用
+    prompt_data: Dict[str, Any]  # prompt 中的节点对象引用（可能为空）
+    node_type: str  # workflow 中的 type
+    class_type: str  # prompt 中的 class_type
+    is_disabled: bool
+    is_subgraph: bool
+    subgraph_id: Optional[str]
+    widgets_values: Optional[List[Any]]
+    inputs: Dict[str, Any]
+
+
+def is_node_disabled(node: Dict[str, Any]) -> bool:
+    """
+    检查节点是否被停用 (Mute/Bypass)。
+    mode 值为 2 (Never/Mute) 或 4 (Bypass)。
+    """
+    return node.get("mode") in (2, 4)
+
 
 # #region 常量定义与环境变量读取
 
@@ -37,158 +58,6 @@ START_REGION_PREFIX: str = os.getenv(
 END_REGION_PREFIX: str = os.getenv("HOOK_END_REGION_PREFIX", _DEFAULT_END_REGION_PREFIX)
 
 # #endregion
-
-
-class PromptFragment:
-    """
-    表示定位出来的一段提示词片段。
-    它可能是整个 CLIPTextEncode 节点的文本，也可能是被特定区域标记包裹的局部文本段。
-    """
-
-    def __init__(
-        self,
-        pair: "WorkflowPromptPair",  # 关联的 WorkflowPromptPair 实例
-        node_id: str,
-        start_marker: str = "",
-        end_marker: str = "",
-        use_markers: bool = False,
-    ):
-        self.pair = pair
-        self.node_id = node_id
-        self.start_marker = start_marker
-        self.end_marker = end_marker
-        self.use_markers = use_markers
-
-    @property
-    def text(self) -> str:
-        """
-        获取该片段当前的文本内容（剥离区域 marker）。
-        """
-        workflow_text = self.pair._get_workflow_node_text(self.node_id)
-        if workflow_text is None:
-            return ""
-        if self.use_markers:
-            start_idx = workflow_text.find(self.start_marker)
-            end_idx = workflow_text.find(self.end_marker)
-            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                return workflow_text[start_idx + len(self.start_marker) : end_idx]
-        return workflow_text
-
-    def add(self, prompt_str: str, raw: bool = False, no_skip: bool = False) -> bool:
-        """
-        往该片段追加提示词，支持双轨道同步更新。
-        返回 True 表示执行了操作，False 表示跳过。
-        """
-        return self.pair.process_double_track(
-            self.node_id,
-            "add",
-            prompt_str,
-            self.start_marker,
-            self.end_marker,
-            raw,
-            no_skip,
-            hard=False,
-            use_markers=self.use_markers,
-        )
-
-    def remove(
-        self,
-        prompt_str: str,
-        raw: bool = False,
-        hard: bool = False,
-        no_skip: bool = False,
-    ) -> bool:
-        """
-        从该片段中移除提示词，支持双轨道同步更新。
-        返回 True 表示执行了操作，False 表示跳过。
-        """
-        return self.pair.process_double_track(
-            self.node_id,
-            "remove",
-            prompt_str,
-            self.start_marker,
-            self.end_marker,
-            raw,
-            no_skip,
-            hard,
-            use_markers=self.use_markers,
-        )
-
-    def get_weight(self, target_prompt: str) -> Optional[float]:
-        """
-        在当前片段文本中查找目标提示词的权重。
-        """
-        text = self.text
-        if not text:
-            return None
-
-        text = self.pair._strip_comments_for_prompt(text)
-
-        escaped = re.escape(target_prompt)
-
-        # 1. 匹配带权重的格式: (word:1.2)
-        pattern_with_weight = re.compile(
-            rf"\(\s*{escaped}\s*:\s*([0-9.-]+)\s*\)", re.IGNORECASE
-        )
-        m = pattern_with_weight.search(text)
-        if m:
-            return float(m.group(1))
-
-        # 2. 匹配带括号无权重的格式: (word) → 默认权重 1.0
-        pattern_brackets = re.compile(rf"\(\s*{escaped}\s*\)", re.IGNORECASE)
-        if pattern_brackets.search(text):
-            return 1.0
-
-        # 3. 匹配裸词 → 默认权重 1.0
-        pattern_bare = re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
-        if pattern_bare.search(text):
-            return 1.0
-
-        return None
-
-    def modify_weight(self, target_prompt: str, weight: float, skip_add: bool) -> bool:
-        """
-        在当前片段中调整目标提示词的权重。
-        """
-        workflow_text = self.pair._get_workflow_node_text(self.node_id)
-        if workflow_text is None:
-            return False
-
-        prompt_text = (
-            self.pair.prompt[self.node_id]
-            .setdefault("inputs", {})
-            .setdefault("text", "")
-        )
-        if not isinstance(prompt_text, str):
-            prompt_text = ""
-
-        # 调整权重
-        new_workflow_text, mod_wf = self.pair._adjust_prompt_weight_in_text(
-            workflow_text, target_prompt, weight
-        )
-        new_prompt_text, mod_pr = self.pair._adjust_prompt_weight_in_text(
-            prompt_text, target_prompt, weight
-        )
-
-        if mod_wf or mod_pr:
-            self.pair.prompt[self.node_id]["inputs"]["text"] = (
-                self.pair._strip_comments_for_prompt(new_prompt_text)
-            )
-            self.pair._update_workflow_node_text(self.node_id, new_workflow_text)
-            return True
-
-        if not skip_add:
-            added_text = f"({target_prompt}:{weight})"
-            self.pair._add_prompt_to_node(
-                self.node_id,
-                added_text,
-                self.start_marker,
-                self.end_marker,
-                self.use_markers,
-            )
-            return True
-
-        return False
 
 
 def find_terminal_input(
@@ -280,23 +149,6 @@ def get_workflow_node_text(workflow: Dict[str, Any], node_id_str: str) -> Option
                             return widgets_values[0]
 
     return None
-
-
-def find_nodes_with_region(
-    prompt: Dict[str, Any], workflow: Dict[str, Any], region_name: str
-) -> List[str]:
-    """
-    查找所有包含指定区域 marker 的 CLIPTextEncode 节点 ID。
-    """
-    start_marker, end_marker = get_region_markers(region_name)
-    result: List[str] = []
-    for nid, node in prompt.items():
-        node_dict = cast(Dict[str, Any], node)
-        if node_dict.get("class_type") == "CLIPTextEncode":
-            wf_text = get_workflow_node_text(workflow, nid)
-            if wf_text and start_marker in wf_text and end_marker in wf_text:
-                result.append(nid)
-    return result
 
 
 def find_clip_text_nodes(prompt: Dict[str, Any], start_val: Any) -> List[str]:
@@ -415,67 +267,3 @@ def get_target_clip_node(prompt: Dict[str, Any], is_neg: bool) -> Optional[str]:
                 best_node_id = nid
 
     return best_node_id
-
-
-def resolve_target_to_nodes(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    target_type: str,
-    target_value: str,
-    is_neg: bool,
-) -> List[Tuple[str, str, str, bool]]:
-    """
-    将单个目标（node 或 region）解析为具体的节点列表。
-    返回 [(node_id, start_marker, end_marker, use_markers), ...]。
-    """
-    if target_type == "node":
-        if target_value not in prompt:
-            _LOGGER.warning(f"Node {target_value} not found in prompt, skipping.")
-            return []
-        return [(target_value, "", "", False)]
-    else:  # region
-        start_marker, end_marker = get_region_markers(target_value)
-        matching_nodes = find_nodes_with_region(prompt, workflow, target_value)
-        if matching_nodes:
-            return [(nid, start_marker, end_marker, True) for nid in matching_nodes]
-        else:
-            fallback_nid = get_target_clip_node(prompt, is_neg)
-            if fallback_nid:
-                return [(fallback_nid, start_marker, end_marker, True)]
-            else:
-                _LOGGER.warning(
-                    f"Failed to locate target node for region '{target_value}'"
-                )
-                return []
-
-
-def locate_prompt_fragments(
-    pair: "WorkflowPromptPair",  # WorkflowPromptPair 实例
-    nodes: Optional[List[str]] = None,
-    regions: Optional[List[str]] = None,
-    is_neg: bool = False,
-) -> Iterator[PromptFragment]:
-    """
-    定位提示词目标节点并使用迭代器 yield PromptFragment。
-    """
-    prompt = pair.prompt
-    workflow = pair.workflow
-
-    raw_targets: List[Tuple[str, str]] = []
-    if nodes:
-        for nid in nodes:
-            raw_targets.append(("node", nid))
-    if regions:
-        for rname in regions:
-            raw_targets.append(("region", rname))
-
-    if not raw_targets:
-        default_region = "negative" if is_neg else "positive"
-        raw_targets.append(("region", default_region))
-
-    for target_type, target_value in raw_targets:
-        resolved = resolve_target_to_nodes(
-            prompt, workflow, target_type, target_value, is_neg
-        )
-        for nid, start_marker, end_marker, use_markers in resolved:
-            yield PromptFragment(pair, nid, start_marker, end_marker, use_markers)

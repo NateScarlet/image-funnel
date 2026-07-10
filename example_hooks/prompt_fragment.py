@@ -1,0 +1,538 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# pyright: reportPrivateUsage=false
+"""
+prompt_fragment 模块：封装提示词片段的增删改查操作。
+
+提供 PromptFragment 类，调用者通过 add/remove/get_weight/modify_weight 操作提示词文本，
+无需关心双轨道（workflow + prompt）同步和 marker 标记的具体处理。
+"""
+
+import logging
+import re
+from typing import List, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from workflow_prompt_pair import WorkflowPromptPair
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def strip_comments_for_prompt(text: str) -> str:
+    """
+    为 prompt 剥离注释行。如果一行去除首尾空白后以 '//' 开头，该整行将被完全过滤掉。
+    """
+    lines: List[str] = []
+    for line in text.splitlines():
+        if line.strip().startswith("//"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+class PromptFragment:
+    """
+    表示定位出来的一段提示词片段。
+    它可能是整个 CLIPTextEncode 节点的文本，也可能是被特定区域标记包裹的局部文本段。
+    """
+
+    def __init__(
+        self,
+        pair: "WorkflowPromptPair",
+        node_id: str,
+        start_marker: str = "",
+        end_marker: str = "",
+        use_markers: bool = False,
+    ):
+        self.pair = pair
+        self.node_id = node_id
+        self.start_marker = start_marker
+        self.end_marker = end_marker
+        self.use_markers = use_markers
+
+    @property
+    def text(self) -> str:
+        """
+        获取该片段当前的文本内容（剥离区域 marker）。
+        """
+        workflow_text = self.pair.get_workflow_node_text(self.node_id)
+        if workflow_text is None:
+            return ""
+        if self.use_markers:
+            start_idx = workflow_text.find(self.start_marker)
+            end_idx = workflow_text.find(self.end_marker)
+            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
+                return workflow_text[start_idx + len(self.start_marker) : end_idx]
+        return workflow_text
+
+    def add(self, prompt_str: str, raw: bool = False, no_skip: bool = False) -> bool:
+        """
+        往该片段追加提示词，支持双轨道同步更新。
+        返回 True 表示执行了操作，False 表示跳过。
+        """
+        return self._process_double_track(
+            self.node_id,
+            "add",
+            prompt_str,
+            self.start_marker,
+            self.end_marker,
+            raw,
+            no_skip,
+            hard=False,
+            use_markers=self.use_markers,
+        )
+
+    def remove(
+        self,
+        prompt_str: str,
+        raw: bool = False,
+        hard: bool = False,
+        no_skip: bool = False,
+    ) -> bool:
+        """
+        从该片段中移除提示词，支持双轨道同步更新。
+        返回 True 表示执行了操作，False 表示跳过。
+        """
+        return self._process_double_track(
+            self.node_id,
+            "remove",
+            prompt_str,
+            self.start_marker,
+            self.end_marker,
+            raw,
+            no_skip,
+            hard,
+            use_markers=self.use_markers,
+        )
+
+    def get_weight(self, target_prompt: str) -> Optional[float]:
+        """
+        在当前片段文本中查找目标提示词的权重。
+        """
+        text = self.text
+        if not text:
+            return None
+
+        text = strip_comments_for_prompt(text)
+
+        escaped = re.escape(target_prompt)
+
+        # 1. 匹配带权重的格式: (word:1.2)
+        pattern_with_weight = re.compile(
+            rf"\(\s*{escaped}\s*:\s*([0-9.-]+)\s*\)", re.IGNORECASE
+        )
+        m = pattern_with_weight.search(text)
+        if m:
+            return float(m.group(1))
+
+        # 2. 匹配带括号无权重的格式: (word) → 默认权重 1.0
+        pattern_brackets = re.compile(rf"\(\s*{escaped}\s*\)", re.IGNORECASE)
+        if pattern_brackets.search(text):
+            return 1.0
+
+        # 3. 匹配裸词 → 默认权重 1.0
+        pattern_bare = re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
+        if pattern_bare.search(text):
+            return 1.0
+
+        return None
+
+    def modify_weight(self, target_prompt: str, weight: float, skip_add: bool) -> bool:
+        """
+        在当前片段中调整目标提示词的权重。
+        """
+        workflow_text = self.pair.get_workflow_node_text(self.node_id)
+        if workflow_text is None:
+            return False
+
+        prompt_text = (
+            self.pair.prompt[self.node_id]
+            .setdefault("inputs", {})
+            .setdefault("text", "")
+        )
+        if not isinstance(prompt_text, str):
+            prompt_text = ""
+
+        new_workflow_text, mod_wf = self._adjust_prompt_weight_in_text(
+            workflow_text, target_prompt, weight
+        )
+        new_prompt_text, mod_pr = self._adjust_prompt_weight_in_text(
+            prompt_text, target_prompt, weight
+        )
+
+        if mod_wf or mod_pr:
+            self.pair.prompt[self.node_id]["inputs"]["text"] = (
+                strip_comments_for_prompt(new_prompt_text)
+            )
+            self.pair.update_workflow_node_text(self.node_id, new_workflow_text)
+            return True
+
+        if not skip_add:
+            added_text = f"({target_prompt}:{weight})"
+            self._add_prompt_to_node(
+                self.node_id,
+                added_text,
+                self.start_marker,
+                self.end_marker,
+                self.use_markers,
+            )
+            return True
+
+        return False
+
+    # #region 私有方法
+
+    def _process_double_track(
+        self,
+        node_id: str,
+        command: str,
+        prompt_str_arg: str,
+        start_marker: str,
+        end_marker: str,
+        raw: bool,
+        no_skip: bool,
+        hard: bool,
+        use_markers: bool = True,
+    ) -> bool:
+        """
+        对指定节点执行 add/remove 操作，原地修改 prompt 和 workflow 文本。
+        返回 True 表示执行了操作，False 表示跳过。
+        """
+        workflow_text = self.pair.get_workflow_node_text(node_id)
+        if workflow_text is None:
+            return False
+        prompt_text = self.pair.prompt[node_id].get("inputs", {}).get("text", "")
+        if not isinstance(prompt_text, str):
+            prompt_text = ""
+
+        stripped_workflow = strip_comments_for_prompt(workflow_text)
+        workflow_cleaned = "\n".join(
+            [line.strip() for line in stripped_workflow.splitlines() if line.strip()]
+        )
+        prompt_cleaned = "\n".join(
+            [line.strip() for line in prompt_text.splitlines() if line.strip()]
+        )
+        is_equivalent = workflow_cleaned == prompt_cleaned
+
+        start_idx = -1
+        end_idx = -1
+        if use_markers:
+            start_idx = workflow_text.find(start_marker)
+            end_idx = workflow_text.find(end_marker)
+            has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
+        else:
+            has_marker = False
+
+        def contains_prompt(area: str) -> bool:
+            target_lower = prompt_str_arg.strip().lower()
+            if raw:
+                return target_lower in area.lower()
+            for line in area.splitlines():
+                if line.strip().startswith("//"):
+                    continue
+                if target_lower in line.lower():
+                    return True
+            return False
+
+        new_workflow_text = None
+        new_prompt_text = None
+
+        if command == "add":
+            if has_marker:
+                before_marker = workflow_text[:start_idx]
+                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
+                after_marker = workflow_text[end_idx + len(end_marker) :]
+
+                if contains_prompt(marker_content) and not no_skip:
+                    _LOGGER.debug(
+                        "Prompt '%s' already exists in marker region, skipping.",
+                        prompt_str_arg,
+                    )
+                    return False
+
+                stripped = marker_content.strip()
+                if stripped:
+                    if not stripped.endswith(","):
+                        stripped += ","
+                    new_content_prompt = f"{stripped}\n{prompt_str_arg},"
+                else:
+                    new_content_prompt = f"{prompt_str_arg},"
+
+                new_workflow_text = (
+                    before_marker.rstrip()
+                    + f"\n{start_marker}\n"
+                    + new_content_prompt
+                    + f"\n{end_marker}\n"
+                    + after_marker.lstrip()
+                )
+
+                if is_equivalent:
+                    new_prompt_text_raw = (
+                        before_marker.rstrip()
+                        + "\n"
+                        + new_content_prompt
+                        + "\n"
+                        + after_marker.lstrip()
+                    )
+                    new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
+                else:
+                    target_match_content = strip_comments_for_prompt(
+                        marker_content
+                    ).strip()
+                    if target_match_content and target_match_content in prompt_text:
+                        new_prompt_text = prompt_text.replace(
+                            target_match_content, new_content_prompt.strip(), 1
+                        )
+                    else:
+                        if raw:
+                            new_prompt_text = (
+                                prompt_text.rstrip() + "\n" + prompt_str_arg
+                            )
+                        else:
+                            new_prompt_text = (
+                                prompt_text.rstrip() + f"\n{prompt_str_arg},"
+                            )
+            else:
+                if contains_prompt(workflow_text) and not no_skip:
+                    _LOGGER.debug(
+                        "Prompt '%s' already exists in text, skipping.",
+                        prompt_str_arg,
+                    )
+                    return False
+
+                if raw:
+                    new_content_prompt = prompt_str_arg
+                else:
+                    new_content_prompt = f"{prompt_str_arg},"
+
+                if use_markers:
+                    new_workflow_text = (
+                        workflow_text.rstrip()
+                        + f"\n{start_marker}\n"
+                        + new_content_prompt
+                        + f"\n{end_marker}\n"
+                    )
+                else:
+                    new_workflow_text = (
+                        workflow_text.rstrip() + "\n" + new_content_prompt
+                    )
+                new_prompt_text = prompt_text.rstrip() + "\n" + new_content_prompt
+
+        else:  # remove
+            effective_hard = hard or raw
+            if has_marker:
+                before_marker = workflow_text[:start_idx]
+                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
+                after_marker = workflow_text[end_idx + len(end_marker) :]
+
+                if not contains_prompt(marker_content):
+                    _LOGGER.debug(
+                        "remove: prompt '%s' not found in marker region (has_marker=True)",
+                        prompt_str_arg,
+                    )
+                    if not no_skip:
+                        _LOGGER.debug(
+                            "Prompt '%s' not found in marker region, skipping.",
+                            prompt_str_arg,
+                        )
+                        return False
+                    new_content_prompt = marker_content
+                else:
+                    if raw:
+                        new_content_prompt = marker_content.replace(prompt_str_arg, "")
+                    else:
+                        target_lower = prompt_str_arg.strip().lower()
+                        lines = marker_content.split("\n")
+                        new_lines: List[str] = []
+                        for line in lines:
+                            if target_lower in line.lower():
+                                if effective_hard:
+                                    pass
+                                else:
+                                    stripped = line.strip()
+                                    if stripped.startswith("//"):
+                                        new_lines.append(line)
+                                    else:
+                                        indent = line[: len(line) - len(line.lstrip())]
+                                        new_lines.append(f"{indent}// {line.lstrip()}")
+                            else:
+                                new_lines.append(line)
+                        new_content_prompt = "\n".join(new_lines)
+
+                new_workflow_text = (
+                    before_marker.rstrip()
+                    + f"\n{start_marker}\n"
+                    + new_content_prompt
+                    + f"\n{end_marker}\n"
+                    + after_marker.lstrip()
+                )
+
+                if is_equivalent:
+                    new_prompt_text_raw = (
+                        before_marker.rstrip()
+                        + "\n"
+                        + new_content_prompt
+                        + "\n"
+                        + after_marker.lstrip()
+                    )
+                    new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
+                else:
+                    target_match_content = strip_comments_for_prompt(
+                        marker_content
+                    ).strip()
+                    if target_match_content and target_match_content in prompt_text:
+                        new_prompt_text = prompt_text.replace(
+                            target_match_content, new_content_prompt.strip(), 1
+                        )
+                    else:
+                        new_prompt_text = prompt_text
+            else:
+                if not contains_prompt(workflow_text):
+                    _LOGGER.debug(
+                        "remove: prompt '%s' not found in full text (has_marker=False)",
+                        prompt_str_arg,
+                    )
+                    if not no_skip:
+                        _LOGGER.debug(
+                            "Prompt '%s' not found, skipping.", prompt_str_arg
+                        )
+                        return False
+                    new_content_prompt = workflow_text
+                else:
+                    if raw:
+                        new_content_prompt = workflow_text.replace(prompt_str_arg, "")
+                    else:
+                        target_lower = prompt_str_arg.strip().lower()
+                        lines = workflow_text.split("\n")
+                        new_lines = []
+                        for line in lines:
+                            if target_lower in line.lower():
+                                if effective_hard:
+                                    pass
+                                else:
+                                    stripped = line.strip()
+                                    if stripped.startswith("//"):
+                                        new_lines.append(line)
+                                    else:
+                                        indent = line[: len(line) - len(line.lstrip())]
+                                        new_lines.append(f"{indent}// {line.lstrip()}")
+                            else:
+                                new_lines.append(line)
+                        new_content_prompt = "\n".join(new_lines)
+
+                new_workflow_text = new_content_prompt
+                new_prompt_text = new_content_prompt
+
+        new_prompt_text = strip_comments_for_prompt(new_prompt_text)
+
+        self.pair.prompt[node_id]["inputs"]["text"] = new_prompt_text
+        self.pair.update_workflow_node_text(node_id, new_workflow_text)
+        return True
+
+    @staticmethod
+    def _adjust_prompt_weight_in_text(
+        text: str, target_prompt: str, new_weight: float
+    ) -> Tuple[str, bool]:
+        """
+        在文本中找到并更新特定提示词的权重为 new_weight。
+        支持匹配格式：(word:weight)、(word) 以及裸词 word。
+        返回 (new_text, is_modified)。
+        """
+        escaped_target = re.escape(target_prompt)
+
+        # 1. 优先匹配已带权重的格式
+        pattern_with_weight = re.compile(
+            rf"\(\s*{escaped_target}\s*:\s*[0-9.-]+\s*\)", re.IGNORECASE
+        )
+        if pattern_with_weight.search(text):
+            new_text = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", text)
+            return new_text, True
+
+        # 2. 匹配带括号但无权重的格式
+        pattern_with_brackets = re.compile(
+            rf"\(\s*{escaped_target}\s*\)", re.IGNORECASE
+        )
+        if pattern_with_brackets.search(text):
+            new_text = pattern_with_brackets.sub(
+                f"({target_prompt}:{new_weight})", text
+            )
+            return new_text, True
+
+        # 3. 匹配裸词，两边使用负向环视以防匹配子串
+        pattern_bare = re.compile(rf"(?<!\w){escaped_target}(?!\w)", re.IGNORECASE)
+        if pattern_bare.search(text):
+            new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
+            return new_text, True
+
+        return text, False
+
+    def _add_prompt_to_node(
+        self,
+        node_id: str,
+        added_text: str,
+        start_marker: str,
+        end_marker: str,
+        use_markers: bool,
+    ) -> None:
+        """
+        将提示词添加到节点。
+        """
+        workflow_text = self.pair.get_workflow_node_text(node_id)
+        if workflow_text is None:
+            return
+
+        prompt_text = (
+            self.pair.prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
+        )
+        if not isinstance(prompt_text, str):
+            prompt_text = ""
+
+        start_idx = -1
+        end_idx = -1
+        if use_markers:
+            start_idx = workflow_text.find(start_marker)
+            end_idx = workflow_text.find(end_marker)
+
+        has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
+
+        if has_marker:
+            before_marker = workflow_text[:start_idx]
+            marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
+            after_marker = workflow_text[end_idx + len(end_marker) :]
+
+            stripped = marker_content.strip()
+            if stripped:
+                if not stripped.endswith(","):
+                    stripped += ","
+                new_content_prompt = f"{stripped}\n{added_text},"
+            else:
+                new_content_prompt = f"{added_text},"
+
+            new_workflow_text = (
+                before_marker.rstrip()
+                + f"\n{start_marker}\n"
+                + new_content_prompt
+                + f"\n{end_marker}\n"
+                + after_marker.lstrip()
+            )
+            new_prompt_text = prompt_text.rstrip()
+            if new_prompt_text and not new_prompt_text.endswith(","):
+                new_prompt_text += ","
+            new_prompt_text += f"\n{added_text},"
+        else:
+            new_workflow_text = workflow_text.rstrip()
+            if new_workflow_text and not new_workflow_text.endswith(","):
+                new_workflow_text += ","
+            new_workflow_text += f"\n{added_text},"
+
+            new_prompt_text = prompt_text.rstrip()
+            if new_prompt_text and not new_prompt_text.endswith(","):
+                new_prompt_text += ","
+            new_prompt_text += f"\n{added_text},"
+
+        self.pair.prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
+            new_prompt_text
+        )
+        self.pair.update_workflow_node_text(node_id, new_workflow_text)
+
+    # #endregion
