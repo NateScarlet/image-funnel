@@ -386,12 +386,12 @@ const autocompleteState = computed<{
   return null;
 });
 
-// activeIndex 声明式重置：query 变化时自动归零
-const activeIndexBuffer = ref({ queryKey: "", index: 0 });
+// activeIndex 声明式重置：query 变化时自动重置为 -1 (不选中)
+const activeIndexBuffer = ref({ queryKey: "", index: -1 });
 const activeIndex = computed({
   get: () => {
     const key = autocompleteState.value?.query ?? "";
-    return activeIndexBuffer.value.queryKey === key ? activeIndexBuffer.value.index : 0;
+    return activeIndexBuffer.value.queryKey === key ? activeIndexBuffer.value.index : -1;
   },
   set: (val: number) => {
     const key = autocompleteState.value?.query ?? "";
@@ -734,14 +734,22 @@ function insertDirective(dirName: string) {
 
 function handleKeyUp() {
   if (autocompleteState.value?.show && suggestions.value.length) {
-    activeIndex.value =
-      (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
+    if (activeIndex.value === -1) {
+      activeIndex.value = suggestions.value.length - 1;
+    } else {
+      activeIndex.value =
+        (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
+    }
   }
 }
 
 function handleKeyDown() {
   if (autocompleteState.value?.show && suggestions.value.length) {
-    activeIndex.value = (activeIndex.value + 1) % suggestions.value.length;
+    if (activeIndex.value === -1) {
+      activeIndex.value = 0;
+    } else {
+      activeIndex.value = (activeIndex.value + 1) % suggestions.value.length;
+    }
   }
 }
 
@@ -752,12 +760,35 @@ function handleKeySpace(e: KeyboardEvent) {
 
   // 已在指令内 → 立即触发动态补全
   updateVariablesDebounced.flush();
+
+  // Ctrl+空格自动选中第一项
+  activeIndex.value = 0;
 }
 
 function handleKeyEnter(e: KeyboardEvent) {
-  if (autocompleteState.value?.show && suggestions.value.length) {
+  if (autocompleteState.value?.show && suggestions.value.length && activeIndex.value !== -1) {
+    const sug = suggestions.value[activeIndex.value];
+    const el = textareaRef.value;
+    if (el) {
+      const text = model.value;
+      const triggerIdx = autocompleteState.value.triggerIndex;
+      const endIdx = el.selectionEnd;
+
+      let textToInsert = sug.text;
+      if (autocompleteState.value.type === "name") {
+        textToInsert = `${sug.text} `;
+      } else if (sug.type === "option" && !sug.placeholder) {
+        textToInsert = `${sug.text} `;
+      }
+
+      // 如果当前选项的效果不会改变文本，则按回车就是正常回车
+      if (textToInsert === text.slice(triggerIdx, endIdx)) {
+        return;
+      }
+    }
+
     e.preventDefault();
-    handleSelectSuggestion(suggestions.value[activeIndex.value]);
+    handleSelectSuggestion(sug);
   }
 }
 

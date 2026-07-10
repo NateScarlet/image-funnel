@@ -176,6 +176,7 @@ describe("NoteEditor", () => {
 
   afterEach(() => {
     wrapper?.unmount();
+    document.body.querySelectorAll("[class*='z-50']").forEach((el) => el.remove());
   });
 
   function createWrapper(initialValue = "") {
@@ -428,4 +429,125 @@ describe("NoteEditor", () => {
       delete (document as unknown as Record<string, unknown>).execCommand;
     }
   });
+
+  test("autocomplete menu defaults to no item selected on typing", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    const menu = getSuggestionMenu();
+    expect(menu).not.toBeNull();
+    
+    // 默认不应该有任何项被高亮选中
+    const activeItem = menu?.querySelector(".bg-secondary-500");
+    expect(activeItem).toBeNull();
+  });
+
+  test("navigates suggestions using Up and Down keys from unselected state", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    const textarea = wrapper.find("textarea");
+    
+    // 初始状态没有选中
+    let menu = getSuggestionMenu();
+    expect(menu?.querySelector(".bg-secondary-500")).toBeNull();
+
+    // 按 Down 键，应该选中第 0 项
+    await textarea.trigger("keydown", { key: "ArrowDown" });
+    await nextTick();
+    menu = getSuggestionMenu();
+    let activeItem = menu?.querySelector(".bg-secondary-500");
+    expect(activeItem).not.toBeNull();
+    const buttons = Array.from(menu?.querySelectorAll("button") ?? []);
+    expect(activeItem).toBe(buttons[0]);
+
+    // 按 Up 键，应该循环到最后一项
+    await textarea.trigger("keydown", { key: "ArrowUp" });
+    await nextTick();
+    activeItem = menu?.querySelector(".bg-secondary-500");
+    expect(activeItem).toBe(buttons[buttons.length - 1]);
+
+    // 从未选中状态按 Up 键，应该选中最后一项
+    wrapper?.unmount();
+    document.body.querySelectorAll("[class*='z-50']").forEach((el) => el.remove());
+    await typeInTextarea(createWrapper(), "/add ");
+    await nextTick();
+    menu = getSuggestionMenu();
+    expect(menu?.querySelector(".bg-secondary-500")).toBeNull();
+
+    await wrapper.find("textarea").trigger("keydown", { key: "ArrowUp" });
+    await nextTick();
+    menu = getSuggestionMenu();
+    activeItem = menu?.querySelector(".bg-secondary-500");
+    const newButtons = Array.from(menu?.querySelectorAll("button") ?? []);
+    expect(activeItem).toBe(newButtons[newButtons.length - 1]);
+  });
+
+  test("does not prevent default Enter behavior when no item is selected", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    const textareaEl = wrapper.find("textarea").element;
+
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    textareaEl.dispatchEvent(event);
+    await nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  test("does not prevent default Enter behavior if the selected suggestion will not change the text", async () => {
+    mockQuery.mockResolvedValue({
+      data: {
+        hookAutocomplete: [
+          { text: "abc", displayText: "abc", type: "positional" },
+        ],
+      },
+    });
+
+    createWrapper();
+    const el = wrapper.find("textarea");
+    await el.trigger("focus");
+    await el.setValue("/add abc");
+    el.element.selectionStart = 5;
+    el.element.selectionEnd = 8;
+    el.element.dispatchEvent(new Event("input", { bubbles: true }));
+    el.element.dispatchEvent(new Event("keyup", { bubbles: true }));
+
+    await vi.waitFor(
+      () => {
+        expect(mockQuery).toHaveBeenCalled();
+      },
+      { timeout: 2000, interval: 50 },
+    );
+    await nextTick();
+
+    const menu = getSuggestionMenu();
+    expect(menu).not.toBeNull();
+    
+    await el.trigger("keydown", { key: "ArrowDown" });
+    await nextTick();
+
+    expect(menu?.querySelector(".bg-secondary-500")).not.toBeNull();
+
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    el.element.dispatchEvent(event);
+    await nextTick();
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  test("selects the first item automatically when Ctrl+Space is pressed", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    const el = wrapper.find("textarea");
+
+    let menu = getSuggestionMenu();
+    expect(menu).not.toBeNull();
+    expect(menu?.querySelector(".bg-secondary-500")).toBeNull();
+
+    const event = new KeyboardEvent("keydown", { key: " ", ctrlKey: true, bubbles: true, cancelable: true });
+    el.element.dispatchEvent(event);
+    await nextTick();
+
+    menu = getSuggestionMenu();
+    const activeItem = menu?.querySelector(".bg-secondary-500");
+    expect(activeItem).not.toBeNull();
+    const buttons = Array.from(menu?.querySelectorAll("button") ?? []);
+    expect(activeItem).toBe(buttons[0]);
+  });
 });
+
