@@ -190,9 +190,9 @@ import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
 import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
-import { useNoteAutocomplete, computeDirectiveInsertion } from "@/composables/useNoteAutocomplete";
-import type { InsertParams } from "@/composables/useNoteAutocomplete";
-import type { Suggestion } from "@/utils/directiveAutocomplete";
+import { useNoteAutocomplete, computeDirectiveInsertion } from "./useNoteAutocomplete";
+import type { InsertParams } from "./useNoteAutocomplete";
+import type { Suggestion } from "./directiveAutocomplete";
 
 const typeLabels: Record<string, string> = {
   subcommand: "子命令",

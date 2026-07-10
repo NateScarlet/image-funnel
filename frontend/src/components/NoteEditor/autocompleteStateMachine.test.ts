@@ -46,7 +46,7 @@ const hookList: HookInfo[] = [
 
 const directiveNames = hookList
   .filter((h) => h.directive?.name != null)
-  .map((h) => h.directive!.name);
+  .map((h) => (h.directive as NonNullable<typeof h.directive>).name);
 
 function buildRules(): DirectiveRule[] {
   const rules: DirectiveRule[] = [];
@@ -128,32 +128,32 @@ describe("computeAutocompleteState", () => {
   test("derives name autocomplete state for /a", () => {
     const state = computeAutocompleteState("/a", 2, true, false, directiveNames);
     expect(state).not.toBeNull();
-    expect(state!.show).toBe(true);
-    expect(state!.type).toBe("name");
-    expect(state!.query).toBe("a");
-    expect(state!.triggerIndex).toBe(1);
+    expect(state?.show).toBe(true);
+    expect(state?.type).toBe("name");
+    expect(state?.query).toBe("a");
+    expect(state?.triggerIndex).toBe(1);
   });
 
   test("derives name autocomplete state for empty query after /", () => {
     const state = computeAutocompleteState("/", 1, true, false, directiveNames);
     expect(state).not.toBeNull();
-    expect(state!.type).toBe("name");
-    expect(state!.query).toBe("");
+    expect(state?.type).toBe("name");
+    expect(state?.query).toBe("");
   });
 
   test("derives args autocomplete state for known directive", () => {
     const state = computeAutocompleteState("/add ", 5, true, false, directiveNames);
     expect(state).not.toBeNull();
-    expect(state!.type).toBe("args");
-    expect(state!.directiveName).toBe("add");
-    expect(state!.query).toBe(""); // 光标在空格后，无输入
+    expect(state?.type).toBe("args");
+    expect(state?.directiveName).toBe("add");
+    expect(state?.query).toBe(""); // 光标在空格后，无输入
   });
 
   test("derives args autocomplete with partial query", () => {
     const state = computeAutocompleteState("/add --reg", 10, true, false, directiveNames);
     expect(state).not.toBeNull();
-    expect(state!.type).toBe("args");
-    expect(state!.query).toBe("--reg");
+    expect(state?.type).toBe("args");
+    expect(state?.query).toBe("--reg");
   });
 
   test("returns null for unknown directive", () => {
@@ -169,8 +169,8 @@ describe("computeAutocompleteState", () => {
   test("matches directive with leading whitespace", () => {
     const state = computeAutocompleteState("  /add ", 7, true, false, directiveNames);
     expect(state).not.toBeNull();
-    expect(state!.type).toBe("args");
-    expect(state!.directiveName).toBe("add");
+    expect(state?.type).toBe("args");
+    expect(state?.directiveName).toBe("add");
   });
 });
 

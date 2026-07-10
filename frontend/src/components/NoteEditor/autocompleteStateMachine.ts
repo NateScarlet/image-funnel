@@ -1,5 +1,5 @@
-import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
-import { getArgsContext, getSuggestionsForRules } from "@/utils/directiveAutocomplete";
+import type { DirectiveRule, Suggestion } from "./directiveAutocomplete";
+import { getArgsContext, getSuggestionsForRules } from "./directiveAutocomplete";
 
 // #region 类型定义
 

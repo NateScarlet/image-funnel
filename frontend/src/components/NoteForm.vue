@@ -84,7 +84,7 @@
 import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { NoteFragment as Note } from "../graphql/generated";
 import useNote from "@/composables/domain/useNote";
-import NoteEditor from "./NoteEditor.vue";
+import NoteEditor from "./NoteEditor";
 import { mdiNoteTextOutline, mdiClose, mdiLoading, mdiCheck, mdiAlertCircleOutline } from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
 

@@ -10,8 +10,8 @@ import {
 } from "@/graphql/generated";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
-import { parseUsage } from "@/utils/directiveAutocomplete";
-import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
+import { parseUsage } from "./directiveAutocomplete";
+import type { DirectiveRule, Suggestion } from "./directiveAutocomplete";
 import {
   computeAutocompleteState,
   computeApiSuggestions,
@@ -23,7 +23,7 @@ import {
   type AutocompleteState,
   type InsertParams,
   type HookInfo,
-} from "@/utils/autocompleteStateMachine";
+} from "./autocompleteStateMachine";
 import { debounce } from "es-toolkit";
 
 export type { AutocompleteState, InsertParams, HookInfo };

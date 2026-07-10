@@ -94,7 +94,7 @@ import { ref, useTemplateRef, onMounted } from "vue";
 import type { NoteFragment } from "@/graphql/generated";
 import { CreateNoteDocument } from "@/graphql/generated";
 import mutate from "@/graphql/utils/mutate";
-import NoteEditor from "./NoteEditor.vue";
+import NoteEditor from "./NoteEditor";
 import { mdiNoteTextOutline, mdiClose, mdiLoading } from "@mdi/js";
 import useNotification from "@/composables/useNotification";
 
