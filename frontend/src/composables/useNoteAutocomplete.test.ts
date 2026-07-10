@@ -1,7 +1,6 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { ref, type Ref } from "vue";
 import { useNoteAutocomplete } from "./useNoteAutocomplete";
-import type { TextareaOperator } from "./useNoteAutocomplete";
 
 const mockQuery = vi.hoisted(() => vi.fn());
 const refreshOn = vi.hoisted(() => vi.fn());
@@ -165,7 +164,7 @@ describe("useNoteAutocomplete composable", () => {
     expect(activeIndex.value).toBe(0);
   });
 
-  test("handleSelectSuggestion correctly calls insertText on operator", () => {
+  test("handleSelectSuggestion returns correct InsertParams", () => {
     model.value = "/ad";
     cursorStart.value = 3;
     cursorEnd.value = 3;
@@ -173,43 +172,13 @@ describe("useNoteAutocomplete composable", () => {
     const { suggestions, handleSelectSuggestion } = createAutocomplete();
     const sug = suggestions.value[0]; // /adjust or /add
 
-    const mockInsert = vi.fn();
-    const mockOperator: TextareaOperator = {
-      get selectionStart() { return 3; },
-      get selectionEnd() { return 3; },
-      insertText: mockInsert,
-    };
+    const params = handleSelectSuggestion(sug, 3);
 
-    handleSelectSuggestion(sug, mockOperator);
-
-    expect(mockInsert).toHaveBeenCalled();
-    const args = mockInsert.mock.calls[0];
-    // textToInsert, start, end, selectStart, selectEnd, hasPlaceholder
-    expect(args[0]).toBe(sug.text + " "); // name mode adds space
-    expect(args[1]).toBe(1); // trigger index (after '/')
-    expect(args[2]).toBe(3); // selectionEnd
-    expect(args[3]).toBe(1 + sug.text.length + 1); // selectStart
-  });
-
-  test("insertDirective correctly calls insertText on operator", () => {
-    model.value = "some content";
-    cursorStart.value = 12;
-    cursorEnd.value = 12;
-
-    const { insertDirective } = createAutocomplete();
-    const mockInsert = vi.fn();
-    const mockOperator: TextareaOperator = {
-      get selectionStart() { return 12; },
-      get selectionEnd() { return 12; },
-      insertText: mockInsert,
-    };
-
-    insertDirective("add", mockOperator);
-
-    expect(mockInsert).toHaveBeenCalled();
-    const args = mockInsert.mock.calls[0];
-    expect(args[0]).toBe("\n/add "); // needs newline
-    expect(args[1]).toBe(12);
-    expect(args[2]).toBe(12);
+    expect(params).not.toBeNull();
+    if (!params) return;
+    expect(params.textToInsert).toBe(sug.text + " "); // name mode adds space
+    expect(params.start).toBe(1); // trigger index (after '/')
+    expect(params.end).toBe(3); // selectionEnd
+    expect(params.selectStart).toBe(1 + sug.text.length + 1); // selectStart
   });
 });

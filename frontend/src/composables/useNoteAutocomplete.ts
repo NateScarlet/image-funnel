@@ -5,37 +5,28 @@ import useQuery from "@/graphql/utils/useQuery";
 import {
   HooksDocument,
   HookAutocompleteDocument,
-  type HookAutocompleteQuery,
   type HookAutocompleteQueryVariables,
+  type HooksQuery,
 } from "@/graphql/generated";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
-import { parseUsage, getArgsContext, getSuggestionsForRules } from "@/utils/directiveAutocomplete";
+import { parseUsage } from "@/utils/directiveAutocomplete";
 import type { DirectiveRule, Suggestion } from "@/utils/directiveAutocomplete";
+import {
+  computeAutocompleteState,
+  computeApiSuggestions,
+  computeSuggestions,
+  computeSuggestionInsertion,
+  computeDirectiveInsertion,
+  getLinePrefix,
+  needsDynamicLoading,
+  type AutocompleteState,
+  type InsertParams,
+  type HookInfo,
+} from "@/utils/autocompleteStateMachine";
 import { debounce } from "es-toolkit";
 
-export interface TextareaOperator {
-  selectionStart: number;
-  selectionEnd: number;
-  insertText(
-    textToInsert: string,
-    start: number,
-    end: number,
-    selectStart: number,
-    selectEnd: number,
-    hasPlaceholder: boolean
-  ): void;
-}
-
-function mapToSuggestion(s: HookAutocompleteQuery["hookAutocomplete"][number]): Suggestion {
-  return {
-    type: s.type ?? "positional",
-    text: s.text,
-    displayText: s.displayText,
-    description: s.description ?? undefined,
-    style: s.style ?? undefined,
-  };
-}
+export type { AutocompleteState, InsertParams, HookInfo };
 
 export interface Options {
   model: MaybeRefOrGetter<string>;
@@ -44,6 +35,8 @@ export interface Options {
   isFocused: MaybeRefOrGetter<boolean>;
   noteId?: MaybeRefOrGetter<string | undefined>;
   loadingCount?: Ref<number>;
+  /** 外部传入的 hooks 数据，避免内部重复查询 */
+  hooksData?: Ref<HooksQuery | undefined>;
 }
 
 export function useNoteAutocomplete(options: Options) {
@@ -58,14 +51,22 @@ export function useNoteAutocomplete(options: Options) {
     return currentTime.value.sub(blurAt.value) < 200;
   });
 
-  // 获取所有 Hooks 列表
-  const { data: hooksData } = useQuery(HooksDocument, {
+  // 获取所有 Hooks 列表（若外部传入则直接使用，避免重复查询）
+  const internalHooksData = useQuery(HooksDocument, {
     fetchPolicy: "cache-first",
+  });
+  const hooksData = computed(() => {
+    if (options.hooksData) return options.hooksData.value;
+    return internalHooksData.data.value;
   });
 
   const directives = computed(() => {
     return hooksData.value?.hooks.filter((h) => h.directive != null) || [];
   });
+
+  const directiveNames = computed(() =>
+    directives.value.map((h) => h.directive?.name ?? ""),
+  );
 
   const currentHook = computed(() => {
     const dirName = state.value?.directiveName;
@@ -77,58 +78,16 @@ export function useNoteAutocomplete(options: Options) {
     return currentHook.value?.directive?.autocomplete ?? false;
   });
 
-  // 自动完成状态（纯推导，仅从 options.model 中读取，不修改）
-  const state = computed<{
-    show: boolean;
-    type: "name" | "args";
-    query: string;
-    triggerIndex: number;
-    selectionStart: number;
-    directiveName?: string;
-    argsText?: string;
-  } | null>(() => {
-    if (!menuVisible.value || dismissed.value) return null;
-
-    const text = toValue(options.model);
-    const start = toValue(options.cursorStart);
-    const textBeforeCursor = text.slice(0, start);
-    const lastNewline = textBeforeCursor.lastIndexOf("\n");
-    const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
-    const lineTextBeforeCursor = textBeforeCursor.slice(lineStart);
-
-    // 1. 优先匹配指令参数补全
-    const directiveMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]+)\s+(.*)$/);
-    if (directiveMatch) {
-      const dirName = directiveMatch[1];
-      const argsText = directiveMatch[2] ?? "";
-      if (directives.value.some((h) => h.directive?.name === dirName)) {
-        const { currentQuery } = getArgsContext(argsText);
-        return {
-          show: true,
-          type: "args" as const,
-          query: currentQuery,
-          triggerIndex: lineStart + lineTextBeforeCursor.length - currentQuery.length,
-          selectionStart: start,
-          directiveName: dirName,
-          argsText,
-        };
-      }
-    }
-
-    // 2. 匹配指令名补全
-    const nameMatch = lineTextBeforeCursor.match(/^[ \t]*\/([a-zA-Z0-9_-]*)$/);
-    if (nameMatch) {
-      return {
-        show: true,
-        type: "name" as const,
-        query: nameMatch[1].toLowerCase(),
-        triggerIndex: lineStart + lineTextBeforeCursor.indexOf("/") + 1,
-        selectionStart: start,
-      };
-    }
-
-    return null;
-  });
+  // 自动完成状态（委托给纯函数）
+  const state = computed<AutocompleteState | null>(() =>
+    computeAutocompleteState(
+      toValue(options.model),
+      toValue(options.cursorStart),
+      menuVisible.value,
+      dismissed.value,
+      directiveNames.value,
+    ),
+  );
 
   // activeIndex 声明式重置：query 变化时自动重置为 -1
   const activeIndexBuffer = ref({ queryKey: "", index: -1 });
@@ -141,38 +100,6 @@ export function useNoteAutocomplete(options: Options) {
       const key = state.value?.query ?? "";
       activeIndexBuffer.value = { queryKey: key, index: val };
     },
-  });
-
-  const apiSuggestions = computed(() => {
-    const s = state.value;
-    if (!s || s.type !== "args") return [];
-
-    const currentVars = variables.value;
-    const currentPrefix = getLinePrefix();
-    if (
-      !currentVars ||
-      currentVars.input?.hookId !== currentHook.value?.id ||
-      currentVars.input?.linePrefix !== currentPrefix
-    ) {
-      return [];
-    }
-
-    const rawSuggestions = autocompleteData.value?.hookAutocomplete ?? [];
-    const suggestionsMapped = rawSuggestions.map(mapToSuggestion);
-    const queryVal = currentVars.input?.query ?? "";
-
-    if (!s.query) return suggestionsMapped;
-
-    // 如果当前的 query 与获取 suggestions 时的 query 相同，说明是一手数据
-    if (s.query === queryVal) {
-      return suggestionsMapped;
-    }
-
-    const q = s.query.toLowerCase();
-    return suggestionsMapped.filter((item) => {
-      if (item.text.toLowerCase() === q) return false;
-      return item.text.toLowerCase().startsWith(q) || item.displayText.toLowerCase().includes(q);
-    });
   });
 
   const dynamicLoadingCount = ref(0);
@@ -190,7 +117,7 @@ export function useNoteAutocomplete(options: Options) {
       input: {
         hookId: currentHook.value?.id ?? "",
         noteId: toValue(options.noteId),
-        linePrefix: getLinePrefix(),
+        linePrefix: getLinePrefix(toValue(options.model), toValue(options.cursorStart)),
         query: s.query,
       },
     };
@@ -212,7 +139,7 @@ export function useNoteAutocomplete(options: Options) {
         updateVariablesDebounced(newVal);
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   const { data: autocompleteData } = useQuery(HookAutocompleteDocument, {
@@ -221,50 +148,39 @@ export function useNoteAutocomplete(options: Options) {
     fetchPolicy: "cache-first",
   });
 
-
   const isDebouncing = computed(() => {
-    return (
-      variablesRaw.value !== null &&
-      variablesRaw.value !== variables.value
-    );
+    return variablesRaw.value !== null && variablesRaw.value !== variables.value;
   });
 
-  const needsDynamicLoading = computed(() => {
-    const s = state.value;
-    if (!s || !enabled.value || s.type !== "args") return false;
-    if (s.query.startsWith("-")) return false;
+  const currentLinePrefix = computed(() =>
+    getLinePrefix(toValue(options.model), toValue(options.cursorStart)),
+  );
 
-    const currentVars = variables.value;
-    const currentPrefix = getLinePrefix();
-    if (
-      !currentVars ||
-      currentVars.input?.hookId !== currentHook.value?.id ||
-      currentVars.input?.linePrefix !== currentPrefix
-    ) {
-      return true;
-    }
+  // API 建议（委托给纯函数）
+  const apiSuggestions = computed(() =>
+    computeApiSuggestions(
+      state.value,
+      variables.value as { input?: { hookId?: string; linePrefix?: string; query?: string } } | undefined,
+      autocompleteData.value?.hookAutocomplete ?? [],
+      currentHook.value?.id ?? null,
+      currentLinePrefix.value,
+    ),
+  );
 
-    const rawSuggestions = autocompleteData.value?.hookAutocomplete ?? [];
-    if (rawSuggestions.length === 0) return true;
-
-    const queryVal = currentVars.input?.query ?? "";
-
-    let filteredLength = 0;
-    if (s.query === queryVal) {
-      filteredLength = rawSuggestions.length;
-    } else {
-      const q = s.query.toLowerCase();
-      filteredLength = rawSuggestions.filter((item) => {
-        if (item.text.toLowerCase() === q) return false;
-        return item.text.toLowerCase().startsWith(q) || item.displayText.toLowerCase().includes(q);
-      }).length;
-    }
-
-    return filteredLength < rawSuggestions.length * 0.5;
-  });
+  // 动态加载判断（委托给纯函数）
+  const needsDynamic = computed(() =>
+    needsDynamicLoading(
+      state.value,
+      enabled.value,
+      variables.value as { input?: { hookId?: string; linePrefix?: string; query?: string } } | undefined,
+      currentHook.value?.id ?? null,
+      currentLinePrefix.value,
+      autocompleteData.value?.hookAutocomplete ?? [],
+    ),
+  );
 
   const isSearching = computed(() => {
-    return dynamicLoading.value || (isDebouncing.value && needsDynamicLoading.value);
+    return dynamicLoading.value || (isDebouncing.value && needsDynamic.value);
   });
 
   const parsedRules = computed<DirectiveRule[]>(() => {
@@ -277,60 +193,16 @@ export function useNoteAutocomplete(options: Options) {
     return rules;
   });
 
-  const suggestions = computed<Suggestion[]>(() => {
-    if (!state.value?.show) return [];
-
-    if (state.value.type === "name") {
-      const q = state.value.query;
-      const list = directives.value;
-      const matched = q ? list.filter((h) => h.directive?.name.toLowerCase().includes(q)) : list;
-      return matched.map((h) => {
-        const dirName = h.directive?.name ?? "";
-        const relatedRule = parsedRules.value.find((r) => r.directive === dirName);
-
-        const header = h.name;
-        const body = relatedRule?.generalDescription || h.description || "";
-        const desc = body ? `${header}\n\n${body}` : header;
-
-        return {
-          type: "subcommand",
-          text: dirName,
-          displayText: `/${dirName}`,
-          description: desc,
-        };
-      });
-    } else {
-      const dirName = state.value.directiveName;
-      if (!dirName) return [];
-      const q = state.value.query;
-      const rules = parsedRules.value.filter((r) => r.directive === dirName);
-
-      const argsText = state.value.argsText ?? "";
-      const { confirmedTokens } = getArgsContext(argsText);
-
-      const staticResults = getSuggestionsForRules(rules, confirmedTokens, q);
-
-      if (
-        enabled.value &&
-        !state.value.query.startsWith("-") &&
-        apiSuggestions.value.length > 0
-      ) {
-        const nonPositional = staticResults.filter((item) => item.type !== "positional");
-        return [...apiSuggestions.value, ...nonPositional];
-      }
-
-      return staticResults;
-    }
-  });
-
-  function getLinePrefix(): string {
-    const text = toValue(options.model);
-    const start = toValue(options.cursorStart);
-    const textBeforeCursor = text.slice(0, start);
-    const lastNewline = textBeforeCursor.lastIndexOf("\n");
-    const lineStart = lastNewline === -1 ? 0 : lastNewline + 1;
-    return textBeforeCursor.slice(lineStart);
-  }
+  // 建议合并（委托给纯函数）
+  const suggestions = computed<Suggestion[]>(() =>
+    computeSuggestions(
+      state.value,
+      directives.value as HookInfo[],
+      parsedRules.value,
+      apiSuggestions.value,
+      enabled.value,
+    ),
+  );
 
   function resetDismissed() {
     dismissed.value = false;
@@ -346,48 +218,7 @@ export function useNoteAutocomplete(options: Options) {
     refreshOn(blurAt.value.add(200));
   }
 
-  function handleSelectSuggestion(sug: Suggestion, op: TextareaOperator) {
-    const s = state.value;
-    if (!s) return;
-
-    const triggerIdx = s.triggerIndex;
-    const endIdx = op.selectionEnd;
-
-    let textToInsert = sug.text;
-    if (s.type === "name") {
-      textToInsert = `${sug.text} `;
-    } else if (sug.type === "option" && !sug.placeholder) {
-      textToInsert = `${sug.text} `;
-    }
-
-    let newSelectionStart = triggerIdx + textToInsert.length;
-    let newSelectionEnd = newSelectionStart;
-
-    if (sug.placeholder) {
-      const placeholderIdx = textToInsert.indexOf(sug.placeholder);
-      if (placeholderIdx !== -1) {
-        newSelectionStart = triggerIdx + placeholderIdx;
-        newSelectionEnd = newSelectionStart + sug.placeholder.length;
-      }
-    }
-
-    const hasPlaceholder = sug.placeholder !== undefined;
-    op.insertText(textToInsert, triggerIdx, endIdx, newSelectionStart, newSelectionEnd, hasPlaceholder);
-  }
-
-  function insertDirective(dirName: string, op: TextareaOperator) {
-    const text = toValue(options.model);
-    const start = op.selectionStart;
-    const end = op.selectionEnd;
-
-    const before = text.slice(0, start);
-    const needsNewline = before.length > 0 && !/(?:^|\n)[ \t]*$/.test(before);
-    const prefix = needsNewline ? "\n" : "";
-    const textToInsert = prefix + `/${dirName} `;
-
-    const newCursorPos = start + textToInsert.length;
-    op.insertText(textToInsert, start, end, newCursorPos, newCursorPos, false);
-  }
+  // #region 键盘交互
 
   function handleKeyUp() {
     if (state.value?.show && suggestions.value.length) {
@@ -400,7 +231,6 @@ export function useNoteAutocomplete(options: Options) {
     }
   }
 
-  // 下键
   function handleKeyDown() {
     if (state.value?.show && suggestions.value.length) {
       if (activeIndex.value === -1) {
@@ -419,28 +249,42 @@ export function useNoteAutocomplete(options: Options) {
     activeIndex.value = 0;
   }
 
-  function handleKeyEnter(e: KeyboardEvent, op: TextareaOperator) {
+  function handleKeyEsc() {
+    if (state.value?.show) {
+      dismissed.value = true;
+    }
+  }
+
+  // #endregion
+
+  // #region 建议提交（纯计算，返回 InsertParams，调用方负责 DOM 操作）
+
+  /** 计算选择建议后的插入参数，返回 null 表示无操作 */
+  function handleSelectSuggestion(sug: Suggestion, selectionEnd: number): InsertParams | null {
+    const s = state.value;
+    if (!s) return null;
+    return computeSuggestionInsertion(sug, s, selectionEnd);
+  }
+
+  /** 计算 Enter 键确认后的插入参数，返回 null 表示无需处理（由调用方让事件继续传播） */
+  function handleKeyEnter(e: KeyboardEvent, selectionEnd: number): InsertParams | null {
     if (state.value?.show && suggestions.value.length && activeIndex.value !== -1) {
       const sug = suggestions.value[activeIndex.value];
+      const s = state.value;
       const text = toValue(options.model);
-      const triggerIdx = state.value.triggerIndex;
-      const endIdx = op.selectionEnd;
+      const params = computeSuggestionInsertion(sug, s, selectionEnd);
 
-      let textToInsert = sug.text;
-      if (state.value.type === "name") {
-        textToInsert = `${sug.text} `;
-      } else if (sug.type === "option" && !sug.placeholder) {
-        textToInsert = `${sug.text} `;
-      }
-
-      if (textToInsert === text.slice(triggerIdx, endIdx)) {
-        return;
+      if (params.textToInsert === text.slice(params.start, params.end)) {
+        return null;
       }
 
       e.preventDefault();
-      handleSelectSuggestion(sug, op);
+      return params;
     }
+    return null;
   }
+
+  // #endregion
 
   watch(
     () => state.value?.show,
@@ -448,14 +292,8 @@ export function useNoteAutocomplete(options: Options) {
       if (!show) {
         updateVariablesDebounced.cancel();
       }
-    }
+    },
   );
-
-  function handleKeyEsc() {
-    if (state.value?.show) {
-      dismissed.value = true;
-    }
-  }
 
   function flushDebounced() {
     updateVariablesDebounced.flush();
@@ -471,7 +309,6 @@ export function useNoteAutocomplete(options: Options) {
     onFocus,
     onBlur,
     handleSelectSuggestion,
-    insertDirective,
     handleKeyUp,
     handleKeyDown,
     handleKeySpace,
@@ -481,3 +318,6 @@ export function useNoteAutocomplete(options: Options) {
     directives,
   };
 }
+
+/** 计算插入指令的插入参数（纯函数，不执行 DOM 操作） */
+export { computeDirectiveInsertion };

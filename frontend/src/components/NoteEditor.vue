@@ -20,7 +20,7 @@
           type="button"
           class="px-2 py-1 text-xs font-semibold rounded-lg bg-primary-800 hover:bg-primary-700 border border-primary-700/60 hover:border-secondary-500/50 text-primary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1 group"
           :title="h.directive!.usage"
-          @click="insertDirective(h.directive!.name, textareaOperator)"
+          @click="onInsertDirective(h.directive!.name)"
         >
           <span class="text-secondary-400 group-hover:text-secondary-300"
             >/{{ h.directive!.name }}</span
@@ -118,7 +118,7 @@
                 ? 'bg-secondary-500 text-white'
                 : 'hover:bg-primary-800 text-primary-200'
             "
-            @click="handleSelectSuggestion(sug, textareaOperator)"
+            @click="onSelectSuggestion(sug)"
             @mouseenter="activeIndex = idx"
           >
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
@@ -166,7 +166,7 @@
         @click="onCursorChange"
         @keydown.up.prevent="handleKeyUp"
         @keydown.down.prevent="handleKeyDown"
-        @keydown.enter="handleKeyEnter($event, textareaOperator)"
+        @keydown.enter="onKeyEnter"
         @keydown.esc.prevent="handleKeyEsc"
         @keydown.space="handleKeySpace"
         @blur="handleBlur"
@@ -190,8 +190,9 @@ import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
 import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
-import { useNoteAutocomplete } from "@/composables/useNoteAutocomplete";
-import type { TextareaOperator } from "@/composables/useNoteAutocomplete";
+import { useNoteAutocomplete, computeDirectiveInsertion } from "@/composables/useNoteAutocomplete";
+import type { InsertParams } from "@/composables/useNoteAutocomplete";
+import type { Suggestion } from "@/utils/directiveAutocomplete";
 
 const typeLabels: Record<string, string> = {
   subcommand: "子命令",
@@ -306,7 +307,6 @@ const {
   onFocus: onAutocompleteFocus,
   onBlur: onAutocompleteBlur,
   handleSelectSuggestion,
-  insertDirective,
   handleKeyUp,
   handleKeyDown,
   handleKeySpace,
@@ -321,48 +321,65 @@ const {
   isFocused: () => isFocused.value,
   noteId: computed(() => props.noteId),
   loadingCount: dynamicLoadingCount,
+  hooksData,
 });
 
-const textareaOperator: TextareaOperator = {
-  get selectionStart() {
-    return textareaRef.value?.selectionStart ?? 0;
-  },
-  get selectionEnd() {
-    return textareaRef.value?.selectionEnd ?? 0;
-  },
-  insertText(textToInsert, start, end, selectStart, selectEnd, hasPlaceholder) {
-    const el = textareaRef.value;
-    if (!el) return;
+/** 执行文本插入操作 */
+function applyInsertion(params: InsertParams) {
+  const el = textareaRef.value;
+  if (!el) return;
 
-    el.focus();
-    el.setSelectionRange(start, end);
+  el.focus();
+  el.setSelectionRange(params.start, params.end);
 
-    let inserted = false;
-    if (typeof document.execCommand === "function") {
-      try {
-        inserted = document.execCommand("insertText", false, textToInsert);
-      } catch {
-        // 忽略
-      }
+  let inserted = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      inserted = document.execCommand("insertText", false, params.textToInsert);
+    } catch {
+      // 忽略
     }
-
-    if (!inserted) {
-      const before = model.value.slice(0, start);
-      const after = model.value.slice(end);
-      model.value = before + textToInsert + after;
-    }
-
-    nextTick(() => {
-      el.focus();
-      el.setSelectionRange(selectStart, selectEnd);
-      onCursorChange();
-      emit("input");
-      if (hasPlaceholder) {
-        flushDebounced();
-      }
-    });
   }
-};
+
+  if (!inserted) {
+    const before = model.value.slice(0, params.start);
+    const after = model.value.slice(params.end);
+    model.value = before + params.textToInsert + after;
+  }
+
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(params.selectStart, params.selectEnd);
+    onCursorChange();
+    emit("input");
+    if (params.hasPlaceholder) {
+      flushDebounced();
+    }
+  });
+}
+
+/** 选择建议后的回调 */
+function onSelectSuggestion(sug: Suggestion) {
+  const p = handleSelectSuggestion(sug, textareaRef.value?.selectionEnd ?? 0);
+  if (p) applyInsertion(p);
+}
+
+/** Enter 键确认 */
+function onKeyEnter(e: KeyboardEvent) {
+  const p = handleKeyEnter(e, textareaRef.value?.selectionEnd ?? 0);
+  if (p) applyInsertion(p);
+}
+
+/** 插入指令（纯函数计算 + DOM 执行） */
+function onInsertDirective(dirName: string) {
+  const params = computeDirectiveInsertion(
+    dirName,
+    model.value,
+    textareaRef.value?.selectionStart ?? 0,
+    textareaRef.value?.selectionEnd ?? 0,
+  );
+  applyInsertion(params);
+}
 
 function onCursorChange() {
   const el = textareaRef.value;
