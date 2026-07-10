@@ -294,6 +294,8 @@ class AutocompleteContext:
         self._parsed_args: Optional[argparse.Namespace] = None
         self._workflow_loaded: bool = False
         self._seen_prompts: Dict[str, str] = {}
+        self._workflow: Optional[Dict[str, Any]] = None
+        self._prompt_meta: Optional[Dict[str, Any]] = None
 
     @property
     def parsed_args(self) -> Optional[argparse.Namespace]:
@@ -338,10 +340,65 @@ class AutocompleteContext:
             self._load_workflow()
         return self._workflow_loaded
 
+    @property
+    def workflow(self) -> Optional[Dict[str, Any]]:
+        if not self._workflow_loaded:
+            self._load_workflow()
+        return self._workflow
+
+    @property
+    def prompt_meta(self) -> Optional[Dict[str, Any]]:
+        if not self._workflow_loaded:
+            self._load_workflow()
+        return self._prompt_meta
+
     def _load_workflow(self):
         self._workflow_loaded = True
         parsed_args = self.parsed_args
-        if parsed_args is None and not self.is_add_cmd:
+
+        # 加载第一张有效图片的 workflow 和 prompt
+        workflow = None
+        prompt_meta = None
+        for path in self.image_paths:
+            if not os.path.isfile(path):
+                continue
+            try:
+                with Image.open(path) as img:
+                    p_str = img.info.get("prompt")
+                    w_str = img.info.get("workflow")
+                    if p_str and w_str:
+                        prompt_meta = json.loads(p_str)
+                        workflow = json.loads(w_str)
+                        break
+            except Exception:
+                continue
+
+        # 如果还是没有加载到，尝试从 example_hooks/samples 目录下的样本图片加载
+        if not (workflow and prompt_meta):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            samples_dir = os.path.join(script_dir, "samples")
+            if os.path.isdir(samples_dir):
+                try:
+                    for filename in os.listdir(samples_dir):
+                        if filename.lower().endswith(".png"):
+                            path = os.path.join(samples_dir, filename)
+                            try:
+                                with Image.open(path) as img:
+                                    p_str = img.info.get("prompt")
+                                    w_str = img.info.get("workflow")
+                                    if p_str and w_str:
+                                        prompt_meta = json.loads(p_str)
+                                        workflow = json.loads(w_str)
+                                        break
+                            except Exception:
+                                continue
+                except Exception:
+                    pass
+
+        self._workflow = workflow
+        self._prompt_meta = prompt_meta
+
+        if not (workflow and prompt_meta):
             return
 
         is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
@@ -461,6 +518,136 @@ class AutocompleteProvider:
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         raise NotImplementedError
+
+
+def get_node_title_and_type(
+    node_id: str, prompt_meta: Dict[str, Any], workflow: Optional[Dict[str, Any]]
+) -> Tuple[str, str]:
+    prompt_node = prompt_meta.get(node_id, {})
+    class_type = prompt_node.get("class_type", "")
+
+    # 1. 优先从 prompt 的 _meta 拿 title
+    title = prompt_node.get("_meta", {}).get("title")
+    if title:
+        return title, class_type
+
+    if not workflow:
+        return class_type or "Unknown Node", class_type
+
+    # 2. 如果是普通顶级节点
+    if ":" not in node_id:
+        for node in workflow.get("nodes", []):
+            if str(node.get("id")) == node_id:
+                w_title = node.get("title")
+                if w_title:
+                    return w_title, class_type
+        return class_type or "Unknown Node", class_type
+
+    # 3. 如果是子图节点 (parent_id:child_id)
+    parent_id, child_id = node_id.split(":", 1)
+    parent_title = parent_id
+    parent_type = None
+
+    # 找父节点信息
+    for node in workflow.get("nodes", []):
+        if str(node.get("id")) == parent_id:
+            parent_title = node.get("title") or node.get("type") or parent_id
+            parent_type = node.get("type")
+            break
+
+    child_title = child_id
+    if parent_type:
+        subgraphs = workflow.get("definitions", {}).get("subgraphs", [])
+        for subgraph in subgraphs:
+            if subgraph.get("id") == parent_type:
+                for node in subgraph.get("nodes", []):
+                    if str(node.get("id")) == child_id:
+                        child_title = node.get("title") or node.get("type") or child_id
+                        break
+                break
+
+    title = f"{parent_title} -> {child_title}"
+    return title, class_type
+
+
+class NodeProvider(AutocompleteProvider):
+    """节点 ID 建议提供者"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return context.prev_word == "--node" and context.is_real_option_prev
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        if not context.prompt_meta:
+            return
+
+        # 找出之前已经用过的节点 ID
+        seen_nodes: Set[str] = set()
+        if context.parsed_args:
+            nodes_val = cast(
+                Optional[List[Any]], getattr(context.parsed_args, "node", None)
+            )
+            if isinstance(nodes_val, list):
+                for val in nodes_val:
+                    if val:
+                        seen_nodes.add(str(val))
+
+        # 兜底：直接从 cleaned_cwords 中提取
+        for idx, w in enumerate(context.cleaned_cwords):
+            if w == "--node":
+                if idx + 1 < len(context.cleaned_cwords):
+                    val = context.cleaned_cwords[idx + 1]
+                    if val and not val.startswith("-"):
+                        seen_nodes.add(val)
+
+        # 确定当前命令支持 of node 类型的过滤逻辑
+        is_cfg = "cfg" in context.cleaned_cwords
+        is_aspect = "aspect" in context.cleaned_cwords
+
+        for node_id, node_data in sorted(
+            context.prompt_meta.items(), key=lambda x: x[0]
+        ):
+            class_type = node_data.get("class_type", "")
+            inputs = node_data.get("inputs", {})
+
+            # 校验是否为 comfyui.py 脚本所支持类型的节点
+            supported = False
+            if is_cfg:
+                supported = "KSampler" in class_type and "cfg" in inputs
+            elif is_aspect:
+                supported = "width" in inputs and "height" in inputs
+            else:
+                supported = class_type == "CLIPTextEncode"
+
+            if not supported:
+                continue
+
+            # 如果有 query，需要前缀或子串过滤
+            if context.query and context.query.lower() not in node_id.lower():
+                continue
+
+            # 获取节点标题和类型
+            title, _ = get_node_title_and_type(
+                node_id, context.prompt_meta, context.workflow
+            )
+
+            # 返回的补全项描述中显示节点名称和类型
+            description = f"名称: {title}, 类型: {class_type}"
+
+            style = ""
+            if node_id in seen_nodes:
+                style = "muted"
+
+            yield AutocompleteSuggestion(
+                text=node_id,
+                displayText=node_id,
+                description=description,
+                type="node",
+                style=style,
+            )
 
 
 class RegionProvider(AutocompleteProvider):
@@ -602,6 +789,7 @@ def autocomplete(
     providers: List[AutocompleteProvider] = [
         RegionProvider(),
         LoraProvider(),
+        NodeProvider(),
         WorkflowPromptProvider(),
         DanbooruProvider(),
     ]

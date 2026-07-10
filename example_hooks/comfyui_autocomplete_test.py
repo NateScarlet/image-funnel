@@ -12,6 +12,7 @@ import os
 import sys
 import unittest
 import json
+from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -578,6 +579,206 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(len(suggestions), 1)
             self.assertEqual(texts[0], "1girl")
             mock_post.assert_called_once()
+
+    def _get_mock_node_image(self):
+        mock_prompt = {
+            "node_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "1girl"},
+                "_meta": {"title": "Positive Prompt"},
+            },
+            "node_2": {
+                "class_type": "KSampler",
+                "inputs": {"cfg": 8.0, "seed": 42},
+                "_meta": {"title": "Main Sampler"},
+            },
+            "node_3": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512},
+            },
+            "node_4:child_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "subgraph prompt"},
+            },
+        }
+        mock_workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "title": "Positive Prompt",
+                    "widgets_values": ["1girl"],
+                },
+                {
+                    "id": "node_2",
+                    "type": "KSampler",
+                    "title": "Main Sampler",
+                    "widgets_values": [42, "fixed", 8.0],
+                },
+                {
+                    "id": "node_3",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [512, 512],
+                },
+                {
+                    "id": "node_4",
+                    "type": "MySubgraph",
+                    "title": "Parent Subgraph",
+                    "widgets_values": [],
+                },
+            ],
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "MySubgraph",
+                        "nodes": [
+                            {
+                                "id": "child_1",
+                                "type": "CLIPTextEncode",
+                                "title": "Inner Prompt",
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        mock_image = MagicMock()
+        mock_image.info = {
+            "prompt": json.dumps(mock_prompt),
+            "workflow": json.dumps(mock_workflow),
+        }
+        mock_image.__enter__.return_value = mock_image
+        return mock_image
+
+    def test_autocomplete_node_clip_text_encode(self):
+        mock_image = self._get_mock_node_image()
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+            self.assertEqual(len(suggestions), 2)
+
+            node_1_sug = next(s for s in suggestions if s.text == "node_1")
+            self.assertEqual(
+                node_1_sug.description, "名称: Positive Prompt, 类型: CLIPTextEncode"
+            )
+            self.assertEqual(node_1_sug.type, "node")
+            self.assertEqual(node_1_sug.style, "")
+
+            sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
+            self.assertEqual(
+                sub_sug.description,
+                "名称: Parent Subgraph -> Inner Prompt, 类型: CLIPTextEncode",
+            )
+
+    def test_autocomplete_node_adjust_cfg(self):
+        mock_image = self._get_mock_node_image()
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust cfg --node ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/adjust", "cfg", "--node"]
+                ),
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("adjust"))
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "node_2")
+            self.assertEqual(
+                suggestions[0].description, "名称: Main Sampler, 类型: KSampler"
+            )
+
+    def test_autocomplete_node_adjust_aspect(self):
+        mock_image = self._get_mock_node_image()
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust aspect --node ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/adjust", "aspect", "--node"]
+                ),
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("adjust"))
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "node_3")
+            self.assertTrue("EmptyLatentImage" in suggestions[0].description)
+
+    def test_autocomplete_node_muted_style(self):
+        mock_image = self._get_mock_node_image()
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node node_1 --node ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "--node", "node_1", "--node"]
+                ),
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+            self.assertEqual(len(suggestions), 2)
+
+            node_1_sug = next(s for s in suggestions if s.text == "node_1")
+            self.assertEqual(node_1_sug.style, "muted")
+
+            sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
+            self.assertEqual(sub_sug.style, "")
+
+    def test_autocomplete_samples_fallback_robustness(self):
+        with patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps([]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            try:
+                suggestions = list(autocomplete("add"))
+                for sug in suggestions:
+                    self.assertIsInstance(sug.text, str)
+                    self.assertIsInstance(sug.displayText, str)
+                    self.assertIsInstance(sug.description, str)
+                    self.assertEqual(sug.type, "node")
+            except Exception as e:
+                self.fail(f"autocomplete raised exception on samples fallback: {e}")
 
 
 if __name__ == "__main__":
