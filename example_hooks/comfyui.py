@@ -26,11 +26,9 @@ if sys.platform.startswith("win"):
             pass
 
 import json
-from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast
 import logging
 import argparse
-import requests
 
 from graphql_utils import update_image_label, fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
@@ -516,7 +514,7 @@ def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
             continue
 
 
-def _extract_lora_names(image_paths: List[str]) -> Iterator[str]:
+def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
     """
     从图片的 prompt 元数据中提取所有 lora 文件名（不含扩展名），逐个 yield。
     委托 WorkflowPromptPair.collect_lora_names 处理。
@@ -540,296 +538,6 @@ def _extract_lora_names(image_paths: List[str]) -> Iterator[str]:
             continue
 
 
-@dataclass
-class AutocompleteSuggestion:
-    text: str
-    displayText: str
-    description: str
-    type: str
-
-
-def quote_if_needed(val: str) -> str:
-    if " " in val:
-        escaped = val.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return val
-
-
-def _fetch_danbooru_suggestions(
-    query: str, search_url: str
-) -> Iterator[AutocompleteSuggestion]:
-    if not query.strip():
-        return
-
-    search_url = search_url.rstrip("/")
-    api_url = f"{search_url}/api/search"
-
-    show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
-    show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
-
-    payload = {
-        "query": query,
-        "top_k": 20,
-        "limit": 20,
-        "popularity_weight": 0.15,
-        "show_nsfw": show_nsfw,
-        "use_segmentation": False,
-    }
-
-    _LOGGER.debug(
-        "Fetching Danbooru suggestions for query: %r from URL: %r",
-        query,
-        api_url,
-    )
-    try:
-        # 用户指明：不需要超时，应该是前端取消时才取消。
-        # 因此，此处直接 requests.post(api_url, json=payload) 而不提供 timeout 参数。
-        response = requests.post(api_url, json=payload)
-        _LOGGER.debug("Danbooru response status: %d", response.status_code)
-        response.raise_for_status()
-        res_json = response.json()
-        results = res_json.get("results", [])
-        _LOGGER.debug("Danbooru search returned %d items", len(results))
-        for item in results:
-            tag = item.get("tag", "")
-            if not tag:
-                continue
-            cn_name = item.get("cn_name", "")
-            wiki = item.get("wiki", "")
-
-            display = f"{tag} ({cn_name})" if cn_name else tag
-            desc = wiki if wiki else "Danbooru 标签"
-
-            yield AutocompleteSuggestion(
-                text=quote_if_needed(tag),
-                displayText=display,
-                description=desc,
-                type="danbooru",
-            )
-    except Exception as e:
-        _LOGGER.warning("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
-
-
-def autocomplete(
-    target_command: Optional[str] = None,
-) -> Iterator[AutocompleteSuggestion]:
-    """
-    autocomplete 子命令：读取环境变量，生成自动完成建议。
-    调用方（main）负责遍历并输出 JSONL。
-    """
-    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
-
-    image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
-    try:
-        image_paths: List[str] = json.loads(image_paths_str)
-    except Exception:
-        image_paths = []
-
-    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
-
-    if prev_word == "--region":
-        regions = extract_region_names_from_images(image_paths)
-        for r in regions:
-            if not query or query.lower() in r.lower():
-                yield AutocompleteSuggestion(
-                    text=r,
-                    displayText=r,
-                    description=f"区域: {r}",
-                    type="region",
-                )
-
-    elif prev_word == "lora":
-        loras = _extract_lora_names(image_paths)
-        for l in loras:
-            if not query or query.lower() in l.lower():
-                yield AutocompleteSuggestion(
-                    text=quote_if_needed(l),
-                    displayText=l,
-                    description=f"Lora: {l}",
-                    type="lora",
-                )
-
-    # 针对指令的参数自动完成
-    cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
-    try:
-        cwords: List[str] = json.loads(cwords_str)
-    except Exception:
-        cwords = []
-
-    # 过滤 Docopt 静态占位符如 <region>, <node-id> 等，避免被误解析为 prompt 位置参数
-    cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
-
-    # 检查是否为 remove 或者是 adjust prompt 指令，且当前是补全 prompt 参数的时机
-    # 如果已输入了 "--" 区分标志，那么后面的所有输入（即使以 "-" 开头）都是普通 prompt 位置参数，而不是选项本身
-    is_remove_cmd = target_command == "remove"
-    is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
-    is_option_input = query.startswith("-") and "--" not in cleaned_cwords
-
-    # 检查 prev_word 是否真的是一个生效的选项参数键
-    # 如果 CWORDS 中有 "--" 且该 "--" 位于 prev_word 之前，则它不是生效的选项键，其后输入的也是位置参数
-    is_real_option_prev = False
-    if prev_word in [
-        "--region",
-        "--node",
-        "-j",
-        "--jobs",
-        "--max-match",
-        "--skip-add",
-        "--neg",
-    ]:
-        try:
-            is_real_option_prev = "--" not in cleaned_cwords or cleaned_cwords.index(
-                "--"
-            ) > cleaned_cwords.index(prev_word)
-        except ValueError:
-            is_real_option_prev = True
-
-    if (
-        (is_remove_cmd or is_adjust_prompt_cmd)
-        and not is_real_option_prev
-        and not is_option_input
-    ):
-        # 将 args_to_parse 构建为以 target_command 为首词，再加上除了指令名之外的其余输入词，最后垫底占位符参数以绕过必需参数校验
-        args_to_parse = (
-            [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
-            if target_command
-            else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
-        )
-        try:
-            parser = get_parser()
-            parsed_args, _ = parser.parse_known_args(args_to_parse)
-        except (Exception, SystemExit):
-            parsed_args = None
-
-        # 对于 adjust prompt，如果 text 已经输入完毕，或已开始输入 weight 参数，则跳过提示词自动完成
-        if is_adjust_prompt_cmd and parsed_args:
-            text_val = getattr(parsed_args, "text", None)
-            weight_val = getattr(parsed_args, "weight", None)
-            if weight_val and weight_val != "dummy_weight":
-                parsed_args = None
-            elif text_val and text_val != "dummy_prompt" and not query:
-                parsed_args = None
-
-        if parsed_args is None:
-            return
-
-        is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
-        is_all = getattr(parsed_args, "all", False) if parsed_args else False
-        regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
-        nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
-        regions_arg = (
-            cast(List[str], regions_raw)
-            if isinstance(regions_raw, list)
-            else cast(List[str], [])
-        )
-        nodes_arg = (
-            cast(List[str], nodes_raw)
-            if isinstance(nodes_raw, list)
-            else cast(List[str], [])
-        )
-
-        # 加载第一张有效图片的 workflow 和 prompt
-        workflow = None
-        prompt_meta = None
-        for path in image_paths:
-            if not os.path.isfile(path):
-                continue
-            try:
-                with Image.open(path) as img:
-                    p_str = img.info.get("prompt")
-                    w_str = img.info.get("workflow")
-                    if p_str and w_str:
-                        prompt_meta = json.loads(p_str)
-                        workflow = json.loads(w_str)
-                        break
-            except Exception:
-                continue
-
-        if workflow and prompt_meta:
-            nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
-            if is_all:
-                clip_nodes = [
-                    nid
-                    for nid, node in prompt_meta.items()
-                    if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-                ]
-                for nid in clip_nodes:
-                    nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
-            else:
-                raw_targets: List[Tuple[str, str]] = []
-                for nid in nodes_arg:
-                    raw_targets.append(("node", nid))
-                for rname in regions_arg:
-                    raw_targets.append(("region", rname))
-
-                if not raw_targets:
-                    default_region = "negative" if is_neg else "positive"
-                    raw_targets.append(("region", default_region))
-
-                for target_type, target_value in raw_targets:
-                    resolved = resolve_target_to_nodes(
-                        prompt_meta, workflow, target_type, target_value, is_neg
-                    )
-                    for nid, start_marker, end_marker, use_markers in resolved:
-                        label = (
-                            f"区域: {target_value}"
-                            if target_type == "region"
-                            else f"节点: {target_value}"
-                        )
-                        nodes_to_process.append(
-                            (nid, start_marker, end_marker, use_markers, label)
-                        )
-
-            seen_prompts: Set[str] = set()
-            for (
-                node_id,
-                start_marker,
-                end_marker,
-                use_markers,
-                label,
-            ) in nodes_to_process:
-                workflow_text = get_workflow_node_text(workflow, node_id)
-                if not workflow_text:
-                    continue
-
-                if use_markers:
-                    start_idx = workflow_text.find(start_marker)
-                    end_idx = workflow_text.find(end_marker)
-                    if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                        content = workflow_text[start_idx + len(start_marker) : end_idx]
-                    else:
-                        content = workflow_text
-                else:
-                    content = workflow_text
-
-                for line in content.splitlines():
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                    if stripped.startswith("//"):
-                        continue
-                    cleaned = stripped.rstrip(",").rstrip("，").strip()
-                    if not cleaned:
-                        continue
-
-                    if cleaned not in seen_prompts:
-                        seen_prompts.add(cleaned)
-                        if not query or query.lower() in cleaned.lower():
-                            yield AutocompleteSuggestion(
-                                text=quote_if_needed(cleaned),
-                                displayText=cleaned,
-                                description=f"来自{label}中的提示词",
-                                type="prompt",
-                            )
-
-    is_add_cmd = target_command == "add"
-    if is_add_cmd and not is_real_option_prev and not is_option_input:
-        danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
-        if danbooru_url:
-            for s in _fetch_danbooru_suggestions(query, danbooru_url):
-                yield s
-
-
 def main() -> None:
     # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
     log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
@@ -842,22 +550,6 @@ def main() -> None:
 
     args = parse_args()
     _LOGGER.debug("args %s", (args,))
-
-    if args.command == "autocomplete":
-        target_cmd = getattr(args, "target_command", None)
-        for s in autocomplete(target_cmd):
-            print(
-                json.dumps(
-                    {
-                        "text": s.text,
-                        "displayText": s.displayText,
-                        "description": s.description,
-                        "type": s.type,
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        return
 
     # 解析 --max-match：默认从 HOOK_MAX_MATCH 环境变量读取，未设置则为 4
     max_match = args.max_match
@@ -1482,17 +1174,6 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="node-id",
         help="Target KSampler node ID, can be specified multiple times; if omitted, adjusts all KSampler nodes",
-    )
-
-    # 5. autocomplete
-    autocomplete_parser = subparsers.add_parser(
-        "autocomplete", help="Provide autocomplete suggestions for directive parameters"
-    )
-    autocomplete_parser.add_argument(
-        "target_command",
-        nargs="?",
-        default=None,
-        help="The actual runtime sub-command being autocompleted",
     )
 
     # 4. adjust aspect

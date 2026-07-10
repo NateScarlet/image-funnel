@@ -39,12 +39,18 @@ from comfyui import (
     resolve_target_to_nodes,
     get_workflow_node_text,
     extract_region_names_from_images,
-    _extract_lora_names,  # pyright: ignore[reportPrivateUsage]
+    extract_lora_names,
     get_parser,
-    quote_if_needed,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def quote_if_needed(val: str) -> str:
+    if " " in val:
+        escaped = val.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return val
 
 
 @dataclass
@@ -490,7 +496,7 @@ class LoraProvider(AutocompleteProvider):
         return context.prev_word == "lora"
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        loras = _extract_lora_names(context.image_paths)
+        loras = extract_lora_names(context.image_paths)
         for l in loras:
             if not context.query or context.query.lower() in l.lower():
                 yield AutocompleteSuggestion(
