@@ -1,7 +1,7 @@
 id = "comfyui-queue"
 name = "发送至 ComfyUI"
 description = "提取图片内置的工作流，更新随机种子并自动发送至 ComfyUI API 重新入列生成，如果配置了 HOOK_IMAGE_SET_LABEL 环境变量则自动更新图片颜色标签"
-command = "uv run -m comfyui queue"
+command = "uv run runner.py comfyui queue"
 
 [directive]
 name = "queue"

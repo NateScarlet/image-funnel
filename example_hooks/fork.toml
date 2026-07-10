@@ -1,7 +1,7 @@
 id = "fork"
 name = "移动图片"
 description = "即时运行 /fork 笔记指令"
-command = "python fork.py"
+command = "uv run runner.py fork"
 
 [directive]
 name = "fork"

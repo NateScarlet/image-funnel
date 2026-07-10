@@ -1,11 +1,5 @@
-#!/usr/bin/env -S uv run
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# /// script
-# dependencies = [
-#   "Pillow",
-#   "requests",
-# ]
-# ///
 
 import json
 import os

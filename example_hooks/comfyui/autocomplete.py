@@ -1,10 +1,3 @@
-# /// script
-# dependencies = [
-#   "requests",
-#   "Pillow",
-# ]
-# ///
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
