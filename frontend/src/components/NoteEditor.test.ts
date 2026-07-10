@@ -1,6 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { type VueWrapper, mount } from "@vue/test-utils";
-import { nextTick } from "vue";
+import { nextTick, ref, watch, toValue } from "vue";
 import NoteEditor from "./NoteEditor.vue";
 
 const mockQuery = vi.hoisted(() => vi.fn());
@@ -44,8 +44,52 @@ const hookList = [
   { id: "hook4", name: "无指令钩子", canDispatchByNote: false, directive: null },
 ];
 
+const mockHooksData = { value: { hooks: hookList } };
+const mockAutocompleteData = ref<unknown>(undefined);
+
+const mockUseQuery = vi.hoisted(() => vi.fn((document: unknown, options: unknown) => {
+  if (document === "HooksDocument") {
+    return { data: mockHooksData, loading: { value: false } };
+  }
+
+  const opts = options as { variables?: unknown; loadingCount?: { value: number } } | undefined;
+
+  if (opts?.variables) {
+    watch(
+      () => toValue(opts.variables),
+      async (vars) => {
+        if (!vars) {
+          mockAutocompleteData.value = undefined;
+          return;
+        }
+
+        if (opts.loadingCount) {
+          opts.loadingCount.value++;
+        }
+
+        try {
+          const res = await mockQuery(document, { variables: vars });
+          mockAutocompleteData.value = res.data;
+        } catch {
+          // 忽略
+        } finally {
+          if (opts.loadingCount) {
+            opts.loadingCount.value--;
+          }
+        }
+      },
+      { immediate: true, deep: true }
+    );
+  }
+
+  return {
+    data: mockAutocompleteData,
+    loading: { value: false },
+  };
+}));
+
 vi.mock("@/graphql/utils/useQuery", () => ({
-  default: vi.fn(() => ({ data: { value: { hooks: hookList } }, loading: { value: false } })),
+  default: mockUseQuery,
 }));
 vi.mock("@/graphql/utils/query", () => ({ default: mockQuery }));
 vi.mock("@/graphql/utils/mutate", () => ({ default: vi.fn() }));

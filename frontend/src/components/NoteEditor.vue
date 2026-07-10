@@ -177,16 +177,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, useTemplateRef, shallowRef } from "vue";
+import { ref, computed, nextTick, useTemplateRef, shallowRef, watch } from "vue";
 
 import { useFloating, offset, flip, shift, autoUpdate } from "@floating-ui/vue";
 import useQuery from "@/graphql/utils/useQuery";
-import query from "@/graphql/utils/query";
 import mutate from "@/graphql/utils/mutate";
 import {
   HooksDocument,
   DispatchNoteHookDocument,
   HookAutocompleteDocument,
+  type HookAutocompleteQuery,
+  type HookAutocompleteQueryVariables,
 } from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
@@ -430,9 +431,98 @@ const apiSuggestions = computed(() => {
   });
 });
 
-const dynamicLoading = ref(false);
-// 标记是否处于防抖等待中
-const isDebouncing = ref(false);
+const dynamicLoadingCount = ref(0);
+const dynamicLoading = computed(() => dynamicLoadingCount.value > 0);
+
+// 计算原始的、未防抖的补全参数
+const autocompleteVariablesRaw = computed(() => {
+  const state = autocompleteState.value;
+  if (!isFocused.value || !state || !autocompleteEnabled.value || state.type !== "args") {
+    return null;
+  }
+  if (state.query.startsWith("-")) {
+    return null;
+  }
+  return {
+    input: {
+      hookId: currentHook.value?.id ?? "",
+      noteId: props.noteId,
+      linePrefix: getLinePrefix(),
+      query: state.query,
+    },
+  };
+});
+
+const autocompleteVariables = ref<HookAutocompleteQueryVariables | undefined>(undefined);
+
+const updateVariablesDebounced = debounce((val) => {
+  autocompleteVariables.value = val;
+}, 300);
+
+// 侦听未防抖变量并驱动防抖与请求发起
+watch(
+  autocompleteVariablesRaw,
+  (newVal) => {
+    if (!newVal) {
+      updateVariablesDebounced.cancel();
+      autocompleteVariables.value = undefined;
+    } else {
+      updateVariablesDebounced(newVal);
+    }
+  },
+  { immediate: true }
+);
+
+// 声明式使用项目已有的 useQuery
+const { data: autocompleteData } = useQuery(HookAutocompleteDocument, {
+  variables: autocompleteVariables,
+  loadingCount: dynamicLoadingCount,
+  fetchPolicy: "cache-first",
+});
+
+function mapToSuggestion(s: HookAutocompleteQuery["hookAutocomplete"][number]): Suggestion {
+  return {
+    type: s.type ?? "positional",
+    text: s.text,
+    displayText: s.displayText,
+    description: s.description ?? undefined,
+    style: s.style ?? undefined,
+  };
+}
+
+// 稳定同步数据到本地缓存
+watch(
+  () => autocompleteData.value,
+  (newData) => {
+    if (newData?.hookAutocomplete) {
+      const queryVal = autocompleteVariables.value?.input?.query ?? "";
+      console.log(`[Autocomplete] 声明式请求返回数据并应用，查询: "${queryVal}"`);
+      dynamicBuffer.value = {
+        contextKey: autocompleteContext.value,
+        query: queryVal,
+        suggestions: newData.hookAutocomplete.map(mapToSuggestion),
+      };
+    }
+  }
+);
+
+// 侦听 variables 的变更，打印发起请求的日志以便调试
+watch(
+  () => autocompleteVariables.value,
+  (vars) => {
+    if (vars) {
+      console.log(`[Autocomplete] 声明式发起请求，查询: "${vars.input.query}"`);
+    }
+  }
+);
+
+// 纯声明式判断是否处于防抖等待中
+const isDebouncing = computed(() => {
+  return (
+    autocompleteVariablesRaw.value !== null &&
+    autocompleteVariablesRaw.value !== autocompleteVariables.value
+  );
+});
 
 // 判断是否需要向后端请求动态补全建议（如果本地缓存足够则不需要）
 const needsDynamicLoading = computed(() => {
@@ -533,74 +623,9 @@ function getLinePrefix(): string {
   return textBeforeCursor.slice(lineStart);
 }
 
-async function executeAutocomplete() {
-  // 开始执行或跳过时，结束防抖等待状态
-  isDebouncing.value = false;
-  const state = autocompleteState.value;
-  if (!state || !autocompleteEnabled.value || state.type !== "args") return;
-  if (state.query.startsWith("-")) return;
-
-  // 本地缓存足够好（过滤后 ≥50%）就跳过 API 请求
-  const buf = dynamicBuffer.value;
-  if (buf.suggestions.length > 0 && apiSuggestions.value.length >= buf.suggestions.length * 0.5) {
-    return;
-  }
-
-  const hookId = currentHook.value?.id;
-  if (!hookId) return;
-
-  dynamicLoading.value = true;
-  try {
-    const result = await query(HookAutocompleteDocument, {
-      variables: {
-        input: {
-          hookId,
-          noteId: props.noteId,
-          linePrefix: getLinePrefix(),
-
-          query: state.query,
-        },
-      },
-    });
-
-    if (result.data?.hookAutocomplete) {
-      const results: Suggestion[] = result.data.hookAutocomplete.map((s) => ({
-        type: s.type ?? "positional",
-        text: s.text,
-        displayText: s.displayText,
-        description: s.description ?? undefined,
-        style: s.style ?? undefined,
-      }));
-      dynamicBuffer.value = {
-        contextKey: autocompleteContext.value,
-        query: state.query,
-        suggestions: results,
-      };
-    }
-  } catch {
-    // 全局 ErrorLink 已处理通知
-  } finally {
-    dynamicLoading.value = false;
-  }
-}
-
-const triggerDynamicAutocomplete = debounce(executeAutocomplete, 300);
-
-// 请求动态自动补全建议，设置防抖并处理 pending 状态
-function requestAutocomplete(flush = false) {
-  if (autocompleteState.value?.type === "args") {
-    isDebouncing.value = true;
-    triggerDynamicAutocomplete();
-    if (flush) {
-      triggerDynamicAutocomplete.flush();
-    }
-  }
-}
-
 function handleInput() {
   emit("input");
   onCursorChange();
-  requestAutocomplete();
 }
 
 function handleSelectSuggestion(sug: Suggestion) {
@@ -658,7 +683,7 @@ function handleSelectSuggestion(sug: Suggestion) {
     onCursorChange();
     emit("input");
     if (hasPlaceholder) {
-      requestAutocomplete(true);
+      updateVariablesDebounced.flush();
     }
   });
 }
@@ -726,7 +751,7 @@ function handleKeySpace(e: KeyboardEvent) {
   autocompleteDismissed.value = false;
 
   // 已在指令内 → 立即触发动态补全
-  requestAutocomplete(true);
+  updateVariablesDebounced.flush();
 }
 
 function handleKeyEnter(e: KeyboardEvent) {
@@ -736,10 +761,19 @@ function handleKeyEnter(e: KeyboardEvent) {
   }
 }
 
+// 侦听补全菜单可见性，一旦关闭则取消防抖
+watch(
+  () => autocompleteState.value?.show,
+  (show) => {
+    if (!show) {
+      updateVariablesDebounced.cancel();
+    }
+  }
+);
+
 function handleKeyEsc() {
   if (autocompleteState.value?.show) {
     autocompleteDismissed.value = true;
-    isDebouncing.value = false;
   }
 }
 
@@ -747,8 +781,7 @@ function handleBlur() {
   isFocused.value = false;
   blurAt.value = Time.now();
   refreshOn(blurAt.value.add(200));
-  isDebouncing.value = false;
-}
+}    
 
 function handleFocus() {
   isFocused.value = true;
