@@ -21,6 +21,11 @@ from prompt_locator import (
     get_workflow_node_text,
     get_target_clip_node,
 )
+from seed_manager import SeedManager
+from filename_manager import FilenameManager
+from weight_manager import WeightManager
+import variant_engine
+from submission import submit as _submit_fn
 
 
 # #region 节点分析测试
@@ -58,8 +63,8 @@ class TestAnalyzeNodes(unittest.TestCase):
             "4": {"class_type": "KSampler", "inputs": {"seed": 11111}},
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertEqual(len(pair._seed_nodes), 4)
-        self.assertTrue(pair.has_seeds_to_update())
+        self.assertEqual(len(pair.seed_nodes), 4)
+        self.assertTrue(SeedManager(pair, pair.seed_nodes).has_seeds())
 
     def test_disabled_node_skipped(self):
         """disabled 节点被跳过"""
@@ -84,9 +89,9 @@ class TestAnalyzeNodes(unittest.TestCase):
             "2": {"class_type": "KSampler", "inputs": {"seed": 456}},
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertTrue(pair.has_seeds_to_update())
-        self.assertEqual(len(pair._seed_nodes), 1)
-        self.assertEqual(pair._seed_nodes[0].node_id, "2")
+        self.assertTrue(SeedManager(pair, pair.seed_nodes).has_seeds())
+        self.assertEqual(len(pair.seed_nodes), 1)
+        self.assertEqual(pair.seed_nodes[0].node_id, "2")
 
     def test_date_filename_detection(self):
         """检测带日期模板的文件名节点"""
@@ -111,8 +116,8 @@ class TestAnalyzeNodes(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertEqual(len(pair._date_filename_nodes), 1)
-        self.assertEqual(pair._date_filename_nodes[0].node_id, "1")
+        self.assertEqual(len(pair.date_filename_nodes), 1)
+        self.assertEqual(pair.date_filename_nodes[0].node_id, "1")
 
     def test_date_filename_detection_mixed(self):
         """混合非日期变量和日期模板的文件名节点仍可检测"""
@@ -144,8 +149,8 @@ class TestAnalyzeNodes(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         # 只有带 %date: 的节点应被检测
-        self.assertEqual(len(pair._date_filename_nodes), 1)
-        self.assertEqual(pair._date_filename_nodes[0].node_id, "1")
+        self.assertEqual(len(pair.date_filename_nodes), 1)
+        self.assertEqual(pair.date_filename_nodes[0].node_id, "1")
 
     def test_subgraph_nodes_analyzed(self):
         """子图节点被正确分析"""
@@ -194,9 +199,9 @@ class TestAnalyzeNodes(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "MySubgraph", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertTrue(pair.has_seeds_to_update())
-        self.assertEqual(len(pair._seed_nodes), 1)
-        self.assertTrue(pair._seed_nodes[0].is_subgraph)
+        self.assertTrue(SeedManager(pair, pair.seed_nodes).has_seeds())
+        self.assertEqual(len(pair.seed_nodes), 1)
+        self.assertTrue(pair.seed_nodes[0].is_subgraph)
 
     def test_subgraph_disabled_node_skipped(self):
         """子图中 disabled 节点被跳过"""
@@ -220,7 +225,7 @@ class TestAnalyzeNodes(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "MySubgraph", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertFalse(pair.has_seeds_to_update())
+        self.assertFalse(SeedManager(pair, pair.seed_nodes).has_seeds())
 
     def test_non_list_widgets_values(self):
         """widgets_values 不是列表时跳过"""
@@ -229,7 +234,7 @@ class TestAnalyzeNodes(unittest.TestCase):
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 123}}}
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertFalse(pair.has_seeds_to_update())
+        self.assertFalse(SeedManager(pair, pair.seed_nodes).has_seeds())
 
 
 # #endregion
@@ -365,13 +370,19 @@ class TestGetNodeById(unittest.TestCase):
 
 # #region 种子更新测试
 class TestSeedUpdate(unittest.TestCase):
+    def _seed_mgr(
+        self, workflow: Dict[str, Any], prompt: Dict[str, Any]
+    ) -> tuple[SeedManager, WorkflowPromptPair]:
+        pair = WorkflowPromptPair(workflow, prompt)
+        return SeedManager(pair, pair.seed_nodes), pair
+
     def test_has_seeds_true(self):
         workflow = {
             "nodes": [{"id": "1", "type": "KSampler", "widgets_values": [123, "fixed"]}]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 123}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        self.assertTrue(pair.has_seeds_to_update())
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        self.assertTrue(mgr.has_seeds())
 
     def test_has_seeds_false(self):
         workflow = {
@@ -380,14 +391,14 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        self.assertFalse(pair.has_seeds_to_update())
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        self.assertFalse(mgr.has_seeds())
 
     def test_has_seeds_false_no_widgets(self):
         workflow = {"nodes": [{"id": "1", "type": "KSampler"}]}
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 123}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        self.assertFalse(pair.has_seeds_to_update())
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        self.assertFalse(mgr.has_seeds())
 
     def test_update_seeds_fixed(self):
         """fixed 策略：种子值不变"""
@@ -401,8 +412,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 12345}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 12345)
 
@@ -417,8 +428,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 12345}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 12346)
 
@@ -433,8 +444,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 12345}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 12344)
 
@@ -450,8 +461,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 0}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 0)
 
@@ -466,8 +477,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "KSampler", "inputs": {"seed": 12345}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         new_seed = workflow["nodes"][0]["widgets_values"][0]
         self.assertIsInstance(new_seed, int)
@@ -490,8 +501,8 @@ class TestSeedUpdate(unittest.TestCase):
             "1": {"class_type": "KSampler", "inputs": {"seed": ["2", 0]}},
             "2": {"class_type": "PrimitiveInt", "inputs": {"value": 12345}},
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(prompt["2"]["inputs"]["value"], 12346)
 
@@ -518,8 +529,8 @@ class TestSeedUpdate(unittest.TestCase):
             "1": {"class_type": "MySubgraph", "inputs": {}},
             "1:2": {"class_type": "KSampler", "inputs": {"seed": 100}},
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 1)
         self.assertEqual(prompt["1:2"]["inputs"]["seed"], 101)
 
@@ -535,9 +546,9 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {}
-        pair = WorkflowPromptPair(workflow, prompt)
+        mgr, _ = self._seed_mgr(workflow, prompt)
         with self.assertRaises(ValueError):
-            pair.update_seeds()
+            mgr.update_seeds()
 
     def test_update_seeds_no_seeds(self):
         """没有种子节点时返回 0"""
@@ -547,8 +558,8 @@ class TestSeedUpdate(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 0)
 
     def test_update_seeds_multiple(self):
@@ -571,8 +582,8 @@ class TestSeedUpdate(unittest.TestCase):
             "1": {"class_type": "KSampler", "inputs": {"seed": 10}},
             "2": {"class_type": "KSampler", "inputs": {"seed": 20}},
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        count = pair.update_seeds()
+        mgr, _ = self._seed_mgr(workflow, prompt)
+        count = mgr.update_seeds()
         self.assertEqual(count, 2)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], 11)
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], 21)
@@ -583,6 +594,12 @@ class TestSeedUpdate(unittest.TestCase):
 
 # #region 文件名更新测试
 class TestFilenameUpdate(unittest.TestCase):
+    def _filename_mgr(
+        self, workflow: Dict[str, Any], prompt: Dict[str, Any]
+    ) -> tuple[FilenameManager, WorkflowPromptPair]:
+        pair = WorkflowPromptPair(workflow, prompt)
+        return FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node), pair
+
     def test_update_output_filenames_basic(self):
         workflow = {
             "nodes": [
@@ -599,8 +616,8 @@ class TestFilenameUpdate(unittest.TestCase):
                 "inputs": {"filename_prefix": "my_output_20260601_000000_001"},
             },
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.update_output_filenames()
+        mgr, _ = self._filename_mgr(workflow, prompt)
+        mgr.update_output_filenames()
         new_prefix = prompt["1"]["inputs"]["filename_prefix"]
         self.assertNotEqual(new_prefix, "my_output_20260601_000000_001")
         self.assertRegex(new_prefix, r"my_output_\d{8}_\d{6}_001")
@@ -613,8 +630,8 @@ class TestFilenameUpdate(unittest.TestCase):
         prompt = {
             "1": {"class_type": "SaveImage", "inputs": {"filename_prefix": "output"}}
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.update_output_filenames()
+        mgr, _ = self._filename_mgr(workflow, prompt)
+        mgr.update_output_filenames()
         self.assertEqual(prompt["1"]["inputs"]["filename_prefix"], "output")
 
     def test_update_output_filenames_through_primitive(self):
@@ -640,8 +657,8 @@ class TestFilenameUpdate(unittest.TestCase):
                 "inputs": {"value": "output_20260601_000000"},
             },
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.update_output_filenames()
+        mgr, _ = self._filename_mgr(workflow, prompt)
+        mgr.update_output_filenames()
         self.assertRegex(prompt["2"]["inputs"]["value"], r"output_\d{8}_\d{6}")
 
     def test_update_output_filenames_subgraph(self):
@@ -670,8 +687,8 @@ class TestFilenameUpdate(unittest.TestCase):
                 "inputs": {"filename_prefix": "output_20260601_000000"},
             },
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.update_output_filenames()
+        mgr, _ = self._filename_mgr(workflow, prompt)
+        mgr.update_output_filenames()
         self.assertRegex(
             prompt["1:2"]["inputs"]["filename_prefix"], r"output_\d{8}_\d{6}"
         )
@@ -689,18 +706,19 @@ class TestFilenameUpdate(unittest.TestCase):
         }
         prompt = {}
         pair = WorkflowPromptPair(workflow, prompt)
+        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
         with self.assertRaises(ValueError):
-            pair.update_output_filenames()
+            mgr.update_output_filenames()
 
     def test_convert_comfy_date_format_full(self):
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        py_fmt, regex = pair._convert_comfy_date_format_to_python("yyyyMMdd_hhmmss")
+        py_fmt, regex = FilenameManager.convert_comfy_date_format_to_python(
+            "yyyyMMdd_hhmmss"
+        )
         self.assertEqual(py_fmt, "%Y%m%d_%H%M%S")
         self.assertEqual(regex, r"\d{4}\d{2}\d{2}_\d{2}\d{2}\d{2}")
 
     def test_convert_comfy_date_format_short(self):
-        pair = WorkflowPromptPair({"nodes": []}, {})
-        py_fmt, regex = pair._convert_comfy_date_format_to_python("yyMMdd")
+        py_fmt, regex = FilenameManager.convert_comfy_date_format_to_python("yyMMdd")
         self.assertEqual(py_fmt, "%y%m%d")
         self.assertEqual(regex, r"\d{2}\d{2}\d{2}")
 
@@ -710,11 +728,15 @@ class TestFilenameUpdate(unittest.TestCase):
 
 # #region CFG 权重测试
 class TestCfgWeight(unittest.TestCase):
+    def _weight_mgr(self, workflow: Dict[str, Any], prompt: Dict[str, Any]):
+        pair = WorkflowPromptPair(workflow, prompt)
+        return WeightManager(pair), pair
+
     def test_get_current_cfg_weight_basic(self):
         prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
         workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        cfg = pair.get_current_cfg_weight()
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        cfg = mgr.get_current_cfg_weight()
         self.assertEqual(cfg, 7.0)
 
     def test_get_current_cfg_weight_through_primitive(self):
@@ -723,8 +745,8 @@ class TestCfgWeight(unittest.TestCase):
             "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 8.5}},
         }
         workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        cfg = pair.get_current_cfg_weight()
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        cfg = mgr.get_current_cfg_weight()
         self.assertEqual(cfg, 8.5)
 
     def test_get_current_cfg_weight_with_node_ids(self):
@@ -733,15 +755,15 @@ class TestCfgWeight(unittest.TestCase):
             "2": {"class_type": "KSampler", "inputs": {"cfg": 5.0}},
         }
         workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        cfg = pair.get_current_cfg_weight(node_ids=["1"])
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        cfg = mgr.get_current_cfg_weight(node_ids=["1"])
         self.assertEqual(cfg, 7.0)
 
     def test_get_current_cfg_weight_not_found(self):
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
         workflow = {"nodes": []}
-        pair = WorkflowPromptPair(workflow, prompt)
-        cfg = pair.get_current_cfg_weight()
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        cfg = mgr.get_current_cfg_weight()
         self.assertIsNone(cfg)
 
     def test_modify_cfg_weights_basic(self):
@@ -755,8 +777,8 @@ class TestCfgWeight(unittest.TestCase):
                 }
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_cfg_weights(9.0)
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        mgr.modify_cfg_weights(9.0)
         self.assertEqual(prompt["1"]["inputs"]["cfg"], 9.0)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][3], 9.0)
 
@@ -775,8 +797,8 @@ class TestCfgWeight(unittest.TestCase):
                 {"id": "2", "type": "PrimitiveFloat", "widgets_values": [7.0]},
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_cfg_weights(9.0)
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        mgr.modify_cfg_weights(9.0)
         self.assertEqual(prompt["2"]["inputs"]["value"], 9.0)
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], 9.0)
 
@@ -791,8 +813,8 @@ class TestCfgWeight(unittest.TestCase):
                 },
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_cfg_weights(9.0)
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        mgr.modify_cfg_weights(9.0)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][4], 9.0)
 
     def test_modify_cfg_weights_with_node_ids(self):
@@ -814,8 +836,8 @@ class TestCfgWeight(unittest.TestCase):
                 },
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_cfg_weights(9.0, node_ids=["1"])
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        mgr.modify_cfg_weights(9.0, node_ids=["1"])
         self.assertEqual(prompt["1"]["inputs"]["cfg"], 9.0)
         self.assertEqual(prompt["2"]["inputs"]["cfg"], 5.0)
 
@@ -830,8 +852,12 @@ class TestCfgWeight(unittest.TestCase):
                 }
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_cfg_variants("5.0:9.0:2.0"))
+        _, pair = self._weight_mgr(workflow, prompt)
+        variants = list(
+            variant_engine.generate_cfg_variants(
+                WeightManager(pair), prompt, "5.0:9.0:2.0"
+            )
+        )
         self.assertEqual(len(variants), 3)
 
     def test_generate_cfg_variants_with_node_ids(self):
@@ -853,8 +879,12 @@ class TestCfgWeight(unittest.TestCase):
                 },
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_cfg_variants("8.0", node_ids=["1"]))
+        _, pair = self._weight_mgr(workflow, prompt)
+        variants = list(
+            variant_engine.generate_cfg_variants(
+                WeightManager(pair), prompt, "8.0", node_ids=["1"]
+            )
+        )
         self.assertEqual(len(variants), 1)
         self.assertEqual(prompt["1"]["inputs"]["cfg"], 8.0)
         self.assertEqual(prompt["2"]["inputs"]["cfg"], 5.0)
@@ -866,8 +896,10 @@ class TestCfgWeight(unittest.TestCase):
                 {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["hello"]}
             ]
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_cfg_variants("7.0"))
+        _, pair = self._weight_mgr(workflow, prompt)
+        variants = list(
+            variant_engine.generate_cfg_variants(WeightManager(pair), prompt, "7.0")
+        )
         self.assertEqual(len(variants), 0)
 
     def test_generate_cfg_variants_relative(self):
@@ -882,8 +914,12 @@ class TestCfgWeight(unittest.TestCase):
                 }
             ],
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_cfg_variants("x-1.0:x+1.0:1.0"))
+        _, pair = self._weight_mgr(workflow, prompt)
+        variants = list(
+            variant_engine.generate_cfg_variants(
+                WeightManager(pair), prompt, "x-1.0:x+1.0:1.0"
+            )
+        )
         self.assertEqual(len(variants), 3)
 
 
@@ -892,6 +928,12 @@ class TestCfgWeight(unittest.TestCase):
 
 # #region 提示词权重测试
 class TestPromptWeight(unittest.TestCase):
+    def _weight_mgr(
+        self, workflow: Dict[str, Any], prompt: Dict[str, Any]
+    ) -> tuple[WeightManager, WorkflowPromptPair]:
+        pair = WorkflowPromptPair(workflow, prompt)
+        return WeightManager(pair), pair
+
     def test_get_current_prompt_weight_with_weight(self):
         workflow = {
             "nodes": [
@@ -908,10 +950,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "(beautiful:1.2) scenery"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
-            [PromptFragment(pair, "1")], "beautiful"
-        )
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "beautiful")
         self.assertEqual(weight, 1.2)
 
     def test_get_current_prompt_weight_brackets(self):
@@ -930,10 +970,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "(beautiful) scenery"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
-            [PromptFragment(pair, "1")], "beautiful"
-        )
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "beautiful")
         self.assertEqual(weight, 1.0)
 
     def test_get_current_prompt_weight_bare(self):
@@ -952,10 +990,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "beautiful scenery"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
-            [PromptFragment(pair, "1")], "beautiful"
-        )
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "beautiful")
         self.assertEqual(weight, 1.0)
 
     def test_get_current_prompt_weight_not_found(self):
@@ -967,8 +1003,8 @@ class TestPromptWeight(unittest.TestCase):
         prompt = {
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello world"}}
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight(
             [PromptFragment(pair, "1")], "nonexistent"
         )
         self.assertIsNone(weight)
@@ -976,8 +1012,8 @@ class TestPromptWeight(unittest.TestCase):
     def test_get_current_prompt_weight_node_not_found(self):
         workflow = {"nodes": []}
         prompt = {}
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([PromptFragment(pair, "999")], "test")
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "999")], "test")
         self.assertIsNone(weight)
 
     def test_get_current_prompt_weight_bare_with_escaped_parens(self):
@@ -997,8 +1033,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "oil painting \\(medium\\), other"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight(
             [PromptFragment(pair, "1")], "oil painting \\(medium\\)"
         )
         self.assertEqual(weight, 1.0)
@@ -1020,8 +1056,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "\\(medium\\), "},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight(
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight(
             [PromptFragment(pair, "1")], "\\(medium\\)"
         )
         self.assertEqual(weight, 1.0)
@@ -1043,12 +1079,12 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "hello world today"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
+        mgr, pair = self._weight_mgr(workflow, prompt)
         # 匹配完整词
-        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "hello")
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "hello")
         self.assertEqual(weight, 1.0)
         # 不匹配子串（如 "world" 中的 "or" 不应匹配）
-        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "orl")
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "orl")
         self.assertIsNone(weight)
 
     def test_get_current_prompt_weight_escaped_parens_not_substring(self):
@@ -1068,8 +1104,8 @@ class TestPromptWeight(unittest.TestCase):
                 "inputs": {"text": "\\(medium\\)"},
             }
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_prompt_weight([PromptFragment(pair, "1")], "mediu")
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        weight = mgr.get_current_prompt_weight([PromptFragment(pair, "1")], "mediu")
         self.assertIsNone(weight)
 
     def test_modify_prompt_weights_skip_add(self):
@@ -1082,8 +1118,8 @@ class TestPromptWeight(unittest.TestCase):
         prompt = {
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello world"}}
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_prompt_weights(
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        mgr.modify_prompt_weights(
             [PromptFragment(pair, "1")], "nonexistent", 1.5, skip_add=True
         )
         self.assertNotIn("nonexistent", prompt["1"]["inputs"]["text"])
@@ -1098,8 +1134,8 @@ class TestPromptWeight(unittest.TestCase):
         prompt = {
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello world"}}
         }
-        pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_prompt_weights(
+        mgr, pair = self._weight_mgr(workflow, prompt)
+        mgr.modify_prompt_weights(
             [PromptFragment(pair, "1")], "beautiful", 1.5, skip_add=False
         )
         self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
@@ -1138,9 +1174,11 @@ class TestPromptWeight(unittest.TestCase):
         """相对权重但无法获取当前值时不生成变体"""
         workflow = {"nodes": []}
         prompt = {}
-        pair = WorkflowPromptPair(workflow, prompt)
+        mgr, _ = self._weight_mgr(workflow, prompt)
         variants = list(
-            pair.generate_prompt_variants([], "nonexistent", "x+0.1", False)
+            variant_engine.generate_prompt_variants(
+                mgr, [], "nonexistent", "x+0.1", False
+            )
         )
         self.assertEqual(len(variants), 0)
 
@@ -1152,10 +1190,10 @@ class TestPromptWeight(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
-        pair = WorkflowPromptPair(workflow, prompt)
+        mgr, pair = self._weight_mgr(workflow, prompt)
         variants = list(
-            pair.generate_prompt_variants(
-                [PromptFragment(pair, "1")], "nonexistent", "1.5", skip_add=True
+            variant_engine.generate_prompt_variants(
+                mgr, [PromptFragment(pair, "1")], "nonexistent", "1.5", skip_add=True
             )
         )
         self.assertEqual(len(variants), 0)
@@ -1170,8 +1208,7 @@ class TestSubmit(unittest.TestCase):
         """提交到不存在的服务器返回 False"""
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         workflow = {"nodes": [{"id": "1", "type": "KSampler"}]}
-        pair = WorkflowPromptPair(workflow, prompt)
-        result = pair.submit("http://127.0.0.1:19999")
+        result = _submit_fn(prompt, workflow, "http://127.0.0.1:19999")
         self.assertFalse(result)
 
 
@@ -1378,7 +1415,11 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                     continue
 
                 pair = WorkflowPromptPair(workflow, prompt)
-                variants = list(pair.generate_lora_variants(lora_name, "0.99"))
+                variants = list(
+                    variant_engine.generate_lora_variants(
+                        WeightManager(pair), lora_name, "0.99"
+                    )
+                )
                 if not variants:
                     continue
                 prompt, workflow = pair.prompt, pair.workflow
@@ -1387,7 +1428,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 found_prompt_updated = False
                 found_workflow_updated = False
 
-                updated_weight = pair.get_current_lora_weight(lora_name)
+                updated_weight = WeightManager(pair).get_current_lora_weight(lora_name)
                 if isinstance(updated_weight, (int, float)):
                     found_prompt_updated = updated_weight == 0.99
 
@@ -1447,7 +1488,11 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
         }
 
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_lora_variants("style_test", "-0.75"))
+        variants = list(
+            variant_engine.generate_lora_variants(
+                WeightManager(pair), "style_test", "-0.75"
+            )
+        )
         self.assertTrue(len(variants) > 0)
         prompt, workflow = pair.prompt, pair.workflow
 
@@ -1501,8 +1546,12 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 if not target_word:
                     continue
 
-                modified = pair.generate_prompt_variants(
-                    target_nodes, target_word, "1.35", skip_add=True
+                modified = variant_engine.generate_prompt_variants(
+                    WeightManager(pair),
+                    target_nodes,
+                    target_word,
+                    "1.35",
+                    skip_add=True,
                 )
                 variants = list(modified)
                 self.assertTrue(len(variants) > 0)
@@ -1518,8 +1567,12 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 # 再次修改：支持在带权重的括号中继续修改
                 pair2 = WorkflowPromptPair(workflow, prompt)
-                modified2 = pair2.generate_prompt_variants(
-                    target_nodes, target_word, "-0.5", skip_add=True
+                modified2 = variant_engine.generate_prompt_variants(
+                    WeightManager(pair2),
+                    target_nodes,
+                    target_word,
+                    "-0.5",
+                    skip_add=True,
                 )
                 variants2 = list(modified2)
                 self.assertTrue(len(variants2) > 0)
@@ -1532,16 +1585,24 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 # 测试不存在的词，且 skip_add=True -> 应不修改，生成器为空
                 pair_skip = WorkflowPromptPair(workflow, prompt)
-                modified_skip = pair_skip.generate_prompt_variants(
-                    target_nodes, "non_existent_word_abc", "1.5", skip_add=True
+                modified_skip = variant_engine.generate_prompt_variants(
+                    WeightManager(pair_skip),
+                    target_nodes,
+                    "non_existent_word_abc",
+                    "1.5",
+                    skip_add=True,
                 )
                 variants_skip = list(modified_skip)
                 self.assertEqual(len(variants_skip), 0)
 
                 # 测试不存在的词，且 skip_add=False -> 应修改成功，生成器非空且添加该词
                 pair_add = WorkflowPromptPair(workflow, prompt)
-                modified_add = pair_add.generate_prompt_variants(
-                    target_nodes, "non_existent_word_abc", "1.5", skip_add=False
+                modified_add = variant_engine.generate_prompt_variants(
+                    WeightManager(pair_add),
+                    target_nodes,
+                    "non_existent_word_abc",
+                    "1.5",
+                    skip_add=False,
                 )
                 variants_add = list(modified_add)
                 self.assertTrue(len(variants_add) > 0)
@@ -1574,7 +1635,7 @@ class TestCoverageGaps(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertIsNone(pair.get_current_lora_weight("lora"))
+        self.assertIsNone(WeightManager(pair).get_current_lora_weight("lora"))
 
     def test_get_current_lora_weight_non_list_widgets(self):
         """workflow 中 widgets_values 不是 list 时跳过"""
@@ -1583,7 +1644,7 @@ class TestCoverageGaps(unittest.TestCase):
             "nodes": [{"id": "1", "type": "LoraLoader", "widgets_values": "not_a_list"}]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        self.assertIsNone(pair.get_current_lora_weight("lora"))
+        self.assertIsNone(WeightManager(pair).get_current_lora_weight("lora"))
 
     def test_modify_lora_weights_disabled_node(self):
         """disabled 的 workflow 节点不被修改"""
@@ -1608,7 +1669,7 @@ class TestCoverageGaps(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.8)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.8)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][2], 0.8)
@@ -1633,7 +1694,7 @@ class TestCoverageGaps(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         self.assertEqual(prompt["1"]["inputs"]["lora_1"]["strength"], 0.8)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0]["strength"], 0.8)
 
@@ -1650,7 +1711,7 @@ class TestCoverageGaps(unittest.TestCase):
         }
         workflow = {}
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         # 应该直接忽略而不报错
         self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.8)
 
@@ -1662,7 +1723,7 @@ class TestCoverageGaps(unittest.TestCase):
         }
         workflow = {"nodes": []}
         pair = WorkflowPromptPair(workflow, prompt)
-        cfg = pair.get_current_cfg_weight(node_ids=["2"])
+        cfg = WeightManager(pair).get_current_cfg_weight(node_ids=["2"])
         self.assertEqual(cfg, 5.0)
 
     def test_modify_cfg_weights_disabled_node(self):
@@ -1687,7 +1748,7 @@ class TestCoverageGaps(unittest.TestCase):
             ],
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_cfg_weights(9.0)
+        WeightManager(pair).modify_cfg_weights(9.0)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][3], 7.0)
         self.assertEqual(workflow["nodes"][1]["widgets_values"][3], 9.0)
 
@@ -1699,7 +1760,7 @@ class TestCoverageGaps(unittest.TestCase):
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = PromptFragment(pair, "1")
-        weight = pair.get_current_prompt_weight([fragment], "test")
+        weight = WeightManager(pair).get_current_prompt_weight([fragment], "test")
         self.assertIsNone(weight)
 
     def test_modify_prompt_weights_no_text(self):
@@ -1710,7 +1771,9 @@ class TestCoverageGaps(unittest.TestCase):
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = PromptFragment(pair, "1")
-        pair.modify_prompt_weights([fragment], "test", 1.5, skip_add=False)
+        WeightManager(pair).modify_prompt_weights(
+            [fragment], "test", 1.5, skip_add=False
+        )
         self.assertNotIn("test", prompt["1"].get("inputs", {}).get("text", ""))
 
     def test_modify_prompt_weights_no_node_info(self):
@@ -1723,7 +1786,9 @@ class TestCoverageGaps(unittest.TestCase):
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = PromptFragment(pair, "999")
-        pair.modify_prompt_weights([fragment], "test", 1.5, skip_add=False)
+        WeightManager(pair).modify_prompt_weights(
+            [fragment], "test", 1.5, skip_add=False
+        )
 
     def test_modify_prompt_weights_non_string_prompt_text(self):
         """prompt 中 text 不是字符串时降级为空字符串"""
@@ -1735,7 +1800,9 @@ class TestCoverageGaps(unittest.TestCase):
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": 123}}}
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = PromptFragment(pair, "1")
-        pair.modify_prompt_weights([fragment], "nonexistent", 1.5, skip_add=False)
+        WeightManager(pair).modify_prompt_weights(
+            [fragment], "nonexistent", 1.5, skip_add=False
+        )
         self.assertIn("(nonexistent:1.5)", prompt["1"]["inputs"]["text"])
 
     def test_update_workflow_node_text_no_node(self):
@@ -1769,7 +1836,11 @@ class TestCoverageGaps(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         with self.assertRaises(ValueError):
-            list(pair.generate_cfg_variants("x:10:1"))
+            list(
+                variant_engine.generate_cfg_variants(
+                    WeightManager(pair), prompt, "x:10:1"
+                )
+            )
 
     def test_update_output_filenames_date_patterns_empty(self):
         """date 模板存在但正则不匹配（如 %date:% 格式）"""
@@ -1785,7 +1856,9 @@ class TestCoverageGaps(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.update_output_filenames()
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).update_output_filenames()
         self.assertEqual(prompt["1"]["inputs"]["filename_prefix"], "output_old")
 
 
@@ -1810,7 +1883,11 @@ class TestAspectAdjustment(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         # 调整为 16:9 (1.7778)
-        variants = list(pair.generate_aspect_variants("16:9"))
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "16:9"
+            )
+        )
         self.assertEqual(len(variants), 1)
         # 512*512 = 262144. 16:9 对应 W=680, H=384 (680*384 = 261120，最接近 262144 且是 8 的倍数)
         self.assertEqual(prompt["1"]["inputs"]["width"], 680)
@@ -1836,7 +1913,11 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_aspect_variants("swap"))
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "swap"
+            )
+        )
         self.assertEqual(len(variants), 1)
         self.assertEqual(prompt["1"]["inputs"]["width"], 1344)
         self.assertEqual(prompt["1"]["inputs"]["height"], 768)
@@ -1863,22 +1944,38 @@ class TestAspectAdjustment(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
 
         # w+1 索引增 1，到达 13:19 (0.6842)。768*1344 = 1032192 -> W = sqrt(1032192 * 13 / 19) = 840.0 -> round to 8: 840; H = 1228.2 -> round to 8: 1232
-        list(pair.generate_aspect_variants("w+1"))
+        list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "w+1"
+            )
+        )
         self.assertEqual(prompt["1"]["inputs"]["width"], 840)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
 
         # 默认不带前缀视为 w。再次 +1，到达 7:9 (0.7778) -> W=896, H=1152
-        list(pair.generate_aspect_variants("+1"))
+        list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "+1"
+            )
+        )
         self.assertEqual(prompt["1"]["inputs"]["width"], 896)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
 
         # h+1 高度增加，代表比例索引减少 1。此时从 7:9 退回到 13:19
-        list(pair.generate_aspect_variants("h+1"))
+        list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "h+1"
+            )
+        )
         self.assertEqual(prompt["1"]["inputs"]["width"], 840)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
 
         # h-1 高度减少，代表比例索引增加 1。再次从 13:19 到达 7:9
-        list(pair.generate_aspect_variants("h-1"))
+        list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "h-1"
+            )
+        )
         self.assertEqual(prompt["1"]["inputs"]["width"], 896)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
 
@@ -1902,12 +1999,20 @@ class TestAspectAdjustment(unittest.TestCase):
 
         # 测试 +-1 (生成 3 个变体：7:9, 1:1, 9:7)
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_aspect_variants("+-1"))
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "+-1"
+            )
+        )
         self.assertEqual(len(variants), 3)
 
         # 测试 +-2:2 (生成 3 个变体：13:19, 1:1, 19:13)
         pair2 = WorkflowPromptPair(workflow, prompt)
-        variants2 = list(pair2.generate_aspect_variants("w+-2:2"))
+        variants2 = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair2), prompt, pair2.nodes_cache, "w+-2:2"
+            )
+        )
         self.assertEqual(len(variants2), 3)
 
     def test_aspect_primitive_connections(self):
@@ -1928,7 +2033,11 @@ class TestAspectAdjustment(unittest.TestCase):
             "3": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_aspect_variants("16:9"))
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "16:9"
+            )
+        )
         self.assertEqual(len(variants), 1)
         self.assertEqual(prompt["2"]["inputs"]["value"], 680)
         self.assertEqual(prompt["3"]["inputs"]["value"], 384)
@@ -1959,7 +2068,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "ComfyUI"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("sub1/sub2")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("sub1/sub2")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
@@ -1981,7 +2092,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("sub")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("sub")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub/ComfyUI")
 
@@ -2000,7 +2113,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             "2": {"class_type": "PrimitiveString", "inputs": {"value": "ComfyUI"}},
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("sub1/sub2")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("sub1/sub2")
         self.assertEqual(prompt["2"]["inputs"]["value"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
@@ -2035,7 +2150,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("NewProject/NewTitle")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewProject/NewTitle")
 
         # 源节点值被更新
         self.assertEqual(prompt["2"]["inputs"]["value"], "NewProject")
@@ -2082,7 +2199,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("MyProj/MyTitle")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("MyProj/MyTitle")
         # 值不变
         self.assertEqual(prompt["2"]["inputs"]["value"], "MyProj")
         self.assertEqual(prompt["3"]["inputs"]["value"], "MyTitle")
@@ -2128,7 +2247,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
 
         # 只有一段，但模板有两个非日期变量 -> 展平路径分隔符并拼入 rel_dir
-        pair.adjust_output_directory("SingleDir")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("SingleDir")
         self.assertEqual(
             prompt["1"]["inputs"]["filename_prefix"],
             "SingleDir/TODO____20260601_120000",
@@ -2161,7 +2282,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             # 没有 _meta.title 为 Project 的节点
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("NewProj")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewProj")
         # 变量源节点未找到 -> 展平并拼入 rel_dir
         self.assertEqual(
             prompt["1"]["inputs"]["filename_prefix"],
@@ -2199,7 +2322,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             # 没有 _meta.title 为 Title 的节点
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("NewProj/NewTitle")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewProj/NewTitle")
         # 部分缺失 -> 展平并拼入 rel_dir
         self.assertEqual(
             prompt["1"]["inputs"]["filename_prefix"],
@@ -2254,7 +2379,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("NewProj/NewTitle")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewProj/NewTitle")
         # 源节点得到 rel_dir + basename（无模板可用，走简单回退）
         self.assertEqual(
             prompt["5"]["inputs"]["value"], "NewProj/NewTitle/20260601_120000"
@@ -2319,7 +2446,9 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             },
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.adjust_output_directory("MyProj/MyTitle")
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("MyProj/MyTitle")
         # 模板变量被更新
         self.assertEqual(prompt["6"]["inputs"]["value"], "MyTitle")
         self.assertEqual(prompt["7"]["inputs"]["value"], "MyProj")

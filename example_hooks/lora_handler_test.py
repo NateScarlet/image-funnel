@@ -10,6 +10,8 @@ lora_handler.py 的单元测试。
 import unittest
 
 from workflow_prompt_pair import WorkflowPromptPair
+from weight_manager import WeightManager
+import variant_engine
 
 
 class TestLoraWeight(unittest.TestCase):
@@ -34,7 +36,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
+        weight = WeightManager(pair).get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.8)
 
     def test_get_current_lora_weight_native_lora_through_primitive(self):
@@ -60,7 +62,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
+        weight = WeightManager(pair).get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.75)
 
     def test_get_current_lora_weight_power_lora(self):
@@ -82,7 +84,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
+        weight = WeightManager(pair).get_current_lora_weight("my_style")
         self.assertEqual(weight, 0.9)
 
     def test_get_current_lora_weight_workflow_fallback(self):
@@ -97,7 +99,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
+        weight = WeightManager(pair).get_current_lora_weight("my_style")
         self.assertIsNone(weight)
 
     def test_get_current_lora_weight_power_lora_workflow(self):
@@ -114,14 +116,14 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("my_style")
+        weight = WeightManager(pair).get_current_lora_weight("my_style")
         self.assertIsNone(weight)
 
     def test_get_current_lora_weight_not_found(self):
         prompt = {}
         workflow = {"nodes": []}
         pair = WorkflowPromptPair(workflow, prompt)
-        weight = pair.get_current_lora_weight("nonexistent")
+        weight = WeightManager(pair).get_current_lora_weight("nonexistent")
         self.assertIsNone(weight)
 
     def test_modify_lora_weights_native_lora(self):
@@ -145,7 +147,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         self.assertEqual(prompt["1"]["inputs"]["strength_model"], 0.5)
         self.assertEqual(prompt["1"]["inputs"]["strength_clip"], 0.5)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.5)
@@ -174,7 +176,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         self.assertEqual(prompt["2"]["inputs"]["value"], 0.5)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][1], 0.5)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][2], 0.5)
@@ -199,7 +201,7 @@ class TestLoraWeight(unittest.TestCase):
             ]
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        pair.modify_lora_weights("my_style", 0.5)
+        WeightManager(pair).modify_lora_weights("my_style", 0.5)
         self.assertEqual(prompt["1"]["inputs"]["lora_1"]["strength"], 0.5)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0]["strength"], 0.5)
 
@@ -208,7 +210,11 @@ class TestLoraWeight(unittest.TestCase):
         prompt = {}
         workflow = {"nodes": []}
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(pair.generate_lora_variants("nonexistent", "x+0.1"))
+        variants = list(
+            variant_engine.generate_lora_variants(
+                WeightManager(pair), "nonexistent", "x+0.1"
+            )
+        )
         self.assertEqual(len(variants), 0)
 
 

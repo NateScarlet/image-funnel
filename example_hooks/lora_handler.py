@@ -7,12 +7,10 @@ Lora 节点处理器模块。
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Set, Any, Optional, cast, TYPE_CHECKING
+from typing import Dict, List, Set, Any, Optional, cast
 
+from node_accessor import NodeAccessor
 from prompt_locator import find_terminal_input, NodeInfo
-
-if TYPE_CHECKING:
-    from workflow_prompt_pair import WorkflowPromptPair
 
 
 class LoraLoaderHandler(ABC):
@@ -33,7 +31,7 @@ class LoraLoaderHandler(ABC):
     def get_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
     ) -> Optional[float]:
         """从节点信息中获取匹配的 Lora 权重"""
@@ -43,7 +41,7 @@ class LoraLoaderHandler(ABC):
     def modify_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
         weight: float,
     ) -> bool:
@@ -67,7 +65,7 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
     def get_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
     ) -> Optional[float]:
         # 1. 只从参与运行的 prompt 提取数据
@@ -78,9 +76,9 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
                 for ik in ["strength_model", "strength_clip"]:
                     if ik in inputs:
                         src_nid, src_key = find_terminal_input(
-                            pair.prompt, node_info.node_id, ik
+                            accessor.prompt, node_info.node_id, ik
                         )
-                        val = pair.prompt[src_nid]["inputs"].get(src_key)
+                        val = accessor.get_prompt_input(src_nid, src_key)
                         if isinstance(val, (int, float)):
                             return float(val)
         return None
@@ -88,7 +86,7 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
     def modify_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
         weight: float,
     ) -> bool:
@@ -103,11 +101,11 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
             for ik in ["strength_model", "strength_clip"]:
                 if ik in inputs:
                     src_nid, src_key = find_terminal_input(
-                        pair.prompt, node_info.node_id, ik
+                        accessor.prompt, node_info.node_id, ik
                     )
-                    pair.prompt[src_nid]["inputs"][src_key] = weight
+                    accessor.set_prompt_input(src_nid, src_key, weight)
                     if src_nid != node_info.node_id:
-                        wf_node = pair.get_node_by_id(src_nid)
+                        wf_node = accessor.get_node_by_id(src_nid)
                         if wf_node and wf_node.widgets_values:
                             wf_node.widgets_values[0] = weight
                     modified = True
@@ -154,7 +152,7 @@ class PowerLoraLoaderHandler(LoraLoaderHandler):
     def get_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
     ) -> Optional[float]:
         # 1. 只从参与运行的 prompt 提取数据
@@ -173,7 +171,7 @@ class PowerLoraLoaderHandler(LoraLoaderHandler):
     def modify_weight(
         self,
         node_info: NodeInfo,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         query_lower: str,
         weight: float,
     ) -> bool:

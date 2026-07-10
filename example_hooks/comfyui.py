@@ -30,10 +30,12 @@ from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast
 import logging
 import argparse
 
-from graphql_utils import update_image_label, fetch_images
+from graphql_utils import fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
-from prompt_fragment import PromptFragment
+from filename_manager import FilenameManager
+from weight_manager import WeightManager
 from prompt_locator import REGION_START_RE
+from command_handlers import COMMAND_HANDLERS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,37 +133,6 @@ def get_relative_output_dir(
     return rel_dir
 
 
-def submit_workflow(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    comfyui_url: str,
-    jobs: int,
-    image_path: str,
-) -> Tuple[bool, bool]:
-    """
-    更新种子和文件名后提交工作流到 ComfyUI。
-    返回 (any_success, has_error)。
-    """
-    pair = WorkflowPromptPair(workflow, prompt)
-    any_success = False
-    has_error = False
-    for q_idx in range(jobs):
-        if jobs > 1:
-            _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, jobs)
-        if pair.update_seeds() == 0:
-            _LOGGER.error(
-                f"Failed to update any seeds for image: {image_path}. Cannot queue duplicate workflow without changing seeds."
-            )
-            has_error = True
-            break
-        pair.update_output_filenames()
-        if pair.submit(comfyui_url):
-            any_success = True
-        else:
-            has_error = True
-    return any_success, has_error
-
-
 def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
     """
     从图片的 workflow 元数据中扫描区域标记，逐个 yield 区域名称。
@@ -209,7 +180,7 @@ def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
                 if not prompt_str:
                     continue
                 prompt_data: Dict[str, Any] = json.loads(prompt_str)
-                for n in WorkflowPromptPair.collect_lora_names(prompt_data):
+                for n in WeightManager.collect_lora_names(prompt_data):
                     name_no_ext, _ = os.path.splitext(n)
                     if name_no_ext not in seen:
                         seen.add(name_no_ext)
@@ -363,193 +334,23 @@ def main() -> None:
                     path, comfyui_output_dir_env, hook_output_dir
                 )
                 pair = WorkflowPromptPair(workflow, prompt)
-                pair.adjust_output_directory(rel_dir)
+                FilenameManager(
+                    pair, pair.date_filename_nodes, pair.title_to_node
+                ).adjust_output_directory(rel_dir)
         except Exception as e:
             _LOGGER.error(f"Failed to adjust output directory: {e}")
             has_errors = True
             continue
 
-        if args.command == "queue":
-            any_success, submit_error = submit_workflow(
-                prompt, workflow, comfyui_url, jobs, path
-            )
-            if submit_error:
-                has_errors = True
-            if any_success:
-                success_count += 1
-                if label_to_set and img_id:
-                    update_image_label(img_id, label_to_set)
-
-        elif args.command == "adjust":
-            node_ids: Optional[List[str]] = getattr(args, "node", None)
-
-            if args.adjust_type == "cfg":
-                pair = WorkflowPromptPair(workflow, prompt)
-                variant_gen = pair.generate_cfg_variants(args.weight, node_ids)
-            elif args.adjust_type in ("lora", "l"):
-                pair = WorkflowPromptPair(workflow, prompt)
-                variant_gen = pair.generate_lora_variants(args.name, args.weight)
-            elif args.adjust_type == "aspect":
-                pair = WorkflowPromptPair(workflow, prompt)
-                variant_gen = pair.generate_aspect_variants(args.ratio, node_ids)
-            elif args.adjust_type in ("prompt", "p"):
-                is_neg = args.neg
-                pair = WorkflowPromptPair(workflow, prompt)
-                fragments = pair.locate_prompts(
-                    nodes=args.node,
-                    regions=args.region,
-                    is_neg=is_neg,
-                )
-                variant_gen = pair.generate_prompt_variants(
-                    fragments, args.text, args.weight, args.skip_add
-                )
-            else:
-                raise ValueError(f"unexpected adjust type '{args.adjust_type}'")
-
-            enable_seed_update = args.update_seed or (jobs > 1)
-            any_image_success = False
-            variant_count = 0
-
-            for _ in variant_gen:
-                variant_count += 1
-                if variant_count > 1:
-                    enable_seed_update = True
-
-                for q_idx in range(jobs):
-                    if jobs > 1 or variant_count > 1:
-                        _LOGGER.debug(
-                            "  -> Queueing variant %d run %d/%d",
-                            variant_count,
-                            q_idx + 1,
-                            jobs,
-                        )
-                    if enable_seed_update:
-                        if pair.update_seeds() == 0:
-                            _LOGGER.error(
-                                f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
-                            )
-                            has_errors = True
-                            break
-                    pair.update_output_filenames()
-                    if pair.submit(comfyui_url):
-                        any_image_success = True
-                    else:
-                        has_errors = True
-
-            if variant_count == 0 and args.no_skip:
-                _LOGGER.debug(
-                    "No variants generated for image %s, sending original workflow (--no-skip).",
-                    path,
-                )
-                pair = WorkflowPromptPair(workflow, prompt)
-                for q_idx in range(jobs):
-                    if jobs > 1:
-                        _LOGGER.debug(
-                            "  -> Queueing original run %d/%d", q_idx + 1, jobs
-                        )
-                    if enable_seed_update:
-                        if pair.update_seeds() == 0:
-                            _LOGGER.error(
-                                f"Failed to update any seeds for image: {path}. Cannot queue duplicate workflow without changing seeds."
-                            )
-                            has_errors = True
-                            break
-                    pair.update_output_filenames()
-                    if pair.submit(comfyui_url):
-                        any_image_success = True
-                    else:
-                        has_errors = True
-            elif variant_count == 0:
-                _LOGGER.debug(
-                    "No variants generated for image %s, skipping submission.", path
-                )
-                _write_action_override("KEEP")
-
-            if any_image_success:
-                success_count += 1
-                if label_to_set and img_id:
-                    update_image_label(img_id, label_to_set)
-
-        elif args.command in ["add", "remove"]:
-            is_neg = args.neg
-            pair = WorkflowPromptPair(workflow, prompt)
-            fragments = pair.locate_prompts(
-                nodes=args.node, regions=args.region, is_neg=is_neg
-            )
-            hard = getattr(args, "hard", False)
-            any_processed = False
-
-            if args.command == "add":
-                prompt_str_arg = " ".join(args.prompt)
-                fragment = next(fragments, None)
-                if fragment:
-                    if fragment.add(prompt_str_arg, raw=args.raw, no_skip=args.no_skip):
-                        any_processed = True
-                    else:
-                        any_processed = True  # 跳过也算成功
-
-                if not any_processed:
-                    has_errors = True
-                    _LOGGER.error("No target was successfully processed for add.")
-                    continue
-
-            else:  # remove
-                # 展开所有目标为具体节点列表
-                if args.all:
-                    clip_nodes = [
-                        nid
-                        for nid, node in prompt.items()
-                        if cast(Dict[str, Any], node).get("class_type")
-                        == "CLIPTextEncode"
-                    ]
-                    fragments = [PromptFragment(pair, nid) for nid in clip_nodes]
-
-                # 为每个提示词生成原始、下划线、空格三种变体，去重
-                remove_prompts: Set[str] = set()
-                for p in args.prompt:
-                    remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
-                _LOGGER.debug("Remove prompts (variants): %s", remove_prompts)
-
-                for fragment in fragments:
-                    for prompt_str_arg in remove_prompts:
-                        _LOGGER.debug(
-                            "Trying to remove '%s' from fragment %s",
-                            prompt_str_arg,
-                            fragment.node_id,
-                        )
-                        if fragment.remove(
-                            prompt_str_arg,
-                            raw=args.raw,
-                            hard=hard,
-                            no_skip=args.no_skip,
-                        ):
-                            _LOGGER.debug(
-                                "Removed '%s' from fragment %s",
-                                prompt_str_arg,
-                                fragment.node_id,
-                            )
-                            any_processed = True
-                        else:
-                            _LOGGER.debug(
-                                "Skipped '%s' in fragment %s (not found or skipped)",
-                                prompt_str_arg,
-                                fragment.node_id,
-                            )
-
-                if not any_processed:
-                    _LOGGER.debug("No prompts were removed, skipping submission.")
-                    continue
-
-            # 提交到 ComfyUI
-            any_success, submit_error = submit_workflow(
-                prompt, workflow, comfyui_url, jobs, path
-            )
-            if submit_error:
-                has_errors = True
-            if any_success:
-                success_count += 1
-                if label_to_set and img_id:
-                    update_image_label(img_id, label_to_set)
+        handler = COMMAND_HANDLERS.get(args.command)
+        if handler is None:
+            raise ValueError(f"Unknown command: '{args.command}'")
+        count, had_error = handler.run(
+            img_id, path, prompt, workflow, args, comfyui_url, jobs, label_to_set
+        )
+        success_count += count
+        if had_error:
+            has_errors = True
 
     print(f"processed {success_count}/{len(targets)} image(s) successfully.")
 

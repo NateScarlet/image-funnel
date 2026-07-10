@@ -10,11 +10,9 @@ prompt_fragment 模块：封装提示词片段的增删改查操作。
 
 import logging
 import re
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import List, Optional, Tuple
 
-if TYPE_CHECKING:
-    from workflow_prompt_pair import WorkflowPromptPair
-
+from node_accessor import NodeAccessor
 from prompt_locator import get_region_content, find_region_boundaries
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,11 +39,11 @@ class PromptFragment:
 
     def __init__(
         self,
-        pair: "WorkflowPromptPair",
+        accessor: NodeAccessor,
         node_id: str,
         region: str = "",
     ):
-        self.pair = pair
+        self.accessor = accessor
         self.node_id = node_id
         self.region = region
 
@@ -54,7 +52,7 @@ class PromptFragment:
         """
         获取该片段当前的文本内容（剥离区域 marker）。
         """
-        workflow_text = self.pair.get_workflow_node_text(self.node_id)
+        workflow_text = self.accessor.get_workflow_node_text(self.node_id)
         if workflow_text is None:
             return ""
         if self.region:
@@ -135,15 +133,11 @@ class PromptFragment:
         """
         在当前片段中调整目标提示词的权重。
         """
-        workflow_text = self.pair.get_workflow_node_text(self.node_id)
+        workflow_text = self.accessor.get_workflow_node_text(self.node_id)
         if workflow_text is None:
             return False
 
-        prompt_text = (
-            self.pair.prompt[self.node_id]
-            .setdefault("inputs", {})
-            .setdefault("text", "")
-        )
+        prompt_text = self.accessor.setdefault_prompt_input(self.node_id, "text", "")
         if not isinstance(prompt_text, str):
             prompt_text = ""
 
@@ -155,10 +149,10 @@ class PromptFragment:
         )
 
         if mod_wf or mod_pr:
-            self.pair.prompt[self.node_id]["inputs"]["text"] = (
-                strip_comments_for_prompt(new_prompt_text)
+            self.accessor.set_prompt_input(
+                self.node_id, "text", strip_comments_for_prompt(new_prompt_text)
             )
-            self.pair.update_workflow_node_text(self.node_id, new_workflow_text)
+            self.accessor.update_workflow_node_text(self.node_id, new_workflow_text)
             return True
 
         if not skip_add:
@@ -233,10 +227,10 @@ class PromptFragment:
         region 非空时操作限定在对应 region 内部；为空时操作全部文本。
         返回 True 表示执行了操作，False 表示跳过。
         """
-        workflow_text = self.pair.get_workflow_node_text(node_id)
+        workflow_text = self.accessor.get_workflow_node_text(node_id)
         if workflow_text is None:
             return False
-        prompt_text = self.pair.prompt[node_id].get("inputs", {}).get("text", "")
+        prompt_text = self.accessor.get_prompt_input(node_id, "text")
         if not isinstance(prompt_text, str):
             prompt_text = ""
 
@@ -455,8 +449,8 @@ class PromptFragment:
 
         new_prompt_text = strip_comments_for_prompt(new_prompt_text)
 
-        self.pair.prompt[node_id]["inputs"]["text"] = new_prompt_text
-        self.pair.update_workflow_node_text(node_id, new_workflow_text)
+        self.accessor.set_prompt_input(node_id, "text", new_prompt_text)
+        self.accessor.update_workflow_node_text(node_id, new_workflow_text)
         return True
 
     @staticmethod
