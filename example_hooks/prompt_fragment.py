@@ -169,12 +169,16 @@ class PromptFragment:
 
         if not skip_add:
             added_text = f"({target_prompt}:{weight})"
-            self._add_prompt_to_node(
+            self._process_double_track(
                 self.node_id,
+                "add",
                 added_text,
                 self.start_marker,
                 self.end_marker,
-                self.use_markers,
+                raw=False,
+                no_skip=False,
+                hard=False,
+                use_markers=self.use_markers,
             )
             return True
 
@@ -479,74 +483,5 @@ class PromptFragment:
             new_lines.append(line)
 
         return "".join(new_lines), modified
-
-    def _add_prompt_to_node(
-        self,
-        node_id: str,
-        added_text: str,
-        start_marker: str,
-        end_marker: str,
-        use_markers: bool,
-    ) -> None:
-        """
-        将提示词添加到节点。
-        """
-        workflow_text = self.pair.get_workflow_node_text(node_id)
-        if workflow_text is None:
-            return
-
-        prompt_text = (
-            self.pair.prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-        )
-        if not isinstance(prompt_text, str):
-            prompt_text = ""
-
-        start_idx = -1
-        end_idx = -1
-        if use_markers:
-            start_idx = workflow_text.find(start_marker)
-            end_idx = workflow_text.find(end_marker)
-
-        has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-
-        if has_marker:
-            before_marker = workflow_text[:start_idx]
-            marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-            after_marker = workflow_text[end_idx + len(end_marker) :]
-
-            stripped = marker_content.strip()
-            if stripped:
-                if not stripped.endswith(","):
-                    stripped += ","
-                new_content_prompt = f"{stripped}\n{added_text},"
-            else:
-                new_content_prompt = f"{added_text},"
-
-            new_workflow_text = (
-                before_marker.rstrip()
-                + f"\n{start_marker}\n"
-                + new_content_prompt
-                + f"\n{end_marker}\n"
-                + after_marker.lstrip()
-            )
-            new_prompt_text = prompt_text.rstrip()
-            if new_prompt_text and not new_prompt_text.endswith(","):
-                new_prompt_text += ","
-            new_prompt_text += f"\n{added_text},"
-        else:
-            new_workflow_text = workflow_text.rstrip()
-            if new_workflow_text and not new_workflow_text.endswith(","):
-                new_workflow_text += ","
-            new_workflow_text += f"\n{added_text},"
-
-            new_prompt_text = prompt_text.rstrip()
-            if new_prompt_text and not new_prompt_text.endswith(","):
-                new_prompt_text += ","
-            new_prompt_text += f"\n{added_text},"
-
-        self.pair.prompt[node_id]["inputs"]["text"] = strip_comments_for_prompt(
-            new_prompt_text
-        )
-        self.pair.update_workflow_node_text(node_id, new_workflow_text)
 
     # #endregion

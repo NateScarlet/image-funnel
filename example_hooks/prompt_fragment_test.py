@@ -78,6 +78,21 @@ class TestAdjustPromptWeightInText(unittest.TestCase):
 
 
 class TestAddPromptToNode(unittest.TestCase):
+    def _add_via_double_track(
+        self, fragment, node_id, added_text, start_marker, end_marker, use_markers
+    ):
+        return fragment._process_double_track(
+            node_id,
+            "add",
+            added_text,
+            start_marker,
+            end_marker,
+            raw=False,
+            no_skip=False,
+            hard=False,
+            use_markers=use_markers,
+        )
+
     def test_with_marker(self):
         """通过 marker 区域添加提示词"""
         workflow = {
@@ -101,7 +116,8 @@ class TestAddPromptToNode(unittest.TestCase):
         fragment = PromptFragment(
             pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
         )
-        fragment._add_prompt_to_node(
+        self._add_via_double_track(
+            fragment,
             "1",
             "(beautiful:1.5)",
             "//#region hook-positive",
@@ -130,7 +146,8 @@ class TestAddPromptToNode(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = PromptFragment(pair, "1")
-        fragment._add_prompt_to_node(
+        self._add_via_double_track(
+            fragment,
             "1",
             "(beautiful:1.5)",
             "//#region hook-positive",
@@ -160,7 +177,8 @@ class TestAddPromptToNode(unittest.TestCase):
         fragment = PromptFragment(
             pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
         )
-        fragment._add_prompt_to_node(
+        self._add_via_double_track(
+            fragment,
             "1",
             "(beautiful:1.5)",
             "//#region hook-positive",
