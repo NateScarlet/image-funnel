@@ -436,35 +436,49 @@ class PromptFragment:
         """
         在文本中找到并更新特定提示词的权重为 new_weight。
         支持匹配格式：(word:weight)、(word) 以及裸词 word。
+        逐行处理，注释行（// 开头）被跳过不受影响。
         返回 (new_text, is_modified)。
         """
         escaped_target = re.escape(target_prompt)
 
-        # 1. 优先匹配已带权重的格式
         pattern_with_weight = re.compile(
             rf"\(\s*{escaped_target}\s*:\s*[0-9.-]+\s*\)", re.IGNORECASE
         )
-        if pattern_with_weight.search(text):
-            new_text = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", text)
-            return new_text, True
-
-        # 2. 匹配带括号但无权重的格式
         pattern_with_brackets = re.compile(
             rf"\(\s*{escaped_target}\s*\)", re.IGNORECASE
         )
-        if pattern_with_brackets.search(text):
-            new_text = pattern_with_brackets.sub(
-                f"({target_prompt}:{new_weight})", text
-            )
-            return new_text, True
-
-        # 3. 匹配裸词，两边使用负向环视以防匹配子串
         pattern_bare = re.compile(rf"(?<!\w){escaped_target}(?!\w)", re.IGNORECASE)
-        if pattern_bare.search(text):
-            new_text = pattern_bare.sub(f"({target_prompt}:{new_weight})", text)
-            return new_text, True
 
-        return text, False
+        modified = False
+        lines = text.splitlines(keepends=True)
+        new_lines: List[str] = []
+        target_lower = target_prompt.lower()
+
+        for line in lines:
+            if line.strip().startswith("//"):
+                new_lines.append(line)
+                continue
+
+            # 粗检查：目标文本不在当前行则跳过正则
+            if target_lower not in line.lower():
+                new_lines.append(line)
+                continue
+
+            if pattern_with_weight.search(line):
+                line = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", line)
+                modified = True
+            elif pattern_with_brackets.search(line):
+                line = pattern_with_brackets.sub(
+                    f"({target_prompt}:{new_weight})", line
+                )
+                modified = True
+            elif pattern_bare.search(line):
+                line = pattern_bare.sub(f"({target_prompt}:{new_weight})", line)
+                modified = True
+
+            new_lines.append(line)
+
+        return "".join(new_lines), modified
 
     def _add_prompt_to_node(
         self,

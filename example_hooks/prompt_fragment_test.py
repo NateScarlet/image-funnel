@@ -600,6 +600,35 @@ class TestDoubleTrack(unittest.TestCase):
         )
         self.assertFalse(result)
 
+    def test_modify_weight_ignores_commented_out_prompts(self):
+        """modify_weight 不应修改注释行中的提示词"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "//#region hook-positive\n// foo,\nactive_prompt,\n//#endregion hook-positive"
+                    ],
+                }
+            ],
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "active_prompt,"}}
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        fragment = PromptFragment(
+            pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
+        )
+
+        # 尝试修改已注释提示词的权重，skip_add=True 时不应视为有效文本——应返回 False
+        modified = fragment.modify_weight("foo", 1.5, skip_add=True)
+        self.assertFalse(modified)
+        # foo 在 workflow 中应保持注释状态不变
+        self.assertIn("// foo,", workflow["nodes"][0]["widgets_values"][0])
+        # active_prompt 不受影响
+        self.assertIn("active_prompt", workflow["nodes"][0]["widgets_values"][0])
+
     def test_add_with_comments_in_workflow(self):
         """workflow 中有注释但 prompt 没有时 (is_equivalent=False) 的回退"""
         workflow = {
