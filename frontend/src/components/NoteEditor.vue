@@ -496,22 +496,11 @@ watch(
   (newData) => {
     if (newData?.hookAutocomplete) {
       const queryVal = autocompleteVariables.value?.input?.query ?? "";
-      console.log(`[Autocomplete] 声明式请求返回数据并应用，查询: "${queryVal}"`);
       dynamicBuffer.value = {
         contextKey: autocompleteContext.value,
         query: queryVal,
         suggestions: newData.hookAutocomplete.map(mapToSuggestion),
       };
-    }
-  }
-);
-
-// 侦听 variables 的变更，打印发起请求的日志以便调试
-watch(
-  () => autocompleteVariables.value,
-  (vars) => {
-    if (vars) {
-      console.log(`[Autocomplete] 声明式发起请求，查询: "${vars.input.query}"`);
     }
   }
 );
