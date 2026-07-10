@@ -195,7 +195,8 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 ### Python
 
 - 标注所有参数类型，尽量避免 Any
-- 修改后使用 ./scripts/check-python.ps1 检查类型
+- 必须使用项目提供的 `pwsh ./scripts/check-python.ps1` 脚本进行类型检查、单元测试和格式化，禁止手动运行底层的测试或格式化工具
+
 
 ### 通用
 

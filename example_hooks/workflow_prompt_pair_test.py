@@ -21,9 +21,12 @@ if current_dir not in sys.path:
 from workflow_prompt_pair import (
     WorkflowPromptPair,
     is_node_disabled,
-    find_terminal_input,
 )
-from comfyui import get_workflow_node_text, get_target_clip_node
+from prompt_locator import (
+    find_terminal_input,
+    get_workflow_node_text,
+    get_target_clip_node,
+)
 
 
 # #region 基础函数测试

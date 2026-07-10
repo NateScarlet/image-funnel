@@ -16,22 +16,25 @@ import re
 import uuid
 import urllib.request
 from dataclasses import dataclass
-from typing import Dict, List, Set, Any, Optional, cast, Tuple, Generator
+from typing import (
+    Dict,
+    List,
+    Set,
+    Any,
+    Optional,
+    cast,
+    Tuple,
+    Generator,
+    Iterator,
+    Iterable,
+    Union,
+)
 from abc import ABC, abstractmethod
 
 from weight_parser import parse_weights, is_relative
+from prompt_locator import KNOWN_PRIMITIVE_TYPES, find_terminal_input, PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
-
-# #region 常量定义
-KNOWN_PRIMITIVE_TYPES = {
-    "PrimitiveInt",
-    "PrimitiveFloat",
-    "PrimitiveString",
-    "PrimitiveBoolean",
-}
-KNOWN_SWITCH_TYPES = {"Any Switch (rgthree)", "ComfySwitchNode"}
-# #endregion
 
 
 @dataclass
@@ -56,64 +59,6 @@ def is_node_disabled(node: Dict[str, Any]) -> bool:
     mode 值为 2 (Never/Mute) 或 4 (Bypass)。
     """
     return node.get("mode") in (2, 4)
-
-
-def find_terminal_input(
-    prompt: Dict[str, Any], node_id: str, input_key: str
-) -> Tuple[str, str]:
-    """
-    在 prompt 结构中顺着连接线递归向下追溯，直到找到直接存储具体数值的叶子节点输入。
-    返回 (src_node_id, src_input_key) 元组。
-    """
-    node: Dict[str, Any] = prompt.get(node_id, {})
-    inputs: Dict[str, Any] = node.get("inputs", {})
-    val: Any = inputs.get(input_key)
-
-    # 如果该输入是一个连接，格式形如 [target_node_id, slot_index]
-    if isinstance(val, list):
-        val_list = cast(List[Any], val)
-        if len(val_list) == 2 and isinstance(val_list[0], str):
-            target_node_id: str = val_list[0]
-            target_node: Dict[str, Any] = prompt.get(target_node_id, {})
-            target_class: str = target_node.get("class_type", "")
-
-            # 1. 针对精确匹配的 Primitive 节点，其真实值存储在 inputs.value 中
-            if target_class in KNOWN_PRIMITIVE_TYPES:
-                return find_terminal_input(prompt, target_node_id, "value")
-
-            # 2. 针对精确匹配的 Switch 路由中转节点，我们只追溯其有效的输入端口
-            elif target_class in KNOWN_SWITCH_TYPES:
-                if target_class == "ComfySwitchNode":
-                    # ComfySwitchNode 的输入中转端口是 on_false 和 on_true
-                    for ik in ["on_false", "on_true"]:
-                        if ik in target_node.get("inputs", {}):
-                            res: Tuple[str, str] = find_terminal_input(
-                                prompt, target_node_id, ik
-                            )
-                            if res:
-                                return res
-                elif target_class == "Any Switch (rgthree)":
-                    # Any Switch (rgthree) 的输入中转端口以 any_ 开头
-                    for ik, iv in target_node.get("inputs", {}).items():
-                        if ik.startswith("any_"):
-                            res: Tuple[str, str] = find_terminal_input(
-                                prompt, target_node_id, ik
-                            )
-                            if res:
-                                return res
-
-            # 3. 针对其他可能中转信号的自定义节点，我们继续追溯其列表型端口
-            else:
-                for ik, iv in target_node.get("inputs", {}).items():
-                    iv_list = cast(List[Any], iv) if isinstance(iv, list) else []
-                    if len(iv_list) == 2:
-                        res: Tuple[str, str] = find_terminal_input(
-                            prompt, target_node_id, ik
-                        )
-                        if res:
-                            return res
-
-    return (node_id, input_key)
 
 
 class LoraLoaderHandler(ABC):
@@ -341,6 +286,19 @@ class WorkflowPromptPair:
         # 缓存文件名节点信息（带日期模板）
         self._date_filename_nodes: List[NodeInfo] = []
         self._analyze_nodes()
+
+    def locate_prompts(
+        self,
+        nodes: Optional[List[str]] = None,
+        regions: Optional[List[str]] = None,
+        is_neg: bool = False,
+    ) -> Iterator[PromptFragment]:
+        """
+        定位提示词目标节点并返回 PromptFragment 迭代器。
+        """
+        from prompt_locator import locate_prompt_fragments
+
+        return locate_prompt_fragments(self, nodes, regions, is_neg)
 
     def _analyze_nodes(self):
         """一次性分析所有节点，缓存节点信息、种子节点和文件名节点"""
@@ -1024,39 +982,12 @@ class WorkflowPromptPair:
     ) -> Optional[float]:
         """
         在目标节点的文本中查找匹配的提示词，返回其当前权重。
-        支持 (word:weight)、(word) 和裸词格式。未带权重视为 1.0。
         """
-        escaped = re.escape(target_prompt)
-
-        for node_id, _, _, _ in target_nodes:
-            node_info = self.get_node_by_id(node_id)
-            if node_info is None:
-                continue
-
-            # 从 workflow 文本中查找（需要获取节点的文本 widget）
-            workflow_text = self._get_workflow_node_text(node_id)
-            if workflow_text is None:
-                continue
-
-            # 匹配带权重的格式: (word:1.2)
-            pattern_with_weight = re.compile(
-                rf"\(\s*{escaped}\s*:\s*([0-9.-]+)\s*\)", re.IGNORECASE
-            )
-            m = pattern_with_weight.search(workflow_text)
-            if m:
-                return float(m.group(1))
-
-            # 匹配带括号无权重的格式: (word) → 默认权重 1.0
-            pattern_brackets = re.compile(rf"\(\s*{escaped}\s*\)", re.IGNORECASE)
-            if pattern_brackets.search(workflow_text):
-                return 1.0
-
-            # 匹配裸词 → 默认权重 1.0
-            # 不能用 \b 因为目标文本可能以非单词字符结尾（如 `\(text\)`），会导致边界断言失败
-            pattern_bare = re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
-            if pattern_bare.search(workflow_text):
-                return 1.0
-
+        for node_id, start_marker, end_marker, use_markers in target_nodes:
+            f = PromptFragment(self, node_id, start_marker, end_marker, use_markers)
+            val = f.get_weight(target_prompt)
+            if val is not None:
+                return val
         return None
 
     def _get_workflow_node_text(self, node_id: str) -> Optional[str]:
@@ -1085,50 +1016,17 @@ class WorkflowPromptPair:
         如果不存在，且未指定 skip_add 选项，则将其添加到第一个有效节点上。
         """
         any_existing_modified = False
-
-        # 1. 首先尝试在所有候选目标节点中修改已存在的提示词
-        for node_id, start_marker, end_marker, use_markers in target_nodes:
-            workflow_text = self._get_workflow_node_text(node_id)
-            if workflow_text is None:
-                continue
-
-            node_info = self.get_node_by_id(node_id)
-            if node_info is None:
-                continue
-
-            # 从 prompt 中获取文本
-            prompt_text = (
-                self.prompt[node_id].setdefault("inputs", {}).setdefault("text", "")
-            )
-            if not isinstance(prompt_text, str):
-                prompt_text = ""
-
-            # 调整权重
-            new_workflow_text, mod_wf = self._adjust_prompt_weight_in_text(
-                workflow_text, target_prompt, weight
-            )
-            new_prompt_text, mod_pr = self._adjust_prompt_weight_in_text(
-                prompt_text, target_prompt, weight
-            )
-
-            if mod_wf or mod_pr:
-                self.prompt[node_id]["inputs"]["text"] = (
-                    self._strip_comments_for_prompt(new_prompt_text)
-                )
-                self._update_workflow_node_text(node_id, new_workflow_text)
+        fragments = [
+            PromptFragment(self, nid, start, end, use)
+            for nid, start, end, use in target_nodes
+        ]
+        for f in fragments:
+            if f.modify_weight(target_prompt, weight, skip_add=True):
                 any_existing_modified = True
 
-        # 2. 如果没有任何一个节点含有该提示词，且允许添加，则在第一个节点上添加
         if not any_existing_modified and not skip_add:
-            if target_nodes:
-                node_id, start_marker, end_marker, use_markers = target_nodes[0]
-                workflow_text = self._get_workflow_node_text(node_id)
-                if workflow_text is not None:
-                    added_text = f"({target_prompt}:{weight})"
-                    # 添加到 workflow 文本和 prompt 文本
-                    self._add_prompt_to_node(
-                        node_id, added_text, start_marker, end_marker, use_markers
-                    )
+            if fragments:
+                fragments[0].modify_weight(target_prompt, weight, skip_add=False)
 
     def _adjust_prompt_weight_in_text(
         self, text: str, target_prompt: str, new_weight: float
@@ -1596,7 +1494,7 @@ class WorkflowPromptPair:
 
     def generate_prompt_variants(
         self,
-        target_nodes: List[Tuple[str, str, str, bool]],
+        fragments: Iterable[Union[PromptFragment, Tuple[str, str, str, bool]]],
         target_prompt: str,
         weight_expr: str,
         skip_add: bool,
@@ -1605,23 +1503,50 @@ class WorkflowPromptPair:
         为每个提示词权重变体原地修改并 yield。
         如果相对权重无法解析当前值，或 skip_add 时提示词不存在，不 yield 任何内容。
         """
-        current = (
-            self.get_current_prompt_weight(target_nodes, target_prompt)
-            if is_relative(weight_expr)
-            else None
-        )
+        # 兼容老测试用例传来的 tuple 节点目标列表
+        actual_fragments: List[PromptFragment] = []
+        for f in fragments:
+            if isinstance(f, PromptFragment):
+                actual_fragments.append(f)
+            else:
+                t = cast(Tuple[Any, ...], f)
+                if len(t) == 4:
+                    actual_fragments.append(
+                        PromptFragment(
+                            self, str(t[0]), str(t[1]), str(t[2]), bool(t[3])
+                        )
+                    )
+
+        current = None
+        if is_relative(weight_expr):
+            for fragment in actual_fragments:
+                val = fragment.get_weight(target_prompt)
+                if val is not None:
+                    current = val
+                    break
+
         if is_relative(weight_expr) and current is None:
             return
-        if (
-            not is_relative(weight_expr)
-            and skip_add
-            and self.get_current_prompt_weight(target_nodes, target_prompt) is None
-        ):
-            return
+
+        if not is_relative(weight_expr) and skip_add:
+            has_existing = False
+            for fragment in actual_fragments:
+                if fragment.get_weight(target_prompt) is not None:
+                    has_existing = True
+                    break
+            if not has_existing:
+                return
+
         weights = parse_weights(weight_expr, current)
 
         for w in weights:
-            self.modify_prompt_weights(target_nodes, target_prompt, w, skip_add)
+            any_modified = False
+            for fragment in actual_fragments:
+                if fragment.modify_weight(target_prompt, w, skip_add=True):
+                    any_modified = True
+            if not any_modified and not skip_add:
+                if actual_fragments:
+                    actual_fragments[0].modify_weight(target_prompt, w, skip_add=False)
             yield
 
     def generate_aspect_variants(

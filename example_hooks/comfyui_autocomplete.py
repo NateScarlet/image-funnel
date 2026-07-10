@@ -36,12 +36,12 @@ from PIL import Image
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from comfyui import (
-    resolve_target_to_nodes,
-    get_workflow_node_text,
     extract_region_names_from_images,
     extract_lora_names,
     get_parser,
 )
+from workflow_prompt_pair import WorkflowPromptPair
+from prompt_locator import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -436,7 +436,9 @@ class AutocompleteContext:
         if not (workflow and prompt_meta):
             return
 
-        nodes_to_process: List[Tuple[str, str, str, bool, str]] = []
+        pair = WorkflowPromptPair(workflow, prompt_meta)
+        fragments_to_process: List[Tuple[PromptFragment, str]] = []
+
         if is_all:
             clip_nodes = [
                 nid
@@ -444,7 +446,7 @@ class AutocompleteContext:
                 if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
             ]
             for nid in clip_nodes:
-                nodes_to_process.append((nid, "", "", False, f"节点: {nid}"))
+                fragments_to_process.append((PromptFragment(pair, nid), f"节点: {nid}"))
         else:
             raw_targets: List[Tuple[str, str]] = []
             for nid in nodes_arg:
@@ -457,40 +459,23 @@ class AutocompleteContext:
                 raw_targets.append(("region", default_region))
 
             for target_type, target_value in raw_targets:
-                resolved = resolve_target_to_nodes(
-                    prompt_meta, workflow, target_type, target_value, is_neg
-                )
+                nodes = nodes_arg if target_type == "node" else None
+                regions = [target_value] if target_type == "region" else None
 
-                for nid, start_marker, end_marker, use_markers in resolved:
+                for fragment in pair.locate_prompts(
+                    nodes=nodes, regions=regions, is_neg=is_neg
+                ):
                     label = (
                         f"区域: {target_value}"
                         if target_type == "region"
                         else f"节点: {target_value}"
                     )
-                    nodes_to_process.append(
-                        (nid, start_marker, end_marker, use_markers, label)
-                    )
+                    fragments_to_process.append((fragment, label))
 
-        for (
-            node_id,
-            start_marker,
-            end_marker,
-            use_markers,
-            label,
-        ) in nodes_to_process:
-            workflow_text = get_workflow_node_text(workflow, node_id)
-            if not workflow_text:
+        for fragment, label in fragments_to_process:
+            content = fragment.text
+            if not content:
                 continue
-
-            if use_markers:
-                start_idx = workflow_text.find(start_marker)
-                end_idx = workflow_text.find(end_marker)
-                if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                    content = workflow_text[start_idx + len(start_marker) : end_idx]
-                else:
-                    content = workflow_text
-            else:
-                content = workflow_text
 
             for line in content.splitlines():
                 stripped = line.strip()

@@ -11,10 +11,12 @@ if current_dir not in sys.path:
     sys.path.append(current_dir)
 
 from comfyui import (
-    get_workflow_node_text,
-    get_target_clip_node,
     strip_comments_for_prompt,
     get_relative_output_dir,
+)
+from prompt_locator import (
+    get_workflow_node_text,
+    get_target_clip_node,
 )
 
 
