@@ -9,8 +9,8 @@ import os
 import re
 from typing import Dict, List, Any, Optional, Tuple
 
-from node_accessor import NodeAccessor
-from prompt_locator import find_terminal_input, NodeInfo
+from .node_accessor import NodeAccessor
+from .prompt_locator import find_terminal_input, NodeInfo
 
 
 class FilenameManager:

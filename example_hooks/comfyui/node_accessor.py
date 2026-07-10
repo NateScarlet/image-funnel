@@ -7,7 +7,7 @@ NodeAccessor 协议：定义对 ComfyUI 节点数据的读写接口。
 
 from typing import Any, Dict, Optional, Protocol
 
-from prompt_locator import NodeInfo
+from .prompt_locator import NodeInfo
 
 
 class NodeAccessor(Protocol):

@@ -1,7 +1,7 @@
 id = "comfyui-remove"
 name = "移除 ComfyUI 提示词"
 description = "在会话提交时运行 /remove 指令，"
-command = "uv run comfyui.py remove"
+command = "uv run -m comfyui remove"
 
 [directive]
 name = "remove"
@@ -26,7 +26,7 @@ on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remove ... %
 on_fail_action = "REMOVE"
 
 [directive.autocomplete]
-command = "uv run comfyui_autocomplete.py remove"
+command = "uv run -m comfyui.autocomplete remove"
 
 [on.post_commit_session.note_scan] # 会话提交后，扫描目录内笔记，对每一个笔记触发钩子逻辑
 ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）

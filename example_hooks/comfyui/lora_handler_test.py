@@ -9,9 +9,9 @@ lora_handler.py 的单元测试。
 
 import unittest
 
-from workflow_prompt_pair import WorkflowPromptPair
-from weight_manager import WeightManager
-import variant_engine
+from .workflow_prompt_pair import WorkflowPromptPair
+from .weight_manager import WeightManager
+from . import variant_engine
 
 
 class TestLoraWeight(unittest.TestCase):

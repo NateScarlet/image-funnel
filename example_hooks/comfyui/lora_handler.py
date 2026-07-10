@@ -9,8 +9,8 @@ Lora 节点处理器模块。
 from abc import ABC, abstractmethod
 from typing import Dict, List, Set, Any, Optional, cast
 
-from node_accessor import NodeAccessor
-from prompt_locator import find_terminal_input, NodeInfo
+from .node_accessor import NodeAccessor
+from .prompt_locator import find_terminal_input, NodeInfo
 
 
 class LoraLoaderHandler(ABC):

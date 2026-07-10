@@ -3,7 +3,7 @@
 
 import unittest
 
-from prompt_locator import (
+from .prompt_locator import (
     find_terminal_input,
     get_region_markers,
     get_target_clip_node,

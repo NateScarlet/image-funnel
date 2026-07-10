@@ -7,13 +7,13 @@ WeightManager：管理 ComfyUI 工作流中的权重调整操作（CFG / LoRA / 
 import logging
 from typing import Dict, List, Any, Optional, Set, Tuple, cast
 
-from node_accessor import NodeAccessor
-from prompt_locator import (
+from .node_accessor import NodeAccessor
+from .prompt_locator import (
     KNOWN_PRIMITIVE_TYPES,
     find_terminal_input,
 )
-from lora_handler import LORA_HANDLERS
-from prompt_fragment import PromptFragment
+from .lora_handler import LORA_HANDLERS
+from .prompt_fragment import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
 

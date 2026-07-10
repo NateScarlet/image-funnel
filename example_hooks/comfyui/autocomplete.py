@@ -35,13 +35,13 @@ import requests
 from PIL import Image
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
-from comfyui import (
+from .__main__ import (
     extract_region_names_from_images,
     extract_lora_names,
     get_parser,
 )
-from workflow_prompt_pair import WorkflowPromptPair
-from prompt_fragment import PromptFragment
+from .workflow_prompt_pair import WorkflowPromptPair
+from .prompt_fragment import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
 

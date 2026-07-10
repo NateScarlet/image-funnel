@@ -11,13 +11,13 @@ WorkflowPromptPair：ComfyUI workflow 和 prompt 配对容器。
 import logging
 from typing import Dict, List, Any, Optional, Iterator, Tuple, cast
 
-from prompt_locator import (
+from .prompt_locator import (
     REGION_START_RE,
     get_target_clip_node,
     NodeInfo,
     is_node_disabled,
 )
-from prompt_fragment import PromptFragment
+from .prompt_fragment import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
 

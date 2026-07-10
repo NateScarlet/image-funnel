@@ -10,8 +10,8 @@ prompt_fragment.py 的单元测试。
 
 import unittest
 
-from workflow_prompt_pair import WorkflowPromptPair
-from prompt_fragment import PromptFragment, strip_comments_for_prompt
+from .workflow_prompt_pair import WorkflowPromptPair
+from .prompt_fragment import PromptFragment, strip_comments_for_prompt
 
 
 class TestStripCommentsForPrompt(unittest.TestCase):

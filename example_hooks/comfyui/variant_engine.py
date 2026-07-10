@@ -19,10 +19,10 @@ from typing import (
     Tuple,
 )
 
-from weight_parser import parse_weights, is_relative
-from prompt_locator import find_terminal_input
-from weight_manager import WeightManager
-from prompt_fragment import PromptFragment
+from .weight_parser import parse_weights, is_relative
+from .prompt_locator import find_terminal_input
+from .weight_manager import WeightManager
+from .prompt_fragment import PromptFragment
 
 COMMON_RATIOS = [
     "5:12",

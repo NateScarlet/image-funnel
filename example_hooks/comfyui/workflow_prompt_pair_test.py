@@ -15,17 +15,17 @@ from typing import Any, Dict, List, cast
 from PIL import Image
 
 
-from workflow_prompt_pair import WorkflowPromptPair
-from prompt_fragment import PromptFragment
-from prompt_locator import (
+from .workflow_prompt_pair import WorkflowPromptPair
+from .prompt_fragment import PromptFragment
+from .prompt_locator import (
     get_workflow_node_text,
     get_target_clip_node,
 )
-from seed_manager import SeedManager
-from filename_manager import FilenameManager
-from weight_manager import WeightManager
-import variant_engine
-from submission import submit as _submit_fn
+from .seed_manager import SeedManager
+from .filename_manager import FilenameManager
+from .weight_manager import WeightManager
+from . import variant_engine
+from .submission import submit as _submit_fn
 
 
 # #region 节点分析测试

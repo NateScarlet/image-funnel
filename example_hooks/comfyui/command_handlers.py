@@ -10,13 +10,13 @@ import logging
 from typing import Dict, List, Set, Any, Optional, Tuple, Protocol, cast
 
 from graphql_utils import update_image_label
-from workflow_prompt_pair import WorkflowPromptPair
-from prompt_fragment import PromptFragment
-from seed_manager import SeedManager
-from filename_manager import FilenameManager
-from weight_manager import WeightManager
-from submission import submit as _submit_fn
-import variant_engine
+from .workflow_prompt_pair import WorkflowPromptPair
+from .prompt_fragment import PromptFragment
+from .seed_manager import SeedManager
+from .filename_manager import FilenameManager
+from .weight_manager import WeightManager
+from .submission import submit as _submit_fn
+from . import variant_engine
 
 _LOGGER = logging.getLogger(__name__)
 

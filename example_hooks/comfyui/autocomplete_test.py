@@ -15,15 +15,15 @@ import json
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
 
     def setUp(self):
         # 每次测试执行前清空模块缓存，确保 PIL.Image.open 的 mock 绝对生效
-        sys.modules.pop("comfyui_autocomplete", None)
-        sys.modules.pop("comfyui", None)
+        sys.modules.pop("comfyui.autocomplete", None)
+        sys.modules.pop("comfyui.__main__", None)
 
     def _get_mock_image(self):
         mock_prompt = {
@@ -67,7 +67,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             texts = [s.text for s in suggestions]
@@ -95,7 +95,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             texts = [s.text for s in suggestions]
@@ -116,7 +116,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--region"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             for s in suggestions:
@@ -136,7 +136,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             for s in suggestions:
@@ -156,7 +156,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/delete_prompt"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             texts = [s.text for s in suggestions]
@@ -198,7 +198,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             texts = [s.text for s in suggestions]
@@ -211,7 +211,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_post = MagicMock(return_value=mock_response)
         with patch("PIL.Image.open", return_value=mock_image), patch(
             "os.path.isfile", return_value=True
-        ), patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
@@ -224,7 +224,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
 
@@ -245,7 +245,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/adjust", "prompt"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
             texts = [s.text for s in suggestions]
@@ -269,7 +269,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 0)
@@ -290,7 +290,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 0)
@@ -311,7 +311,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             texts = [s.text for s in suggestions]
@@ -332,7 +332,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
@@ -342,7 +342,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
 
@@ -357,7 +357,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertFalse(req_data["show_nsfw"])
 
         mock_post.reset_mock()
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
@@ -368,7 +368,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
 
@@ -390,7 +390,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(suggestions[1].description, "A noble girl.")
 
         mock_post.reset_mock()
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
@@ -400,14 +400,14 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
             mock_post.assert_not_called()
             self.assertEqual(len(suggestions), 0)
 
         mock_post.reset_mock()
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "pos",
@@ -417,7 +417,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
             mock_post.assert_not_called()
@@ -436,7 +436,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
@@ -448,7 +448,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
 
@@ -462,7 +462,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertFalse(req_data["show_nsfw"])
 
         mock_post.reset_mock()
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
@@ -475,7 +475,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
 
@@ -528,7 +528,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         with patch("PIL.Image.open", return_value=mock_image), patch(
             "os.path.isfile", return_value=True
-        ), patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
@@ -539,7 +539,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
 
@@ -562,7 +562,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
@@ -572,7 +572,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
             texts = [s.text for s in suggestions]
@@ -664,7 +664,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
             self.assertEqual(len(suggestions), 2)
@@ -698,7 +698,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 1)
@@ -723,7 +723,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 1)
@@ -746,7 +746,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("add"))
             self.assertEqual(len(suggestions), 2)
@@ -768,7 +768,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
             },
         ):
-            from comfyui_autocomplete import autocomplete
+            from .autocomplete import autocomplete
 
             try:
                 suggestions = list(autocomplete("add"))

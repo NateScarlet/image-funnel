@@ -7,8 +7,8 @@ SeedManager：管理 ComfyUI 工作流中的随机种子更新。
 import random
 from typing import Dict, Any, List
 
-from node_accessor import NodeAccessor
-from prompt_locator import KNOWN_PRIMITIVE_TYPES, find_terminal_input, NodeInfo
+from .node_accessor import NodeAccessor
+from .prompt_locator import KNOWN_PRIMITIVE_TYPES, find_terminal_input, NodeInfo
 
 
 class SeedManager:

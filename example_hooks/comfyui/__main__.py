@@ -7,6 +7,7 @@
 # ]
 # ///
 
+import json
 import os
 import sys
 
@@ -25,17 +26,16 @@ if sys.platform.startswith("win"):
         except Exception:
             pass
 
-import json
 from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, cast
 import logging
 import argparse
 
 from graphql_utils import fetch_images
-from workflow_prompt_pair import WorkflowPromptPair
-from filename_manager import FilenameManager
-from weight_manager import WeightManager
-from prompt_locator import REGION_START_RE
-from command_handlers import COMMAND_HANDLERS
+from .workflow_prompt_pair import WorkflowPromptPair
+from .filename_manager import FilenameManager
+from .weight_manager import WeightManager
+from .prompt_locator import REGION_START_RE
+from .command_handlers import COMMAND_HANDLERS
 
 _LOGGER = logging.getLogger(__name__)
 

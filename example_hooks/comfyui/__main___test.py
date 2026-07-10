@@ -5,9 +5,9 @@ import os
 import json
 from PIL import Image
 
-from comfyui import get_relative_output_dir
-from prompt_fragment import strip_comments_for_prompt
-from prompt_locator import (
+from .__main__ import get_relative_output_dir
+from .prompt_fragment import strip_comments_for_prompt
+from .prompt_locator import (
     get_workflow_node_text,
     get_target_clip_node,
 )
@@ -222,7 +222,7 @@ class TestComfyUIHook(unittest.TestCase):
 
     def test_main_no_images(self):
         from unittest.mock import patch
-        import comfyui
+        from .__main__ import main as comfyui_main
         from typing import Any
 
         def exit_side_effect(code: Any = 0) -> None:
@@ -237,14 +237,14 @@ class TestComfyUIHook(unittest.TestCase):
                 "IMAGE_FUNNEL_ACTION": "dummy_action_path",
                 "IMAGE_FUNNEL_TRIGGER": "post_commit_session",
             },
-        ), patch("sys.argv", ["comfyui.py", "queue"]), patch(
+        ), patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
             "sys.exit", side_effect=exit_side_effect
         ), patch(
-            "comfyui._write_action_override"
+            "comfyui.__main__._write_action_override"
         ) as mock_override:
 
             with self.assertRaises(SystemExit) as cm:
-                comfyui.main()
+                comfyui_main()
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP")
 
@@ -257,16 +257,16 @@ class TestComfyUIHook(unittest.TestCase):
                 "IMAGE_FUNNEL_ACTION": "dummy_action_path",
                 "IMAGE_FUNNEL_TRIGGER": "post_commit_session",
             },
-        ), patch("sys.argv", ["comfyui.py", "add", "dummy_prompt"]), patch(
+        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
         ), patch(
-            "comfyui._write_action_override"
+            "comfyui.__main__._write_action_override"
         ) as mock_override, patch(
-            "comfyui.fetch_images", return_value=[]
+            "comfyui.__main__.fetch_images", return_value=[]
         ):
 
             with self.assertRaises(SystemExit) as cm:
-                comfyui.main()
+                comfyui_main()
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP")
 
@@ -278,12 +278,12 @@ class TestComfyUIHook(unittest.TestCase):
                 "IMAGE_FUNNEL_IMAGE_IDS": "[]",
                 "IMAGE_FUNNEL_ACTION": "dummy_action_path",
             },
-        ), patch("sys.argv", ["comfyui.py", "add", "dummy_prompt"]), patch(
+        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
         ), patch(
-            "comfyui._write_action_override"
+            "comfyui.__main__._write_action_override"
         ) as mock_override, patch(
-            "comfyui.fetch_images", return_value=[]
+            "comfyui.__main__.fetch_images", return_value=[]
         ):
 
             # 清除可能存在的 IMAGE_FUNNEL_TRIGGER 保证测试纯净
@@ -291,7 +291,7 @@ class TestComfyUIHook(unittest.TestCase):
                 del os.environ["IMAGE_FUNNEL_TRIGGER"]
 
             with self.assertRaises(ValueError) as cm:
-                comfyui.main()
+                comfyui_main()
             self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
             mock_override.assert_called_once_with("KEEP")
 
@@ -304,16 +304,16 @@ class TestComfyUIHook(unittest.TestCase):
                 "IMAGE_FUNNEL_ACTION": "dummy_action_path",
                 "IMAGE_FUNNEL_TRIGGER": "note_dispatch",
             },
-        ), patch("sys.argv", ["comfyui.py", "add", "dummy_prompt"]), patch(
+        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
         ), patch(
-            "comfyui._write_action_override"
+            "comfyui.__main__._write_action_override"
         ) as mock_override, patch(
-            "comfyui.fetch_images", return_value=[]
+            "comfyui.__main__.fetch_images", return_value=[]
         ):
 
             with self.assertRaises(SystemExit) as cm:
-                comfyui.main()
+                comfyui_main()
             self.assertEqual(cm.exception.code, 1)
             mock_override.assert_called_once_with("KEEP")
 

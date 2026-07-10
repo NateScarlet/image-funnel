@@ -12,8 +12,8 @@ import logging
 import re
 from typing import List, Optional, Tuple
 
-from node_accessor import NodeAccessor
-from prompt_locator import get_region_content, find_region_boundaries
+from .node_accessor import NodeAccessor
+from .prompt_locator import get_region_content, find_region_boundaries
 
 _LOGGER = logging.getLogger(__name__)
 
