@@ -15,6 +15,8 @@ from typing import List, Optional, Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
     from workflow_prompt_pair import WorkflowPromptPair
 
+from prompt_locator import get_region_content, find_region_boundaries
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -34,21 +36,18 @@ class PromptFragment:
     """
     表示定位出来的一段提示词片段。
     它可能是整个 CLIPTextEncode 节点的文本，也可能是被特定区域标记包裹的局部文本段。
+    region 为空表示不使用标记，直接操作全部文本。
     """
 
     def __init__(
         self,
         pair: "WorkflowPromptPair",
         node_id: str,
-        start_marker: str = "",
-        end_marker: str = "",
-        use_markers: bool = False,
+        region: str = "",
     ):
         self.pair = pair
         self.node_id = node_id
-        self.start_marker = start_marker
-        self.end_marker = end_marker
-        self.use_markers = use_markers
+        self.region = region
 
     @property
     def text(self) -> str:
@@ -58,11 +57,10 @@ class PromptFragment:
         workflow_text = self.pair.get_workflow_node_text(self.node_id)
         if workflow_text is None:
             return ""
-        if self.use_markers:
-            start_idx = workflow_text.find(self.start_marker)
-            end_idx = workflow_text.find(self.end_marker)
-            if start_idx != -1 and end_idx != -1 and start_idx < end_idx:
-                return workflow_text[start_idx + len(self.start_marker) : end_idx]
+        if self.region:
+            content = get_region_content(workflow_text, self.region)
+            if content is not None:
+                return content
         return workflow_text
 
     def add(self, prompt_str: str, raw: bool = False, no_skip: bool = False) -> bool:
@@ -74,12 +72,10 @@ class PromptFragment:
             self.node_id,
             "add",
             prompt_str,
-            self.start_marker,
-            self.end_marker,
+            self.region,
             raw,
             no_skip,
             hard=False,
-            use_markers=self.use_markers,
         )
 
     def remove(
@@ -97,12 +93,10 @@ class PromptFragment:
             self.node_id,
             "remove",
             prompt_str,
-            self.start_marker,
-            self.end_marker,
+            self.region,
             raw,
             no_skip,
             hard,
-            use_markers=self.use_markers,
         )
 
     def get_weight(self, target_prompt: str) -> Optional[float]:
@@ -173,12 +167,10 @@ class PromptFragment:
                 self.node_id,
                 "add",
                 added_text,
-                self.start_marker,
-                self.end_marker,
+                self.region,
                 raw=False,
                 no_skip=False,
                 hard=False,
-                use_markers=self.use_markers,
             )
             return True
 
@@ -186,20 +178,59 @@ class PromptFragment:
 
     # #region 私有方法
 
+    @staticmethod
+    def _split_region(
+        text: str, region_name: str
+    ) -> Optional[Tuple[str, str, str, str, str]]:
+        """
+        将文本按 region 标记分割。
+        返回 (before, region_line, content, end_line, after) 或 None。
+        """
+        start, endregion_start = find_region_boundaries(text, region_name)
+        if start == -1:
+            return None
+
+        before = text[:start]
+        line_end = text.find("\n", start)
+        if line_end == -1:
+            line_end = start
+        region_line = text[start:line_end]
+
+        # 找到 #endregion 行的结尾
+        endregion_line_end = text.find("\n", endregion_start)
+        if endregion_line_end == -1:
+            endregion_line_end = len(text)
+        end_line = text[endregion_start:endregion_line_end]
+
+        content = text[line_end + 1 : endregion_start]
+
+        after = text[endregion_line_end:]
+
+        return (before, region_line, content, end_line, after)
+
+    @staticmethod
+    def _make_region_line(region_name: str) -> str:
+        """生成 region 起始标记行"""
+        return f"// #region {region_name}"
+
+    @staticmethod
+    def _make_end_region_line(region_name: str) -> str:
+        """生成 region 结束标记行"""
+        return f"// #endregion {region_name}"
+
     def _process_double_track(
         self,
         node_id: str,
         command: str,
         prompt_str_arg: str,
-        start_marker: str,
-        end_marker: str,
+        region: str,
         raw: bool,
         no_skip: bool,
         hard: bool,
-        use_markers: bool = True,
     ) -> bool:
         """
         对指定节点执行 add/remove 操作，原地修改 prompt 和 workflow 文本。
+        region 非空时操作限定在对应 region 内部；为空时操作全部文本。
         返回 True 表示执行了操作，False 表示跳过。
         """
         workflow_text = self.pair.get_workflow_node_text(node_id)
@@ -218,14 +249,10 @@ class PromptFragment:
         )
         is_equivalent = workflow_cleaned == prompt_cleaned
 
-        start_idx = -1
-        end_idx = -1
-        if use_markers:
-            start_idx = workflow_text.find(start_marker)
-            end_idx = workflow_text.find(end_marker)
-            has_marker = start_idx != -1 and end_idx != -1 and start_idx < end_idx
-        else:
-            has_marker = False
+        # 尝试查找 region 边界
+        region_parts = None
+        if region:
+            region_parts = self._split_region(workflow_text, region)
 
         def contains_prompt(area: str) -> bool:
             target_lower = prompt_str_arg.strip().lower()
@@ -242,10 +269,8 @@ class PromptFragment:
         new_prompt_text = None
 
         if command == "add":
-            if has_marker:
-                before_marker = workflow_text[:start_idx]
-                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-                after_marker = workflow_text[end_idx + len(end_marker) :]
+            if region_parts:
+                before, region_line, marker_content, end_line, after = region_parts
 
                 if contains_prompt(marker_content) and not no_skip:
                     _LOGGER.debug(
@@ -263,20 +288,20 @@ class PromptFragment:
                     new_content_prompt = f"{prompt_str_arg},"
 
                 new_workflow_text = (
-                    before_marker.rstrip()
-                    + f"\n{start_marker}\n"
+                    before.rstrip()
+                    + f"\n{region_line}\n"
                     + new_content_prompt
-                    + f"\n{end_marker}\n"
-                    + after_marker.lstrip()
+                    + f"\n{end_line}\n"
+                    + after.lstrip()
                 )
 
                 if is_equivalent:
                     new_prompt_text_raw = (
-                        before_marker.rstrip()
+                        before.rstrip()
                         + "\n"
                         + new_content_prompt
                         + "\n"
-                        + after_marker.lstrip()
+                        + after.lstrip()
                     )
                     new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
                 else:
@@ -309,12 +334,15 @@ class PromptFragment:
                 else:
                     new_content_prompt = f"{prompt_str_arg},"
 
-                if use_markers:
+                if region:
+                    # 存在 region 名但文本中无标记 → 创建新标记
+                    region_line = self._make_region_line(region)
+                    end_line = self._make_end_region_line(region)
                     new_workflow_text = (
                         workflow_text.rstrip()
-                        + f"\n{start_marker}\n"
+                        + f"\n{region_line}\n"
                         + new_content_prompt
-                        + f"\n{end_marker}\n"
+                        + f"\n{end_line}\n"
                     )
                 else:
                     new_workflow_text = (
@@ -324,10 +352,8 @@ class PromptFragment:
 
         else:  # remove
             effective_hard = hard or raw
-            if has_marker:
-                before_marker = workflow_text[:start_idx]
-                marker_content = workflow_text[start_idx + len(start_marker) : end_idx]
-                after_marker = workflow_text[end_idx + len(end_marker) :]
+            if region_parts:
+                before, region_line, marker_content, end_line, after = region_parts
 
                 if not contains_prompt(marker_content):
                     _LOGGER.debug(
@@ -364,20 +390,20 @@ class PromptFragment:
                         new_content_prompt = "\n".join(new_lines)
 
                 new_workflow_text = (
-                    before_marker.rstrip()
-                    + f"\n{start_marker}\n"
+                    before.rstrip()
+                    + f"\n{region_line}\n"
                     + new_content_prompt
-                    + f"\n{end_marker}\n"
-                    + after_marker.lstrip()
+                    + f"\n{end_line}\n"
+                    + after.lstrip()
                 )
 
                 if is_equivalent:
                     new_prompt_text_raw = (
-                        before_marker.rstrip()
+                        before.rstrip()
                         + "\n"
                         + new_content_prompt
                         + "\n"
-                        + after_marker.lstrip()
+                        + after.lstrip()
                     )
                     new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
                 else:

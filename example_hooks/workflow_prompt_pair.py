@@ -35,7 +35,7 @@ from prompt_locator import (
     NodeInfo,
     is_node_disabled,
 )
-from prompt_locator import get_region_markers, get_target_clip_node
+from prompt_locator import REGION_START_RE, get_target_clip_node
 from prompt_fragment import PromptFragment
 from lora_handler import LORA_HANDLERS
 
@@ -86,14 +86,20 @@ class WorkflowPromptPair:
         """
         查找所有包含指定区域 marker 的 CLIPTextEncode 节点 ID。
         """
-        start_marker, end_marker = get_region_markers(region_name)
         result: List[str] = []
         for nid, node in self.prompt.items():
             node_dict = cast(Dict[str, Any], node)
             if node_dict.get("class_type") == "CLIPTextEncode":
                 wf_text = self.get_workflow_node_text(nid)
-                if wf_text and start_marker in wf_text and end_marker in wf_text:
-                    result.append(nid)
+                if wf_text:
+                    # 检查是否存在 // #region {name} 且其后有 // #endregion
+                    has_start = False
+                    for m in REGION_START_RE.finditer(wf_text):
+                        if m.group(1) == region_name:
+                            has_start = True
+                            break
+                    if has_start:
+                        result.append(nid)
         return result
 
     def _resolve_target_to_nodes(
@@ -109,23 +115,18 @@ class WorkflowPromptPair:
             if target_value not in self.prompt:
                 _LOGGER.warning(f"Node {target_value} not found in prompt, skipping.")
                 return []
-            return [PromptFragment(self, target_value, "", "", False)]
+            return [PromptFragment(self, target_value)]
         else:  # region
-            start_marker, end_marker = get_region_markers(target_value)
             matching_nodes = self._find_nodes_with_region(target_value)
             if matching_nodes:
                 return [
-                    PromptFragment(self, nid, start_marker, end_marker, True)
+                    PromptFragment(self, nid, region=target_value)
                     for nid in matching_nodes
                 ]
             else:
                 fallback_nid = get_target_clip_node(self.prompt, is_neg)
                 if fallback_nid:
-                    return [
-                        PromptFragment(
-                            self, fallback_nid, start_marker, end_marker, True
-                        )
-                    ]
+                    return [PromptFragment(self, fallback_nid, region=target_value)]
                 else:
                     _LOGGER.warning(
                         f"Failed to locate target node for region '{target_value}'"

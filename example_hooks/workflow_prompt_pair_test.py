@@ -1229,13 +1229,10 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 if target_node_id is None:
                     continue
 
-                start_marker = "//#region hook-positive"
-                end_marker = "//#endregion hook-positive"
+                region_name = "positive"
 
                 pair = WorkflowPromptPair(workflow, prompt)
-                fragment = PromptFragment(
-                    pair, target_node_id, start_marker, end_marker, True
-                )
+                fragment = PromptFragment(pair, target_node_id, region=region_name)
 
                 # --- 第一次 add "beautiful scenery" ---
                 prompt_str_arg = "beautiful scenery"
@@ -1246,7 +1243,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 self.assertIsNotNone(workflow_text)
                 assert workflow_text is not None
                 self.assertNotIn(
-                    start_marker,
+                    "// #region positive",
                     workflow_text,
                     "Start marker should not be in raw sample workflow text yet",
                 )
@@ -1256,8 +1253,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         target_node_id,
                         "add",
                         prompt_str_arg,
-                        start_marker,
-                        end_marker,
+                        region_name,
                         args_raw,
                         args_no_skip,
                         False,
@@ -1269,8 +1265,8 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn(start_marker, wf_text_got)
-                self.assertNotIn(start_marker, pr_text_got)
+                self.assertIn("// #region positive", wf_text_got)
+                self.assertNotIn("// #region positive", pr_text_got)
                 self.assertIn("beautiful scenery,", pr_text_got)
 
                 # --- 第二次 add "golden sunset" ---
@@ -1281,8 +1277,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         target_node_id,
                         "add",
                         prompt_str_arg,
-                        start_marker,
-                        end_marker,
+                        region_name,
                         args_raw,
                         args_no_skip,
                         False,
@@ -1294,8 +1289,8 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn(start_marker, wf_text_got)
-                self.assertNotIn(start_marker, pr_text_got)
+                self.assertIn("// #region positive", wf_text_got)
+                self.assertNotIn("// #region positive", pr_text_got)
                 self.assertIn("beautiful scenery", pr_text_got)
                 self.assertIn("golden sunset", pr_text_got)
 
@@ -1307,8 +1302,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         target_node_id,
                         "remove",
                         prompt_str_arg,
-                        start_marker,
-                        end_marker,
+                        region_name,
                         args_raw,
                         args_no_skip,
                         True,
@@ -1320,8 +1314,8 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn(start_marker, wf_text_got)
-                self.assertNotIn(start_marker, pr_text_got)
+                self.assertIn("// #region positive", wf_text_got)
+                self.assertNotIn("// #region positive", pr_text_got)
                 self.assertNotIn("beautiful scenery", pr_text_got)
                 self.assertIn("golden sunset", pr_text_got)
 
@@ -1333,8 +1327,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         target_node_id,
                         "remove",
                         prompt_str_arg,
-                        start_marker,
-                        end_marker,
+                        region_name,
                         args_raw,
                         args_no_skip,
                         False,

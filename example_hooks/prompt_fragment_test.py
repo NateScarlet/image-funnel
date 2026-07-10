@@ -78,19 +78,15 @@ class TestAdjustPromptWeightInText(unittest.TestCase):
 
 
 class TestAddPromptToNode(unittest.TestCase):
-    def _add_via_double_track(
-        self, fragment, node_id, added_text, start_marker, end_marker, use_markers
-    ):
+    def _add_via_double_track(self, fragment, node_id, added_text, region):
         return fragment._process_double_track(
             node_id,
             "add",
             added_text,
-            start_marker,
-            end_marker,
+            region,
             raw=False,
             no_skip=False,
             hard=False,
-            use_markers=use_markers,
         )
 
     def test_with_marker(self):
@@ -101,7 +97,7 @@ class TestAddPromptToNode(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive\nbest quality"
+                        "// #region positive\nmasterpiece,\n// #endregion\nbest quality"
                     ],
                 }
             ],
@@ -113,16 +109,12 @@ class TestAddPromptToNode(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = PromptFragment(
-            pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
-        )
+        fragment = PromptFragment(pair, "1", region="positive")
         self._add_via_double_track(
             fragment,
             "1",
             "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
+            "positive",
         )
         self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
         self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
@@ -150,9 +142,7 @@ class TestAddPromptToNode(unittest.TestCase):
             fragment,
             "1",
             "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            False,
+            "",
         )
         self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
         self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
@@ -165,7 +155,7 @@ class TestAddPromptToNode(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\n\n//#endregion hook-positive\nbest quality"
+                        "// #region positive\n\n// #endregion\nbest quality"
                     ],
                 }
             ],
@@ -174,16 +164,12 @@ class TestAddPromptToNode(unittest.TestCase):
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "\nbest quality"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = PromptFragment(
-            pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
-        )
+        fragment = PromptFragment(pair, "1", region="positive")
         self._add_via_double_track(
             fragment,
             "1",
             "(beautiful:1.5)",
-            "//#region hook-positive",
-            "//#endregion hook-positive",
-            True,
+            "positive",
         )
         self.assertIn("(beautiful:1.5)", workflow["nodes"][0]["widgets_values"][0])
         self.assertIn("(beautiful:1.5)", prompt["1"]["inputs"]["text"])
@@ -202,7 +188,7 @@ class TestFragmentTextAndModify(unittest.TestCase):
                 {
                     "id": "node_1",
                     "widgets_values": [
-                        "//#region hook-positive\nmasterpiece\n//#endregion hook-positive"
+                        "// #region positive\nmasterpiece\n// #endregion"
                     ],
                 }
             ]
@@ -213,7 +199,7 @@ class TestFragmentTextAndModify(unittest.TestCase):
         fragment = fragments[0]
 
         # 1. 验证获取文本
-        self.assertEqual(fragment.text, "\nmasterpiece\n")
+        self.assertEqual(fragment.text, "masterpiece")
 
         # 2. 验证获取权重
         self.assertEqual(fragment.get_weight("masterpiece"), 1.0)
@@ -236,21 +222,17 @@ class TestFragmentTextAndModify(unittest.TestCase):
 
 
 class TestDoubleTrack(unittest.TestCase):
-    def setUp(self):
-        self.start_marker = "//#region hook-positive"
-        self.end_marker = "//#endregion hook-positive"
+    REGION = "positive"
 
-    def _make_fragment(self, pair, node_id, use_markers=True):
+    def _make_fragment(self, pair, node_id, use_region=True):
         return PromptFragment(
             pair,
             node_id,
-            self.start_marker if use_markers else "",
-            self.end_marker if use_markers else "",
-            use_markers,
+            region=self.REGION if use_region else "",
         )
 
     def test_add_without_markers(self):
-        """use_markers=False 时直接追加"""
+        """region="" 时直接追加"""
         workflow = {
             "nodes": [
                 {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece"]}
@@ -260,13 +242,13 @@ class TestDoubleTrack(unittest.TestCase):
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = self._make_fragment(pair, "1", use_markers=False)
+        fragment = self._make_fragment(pair, "1", use_region=False)
         result = fragment._process_double_track(
-            "1", "add", "beautiful scenery", "", "", False, False, False, False
+            "1", "add", "beautiful scenery", "", False, False, False
         )
         self.assertTrue(result)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
-        self.assertNotIn("//#region", workflow["nodes"][0]["widgets_values"][0])
+        self.assertNotIn("// #region", workflow["nodes"][0]["widgets_values"][0])
 
     def test_add_raw(self):
         """raw=True 时不添加逗号"""
@@ -281,15 +263,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "add",
-            "raw text here",
-            self.start_marker,
-            self.end_marker,
-            True,
-            False,
-            False,
-            True,
+            "1", "add", "raw text here", self.REGION, True, False, False
         )
         self.assertTrue(result)
         self.assertIn("raw text here", workflow["nodes"][0]["widgets_values"][0])
@@ -302,7 +276,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
+                        "// #region positive\nbeautiful scenery,\n// #endregion\nmasterpiece"
                     ],
                 }
             ],
@@ -316,15 +290,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            True,
-            False,
-            True,
+            "1", "add", "beautiful scenery", self.REGION, False, True, False
         )
         self.assertTrue(result)
 
@@ -336,7 +302,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
+                        "// #region positive\nbeautiful scenery,\n// #endregion\nmasterpiece"
                     ],
                 }
             ],
@@ -350,15 +316,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
+            "1", "add", "beautiful scenery", self.REGION, False, False, False
         )
         self.assertFalse(result)
 
@@ -380,9 +338,9 @@ class TestDoubleTrack(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = self._make_fragment(pair, "1", use_markers=False)
+        fragment = self._make_fragment(pair, "1", use_region=False)
         result = fragment._process_double_track(
-            "1", "add", "beautiful scenery", "", "", False, False, False, False
+            "1", "add", "beautiful scenery", "", False, False, False
         )
         self.assertFalse(result)
 
@@ -394,7 +352,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
+                        "// #region positive\nbeautiful scenery,\n// #endregion\nmasterpiece"
                     ],
                 }
             ],
@@ -408,15 +366,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            True,
-            True,
+            "1", "remove", "beautiful scenery", self.REGION, False, False, True
         )
         self.assertTrue(result)
         self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
@@ -429,7 +379,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nbeautiful scenery,\n//#endregion hook-positive\nmasterpiece"
+                        "// #region positive\nbeautiful scenery,\n// #endregion\nmasterpiece"
                     ],
                 }
             ],
@@ -443,22 +393,14 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "remove",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
+            "1", "remove", "beautiful scenery", self.REGION, False, False, False
         )
         self.assertTrue(result)
         self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
         self.assertNotIn("beautiful scenery", prompt["1"]["inputs"]["text"])
 
     def test_remove_no_marker_hard(self):
-        """hard=True, has_marker=False"""
+        """hard=True, region="" """
         workflow = {
             "nodes": [
                 {
@@ -475,15 +417,15 @@ class TestDoubleTrack(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = self._make_fragment(pair, "1", use_markers=False)
+        fragment = self._make_fragment(pair, "1", use_region=False)
         result = fragment._process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, False, True, False
+            "1", "remove", "beautiful scenery", "", False, False, True
         )
         self.assertTrue(result)
         self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
     def test_remove_no_marker_comment_out(self):
-        """hard=False, has_marker=False"""
+        """hard=False, region="" """
         workflow = {
             "nodes": [
                 {
@@ -500,9 +442,9 @@ class TestDoubleTrack(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = self._make_fragment(pair, "1", use_markers=False)
+        fragment = self._make_fragment(pair, "1", use_region=False)
         result = fragment._process_double_track(
-            "1", "remove", "beautiful scenery", "", "", False, False, False, False
+            "1", "remove", "beautiful scenery", "", False, False, False
         )
         self.assertTrue(result)
         self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
@@ -515,7 +457,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nsome raw text,\n//#endregion hook-positive\nmasterpiece"
+                        "// #region positive\nsome raw text,\n// #endregion\nmasterpiece"
                     ],
                 }
             ],
@@ -529,15 +471,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "remove",
-            "raw text",
-            self.start_marker,
-            self.end_marker,
-            True,
-            False,
-            False,
-            True,
+            "1", "remove", "raw text", self.REGION, True, False, False
         )
         self.assertTrue(result)
         self.assertNotIn("raw text", workflow["nodes"][0]["widgets_values"][0])
@@ -550,7 +484,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive\nbest quality"
+                        "// #region positive\nmasterpiece,\n// #endregion\nbest quality"
                     ],
                 }
             ],
@@ -564,15 +498,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "remove",
-            "nonexistent_prompt",
-            self.start_marker,
-            self.end_marker,
-            False,
-            True,
-            False,
-            True,
+            "1", "remove", "nonexistent_prompt", self.REGION, False, True, False
         )
         self.assertTrue(result)
 
@@ -584,7 +510,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\nmasterpiece,\n//#endregion hook-positive"
+                        "// #region positive\nmasterpiece,\n// #endregion"
                     ],
                 }
             ],
@@ -595,15 +521,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "remove",
-            "nonexistent",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
+            "1", "remove", "nonexistent", self.REGION, False, False, False
         )
         self.assertFalse(result)
 
@@ -612,9 +530,9 @@ class TestDoubleTrack(unittest.TestCase):
         workflow = {"nodes": []}
         prompt = {}
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = self._make_fragment(pair, "999", use_markers=False)
+        fragment = self._make_fragment(pair, "999", use_region=False)
         result = fragment._process_double_track(
-            "999", "add", "test", "", "", False, False, False, False
+            "999", "add", "test", "", False, False, False
         )
         self.assertFalse(result)
 
@@ -626,7 +544,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\n// foo,\nactive_prompt,\n//#endregion hook-positive"
+                        "// #region positive\n// foo,\nactive_prompt,\n// #endregion"
                     ],
                 }
             ],
@@ -635,9 +553,7 @@ class TestDoubleTrack(unittest.TestCase):
             "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "active_prompt,"}}
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        fragment = PromptFragment(
-            pair, "1", "//#region hook-positive", "//#endregion hook-positive", True
-        )
+        fragment = PromptFragment(pair, "1", region="positive")
 
         # 尝试修改已注释提示词的权重，skip_add=True 时不应视为有效文本——应返回 False
         modified = fragment.modify_weight("foo", 1.5, skip_add=True)
@@ -655,7 +571,7 @@ class TestDoubleTrack(unittest.TestCase):
                     "id": "1",
                     "type": "CLIPTextEncode",
                     "widgets_values": [
-                        "//#region hook-positive\n// comment in workflow\nmasterpiece,\n//#endregion hook-positive\nbest quality"
+                        "// #region positive\n// comment in workflow\nmasterpiece,\n// #endregion\nbest quality"
                     ],
                 }
             ],
@@ -669,15 +585,7 @@ class TestDoubleTrack(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         fragment = self._make_fragment(pair, "1")
         result = fragment._process_double_track(
-            "1",
-            "add",
-            "beautiful scenery",
-            self.start_marker,
-            self.end_marker,
-            False,
-            False,
-            False,
-            True,
+            "1", "add", "beautiful scenery", self.REGION, False, False, False
         )
         self.assertTrue(result)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])

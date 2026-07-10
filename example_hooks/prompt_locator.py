@@ -9,6 +9,7 @@ prompt_locator 模块：封装 ComfyUI 提示词节点定位逻辑。
 """
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Set, cast
 
@@ -39,7 +40,14 @@ def is_node_disabled(node: Dict[str, Any]) -> bool:
     return node.get("mode") in (2, 4)
 
 
-# #region 常量定义与环境变量读取
+# #region Region 标记匹配
+
+# 标准 // #region / // #endregion 注释语法（ComfyUI 工作流需以 // 开头注释）
+# 允许 // 前有缩进，允许 // 与 # 之间有任意空格，endregion 可附带名称作为描述
+REGION_START_RE = re.compile(r"^\s*//\s*#region\s+(\S+)", re.MULTILINE)
+REGION_END_RE = re.compile(r"^\s*//\s*#endregion\b", re.MULTILINE)
+
+# #endregion
 
 KNOWN_PRIMITIVE_TYPES: Set[str] = {
     "PrimitiveInt",
@@ -48,16 +56,6 @@ KNOWN_PRIMITIVE_TYPES: Set[str] = {
     "PrimitiveBoolean",
 }
 KNOWN_SWITCH_TYPES: Set[str] = {"Any Switch (rgthree)", "ComfySwitchNode"}
-
-_DEFAULT_START_REGION_PREFIX = "//#region hook-"
-_DEFAULT_END_REGION_PREFIX = "//#endregion hook-"
-
-START_REGION_PREFIX: str = os.getenv(
-    "HOOK_START_REGION_PREFIX", _DEFAULT_START_REGION_PREFIX
-)
-END_REGION_PREFIX: str = os.getenv("HOOK_END_REGION_PREFIX", _DEFAULT_END_REGION_PREFIX)
-
-# #endregion
 
 
 def find_terminal_input(
@@ -118,12 +116,49 @@ def find_terminal_input(
     return (node_id, input_key)
 
 
+def find_region_boundaries(text: str, region_name: str) -> Tuple[int, int]:
+    """
+    在文本中查找指定 region 的边界。
+    返回 (start_pos, endregion_pos)，其中：
+      - start_pos:     // #region {name} 行的起始位置
+      - endregion_pos: // #endregion 行的起始位置（不含该行内容）
+    未找到时返回 (-1, -1)。
+    不支持嵌套 region。
+    """
+    for match in REGION_START_RE.finditer(text):
+        if match.group(1) == region_name:
+            end_match = REGION_END_RE.search(text, match.end())
+            if end_match:
+                return (match.start(), end_match.start())
+            return (-1, -1)
+    return (-1, -1)
+
+
+def get_region_content(text: str, region_name: str) -> Optional[str]:
+    """
+    获取 region 内部的内容（去除 // #region 和 // #endregion 标记行）。
+    未找到 region 时返回 None。
+    """
+    start, endregion_start = find_region_boundaries(text, region_name)
+    if start == -1:
+        return None
+
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        return ""
+
+    content = text[line_end + 1 : endregion_start]
+    if content.endswith("\n"):
+        content = content[:-1]
+    return content
+
+
 def get_region_markers(region_name: str) -> Tuple[str, str]:
     """
-    根据区域名称拼装 marker 字符串。
-    使用 HOOK_START_REGION_PREFIX / HOOK_END_REGION_PREFIX 环境变量作为前缀，追加区域名。
+    返回标准 region 标记字符串。
+    使用标准 // #region name / // #endregion 语法。
     """
-    return START_REGION_PREFIX + region_name, END_REGION_PREFIX + region_name
+    return (f"// #region {region_name}", f"// #endregion {region_name}")
 
 
 def get_workflow_node_text(workflow: Dict[str, Any], node_id_str: str) -> Optional[str]:

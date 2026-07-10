@@ -39,8 +39,6 @@ ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义�
 HOOK_JOBS = "4"
 HOOK_IMAGE_RATING = "4"
 HOOK_MAX_MATCH = "4"
-HOOK_START_REGION_PREFIX = "//#region "
-HOOK_END_REGION_PREFIX = "//#endregion "
 HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
 HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"
 

@@ -33,7 +33,7 @@ import argparse
 from graphql_utils import update_image_label, fetch_images
 from workflow_prompt_pair import WorkflowPromptPair
 from prompt_fragment import PromptFragment
-from prompt_locator import START_REGION_PREFIX as _START_REGION_PREFIX
+from prompt_locator import REGION_START_RE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ def submit_workflow(
 def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
     """
     从图片的 workflow 元数据中扫描区域标记，逐个 yield 区域名称。
-    区域标记由 `_START_REGION_PREFIX` 定义，存储在 CLIPTextEncode 节点的文本 widget 中。
+    区域标记使用标准 // #region {name} 语法，存储在 CLIPTextEncode 节点的文本 widget 中。
     """
     seen: Set[str] = set()
     for path in image_paths:
@@ -185,16 +185,11 @@ def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
                     for raw_val in widget_values_list:
                         if not isinstance(raw_val, str):
                             continue
-                        val_text: str = raw_val
-                        if _START_REGION_PREFIX not in val_text:
-                            continue
-                        for line in val_text.splitlines():
-                            stripped = line.strip()
-                            if stripped.startswith(_START_REGION_PREFIX):
-                                name = stripped[len(_START_REGION_PREFIX) :].strip()
-                                if name and name not in seen:
-                                    seen.add(name)
-                                    yield name
+                        for m in REGION_START_RE.finditer(raw_val):
+                            name = m.group(1)
+                            if name and name not in seen:
+                                seen.add(name)
+                                yield name
         except Exception:
             continue
 
