@@ -126,12 +126,15 @@ def _fetch_danbooru_suggestions(
     search_url = search_url.rstrip("/")
     api_url = f"{search_url}/api/search"
 
+    show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
+    show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
+
     payload = {
         "query": query,
         "top_k": 20,
         "limit": 20,
         "popularity_weight": 0.15,
-        "show_nsfw": True,
+        "show_nsfw": show_nsfw,
         "use_segmentation": False,
     }
 
@@ -179,10 +182,13 @@ def _fetch_danbooru_related(
     search_url = search_url.rstrip("/")
     api_url = f"{search_url}/api/related"
 
+    show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
+    show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
+
     payload = {
         "tags": tags,
         "limit": 20,
-        "show_nsfw": True,
+        "show_nsfw": show_nsfw,
     }
 
     try:

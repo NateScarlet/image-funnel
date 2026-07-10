@@ -353,6 +353,28 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(req_data["query"], "girl")
             self.assertEqual(req_data["top_k"], 20)
             self.assertEqual(req_data["limit"], 20)
+            self.assertFalse(req_data["show_nsfw"])
+
+        mock_post.reset_mock()
+        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add"]),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+                "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            req_data = call_kwargs.get("json")
+            self.assertTrue(req_data["show_nsfw"])
 
             self.assertEqual(len(suggestions), 2)
             self.assertEqual(suggestions[0].text, "1girl")
@@ -436,6 +458,30 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             req_data = call_kwargs.get("json")
             self.assertEqual(req_data["tags"], ["masterpiece", "1girl"])
             self.assertEqual(req_data["limit"], 20)
+            self.assertFalse(req_data["show_nsfw"])
+
+        mock_post.reset_mock()
+        with patch("comfyui_autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add masterpiece, 1girl, ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "masterpiece,", "1girl,"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+                "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
+            },
+        ):
+            from comfyui_autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            req_data = call_kwargs.get("json")
+            self.assertTrue(req_data["show_nsfw"])
 
             self.assertEqual(len(suggestions), 2)
             self.assertEqual(suggestions[0].text, "sailor_collar")
