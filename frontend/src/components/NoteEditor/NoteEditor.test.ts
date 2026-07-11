@@ -1,11 +1,27 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 import { type VueWrapper, mount } from "@vue/test-utils";
-import { nextTick, ref, watch, toValue } from "vue";
+import { nextTick, ref, watch, toValue, customRef } from "vue";
 import NoteEditor from "./NoteEditor.vue";
 
 const mockQuery = vi.hoisted(() => vi.fn());
 const refreshOn = vi.hoisted(() => vi.fn());
-const timeNow = vi.hoisted(() => ({ value: 1000000 }));
+const timeNow = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  return {
+    currentMs: 1000000,
+    get value() {
+      return this.currentMs;
+    },
+    set value(v: number) {
+      this.currentMs = v;
+      listeners.forEach((l) => l());
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
+});
 
 const hookList = [
   {
@@ -119,20 +135,32 @@ vi.mock("@/composables/useNotification", () => ({
   })),
 }));
 vi.mock("@/composables/useClickOutside", () => ({ default: vi.fn() }));
-vi.mock("@/composables/useCurrentTime", () => ({
-  default: vi.fn(() => ({
-    currentTime: {
-      get value() {
+vi.mock("@/composables/useCurrentTime", () => {
+  return {
+    default: vi.fn(() => {
+      const currentTime = customRef((track: () => void, trigger: () => void) => {
+        timeNow.subscribe(() => {
+          trigger();
+        });
         return {
-          ms: timeNow.value,
-          sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms,
-          add: (d: unknown) => ({ ms: timeNow.value + (d as number) }),
+          get() {
+            track();
+            return {
+              ms: timeNow.value,
+              sub: (other: unknown) => timeNow.value - (other as { ms: number }).ms,
+              add: (d: unknown) => ({ ms: timeNow.value + (d as number) }),
+            };
+          },
+          set() {},
         };
-      },
-    },
-    refreshOn,
-  })),
-}));
+      });
+      return {
+        currentTime,
+        refreshOn,
+      };
+    }),
+  };
+});
 vi.mock("@/utils/Time", () => ({
   default: {
     now: () => ({
@@ -549,5 +577,54 @@ describe("NoteEditor", () => {
     const buttons = Array.from(menu?.querySelectorAll("button") ?? []);
     expect(activeItem).toBe(buttons[0]);
   });
+
+  test("API suggestions remain rendered during blur grace period (200ms)", async () => {
+    mockQuery.mockResolvedValue({
+      data: {
+        hookAutocomplete: [
+          { text: "positive", displayText: "positive", type: null },
+        ],
+      },
+    });
+
+    createWrapper();
+    const el = wrapper.find("textarea");
+    await el.trigger("focus");
+    await el.setValue("/add ");
+    el.element.selectionStart = 5;
+    el.element.selectionEnd = 5;
+    el.element.dispatchEvent(new Event("input", { bubbles: true }));
+    el.element.dispatchEvent(new Event("keyup", { bubbles: true }));
+
+    await vi.waitFor(
+      () => {
+        expect(mockQuery).toHaveBeenCalled();
+      },
+      { timeout: 2000, interval: 50 },
+    );
+
+    await vi.waitFor(
+      () => {
+        expect(findSuggestionTexts().some((t) => t.includes("positive"))).toBe(true);
+      },
+      { timeout: 2000, interval: 50 },
+    );
+
+    // 触发 blur 事件
+    el.element.dispatchEvent(new Event("blur", { bubbles: true }));
+    await nextTick();
+
+    // 在 200ms 宽限期内，API 建议应该继续留在 DOM 中
+    expect(getSuggestionMenu()).not.toBeNull();
+    expect(findSuggestionTexts().some((t) => t.includes("positive"))).toBe(true);
+
+    // 时间流逝 200ms
+    timeNow.value = 1000200;
+    await nextTick();
+
+    // 200ms 之后，菜单被隐藏
+    expect(getSuggestionMenu()).toBeNull();
+  });
 });
+
 

@@ -107,7 +107,7 @@ export function useNoteAutocomplete(options: Options) {
 
   const variablesRaw = computed(() => {
     const s = state.value;
-    if (!toValue(options.isFocused) || !s || !enabled.value || s.type !== "args") {
+    if (!s || !enabled.value || s.type !== "args") {
       return null;
     }
     if (s.query.startsWith("-")) {
