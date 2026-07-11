@@ -612,8 +612,19 @@ class NodeProvider(AutocompleteProvider):
                 node_id, context.prompt_meta, context.workflow
             )
 
-            # 返回的补全项描述中显示节点名称和类型
-            description = f"名称: {title}, 类型: {class_type}"
+            # 获取节点 CLIP 文本内容作为描述
+            clip_text = ""
+            if isinstance(inputs, dict):
+                inputs_dict = cast(Dict[str, Any], inputs)
+                text_val = inputs_dict.get("text")
+                if isinstance(text_val, str):
+                    clip_text = text_val
+                elif text_val is not None:
+                    clip_text = str(cast(object, text_val))
+
+            description = clip_text
+
+            display_name = f"#{node_id} {title} ({class_type})"
 
             style = ""
             if node_id in seen_nodes:
@@ -621,7 +632,7 @@ class NodeProvider(AutocompleteProvider):
 
             yield AutocompleteSuggestion(
                 text=node_id,
-                displayText=node_id,
+                displayText=display_name,
                 description=description,
                 type="node",
                 style=style,

@@ -670,16 +670,18 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(len(suggestions), 2)
 
             node_1_sug = next(s for s in suggestions if s.text == "node_1")
+            self.assertEqual(node_1_sug.description, "1girl")
             self.assertEqual(
-                node_1_sug.description, "名称: Positive Prompt, 类型: CLIPTextEncode"
+                node_1_sug.displayText, "#node_1 Positive Prompt (CLIPTextEncode)"
             )
             self.assertEqual(node_1_sug.type, "node")
             self.assertEqual(node_1_sug.style, "")
 
             sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
+            self.assertEqual(sub_sug.description, "subgraph prompt")
             self.assertEqual(
-                sub_sug.description,
-                "名称: Parent Subgraph -> Inner Prompt, 类型: CLIPTextEncode",
+                sub_sug.displayText,
+                "#node_4:child_1 Parent Subgraph -> Inner Prompt (CLIPTextEncode)",
             )
 
     def test_autocomplete_node_adjust_cfg(self):
@@ -703,8 +705,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 1)
             self.assertEqual(suggestions[0].text, "node_2")
+            self.assertEqual(suggestions[0].description, "")
             self.assertEqual(
-                suggestions[0].description, "名称: Main Sampler, 类型: KSampler"
+                suggestions[0].displayText, "#node_2 Main Sampler (KSampler)"
             )
 
     def test_autocomplete_node_adjust_aspect(self):
@@ -728,7 +731,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             suggestions = list(autocomplete("adjust"))
             self.assertEqual(len(suggestions), 1)
             self.assertEqual(suggestions[0].text, "node_3")
-            self.assertTrue("EmptyLatentImage" in suggestions[0].description)
+            self.assertEqual(suggestions[0].description, "")
+            self.assertEqual(
+                suggestions[0].displayText,
+                "#node_3 EmptyLatentImage (EmptyLatentImage)",
+            )
 
     def test_autocomplete_node_muted_style(self):
         mock_image = self._get_mock_node_image()
