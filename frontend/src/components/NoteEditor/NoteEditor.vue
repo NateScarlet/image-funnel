@@ -33,7 +33,11 @@
       </template>
 
       <!-- 派发按钮：可即时触发的笔记钩子，放入二级菜单防止误触 -->
-      <div v-if="dispatchableHooks.length" ref="dispatchMenuRef" class="relative">
+      <div
+        v-if="dispatchableHooks.length"
+        ref="dispatchMenuRef"
+        class="relative"
+      >
         <button
           type="button"
           class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
@@ -75,7 +79,10 @@
               showDispatchMenu = false;
             "
           >
-            <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
+            <svg
+              class="w-4 h-4 text-secondary-400 shrink-0"
+              viewBox="0 0 24 24"
+            >
               <path :d="mdiLightningBolt" fill="currentColor" />
             </svg>
             <span>{{ h.name }}</span>
@@ -97,7 +104,11 @@
           <div
             class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
           >
-            {{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}
+            {{
+              autocompleteState?.type === "name"
+                ? "选择笔记指令"
+                : "指令参数建议"
+            }}
           </div>
           <div
             v-if="isSearching"
@@ -138,7 +149,9 @@
                 v-if="sug.type"
                 class="text-[10px] uppercase px-1 rounded font-normal"
                 :class="
-                  idx === activeIndex ? 'bg-white/20 text-white' : 'bg-primary-800 text-primary-400'
+                  idx === activeIndex
+                    ? 'bg-white/20 text-white'
+                    : 'bg-primary-800 text-primary-400'
                 "
               >
                 {{ typeLabels[sug.type] || sug.type }}
@@ -182,15 +195,20 @@ import { ref, computed, nextTick, useTemplateRef } from "vue";
 import { useFloating, offset, flip, shift, autoUpdate } from "@floating-ui/vue";
 import useQuery from "@/graphql/utils/useQuery";
 import mutate from "@/graphql/utils/mutate";
-import {
-  HooksDocument,
-  DispatchNoteHookDocument,
-} from "@/graphql/generated";
+import { HooksDocument, DispatchNoteHookDocument } from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
-import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
-import { useNoteAutocomplete, computeDirectiveInsertion } from "./useNoteAutocomplete";
+import {
+  mdiConsole,
+  mdiLightningBolt,
+  mdiChevronDown,
+  mdiLoading,
+} from "@mdi/js";
+import {
+  useNoteAutocomplete,
+  computeDirectiveInsertion,
+} from "./useNoteAutocomplete";
 import type { InsertParams } from "./useNoteAutocomplete";
 import type { Suggestion } from "./directiveAutocomplete";
 
@@ -229,9 +247,7 @@ const { floatingStyles } = useFloating(textareaRef, floatingEl, {
 });
 
 // 使用声明式缓存加载，避免多余的组件内部状态
-const { data: hooksData } = useQuery(HooksDocument, {
-  fetchPolicy: "cache-first",
-});
+const { data: hooksData } = useQuery(HooksDocument);
 
 // 可即时派发的钩子：canDispatchByNote 且当前笔记已保存（有 noteId）
 const dispatchableHooks = computed(() => {
@@ -241,7 +257,10 @@ const dispatchableHooks = computed(() => {
       if (!h.canDispatchByNote) return false;
       if (!h.directive) return false;
       // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
-      const escapedName = h.directive.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedName = h.directive.name.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
       const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
       return regex.test(model.value);
     }) || []
@@ -267,7 +286,9 @@ async function triggerDispatch(hookId: string, hookName: string) {
     try {
       await props.onBeforeDispatch();
     } catch (err) {
-      showError(`保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`);
+      showError(
+        `保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`
+      );
       isDispatching.value = false;
       return;
     }
@@ -376,7 +397,7 @@ function onInsertDirective(dirName: string) {
     dirName,
     model.value,
     textareaRef.value?.selectionStart ?? 0,
-    textareaRef.value?.selectionEnd ?? 0,
+    textareaRef.value?.selectionEnd ?? 0
   );
   applyInsertion(params);
 }
