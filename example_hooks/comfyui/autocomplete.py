@@ -723,27 +723,37 @@ class DanbooruProvider(AutocompleteProvider):
 
 def autocomplete(
     target_command: Optional[str] = None,
+    *,
+    query: str = "",
+    prev_word: str = "",
+    cwords: Optional[List[str]] = None,
+    image_paths: Optional[List[str]] = None,
 ) -> Iterator[AutocompleteSuggestion]:
     """
     autocomplete 子命令：读取环境变量，生成自动完成建议。
     调用方（main）负责输出 JSONL。
     """
-    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
-    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
+    if not query:
+        query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
 
-    cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
-    try:
-        cwords: List[str] = json.loads(cwords_str)
-    except json.JSONDecodeError as e:
-        _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
-        raise
+    if not prev_word:
+        prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
 
-    image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
-    try:
-        image_paths: List[str] = json.loads(image_paths_str)
-    except json.JSONDecodeError as e:
-        _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
-        raise
+    if cwords is None:
+        cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
+        try:
+            cwords = cast(List[str], json.loads(cwords_str))
+        except json.JSONDecodeError as e:
+            _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
+            raise
+
+    if image_paths is None:
+        image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
+        try:
+            image_paths = cast(List[str], json.loads(image_paths_str))
+        except json.JSONDecodeError as e:
+            _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
+            raise
 
     cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
     is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords

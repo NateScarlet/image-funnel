@@ -144,8 +144,9 @@ def extract_lora_names(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
                 yield name_no_ext
 
 
-def main() -> None:
-    config = ComfyUIConfig.from_env()
+def main(config: Optional[ComfyUIConfig] = None) -> None:
+    if config is None:
+        config = ComfyUIConfig.from_env()
 
     log_level = getattr(logging, config.logging_level, logging.WARNING)
     logging.basicConfig(

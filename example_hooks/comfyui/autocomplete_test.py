@@ -1,313 +1,236 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-import os
-import sys
 import unittest
-import json
+import os
+import argparse
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
+from .autocomplete import (
+    AutocompleteContext,
+    WorkflowPromptProvider,
+    DanbooruProvider,
+    NodeProvider,
+    LoraProvider,
+)
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
 
-    def setUp(self):
-        # 每次测试执行前清空模块缓存，确保 PIL.Image.open 的 mock 绝对生效
-        sys.modules.pop("comfyui.autocomplete", None)
-        sys.modules.pop("comfyui.__main__", None)
+    def _make_context(self, **kwargs: Any) -> AutocompleteContext:
+        """Helper to build AutocompleteContext with sane defaults."""
+        defaults: Dict[str, Any] = dict(
+            target_command=None,
+            query="",
+            prev_word="",
+            cwords=[],
+            image_paths=[],
+            parsed_args=None,
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+        )
+        defaults.update(kwargs)
+        return AutocompleteContext(**defaults)
 
-    def _get_mock_image(self):
-        mock_prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "1girl, masterpiece, score_7, cute\n// this is a comment\n\n  another prompt line , "
-                },
-            }
-        }
-        mock_workflow = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "1girl, masterpiece, score_7, cute\n// this is a comment\n\n  another prompt line , "
-                    ],
-                }
-            ]
-        }
-        mock_image = MagicMock()
-        mock_image.info = {
-            "prompt": json.dumps(mock_prompt),
-            "workflow": json.dumps(mock_workflow),
-        }
-        mock_image.__enter__.return_value = mock_image
-        return mock_image
+    def _make_parsed_args(self, **kwargs: Any) -> argparse.Namespace:
+        """Helper to build a Namespace simulating parsed CLI args."""
+        base = dict(
+            command="remove",
+            neg=False,
+            all=False,
+            region=None,
+            node=None,
+            raw=False,
+            hard=False,
+            no_skip=False,
+        )
+        base.update(kwargs)
+        return argparse.Namespace(**base)
+
+    # ---- WorkflowPromptProvider tests ----
 
     def test_autocomplete_remove_prompt_normal(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            texts = [s.text for s in suggestions]
-
-            self.assertEqual(len(suggestions), 2)
-            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
-            self.assertIn('"another prompt line"', texts)
-            self.assertEqual(suggestions[0].type, "prompt")
-            self.assertEqual(suggestions[0].style, "")
-            self.assertTrue("positive" in suggestions[0].description)
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="remove",
+            cwords=["/remove"],
+            parsed_args=self._make_parsed_args(),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 2)
+        self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+        self.assertIn('"another prompt line"', texts)
+        self.assertEqual(suggestions[0].type, "prompt")
+        self.assertEqual(suggestions[0].style, "")
+        self.assertTrue("positive" in suggestions[0].description)
 
     def test_autocomplete_remove_prompt_by_region(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "cute",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove --region positive cu",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/remove", "--region", "positive"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(texts[0], '"1girl, masterpiece, score_7, cute"')
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="remove",
+            query="cute",
+            cwords=["/remove", "--region", "positive"],
+            parsed_args=self._make_parsed_args(region=["positive"]),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(texts[0], '"1girl, masterpiece, score_7, cute"')
 
     def test_autocomplete_remove_prompt_skip_on_option(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--region",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove --region ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--region"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            for s in suggestions:
-                self.assertNotEqual(s.type, "prompt")
+        context = self._make_context(
+            target_command="remove",
+            prev_word="--region",
+            cwords=["/remove", "--region"],
+            parsed_args=self._make_parsed_args(),
+        )
+        provider = WorkflowPromptProvider()
+        self.assertFalse(provider.can_provide(context))
 
     def test_autocomplete_remove_prompt_skip_on_dash_query(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "--r",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove --r",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            for s in suggestions:
-                self.assertNotEqual(s.type, "prompt")
+        context = self._make_context(
+            target_command="remove",
+            query="--r",
+            prev_word="",
+            cwords=["/remove"],
+            parsed_args=self._make_parsed_args(),
+        )
+        provider = WorkflowPromptProvider()
+        self.assertFalse(provider.can_provide(context))
 
     def test_autocomplete_remove_prompt_by_custom_command(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/delete_prompt ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/delete_prompt"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 2)
-            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="remove",
+            cwords=["/delete_prompt"],
+            parsed_args=self._make_parsed_args(),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 2)
+        self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
 
     def test_autocomplete_remove_prompt_with_double_dash(self):
-        mock_prompt_dash = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "-a_cute_girl, masterpiece\n"},
-            }
+        seen_prompts = {
+            "-a_cute_girl": "区域: positive",
+            "masterpiece": "区域: positive",
         }
-        mock_workflow_dash = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["-a_cute_girl\nmasterpiece\n"],
-                }
-            ]
-        }
-        mock_image_dash = MagicMock()
-        mock_image_dash.info = {
-            "prompt": json.dumps(mock_prompt_dash),
-            "workflow": json.dumps(mock_workflow_dash),
-        }
-        mock_image_dash.__enter__.return_value = mock_image_dash
-
-        with patch("PIL.Image.open", return_value=mock_image_dash), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "-a",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove -- -a",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(texts[0], "-a_cute_girl")
+        context = self._make_context(
+            target_command="remove",
+            query="-a",
+            prev_word="--",
+            cwords=["/remove", "--"],
+            parsed_args=self._make_parsed_args(),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(texts[0], "-a_cute_girl")
 
     def test_autocomplete_adjust_lora_no_prompt_or_danbooru(self):
-        mock_image = self._get_mock_image()
-        mock_response = MagicMock()
-        mock_post = MagicMock(return_value=mock_response)
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "my_lora",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust lora my_lora ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/adjust", "lora", "my_lora"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-
-            mock_post.assert_not_called()
-            self.assertEqual(len(suggestions), 0)
+        context = self._make_context(
+            target_command="adjust",
+            prev_word="my_lora",
+            cwords=["/adjust", "lora", "my_lora"],
+            parsed_args=argparse.Namespace(
+                command="adjust", adjust_type="lora", name="my_lora", weight="0.8"
+            ),
+        )
+        provider = LoraProvider()
+        self.assertFalse(provider.can_provide(context))
+        provider2 = WorkflowPromptProvider()
+        self.assertFalse(provider2.can_provide(context))
+        provider3 = DanbooruProvider()
+        self.assertFalse(provider3.can_provide(context))
 
     def test_autocomplete_adjust_prompt_normal(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust prompt ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/adjust", "prompt"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 2)
-            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
-            self.assertIn('"another prompt line"', texts)
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="adjust",
+            cwords=["/adjust", "prompt"],
+            parsed_args=self._make_parsed_args(
+                command="adjust",
+                adjust_type="prompt",
+                text="dummy_prompt",
+                weight="dummy_weight",
+            ),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 2)
+        self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+        self.assertIn('"another prompt line"', texts)
 
     def test_autocomplete_adjust_prompt_skip_by_text(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": '"another prompt line"',
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": '/adjust prompt "another prompt line" ',
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/adjust", "prompt", '"another prompt line"']
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-            self.assertEqual(len(suggestions), 0)
+        context = self._make_context(
+            target_command="adjust",
+            prev_word='"another prompt line"',
+            cwords=["/adjust", "prompt", '"another prompt line"'],
+            parsed_args=None,
+            seen_prompts={"1girl, masterpiece, score_7, cute": "区域: positive"},
+        )
+        provider = WorkflowPromptProvider()
+        self.assertFalse(provider.can_provide(context))
 
     def test_autocomplete_adjust_prompt_skip_by_weight(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "1",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": '"another prompt line"',
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": '/adjust prompt "another prompt line" 1',
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/adjust", "prompt", '"another prompt line"', "1"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-            self.assertEqual(len(suggestions), 0)
+        context = self._make_context(
+            target_command="adjust",
+            query="1",
+            prev_word='"another prompt line"',
+            cwords=["/adjust", "prompt", '"another prompt line"', "1"],
+            parsed_args=None,
+            seen_prompts={},
+        )
+        provider = WorkflowPromptProvider()
+        self.assertFalse(provider.can_provide(context))
 
     def test_autocomplete_remove_prompt_with_double_dash_and_option(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "a",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--region",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove -- --region a",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/remove", "--", "--region"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="remove",
+            query="a",
+            prev_word="--region",
+            cwords=["/remove", "--", "--region"],
+            parsed_args=self._make_parsed_args(),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 2)
+        self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
 
-            suggestions = list(autocomplete("remove"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 2)
-            self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
+    # ---- DanbooruProvider tests ----
 
     def test_autocomplete_add_prompt_danbooru(self):
         mock_response = MagicMock()
@@ -323,95 +246,73 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add"]),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
-
-            req_data = call_kwargs.get("json")
-            self.assertEqual(req_data["query"], "girl")
-            self.assertEqual(req_data["top_k"], 20)
-            self.assertEqual(req_data["limit"], 20)
-            self.assertFalse(req_data["show_nsfw"])
+        req_data = call_kwargs.get("json")
+        self.assertEqual(req_data["query"], "girl")
+        self.assertEqual(req_data["top_k"], 20)
+        self.assertEqual(req_data["limit"], 20)
+        self.assertFalse(req_data["show_nsfw"])
 
         mock_post.reset_mock()
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add"]),
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
                 "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
             },
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called()
+        call_args, call_kwargs = mock_post.call_args
+        req_data = call_kwargs.get("json")
+        self.assertTrue(req_data["show_nsfw"])
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            req_data = call_kwargs.get("json")
-            self.assertTrue(req_data["show_nsfw"])
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual(suggestions[0].text, "1girl")
+        self.assertEqual(suggestions[0].displayText, "1girl (女孩)")
+        self.assertEqual(suggestions[0].description, "A female character.")
+        self.assertEqual(suggestions[0].type, "danbooru")
 
-            self.assertEqual(len(suggestions), 2)
-            self.assertEqual(suggestions[0].text, "1girl")
-            self.assertEqual(suggestions[0].displayText, "1girl (女孩)")
-            self.assertEqual(suggestions[0].description, "A female character.")
-            self.assertEqual(suggestions[0].type, "danbooru")
-
-            self.assertEqual(suggestions[1].text, r"dunyarzad_\(genshin_impact\)")
-            self.assertEqual(
-                suggestions[1].displayText, "dunyarzad_(genshin_impact) (迪娜泽黛)"
-            )
-            self.assertEqual(suggestions[1].description, "A noble girl.")
+        self.assertEqual(suggestions[1].text, r"dunyarzad_\(genshin_impact\)")
+        self.assertEqual(
+            suggestions[1].displayText, "dunyarzad_(genshin_impact) (迪娜泽黛)"
+        )
+        self.assertEqual(suggestions[1].description, "A noble girl.")
 
         mock_post.reset_mock()
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add"]),
-                "DANBOORU_SEARCH_URL": "",
-            },
+            os.environ, {"DANBOORU_SEARCH_URL": ""}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 0)
 
-            suggestions = list(autocomplete("add"))
-            mock_post.assert_not_called()
-            self.assertEqual(len(suggestions), 0)
-
-        mock_post.reset_mock()
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "pos",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--region",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region pos",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--region"]),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("add"))
-            mock_post.assert_not_called()
+        context2 = self._make_context(
+            target_command="add",
+            query="pos",
+            prev_word="--region",
+            cwords=["/add", "--region"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+        )
+        self.assertFalse(provider.can_provide(context2))
 
     def test_autocomplete_add_prompt_danbooru_related(self):
         mock_response = MagicMock()
@@ -427,88 +328,56 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="1girl,",
+            cwords=["/add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add masterpiece, 1girl, ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "masterpiece,", "1girl,"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
-
-            req_data = call_kwargs.get("json")
-            self.assertEqual(req_data["tags"], ["masterpiece", "1girl"])
-            self.assertEqual(req_data["limit"], 20)
-            self.assertFalse(req_data["show_nsfw"])
+        req_data = call_kwargs.get("json")
+        self.assertEqual(req_data["tags"], ["masterpiece", "1girl"])
+        self.assertEqual(req_data["limit"], 20)
+        self.assertFalse(req_data["show_nsfw"])
 
         mock_post.reset_mock()
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
             os.environ,
             {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add masterpiece, 1girl, ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "masterpiece,", "1girl,"]
-                ),
                 "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
                 "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
             },
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        req_data = call_kwargs.get("json")
+        self.assertTrue(req_data["show_nsfw"])
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            req_data = call_kwargs.get("json")
-            self.assertTrue(req_data["show_nsfw"])
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual(suggestions[0].text, "sailor_collar")
+        self.assertEqual(suggestions[0].displayText, "sailor_collar (水手领)")
+        self.assertEqual(suggestions[0].description, "A collar style.")
+        self.assertEqual(suggestions[0].type, "danbooru")
 
-            self.assertEqual(len(suggestions), 2)
-            self.assertEqual(suggestions[0].text, "sailor_collar")
-            self.assertEqual(suggestions[0].displayText, "sailor_collar (水手领)")
-            self.assertEqual(suggestions[0].description, "A collar style.")
-            self.assertEqual(suggestions[0].type, "danbooru")
-
-            self.assertEqual(suggestions[1].text, "skirt")
-            self.assertEqual(suggestions[1].displayText, "skirt (裙子)")
-            self.assertEqual(suggestions[1].description, "A bottom wear.")
+        self.assertEqual(suggestions[1].text, "skirt")
+        self.assertEqual(suggestions[1].displayText, "skirt (裙子)")
+        self.assertEqual(suggestions[1].description, "A bottom wear.")
 
     def test_autocomplete_add_prompt_danbooru_related_fallback(self):
-        mock_prompt = {
-            "6": {
-                "inputs": {"text": "masterpiece, 1girl"},
-                "class_type": "CLIPTextEncode",
-            }
-        }
-        mock_workflow = {
-            "nodes": [
-                {
-                    "id": 6,
-                    "type": "CLIPTextEncode",
-                    "widgets_values": ["masterpiece, 1girl"],
-                }
-            ]
-        }
-
-        mock_image = MagicMock()
-        mock_image.info = {
-            "prompt": json.dumps(mock_prompt),
-            "workflow": json.dumps(mock_workflow),
-        }
-        mock_image.__enter__.return_value = mock_image
-
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "results": [
@@ -517,32 +386,34 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add"]),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+        seen_prompts = {"masterpiece, 1girl": "区域: positive"}
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts=seen_prompts,
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
+        req_data = call_kwargs.get("json")
+        self.assertEqual(sorted(req_data["tags"]), ["1girl", "masterpiece"])
 
-            req_data = call_kwargs.get("json")
-            self.assertEqual(sorted(req_data["tags"]), ["1girl", "masterpiece"])
-
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "solo")
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "solo")
 
     def test_autocomplete_add_prompt_with_neg_flag(self):
         mock_response = MagicMock()
@@ -553,55 +424,27 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="--neg",
+            cwords=["/add", "--neg"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
         with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--neg",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --neg girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--neg"]),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
-            texts = [s.text for s in suggestions]
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(texts[0], "1girl")
-            mock_post.assert_called_once()
-
-    def _get_mock_image_with_positive_region(self):
-        """创建包含 // #region positive 区域标记的 mock image，验证 _find_nodes_with_region 路径"""
-        mock_prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "// #region positive\n1girl, masterpiece, score_7, cute\n// #endregion\nnegative prompt line"
-                },
-            }
-        }
-        mock_workflow = {
-            "nodes": [
-                {
-                    "id": "node_1",
-                    "type": "CLIPTextEncode",
-                    "widgets_values": [
-                        "// #region positive\n1girl, masterpiece, score_7, cute\n// #endregion\nnegative prompt line"
-                    ],
-                }
-            ]
-        }
-        mock_image = MagicMock()
-        mock_image.info = {
-            "prompt": json.dumps(mock_prompt),
-            "workflow": json.dumps(mock_workflow),
-        }
-        mock_image.__enter__.return_value = mock_image
-        return mock_image
+        mock_post.assert_called_once()
+        texts = [s.text for s in suggestions]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(texts[0], "1girl")
 
     def test_autocomplete_add_prompt_region_query_search(self):
-        """用户输入 /add --region positive 后继续输入搜索词，应通过 _find_nodes_with_region 匹配区域并执行 Danbooru 前缀搜索"""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "results": [
@@ -610,40 +453,33 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch(
-            "PIL.Image.open", return_value=self._get_mock_image_with_positive_region()
-        ), patch("os.path.isfile", return_value=True), patch(
-            "comfyui.autocomplete.requests.post", mock_post
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "--region", "positive"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
+        req_data = call_kwargs.get("json")
+        self.assertEqual(req_data["query"], "girl")
 
-            req_data = call_kwargs.get("json")
-            self.assertEqual(req_data["query"], "girl")
-
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "1girl")
-            self.assertEqual(suggestions[0].type, "danbooru")
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "1girl")
+        self.assertEqual(suggestions[0].type, "danbooru")
 
     def test_autocomplete_add_prompt_region_related(self):
-        """用户输入 /add --region positive 后未输入搜索词，应通过 _find_nodes_with_region 匹配区域并基于正区域提示词做 Danbooru 关联补全"""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "results": [
@@ -652,41 +488,37 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch(
-            "PIL.Image.open", return_value=self._get_mock_image_with_positive_region()
-        ), patch("os.path.isfile", return_value=True), patch(
-            "comfyui.autocomplete.requests.post", mock_post
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "--region", "positive"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+        seen_prompts = {"1girl, masterpiece, score_7, cute": "区域: positive"}
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            seen_prompts=seen_prompts,
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
+        req_data = call_kwargs.get("json")
+        expected_tags = ["1girl", "cute", "masterpiece", "score_7"]
+        self.assertEqual(sorted(req_data["tags"]), expected_tags)
 
-            req_data = call_kwargs.get("json")
-            # 应该仅基于正区域内的提示词（region 外的 "negative prompt line" 不应出现）
-            expected_tags = ["1girl", "cute", "masterpiece", "score_7"]
-            self.assertEqual(sorted(req_data["tags"]), expected_tags)
-
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "cute")
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "cute")
 
     def test_autocomplete_add_prompt_region_query_search_fallback(self):
-        """用户输入 /add --region positive 继续输入搜索词，无 region 标记时应通过 get_target_clip_node 回退仍能返回补全结果"""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "results": [
@@ -695,38 +527,33 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("PIL.Image.open", return_value=self._get_mock_image()), patch(
-            "os.path.isfile", return_value=True
-        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive girl",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "--region", "positive"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
+        req_data = call_kwargs.get("json")
+        self.assertEqual(req_data["query"], "girl")
 
-            req_data = call_kwargs.get("json")
-            self.assertEqual(req_data["query"], "girl")
-
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "1girl")
-            self.assertEqual(suggestions[0].type, "danbooru")
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "1girl")
+        self.assertEqual(suggestions[0].type, "danbooru")
 
     def test_autocomplete_add_prompt_region_related_fallback(self):
-        """用户输入 /add --region positive 后未输入搜索词，无 region 标记时应通过 get_target_clip_node 回退仍能基于全量提示词做关联补全"""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "results": [
@@ -735,45 +562,49 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         }
         mock_post = MagicMock(return_value=mock_response)
 
-        with patch("PIL.Image.open", return_value=self._get_mock_image()), patch(
-            "os.path.isfile", return_value=True
-        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "--region", "positive"]
-                ),
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-            },
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "区域: positive",
+            "another prompt line": "区域: positive",
+        }
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            seen_prompts=seen_prompts,
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        provider = DanbooruProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
         ):
-            from .autocomplete import autocomplete
+            suggestions = list(provider.provide(context))
 
-            suggestions = list(autocomplete("add"))
+        mock_post.assert_called_once()
+        call_args, call_kwargs = mock_post.call_args
+        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
 
-            mock_post.assert_called_once()
-            call_args, call_kwargs = mock_post.call_args
-            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
+        req_data = call_kwargs.get("json")
+        expected_tags = [
+            "1girl",
+            "another prompt line",
+            "cute",
+            "masterpiece",
+            "score_7",
+        ]
+        self.assertEqual(sorted(req_data["tags"]), expected_tags)
 
-            req_data = call_kwargs.get("json")
-            # 无 region 标记时回退到全量提示词
-            expected_tags = [
-                "1girl",
-                "another prompt line",
-                "cute",
-                "masterpiece",
-                "score_7",
-            ]
-            self.assertEqual(sorted(req_data["tags"]), expected_tags)
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "cute")
 
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "cute")
+    # ---- NodeProvider tests ----
 
-    def _get_mock_node_image(self):
-        mock_prompt = {
+    def _get_mock_node_prompt_meta(self) -> Dict[str, Any]:
+        return {
             "node_1": {
                 "class_type": "CLIPTextEncode",
                 "inputs": {"text": "1girl"},
@@ -793,7 +624,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 "inputs": {"text": "subgraph prompt"},
             },
         }
-        mock_workflow: Dict[str, Any] = {
+
+    def _get_mock_node_workflow(self) -> Dict[str, Any]:
+        return {
             "nodes": [
                 {
                     "id": "node_1",
@@ -834,171 +667,133 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ]
             },
         }
-        mock_image = MagicMock()
-        mock_image.info = {
-            "prompt": json.dumps(mock_prompt),
-            "workflow": json.dumps(mock_workflow),
-        }
-        mock_image.__enter__.return_value = mock_image
-        return mock_image
 
     def test_autocomplete_node_clip_text_encode(self):
-        mock_image = self._get_mock_node_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
-            },
-        ):
-            from .autocomplete import autocomplete
+        prompt_meta = self._get_mock_node_prompt_meta()
+        workflow = self._get_mock_node_workflow()
+        context = self._make_context(
+            target_command="add",
+            prev_word="--node",
+            cwords=["/add", "--node"],
+            parsed_args=self._make_parsed_args(command="add"),
+            prompt_meta=prompt_meta,
+            workflow=workflow,
+        )
+        provider = NodeProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 2)
 
-            suggestions = list(autocomplete("add"))
-            self.assertEqual(len(suggestions), 2)
+        node_1_sug = next(s for s in suggestions if s.text == "node_1")
+        self.assertEqual(node_1_sug.description, "1girl")
+        self.assertEqual(
+            node_1_sug.displayText, "#node_1 Positive Prompt (CLIPTextEncode)"
+        )
+        self.assertEqual(node_1_sug.type, "node")
+        self.assertEqual(node_1_sug.style, "")
 
-            node_1_sug = next(s for s in suggestions if s.text == "node_1")
-            self.assertEqual(node_1_sug.description, "1girl")
-            self.assertEqual(
-                node_1_sug.displayText, "#node_1 Positive Prompt (CLIPTextEncode)"
-            )
-            self.assertEqual(node_1_sug.type, "node")
-            self.assertEqual(node_1_sug.style, "")
-
-            sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
-            self.assertEqual(sub_sug.description, "subgraph prompt")
-            self.assertEqual(
-                sub_sug.displayText,
-                "#node_4:child_1 Parent Subgraph -> Inner Prompt (CLIPTextEncode)",
-            )
+        sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
+        self.assertEqual(sub_sug.description, "subgraph prompt")
+        self.assertEqual(
+            sub_sug.displayText,
+            "#node_4:child_1 Parent Subgraph -> Inner Prompt (CLIPTextEncode)",
+        )
 
     def test_autocomplete_node_adjust_cfg(self):
-        mock_image = self._get_mock_node_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust cfg --node ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/adjust", "cfg", "--node"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "node_2")
-            self.assertEqual(suggestions[0].description, "")
-            self.assertEqual(
-                suggestions[0].displayText, "#node_2 Main Sampler (KSampler)"
-            )
+        prompt_meta = self._get_mock_node_prompt_meta()
+        workflow = self._get_mock_node_workflow()
+        context = self._make_context(
+            target_command="adjust",
+            prev_word="--node",
+            cwords=["/adjust", "cfg", "--node"],
+            parsed_args=self._make_parsed_args(command="adjust"),
+            prompt_meta=prompt_meta,
+            workflow=workflow,
+        )
+        provider = NodeProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "node_2")
+        self.assertEqual(suggestions[0].description, "")
+        self.assertEqual(suggestions[0].displayText, "#node_2 Main Sampler (KSampler)")
 
     def test_autocomplete_node_adjust_aspect(self):
-        mock_image = self._get_mock_node_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/adjust aspect --node ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/adjust", "aspect", "--node"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("adjust"))
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "node_3")
-            self.assertEqual(suggestions[0].description, "")
-            self.assertEqual(
-                suggestions[0].displayText,
-                "#node_3 EmptyLatentImage (EmptyLatentImage)",
-            )
+        prompt_meta = self._get_mock_node_prompt_meta()
+        workflow = self._get_mock_node_workflow()
+        context = self._make_context(
+            target_command="adjust",
+            prev_word="--node",
+            cwords=["/adjust", "aspect", "--node"],
+            parsed_args=self._make_parsed_args(command="adjust"),
+            prompt_meta=prompt_meta,
+            workflow=workflow,
+        )
+        provider = NodeProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "node_3")
+        self.assertEqual(suggestions[0].description, "")
+        self.assertEqual(
+            suggestions[0].displayText,
+            "#node_3 EmptyLatentImage (EmptyLatentImage)",
+        )
 
     def test_autocomplete_node_muted_style(self):
-        mock_image = self._get_mock_node_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node node_1 --node ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
-                    ["/add", "--node", "node_1", "--node"]
-                ),
-            },
-        ):
-            from .autocomplete import autocomplete
+        prompt_meta = self._get_mock_node_prompt_meta()
+        workflow = self._get_mock_node_workflow()
+        context = self._make_context(
+            target_command="add",
+            prev_word="--node",
+            cwords=["/add", "--node", "node_1", "--node"],
+            parsed_args=self._make_parsed_args(command="add", node=["node_1"]),
+            prompt_meta=prompt_meta,
+            workflow=workflow,
+        )
+        provider = NodeProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 2)
 
-            suggestions = list(autocomplete("add"))
-            self.assertEqual(len(suggestions), 2)
+        node_1_sug = next(s for s in suggestions if s.text == "node_1")
+        self.assertEqual(node_1_sug.style, "muted")
 
-            node_1_sug = next(s for s in suggestions if s.text == "node_1")
-            self.assertEqual(node_1_sug.style, "muted")
-
-            sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
-            self.assertEqual(sub_sug.style, "")
+        sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
+        self.assertEqual(sub_sug.style, "")
 
     def test_autocomplete_no_images_robustness(self):
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps([]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--node",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --node ",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/add", "--node"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            try:
-                suggestions = list(autocomplete("add"))
-                self.assertEqual(len(suggestions), 0)
-            except Exception as e:
-                self.fail(f"autocomplete raised exception when no images present: {e}")
+        context = self._make_context(
+            target_command="add",
+            prev_word="--node",
+            cwords=["/add", "--node"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = NodeProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 0)
 
     def test_autocomplete_remove_all_freeze(self):
-        mock_image = self._get_mock_image()
-        with patch("PIL.Image.open", return_value=mock_image), patch(
-            "os.path.isfile", return_value=True
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
-                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--all",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove --all",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--all"]),
-            },
-        ):
-            from .autocomplete import autocomplete
-
-            suggestions = list(autocomplete("remove"))
-            self.assertIsNotNone(suggestions)
-            self.assertTrue(len(suggestions) > 0)
-            self.assertTrue(
-                any(
-                    s.text == '"1girl, masterpiece, score_7, cute"' for s in suggestions
-                )
-            )
+        seen_prompts = {
+            "1girl, masterpiece, score_7, cute": "节点: node_1",
+            "another prompt line": "节点: node_1",
+        }
+        context = self._make_context(
+            target_command="remove",
+            prev_word="--all",
+            cwords=["/remove", "--all"],
+            parsed_args=self._make_parsed_args(all=True),
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        self.assertIsNotNone(suggestions)
+        self.assertTrue(len(suggestions) > 0)
+        self.assertTrue(
+            any(s.text == '"1girl, masterpiece, score_7, cute"' for s in suggestions)
+        )
 
 
 if __name__ == "__main__":

@@ -223,97 +223,77 @@ class TestComfyUIHook(unittest.TestCase):
     def test_main_no_images(self):
         from unittest.mock import patch
         from .__main__ import main as comfyui_main
+        from .config import ComfyUIConfig
         from typing import Any
 
         def exit_side_effect(code: Any = 0) -> None:
             raise SystemExit(code)
 
-        # 1. 验证 queue 指令没有输入图片，但在有服务端自动（非手动）触发标识时，以 0 退出且写入 KEEP
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
-                "IMAGE_FUNNEL_IMAGE_IDS": "[]",
-                "IMAGE_FUNNEL_ACTION": "dummy_action_path",
-                "IMAGE_FUNNEL_TRIGGER": "post_commit_session",
-            },
-        ), patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
+        # 1. queue command, no images, auto trigger → exit 0, write KEEP
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+        )
+        with patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch(
-            "comfyui.__main__._write_action_override"
-        ) as mock_override:
-
+        ), patch("comfyui.__main__._write_action_override") as mock_override:
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main()
+                comfyui_main(config)
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
-        # 2. 验证 add 指令没有输入图片，但在有服务端自动（非手动）触发标识时，以 0 退出且写入 KEEP
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
-                "IMAGE_FUNNEL_IMAGE_IDS": "[]",
-                "IMAGE_FUNNEL_ACTION": "dummy_action_path",
-                "IMAGE_FUNNEL_TRIGGER": "post_commit_session",
-            },
-        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
+        # 2. add command, no images, auto trigger → exit 0, write KEEP
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+        )
+        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch(
-            "comfyui.__main__._write_action_override"
-        ) as mock_override, patch(
+        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
             "comfyui.__main__.fetch_images", return_value=[]
         ):
-
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main()
+                comfyui_main(config)
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
-        # 3. 验证没有服务端触发标识（例如本地命令行直接运行）且没有图片时，直接抛出 ValueError 报错
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
-                "IMAGE_FUNNEL_IMAGE_IDS": "[]",
-                "IMAGE_FUNNEL_ACTION": "dummy_action_path",
-            },
-        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
+        # 3. No trigger → ValueError
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="",
+        )
+        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch(
-            "comfyui.__main__._write_action_override"
-        ) as mock_override, patch(
+        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
             "comfyui.__main__.fetch_images", return_value=[]
         ):
-
-            # 清除可能存在的 IMAGE_FUNNEL_TRIGGER 保证测试纯净
-            if "IMAGE_FUNNEL_TRIGGER" in os.environ:
-                del os.environ["IMAGE_FUNNEL_TRIGGER"]
-
-            with self.assertRaises(ValueError) as cm:
-                comfyui_main()
-            self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
+            # Clear any IMAGE_FUNNEL_TRIGGER from os.environ for safety
+            with patch.dict(os.environ, {}, clear=True):
+                with self.assertRaises(ValueError) as cm:
+                    comfyui_main(config)
+                self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
-        # 4. 验证虽然有服务端触发标识，但是为手动派发（如 note_dispatch）触发且没有图片时，依旧以 1 报错退出
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
-                "IMAGE_FUNNEL_IMAGE_IDS": "[]",
-                "IMAGE_FUNNEL_ACTION": "dummy_action_path",
-                "IMAGE_FUNNEL_TRIGGER": "note_dispatch",
-            },
-        ), patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
+        # 4. Manual trigger (note_dispatch), no images → exit 1
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="note_dispatch",
+        )
+        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch(
-            "comfyui.__main__._write_action_override"
-        ) as mock_override, patch(
+        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
             "comfyui.__main__.fetch_images", return_value=[]
         ):
-
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main()
+                comfyui_main(config)
             self.assertEqual(cm.exception.code, 1)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
