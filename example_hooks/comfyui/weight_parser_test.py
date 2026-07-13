@@ -155,6 +155,43 @@ class TestWeightParser(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_weights("+-0.3:0.1")
 
+    # --- parse_weights: 反向格式 (如 x:x-0.5) ---
+
+    def test_parse_x_range_reversed_default_step(self):
+        # x:x-0.5, current=1.0, step=0.1 → 1.0, 0.9, 0.8, 0.7, 0.6, 0.5
+        self.assertEqual(
+            parse_weights("x:x-0.5", current_value=1.0),
+            [1.0, 0.9, 0.8, 0.7, 0.6, 0.5],
+        )
+
+    def test_parse_x_range_reversed_with_step(self):
+        # x:x-0.4:0.2, current=1.0 → 1.0, 0.8, 0.6
+        self.assertEqual(
+            parse_weights("x:x-0.4:0.2", current_value=1.0),
+            [1.0, 0.8, 0.6],
+        )
+
+    def test_parse_x_reversed_negative_current(self):
+        # x:x+0.5, current=-0.5, step=0.1 → -0.5, -0.4, -0.3, -0.2, -0.1, 0.0
+        self.assertEqual(
+            parse_weights("x:x+0.5", current_value=-0.5),
+            [-0.5, -0.4, -0.3, -0.2, -0.1, 0.0],
+        )
+
+    def test_parse_absolute_range_reversed_default_step(self):
+        # 0.7:0.5, step=0.1 → 0.7, 0.6, 0.5
+        self.assertEqual(
+            parse_weights("0.7:0.5"),
+            [0.7, 0.6, 0.5],
+        )
+
+    def test_parse_absolute_range_reversed_with_step(self):
+        # 1.0:0.4:0.3 → 1.0, 0.7, 0.4
+        self.assertEqual(
+            parse_weights("1.0:0.4:0.3"),
+            [1.0, 0.7, 0.4],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

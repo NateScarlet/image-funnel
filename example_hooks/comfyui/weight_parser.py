@@ -29,16 +29,17 @@ def generate_range(
     if step == 0:
         raise ValueError("Step cannot be zero.")
 
+    # 自动修正步长方向：如果步长符号与起止方向不一致，反转步长
+    if (step > 0 and start > end) or (step < 0 and start < end):
+        step = -step
+
     weights: List[float] = []
     curr = start
-    if step > 0:
-        while curr <= end + (step * 0.01):
-            weights.append(round(curr, 4))
-            curr += step
-    else:
-        while curr >= end + (step * 0.01):
-            weights.append(round(curr, 4))
-            curr += step
+    while (step > 0 and curr <= end + (step * 0.01)) or (
+        step < 0 and curr >= end + (step * 0.01)
+    ):
+        weights.append(round(curr, 4))
+        curr += step
     if not weights:
         raise ValueError(f"No weights generated from range '{weight_str}'")
     return weights
