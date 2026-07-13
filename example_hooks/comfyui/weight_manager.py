@@ -105,8 +105,8 @@ class WeightManager:
 
     def modify_cfg_weights(
         self, weight: float, node_ids: Optional[List[str]] = None
-    ) -> None:
-        """修改 KSampler 的 CFG 权重，直接修改原对象。"""
+    ) -> int:
+        """修改 KSampler 的 CFG 权重，返回实际修改的 source 节点数。"""
         prompt = self._accessor.prompt
         cfg_sources: List[Tuple[str, str]] = []
 
@@ -121,9 +121,11 @@ class WeightManager:
                     src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
                     cfg_sources.append((src_nid, src_key))
 
+        modified = 0
         for src_nid, src_key in cfg_sources:
             if src_nid in prompt:
                 prompt[src_nid]["inputs"][src_key] = weight
+                modified += 1
 
         for node_info in self._accessor.nodes_cache.values():
             if node_ids is not None and node_info.node_id not in node_ids:
@@ -147,6 +149,8 @@ class WeightManager:
                         wv = node_info.widgets_values
                         if wv and isinstance(wv[0], (int, float)):
                             wv[0] = weight
+
+        return modified
 
     # #endregion
 
@@ -188,8 +192,8 @@ class WeightManager:
         target_width: int,
         target_height: int,
         node_ids: Optional[List[str]] = None,
-    ) -> None:
-        """修改指定包含 width 和 height 的节点的长宽比，直接修改原对象。"""
+    ) -> int:
+        """修改指定包含 width 和 height 的节点的长宽比，返回实际修改的 source 节点数。"""
         prompt = self._accessor.prompt
         sources: List[Tuple[str, Tuple[str, str], Tuple[str, str]]] = []
         for nid, node_info in self._accessor.nodes_cache.items():
@@ -200,11 +204,14 @@ class WeightManager:
                 h_nid, h_key = find_terminal_input(prompt, nid, "height")
                 sources.append((nid, (w_nid, w_key), (h_nid, h_key)))
 
+        modified = 0
         for nid, (w_nid, w_key), (h_nid, h_key) in sources:
             if w_nid in prompt:
                 prompt[w_nid]["inputs"][w_key] = target_width
+                modified += 1
             if h_nid in prompt:
                 prompt[h_nid]["inputs"][h_key] = target_height
+                modified += 1
 
         for nid, (w_nid, w_key), (h_nid, h_key) in sources:
             node_info = self._accessor.nodes_cache.get(nid)
@@ -226,5 +233,7 @@ class WeightManager:
                             wv[0] = target_width
                         elif cached_info.node_id == h_nid:
                             wv[0] = target_height
+
+        return modified
 
     # #endregion

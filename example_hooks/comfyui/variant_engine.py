@@ -90,9 +90,13 @@ def generate_cfg_variants(
 
     first_weights = list(node_weights_map.values())[0]
     for vi in range(len(first_weights)):
+        any_modified = False
         for nid in node_weights_map:
-            weight_manager.modify_cfg_weights(node_weights_map[nid][vi], [nid])
-        yield
+            count = weight_manager.modify_cfg_weights(node_weights_map[nid][vi], [nid])
+            if count > 0:
+                any_modified = True
+        if any_modified:
+            yield
 
 
 def generate_lora_variants(
@@ -284,10 +288,14 @@ def generate_aspect_variants(
 
     first_variants = list(node_variants_map.values())[0]
     for vi in range(len(first_variants)):
+        any_modified = False
         for nid, variants in node_variants_map.items():
             w_target, h_target = variants[vi]
-            weight_manager.modify_aspect_ratio(w_target, h_target, [nid])
-        yield
+            count = weight_manager.modify_aspect_ratio(w_target, h_target, [nid])
+            if count > 0:
+                any_modified = True
+        if any_modified:
+            yield
 
 
 def _find_closest_ratio_index(ratio: float) -> Optional[int]:

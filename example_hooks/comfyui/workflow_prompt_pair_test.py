@@ -925,6 +925,41 @@ class TestCfgWeight(unittest.TestCase):
         )
         self.assertEqual(len(variants), 3)
 
+    def test_modify_cfg_weights_returns_count(self):
+        """单个 KSampler 的 cfg source 存在时返回 1"""
+        prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "KSampler",
+                    "widgets_values": [123, "fixed", 20, 7.0],
+                }
+            ],
+        }
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        count = mgr.modify_cfg_weights(9.0)
+        self.assertEqual(count, 1)
+
+    def test_modify_cfg_weights_returns_count_multi(self):
+        """多个 KSampler 全部修改成功时返回对应数量"""
+        prompt = {
+            "1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}},
+            "2": {"class_type": "KSampler", "inputs": {"cfg": 5.0}},
+        }
+        workflow = {"nodes": []}
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        count = mgr.modify_cfg_weights(9.0)
+        self.assertEqual(count, 2)
+
+    def test_modify_cfg_weights_returns_zero_when_no_ksampler(self):
+        """没有 KSampler 节点时返回 0"""
+        prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
+        workflow = {"nodes": []}
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        count = mgr.modify_cfg_weights(9.0)
+        self.assertEqual(count, 0)
+
 
 # #endregion
 
@@ -2130,9 +2165,52 @@ class TestAspectAdjustment(unittest.TestCase):
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], 680)
         self.assertEqual(workflow["nodes"][2]["widgets_values"][0], 384)
 
+    def test_modify_aspect_ratio_returns_count(self):
+        """单个 latent 节点的 w/h source 都存在时返回 2"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [512, 512, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        mgr = WeightManager(pair)
+        count = mgr.modify_aspect_ratio(680, 384)
+        self.assertEqual(count, 2)
+
+    def test_modify_aspect_ratio_returns_zero_when_no_latent(self):
+        """没有含 w/h 的 latent 节点时返回 0"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "KSampler",
+                    "widgets_values": [123, "fixed", 20, 7.0],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "KSampler",
+                "inputs": {"seed": 123, "steps": 20, "cfg": 7.0},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        mgr = WeightManager(pair)
+        count = mgr.modify_aspect_ratio(680, 384)
+        self.assertEqual(count, 0)
+
 
 # #endregion
-
 
 # #endregion
 
