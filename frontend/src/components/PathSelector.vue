@@ -36,6 +36,7 @@
 
     <div class="relative">
       <input
+        ref="inputEl"
         v-model="targetDirInput"
         type="text"
         :placeholder="
@@ -55,81 +56,85 @@
       />
 
       <!-- 联想建议气泡列表 -->
-      <div
-        v-if="showSuggestions && suggestions.length > 0"
-        class="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-xl bg-primary-800 border border-primary-700 shadow-2xl py-1 divide-y divide-primary-700/40"
-      >
-        <button
-          v-for="(item, idx) in suggestions"
-          :key="item.id"
-          type="button"
-          class="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors hover:bg-primary-700/60 cursor-pointer text-primary-200 group"
-          :class="{
-            'bg-primary-700/80 text-white': idx === activeSuggestionIndex,
-          }"
-          @mousedown="selectSuggestion(item)"
+      <Teleport to="body">
+        <div
+          v-if="showSuggestions && suggestions.length > 0"
+          ref="floatingEl"
+          :style="floatingStyles"
+          class="z-[100] max-h-56 overflow-y-auto rounded-xl bg-primary-800 border border-primary-700 shadow-2xl py-1 divide-y divide-primary-700/40"
         >
-          <!-- 左侧：封面/文件夹图标 -->
-          <div
-            class="relative w-10 h-10 rounded-lg overflow-hidden bg-primary-900/60 border border-primary-700 shrink-0 flex items-center justify-center"
+          <button
+            v-for="(item, idx) in suggestions"
+            :key="item.id"
+            type="button"
+            class="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors hover:bg-primary-700/60 cursor-pointer text-primary-200 group"
+            :class="{
+              'bg-primary-700/80 text-white': idx === activeSuggestionIndex,
+            }"
+            @mousedown="selectSuggestion(item)"
           >
-            <template v-if="getCachedStats(item.id)?.latestImage">
-              <img
-                :src="getCachedStats(item.id)!.latestImage!.url256"
-                class="w-full h-full object-cover"
-                alt="Cover"
-              />
-            </template>
-            <template v-else>
-              <!-- 默认文件夹 SVG 图标 -->
-              <svg
-                class="w-5 h-5 text-primary-400 group-hover:text-secondary-400 transition-colors"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  d="M19,20H5V8H19M19,6H12L10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H19A2,2 0 0,0 21,18V8A2,2 0 0,0 19,6Z"
-                  fill="currentColor"
+            <!-- 左侧：封面/文件夹图标 -->
+            <div
+              class="relative w-10 h-10 rounded-lg overflow-hidden bg-primary-900/60 border border-primary-700 shrink-0 flex items-center justify-center"
+            >
+              <template v-if="getCachedStats(item.id)?.latestImage">
+                <img
+                  :src="getCachedStats(item.id)!.latestImage!.url256"
+                  class="w-full h-full object-cover"
+                  alt="Cover"
                 />
-              </svg>
-            </template>
-
-            <!-- 如果正在加载，且数据还没返回，在图标上加一个加载小圆圈 -->
-            <div
-              v-if="isStatsLoading(item.id) && !getCachedStats(item.id)"
-              class="absolute inset-0 bg-primary-800/80 flex items-center justify-center"
-            >
-              <div
-                class="w-4 h-4 rounded-full border-2 border-secondary-500 border-t-transparent animate-spin"
-              ></div>
-            </div>
-          </div>
-
-          <!-- 中右侧：路径与统计信息 -->
-          <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-            <div
-              class="truncate text-xs font-medium text-primary-100 group-hover:text-white transition-colors"
-            >
-              {{ item.relPath }}
-            </div>
-            <div class="flex items-center gap-2 mt-0.5 text-xs">
-              <template v-if="getCachedStats(item.id)">
-                <span class="text-primary-300">
-                  {{ getCachedStats(item.id)!.imageCount }} 张图片
-                </span>
-                <span
-                  v-if="getCachedStats(item.id)!.subdirectoryCount > 0"
-                  class="text-primary-400"
-                >
-                  • {{ getCachedStats(item.id)!.subdirectoryCount }} 个子目录
-                </span>
               </template>
               <template v-else>
-                <span class="text-primary-500 animate-pulse">计算中...</span>
+                <!-- 默认文件夹 SVG 图标 -->
+                <svg
+                  class="w-5 h-5 text-primary-400 group-hover:text-secondary-400 transition-colors"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M19,20H5V8H19M19,6H12L10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H19A2,2 0 0,0 21,18V8A2,2 0 0,0 19,6Z"
+                    fill="currentColor"
+                  />
+                </svg>
               </template>
+
+              <!-- 如果正在加载，且数据还没返回，在图标上加一个加载小圆圈 -->
+              <div
+                v-if="isStatsLoading(item.id) && !getCachedStats(item.id)"
+                class="absolute inset-0 bg-primary-800/80 flex items-center justify-center"
+              >
+                <div
+                  class="w-4 h-4 rounded-full border-2 border-secondary-500 border-t-transparent animate-spin"
+                ></div>
+              </div>
             </div>
-          </div>
-        </button>
-      </div>
+
+            <!-- 中右侧：路径与统计信息 -->
+            <div class="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+              <div
+                class="truncate text-xs font-medium text-primary-100 group-hover:text-white transition-colors"
+              >
+                {{ item.relPath }}
+              </div>
+              <div class="flex items-center gap-2 mt-0.5 text-xs">
+                <template v-if="getCachedStats(item.id)">
+                  <span class="text-primary-300">
+                    {{ getCachedStats(item.id)!.imageCount }} 张图片
+                  </span>
+                  <span
+                    v-if="getCachedStats(item.id)!.subdirectoryCount > 0"
+                    class="text-primary-400"
+                  >
+                    • {{ getCachedStats(item.id)!.subdirectoryCount }} 个子目录
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="text-primary-500 animate-pulse">计算中...</span>
+                </template>
+              </div>
+            </div>
+          </button>
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -137,6 +142,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
 import { debounce } from "es-toolkit";
+import { useFloating, offset, flip, shift, autoUpdate, size } from "@floating-ui/vue";
 import useQuery from "@/graphql/utils/useQuery";
 import { SuggestDirectoriesDocument, type PathInput } from "@/graphql/generated";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
@@ -158,6 +164,30 @@ const emit = defineEmits<{
 const showSuggestions = ref(false);
 const activeSuggestionIndex = ref(-1);
 const isFocused = ref(false);
+
+// 定位相关的 DOM 引用与 useFloating 初始化
+const inputEl = ref<HTMLInputElement | null>(null);
+const floatingEl = ref<HTMLElement | null>(null);
+
+const { floatingStyles } = useFloating(inputEl, floatingEl, {
+  placement: "bottom-start",
+  strategy: "fixed",
+  whileElementsMounted: autoUpdate,
+  middleware: [
+    offset({ mainAxis: 4 }),
+    flip({
+      fallbackPlacements: ["top-start", "bottom-start"],
+    }),
+    shift(),
+    size({
+      apply({ rects, elements }) {
+        Object.assign(elements.floating.style, {
+          width: `${rects.reference.width}px`,
+        });
+      },
+    }),
+  ],
+});
 
 const { getCachedStats, refetchStats, isStatsLoading } = useDirectoryStats();
 
