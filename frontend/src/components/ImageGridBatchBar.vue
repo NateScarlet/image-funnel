@@ -46,69 +46,58 @@
         <!-- 右侧：批量动作 -->
         <div class="flex flex-wrap items-center justify-end gap-3">
           <!-- 批量评分 -->
-          <div class="relative group/rating">
-            <button
-              class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
-              :class="[
-                !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
-                activeDropdown === 'rating'
-                  ? 'border-secondary-500/50 text-white bg-primary-700'
-                  : '',
-              ]"
-              @click="toggleDropdown('rating', $event)"
-            >
-              <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24">
-                <path :d="mdiStar" fill="currentColor" />
-              </svg>
-              <span>评星</span>
-            </button>
-
-            <!-- 评分悬浮窗 -->
-            <div
-              v-if="bulkOps.selectedFilterBy.value"
-              class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl flex items-center gap-1 z-60 w-max"
-              :class="[
-                activeDropdown === 'rating'
-                  ? 'visible opacity-100'
-                  : 'invisible group-hover/rating:visible opacity-0 group-hover/rating:opacity-100',
-              ]"
-              @click.stop
-            >
-              <RatingSelector v-model="bulkRating" />
-            </div>
-          </div>
+          <AppDropdown
+            placement="top-end"
+            content-class="w-max flex items-center gap-1"
+            :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
+          >
+            <template #trigger="{ isOpen, toggle }">
+              <button
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
+                :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
+                :class="[
+                  !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
+                  isOpen ? 'border-secondary-500/50 text-white bg-primary-700' : '',
+                ]"
+                @click="toggle"
+              >
+                <svg class="w-4 h-4 text-yellow-400" viewBox="0 0 24 24">
+                  <path :d="mdiStar" fill="currentColor" />
+                </svg>
+                <span>评星</span>
+              </button>
+            </template>
+            <template #content="{ close }">
+              <RatingSelector
+                :modelValue="bulkRating"
+                @update:modelValue="val => handleBulkSetRating(val, close)"
+              />
+            </template>
+          </AppDropdown>
 
           <!-- 批量标签 -->
-          <div class="relative group/label">
-            <button
-              class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
-              :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
-              :class="[
-                !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
-                activeDropdown === 'label'
-                  ? 'border-secondary-500/50 text-white bg-primary-700'
-                  : '',
-              ]"
-              @click="toggleDropdown('label', $event)"
-            >
-              <span
-                class="w-3 h-3 rounded-full bg-linear-to-tr from-sky-400 via-green-400 to-yellow-400"
-              ></span>
-              <span>标签</span>
-            </button>
-
-            <!-- 标签悬浮窗 -->
-            <div
-              v-if="bulkOps.selectedFilterBy.value"
-              class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-max"
-              :class="[
-                activeDropdown === 'label'
-                  ? 'visible opacity-100'
-                  : 'invisible group-hover/label:visible opacity-0 group-hover/label:opacity-100',
-              ]"
-              @click.stop
-            >
+          <AppDropdown
+            placement="top-end"
+            content-class="w-max"
+            :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
+          >
+            <template #trigger="{ isOpen, toggle }">
+              <button
+                class="px-3 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer hover:border-secondary-500/50 select-none"
+                :disabled="!bulkOps.selectedFilterBy.value || bulkOps.isUpdating.value"
+                :class="[
+                  !bulkOps.selectedFilterBy.value ? 'opacity-40 cursor-not-allowed' : '',
+                  isOpen ? 'border-secondary-500/50 text-white bg-primary-700' : '',
+                ]"
+                @click="toggle"
+              >
+                <span
+                  class="w-3 h-3 rounded-full bg-linear-to-tr from-sky-400 via-green-400 to-yellow-400"
+                ></span>
+                <span>标签</span>
+              </button>
+            </template>
+            <template #content="{ close }">
               <div class="flex items-center gap-2">
                 <button
                   v-for="(colorHex, colorName) in PRESET_COLORS"
@@ -116,18 +105,18 @@
                   class="w-6 h-6 rounded-full transition-all border border-white/20 hover:scale-120 cursor-pointer relative"
                   :style="{ backgroundColor: colorHex }"
                   :title="colorName"
-                  @click="handleBulkSetLabel(colorName)"
+                  @click="handleBulkSetLabel(colorName, close)"
                 ></button>
                 <div class="w-px h-5 bg-primary-700 mx-1"></div>
                 <button
                   class="px-2 py-1 text-xs hover:bg-primary-800 border border-primary-700/60 hover:text-white rounded-lg text-primary-300 transition-colors cursor-pointer select-none"
-                  @click="handleBulkSetLabel('')"
+                  @click="handleBulkSetLabel('', close)"
                 >
                   清除
                 </button>
               </div>
-            </div>
-          </div>
+            </template>
+          </AppDropdown>
 
           <!-- 批量移动 -->
           <button
@@ -167,50 +156,44 @@
           </button>
 
           <!-- 批量动作 -->
-          <div v-if="dispatchableHooks.length > 0" class="relative group/hook">
-            <button
-              class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
-              :disabled="!bulkOps.selectedFilterBy.value || isBulkDispatching"
-              :class="[
-                !bulkOps.selectedFilterBy.value || isBulkDispatching
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'cursor-pointer hover:border-secondary-500/50',
-                activeDropdown === 'hook'
-                  ? 'border-secondary-500/50 text-white bg-primary-700'
-                  : '',
-              ]"
-              @click="toggleDropdown('hook', $event)"
-            >
-              <svg
-                v-if="isBulkDispatching"
-                class="w-4 h-4 text-secondary-400 animate-spin"
-                viewBox="0 0 24 24"
+          <AppDropdown
+            v-if="dispatchableHooks.length > 0"
+            placement="top-end"
+            content-class="w-52 flex flex-col gap-1 text-left"
+            :disabled="!bulkOps.selectedFilterBy.value || isBulkDispatching"
+          >
+            <template #trigger="{ isOpen, toggle }">
+              <button
+                class="px-4 h-9 text-xs font-semibold bg-primary-800 hover:bg-primary-700 border border-primary-700/80 text-primary-200 rounded-xl transition-all flex items-center gap-2 select-none"
+                :disabled="!bulkOps.selectedFilterBy.value || isBulkDispatching"
+                :class="[
+                  !bulkOps.selectedFilterBy.value || isBulkDispatching
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'cursor-pointer hover:border-secondary-500/50',
+                  isOpen ? 'border-secondary-500/50 text-white bg-primary-700' : '',
+                ]"
+                @click="toggle"
               >
-                <path
-                  :d="mdiLoading"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="3"
-                  stroke-linecap="round"
-                />
-              </svg>
-              <svg v-else class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
-                <path :d="mdiPlayOutline" fill="currentColor" />
-              </svg>
-              <span>动作</span>
-            </button>
-
-            <!-- 动作悬浮窗 -->
-            <div
-              v-if="bulkOps.selectedFilterBy.value"
-              class="absolute bottom-full right-0 mb-2 transition-all duration-200 bg-primary-900/95 backdrop-blur-md border border-primary-700/60 p-2 rounded-xl shadow-xl z-60 w-52 flex flex-col gap-1 text-left"
-              :class="[
-                activeDropdown === 'hook'
-                  ? 'visible opacity-100'
-                  : 'invisible group-hover/hook:visible opacity-0 group-hover/hook:opacity-100',
-              ]"
-              @click.stop
-            >
+                <svg
+                  v-if="isBulkDispatching"
+                  class="w-4 h-4 text-secondary-400 animate-spin"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    :d="mdiLoading"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <svg v-else class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
+                  <path :d="mdiPlayOutline" fill="currentColor" />
+                </svg>
+                <span>动作</span>
+              </button>
+            </template>
+            <template #content="{ close }">
               <div
                 class="text-xs font-bold text-primary-400 tracking-wider uppercase select-none px-2 py-1"
               >
@@ -221,7 +204,7 @@
                 :key="hook.id"
                 class="px-2 py-1 text-xs text-left text-primary-200 hover:text-white hover:bg-primary-800 rounded-lg transition-colors flex items-center justify-between cursor-pointer select-none"
                 :title="hook.description || hook.name"
-                @click="handleBulkDispatch(hook.id, hook.name)"
+                @click="handleBulkDispatch(hook.id, hook.name, close)"
               >
                 <span class="truncate pr-2">{{ hook.name }}</span>
                 <svg
@@ -232,8 +215,8 @@
                   <path :d="mdiPlayOutline" fill="currentColor" />
                 </svg>
               </button>
-            </div>
-          </div>
+            </template>
+          </AppDropdown>
 
           <div class="h-5 w-px bg-primary-700"></div>
 
@@ -254,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { computed } from "vue";
 import {
   mdiStar,
   mdiFolderMove,
@@ -265,8 +248,8 @@ import {
 } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingSelector from "./RatingSelector.vue";
+import AppDropdown from "./AppDropdown.vue";
 import useImageHooks from "@/composables/useImageHooks";
-import useEventListeners from "@/composables/useEventListeners";
 import type { ImageFragment, ImageFiltersInput } from "@/graphql/generated";
 import type { Ref, ComputedRef } from "vue";
 
@@ -295,65 +278,36 @@ defineEmits<{
   move: [];
 }>();
 
-// #region 下拉菜单管理
-const activeDropdown = ref<"rating" | "label" | "hook" | null>(null);
-
-function toggleDropdown(menu: "rating" | "label" | "hook", event: Event) {
-  event.stopPropagation();
-  if (activeDropdown.value === menu) {
-    activeDropdown.value = null;
-  } else {
-    activeDropdown.value = menu;
-  }
-}
-
-function closeDropdowns() {
-  activeDropdown.value = null;
-}
-
-useEventListeners(document, ({ on }) => {
-  on("click", closeDropdowns);
-});
-
-watch([() => props.bulkOps.isBulkMode.value, props.bulkOps.selectedFilterBy], () => {
-  if (!props.bulkOps.isBulkMode.value || !props.bulkOps.selectedFilterBy.value) {
-    closeDropdowns();
-  }
-});
-// #endregion
-
 // #region 批量评分 computed
-const bulkRating = computed<number>({
-  get() {
-    const images = props.bulkOps.selectedImages.value;
-    if (images.length === 0) return 0;
-    const firstImg = images[0];
-    const rating = firstImg.currentRating || 0;
-    const allSame = images.every((img) => (img.currentRating || 0) === rating);
-    return allSame ? rating : 0;
-  },
-  set(val) {
-    if (typeof val === "number") {
-      void handleBulkSetRating(val);
-    }
-  },
+const bulkRating = computed<number>(() => {
+  const images = props.bulkOps.selectedImages.value;
+  if (images.length === 0) return 0;
+  const firstImg = images[0];
+  const rating = firstImg.currentRating || 0;
+  const allSame = images.every((img) => (img.currentRating || 0) === rating);
+  return allSame ? rating : 0;
 });
 
-async function handleBulkSetRating(rating: number) {
-  await props.bulkOps.setRating(rating);
-  closeDropdowns();
+async function handleBulkSetRating(
+  rating: number | null | readonly number[] | undefined,
+  closeDropdown: () => void
+) {
+  if (typeof rating === "number") {
+    await props.bulkOps.setRating(rating);
+    closeDropdown();
+  }
 }
 
-async function handleBulkSetLabel(label: string) {
+async function handleBulkSetLabel(label: string, closeDropdown: () => void) {
   await props.bulkOps.setLabel(label);
-  closeDropdowns();
+  closeDropdown();
 }
 
-async function handleBulkDispatch(hookId: string, hookName: string) {
+async function handleBulkDispatch(hookId: string, hookName: string, closeDropdown: () => void) {
   const filterBy = props.bulkOps.selectedFilterBy.value;
   if (!filterBy) return;
   await dispatch(hookId, hookName, filterBy);
-  closeDropdowns();
+  closeDropdown();
 }
 // #endregion
 
