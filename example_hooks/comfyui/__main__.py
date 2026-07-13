@@ -112,7 +112,7 @@ def get_relative_output_dir(
     return rel_dir
 
 
-def extract_region_names_from_workflows(
+def extract_region_names(
     workflows: Iterable[Dict[str, Any]],
 ) -> Iterator[str]:
     """从已解析的 workflow 数据中扫描区域标记，逐个 yield 区域名称。"""
@@ -133,20 +133,7 @@ def extract_region_names_from_workflows(
                         yield name
 
 
-def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
-    """从图片文件元数据中扫描区域标记（向后兼容包装）。"""
-    workflows: List[Dict[str, Any]] = []
-    for path in image_paths:
-        if not os.path.isfile(path):
-            continue
-        with Image.open(path) as img:
-            workflow_str = img.info.get("workflow")
-            if workflow_str:
-                workflows.append(json.loads(workflow_str))
-    yield from extract_region_names_from_workflows(workflows)
-
-
-def extract_lora_names_from_prompts(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
+def extract_lora_names(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
     """从已解析的 prompt 元数据中提取所有 lora 文件名（不含扩展名），逐个 yield。"""
     seen: Set[str] = set()
     for prompt_data in prompts:
@@ -155,19 +142,6 @@ def extract_lora_names_from_prompts(prompts: Iterable[Dict[str, Any]]) -> Iterat
             if name_no_ext not in seen:
                 seen.add(name_no_ext)
                 yield name_no_ext
-
-
-def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
-    """从图片文件的 prompt 元数据中提取 lora 文件名（向后兼容包装）。"""
-    prompts: List[Dict[str, Any]] = []
-    for path in image_paths:
-        if not os.path.isfile(path):
-            continue
-        with Image.open(path) as img:
-            prompt_str = img.info.get("prompt")
-            if prompt_str:
-                prompts.append(json.loads(prompt_str))
-    yield from extract_lora_names_from_prompts(prompts)
 
 
 def main() -> None:
