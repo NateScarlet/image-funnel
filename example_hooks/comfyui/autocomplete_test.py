@@ -764,7 +764,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
             self.assertEqual(sub_sug.style, "")
 
-    def test_autocomplete_samples_fallback_robustness(self):
+    def test_autocomplete_no_images_robustness(self):
         with patch.dict(
             os.environ,
             {
@@ -779,13 +779,28 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
             try:
                 suggestions = list(autocomplete("add"))
-                for sug in suggestions:
-                    self.assertIsInstance(sug.text, str)
-                    self.assertIsInstance(sug.displayText, str)
-                    self.assertIsInstance(sug.description, str)
-                    self.assertEqual(sug.type, "node")
+                self.assertEqual(len(suggestions), 0)
             except Exception as e:
-                self.fail(f"autocomplete raised exception on samples fallback: {e}")
+                self.fail(f"autocomplete raised exception when no images present: {e}")
+
+    def test_autocomplete_remove_all_freeze(self):
+        mock_image = self._get_mock_image()
+        with patch("PIL.Image.open", return_value=mock_image), patch(
+            "os.path.isfile", return_value=True
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "-all",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove -all",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "-all"]),
+            },
+        ):
+            from .autocomplete import autocomplete
+
+            suggestions = list(autocomplete("remove"))
+            self.assertIsNotNone(suggestions)
 
 
 if __name__ == "__main__":

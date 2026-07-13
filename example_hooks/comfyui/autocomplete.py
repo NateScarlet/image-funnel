@@ -234,14 +234,16 @@ class AutocompleteContext:
         image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
         try:
             self.image_paths: List[str] = json.loads(image_paths_str)
-        except Exception:
-            self.image_paths = []
+        except Exception as e:
+            _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
+            raise
 
         cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
         try:
             self.cwords: List[str] = json.loads(cwords_str)
-        except Exception:
-            self.cwords = []
+        except Exception as e:
+            _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
+            raise
 
         self.cleaned_cwords: List[str] = [
             w for w in self.cwords if not (w.startswith("<") and w.endswith(">"))
@@ -309,7 +311,7 @@ class AutocompleteContext:
         try:
             parser = get_parser()
             parsed_args, _ = parser.parse_known_args(args_to_parse)
-        except (Exception, SystemExit):
+        except SystemExit:
             parsed_args = None
 
         if self.is_adjust_prompt_cmd and parsed_args:
@@ -365,29 +367,6 @@ class AutocompleteContext:
                         break
             except Exception:
                 continue
-
-        # 如果还是没有加载到，尝试从 example_hooks/samples 目录下的样本图片加载
-        if not (workflow and prompt_meta):
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            samples_dir = os.path.join(script_dir, "samples")
-            if os.path.isdir(samples_dir):
-                try:
-                    for filename in os.listdir(samples_dir):
-                        if filename.lower().endswith(".png"):
-                            path = os.path.join(samples_dir, filename)
-                            try:
-                                with Image.open(path) as img:
-                                    p_str = img.info.get("prompt")
-                                    w_str = img.info.get("workflow")
-                                    if p_str and w_str:
-                                        prompt_meta = json.loads(p_str)
-                                        workflow = json.loads(w_str)
-                                        break
-                            except Exception:
-                                continue
-                except Exception:
-                    pass
-
         self._workflow = workflow
         self._prompt_meta = prompt_meta
 
@@ -408,26 +387,6 @@ class AutocompleteContext:
             if isinstance(nodes_raw, list)
             else cast(List[str], [])
         )
-
-        # 加载第一张有效图片的 workflow 和 prompt
-        workflow = None
-        prompt_meta = None
-        for path in self.image_paths:
-            if not os.path.isfile(path):
-                continue
-            try:
-                with Image.open(path) as img:
-                    p_str = img.info.get("prompt")
-                    w_str = img.info.get("workflow")
-                    if p_str and w_str:
-                        prompt_meta = json.loads(p_str)
-                        workflow = json.loads(w_str)
-                        break
-            except Exception:
-                continue
-
-        if not (workflow and prompt_meta):
-            return
 
         pair = WorkflowPromptPair(workflow, prompt_meta)
         fragments_to_process: List[Tuple[PromptFragment, str]] = []
