@@ -1,12 +1,6 @@
 import unittest
 import os
 
-# 允许直接在此目录下运行，也可以在项目根目录下运行
-import sys
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
 
 from .weight_parser import parse_weights, eval_part, generate_range, is_relative
 

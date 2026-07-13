@@ -1,10 +1,3 @@
-# /// script
-# dependencies = [
-#   "requests",
-#   "Pillow",
-# ]
-# ///
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
@@ -14,9 +7,6 @@ import unittest
 import json
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 class TestComfyUIAutocomplete(unittest.TestCase):
 
