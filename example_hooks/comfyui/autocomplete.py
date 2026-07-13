@@ -152,7 +152,7 @@ def _fetch_danbooru_suggestions(
                 description=desc,
                 type="danbooru",
             )
-    except Exception as e:
+    except requests.RequestException as e:
         _LOGGER.warning("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
 
 
@@ -203,7 +203,7 @@ def _fetch_danbooru_related(
                 description=desc,
                 type="danbooru",
             )
-    except Exception as e:
+    except requests.RequestException as e:
         _LOGGER.warning("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
 
 
@@ -218,14 +218,14 @@ class AutocompleteContext:
         image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
         try:
             self.image_paths: List[str] = json.loads(image_paths_str)
-        except Exception as e:
+        except json.JSONDecodeError as e:
             _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
             raise
 
         cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
         try:
             self.cwords: List[str] = json.loads(cwords_str)
-        except Exception as e:
+        except json.JSONDecodeError as e:
             _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
             raise
 
@@ -349,7 +349,7 @@ class AutocompleteContext:
                         prompt_meta = json.loads(p_str)
                         workflow = json.loads(w_str)
                         break
-            except Exception:
+            except OSError:
                 continue
         self._workflow = workflow
         self._prompt_meta = prompt_meta

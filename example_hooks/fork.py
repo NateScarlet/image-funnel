@@ -40,7 +40,7 @@ def main() -> None:
 
     try:
         image_ids: List[str] = json.loads(image_ids_str) if image_ids_str else []
-    except Exception as e:
+    except json.JSONDecodeError as e:
         _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_IDS: {e}")
         sys.exit(1)
 

@@ -121,27 +121,24 @@ def extract_region_names_from_images(image_paths: List[str]) -> Iterator[str]:
     for path in image_paths:
         if not os.path.isfile(path):
             continue
-        try:
-            with Image.open(path) as img:
-                workflow_str = img.info.get("workflow")
-                if not workflow_str:
+        with Image.open(path) as img:
+            workflow_str = img.info.get("workflow")
+            if not workflow_str:
+                continue
+            workflow = json.loads(workflow_str)
+            for node in workflow.get("nodes", []):
+                widgets_values = node.get("widgets_values")
+                if not isinstance(widgets_values, list):
                     continue
-                workflow = json.loads(workflow_str)
-                for node in workflow.get("nodes", []):
-                    widgets_values = node.get("widgets_values")
-                    if not isinstance(widgets_values, list):
+                widget_values_list: list[Any] = cast("list[Any]", widgets_values)
+                for raw_val in widget_values_list:
+                    if not isinstance(raw_val, str):
                         continue
-                    widget_values_list: list[Any] = cast("list[Any]", widgets_values)
-                    for raw_val in widget_values_list:
-                        if not isinstance(raw_val, str):
-                            continue
-                        for m in REGION_START_RE.finditer(raw_val):
-                            name = m.group(1)
-                            if name and name not in seen:
-                                seen.add(name)
-                                yield name
-        except Exception:
-            continue
+                    for m in REGION_START_RE.finditer(raw_val):
+                        name = m.group(1)
+                        if name and name not in seen:
+                            seen.add(name)
+                            yield name
 
 
 def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
@@ -153,19 +150,16 @@ def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
     for path in image_paths:
         if not os.path.isfile(path):
             continue
-        try:
-            with Image.open(path) as img:
-                prompt_str = img.info.get("prompt")
-                if not prompt_str:
-                    continue
-                prompt_data: Dict[str, Any] = json.loads(prompt_str)
-                for n in WeightManager.collect_lora_names(prompt_data):
-                    name_no_ext, _ = os.path.splitext(n)
-                    if name_no_ext not in seen:
-                        seen.add(name_no_ext)
-                        yield name_no_ext
-        except Exception:
-            continue
+        with Image.open(path) as img:
+            prompt_str = img.info.get("prompt")
+            if not prompt_str:
+                continue
+            prompt_data: Dict[str, Any] = json.loads(prompt_str)
+            for n in WeightManager.collect_lora_names(prompt_data):
+                name_no_ext, _ = os.path.splitext(n)
+                if name_no_ext not in seen:
+                    seen.add(name_no_ext)
+                    yield name_no_ext
 
 
 def main() -> None:
@@ -206,13 +200,13 @@ def main() -> None:
 
     try:
         image_paths: List[str] = json.loads(image_paths_str) if image_paths_str else []
-    except Exception as e:
+    except json.JSONDecodeError as e:
         _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: {e}")
         sys.exit(1)
 
     try:
         image_ids: List[str] = json.loads(image_ids_str) if image_ids_str else []
-    except Exception as e:
+    except json.JSONDecodeError as e:
         _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_IDS: {e}")
         sys.exit(1)
 
@@ -298,7 +292,7 @@ def main() -> None:
                     has_errors = True
                     continue
                 workflow = cast(Dict[str, Any], workflow_data)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             _LOGGER.error(f"Failed to read PNG properties: {e}")
             has_errors = True
             continue
@@ -318,7 +312,7 @@ def main() -> None:
                 FilenameManager(
                     pair, pair.date_filename_nodes, pair.title_to_node
                 ).adjust_output_directory(rel_dir)
-        except Exception as e:
+        except (ValueError, OSError) as e:
             _LOGGER.error(f"Failed to adjust output directory: {e}")
             has_errors = True
             continue
