@@ -222,28 +222,150 @@ def _fetch_danbooru_related(
         )
 
 
+def _parse_args_for_autocomplete(
+    target_command: Optional[str],
+    cleaned_cwords: List[str],
+    is_adjust_prompt_cmd: bool,
+    query: str,
+) -> Optional[argparse.Namespace]:
+    args_to_parse = (
+        [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
+        if target_command
+        else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
+    )
+    try:
+        parser = get_parser()
+        parsed_args, _ = parser.parse_known_args(args_to_parse)
+    except SystemExit:
+        parsed_args = None
+
+    if is_adjust_prompt_cmd and parsed_args:
+        text_val = getattr(parsed_args, "text", None)
+        weight_val = getattr(parsed_args, "weight", None)
+        if weight_val and weight_val != "dummy_weight":
+            parsed_args = None
+        elif text_val and text_val != "dummy_prompt" and not query:
+            parsed_args = None
+    return parsed_args
+
+
+def _load_workflow_data(
+    image_paths: List[str],
+    parsed_args: Optional[argparse.Namespace],
+) -> Tuple[Dict[str, str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    seen_prompts: Dict[str, str] = {}
+    workflow: Optional[Dict[str, Any]] = None
+    prompt_meta: Optional[Dict[str, Any]] = None
+
+    for path in image_paths:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with Image.open(path) as img:
+                p_str = img.info.get("prompt")
+                w_str = img.info.get("workflow")
+                if p_str and w_str:
+                    prompt_meta = json.loads(p_str)
+                    workflow = json.loads(w_str)
+                    break
+        except OSError:
+            continue
+
+    if not (workflow and prompt_meta):
+        return seen_prompts, workflow, prompt_meta
+
+    is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
+    is_all = getattr(parsed_args, "all", False) if parsed_args else False
+    regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
+    nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
+    regions_arg = (
+        cast(List[str], regions_raw)
+        if isinstance(regions_raw, list)
+        else cast(List[str], [])
+    )
+    nodes_arg = (
+        cast(List[str], nodes_raw)
+        if isinstance(nodes_raw, list)
+        else cast(List[str], [])
+    )
+
+    pair = WorkflowPromptPair(workflow, prompt_meta)
+    fragments_to_process: List[Tuple[PromptFragment, str]] = []
+
+    if is_all:
+        clip_nodes = [
+            nid
+            for nid, node in prompt_meta.items()
+            if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
+        ]
+        for nid in clip_nodes:
+            fragments_to_process.append((PromptFragment(pair, nid), f"节点: {nid}"))
+    else:
+        raw_targets: List[Tuple[str, str]] = []
+        for nid in nodes_arg:
+            raw_targets.append(("node", nid))
+        for rname in regions_arg:
+            raw_targets.append(("region", rname))
+
+        if not raw_targets:
+            default_region = "negative" if is_neg else "positive"
+            raw_targets.append(("region", default_region))
+
+        for target_type, target_value in raw_targets:
+            nodes = nodes_arg if target_type == "node" else None
+            regions = [target_value] if target_type == "region" else None
+
+            for fragment in pair.locate_prompts(
+                nodes=nodes, regions=regions, is_neg=is_neg
+            ):
+                label = (
+                    f"区域: {target_value}"
+                    if target_type == "region"
+                    else f"节点: {target_value}"
+                )
+                fragments_to_process.append((fragment, label))
+
+    for fragment, label in fragments_to_process:
+        content = fragment.text
+        if not content:
+            continue
+
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("//"):
+                continue
+            cleaned = stripped.rstrip(",").rstrip("，").strip()
+            if not cleaned:
+                continue
+            if cleaned not in seen_prompts:
+                seen_prompts[cleaned] = label
+
+    return seen_prompts, workflow, prompt_meta
+
+
 class AutocompleteContext:
     """自动完成输入参数和状态上下文"""
 
-    def __init__(self, target_command: Optional[str] = None):
+    def __init__(
+        self,
+        target_command: Optional[str],
+        *,
+        query: str = "",
+        prev_word: str = "",
+        cwords: Optional[List[str]] = None,
+        image_paths: Optional[List[str]] = None,
+        parsed_args: Optional[argparse.Namespace] = None,
+        seen_prompts: Optional[Dict[str, str]] = None,
+        workflow: Optional[Dict[str, Any]] = None,
+        prompt_meta: Optional[Dict[str, Any]] = None,
+    ):
         self.target_command: Optional[str] = target_command
-        self.query: str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
-        self.prev_word: str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
-
-        image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
-        try:
-            self.image_paths: List[str] = json.loads(image_paths_str)
-        except json.JSONDecodeError as e:
-            _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
-            raise
-
-        cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
-        try:
-            self.cwords: List[str] = json.loads(cwords_str)
-        except json.JSONDecodeError as e:
-            _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
-            raise
-
+        self.query: str = query
+        self.prev_word: str = prev_word
+        self.cwords: List[str] = cwords or []
+        self.image_paths: List[str] = image_paths or []
         self.cleaned_cwords: List[str] = [
             w for w in self.cwords if not (w.startswith("<") and w.endswith(">"))
         ]
@@ -283,162 +405,30 @@ class AutocompleteContext:
             except ValueError:
                 self.is_real_option_prev = True
 
-        # 延迟加载的状态
-        self._parsed_args_loaded: bool = False
-        self._parsed_args: Optional[argparse.Namespace] = None
-        self._workflow_loaded: bool = False
-        self._seen_prompts: Dict[str, str] = {}
-        self._workflow: Optional[Dict[str, Any]] = None
-        self._prompt_meta: Optional[Dict[str, Any]] = None
+        self._parsed_args: Optional[argparse.Namespace] = parsed_args
+        self._seen_prompts: Dict[str, str] = seen_prompts or {}
+        self._workflow: Optional[Dict[str, Any]] = workflow
+        self._prompt_meta: Optional[Dict[str, Any]] = prompt_meta
 
     @property
     def parsed_args(self) -> Optional[argparse.Namespace]:
-        if not self._parsed_args_loaded:
-            self._parse_arguments()
         return self._parsed_args
-
-    def _parse_arguments(self):
-        self._parsed_args_loaded = True
-        args_to_parse = (
-            [self.target_command]
-            + self.cleaned_cwords[1:]
-            + ["dummy_prompt", "dummy_weight"]
-            if self.target_command
-            else self.cleaned_cwords + ["dummy_prompt", "dummy_weight"]
-        )
-
-        try:
-            parser = get_parser()
-            parsed_args, _ = parser.parse_known_args(args_to_parse)
-        except SystemExit:
-            parsed_args = None
-
-        if self.is_adjust_prompt_cmd and parsed_args:
-            text_val = getattr(parsed_args, "text", None)
-            weight_val = getattr(parsed_args, "weight", None)
-            if weight_val and weight_val != "dummy_weight":
-                parsed_args = None
-            elif text_val and text_val != "dummy_prompt" and not self.query:
-                parsed_args = None
-        self._parsed_args = parsed_args
 
     @property
     def seen_prompts(self) -> Dict[str, str]:
-        if not self._workflow_loaded:
-            self._load_workflow()
         return self._seen_prompts
 
     @property
     def workflow_loaded(self) -> bool:
-        if not self._workflow_loaded:
-            self._load_workflow()
-        return self._workflow_loaded
+        return self._workflow is not None and self._prompt_meta is not None
 
     @property
     def workflow(self) -> Optional[Dict[str, Any]]:
-        if not self._workflow_loaded:
-            self._load_workflow()
         return self._workflow
 
     @property
     def prompt_meta(self) -> Optional[Dict[str, Any]]:
-        if not self._workflow_loaded:
-            self._load_workflow()
         return self._prompt_meta
-
-    def _load_workflow(self):
-        self._workflow_loaded = True
-        parsed_args = self.parsed_args
-
-        # 加载第一张有效图片的 workflow 和 prompt
-        workflow = None
-        prompt_meta = None
-        for path in self.image_paths:
-            if not os.path.isfile(path):
-                continue
-            try:
-                with Image.open(path) as img:
-                    p_str = img.info.get("prompt")
-                    w_str = img.info.get("workflow")
-                    if p_str and w_str:
-                        prompt_meta = json.loads(p_str)
-                        workflow = json.loads(w_str)
-                        break
-            except OSError:
-                continue
-        self._workflow = workflow
-        self._prompt_meta = prompt_meta
-
-        if not (workflow and prompt_meta):
-            return
-
-        is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
-        is_all = getattr(parsed_args, "all", False) if parsed_args else False
-        regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
-        nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
-        regions_arg = (
-            cast(List[str], regions_raw)
-            if isinstance(regions_raw, list)
-            else cast(List[str], [])
-        )
-        nodes_arg = (
-            cast(List[str], nodes_raw)
-            if isinstance(nodes_raw, list)
-            else cast(List[str], [])
-        )
-
-        pair = WorkflowPromptPair(workflow, prompt_meta)
-        fragments_to_process: List[Tuple[PromptFragment, str]] = []
-
-        if is_all:
-            clip_nodes = [
-                nid
-                for nid, node in prompt_meta.items()
-                if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-            ]
-            for nid in clip_nodes:
-                fragments_to_process.append((PromptFragment(pair, nid), f"节点: {nid}"))
-        else:
-            raw_targets: List[Tuple[str, str]] = []
-            for nid in nodes_arg:
-                raw_targets.append(("node", nid))
-            for rname in regions_arg:
-                raw_targets.append(("region", rname))
-
-            if not raw_targets:
-                default_region = "negative" if is_neg else "positive"
-                raw_targets.append(("region", default_region))
-
-            for target_type, target_value in raw_targets:
-                nodes = nodes_arg if target_type == "node" else None
-                regions = [target_value] if target_type == "region" else None
-
-                for fragment in pair.locate_prompts(
-                    nodes=nodes, regions=regions, is_neg=is_neg
-                ):
-                    label = (
-                        f"区域: {target_value}"
-                        if target_type == "region"
-                        else f"节点: {target_value}"
-                    )
-                    fragments_to_process.append((fragment, label))
-
-        for fragment, label in fragments_to_process:
-            content = fragment.text
-            if not content:
-                continue
-
-            for line in content.splitlines():
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                if stripped.startswith("//"):
-                    continue
-                cleaned = stripped.rstrip(",").rstrip("，").strip()
-                if not cleaned:
-                    continue
-                if cleaned not in self._seen_prompts:
-                    self._seen_prompts[cleaned] = label
 
 
 class AutocompleteProvider:
@@ -732,7 +722,43 @@ def autocomplete(
     autocomplete 子命令：读取环境变量，生成自动完成建议。
     调用方（main）负责输出 JSONL。
     """
-    context = AutocompleteContext(target_command)
+    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+    prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
+
+    cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
+    try:
+        cwords: List[str] = json.loads(cwords_str)
+    except json.JSONDecodeError as e:
+        _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
+        raise
+
+    image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
+    try:
+        image_paths: List[str] = json.loads(image_paths_str)
+    except json.JSONDecodeError as e:
+        _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
+        raise
+
+    cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
+    is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
+
+    parsed_args = _parse_args_for_autocomplete(
+        target_command, cleaned_cwords, is_adjust_prompt_cmd, query
+    )
+
+    seen_prompts, workflow, prompt_meta = _load_workflow_data(image_paths, parsed_args)
+
+    context = AutocompleteContext(
+        target_command=target_command,
+        query=query,
+        prev_word=prev_word,
+        cwords=cwords,
+        image_paths=image_paths,
+        parsed_args=parsed_args,
+        seen_prompts=seen_prompts,
+        workflow=workflow,
+        prompt_meta=prompt_meta,
+    )
     providers: List[AutocompleteProvider] = [
         RegionProvider(),
         LoraProvider(),
