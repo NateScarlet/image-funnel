@@ -20,7 +20,6 @@ from typing import (
 )
 
 from .weight_parser import parse_weights, is_relative
-from .prompt_locator import find_terminal_input
 from .weight_manager import WeightManager
 from .prompt_fragment import PromptFragment
 
@@ -57,25 +56,13 @@ def generate_cfg_variants(
     """
     为每个 CFG 权重变体原地修改并 yield。
     """
-    ksampler_cfgs: Dict[str, float] = {}
-    for nid, node in prompt.items():
-        if node_ids is not None and nid not in node_ids:
-            continue
-        class_type = node.get("class_type", "")
-        if "KSampler" in class_type:
-            inputs = node.get("inputs", {})
-            if "cfg" in inputs:
-                src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-                val = prompt[src_nid]["inputs"].get(src_key)
-                if isinstance(val, (int, float)):
-                    ksampler_cfgs[nid] = float(val)
-
-    if not ksampler_cfgs:
+    sources = weight_manager.collect_cfg_sources(node_ids)
+    if not sources:
         return
 
     node_weights_map: Dict[str, List[float]] = {}
-    for nid, cfg_val in ksampler_cfgs.items():
-        node_weights_map[nid] = parse_weights(weight_expr, cfg_val)
+    for src in sources:
+        node_weights_map[src.node_id] = parse_weights(weight_expr, src.current_value)
 
     version_lengths = {nid: len(w) for nid, w in node_weights_map.items()}
     unique_lengths = set(version_lengths.values())
@@ -166,6 +153,54 @@ def generate_prompt_variants(
         yield
 
 
+def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
+    """从比例表达式中解析出目标比率列表。"""
+    ratio_expr_clean = ratio_expr.strip()
+
+    m_sym = _parse_symmetric_expression(ratio_expr_clean)
+    if m_sym:
+        prefix = m_sym.group(1) or "w"
+        delta = int(m_sym.group(2))
+        step = int(m_sym.group(3)) if m_sym.group(3) else 1
+
+        start_idx = max(0, curr_idx - delta)
+        end_idx = min(len(COMMON_RATIOS) - 1, curr_idx + delta)
+
+        indices: List[int] = []
+        for offset in range(0, delta + 1, step):
+            l_idx = curr_idx - offset
+            if l_idx >= start_idx:
+                indices.append(l_idx)
+            r_idx = curr_idx + offset
+            if r_idx <= end_idx:
+                indices.append(r_idx)
+
+        indices = sorted(list(set(indices)))
+        return [COMMON_VALUES[idx] for idx in indices]
+
+    m_shift = re.match(r"^([wh]?)([+-]\d+)$", ratio_expr_clean)
+    if m_shift:
+        prefix = m_shift.group(1) or "w"
+        shift = int(m_shift.group(2))
+
+        effective_shift = -shift if prefix == "h" else shift
+        target_idx = max(0, min(len(COMMON_RATIOS) - 1, curr_idx + effective_shift))
+        return [COMMON_VALUES[target_idx]]
+
+    if ":" in ratio_expr_clean:
+        try:
+            w_part, h_part = ratio_expr_clean.split(":", 1)
+            rw = float(w_part)
+            rh = float(h_part)
+            if rw <= 0 or rh <= 0:
+                raise ValueError()
+            return [rw / rh]
+        except ValueError:
+            raise ValueError(f"Invalid aspect ratio format: '{ratio_expr_clean}'")
+
+    raise ValueError(f"Invalid aspect ratio expression: '{ratio_expr_clean}'")
+
+
 def generate_aspect_variants(
     weight_manager: WeightManager,
     prompt: Dict[str, Any],
@@ -176,92 +211,28 @@ def generate_aspect_variants(
     """
     为每个长宽比变体原地修改并 yield。
     """
-    latent_nodes: List[str] = []
-    for nid, node_info in nodes_cache.items():
-        if node_ids is not None and nid not in node_ids:
-            continue
-        if "width" in node_info.inputs and "height" in node_info.inputs:
-            latent_nodes.append(nid)
-
-    if not latent_nodes:
+    sources = weight_manager.collect_aspect_sources(node_ids)
+    if not sources:
         return
 
     node_variants_map: Dict[str, List[Tuple[int, int]]] = {}
-    for nid in latent_nodes:
-        w_nid, w_key = find_terminal_input(prompt, nid, "width")
-        h_nid, h_key = find_terminal_input(prompt, nid, "height")
-        w_val = prompt[w_nid]["inputs"].get(w_key)
-        h_val = prompt[h_nid]["inputs"].get(h_key)
+    for src in sources:
+        W = src.current_width
+        H = src.current_height
 
-        if not isinstance(w_val, (int, float)) or not isinstance(h_val, (int, float)):
+        # 处理 swap/exchange 直接交换
+        if ratio_expr.strip().lower() in ("swap", "exchange"):
+            node_variants_map[src.node_id] = [(int(round(H)), int(round(W)))]
             continue
 
-        W = float(w_val)
-        H = float(h_val)
-        S = W * H
         R_curr = W / H
-
         curr_idx = _find_closest_ratio_index(R_curr)
         if curr_idx is None:
             continue
 
-        target_ratios: List[float] = []
-        ratio_expr_clean = ratio_expr.strip()
+        target_ratios = _compute_target_ratios(ratio_expr, curr_idx)
 
-        if ratio_expr_clean.lower() in ("swap", "exchange"):
-            node_variants_map[nid] = [(int(round(H)), int(round(W)))]
-            continue
-
-        m_sym = _parse_symmetric_expression(ratio_expr_clean)
-        if m_sym:
-            prefix = m_sym.group(1) or "w"
-            delta = int(m_sym.group(2))
-            step = int(m_sym.group(3)) if m_sym.group(3) else 1
-
-            start_idx = max(0, curr_idx - delta)
-            end_idx = min(len(COMMON_RATIOS) - 1, curr_idx + delta)
-
-            indices: List[int] = []
-            for offset in range(0, delta + 1, step):
-                l_idx = curr_idx - offset
-                if l_idx >= start_idx:
-                    indices.append(l_idx)
-                r_idx = curr_idx + offset
-                if r_idx <= end_idx:
-                    indices.append(r_idx)
-
-            indices = sorted(list(set(indices)))
-            target_ratios = [COMMON_VALUES[idx] for idx in indices]
-
-        else:
-            m_shift = re.match(r"^([wh]?)([+-]\d+)$", ratio_expr_clean)
-            if m_shift:
-                prefix = m_shift.group(1) or "w"
-                shift = int(m_shift.group(2))
-
-                effective_shift = -shift if prefix == "h" else shift
-                target_idx = max(
-                    0, min(len(COMMON_RATIOS) - 1, curr_idx + effective_shift)
-                )
-                target_ratios = [COMMON_VALUES[target_idx]]
-
-            elif ":" in ratio_expr_clean:
-                try:
-                    w_part, h_part = ratio_expr_clean.split(":", 1)
-                    rw = float(w_part)
-                    rh = float(h_part)
-                    if rw <= 0 or rh <= 0:
-                        raise ValueError()
-                    target_ratios = [rw / rh]
-                except ValueError:
-                    raise ValueError(
-                        f"Invalid aspect ratio format: '{ratio_expr_clean}'"
-                    )
-            else:
-                raise ValueError(
-                    f"Invalid aspect ratio expression: '{ratio_expr_clean}'"
-                )
-
+        S = W * H
         variants: List[Tuple[int, int]] = []
         for R in target_ratios:
             W_raw = math.sqrt(S * R)
@@ -272,7 +243,7 @@ def generate_aspect_variants(
             H_new = max(8, H_new)
             variants.append((W_new, H_new))
 
-        node_variants_map[nid] = variants
+        node_variants_map[src.node_id] = variants
 
     if not node_variants_map:
         return

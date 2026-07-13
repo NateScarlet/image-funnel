@@ -5,7 +5,8 @@ WeightManager：管理 ComfyUI 工作流中的权重调整操作（CFG / LoRA / 
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Set, Tuple, cast
+from dataclasses import dataclass
+from typing import Dict, List, Any, Optional, Set, cast
 
 from .node_accessor import NodeAccessor
 from .prompt_locator import (
@@ -16,6 +17,31 @@ from .lora_handler import LORA_HANDLERS
 from .prompt_fragment import PromptFragment
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# #region CFG / Aspect 源节点数据
+
+
+@dataclass
+class CfgSource:
+    node_id: str
+    src_node_id: str
+    src_key: str
+    current_value: float
+
+
+@dataclass
+class AspectSource:
+    node_id: str
+    width_src_node_id: str
+    width_src_key: str
+    height_src_node_id: str
+    height_src_key: str
+    current_width: float
+    current_height: float
+
+
+# #endregion
 
 
 class WeightManager:
@@ -84,11 +110,13 @@ class WeightManager:
 
     # #region CFG 权重
 
-    def get_current_cfg_weight(
+    def collect_cfg_sources(
         self, node_ids: Optional[List[str]] = None
-    ) -> Optional[float]:
-        """在 prompt 中查找 KSampler 节点的当前 CFG 值。"""
+    ) -> List[CfgSource]:
+        """在 prompt 中查找 KSampler 节点的 CFG 源节点及当前值。
+        返回所有匹配的 CfgSource 列表，直接值或通过追溯终端节点获取。"""
         prompt = self._accessor.prompt
+        sources: List[CfgSource] = []
         for nid, node in prompt.items():
             if node_ids is not None and nid not in node_ids:
                 continue
@@ -100,7 +128,23 @@ class WeightManager:
                     src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
                     val = prompt[src_nid]["inputs"].get(src_key)
                     if isinstance(val, (int, float)):
-                        return float(val)
+                        sources.append(
+                            CfgSource(
+                                node_id=nid,
+                                src_node_id=src_nid,
+                                src_key=src_key,
+                                current_value=float(val),
+                            )
+                        )
+        return sources
+
+    def get_current_cfg_weight(
+        self, node_ids: Optional[List[str]] = None
+    ) -> Optional[float]:
+        """在 prompt 中查找 KSampler 节点的当前 CFG 值。"""
+        sources = self.collect_cfg_sources(node_ids)
+        if sources:
+            return sources[0].current_value
         return None
 
     def modify_cfg_weights(
@@ -108,25 +152,15 @@ class WeightManager:
     ) -> int:
         """修改 KSampler 的 CFG 权重，返回实际修改的 source 节点数。"""
         prompt = self._accessor.prompt
-        cfg_sources: List[Tuple[str, str]] = []
-
-        for nid, node in prompt.items():
-            if node_ids is not None and nid not in node_ids:
-                continue
-            node_dict = cast(Dict[str, Any], node)
-            class_type = node_dict.get("class_type", "")
-            if "KSampler" in class_type:
-                inputs = node_dict.get("inputs", {})
-                if "cfg" in inputs:
-                    src_nid, src_key = find_terminal_input(prompt, nid, "cfg")
-                    cfg_sources.append((src_nid, src_key))
+        sources = self.collect_cfg_sources(node_ids)
 
         modified = 0
-        for src_nid, src_key in cfg_sources:
-            if src_nid in prompt:
-                prompt[src_nid]["inputs"][src_key] = weight
+        for src in sources:
+            if src.src_node_id in prompt:
+                prompt[src.src_node_id]["inputs"][src.src_key] = weight
                 modified += 1
 
+        # Update workflow widgets
         for node_info in self._accessor.nodes_cache.values():
             if node_ids is not None and node_info.node_id not in node_ids:
                 continue
@@ -144,8 +178,8 @@ class WeightManager:
                             wv[4] = weight
 
             elif node_info.class_type in KNOWN_PRIMITIVE_TYPES:
-                for src_nid, src_key in cfg_sources:
-                    if src_nid == node_info.node_id:
+                for src in sources:
+                    if src.src_node_id == node_info.node_id:
                         wv = node_info.widgets_values
                         if wv and isinstance(wv[0], (int, float)):
                             wv[0] = weight
@@ -187,6 +221,35 @@ class WeightManager:
 
     # #region 长宽比
 
+    def collect_aspect_sources(
+        self, node_ids: Optional[List[str]] = None
+    ) -> List[AspectSource]:
+        """在 prompt 中查找具有 width/height 输入的节点的源节点及当前值。
+        返回所有匹配的 AspectSource 列表，通过追溯终端节点获取。"""
+        prompt = self._accessor.prompt
+        sources: List[AspectSource] = []
+        for nid, node_info in self._accessor.nodes_cache.items():
+            if node_ids is not None and nid not in node_ids:
+                continue
+            if "width" in node_info.inputs and "height" in node_info.inputs:
+                w_nid, w_key = find_terminal_input(prompt, nid, "width")
+                h_nid, h_key = find_terminal_input(prompt, nid, "height")
+                w_val = prompt[w_nid]["inputs"].get(w_key)
+                h_val = prompt[h_nid]["inputs"].get(h_key)
+                if isinstance(w_val, (int, float)) and isinstance(h_val, (int, float)):
+                    sources.append(
+                        AspectSource(
+                            node_id=nid,
+                            width_src_node_id=w_nid,
+                            width_src_key=w_key,
+                            height_src_node_id=h_nid,
+                            height_src_key=h_key,
+                            current_width=float(w_val),
+                            current_height=float(h_val),
+                        )
+                    )
+        return sources
+
     def modify_aspect_ratio(
         self,
         target_width: int,
@@ -195,32 +258,32 @@ class WeightManager:
     ) -> int:
         """修改指定包含 width 和 height 的节点的长宽比，返回实际修改的 source 节点数。"""
         prompt = self._accessor.prompt
-        sources: List[Tuple[str, Tuple[str, str], Tuple[str, str]]] = []
+        sources = self.collect_aspect_sources(node_ids)
+
+        modified = 0
+        for src in sources:
+            if src.width_src_node_id in prompt:
+                prompt[src.width_src_node_id]["inputs"][
+                    src.width_src_key
+                ] = target_width
+                modified += 1
+            if src.height_src_node_id in prompt:
+                prompt[src.height_src_node_id]["inputs"][
+                    src.height_src_key
+                ] = target_height
+                modified += 1
+
+        # Update workflow widgets
         for nid, node_info in self._accessor.nodes_cache.items():
             if node_ids is not None and nid not in node_ids:
                 continue
-            if "width" in node_info.inputs and "height" in node_info.inputs:
-                w_nid, w_key = find_terminal_input(prompt, nid, "width")
-                h_nid, h_key = find_terminal_input(prompt, nid, "height")
-                sources.append((nid, (w_nid, w_key), (h_nid, h_key)))
-
-        modified = 0
-        for nid, (w_nid, w_key), (h_nid, h_key) in sources:
-            if w_nid in prompt:
-                prompt[w_nid]["inputs"][w_key] = target_width
-                modified += 1
-            if h_nid in prompt:
-                prompt[h_nid]["inputs"][h_key] = target_height
-                modified += 1
-
-        for nid, (w_nid, w_key), (h_nid, h_key) in sources:
-            node_info = self._accessor.nodes_cache.get(nid)
-            if node_info and not node_info.is_disabled:
+            if not node_info.is_disabled:
                 wv = node_info.widgets_values
                 if wv and len(wv) >= 2:
-                    if w_nid == nid and isinstance(wv[0], (int, float)):
+                    is_source_node = any(src.node_id == nid for src in sources)
+                    if is_source_node and isinstance(wv[0], (int, float)):
                         wv[0] = target_width
-                    if h_nid == nid and isinstance(wv[1], (int, float)):
+                    if is_source_node and isinstance(wv[1], (int, float)):
                         wv[1] = target_height
 
             for cached_info in self._accessor.nodes_cache.values():
@@ -229,10 +292,11 @@ class WeightManager:
                 if cached_info.class_type in KNOWN_PRIMITIVE_TYPES:
                     wv = cached_info.widgets_values
                     if wv and isinstance(wv[0], (int, float)):
-                        if cached_info.node_id == w_nid:
-                            wv[0] = target_width
-                        elif cached_info.node_id == h_nid:
-                            wv[0] = target_height
+                        for src in sources:
+                            if cached_info.node_id == src.width_src_node_id:
+                                wv[0] = target_width
+                            elif cached_info.node_id == src.height_src_node_id:
+                                wv[0] = target_height
 
         return modified
 
