@@ -3,22 +3,6 @@
 
 import os
 import sys
-
-# 重新配置标准输出和标准错误流的编码和错误处理，在 Windows 环境下防止 'gbk' 无法编码特定 Unicode 字符抛出 UnicodeEncodeError
-if sys.platform.startswith("win"):
-    reconfigure_stdout = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure_stdout is not None:
-        try:
-            reconfigure_stdout(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-    reconfigure_stderr = getattr(sys.stderr, "reconfigure", None)
-    if reconfigure_stderr is not None:
-        try:
-            reconfigure_stderr(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-
 import json
 import logging
 from dataclasses import dataclass
