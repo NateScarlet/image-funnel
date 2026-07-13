@@ -1202,14 +1202,13 @@ class TestPromptWeight(unittest.TestCase):
 # #endregion
 
 
-# #region 提交测试
 class TestSubmit(unittest.TestCase):
     def test_submit_failure(self):
-        """提交到不存在的服务器返回 False"""
+        """提交到不存在的服务器应该抛出异常"""
         prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
         workflow = {"nodes": [{"id": "1", "type": "KSampler"}]}
-        result = _submit_fn(prompt, workflow, "http://127.0.0.1:19999")
-        self.assertFalse(result)
+        with self.assertRaises(Exception):
+            _submit_fn(prompt, workflow, "http://127.0.0.1:19999")
 
 
 # #endregion

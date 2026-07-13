@@ -14,8 +14,10 @@ def submit(
     prompt: Dict[str, Any],
     workflow: Dict[str, Any],
     comfyui_url: str,
-) -> bool:
-    """提交工作流到 ComfyUI 的 /prompt 接口"""
+) -> None:
+    """提交工作流到 ComfyUI 的 /prompt 接口。
+    如果提交失败（例如网络错误、无法连接或服务端错误），直接抛出异常以实现快速失败。
+    """
     client_id: str = str(uuid.uuid4())
     payload: Dict[str, Any] = {
         "prompt": prompt,
@@ -28,9 +30,5 @@ def submit(
         data=data,
         headers={"Content-Type": "application/json"},
     )
-    try:
-        with urllib.request.urlopen(req) as f:
-            json.loads(f.read().decode("utf-8"))
-            return True
-    except Exception:
-        return False
+    with urllib.request.urlopen(req) as f:
+        json.loads(f.read().decode("utf-8"))

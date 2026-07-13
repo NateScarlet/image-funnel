@@ -29,7 +29,7 @@ from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
 from .prompt_locator import REGION_START_RE
-from .command_handlers import COMMAND_HANDLERS
+from .command_handlers import COMMAND_HANDLERS, CommandContext
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -216,6 +216,8 @@ def main() -> None:
         required_rating = int(required_rating_str)
 
     jobs = args.jobs if args.jobs is not None else int(os.getenv("HOOK_JOBS", "1"))
+    if jobs <= 0:
+        raise ValueError(f"--jobs/HOOK_JOBS must be a positive integer, got: {jobs}")
 
     try:
         image_paths: List[str] = json.loads(image_paths_str) if image_paths_str else []
@@ -339,12 +341,19 @@ def main() -> None:
         handler = COMMAND_HANDLERS.get(args.command)
         if handler is None:
             raise ValueError(f"Unknown command: '{args.command}'")
-        count, had_error = handler.run(
-            img_id, path, prompt, workflow, args, comfyui_url, jobs, label_to_set
+        ctx = CommandContext(
+            img_id=img_id,
+            path=path,
+            prompt=prompt,
+            workflow=workflow,
+            args=args,
+            comfyui_url=comfyui_url,
+            jobs=jobs,
+            label_to_set=label_to_set,
         )
-        success_count += count
-        if had_error:
-            has_errors = True
+        handler.run(ctx)
+        if not ctx.skipped:
+            success_count += 1
 
     print(f"processed {success_count}/{len(targets)} image(s) successfully.")
 
