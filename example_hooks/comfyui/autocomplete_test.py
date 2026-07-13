@@ -792,15 +792,21 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             {
                 "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
                 "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
-                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "-all",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove -all",
-                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "-all"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "--all",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/remove --all",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(["/remove", "--all"]),
             },
         ):
             from .autocomplete import autocomplete
 
             suggestions = list(autocomplete("remove"))
             self.assertIsNotNone(suggestions)
+            self.assertTrue(len(suggestions) > 0)
+            self.assertTrue(
+                any(
+                    s.text == '"1girl, masterpiece, score_7, cute"' for s in suggestions
+                )
+            )
 
 
 if __name__ == "__main__":

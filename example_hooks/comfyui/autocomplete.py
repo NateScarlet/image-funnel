@@ -271,8 +271,8 @@ class AutocompleteContext:
                     for opt in action.option_strings:
                         self.option_with_args.add(opt)
 
-        self.is_real_option_prev: bool = False
-        if self.prev_word in (self.option_with_args | self.option_without_args):
+        self.is_real_option_prev = False
+        if self.prev_word in self.option_with_args:
             try:
                 self.is_real_option_prev = (
                     "--" not in self.cleaned_cwords
