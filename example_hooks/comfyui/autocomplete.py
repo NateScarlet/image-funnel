@@ -14,7 +14,9 @@ from PIL import Image
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
     extract_region_names_from_images,
+    extract_region_names_from_workflows,
     extract_lora_names,
+    extract_lora_names_from_prompts,
     get_parser,
 )
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -598,7 +600,10 @@ class RegionProvider(AutocompleteProvider):
         return context.prev_word == "--region" and context.is_real_option_prev
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        regions = extract_region_names_from_images(context.image_paths)
+        if context.workflow:
+            regions = extract_region_names_from_workflows([context.workflow])
+        else:
+            regions = extract_region_names_from_images(context.image_paths)
         for r in regions:
             if not context.query or context.query.lower() in r.lower():
                 yield AutocompleteSuggestion(
@@ -620,7 +625,10 @@ class LoraProvider(AutocompleteProvider):
         return context.prev_word == "lora"
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        loras = extract_lora_names(context.image_paths)
+        if context.prompt_meta:
+            loras = extract_lora_names_from_prompts([context.prompt_meta])
+        else:
+            loras = extract_lora_names(context.image_paths)
         for l in loras:
             if not context.query or context.query.lower() in l.lower():
                 yield AutocompleteSuggestion(
