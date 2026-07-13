@@ -123,8 +123,6 @@ import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import useSession from "../composables/domain/useSession";
-import { usePresets } from "../composables/usePresets";
-
 const { session } = defineProps<{
   session: SessionFragment;
 }>();
@@ -138,12 +136,12 @@ const nextDirectoryId = computed(() => {
   return getNextDirectory(session.directory.parentId ?? "", session.directory.id);
 });
 
-const { lastSession: nextDirLastSession } = useDirectoryState(() => nextDirectoryId.value ?? "");
+const { lastSession: nextDirLastSession, defaultState: nextDirDefaultState } = useDirectoryState(
+  () => nextDirectoryId.value ?? "",
+);
 
 const commitForm = useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
 
-const { getPreset, lastSelectedPresetId } = usePresets();
-const selectedPreset = computed(() => getPreset(lastSelectedPresetId.value));
 const { createSession } = useSession("");
 
 const showConfirm = ref(false);
@@ -188,7 +186,7 @@ async function handleCommitted() {
         rating: nextRating,
       },
       targetKeep: nextTargetKeep,
-      createActions: selectedPreset.value?.writeActions,
+      createActions: nextDirDefaultState.value?.writeActions ?? undefined,
     });
 
     if (nextSession) {
