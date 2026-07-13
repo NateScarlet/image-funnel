@@ -11,7 +11,10 @@ workflow_prompt_pair.py 的单元测试。
 import unittest
 import os
 import json
-from typing import Any, Dict, List, cast
+import socket
+import http.server
+import threading
+from typing import Any, Dict, List, cast, Type
 from PIL import Image
 
 
@@ -1203,12 +1206,96 @@ class TestPromptWeight(unittest.TestCase):
 
 
 class TestSubmit(unittest.TestCase):
-    def test_submit_failure(self):
-        """提交到不存在的服务器应该抛出异常"""
-        prompt = {"1": {"class_type": "KSampler", "inputs": {}}}
-        workflow = {"nodes": [{"id": "1", "type": "KSampler"}]}
+    server: http.server.HTTPServer
+    server_port: int
+    server_thread: threading.Thread
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # 启动一个测试用的 HTTP 服务器，监听随机空闲端口
+        cls.server = http.server.HTTPServer(("127.0.0.1", 0), cls._make_handler())
+        cls.server_port = cls.server.server_address[1]
+        cls.server_thread = threading.Thread(target=cls.server.serve_forever)
+        cls.server_thread.daemon = True
+        cls.server_thread.start()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.server_thread.join()
+
+    @classmethod
+    def _make_handler(cls) -> Type[http.server.BaseHTTPRequestHandler]:
+        class TestHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                if self.path == "/prompt":
+                    try:
+                        content_length: int = int(self.headers.get("Content-Length", 0))
+                        post_data: bytes = self.rfile.read(content_length)
+                        payload: Dict[str, Any] = json.loads(post_data.decode("utf-8"))
+                        prompt: Dict[str, Any] = payload.get("prompt", {})
+
+                        is_error: bool = False
+                        for node in prompt.values():
+                            if (
+                                isinstance(node, dict)
+                                and node.get("class_type") == "ErrorSampler"
+                            ):
+                                is_error = True
+                                break
+
+                        if is_error:
+                            self.send_response(500)
+                            self.end_headers()
+                            self.wfile.write(b"Internal Server Error")
+                        else:
+                            self.send_response(200)
+                            self.send_header("Content-Type", "application/json")
+                            self.end_headers()
+                            self.wfile.write(b'{"prompt_id": "mock-prompt-id"}')
+                    except Exception:
+                        self.send_response(400)
+                        self.end_headers()
+                        self.wfile.write(b"Bad Request")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Not Found")
+
+            def log_message(self, format: str, *args: Any) -> None:
+                # 抑制服务器输出日志到 stderr，避免污染测试输出
+                pass
+
+        return TestHTTPRequestHandler
+
+    def test_submit_success(self) -> None:
+        """成功提交到 ComfyUI 服务器不应该抛出异常"""
+        prompt: Dict[str, Any] = {"1": {"class_type": "KSampler", "inputs": {}}}
+        workflow: Dict[str, Any] = {"nodes": [{"id": "1", "type": "KSampler"}]}
+        # 应该正常执行，不抛出异常
+        _submit_fn(prompt, workflow, f"http://127.0.0.1:{self.server_port}")
+
+    def test_submit_failure_server_error(self) -> None:
+        """服务器返回错误时应该抛出异常"""
+        prompt: Dict[str, Any] = {"1": {"class_type": "ErrorSampler", "inputs": {}}}
+        workflow: Dict[str, Any] = {"nodes": [{"id": "1", "type": "KSampler"}]}
         with self.assertRaises(Exception):
-            _submit_fn(prompt, workflow, "http://127.0.0.1:19999")
+            _submit_fn(prompt, workflow, f"http://127.0.0.1:{self.server_port}")
+
+    def test_submit_failure_no_server(self) -> None:
+        """提交到不存在的服务器应该抛出异常"""
+        prompt: Dict[str, Any] = {"1": {"class_type": "KSampler", "inputs": {}}}
+        workflow: Dict[str, Any] = {"nodes": [{"id": "1", "type": "KSampler"}]}
+
+        # 获取一个空闲端口，并在关闭后立即尝试连接
+        s: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 0))
+        unused_port: int = s.getsockname()[1]
+        s.close()
+
+        with self.assertRaises(Exception):
+            _submit_fn(prompt, workflow, f"http://127.0.0.1:{unused_port}")
 
 
 # #endregion
