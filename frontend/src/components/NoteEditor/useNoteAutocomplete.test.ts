@@ -181,4 +181,22 @@ describe("useNoteAutocomplete composable", () => {
     expect(params.end).toBe(3); // selectionEnd
     expect(params.selectStart).toBe(1 + sug.text.length + 1); // selectStart
   });
+
+  test("isSearching is false when query completes with empty results", () => {
+    vi.useFakeTimers();
+    model.value = "/add p";
+    cursorStart.value = 6;
+    cursorEnd.value = 6;
+
+    const { isSearching, flushDebounced } = createAutocomplete();
+
+    // Trigger debounce flush
+    flushDebounced();
+
+    // Mock autocomplete data returning empty list
+    mockAutocompleteData.value = { hookAutocomplete: [] };
+
+    // After debounce is flushed and variables have updated, isSearching should be false
+    expect(isSearching.value).toBe(false);
+  });
 });

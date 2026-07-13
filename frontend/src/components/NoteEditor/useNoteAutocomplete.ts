@@ -24,7 +24,7 @@ import {
   type InsertParams,
   type HookInfo,
 } from "./autocompleteStateMachine";
-import { debounce } from "es-toolkit";
+import { debounce, isEqual } from "es-toolkit";
 
 export type { AutocompleteState, InsertParams, HookInfo };
 
@@ -157,7 +157,7 @@ export function useNoteAutocomplete(options: Options) {
 
   const isDebouncing = computed(() => {
     return (
-      variablesRaw.value !== null && variablesRaw.value !== variables.value
+      variablesRaw.value !== null && !isEqual(variablesRaw.value, variables.value)
     );
   });
 
