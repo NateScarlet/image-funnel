@@ -580,6 +580,207 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(texts[0], "1girl")
             mock_post.assert_called_once()
 
+    def _get_mock_image_with_positive_region(self):
+        """创建包含 // #region positive 区域标记的 mock image，验证 _find_nodes_with_region 路径"""
+        mock_prompt = {
+            "node_1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "// #region positive\n1girl, masterpiece, score_7, cute\n// #endregion\nnegative prompt line"
+                },
+            }
+        }
+        mock_workflow = {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\n1girl, masterpiece, score_7, cute\n// #endregion\nnegative prompt line"
+                    ],
+                }
+            ]
+        }
+        mock_image = MagicMock()
+        mock_image.info = {
+            "prompt": json.dumps(mock_prompt),
+            "workflow": json.dumps(mock_workflow),
+        }
+        mock_image.__enter__.return_value = mock_image
+        return mock_image
+
+    def test_autocomplete_add_prompt_region_query_search(self):
+        """用户输入 /add --region positive 后继续输入搜索词，应通过 _find_nodes_with_region 匹配区域并执行 Danbooru 前缀搜索"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch(
+            "PIL.Image.open", return_value=self._get_mock_image_with_positive_region()
+        ), patch("os.path.isfile", return_value=True), patch(
+            "comfyui.autocomplete.requests.post", mock_post
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "--region", "positive"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from .autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
+
+            req_data = call_kwargs.get("json")
+            self.assertEqual(req_data["query"], "girl")
+
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "1girl")
+            self.assertEqual(suggestions[0].type, "danbooru")
+
+    def test_autocomplete_add_prompt_region_related(self):
+        """用户输入 /add --region positive 后未输入搜索词，应通过 _find_nodes_with_region 匹配区域并基于正区域提示词做 Danbooru 关联补全"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "cute", "cn_name": "可爱", "wiki": "Cute character."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch(
+            "PIL.Image.open", return_value=self._get_mock_image_with_positive_region()
+        ), patch("os.path.isfile", return_value=True), patch(
+            "comfyui.autocomplete.requests.post", mock_post
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "--region", "positive"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from .autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
+
+            req_data = call_kwargs.get("json")
+            # 应该仅基于正区域内的提示词（region 外的 "negative prompt line" 不应出现）
+            expected_tags = ["1girl", "cute", "masterpiece", "score_7"]
+            self.assertEqual(sorted(req_data["tags"]), expected_tags)
+
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "cute")
+
+    def test_autocomplete_add_prompt_region_query_search_fallback(self):
+        """用户输入 /add --region positive 继续输入搜索词，无 region 标记时应通过 get_target_clip_node 回退仍能返回补全结果"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch("PIL.Image.open", return_value=self._get_mock_image()), patch(
+            "os.path.isfile", return_value=True
+        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive girl",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "--region", "positive"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from .autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
+
+            req_data = call_kwargs.get("json")
+            self.assertEqual(req_data["query"], "girl")
+
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "1girl")
+            self.assertEqual(suggestions[0].type, "danbooru")
+
+    def test_autocomplete_add_prompt_region_related_fallback(self):
+        """用户输入 /add --region positive 后未输入搜索词，无 region 标记时应通过 get_target_clip_node 回退仍能基于全量提示词做关联补全"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "cute", "cn_name": "可爱", "wiki": "Cute character."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch("PIL.Image.open", return_value=self._get_mock_image()), patch(
+            "os.path.isfile", return_value=True
+        ), patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                "IMAGE_FUNNEL_IMAGE_PATHS": json.dumps(["dummy.png"]),
+                "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "positive",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX": "/add --region positive ",
+                "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": json.dumps(
+                    ["/add", "--region", "positive"]
+                ),
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            from .autocomplete import autocomplete
+
+            suggestions = list(autocomplete("add"))
+
+            mock_post.assert_called_once()
+            call_args, call_kwargs = mock_post.call_args
+            self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
+
+            req_data = call_kwargs.get("json")
+            # 无 region 标记时回退到全量提示词
+            expected_tags = [
+                "1girl",
+                "another prompt line",
+                "cute",
+                "masterpiece",
+                "score_7",
+            ]
+            self.assertEqual(sorted(req_data["tags"]), expected_tags)
+
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "cute")
+
     def _get_mock_node_image(self):
         mock_prompt = {
             "node_1": {
