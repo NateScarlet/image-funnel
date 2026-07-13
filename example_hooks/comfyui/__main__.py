@@ -16,6 +16,7 @@ from .weight_manager import WeightManager
 from .prompt_locator import REGION_START_RE
 from .command_handlers import COMMAND_HANDLERS, CommandContext
 from .config import ComfyUIConfig
+from . import operation_history
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -202,6 +203,9 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
     _LOGGER.debug(
         "Found %d image(s) to process, command: %s", len(targets), args.command
     )
+
+    # 在执行前记录操作历史，失败的操作也需要被追溯和重放
+    operation_history.OperationHistory.from_env().extract_params(args)
 
     has_errors = False
     success_count = 0
