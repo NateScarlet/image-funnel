@@ -15,15 +15,15 @@ from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
 from .prompt_locator import REGION_START_RE
 from .command_handlers import COMMAND_HANDLERS, CommandContext
+from .config import ComfyUIConfig
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _write_action_override(action: str) -> None:
-    """向 IMAGE_FUNNEL_ACTION 文件写入操作覆盖，通知 Runner 跳过默认行为"""
-    action_path = os.getenv("IMAGE_FUNNEL_ACTION", "")
+def _write_action_override(action: str, action_path: str) -> None:
+    """向 action_path 文件写入操作覆盖，通知 Runner 跳过默认行为"""
     if not action_path:
-        raise ValueError("IMAGE_FUNNEL_ACTION environment variable is not set")
+        raise ValueError("action_path is empty")
     with open(action_path, "w", encoding="utf-8") as f:
         f.write(action)
 
@@ -163,9 +163,9 @@ def extract_lora_names(image_paths: List[str]) -> Iterator[str]:
 
 
 def main() -> None:
-    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
-    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
-    log_level = getattr(logging, log_level_str, logging.WARNING)
+    config = ComfyUIConfig.from_env()
+
+    log_level = getattr(logging, config.logging_level, logging.WARNING)
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -175,51 +175,24 @@ def main() -> None:
     args = parse_args()
     _LOGGER.debug("args %s", (args,))
 
-    # 解析 --max-match：默认从 HOOK_MAX_MATCH 环境变量读取，未设置则为 4
-    max_match = args.max_match
-    if max_match is None:
-        max_match_str = os.getenv("HOOK_MAX_MATCH", "4")
-        max_match = int(max_match_str)  # 非法值让 ValueError 向上传播
+    max_match = args.max_match if args.max_match is not None else config.max_match
     if max_match < 0:
         raise ValueError(f"--max-match must be non-negative, got: {max_match}")
 
-    image_paths_str: str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "")
-    image_ids_str: str = os.getenv("IMAGE_FUNNEL_IMAGE_IDS", "")
-    comfyui_url: str = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
-    label_to_set: Optional[str] = os.getenv("HOOK_IMAGE_SET_LABEL")
-
-    # 过滤器星级检查（针对 add/remove 指令的选做项）
-    required_rating_str = os.getenv("HOOK_IMAGE_RATING")
-    required_rating: Optional[int] = None
-    if required_rating_str:
-        required_rating = int(required_rating_str)
-
-    jobs = args.jobs if args.jobs is not None else int(os.getenv("HOOK_JOBS", "1"))
+    jobs = args.jobs if args.jobs is not None else config.jobs
     if jobs <= 0:
         raise ValueError(f"--jobs/HOOK_JOBS must be a positive integer, got: {jobs}")
-
-    try:
-        image_paths: List[str] = json.loads(image_paths_str) if image_paths_str else []
-    except json.JSONDecodeError as e:
-        _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: {e}")
-        sys.exit(1)
-
-    try:
-        image_ids: List[str] = json.loads(image_ids_str) if image_ids_str else []
-    except json.JSONDecodeError as e:
-        _LOGGER.error(f"Failed to parse IMAGE_FUNNEL_IMAGE_IDS: {e}")
-        sys.exit(1)
 
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
     if args.command in ["add", "remove", "adjust"]:
         _LOGGER.debug(f"Command is {args.command}, fetching images via GraphQL...")
-        targets = fetch_images(required_rating)
+        targets = fetch_images(config.required_rating)
     else:
         # queue 场景
-        if image_paths:
-            for idx, path in enumerate(image_paths):
-                img_id = image_ids[idx] if idx < len(image_ids) else ""
+        if config.image_paths:
+            for idx, path in enumerate(config.image_paths):
+                img_id = config.image_ids[idx] if idx < len(config.image_ids) else ""
                 targets.append((img_id, path))
 
     if max_match > 0 and len(targets) > max_match:
@@ -228,15 +201,14 @@ def main() -> None:
             len(targets),
             max_match,
         )
-        _write_action_override("KEEP")
+        _write_action_override("KEEP", config.action_path)
         sys.exit(0)
 
     if not targets:
-        _write_action_override("KEEP")
-        trigger = os.getenv("IMAGE_FUNNEL_TRIGGER", "")
-        if not trigger:
+        _write_action_override("KEEP", config.action_path)
+        if not config.trigger:
             raise ValueError("Environment variable IMAGE_FUNNEL_TRIGGER is missing")
-        is_non_manual = trigger not in ["image_dispatch", "note_dispatch"]
+        is_non_manual = config.trigger not in ["image_dispatch", "note_dispatch"]
         if is_non_manual:
             _LOGGER.info("No images found to process. Skipping.")
             sys.exit(0)
@@ -298,15 +270,13 @@ def main() -> None:
             continue
 
         try:
-            hook_output_dir = os.getenv("HOOK_OUTPUT_DIR", "")
-            if hook_output_dir == ":inherit:":
+            if config.hook_output_dir == ":inherit:":
                 _LOGGER.debug(
                     "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
                 )
             else:
-                comfyui_output_dir_env = os.getenv("COMFYUI_OUTPUT_DIR", "")
                 rel_dir = get_relative_output_dir(
-                    path, comfyui_output_dir_env, hook_output_dir
+                    path, config.comfyui_output_dir, config.hook_output_dir
                 )
                 pair = WorkflowPromptPair(workflow, prompt)
                 FilenameManager(
@@ -326,9 +296,9 @@ def main() -> None:
             prompt=prompt,
             workflow=workflow,
             args=args,
-            comfyui_url=comfyui_url,
+            comfyui_url=config.comfyui_url,
             jobs=jobs,
-            label_to_set=label_to_set,
+            label_to_set=config.label_to_set,
         )
         handler.run(ctx)
         if not ctx.skipped:
@@ -337,7 +307,7 @@ def main() -> None:
     print(f"processed {success_count}/{len(targets)} image(s) successfully.")
 
     if success_count == 0:
-        _write_action_override("KEEP")
+        _write_action_override("KEEP", config.action_path)
 
     if has_errors:
         sys.exit(1)

@@ -246,7 +246,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 comfyui_main()
             self.assertEqual(cm.exception.code, 0)
-            mock_override.assert_called_once_with("KEEP")
+            mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
         # 2. 验证 add 指令没有输入图片，但在有服务端自动（非手动）触发标识时，以 0 退出且写入 KEEP
         with patch.dict(
@@ -268,7 +268,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 comfyui_main()
             self.assertEqual(cm.exception.code, 0)
-            mock_override.assert_called_once_with("KEEP")
+            mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
         # 3. 验证没有服务端触发标识（例如本地命令行直接运行）且没有图片时，直接抛出 ValueError 报错
         with patch.dict(
@@ -293,7 +293,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 comfyui_main()
             self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
-            mock_override.assert_called_once_with("KEEP")
+            mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
         # 4. 验证虽然有服务端触发标识，但是为手动派发（如 note_dispatch）触发且没有图片时，依旧以 1 报错退出
         with patch.dict(
@@ -315,7 +315,7 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 comfyui_main()
             self.assertEqual(cm.exception.code, 1)
-            mock_override.assert_called_once_with("KEEP")
+            mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
 
 class TestComfyUIOutputDirectory(unittest.TestCase):

@@ -8,6 +8,7 @@ import json
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
+
 class TestComfyUIAutocomplete(unittest.TestCase):
 
     def setUp(self):

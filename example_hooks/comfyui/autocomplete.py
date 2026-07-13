@@ -19,6 +19,7 @@ from .__main__ import (
 )
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
+from .config import ComfyUIConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -751,9 +752,8 @@ def autocomplete(
 
 
 def main() -> None:
-    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
-    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
-    log_level = getattr(logging, log_level_str, logging.WARNING)
+    config = ComfyUIConfig.from_env()
+    log_level = getattr(logging, config.logging_level, logging.WARNING)
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
