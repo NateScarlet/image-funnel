@@ -9,6 +9,7 @@ import {
   computeDirectiveInsertion,
   type AutocompleteState,
   type HookInfo,
+  type InsertParams,
 } from "./autocompleteStateMachine";
 import { parseUsage, type DirectiveRule, type Suggestion } from "./directiveAutocomplete";
 
@@ -381,7 +382,7 @@ describe("computeSuggestionInsertion", () => {
   test("name mode: appends space after suggestion text", () => {
     const state = makeNameState({ triggerIndex: 1, type: "name" });
     const sug: Suggestion = { type: "subcommand", text: "adjust", displayText: "/adjust" };
-    const params = computeSuggestionInsertion(sug, state, 3);
+    const params = computeSuggestionInsertion(sug, state, 3) as InsertParams;
     expect(params.textToInsert).toBe("adjust ");
     expect(params.start).toBe(1);
     expect(params.end).toBe(3);
@@ -391,7 +392,7 @@ describe("computeSuggestionInsertion", () => {
   test("option mode without placeholder: appends space", () => {
     const state = makeArgsState({ triggerIndex: 5, type: "args" });
     const sug: Suggestion = { type: "option", text: "--neg", displayText: "--neg" };
-    const params = computeSuggestionInsertion(sug, state, 5);
+    const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
     expect(params.textToInsert).toBe("--neg ");
   });
 
@@ -403,7 +404,7 @@ describe("computeSuggestionInsertion", () => {
       displayText: "--region <region>",
       placeholder: "<region>",
     };
-    const params = computeSuggestionInsertion(sug, state, 5);
+    const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
     expect(params.textToInsert).toBe("--region <region>");
     expect(params.hasPlaceholder).toBe(true);
     expect(params.selectStart).toBe(5 + "--region ".length);
@@ -413,7 +414,7 @@ describe("computeSuggestionInsertion", () => {
   test("positional type: does not append space", () => {
     const state = makeArgsState({ triggerIndex: 5, type: "args" });
     const sug: Suggestion = { type: "positional", text: "<prompt>", displayText: "<prompt>", placeholder: "<prompt>" };
-    const params = computeSuggestionInsertion(sug, state, 5);
+    const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
     expect(params.textToInsert).toBe("<prompt>");
   });
 });

@@ -125,9 +125,13 @@
             type="button"
             class="w-full text-left px-3 py-2 rounded-lg flex flex-col transition-colors cursor-pointer"
             :class="
-              idx === activeIndex
-                ? 'bg-secondary-500 text-white'
-                : 'hover:bg-primary-800 text-primary-200'
+              sug.type === 'error'
+                ? idx === activeIndex
+                  ? 'bg-error-800 text-error-100'
+                  : 'bg-error-950/40 text-error-400'
+                : idx === activeIndex
+                  ? 'bg-secondary-500 text-white'
+                  : 'hover:bg-primary-800 text-primary-200'
             "
             @click="onSelectSuggestion(sug)"
             @mouseenter="activeIndex = idx"
@@ -135,7 +139,11 @@
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
               <span
                 :class="[
-                  idx === activeIndex ? 'text-white' : 'text-secondary-400',
+                  sug.type === 'error'
+                    ? 'text-error-400'
+                    : idx === activeIndex
+                      ? 'text-white'
+                      : 'text-secondary-400',
                   sug.style === 'muted'
                     ? idx === activeIndex
                       ? 'line-through font-normal opacity-70'
@@ -149,9 +157,11 @@
                 v-if="sug.type"
                 class="text-[10px] uppercase px-1 rounded font-normal"
                 :class="
-                  idx === activeIndex
-                    ? 'bg-white/20 text-white'
-                    : 'bg-primary-800 text-primary-400'
+                  sug.type === 'error'
+                    ? 'bg-error-900/60 text-error-300'
+                    : idx === activeIndex
+                      ? 'bg-white/20 text-white'
+                      : 'bg-primary-800 text-primary-400'
                 "
               >
                 {{ typeLabels[sug.type] || sug.type }}
@@ -159,8 +169,14 @@
             </div>
             <div
               v-if="sug.description"
-              class="text-xs opacity-80 wrap-break-word whitespace-pre-wrap"
-              :class="idx === activeIndex ? 'text-white' : 'text-primary-400'"
+              class="text-xs wrap-break-word whitespace-pre-wrap"
+              :class="
+                sug.type === 'error'
+                  ? 'text-error-500'
+                  : idx === activeIndex
+                    ? 'text-white opacity-80'
+                    : 'text-primary-400 opacity-80'
+              "
             >
               {{ sug.description }}
             </div>
@@ -216,6 +232,7 @@ const typeLabels: Record<string, string> = {
   subcommand: "子命令",
   positional: "参数",
   option: "选项",
+  error: "错误",
 };
 
 const props = defineProps<{

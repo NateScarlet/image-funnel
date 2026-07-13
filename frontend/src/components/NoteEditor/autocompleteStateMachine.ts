@@ -264,7 +264,8 @@ export function computeSuggestionInsertion(
   sug: Suggestion,
   state: AutocompleteState,
   selectionEnd: number,
-): InsertParams {
+): InsertParams | null {
+  if (sug.type === "error") return null;
   const triggerIdx = state.triggerIndex;
   const endIdx = selectionEnd;
 

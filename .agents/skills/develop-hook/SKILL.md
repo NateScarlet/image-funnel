@@ -403,3 +403,40 @@ if __name__ == "__main__":
 - 脚本退出码非 0 时，Runner 会记录错误日志并返回空结果（不会阻塞用户输入）。
 - JSONL 中某一行解析失败会导致整个自动完成请求出错，并返回错误给前端。
 - 脚本应使用 `stderr` 输出调试或错误日志，不要污染 `stdout`，因 `stdout` 的全部内容必须为有效的 JSONL。
+
+### 6.7 输出错误建议项
+
+某些场景下请求失败不等于"无建议"（如网络请求超时），脚本不应静默返回空列表欺骗用户。可以通过输出 `type="error"` 的建议项来显示错误信息，令用户知晓失败原因：
+
+```jsonl
+{"text": "", "displayText": "⚠ Danbooru 搜索失败", "description": "ConnectionError: ...", "type": "error"}
+```
+
+- `text` 必须**为空字符串**（`""`），避免用户误选中时修改输入内容。
+- `displayText` 用于显示简短的错误标题。
+- `description` 包含具体的错误细节（如异常消息），会显示在浮层中。
+- `type` 固定为 `"error"`，前端会应用红色系样式区分，并阻止该条目被选中插入。
+
+```python
+# 示例：请求失败时 yield 错误建议项
+try:
+    response = requests.post(api_url, json=payload)
+    response.raise_for_status()
+    for item in response.json().get("results", []):
+        yield AutocompleteSuggestion(
+            text=item["tag"],
+            displayText=item["tag"],
+            description="来自远程搜索",
+            type="search",
+        )
+except requests.RequestException as e:
+    yield AutocompleteSuggestion(
+        text="",
+        displayText="⚠ 搜索服务不可用",
+        description=f"{e}",
+        type="error",
+        style="",
+    )
+```
+
+错误建议项与其他正常建议项可以共存（如本地补全仍正常提供），不会互相影响。

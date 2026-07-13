@@ -297,6 +297,7 @@ export function useNoteAutocomplete(options: Options) {
       const s = state.value;
       const text = toValue(options.model);
       const params = computeSuggestionInsertion(sug, s, selectionEnd);
+      if (!params) return null;
 
       if (params.textToInsert === text.slice(params.start, params.end)) {
         return null;

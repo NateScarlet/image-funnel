@@ -154,6 +154,13 @@ def _fetch_danbooru_suggestions(
             )
     except requests.RequestException as e:
         _LOGGER.warning("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
+        yield AutocompleteSuggestion(
+            text="",
+            displayText="⚠ Danbooru 搜索失败",
+            description=f"{e}",
+            type="error",
+            style="",
+        )
 
 
 def _fetch_danbooru_related(
@@ -205,6 +212,13 @@ def _fetch_danbooru_related(
             )
     except requests.RequestException as e:
         _LOGGER.warning("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
+        yield AutocompleteSuggestion(
+            text="",
+            displayText="⚠ Danbooru 搜索失败",
+            description=f"{e}",
+            type="error",
+            style="",
+        )
 
 
 class AutocompleteContext:
