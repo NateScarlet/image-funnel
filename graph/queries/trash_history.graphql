@@ -1,7 +1,8 @@
 extend type Query {
   "获取回收站历史记录，支持基于 Relay 规范的分页"
   trashHistory(
-    first: Int
+    "每页条目数，默认 100"
+    first: Int = 100
     after: String
   ): TrashHistoryConnection!
 }

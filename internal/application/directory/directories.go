@@ -15,11 +15,6 @@ func (h *Handler) Directories(
 	first *int,
 	after *string,
 ) (connection *shared.DirectoryConnectionDTO, err error) {
-	if first == nil {
-		defaultFirst := 100
-		first = &defaultFirst
-	}
-
 	parentDir, err := h.dirSvc.GetDirectory(ctx, parentID)
 	if err != nil {
 		return nil, err

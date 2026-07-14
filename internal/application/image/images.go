@@ -17,11 +17,6 @@ func (h *Handler) Images(
 	first *int,
 	after *string,
 ) (connection *shared.ImageConnectionDTO, err error) {
-	if first == nil {
-		defaultFirst := 100
-		first = &defaultFirst
-	}
-
 	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err

@@ -17,11 +17,6 @@ func (h *Handler) Notes(
 	first *int,
 	after *string,
 ) (connection *shared.NoteConnectionDTO, err error) {
-	if first == nil {
-		defaultFirst := 100
-		first = &defaultFirst
-	}
-
 	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err

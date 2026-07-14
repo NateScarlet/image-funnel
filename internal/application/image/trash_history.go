@@ -12,11 +12,6 @@ func (h *Handler) TrashHistory(
 	first *int,
 	after *string,
 ) (connection *shared.TrashHistoryConnectionDTO, err error) {
-	if first == nil {
-		defaultFirst := 100
-		first = &defaultFirst
-	}
-
 	builder := pagination.NewConnectionBufferBuilder[*shared.TrashHistoryItemDTO, *shared.TrashHistoryEdgeDTO, *shared.TrashHistoryConnectionDTO]()
 	buf := builder(
 		func(item *shared.TrashHistoryItemDTO, cursor string) (*shared.TrashHistoryEdgeDTO, error) {

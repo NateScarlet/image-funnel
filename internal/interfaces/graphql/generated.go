@@ -2581,17 +2581,19 @@ type Directory implements Node
   "子目录列表，支持筛选与分页"
   directoriesV2(
     filterBy: DirectoryFilters
-    first: Int
+    "每页条目数，默认 100"
+    first: Int = 100
     after: String
   ): DirectoryConnection! @goField(forceResolver: true)
   "目录下的图片列表，支持筛选与分页"
   images(
     filterBy: ImageFiltersInput
-    first: Int
+    "每页条目数，默认 100"
+    first: Int = 100
     after: String
   ): ImageConnection! @goField(forceResolver: true)
   "目录下的笔记列表，支持筛选与分页"
-  notes(filterBy: NoteFiltersInput, first: Int, after: String): NoteConnection!
+  notes(filterBy: NoteFiltersInput, "每页条目数，默认 100" first: Int = 100, after: String): NoteConnection!
     @goField(forceResolver: true)
   "该目录下最后活跃的会话，无历史会话时返回null"
   lastSession: Session @goField(forceResolver: true)
@@ -3093,7 +3095,8 @@ extend type Query {
 	{Name: "../../../graph/queries/trash_history.graphql", Input: `extend type Query {
   "获取回收站历史记录，支持基于 Relay 规范的分页"
   trashHistory(
-    first: Int
+    "每页条目数，默认 100"
+    first: Int = 100
     after: String
   ): TrashHistoryConnection!
 }
