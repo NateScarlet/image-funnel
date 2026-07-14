@@ -178,7 +178,7 @@ def _fetch_danbooru_related(
 
     payload = {
         "tags": tags,
-        "limit": 20,
+        "limit": 100,
         "show_nsfw": show_nsfw,
     }
 
@@ -192,10 +192,16 @@ def _fetch_danbooru_related(
         res_json = response.json()
         results = res_json.get("results", [])
         _LOGGER.debug("Danbooru related search returned %d items", len(results))
+        yielded_count = 0
         for item in results:
             tag = item.get("tag", "")
             if not tag:
                 continue
+
+            # 过滤掉角色类型标签，避免污染联想建议
+            if item.get("category") == "Character":
+                continue
+
             cn_name = item.get("cn_name", "")
             wiki = item.get("wiki", "")
 
@@ -211,6 +217,9 @@ def _fetch_danbooru_related(
                 description=desc,
                 type="danbooru",
             )
+            yielded_count += 1
+            if yielded_count >= 20:
+                break
     except requests.RequestException as e:
         _LOGGER.warning("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
         yield AutocompleteSuggestion(

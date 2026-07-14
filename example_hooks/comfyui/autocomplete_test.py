@@ -323,6 +323,12 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                     "cn_name": "水手领",
                     "wiki": "A collar style.",
                 },
+                {
+                    "tag": "hatsune_miku",
+                    "category": "Character",
+                    "cn_name": "初音未来",
+                    "wiki": "Vocaloid character.",
+                },
                 {"tag": "skirt", "cn_name": "裙子", "wiki": "A bottom wear."},
             ]
         }
@@ -349,7 +355,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         req_data = call_kwargs.get("json")
         self.assertEqual(req_data["tags"], ["masterpiece", "1girl"])
-        self.assertEqual(req_data["limit"], 20)
+        self.assertEqual(req_data["limit"], 100)
         self.assertFalse(req_data["show_nsfw"])
 
         mock_post.reset_mock()
@@ -794,6 +800,76 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertTrue(
             any(s.text == '"1girl, masterpiece, score_7, cute"' for s in suggestions)
         )
+
+
+class TestAutocompleteIntegration(unittest.TestCase):
+
+    @patch("comfyui.autocomplete.requests.post")
+    def test_integration_autocomplete_danbooru_related(
+        self, mock_post: MagicMock
+    ) -> None:
+        import io
+        import json
+        from comfyui.autocomplete import main as autocomplete_main
+
+        # 1. Mock Danbooru API 的返回，包含 1 个 Character 标签，以及超过 25 个其他标签
+        mock_response = MagicMock()
+        results = [
+            {"tag": "1girl", "cn_name": "女孩", "wiki": "A girl."},
+            {
+                "tag": "hatsune_miku",
+                "category": "Character",
+                "cn_name": "初音未来",
+                "wiki": "A character.",
+            },
+        ]
+        for i in range(30):
+            results.append(
+                {"tag": f"tag_{i}", "cn_name": f"标签_{i}", "wiki": f"Wiki_{i}"}
+            )
+
+        mock_response.json.return_value = {"results": results}
+        mock_post.return_value = mock_response
+
+        # 2. 配置补全上下文环境变量
+        env_vars = {
+            "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/add", "masterpiece,", "1girl,"]',
+            "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
+        }
+
+        # 3. 拦截 stdout 并运行 main()
+        with patch.dict(os.environ, env_vars), patch(
+            "sys.argv", ["comfyui.autocomplete", "add"]
+        ), patch("sys.stdout", new_io := io.StringIO()):
+            try:
+                autocomplete_main()
+            except SystemExit as e:
+                self.assertEqual(e.code, 0)
+            output = new_io.getvalue()
+
+        # 4. 解析输出的 JSONL 并验证
+        lines = [
+            json.loads(line) for line in output.strip().splitlines() if line.strip()
+        ]
+
+        # 验证 limit 为 100
+        mock_post.assert_called_once()
+        _, call_kwargs = mock_post.call_args
+        self.assertEqual(call_kwargs.get("json", {}).get("limit"), 100)
+
+        # 验证结果中不包含 character 标签
+        tags = [item["text"] for item in lines]
+        self.assertNotIn("hatsune_miku", tags)
+        self.assertIn("1girl", tags)
+        self.assertIn("tag_0", tags)
+
+        # 验证结果被限制在最前 20 个常规标签内（1girl + tag_0 到 tag_18）
+        self.assertEqual(len(lines), 20)
+        self.assertEqual(lines[0]["text"], "1girl")
+        self.assertEqual(lines[19]["text"], "tag_18")
 
 
 if __name__ == "__main__":
