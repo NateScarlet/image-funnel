@@ -1,0 +1,10 @@
+id = "retention-rating2"
+name = "保留图片(2星)"
+description = "会话提交后，仅保留最近的128张2星图片，超出部分移至回收站"
+command = "uv run runner.py retention"
+
+[on.post_commit_session]
+
+[env]
+HOOK_IMAGE_RATING = "2"
+HOOK_MAX_RETAIN = "128"
