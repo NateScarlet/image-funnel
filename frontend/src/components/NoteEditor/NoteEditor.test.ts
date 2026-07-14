@@ -375,8 +375,8 @@ describe("NoteEditor", () => {
     positiveBtn?.click();
     await nextTick();
 
-    // 验证选区 `<region>` 被替换为 `positive`，而不是 `positive<region>`
-    expect(wrapper.find("textarea").element.value).toBe("/add --region positive");
+    // 验证选区 `<region>` 被替换为 `positive `，且追加了尾随空格，而不是 `positive<region>`
+    expect(wrapper.find("textarea").element.value).toBe("/add --region positive ");
   });
 
   test("uses document.execCommand to insert suggestion and preserve undo history", async () => {
@@ -518,7 +518,7 @@ describe("NoteEditor", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
-  test("does not prevent default Enter behavior if the selected suggestion will not change the text", async () => {
+  test("prevents default Enter behavior if the selected suggestion will change the text by appending a space", async () => {
     mockQuery.mockResolvedValue({
       data: {
         hookAutocomplete: [
@@ -556,7 +556,7 @@ describe("NoteEditor", () => {
     el.element.dispatchEvent(event);
     await nextTick();
 
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   test("selects the first item automatically when Ctrl+Space is pressed", async () => {

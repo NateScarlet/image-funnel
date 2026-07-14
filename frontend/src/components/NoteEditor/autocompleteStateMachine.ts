@@ -272,7 +272,8 @@ export function computeSuggestionInsertion(
   let textToInsert = sug.text;
   if (state.type === "name") {
     textToInsert = `${sug.text} `;
-  } else if (sug.type === "option" && !sug.placeholder) {
+  } else if (!sug.placeholder) {
+    // 对于除指令名外的所有非占位符建议，均追加尾随空格，防止光标停留在单词末尾而重复触发补全
     textToInsert = `${sug.text} `;
   }
 

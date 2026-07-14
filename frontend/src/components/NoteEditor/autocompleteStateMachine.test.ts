@@ -417,6 +417,20 @@ describe("computeSuggestionInsertion", () => {
     const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
     expect(params.textToInsert).toBe("<prompt>");
   });
+
+  test("positional type without placeholder (e.g. danbooru tag): appends space", () => {
+    const state = makeArgsState({ triggerIndex: 5, type: "args" });
+    const sug: Suggestion = { type: "positional", text: "1girl", displayText: "1girl" };
+    const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
+    expect(params.textToInsert).toBe("1girl ");
+  });
+
+  test("node-id type without placeholder: appends space", () => {
+    const state = makeArgsState({ triggerIndex: 5, type: "args" });
+    const sug: Suggestion = { type: "node-id", text: "node123", displayText: "node123" };
+    const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
+    expect(params.textToInsert).toBe("node123 ");
+  });
 });
 
 // #endregion

@@ -201,6 +201,7 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 
 ### 通用
 
+- **Commit 规范**: 对于 `example_hooks` 目录及相关钩子脚本的修改，Commit 消息的 scope 部分必须带有 `example-hooks/` 前缀（例如：`feat(example-hooks/danbooru): ...`）。
 - **注释**: 使用中文添加对理解上下文有帮助的注释，避免简单翻译代码
 - **Region 注释**: 使用 `// #region {分组名称}` / `// #endregion` 包裹长段关联代码
 - **ID**: 客户端不应尝试解析 ID，格式不固定
