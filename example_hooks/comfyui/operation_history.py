@@ -98,3 +98,23 @@ class OperationHistory:
             return
 
         raise AssertionError(f"unreachable: unknown command {cmd!r}")
+
+    def get_added_prompts(self, candidates: list[str]) -> set[str]:
+        """返回 candidates 中已在历史记录中存在的提示词集合。"""
+        if not os.path.isfile(self.db_path) or not candidates:
+            return set()
+        conn = sqlite3.connect(self.db_path)
+        try:
+            placeholders = ",".join("?" * len(candidates))
+            rows = conn.execute(
+                f"SELECT DISTINCT json_extract(data, '$.prompt') FROM history WHERE command = 'add' AND json_extract(data, '$.prompt') IN ({placeholders})",
+                candidates,
+            ).fetchall()
+            return {row[0] for row in rows}
+        finally:
+            conn.close()
+
+
+def get_added_prompts(candidates: list[str]) -> set[str]:
+    """返回 candidates 中已在历史记录中存在的提示词集合。"""
+    return OperationHistory.from_env().get_added_prompts(candidates)

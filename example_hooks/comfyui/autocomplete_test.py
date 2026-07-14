@@ -421,6 +421,77 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "solo")
 
+    def test_autocomplete_danbooru_style_muted_from_history(self):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
+                {"tag": "solo", "cn_name": "单人", "wiki": "Solo image."},
+            ]
+        }
+        mock_post = MagicMock(return_value=mock_response)
+
+        with patch(
+            "comfyui.autocomplete.get_added_prompts", return_value={"1girl"}
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
+                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            },
+        ):
+            # 场景 1：有 query，执行前缀语义搜索
+            context1 = self._make_context(
+                target_command="add",
+                query="girl",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+            )
+            provider = DanbooruProvider()
+
+            with patch("comfyui.autocomplete.requests.post", mock_post):
+                suggestions1 = list(provider.provide(context1))
+
+            self.assertEqual(len(suggestions1), 2)
+            # 1girl 在历史中，style 为 muted
+            self.assertEqual(suggestions1[0].text, "1girl")
+            self.assertEqual(suggestions1[0].style, "muted")
+            # solo 不在历史中，style 保持为空
+            self.assertEqual(suggestions1[1].text, "solo")
+            self.assertEqual(suggestions1[1].style, "")
+
+            # 场景 2：空 query，执行关联联想
+            context2 = self._make_context(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+                seen_prompts={"portrait": "区域: positive"},
+                workflow={"nodes": []},
+                prompt_meta={},
+            )
+
+            mock_response_related = MagicMock()
+            mock_response_related.json.return_value = {
+                "results": [
+                    {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
+                    {"tag": "solo", "cn_name": "单人", "wiki": "Solo image."},
+                ]
+            }
+            mock_post_related = MagicMock(return_value=mock_response_related)
+
+            with patch("comfyui.autocomplete.requests.post", mock_post_related):
+                suggestions2 = list(provider.provide(context2))
+
+            self.assertEqual(len(suggestions2), 2)
+            self.assertEqual(suggestions2[0].text, "1girl")
+            self.assertEqual(suggestions2[0].style, "muted")
+            self.assertEqual(suggestions2[1].text, "solo")
+            self.assertEqual(suggestions2[1].style, "")
+
     def test_autocomplete_add_prompt_with_neg_flag(self):
         mock_response = MagicMock()
         mock_response.json.return_value = {

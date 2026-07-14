@@ -20,6 +20,7 @@ from .__main__ import (
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .config import ComfyUIConfig
+from .operation_history import get_added_prompts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -700,12 +701,30 @@ class DanbooruProvider(AutocompleteProvider):
             )
             return cleaned_text in context.seen_prompts
 
-        if context.query.strip():
-            # 用户正在打字，执行前缀语义搜索
-            for s in _fetch_danbooru_suggestions(context.query, danbooru_url):
+        def apply_styles(
+            suggestions: List[AutocompleteSuggestion], added: Set[str]
+        ) -> Iterator[AutocompleteSuggestion]:
+            for s in suggestions:
                 if is_in_workflow(s.text):
                     s.style = "muted"
+                elif not s.style and s.text in added:
+                    s.style = "muted"
                 yield s
+
+        has_history = (
+            "IMAGE_FUNNEL_ROOT_DIR" in os.environ
+            and "IMAGE_FUNNEL_DIRECTORY_REL_PATH" in os.environ
+        )
+
+        if context.query.strip():
+            # 用户正在打字，执行前缀语义搜索
+            suggestions = list(_fetch_danbooru_suggestions(context.query, danbooru_url))
+            added: Set[str] = (
+                get_added_prompts([s.text for s in suggestions])
+                if has_history
+                else set()
+            )
+            yield from apply_styles(suggestions, added)
         else:
             # 当前词未输入，执行关联联想
             prompt_tags = _extract_prompt_tags(
@@ -724,10 +743,13 @@ class DanbooruProvider(AutocompleteProvider):
                 prompt_tags = sorted(list(set(raw_tags)))
 
             if prompt_tags:
-                for s in _fetch_danbooru_related(prompt_tags, danbooru_url):
-                    if is_in_workflow(s.text):
-                        s.style = "muted"
-                    yield s
+                suggestions = list(_fetch_danbooru_related(prompt_tags, danbooru_url))
+                added: Set[str] = (
+                    get_added_prompts([s.text for s in suggestions])
+                    if has_history
+                    else set()
+                )
+                yield from apply_styles(suggestions, added)
 
 
 def autocomplete(
