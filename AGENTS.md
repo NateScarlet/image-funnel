@@ -219,4 +219,4 @@ The five canonical triage roles use their default names. See `docs/agents/triage
 
 ### Domain docs
 
-Single-context. See `docs/agents/domain.md`.
+Multi-context ("app" and "example_hooks"). See `docs/agents/domain.md`.
