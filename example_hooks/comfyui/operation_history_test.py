@@ -132,12 +132,12 @@ def test_from_env():
         },
     ):
         history = OperationHistory.from_env()
-    assert history.db_path == "/tmp/test_dir/.io.github.nantescarlet.hook.db"
+    assert history.db_path == "/tmp/test_dir/.io.github.natescarlet.hook.db"
 
 
 def test_get_added_prompts():
     with tempfile.TemporaryDirectory() as tmp:
-        db_path = os.path.join(tmp, ".io.github.nantescarlet.hook.db")
+        db_path = os.path.join(tmp, ".io.github.natescarlet.hook.db")
         history = OperationHistory(db_path)
         history.ensure_db()
         history.record("add", {"prompt": "1girl"})
@@ -154,7 +154,7 @@ def test_get_added_prompts():
 
 def test_get_added_prompts_db_not_exist():
     with tempfile.TemporaryDirectory() as tmp:
-        db_path = os.path.join(tmp, "non_exist_dir", ".io.github.nantescarlet.hook.db")
+        db_path = os.path.join(tmp, "non_exist_dir", ".io.github.natescarlet.hook.db")
         history = OperationHistory(db_path)
         res = history.get_added_prompts(["1girl"])
         assert res == set()

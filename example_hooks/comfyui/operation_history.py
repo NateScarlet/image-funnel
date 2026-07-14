@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """操作历史记录模块：将 comfyui 指令执行记录写入当前目录下的 SQLite 数据库。
 
-数据库文件路径：{IMAGE_FUNNEL_ROOT_DIR}/{IMAGE_FUNNEL_DIRECTORY_REL_PATH}/.io.github.nantescarlet.hook.db
+数据库文件路径：{IMAGE_FUNNEL_ROOT_DIR}/{IMAGE_FUNNEL_DIRECTORY_REL_PATH}/.io.github.natescarlet.hook.db
 仅在 __main__.py 的执行路径中调用，autocomplete 有独立入口，不会经过此模块。
 """
 
@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 
-_DB_FILENAME = ".io.github.nantescarlet.hook.db"
+_DB_FILENAME = ".io.github.natescarlet.hook.db"
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS history (
