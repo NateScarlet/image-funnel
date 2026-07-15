@@ -31,6 +31,15 @@ _MIGRATIONS: list[str] = [
         updated_at INTEGER NOT NULL
     );
     """,
+    """
+    CREATE TABLE IF NOT EXISTS danbooru_tag_cache (
+        tag        TEXT PRIMARY KEY,
+        cn_name    TEXT NOT NULL,
+        wiki       TEXT NOT NULL,
+        category   TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    """,
 ]
 
 

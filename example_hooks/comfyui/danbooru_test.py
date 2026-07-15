@@ -6,16 +6,23 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 import requests
+import time
 
 from .db import SQLiteContext
 from .danbooru import (
     AkizukiDanbooruTagProvider,
     DanbooruTag,
     SQLiteDanbooruTagProvider,
+    SQLiteDanbooruTagLoader,
+    AkizukiDanbooruTagLoader,
 )
 
 
 class TestAkizukiDanbooruTagProvider(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.loader = MagicMock()
+        self.loader.load.return_value = None
 
     @patch("comfyui.danbooru.requests.post")
     def test_search_success(self, mock_post: MagicMock) -> None:
@@ -39,7 +46,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         }
         mock_post.return_value = mock_response
 
-        provider = AkizukiDanbooruTagProvider("https://mock-api.com")
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
         results = provider.search("girl")
 
         self.assertEqual(len(results), 2)
@@ -52,7 +61,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
     def test_search_failure(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = requests.RequestException("Network Error")
 
-        provider = AkizukiDanbooruTagProvider("https://mock-api.com")
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
         with self.assertRaises(requests.RequestException):
             provider.search("girl")
 
@@ -72,7 +83,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         }
         mock_post.return_value = mock_response
 
-        provider = AkizukiDanbooruTagProvider("https://mock-api.com")
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
         results = provider.related(["1girl", "solo"])
 
         self.assertEqual(len(results), 1)
@@ -87,7 +100,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         mock_post.return_value = mock_response
 
         # 默认情况下 NSFW 为 false
-        provider = AkizukiDanbooruTagProvider("https://mock-api.com")
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
         provider.search("girl")
         _, call_kwargs = mock_post.call_args
         payload = call_kwargs.get("json", {})
@@ -98,7 +113,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         # show_nsfw=True 时，应该反映在 payload 中
         mock_post.reset_mock()
         provider_nsfw = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", show_nsfw=True
+            "https://mock-api.com", loader=self.loader, show_nsfw=True
         )
         provider_nsfw.search("girl")
         _, call_kwargs = mock_post.call_args
@@ -112,7 +127,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         mock_response.json.return_value = {"results": []}
         mock_post.return_value = mock_response
 
-        provider = AkizukiDanbooruTagProvider("https://mock-api.com")
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
         provider.related(["1girl"])
         _, call_kwargs = mock_post.call_args
         payload = call_kwargs.get("json", {})
@@ -122,7 +139,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
 
         mock_post.reset_mock()
         provider_nsfw = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", show_nsfw=True
+            "https://mock-api.com", loader=self.loader, show_nsfw=True
         )
         provider_nsfw.related(["1girl"])
         _, call_kwargs = mock_post.call_args
@@ -131,11 +148,15 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
 
     def test_from_env(self) -> None:
         with patch.dict(os.environ, {"DANBOORU_SEARCH_INCLUDE_NSFW": "true"}):
-            provider = AkizukiDanbooruTagProvider.from_env("https://mock-api.com")
+            provider = AkizukiDanbooruTagProvider.from_env(
+                "https://mock-api.com", loader=self.loader
+            )
             self.assertTrue(provider.show_nsfw)
 
         with patch.dict(os.environ, {"DANBOORU_SEARCH_INCLUDE_NSFW": "false"}):
-            provider = AkizukiDanbooruTagProvider.from_env("https://mock-api.com")
+            provider = AkizukiDanbooruTagProvider.from_env(
+                "https://mock-api.com", loader=self.loader
+            )
             self.assertFalse(provider.show_nsfw)
 
 
@@ -294,3 +315,157 @@ class TestSQLiteDanbooruTagProvider(unittest.TestCase):
         except SystemExit as e:
             self.assertEqual(e.code, 0)
         mock_update.assert_called_once_with("search", "girl", "https://mock-api.com")
+
+
+class TestDanbooruTagLoader(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.db_ctx = SQLiteContext(":memory:")
+        # 激活建表迁移
+        _ = self.db_ctx.connection
+        self.mock_inner = MagicMock()
+        self.loader = SQLiteDanbooruTagLoader(self.mock_inner, self.db_ctx, ttl=3600)
+
+    def tearDown(self) -> None:
+        self.db_ctx.close()
+
+    def test_load_cache_hit(self) -> None:
+        now = int(time.time())
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                ("1girl", "女孩", "A girl.", "General", now),
+            )
+
+        res = self.loader.load("1girl")
+        assert res is not None
+        self.assertEqual(res.tag, "1girl")
+        self.assertEqual(res.cn_name, "女孩")
+        self.assertEqual(res.category, "General")
+        self.mock_inner.load.assert_not_called()
+
+    def test_load_cache_miss_calls_inner(self) -> None:
+        mock_tag = DanbooruTag("solo", "单人", "Solo.", "General")
+        self.mock_inner.load.return_value = mock_tag
+
+        res = self.loader.load("solo")
+        self.assertEqual(res, mock_tag)
+        self.mock_inner.load.assert_called_once_with("solo")
+
+        row = self.db_ctx.connection.execute(
+            "SELECT cn_name, wiki, category FROM danbooru_tag_cache WHERE tag = ?",
+            ("solo",),
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], "单人")
+        self.assertEqual(row[2], "General")
+
+    def test_load_cache_expired(self) -> None:
+        now = int(time.time())
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                ("1girl", "女孩", "A girl.", "General", now - 7200),
+            )
+
+        mock_tag = DanbooruTag("1girl", "女孩新", "A girl.", "General")
+        self.mock_inner.load.return_value = mock_tag
+
+        res = self.loader.load("1girl")
+        self.assertEqual(res, mock_tag)
+        self.mock_inner.load.assert_called_once_with("1girl")
+
+    @patch("requests.post")
+    def test_akizuki_loader_load_success(self, mock_post: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "tag": "solo_focus",
+                    "cn_name": "单人焦点",
+                    "wiki": "",
+                    "category": "General",
+                },
+                {
+                    "tag": "solo",
+                    "cn_name": "单人",
+                    "wiki": "wiki",
+                    "category": "General",
+                },
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        res = raw_loader.load("solo")
+
+        assert res is not None
+        self.assertEqual(res.tag, "solo")
+        self.assertEqual(res.cn_name, "单人")
+        self.assertEqual(res.category, "General")
+
+    @patch("requests.post")
+    def test_provider_related_consumes_loader(self, mock_post: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {"tag": "solo", "cn_name": "单人", "category": "General"},
+                {"tag": "1girl", "cn_name": "女孩", "category": "General"},
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        now = int(time.time())
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                ("1girl", "女孩", "A girl.", "General", now),
+            )
+
+        solo_tag = DanbooruTag("solo", "单人", "Solo.", "General")
+        self.mock_inner.load.return_value = solo_tag
+
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
+        results = provider.related(["dummy"])
+
+        self.assertEqual(len(results), 2)
+        tag_map = {item.tag: item for item in results}
+        self.assertIn("1girl", tag_map)
+        self.assertEqual(tag_map["1girl"].cn_name, "女孩")
+        self.assertEqual(tag_map["1girl"].category, "General")
+
+        self.assertIn("solo", tag_map)
+        self.assertEqual(tag_map["solo"].cn_name, "单人")
+        self.assertEqual(tag_map["solo"].category, "General")
+
+    @patch("requests.post")
+    def test_provider_prepopulates_loader_cache(self, mock_post: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "tag": "red_hair",
+                    "cn_name": "红发",
+                    "wiki": "Red.",
+                    "category": "Copyright",
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        provider = AkizukiDanbooruTagProvider(
+            "https://mock-api.com", loader=self.loader
+        )
+        results = provider.search("red")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].tag, "red_hair")
+        row = self.db_ctx.connection.execute(
+            "SELECT cn_name, category FROM danbooru_tag_cache WHERE tag = ?",
+            ("red_hair",),
+        ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], "红发")
+        self.assertEqual(row[1], "Copyright")

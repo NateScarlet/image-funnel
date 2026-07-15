@@ -15,6 +15,8 @@ from .danbooru import (
     DanbooruTagProvider,
     AkizukiDanbooruTagProvider,
     SQLiteDanbooruTagProvider,
+    AkizukiDanbooruTagLoader,
+    SQLiteDanbooruTagLoader,
 )
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
@@ -775,7 +777,11 @@ def autocomplete(
     if danbooru_url:
         try:
             db_ctx = SQLiteContext.from_env()
-            akizuki = AkizukiDanbooruTagProvider.from_env(danbooru_url)
+            raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
+            cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
+            akizuki = AkizukiDanbooruTagProvider.from_env(
+                danbooru_url, loader=cache_loader
+            )
             danbooru_tag_provider = SQLiteDanbooruTagProvider(
                 akizuki, db_ctx, danbooru_url
             )

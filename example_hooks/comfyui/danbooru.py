@@ -22,6 +22,125 @@ class DanbooruTag:
     category: str
 
 
+class DanbooruTagLoader(Protocol):
+    """支持按精确名称查询/加载单个 Danbooru 标签详情的接口。"""
+
+    def load(self, tag: str) -> Optional[DanbooruTag]:
+        """精确按 tag 名称加载详情。"""
+        ...
+
+    def write_cache(self, item: DanbooruTag) -> None:
+        """回填写入缓存数据（可选）。"""
+        ...
+
+
+class AkizukiDanbooruTagLoader:
+    """通过 Akizuki 在线接口精确匹配并加载单个 DanbooruTag 的实体。"""
+
+    def __init__(self, search_url: str) -> None:
+        self.search_url = search_url
+
+    @classmethod
+    def from_env(cls, search_url: str) -> "AkizukiDanbooruTagLoader":
+        return cls(search_url)
+
+    def write_cache(self, item: DanbooruTag) -> None:
+        """AkizukiDanbooruTagLoader 本身无缓存写操作，此处直接 pass。"""
+        pass
+
+    def load(self, tag: str) -> Optional[DanbooruTag]:
+        if not tag.strip():
+            return None
+
+        api_url = f"{self.search_url}/api/search"
+        payload = {
+            "query": tag,
+            "top_k": 5,
+            "limit": 5,
+            "popularity_weight": 0.0,
+            "show_nsfw": True,
+            "use_segmentation": False,
+        }
+
+        try:
+            response = requests.post(api_url, json=payload, timeout=5.0)
+            response.raise_for_status()
+            res_json = response.json()
+            results = res_json.get("results", [])
+
+            for item in results:
+                name = item["tag"]
+                if name == tag:
+                    return DanbooruTag(
+                        tag=name,
+                        cn_name=item["cn_name"],
+                        wiki=item.get("wiki", ""),
+                        category=item["category"],
+                    )
+            return None
+        except Exception as e:
+            _LOGGER.error(
+                "Failed to load Danbooru tag %r details: %s", tag, e, exc_info=True
+            )
+            return None
+
+
+class SQLiteDanbooruTagLoader:
+    """带 SQLite 缓存的 DanbooruTagLoader 装饰器。"""
+
+    def __init__(
+        self,
+        loader: DanbooruTagLoader,
+        db_ctx: SQLiteContext,
+        ttl: int = 2592000,  # 30天
+    ) -> None:
+        self.loader = loader
+        self.db_ctx = db_ctx
+        self.ttl = ttl
+
+    def load(self, tag: str) -> Optional[DanbooruTag]:
+        if not tag.strip():
+            return None
+
+        now = int(time.time())
+        # 1. 尝试从 SQLite 中读取精确匹配的缓存
+        try:
+            row = self.db_ctx.connection.execute(
+                "SELECT cn_name, wiki, category, updated_at FROM danbooru_tag_cache WHERE tag = ?",
+                (tag,),
+            ).fetchone()
+            if row:
+                cn_name, wiki, category, updated_at = row
+                if now - updated_at < self.ttl:
+                    return DanbooruTag(
+                        tag=tag, cn_name=cn_name, wiki=wiki, category=category
+                    )
+        except Exception as e:
+            _LOGGER.warning("SQLite tag cache read error: %s", e)
+
+        # 2. 缓存未命中或已过期，同步调用底层 loader 获取最新信息
+        result = self.loader.load(tag)
+        if result:
+            self.write_cache(result)
+        return result
+
+    def write_cache(self, item: DanbooruTag) -> None:
+        """保存/更新单个 Tag 的详情至缓存。"""
+        now = int(time.time())
+        try:
+            with self.db_ctx.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
+                    (now - self.ttl,),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (item.tag, item.cn_name, item.wiki, item.category, now),
+                )
+        except Exception as e:
+            _LOGGER.warning("SQLite tag cache write error: %s", e)
+
+
 class DanbooruTagProvider(Protocol):
     """Danbooru 标签自动补全提供者接口。"""
 
@@ -37,15 +156,25 @@ class DanbooruTagProvider(Protocol):
 class AkizukiDanbooruTagProvider:
     """Akizuki Danbooru 服务提供的标签补全实现。"""
 
-    def __init__(self, search_url: str, show_nsfw: bool = False) -> None:
+    def __init__(
+        self,
+        search_url: str,
+        loader: DanbooruTagLoader,
+        show_nsfw: bool = False,
+    ) -> None:
         self.search_url = search_url.rstrip("/")
+        self.loader = loader
         self.show_nsfw = show_nsfw
 
     @classmethod
-    def from_env(cls, search_url: str) -> "AkizukiDanbooruTagProvider":
+    def from_env(
+        cls,
+        search_url: str,
+        loader: DanbooruTagLoader,
+    ) -> "AkizukiDanbooruTagProvider":
         show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
         show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
-        return cls(search_url, show_nsfw=show_nsfw)
+        return cls(search_url, loader=loader, show_nsfw=show_nsfw)
 
     def search(self, query: str) -> List[DanbooruTag]:
         if not query.strip():
@@ -77,17 +206,15 @@ class AkizukiDanbooruTagProvider:
 
             tags: List[DanbooruTag] = []
             for item in results:
-                tag = item.get("tag", "")
-                if not tag:
-                    continue
-                tags.append(
-                    DanbooruTag(
-                        tag=tag,
-                        cn_name=item.get("cn_name", ""),
-                        wiki=item.get("wiki", ""),
-                        category=item.get("category", ""),
-                    )
+                tag = item["tag"]
+                tag_item = DanbooruTag(
+                    tag=tag,
+                    cn_name=item["cn_name"],
+                    wiki=item.get("wiki", ""),
+                    category=item["category"],
                 )
+                tags.append(tag_item)
+                self.loader.write_cache(tag_item)
             return tags
         except requests.RequestException as e:
             _LOGGER.error("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
@@ -118,15 +245,17 @@ class AkizukiDanbooruTagProvider:
 
             tags_list: List[DanbooruTag] = []
             for item in results:
-                tag = item.get("tag", "")
-                if not tag:
+                tag = item["tag"]
+                loaded = self.loader.load(tag)
+                if loaded:
+                    tags_list.append(loaded)
                     continue
                 tags_list.append(
                     DanbooruTag(
                         tag=tag,
-                        cn_name=item.get("cn_name", ""),
+                        cn_name=item["cn_name"],
                         wiki=item.get("wiki", ""),
-                        category=item.get("category", ""),
+                        category=item["category"],
                     )
                 )
             return tags_list
@@ -311,7 +440,9 @@ def update_cache(
     if db_ctx is None:
         db_ctx = SQLiteContext.from_env()
 
-    akizuki = AkizukiDanbooruTagProvider.from_env(search_url)
+    raw_loader = AkizukiDanbooruTagLoader(search_url)
+    cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
+    akizuki = AkizukiDanbooruTagProvider.from_env(search_url, loader=cache_loader)
     provider = SQLiteDanbooruTagProvider(akizuki, db_ctx, search_url)
 
     with db_ctx:
