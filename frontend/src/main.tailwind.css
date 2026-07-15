@@ -11,6 +11,7 @@
     background-color: var(--color-primary-900);
     color: var(--color-primary-100);
     overflow: auto;
+    touch-action: manipulation;
   }
 }
 
