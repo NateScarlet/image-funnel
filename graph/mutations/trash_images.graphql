@@ -2,6 +2,8 @@
 input TrashImagesInput {
   directoryId: ID!
   filterBy: ImageFiltersInput!
+  "删除时附带的额外说明消息，支持多行文本"
+  message: String
   clientMutationId: String
 }
 

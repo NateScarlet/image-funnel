@@ -14,6 +14,7 @@ func (h *Handler) TrashImages(
 	ctx context.Context,
 	directoryID scalar.ID,
 	filterBy shared.ImageFilters,
+	message string,
 ) (historyId string, totalFileCount int, err error) {
 	startTime := time.Now()
 
@@ -28,7 +29,7 @@ func (h *Handler) TrashImages(
 		zap.String("fromDirectory", relPath),
 	)
 
-	historyId, totalFileCount, err = h.imgTrasher.Trash(ctx, relPath, filterBy)
+	historyId, totalFileCount, err = h.imgTrasher.Trash(ctx, relPath, filterBy, message)
 	if err != nil {
 		h.logger.Error("trash images failed",
 			zap.Stringer("directoryID", directoryID),

@@ -225,7 +225,7 @@ func TestTrashAndUndo(t *testing.T) {
 	}
 
 	// 1. 测试 Trash 暂存
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, historyId)
 	assert.Equal(t, 3, fileCount) // img1.jpg, img1.jpg.txt, img2.jpg
@@ -283,7 +283,7 @@ func TestEmptyTrash(t *testing.T) {
 		Rating: []int{0},
 	}
 
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, fileCount)
 
@@ -337,7 +337,7 @@ func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {
 	}
 
 	// 执行 Trash
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, historyId)
 	assert.Equal(t, 2, fileCount) // 仅移动 img1.png 和 img1.png.xmp
@@ -479,7 +479,7 @@ func TestUndoTrashConflict(t *testing.T) {
 	filter := shared.ImageFilters{}
 
 	// 1. 将两个图片移入回收站
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter)
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, fileCount)
 

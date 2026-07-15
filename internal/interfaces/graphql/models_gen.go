@@ -299,9 +299,11 @@ type Subscription struct {
 
 // 将符合条件的图片及其配套文件移到回收站
 type TrashImagesInput struct {
-	DirectoryID      scalar.ID            `json:"directoryId"`
-	FilterBy         *shared.ImageFilters `json:"filterBy"`
-	ClientMutationID *string              `json:"clientMutationId,omitempty"`
+	DirectoryID scalar.ID            `json:"directoryId"`
+	FilterBy    *shared.ImageFilters `json:"filterBy"`
+	// 删除时附带的额外说明消息，支持多行文本
+	Message          *string `json:"message,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type TrashImagesPayload struct {

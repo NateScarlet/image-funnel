@@ -167,6 +167,9 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
     if jobs <= 0:
         raise ValueError(f"--jobs/HOOK_JOBS must be a positive integer, got: {jobs}")
 
+    if client is None:
+        client = GraphQLClient.from_env()
+
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
     if args.command in ["add", "remove", "adjust"]:

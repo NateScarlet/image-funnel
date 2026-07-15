@@ -18,7 +18,12 @@ func (r *mutationResolver) TrashImages(ctx context.Context, input TrashImagesInp
 		filter = *input.FilterBy
 	}
 
-	historyId, movedCount, err := r.app.TrashImages(ctx, input.DirectoryID, filter)
+	var message string
+	if input.Message != nil {
+		message = *input.Message
+	}
+
+	historyId, movedCount, err := r.app.TrashImages(ctx, input.DirectoryID, filter, message)
 	if err != nil {
 		return nil, err
 	}

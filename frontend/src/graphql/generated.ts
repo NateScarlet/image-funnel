@@ -265,6 +265,8 @@ export type TrashImagesInput = {
   clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
   directoryId: Scalars["ID"]["input"];
   filterBy: ImageFiltersInput;
+  /** 删除时附带的额外说明消息，支持多行文本 */
+  message?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 /** 撤销上一次标记操作，支持跨轮撤销 */
@@ -2043,6 +2045,7 @@ export type TrashHistoryQuery = {
         imageCount: number;
         associatedFileCount: number;
         srcRelPath: string;
+        message: string | null;
         coverImage: {
           __typename: "Image";
           id: string;
@@ -2061,6 +2064,7 @@ export type TrashHistoryQuery = {
       imageCount: number;
       associatedFileCount: number;
       srcRelPath: string;
+      message: string | null;
       coverImage: {
         __typename: "Image";
         id: string;
@@ -7707,6 +7711,7 @@ export const TrashHistoryDocument = {
                             { kind: "Field", name: { kind: "Name", value: "imageCount" } },
                             { kind: "Field", name: { kind: "Name", value: "associatedFileCount" } },
                             { kind: "Field", name: { kind: "Name", value: "srcRelPath" } },
+                            { kind: "Field", name: { kind: "Name", value: "message" } },
                             {
                               kind: "Field",
                               name: { kind: "Name", value: "coverImage" },
@@ -7750,6 +7755,7 @@ export const TrashHistoryDocument = {
                       { kind: "Field", name: { kind: "Name", value: "imageCount" } },
                       { kind: "Field", name: { kind: "Name", value: "associatedFileCount" } },
                       { kind: "Field", name: { kind: "Name", value: "srcRelPath" } },
+                      { kind: "Field", name: { kind: "Name", value: "message" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "coverImage" },

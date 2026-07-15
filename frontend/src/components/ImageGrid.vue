@@ -455,7 +455,7 @@ useHotkeys(
 
       isBulkDeleting.value = true;
       try {
-        await trashImages(props.directoryId, selectedFilterBy.value);
+        await trashImages(props.directoryId, selectedFilterBy.value, "Delete键删除");
         deselectAll();
       } finally {
         isBulkDeleting.value = false;

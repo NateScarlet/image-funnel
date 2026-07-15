@@ -81,6 +81,7 @@ type trashMeta struct {
 	TotalFileSize  int64              `json:"totalFileSize"`
 	SrcRelPath     string             `json:"srcRelPath"`
 	Images         []trashedImageMeta `json:"images"`
+	Message        string             `json:"message,omitempty"`
 }
 
 // ImageMover 专职处理图片及其同名或带有额外扩展名的配套伴随文件物理移动、暂存与回收站操作
@@ -235,6 +236,7 @@ func (s *ImageMover) Trash(
 	ctx context.Context,
 	relPath string,
 	filterBy shared.ImageFilters,
+	message string,
 ) (historyId string, totalFileCount int, err error) {
 	// 扫描符合过滤条件的图片集
 	toDeleteImages, err := s.findTargetImages(ctx, relPath, filterBy)
@@ -354,6 +356,7 @@ func (s *ImageMover) Trash(
 		TotalFileSize:  totalSize,
 		SrcRelPath:     filepath.ToSlash(relPath),
 		Images:         trashedImages,
+		Message:        message,
 	}
 
 	metaBytes, err = json.MarshalIndent(meta, "", "  ")
@@ -523,10 +526,16 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 
 			metaBytes, err := os.ReadFile(filepath.Join(trashRoot, entry.Name(), "meta.json"))
 			if err != nil {
+				if !yield(nil, fmt.Errorf("failed to read meta.json for trash history %s: %w", entry.Name(), err)) {
+					return
+				}
 				continue
 			}
 			var meta trashMeta
 			if err := json.Unmarshal(metaBytes, &meta); err != nil {
+				if !yield(nil, fmt.Errorf("failed to parse meta.json for trash history %s: %w", entry.Name(), err)) {
+					return
+				}
 				continue
 			}
 
@@ -546,6 +555,7 @@ func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.Tra
 				AssociatedFileCount: associatedCount,
 				CoverImageAbsPath:   coverImageAbsPath,
 				SrcRelPath:          filepath.ToSlash(meta.SrcRelPath),
+				Message:             meta.Message,
 			}
 
 			if !yield(item, nil) {

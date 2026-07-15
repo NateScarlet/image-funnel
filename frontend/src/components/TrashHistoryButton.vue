@@ -49,28 +49,25 @@
 
             <!-- 详细信息 -->
             <div class="flex-1 min-w-0 space-y-0.5">
-              <div class="text-primary-200 font-medium truncate flex items-center gap-1">
+              <div
+                class="text-primary-200 font-medium leading-relaxed break-words"
+                :title="item.message || item.srcRelPath"
+              >
+                {{ item.message || getDirName(item.srcRelPath) }}
+              </div>
+              <div class="flex items-center gap-1 text-primary-400 text-xs">
                 <span>{{ item.imageCount }} 张图片</span>
                 <span
                   v-if="item.associatedFileCount > 0"
-                  class="text-xs text-primary-400 font-normal shrink-0"
+                  class="text-primary-500 font-normal shrink-0"
                 >
                   (+{{ item.associatedFileCount }} 伴随)
                 </span>
-              </div>
-              <!-- 原目录路径 -->
-              <div
-                class="text-primary-400 truncate flex items-center gap-1"
-                :title="item.srcRelPath || '根目录'"
-              >
-                <svg class="w-3.5 h-3.5 text-primary-500 shrink-0" viewBox="0 0 24 24">
-                  <path :d="mdiFolder" fill="currentColor" />
-                </svg>
-                <span class="truncate">{{ item.srcRelPath || "/" }}</span>
-              </div>
-              <div class="flex items-center justify-between text-primary-500 font-mono">
+                <span class="text-primary-600 mx-1">·</span>
                 <span>{{ formatTrashSize(item.totalFileSize) }}</span>
-                <span>{{ formatTime(item.trashedAt) }}</span>
+              </div>
+              <div class="text-primary-500 font-mono text-xs">
+                {{ formatTime(item.trashedAt) }}
               </div>
             </div>
 
@@ -119,12 +116,13 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { mdiDelete, mdiDeleteSweep, mdiFileImage, mdiFolder } from "@mdi/js";
+import { mdiDelete, mdiDeleteSweep, mdiFileImage } from "@mdi/js";
 import AppDropdown from "./AppDropdown.vue";
 import useTrash from "@/composables/domain/useTrash";
 import useNotification from "@/composables/useNotification";
 import useStorage from "@/composables/useStorage";
 import { formatSize } from "@/utils/formatSize";
+import basename from "@/utils/basename";
 import type { TrashHistoryQuery } from "@/graphql/generated";
 
 type TrashHistoryItem = TrashHistoryQuery["trashHistory"]["nodes"][number];
@@ -187,5 +185,9 @@ function formatTime(val: string) {
 
 function saveMinAgeSetting() {
   saveMinAge();
+}
+
+function getDirName(relPath: string) {
+  return basename(relPath) || "/";
 }
 </script>

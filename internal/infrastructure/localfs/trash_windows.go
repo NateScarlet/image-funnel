@@ -110,7 +110,6 @@ func trashOrDelete(paths []string, useSystemRecycleBin bool) error {
 	}
 
 	if !useSystemRecycleBin {
-		// 物理删除直接使用 Go 语言自带的跨平台 os.RemoveAll，更轻量且彻底避免 Windows Shell API 的副作用
 		for _, p := range paths {
 			if err := os.RemoveAll(p); err != nil && !os.IsNotExist(err) {
 				return err

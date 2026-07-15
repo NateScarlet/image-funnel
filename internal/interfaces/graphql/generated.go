@@ -426,6 +426,7 @@ type ComplexityRoot struct {
 		CoverImage          func(childComplexity int) int
 		ID                  func(childComplexity int) int
 		ImageCount          func(childComplexity int) int
+		Message             func(childComplexity int) int
 		SrcRelPath          func(childComplexity int) int
 		TotalFileCount      func(childComplexity int) int
 		TotalFileSize       func(childComplexity int) int
@@ -2202,6 +2203,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.TrashHistoryItem.ImageCount(childComplexity), true
+	case "TrashHistoryItem.message":
+		if e.complexity.TrashHistoryItem.Message == nil {
+			break
+		}
+
+		return e.complexity.TrashHistoryItem.Message(childComplexity), true
 	case "TrashHistoryItem.srcRelPath":
 		if e.complexity.TrashHistoryItem.SrcRelPath == nil {
 			break
@@ -2971,6 +2978,8 @@ type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO"
   coverImage: Image
   "删除（移入回收站）前的源目录相对路径"
   srcRelPath: String!
+  "删除时附带的额外说明消息，支持多行文本。若为空，前端应回退显示目录名称"
+  message: String
 }
 
 type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {
@@ -3529,6 +3538,8 @@ extend type Mutation {
 input TrashImagesInput {
   directoryId: ID!
   filterBy: ImageFiltersInput!
+  "删除时附带的额外说明消息，支持多行文本"
+  message: String
   clientMutationId: String
 }
 
@@ -12780,6 +12791,8 @@ func (ec *executionContext) fieldContext_TrashHistoryConnection_nodes(_ context.
 				return ec.fieldContext_TrashHistoryItem_coverImage(ctx, field)
 			case "srcRelPath":
 				return ec.fieldContext_TrashHistoryItem_srcRelPath(ctx, field)
+			case "message":
+				return ec.fieldContext_TrashHistoryItem_message(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TrashHistoryItem", field.Name)
 		},
@@ -12866,6 +12879,8 @@ func (ec *executionContext) fieldContext_TrashHistoryEdge_node(_ context.Context
 				return ec.fieldContext_TrashHistoryItem_coverImage(ctx, field)
 			case "srcRelPath":
 				return ec.fieldContext_TrashHistoryItem_srcRelPath(ctx, field)
+			case "message":
+				return ec.fieldContext_TrashHistoryItem_message(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TrashHistoryItem", field.Name)
 		},
@@ -13150,6 +13165,35 @@ func (ec *executionContext) _TrashHistoryItem_srcRelPath(ctx context.Context, fi
 }
 
 func (ec *executionContext) fieldContext_TrashHistoryItem_srcRelPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TrashHistoryItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TrashHistoryItem_message(ctx context.Context, field graphql.CollectedField, obj *shared.TrashHistoryItemDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TrashHistoryItem_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalOString2string,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TrashHistoryItem_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TrashHistoryItem",
 		Field:      field,
@@ -16128,7 +16172,7 @@ func (ec *executionContext) unmarshalInputTrashImagesInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"directoryId", "filterBy", "clientMutationId"}
+	fieldsInOrder := [...]string{"directoryId", "filterBy", "message", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -16149,6 +16193,13 @@ func (ec *executionContext) unmarshalInputTrashImagesInput(ctx context.Context, 
 				return it, err
 			}
 			it.FilterBy = data
+		case "message":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("message"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Message = data
 		case "clientMutationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -19998,6 +20049,8 @@ func (ec *executionContext) _TrashHistoryItem(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "message":
+			out.Values[i] = ec._TrashHistoryItem_message(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -21326,13 +21379,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

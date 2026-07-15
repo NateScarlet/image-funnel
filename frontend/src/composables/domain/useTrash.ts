@@ -14,12 +14,13 @@ export default function useTrash() {
     fetchPolicy: "cache-and-network",
   });
 
-  async function trashImages(directoryId: string, filterBy: ImageFiltersInput) {
+  async function trashImages(directoryId: string, filterBy: ImageFiltersInput, message?: string) {
     const result = await mutate(TrashImagesDocument, {
       variables: {
         input: {
           directoryId,
           filterBy,
+          message,
         },
       },
     });

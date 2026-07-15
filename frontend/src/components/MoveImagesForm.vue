@@ -88,18 +88,33 @@
         @submit="handleMoveImages"
       />
 
-      <!-- 移至系统回收站说明 -->
-      <div
-        v-else
-        class="rounded-xl bg-primary-900/20 border border-primary-800/20 p-4 text-xs text-primary-300 leading-relaxed flex gap-2 items-start"
-      >
-        <svg class="w-4 h-4 text-secondary-400 shrink-0 mt-0.5" viewBox="0 0 24 24">
-          <path :d="mdiDelete" fill="currentColor" />
-        </svg>
+      <!-- 移至回收站说明 -->
+      <div v-else class="space-y-3">
+        <div
+          class="rounded-xl bg-primary-900/20 border border-primary-800/20 p-4 text-xs text-primary-300 leading-relaxed flex gap-2 items-start"
+        >
+          <svg class="w-4 h-4 text-secondary-400 shrink-0 mt-0.5" viewBox="0 0 24 24">
+            <path :d="mdiDelete" fill="currentColor" />
+          </svg>
+          <div>
+            <span class="font-medium text-primary-200">说明：</span>
+            图片及其配套的伴随文件将被移动到根目录下的回收站目录中。
+            此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
+          </div>
+        </div>
+
+        <!-- 删除消息输入 -->
         <div>
-          <span class="font-medium text-primary-200">说明：</span>
-          图片及其配套的伴随文件将被移动到根目录下的回收站目录中。
-          此操作完全支持撤销，您也可以在回收站历史页面中随时将其永久清空。
+          <label class="mb-2 block text-xs font-semibold text-primary-300">
+            删除说明（可选）
+          </label>
+          <textarea
+            v-model="trashMessage"
+            class="w-full bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all px-3 py-2 resize-none"
+            placeholder="添加删除说明，帮助理解删除上下文…"
+            rows="2"
+            :disabled="moving"
+          ></textarea>
         </div>
       </div>
 
@@ -169,6 +184,7 @@ const pathInput = ref<PathInput | null>(null);
 const toTrash = ref(false);
 const moving = ref(false);
 const moveError = ref("");
+const trashMessage = ref("");
 
 const { show: showNotification } = useNotification();
 const { revealInExplorer } = useOpenDir();
@@ -185,7 +201,7 @@ async function handleMoveImages() {
 
   try {
     if (toTrash.value) {
-      await trashImages(props.directoryId, props.filterBy);
+      await trashImages(props.directoryId, props.filterBy, trashMessage.value || undefined);
       emit("close");
     } else {
       const toDir = pathInput.value;

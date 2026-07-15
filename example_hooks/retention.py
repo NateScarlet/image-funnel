@@ -135,6 +135,7 @@ def main() -> None:
         "input": {
             "directoryId": directory_id,
             "filterBy": {"id": excess_ids, "rating": [rating]},
+            "message": f"retention 自动移除 {rating} 星图片（保留 {max_retain}/{count}）",
         }
     }
     result: Dict[str, Any] = execute(trash_query, trash_variables)

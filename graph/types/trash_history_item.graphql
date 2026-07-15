@@ -15,6 +15,8 @@ type TrashHistoryItem @goModel(model: "main/internal/shared.TrashHistoryItemDTO"
   coverImage: Image
   "删除（移入回收站）前的源目录相对路径"
   srcRelPath: String!
+  "删除时附带的额外说明消息，支持多行文本。若为空，前端应回退显示目录名称"
+  message: String
 }
 
 type TrashHistoryEdge @goModel(model: "main/internal/shared.TrashHistoryEdgeDTO") {

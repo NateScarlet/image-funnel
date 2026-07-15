@@ -337,9 +337,13 @@ async function handleDeleteUnmatched() {
   try {
     const ratingsToDelete = Array.from({ length: info.maxUnmatched + 1 }, (_, i) => i);
 
-    await trashImages(props.directoryId, {
-      rating: ratingsToDelete,
-    });
+    await trashImages(
+      props.directoryId,
+      {
+        rating: ratingsToDelete,
+      },
+      `删除 ${info.maxUnmatched} 星及以下图片`,
+    );
   } finally {
     isDeletingUnmatched.value = false;
   }
