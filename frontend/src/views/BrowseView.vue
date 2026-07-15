@@ -167,8 +167,10 @@
             </RouterLink>
           </div>
 
-          <!-- 右侧同级目录导航按钮组与更多操作 -->
+            <!-- 右侧同级目录导航按钮组、回收站与更多操作 -->
           <div class="flex items-center gap-2">
+            <TrashHistoryButton />
+
             <div class="flex items-center gap-1">
               <RouterLink
                 :to="prevSiblingTo"
