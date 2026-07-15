@@ -503,7 +503,7 @@
               <input
                 v-model="useRawImage"
                 type="checkbox"
-                class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-0 focus:ring-offset-0 focus:outline-none w-4 h-4"
+                class="rounded border-white/30 bg-white/5 text-secondary-600 focus:ring-2 focus:ring-secondary-500/50 focus:ring-offset-1 focus:ring-offset-primary-900 focus:outline-none w-4 h-4"
               />
               <span class="text-xs">原图</span>
             </label>

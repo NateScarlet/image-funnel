@@ -15,7 +15,7 @@
       <!-- 滑动背景与圆形滑块，使用 label 来触发 checkbox 的状态 -->
       <label
         :for="id"
-        class="block w-11 h-6 bg-primary-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600 cursor-pointer"
+        class="block w-11 h-6 bg-primary-600 peer-focus:ring-2 peer-focus:ring-secondary-500/50 peer-focus:ring-offset-2 peer-focus:ring-offset-primary-900 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary-600 cursor-pointer"
       ></label>
     </div>
   </div>
