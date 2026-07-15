@@ -27,6 +27,7 @@ from .__main__ import (
 )
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
+from .prompt_locator import get_workflow_node_text
 from .config import ComfyUIConfig
 from .operation_history import get_added_prompts
 
@@ -448,17 +449,19 @@ class NodeProvider(AutocompleteProvider):
                 node_id, context.prompt_meta, context.workflow
             )
 
-            # 获取节点 CLIP 文本内容作为描述
-            clip_text = ""
-            if isinstance(inputs, dict):
-                inputs_dict = cast(Dict[str, Any], inputs)
-                text_val = inputs_dict.get("text")
-                if isinstance(text_val, str):
-                    clip_text = text_val
-                elif text_val is not None:
-                    clip_text = str(cast(object, text_val))
-
-            description = clip_text
+            # 优先使用 workflow 节点文本（含注释），fallback 到 prompt 文本
+            description = ""
+            if context.workflow:
+                wf_text = get_workflow_node_text(context.workflow, node_id)
+                if wf_text:
+                    description = wf_text
+            if not description:
+                if isinstance(inputs, dict):
+                    text_val = cast(Dict[str, Any], inputs).get("text")
+                    if isinstance(text_val, str):
+                        description = text_val
+                    elif text_val is not None:
+                        description = str(cast(object, text_val))
 
             display_name = f"#{node_id} {title} ({class_type})"
 

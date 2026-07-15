@@ -534,7 +534,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                     "id": "node_1",
                     "type": "CLIPTextEncode",
                     "title": "Positive Prompt",
-                    "widgets_values": ["1girl"],
+                    "widgets_values": ["// positive prompt\n1girl, masterpiece,"],
                 },
                 {
                     "id": "node_2",
@@ -587,7 +587,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual(len(suggestions), 2)
 
         node_1_sug = next(s for s in suggestions if s.text == "node_1")
-        self.assertEqual(node_1_sug.description, "1girl")
+        # workflow 文本含注释，应优先展示
+        self.assertEqual(
+            node_1_sug.description, "// positive prompt\n1girl, masterpiece,"
+        )
         self.assertEqual(
             node_1_sug.displayText, "#node_1 Positive Prompt (CLIPTextEncode)"
         )
@@ -663,6 +666,42 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         sub_sug = next(s for s in suggestions if s.text == "node_4:child_1")
         self.assertEqual(sub_sug.style, "")
+
+    def test_autocomplete_node_fallback_prompt_text_when_no_workflow(self):
+        """workflow 为 None 时，description 应 fallback 到 prompt 文本"""
+        prompt_meta = self._get_mock_node_prompt_meta()
+        context = self._make_context(
+            target_command="add",
+            prev_word="--node",
+            cwords=["/add", "--node"],
+            parsed_args=self._make_parsed_args(command="add"),
+            prompt_meta=prompt_meta,
+            workflow=None,
+        )
+        provider = NodeProvider()
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 2)
+        node_1_sug = next(s for s in suggestions if s.text == "node_1")
+        self.assertEqual(node_1_sug.description, "1girl")
+
+    def test_autocomplete_node_fallback_prompt_text_when_no_workflow_text(self):
+        """workflow 节点无 widgets_values 时，description 应 fallback 到 prompt 文本"""
+        prompt_meta = self._get_mock_node_prompt_meta()
+        workflow = self._get_mock_node_workflow()
+        # 清空 node_1 的 widgets_values 模拟无 workflow 文本的场景
+        workflow["nodes"][0]["widgets_values"] = []
+        context = self._make_context(
+            target_command="add",
+            prev_word="--node",
+            cwords=["/add", "--node"],
+            parsed_args=self._make_parsed_args(command="add"),
+            prompt_meta=prompt_meta,
+            workflow=workflow,
+        )
+        provider = NodeProvider()
+        suggestions = list(provider.provide(context))
+        node_1_sug = next(s for s in suggestions if s.text == "node_1")
+        self.assertEqual(node_1_sug.description, "1girl")
 
     def test_autocomplete_no_images_robustness(self):
         context = self._make_context(
