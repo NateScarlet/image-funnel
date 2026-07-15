@@ -25,7 +25,7 @@
   >
     <div
       v-if="visibleModel"
-      class="absolute inset-y-0 right-0 lg:max-w-[90vw] pointer-events-auto"
+      class="absolute inset-y-0 right-0 lg:max-w-[90vw] pointer-events-auto overscroll-contain"
       :class="containerClass"
     >
       <!-- 移动端顶部关闭按钮 -->
