@@ -7,12 +7,12 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from graphql_utils import execute
+from graphql_utils import GraphQLClient
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def main() -> None:
+def run_retention(client: GraphQLClient) -> None:
     # 快速失败：校验必需的环境变量
     rating_str = os.getenv("HOOK_IMAGE_RATING")
     if not rating_str:
@@ -79,7 +79,7 @@ def main() -> None:
             directory_id,
             cursor,
         )
-        data: Dict[str, Any] = execute(query, variables)
+        data: Dict[str, Any] = client.execute(query, variables)
         node_data: Dict[str, Any] = data["node"]
         page_data: Dict[str, Any] = node_data["images"]
         images_raw.extend(page_data["nodes"])
@@ -129,7 +129,7 @@ def main() -> None:
             "message": f"retention 自动移除 {rating} 星图片（保留 {max_retain}/{count}）",
         }
     }
-    result: Dict[str, Any] = execute(trash_query, trash_variables)
+    result: Dict[str, Any] = client.execute(trash_query, trash_variables)
     moved: int = result["trashImages"]["movedCount"]
 
     print(
@@ -139,4 +139,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    client = GraphQLClient.from_env()
+    run_retention(client)

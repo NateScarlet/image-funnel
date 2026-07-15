@@ -224,10 +224,14 @@ class TestComfyUIHook(unittest.TestCase):
             del os.environ["HOOK_NEGATIVE_KEYWORDS"]
 
     def test_main_no_images(self):
-        from unittest.mock import patch
-        from .__main__ import main as comfyui_main
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
         from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
         from typing import Any
+
+        def _make_mock_client() -> MagicMock:
+            return MagicMock(spec=GraphQLClient)
 
         def exit_side_effect(code: Any = 0) -> None:
             raise SystemExit(code)
@@ -239,11 +243,12 @@ class TestComfyUIHook(unittest.TestCase):
             action_path="dummy_action_path",
             trigger="post_commit_session",
         )
+        mock_client = _make_mock_client()
         with patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
             "sys.exit", side_effect=exit_side_effect
         ), patch("comfyui.__main__._write_action_override") as mock_override:
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main(config)
+                run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
@@ -254,13 +259,21 @@ class TestComfyUIHook(unittest.TestCase):
             action_path="dummy_action_path",
             trigger="post_commit_session",
         )
+        mock_client = _make_mock_client()
+        mock_client.fetch_images.return_value = []
         with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
-            "comfyui.__main__.fetch_images", return_value=[]
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
         ):
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main(config)
+                run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
@@ -271,16 +284,22 @@ class TestComfyUIHook(unittest.TestCase):
             action_path="dummy_action_path",
             trigger="",
         )
+        mock_client = _make_mock_client()
+        mock_client.fetch_images.return_value = []
         with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
-            "comfyui.__main__.fetch_images", return_value=[]
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
         ):
-            # Clear any IMAGE_FUNNEL_TRIGGER from os.environ for safety
-            with patch.dict(os.environ, {}, clear=True):
-                with self.assertRaises(ValueError) as cm:
-                    comfyui_main(config)
-                self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
+            with self.assertRaises(ValueError) as cm:
+                run_comfyui(mock_client, config)
+            self.assertIn("IMAGE_FUNNEL_TRIGGER is missing", str(cm.exception))
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
         # 4. Manual trigger (note_dispatch), no images → exit 1
@@ -290,13 +309,21 @@ class TestComfyUIHook(unittest.TestCase):
             action_path="dummy_action_path",
             trigger="note_dispatch",
         )
+        mock_client = _make_mock_client()
+        mock_client.fetch_images.return_value = []
         with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch("comfyui.__main__._write_action_override") as mock_override, patch(
-            "comfyui.__main__.fetch_images", return_value=[]
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
         ):
             with self.assertRaises(SystemExit) as cm:
-                comfyui_main(config)
+                run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 1)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 

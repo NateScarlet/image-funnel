@@ -9,7 +9,7 @@
 import logging
 from typing import Dict, List, Set, Any, Optional, Protocol, cast
 
-from graphql_utils import update_image_label
+from graphql_utils import GraphQLClient
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .seed_manager import SeedManager
@@ -17,6 +17,7 @@ from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
 from .submission import submit as _submit_fn
 from . import variant_engine
+from . import operation_history
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class CommandContext:
         comfyui_url: str,
         jobs: int,
         label_to_set: Optional[str],
+        history: operation_history.OperationHistory,
+        client: GraphQLClient,
     ):
         self.img_id = img_id
         self.path = path
@@ -43,7 +46,13 @@ class CommandContext:
         self.comfyui_url = comfyui_url
         self.jobs = jobs
         self.label_to_set = label_to_set
+        self.client = client
+        self.history = history
         self.skipped: bool = False
+
+    def update_label(self) -> None:
+        if self.label_to_set and self.img_id:
+            self.client.update_image_label(self.img_id, self.label_to_set)
 
     def skip(self) -> None:
         """标记当前图片处理已被跳过"""
@@ -79,8 +88,7 @@ class QueueHandler:
             filename_mgr.update_output_filenames()
             _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
 
-        if ctx.label_to_set and ctx.img_id:
-            update_image_label(ctx.img_id, ctx.label_to_set)
+        ctx.update_label()
 
 
 class AddHandler:
@@ -98,8 +106,7 @@ class AddHandler:
             fragment.add(prompt_str_arg, raw=ctx.args.raw, no_skip=ctx.args.no_skip)
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
-        if ctx.label_to_set and ctx.img_id:
-            update_image_label(ctx.img_id, ctx.label_to_set)
+        ctx.update_label()
 
 
 class RemoveHandler:
@@ -113,16 +120,9 @@ class RemoveHandler:
         hard = getattr(ctx.args, "hard", False)
 
         if ctx.args.all:
-            clip_nodes = [
-                nid for nid, node in ctx.prompt.items() if isinstance(node, dict)
+            fragments = [
+                PromptFragment(pair, nid) for nid in _clip_text_encode_nodes(ctx.prompt)
             ]
-            clip_nodes = [
-                nid
-                for nid in clip_nodes
-                if cast(Dict[str, Any], ctx.prompt[nid]).get("class_type")
-                == "CLIPTextEncode"
-            ]
-            fragments = [PromptFragment(pair, nid) for nid in clip_nodes]
 
         prompt_list: List[str] = list(ctx.args.prompt)
         remove_prompts: Set[str] = set()
@@ -145,8 +145,76 @@ class RemoveHandler:
             return
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
-        if ctx.label_to_set and ctx.img_id:
-            update_image_label(ctx.img_id, ctx.label_to_set)
+        ctx.update_label()
+
+
+# #region CLIPTextEncode 节点辅助
+
+
+def _clip_text_encode_nodes(prompt: Dict[str, Any]) -> List[str]:
+    """返回 prompt 中所有 CLIPTextEncode 类型节点的 ID 列表"""
+    return [
+        nid
+        for nid, node in prompt.items()
+        if isinstance(node, dict)
+        and cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
+    ]
+
+
+# #endregion
+
+
+class RemoveAgainHandler:
+    """remove-again 命令：重放历史移除操作，合并为一个变体"""
+
+    def run(self, ctx: CommandContext) -> None:
+        records = ctx.history.list_remove()
+
+        if not records:
+            ctx.skip()
+            return
+
+        pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
+        any_processed = False
+
+        for record in records:
+            # 根据历史记录中的范围参数定位目标片段
+            fragments = pair.locate_prompts(
+                nodes=record.node, regions=record.region, is_neg=record.neg
+            )
+
+            if record.all:
+                fragments = [
+                    PromptFragment(pair, nid)
+                    for nid in _clip_text_encode_nodes(ctx.prompt)
+                ]
+
+            # 生成提示词的变体形式（空格/下划线互换）
+            remove_prompts: Set[str] = set()
+            remove_prompts.update(
+                (
+                    record.prompt,
+                    record.prompt.replace("_", " "),
+                    record.prompt.replace(" ", "_"),
+                )
+            )
+
+            for fragment in fragments:
+                for prompt_str_arg in remove_prompts:
+                    if fragment.remove(
+                        prompt_str_arg,
+                        raw=record.raw,
+                        hard=record.hard,
+                        no_skip=record.no_skip,
+                    ):
+                        any_processed = True
+
+        if not any_processed:
+            ctx.skip()
+            return
+
+        _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
+        ctx.update_label()
 
 
 class AdjustHandler:
@@ -214,8 +282,7 @@ class AdjustHandler:
             ctx.skip()
             return
 
-        if ctx.label_to_set and ctx.img_id:
-            update_image_label(ctx.img_id, ctx.label_to_set)
+        ctx.update_label()
 
 
 def _submit_simple(
@@ -245,6 +312,7 @@ COMMAND_HANDLERS: Dict[str, CommandHandler] = {
     "queue": QueueHandler(),
     "add": AddHandler(),
     "remove": RemoveHandler(),
+    "remove-again": RemoveAgainHandler(),
     "adjust": AdjustHandler(),
 }
 

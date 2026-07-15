@@ -11,7 +11,7 @@
 import logging
 import os
 import sys
-import importlib
+import runpy
 
 
 def main() -> None:
@@ -31,21 +31,19 @@ def main() -> None:
     module_name = sys.argv[1]
     sys.argv = [module_name] + sys.argv[2:]
 
-    # 优先尝试 {module}.__main__（适用于 comfyui 这类包入口），
-    # 失败则直接导入模块自身（适用于 fork、comfyui.autocomplete 等）
+    # 优先尝试以 __main__ 身份运行 {module}.__main__，
+    # 失败则直接以 __main__ 身份运行模块自身
     try:
-        module = importlib.import_module(f"{module_name}.__main__")
-    except ModuleNotFoundError:
+        runpy.run_module(f"{module_name}.__main__", run_name="__main__", alter_sys=True)
+    except ImportError:
         try:
-            module = importlib.import_module(module_name)
-        except ModuleNotFoundError:
+            runpy.run_module(module_name, run_name="__main__", alter_sys=True)
+        except ImportError:
             print(
-                f"Error: Cannot import module '{module_name}' or '{module_name}.__main__'",
+                f"Error: Cannot run module '{module_name}' or '{module_name}.__main__'",
                 file=sys.stderr,
             )
             sys.exit(1)
-
-    module.main()
 
 
 if __name__ == "__main__":

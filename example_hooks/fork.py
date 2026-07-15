@@ -8,7 +8,7 @@ import logging
 import argparse
 from typing import List, Optional
 
-from graphql_utils import move_images, update_image_label
+from graphql_utils import GraphQLClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main() -> None:
+def run_fork(client: GraphQLClient) -> None:
     args = parse_args()
     suffix = args.suffix.strip()
     if not suffix:
@@ -57,18 +57,23 @@ def main() -> None:
 
     if label_to_set:
         for img_id in image_ids:
-            update_image_label(img_id, label_to_set)
+            client.update_image_label(img_id, label_to_set)
+
+    directory_id = os.getenv("IMAGE_FUNNEL_DIRECTORY_ID")
+    if not directory_id:
+        raise ValueError("Environment variable IMAGE_FUNNEL_DIRECTORY_ID is missing.")
 
     _LOGGER.debug(
         "Moving %d image(s) to relative path '%s' using GraphQL...",
         len(image_ids),
         dest_dir,
     )
-    move_images(image_ids, dest_dir)
+    client.move_images(directory_id, image_ids, dest_dir)
 
     print(f"processed {len(image_ids)} image(s) successfully.")
     sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    client = GraphQLClient.from_env()
+    run_fork(client)

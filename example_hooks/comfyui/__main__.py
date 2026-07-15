@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, Iterable, ca
 import logging
 import argparse
 
-from graphql_utils import fetch_images
+from graphql_utils import GraphQLClient
 from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
@@ -145,7 +145,7 @@ def extract_lora_names(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
                 yield name_no_ext
 
 
-def main(config: Optional[ComfyUIConfig] = None) -> None:
+def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -> None:
     if config is None:
         config = ComfyUIConfig.from_env()
 
@@ -160,14 +160,20 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
     if jobs <= 0:
         raise ValueError(f"--jobs/HOOK_JOBS must be a positive integer, got: {jobs}")
 
-    if client is None:
-        client = GraphQLClient.from_env()
-
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
-    if args.command in ["add", "remove", "adjust"]:
+    if args.command in ["add", "remove", "adjust", "remove-again"]:
         _LOGGER.debug(f"Command is {args.command}, fetching images via GraphQL...")
-        targets = fetch_images(config.required_rating)
+
+        directory_id = os.getenv("IMAGE_FUNNEL_DIRECTORY_ID")
+        if not directory_id:
+            raise ValueError(
+                "Environment variable IMAGE_FUNNEL_DIRECTORY_ID is missing."
+            )
+        root_dir = os.getenv("IMAGE_FUNNEL_ROOT_DIR")
+        if not root_dir:
+            raise ValueError("Environment variable IMAGE_FUNNEL_ROOT_DIR is missing.")
+        targets = client.fetch_images(directory_id, root_dir, config.required_rating)
     else:
         # queue 场景
         if config.image_paths:
@@ -201,7 +207,8 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
     )
 
     # 在执行前记录操作历史，失败的操作也需要被追溯和重放
-    operation_history.OperationHistory.from_env().extract_params(args)
+    op_history = operation_history.OperationHistory.from_env()
+    op_history.extract_params(args)
 
     has_errors = False
     success_count = 0
@@ -282,6 +289,8 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
             comfyui_url=config.comfyui_url,
             jobs=jobs,
             label_to_set=config.label_to_set,
+            client=client,
+            history=op_history,
         )
         handler.run(ctx)
         if not ctx.skipped:
@@ -413,6 +422,19 @@ def get_parser() -> argparse.ArgumentParser:
         help="Target node ID, can be specified multiple times; searches all matching nodes",
     )
     remove_parser.add_argument("prompt", nargs="+", help="The prompt text to remove")
+
+    remove_again_parser = subparsers.add_parser(
+        "remove-again",
+        help="重放当前目录所有历史 /remove 操作，保留原始范围参数",
+    )
+    remove_again_parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+    )
 
     # adjust command
     adjust_parser = subparsers.add_parser(
@@ -578,5 +600,5 @@ def parse_args(args: Optional[List[str]] = None):
 
 
 if __name__ == "__main__":
-    config = ComfyUIConfig.from_env()
-    main(config)
+    client = GraphQLClient.from_env()
+    run_comfyui(client)
