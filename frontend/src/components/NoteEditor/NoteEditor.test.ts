@@ -316,7 +316,7 @@ describe("NoteEditor", () => {
     // 在防抖期间（API 尚未被调用前），确认菜单浮层是可见的，并且包含“加载中...”
     const menu = getSuggestionMenu();
     expect(menu).not.toBeNull();
-    expect(menu?.textContent).toContain("加载中...");
+    expect(menu?.textContent).toContain("加载中…");
     expect(mockQuery).not.toHaveBeenCalled();
 
     // 等待防抖结束并让 API 调用完成

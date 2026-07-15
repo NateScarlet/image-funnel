@@ -183,7 +183,7 @@ useSubscription(PairingRequestUpdatedDocument, {
               class="w-full rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-primary-200 transition-colors hover:bg-primary-600 disabled:opacity-50 cursor-pointer"
               @click="authenticate"
             >
-              {{ isActionLoading ? "处理中..." : "在此设备上登录以绑定" }}
+              {{ isActionLoading ? "处理中…" : "在此设备上登录以绑定" }}
             </button>
           </div>
         </div>
@@ -277,7 +277,7 @@ useSubscription(PairingRequestUpdatedDocument, {
             class="w-full rounded-lg bg-secondary-600 px-4 py-3 font-semibold text-white transition-colors hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             @click="authenticate"
           >
-            {{ isActionLoading ? "处理中..." : "登录" }}
+            {{ isActionLoading ? "处理中…" : "登录" }}
           </button>
           <p class="mt-2 text-left text-xs text-primary-400">
             提示：注册新设备时，浏览器可能会弹出 1–3 次系统确认请求，请按照提示操作直到全部完成。

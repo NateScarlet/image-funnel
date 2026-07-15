@@ -69,7 +69,7 @@
         <svg v-if="creatingSession" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
           <path :d="mdiLoading" fill="currentColor" />
         </svg>
-        <span>{{ creatingSession ? "创建中..." : "开始筛选" }}</span>
+        <span>{{ creatingSession ? "创建中…" : "开始筛选" }}</span>
       </button>
     </div>
   </div>

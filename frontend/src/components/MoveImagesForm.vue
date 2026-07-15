@@ -137,7 +137,7 @@
             stroke-linecap="round"
           />
         </svg>
-        <span>{{ moving ? "正在移动..." : "确认移动" }}</span>
+        <span>{{ moving ? "正在移动…" : "确认移动" }}</span>
       </button>
     </div>
   </div>

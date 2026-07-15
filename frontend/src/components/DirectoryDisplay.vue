@@ -15,7 +15,7 @@
       <div
         v-if="loading && stats"
         class="absolute right-0 top-0 z-10 rounded-bl bg-black/30 p-1 text-white backdrop-blur-xs"
-        title="正在刷新..."
+        title="正在刷新…"
       >
         <svg
           class="h-3 w-3 animate-spin"

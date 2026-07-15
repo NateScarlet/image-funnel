@@ -61,7 +61,7 @@
         >
           笔记内容
         </label>
-        <NoteEditor ref="noteEditor" v-model="content" placeholder="输入笔记内容..." />
+        <NoteEditor ref="noteEditor" v-model="content" placeholder="输入笔记内容…" />
       </div>
 
       <!-- 操作按钮区 -->

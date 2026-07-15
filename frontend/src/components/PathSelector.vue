@@ -130,7 +130,7 @@
                   </span>
                 </template>
                 <template v-else>
-                  <span class="text-primary-500 animate-pulse">计算中...</span>
+                  <span class="text-primary-500 animate-pulse">计算中…</span>
                 </template>
               </div>
             </div>

@@ -46,7 +46,7 @@
             <svg v-else class="w-5 h-5" viewBox="0 0 24 24">
               <path :d="mdiCheckAll" fill="currentColor" />
             </svg>
-            <span>{{ earlyFinishing ? "处理中..." : "全部保留" }}</span>
+            <span>{{ earlyFinishing ? "处理中…" : "全部保留" }}</span>
           </button>
         </div>
       </template>
@@ -141,7 +141,7 @@
 
       <div v-else class="min-h-full flex flex-col items-center justify-center w-full">
         <template v-if="loading">
-          <div class="text-center text-primary-400">加载中...</div>
+          <div class="text-center text-primary-400">加载中…</div>
         </template>
         <template v-else-if="!session">
           <div class="text-center">
@@ -578,7 +578,7 @@ async function undo() {
 
   stack.adopt(
     setTimeout(() => {
-      const id = showNotification("正在撤销，请稍候...", "info", 0);
+      const id = showNotification("正在撤销，请稍候…", "info", 0);
       stack.adopt(id, removeNotification);
     }, 800),
     clearTimeout,

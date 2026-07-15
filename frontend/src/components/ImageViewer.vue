@@ -116,7 +116,7 @@
         <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ isCopying ? "正在复制..." : isCopied ? "已复制" : "复制" }}</span>
+        <span class="text-xs">{{ isCopying ? "正在复制…" : isCopied ? "已复制" : "复制" }}</span>
       </button>
       <div class="hidden md:block w-px h-4 bg-white/30 mx-1"></div>
 
@@ -235,7 +235,7 @@
                 <input
                   v-model="customLabelInput"
                   type="text"
-                  placeholder="文字..."
+                  placeholder="文字…"
                   class="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs md:text-sm text-white placeholder-white/30 focus:outline-none focus:border-secondary-500 transition-colors w-0"
                   @keydown.enter="saveCustomLabel"
                 />
@@ -476,7 +476,7 @@
                   <path :d="mdiContentCopy" />
                 </svg>
                 <span class="text-xs">{{
-                  isCopying ? "正在复制..." : isCopied ? "已复制" : "复制"
+                  isCopying ? "正在复制…" : isCopied ? "已复制" : "复制"
                 }}</span>
               </button>
 

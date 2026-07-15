@@ -106,7 +106,7 @@
             <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24">
               <path :d="mdiLoading" fill="currentColor" />
             </svg>
-            加载中...
+            加载中…
           </div>
           <button
             v-for="(sug, idx) in suggestions"
@@ -287,7 +287,7 @@ async function triggerDispatch(hookId: string, hookName: string) {
     }
   }
 
-  const infoNotificationId = showInfo(`正在执行动作 ${hookName}...`, 0);
+  const infoNotificationId = showInfo(`正在执行动作 ${hookName}…`, 0);
 
   try {
     await mutate(DispatchNoteHookDocument, {

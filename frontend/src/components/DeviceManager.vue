@@ -102,7 +102,7 @@ async function handleRegister() {
             class="inline-block rounded-xl bg-primary-700 hover:bg-primary-600 px-4 py-2 text-sm font-medium text-primary-100 shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             @click="handleRegister"
           >
-            {{ authLoading ? "处理中..." : "注册当前设备" }}
+            {{ authLoading ? "处理中…" : "注册当前设备" }}
           </button>
           <p class="mt-2 text-xs text-primary-400">
             提示：注册新设备时，浏览器可能会弹出 1–3 次系统确认请求，请按照提示操作直到全部完成。

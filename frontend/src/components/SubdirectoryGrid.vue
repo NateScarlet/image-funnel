@@ -19,7 +19,7 @@
             name="search"
             autocomplete="off"
             type="text"
-            placeholder="搜索子目录..."
+            placeholder="搜索子目录…"
             class="w-full pl-8 pr-8 h-8 bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all"
           />
           <svg
@@ -105,7 +105,7 @@
               stroke-linecap="round"
             />
           </svg>
-          <span class="text-sm">正在加载子目录...</span>
+          <span class="text-sm">正在加载子目录…</span>
         </template>
         <template v-else>
           <svg class="w-8 h-8 text-primary-500" viewBox="0 0 24 24">
@@ -139,7 +139,7 @@
               stroke-linecap="round"
             />
           </svg>
-          <span>{{ loading ? "正在加载..." : "加载更多子目录" }}</span>
+          <span>{{ loading ? "正在加载…" : "加载更多子目录" }}</span>
         </button>
       </div>
     </div>

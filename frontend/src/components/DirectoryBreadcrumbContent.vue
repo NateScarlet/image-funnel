@@ -42,7 +42,7 @@
         ? 'text-white font-semibold pointer-events-none'
         : 'text-primary-300 hover:text-white hover:bg-white/10 cursor-pointer',
     ]"
-    :title="myDirectory?.relPath || '加载中...'"
+    :title="myDirectory?.relPath || '加载中…'"
   >
     {{ displayName }}
   </RouterLink>
@@ -90,7 +90,7 @@ const needsSeparatorBefore = computed(() => {
 // 解析显示名称，未就绪时显示为省略号
 const displayName = computed(() => {
   if (!myDirectory.value) {
-    return "...";
+    return "…";
   }
   return getDirName(myDirectory.value.relPath);
 });

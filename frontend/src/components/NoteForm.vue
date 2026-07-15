@@ -36,7 +36,7 @@
         <NoteEditor
           ref="noteEditor"
           v-model="content"
-          placeholder="输入笔记... (自动保存)"
+          placeholder="输入笔记… (自动保存)"
           :note-id="props.note.id"
           :on-before-dispatch="flush"
           @input="handleInput"

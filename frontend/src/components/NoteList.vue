@@ -122,7 +122,7 @@
               stroke-linecap="round"
             />
           </svg>
-          <span>{{ loading ? "正在加载..." : "加载更多笔记" }}</span>
+          <span>{{ loading ? "正在加载…" : "加载更多笔记" }}</span>
         </button>
       </div>
     </div>

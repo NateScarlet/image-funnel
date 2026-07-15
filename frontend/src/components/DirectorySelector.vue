@@ -62,7 +62,7 @@
           autocomplete="off"
           type="search"
           class="w-full bg-primary-800 text-primary-100 border border-primary-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-secondary-500 placeholder-primary-500 transition-colors"
-          placeholder="搜索目录..."
+          placeholder="搜索目录…"
         />
       </div>
 
@@ -111,7 +111,7 @@
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
               ></path>
             </svg>
-            <span>{{ loading ? "正在加载..." : "加载更多子目录" }}</span>
+            <span>{{ loading ? "正在加载…" : "加载更多子目录" }}</span>
           </button>
         </div>
       </div>

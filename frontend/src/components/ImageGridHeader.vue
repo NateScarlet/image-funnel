@@ -68,7 +68,7 @@
         class="w-4 h-4 animate-spin text-secondary-500"
         viewBox="0 0 24 24"
         fill="none"
-        title="正在加载最新数据..."
+        title="正在加载最新数据…"
       >
         <path
           :d="mdiLoading"
@@ -144,7 +144,7 @@
           name="search"
           autocomplete="off"
           type="text"
-          placeholder="搜索文件名..."
+          placeholder="搜索文件名…"
           class="w-full pl-8 pr-8 h-8 bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all"
         />
         <svg
