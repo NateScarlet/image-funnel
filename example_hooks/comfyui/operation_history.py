@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """操作历史记录模块：将 comfyui 指令执行记录写入当前目录下的 SQLite 数据库。
 
@@ -9,62 +8,37 @@
 import argparse
 import json
 import os
-import sqlite3
 
-_DB_FILENAME = ".io.github.natescarlet.hook.db"
 
-_CREATE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS history (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    command    TEXT NOT NULL,
-    data       TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_history_command ON history(command);
-"""
+from .db import SQLiteContext
 
 
 class OperationHistory:
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
+
+    def __init__(self, db_ctx: SQLiteContext) -> None:
+        self.db_ctx = db_ctx
+
+    @property
+    def db_path(self) -> str:
+        """返回底层数据库路径以保证对现有测试的向后兼容。"""
+        return self.db_ctx.db_path
 
     @staticmethod
     def from_env() -> "OperationHistory":
-        return OperationHistory(
-            os.path.join(
-                os.environ["IMAGE_FUNNEL_ROOT_DIR"],
-                os.environ["IMAGE_FUNNEL_DIRECTORY_REL_PATH"],
-                _DB_FILENAME,
-            )
-        )
-
-    def ensure_db(self) -> None:
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.executescript(_CREATE_TABLE_SQL)
-            conn.commit()
-        finally:
-            conn.close()
+        return OperationHistory(SQLiteContext.from_env())
 
     def record(self, command: str, data: dict[str, str]) -> None:
-        conn = sqlite3.connect(self.db_path)
-        try:
+        with self.db_ctx.transaction() as conn:
             conn.execute(
                 "INSERT INTO history (command, data) VALUES (?, ?)",
                 (command, json.dumps(data, ensure_ascii=False)),
             )
-            conn.commit()
-        finally:
-            conn.close()
 
     def extract_params(self, args: argparse.Namespace) -> None:
         """从 argparse 解析结果中提取参数并写入历史记录。
 
         add/remove 的每个 prompt 参数是独立操作，分别写入一条记录。
         """
-        self.ensure_db()
 
         cmd = args.command
 
@@ -101,18 +75,18 @@ class OperationHistory:
 
     def get_added_prompts(self, candidates: list[str]) -> set[str]:
         """返回 candidates 中已在历史记录中存在的提示词集合。"""
-        if not os.path.isfile(self.db_path) or not candidates:
+        if not candidates:
             return set()
-        conn = sqlite3.connect(self.db_path)
-        try:
-            placeholders = ",".join("?" * len(candidates))
-            rows = conn.execute(
-                f"SELECT DISTINCT json_extract(data, '$.prompt') FROM history WHERE command = 'add' AND json_extract(data, '$.prompt') IN ({placeholders})",
-                candidates,
-            ).fetchall()
-            return {row[0] for row in rows}
-        finally:
-            conn.close()
+
+        if self.db_path != ":memory:" and not os.path.isfile(self.db_path):
+            return set()
+
+        placeholders = ",".join("?" * len(candidates))
+        rows = self.db_ctx.connection.execute(
+            f"SELECT DISTINCT json_extract(data, '$.prompt') FROM history WHERE command = 'add' AND json_extract(data, '$.prompt') IN ({placeholders})",
+            candidates,
+        ).fetchall()
+        return {row[0] for row in rows}
 
 
 def get_added_prompts(candidates: list[str]) -> set[str]:

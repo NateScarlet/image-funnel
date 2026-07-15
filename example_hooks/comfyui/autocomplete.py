@@ -8,8 +8,14 @@ import logging
 from dataclasses import dataclass
 import argparse
 from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, cast
-import requests
 from PIL import Image
+
+from .db import SQLiteContext
+from .danbooru import (
+    DanbooruTagProvider,
+    AkizukiDanbooruTagProvider,
+    SQLiteDanbooruTagProvider,
+)
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
@@ -100,136 +106,6 @@ def _extract_prompt_tags(cwords: List[str], option_with_args: Set[str]) -> List[
                 if part_cleaned:
                     tags.append(part_cleaned)
     return tags
-
-
-def _fetch_danbooru_suggestions(
-    query: str, search_url: str
-) -> Iterator[AutocompleteSuggestion]:
-    if not query.strip():
-        return
-
-    search_url = search_url.rstrip("/")
-    api_url = f"{search_url}/api/search"
-
-    show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
-    show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
-
-    payload = {
-        "query": query,
-        "top_k": 20,
-        "limit": 20,
-        "popularity_weight": 0.15,
-        "show_nsfw": show_nsfw,
-        "use_segmentation": False,
-    }
-
-    _LOGGER.debug(
-        "Fetching Danbooru suggestions for query: %r from URL: %r",
-        query,
-        api_url,
-    )
-    try:
-        response = requests.post(api_url, json=payload)
-        _LOGGER.debug("Danbooru response status: %d", response.status_code)
-        response.raise_for_status()
-        res_json = response.json()
-        results = res_json.get("results", [])
-        _LOGGER.debug("Danbooru search returned %d items", len(results))
-        for item in results:
-            tag = item.get("tag", "")
-            if not tag:
-                continue
-            cn_name = item.get("cn_name", "")
-            wiki = item.get("wiki", "")
-
-            display = f"{tag} ({cn_name})" if cn_name else tag
-            desc = wiki if wiki else "Danbooru 标签"
-
-            # 自动转义 tag 中的括号，避免被 ComfyUI/Stable Diffusion 权重解析器误识别
-            escaped_tag = tag.replace("(", r"\(").replace(")", r"\)")
-
-            yield AutocompleteSuggestion(
-                text=quote_if_needed(escaped_tag),
-                displayText=display,
-                description=desc,
-                type="danbooru",
-            )
-    except requests.RequestException as e:
-        _LOGGER.warning("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
-        yield AutocompleteSuggestion(
-            text="",
-            displayText="⚠ Danbooru 搜索失败",
-            description=f"{e}",
-            type="error",
-            style="",
-        )
-
-
-def _fetch_danbooru_related(
-    tags: List[str], search_url: str
-) -> Iterator[AutocompleteSuggestion]:
-    if not tags:
-        return
-
-    search_url = search_url.rstrip("/")
-    api_url = f"{search_url}/api/related"
-
-    show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
-    show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
-
-    payload = {
-        "tags": tags,
-        "limit": 100,
-        "show_nsfw": show_nsfw,
-    }
-
-    try:
-        _LOGGER.debug(
-            "Fetching Danbooru related tags for: %r from URL: %r", tags, api_url
-        )
-        response = requests.post(api_url, json=payload)
-        _LOGGER.debug("Danbooru related response status: %d", response.status_code)
-        response.raise_for_status()
-        res_json = response.json()
-        results = res_json.get("results", [])
-        _LOGGER.debug("Danbooru related search returned %d items", len(results))
-        yielded_count = 0
-        for item in results:
-            tag = item.get("tag", "")
-            if not tag:
-                continue
-
-            # 过滤掉角色类型标签，避免污染联想建议
-            if item.get("category") == "Character":
-                continue
-
-            cn_name = item.get("cn_name", "")
-            wiki = item.get("wiki", "")
-
-            display = f"{tag} ({cn_name})" if cn_name else tag
-            desc = wiki if wiki else "Danbooru 关联标签"
-
-            # 自动转义 tag 中的括号，避免被 ComfyUI/Stable Diffusion 权重解析器误识别
-            escaped_tag = tag.replace("(", r"\(").replace(")", r"\)")
-
-            yield AutocompleteSuggestion(
-                text=quote_if_needed(escaped_tag),
-                displayText=display,
-                description=desc,
-                type="danbooru",
-            )
-            yielded_count += 1
-            if yielded_count >= 20:
-                break
-    except requests.RequestException as e:
-        _LOGGER.warning("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
-        yield AutocompleteSuggestion(
-            text="",
-            displayText="⚠ Danbooru 搜索失败",
-            description=f"{e}",
-            type="error",
-            style="",
-        )
 
 
 def _parse_args_for_autocomplete(
@@ -673,8 +549,30 @@ class WorkflowPromptProvider(AutocompleteProvider):
                 )
 
 
+class FailedDanbooruProvider(AutocompleteProvider):
+    """用于承载 Danbooru 初始化失败时友好提示的 Provider 占位符。"""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return context.is_add_cmd
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        yield AutocompleteSuggestion(
+            text="",
+            displayText="⚠ Danbooru 初始化失败",
+            description=f"{self.error}",
+            type="error",
+            style="",
+        )
+
+
 class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
+
+    def __init__(self, provider: DanbooruTagProvider) -> None:
+        self.provider = provider
 
     def can_provide(self, context: AutocompleteContext) -> bool:
         if not context.is_add_cmd:
@@ -691,10 +589,6 @@ class DanbooruProvider(AutocompleteProvider):
         return not is_real_option_arg_prev and not is_option_input
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
-        if not danbooru_url:
-            return
-
         def is_in_workflow(text: str) -> bool:
             cleaned_text = (
                 text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")
@@ -718,7 +612,36 @@ class DanbooruProvider(AutocompleteProvider):
 
         if context.query.strip():
             # 用户正在打字，执行前缀语义搜索
-            suggestions = list(_fetch_danbooru_suggestions(context.query, danbooru_url))
+            try:
+                tags = self.provider.search(context.query)
+                suggestions: List[AutocompleteSuggestion] = []
+                for item in tags:
+                    display = (
+                        f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
+                    )
+                    desc = item.wiki if item.wiki else "Danbooru 标签"
+                    escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
+                    suggestions.append(
+                        AutocompleteSuggestion(
+                            text=quote_if_needed(escaped_tag),
+                            displayText=display,
+                            description=desc,
+                            type="danbooru",
+                        )
+                    )
+            except Exception as e:
+                _LOGGER.warning(
+                    "Failed to provide Danbooru suggestions: %s", e, exc_info=True
+                )
+                yield AutocompleteSuggestion(
+                    text="",
+                    displayText="⚠ Danbooru 搜索失败",
+                    description=f"{e}",
+                    type="error",
+                    style="",
+                )
+                return
+
             added: Set[str] = (
                 get_added_prompts([s.text for s in suggestions])
                 if has_history
@@ -743,7 +666,42 @@ class DanbooruProvider(AutocompleteProvider):
                 prompt_tags = sorted(list(set(raw_tags)))
 
             if prompt_tags:
-                suggestions = list(_fetch_danbooru_related(prompt_tags, danbooru_url))
+                try:
+                    tags = self.provider.related(prompt_tags)
+                    suggestions: List[AutocompleteSuggestion] = []
+                    for item in tags:
+                        if item.category == "Character":
+                            continue
+                        display = (
+                            f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
+                        )
+                        desc = item.wiki if item.wiki else "Danbooru 关联标签"
+                        escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
+                        suggestions.append(
+                            AutocompleteSuggestion(
+                                text=quote_if_needed(escaped_tag),
+                                displayText=display,
+                                description=desc,
+                                type="danbooru",
+                            )
+                        )
+                        if len(suggestions) >= 20:
+                            break
+                except Exception as e:
+                    _LOGGER.warning(
+                        "Failed to provide Danbooru related suggestions: %s",
+                        e,
+                        exc_info=True,
+                    )
+                    yield AutocompleteSuggestion(
+                        text="",
+                        displayText="⚠ Danbooru 搜索失败",
+                        description=f"{e}",
+                        type="error",
+                        style="",
+                    )
+                    return
+
                 added: Set[str] = (
                     get_added_prompts([s.text for s in suggestions])
                     if has_history
@@ -811,8 +769,20 @@ def autocomplete(
         LoraProvider(),
         NodeProvider(),
         WorkflowPromptProvider(),
-        DanbooruProvider(),
     ]
+
+    danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
+    if danbooru_url:
+        try:
+            db_ctx = SQLiteContext.from_env()
+            akizuki = AkizukiDanbooruTagProvider.from_env(danbooru_url)
+            danbooru_tag_provider = SQLiteDanbooruTagProvider(
+                akizuki, db_ctx, danbooru_url
+            )
+            providers.append(DanbooruProvider(danbooru_tag_provider))
+        except Exception as e:
+            _LOGGER.error("Failed to initialize Danbooru provider: %s", e)
+            providers.append(FailedDanbooruProvider(e))
 
     for provider in providers:
         if provider.can_provide(context):
@@ -835,6 +805,7 @@ def main() -> None:
 
     if len(sys.argv) > 1:
         target_cmd = sys.argv[1]
+
         for s in autocomplete(target_cmd):
             print(
                 json.dumps(

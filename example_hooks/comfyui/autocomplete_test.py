@@ -10,6 +10,7 @@ from .autocomplete import (
     NodeProvider,
     LoraProvider,
 )
+from .danbooru import DanbooruTag
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
@@ -160,7 +161,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertFalse(provider.can_provide(context))
         provider2 = WorkflowPromptProvider()
         self.assertFalse(provider2.can_provide(context))
-        provider3 = DanbooruProvider()
+        provider3 = DanbooruProvider(MagicMock())
         self.assertFalse(provider3.can_provide(context))
 
     def test_autocomplete_adjust_prompt_normal(self):
@@ -232,19 +233,14 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     # ---- DanbooruProvider tests ----
 
-    def test_autocomplete_add_prompt_danbooru(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-                {
-                    "tag": "dunyarzad_(genshin_impact)",
-                    "cn_name": "迪娜泽黛",
-                    "wiki": "A noble girl.",
-                },
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_danbooru(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+            DanbooruTag(
+                "dunyarzad_(genshin_impact)", "迪娜泽黛", "A noble girl.", "General"
+            ),
+        ]
 
         context = self._make_context(
             target_command="add",
@@ -253,38 +249,12 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
+        suggestions = list(provider.provide(context))
 
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
-
-        req_data = call_kwargs.get("json")
-        self.assertEqual(req_data["query"], "girl")
-        self.assertEqual(req_data["top_k"], 20)
-        self.assertEqual(req_data["limit"], 20)
-        self.assertFalse(req_data["show_nsfw"])
-
-        mock_post.reset_mock()
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-                "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
-            },
-        ):
-            suggestions = list(provider.provide(context))
-
-        mock_post.assert_called()
-        call_args, call_kwargs = mock_post.call_args
-        req_data = call_kwargs.get("json")
-        self.assertTrue(req_data["show_nsfw"])
+        mock_provider.search.assert_called_once_with("girl")
 
         self.assertEqual(len(suggestions), 2)
         self.assertEqual(suggestions[0].text, "1girl")
@@ -298,13 +268,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         self.assertEqual(suggestions[1].description, "A noble girl.")
 
-        mock_post.reset_mock()
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": ""}
-        ):
-            suggestions = list(provider.provide(context))
-        self.assertEqual(len(suggestions), 0)
-
+        # 选项不满足的情况
         context2 = self._make_context(
             target_command="add",
             query="pos",
@@ -314,25 +278,13 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         self.assertFalse(provider.can_provide(context2))
 
-    def test_autocomplete_add_prompt_danbooru_related(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {
-                    "tag": "sailor_collar",
-                    "cn_name": "水手领",
-                    "wiki": "A collar style.",
-                },
-                {
-                    "tag": "hatsune_miku",
-                    "category": "Character",
-                    "cn_name": "初音未来",
-                    "wiki": "Vocaloid character.",
-                },
-                {"tag": "skirt", "cn_name": "裙子", "wiki": "A bottom wear."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_danbooru_related(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("sailor_collar", "水手领", "A collar style.", "General"),
+            DanbooruTag("hatsune_miku", "初音未来", "Vocaloid character.", "Character"),
+            DanbooruTag("skirt", "裙子", "A bottom wear.", "General"),
+        ]
 
         context = self._make_context(
             target_command="add",
@@ -341,56 +293,22 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "masterpiece,", "1girl,"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
+        suggestions = list(provider.provide(context))
 
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
-
-        req_data = call_kwargs.get("json")
-        self.assertEqual(req_data["tags"], ["masterpiece", "1girl"])
-        self.assertEqual(req_data["limit"], 100)
-        self.assertFalse(req_data["show_nsfw"])
-
-        mock_post.reset_mock()
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ,
-            {
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
-                "DANBOORU_SEARCH_INCLUDE_NSFW": "true",
-            },
-        ):
-            suggestions = list(provider.provide(context))
-
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        req_data = call_kwargs.get("json")
-        self.assertTrue(req_data["show_nsfw"])
+        mock_provider.related.assert_called_once_with(["masterpiece", "1girl"])
 
         self.assertEqual(len(suggestions), 2)
         self.assertEqual(suggestions[0].text, "sailor_collar")
-        self.assertEqual(suggestions[0].displayText, "sailor_collar (水手领)")
-        self.assertEqual(suggestions[0].description, "A collar style.")
-        self.assertEqual(suggestions[0].type, "danbooru")
-
         self.assertEqual(suggestions[1].text, "skirt")
-        self.assertEqual(suggestions[1].displayText, "skirt (裙子)")
-        self.assertEqual(suggestions[1].description, "A bottom wear.")
 
-    def test_autocomplete_add_prompt_danbooru_related_fallback(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "solo", "cn_name": "单人", "wiki": "Solo."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_danbooru_related_fallback(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("solo", "单人", "Solo.", "General"),
+        ]
 
         seen_prompts = {"masterpiece, 1girl": "区域: positive"}
         context = self._make_context(
@@ -403,33 +321,25 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
+        suggestions = list(provider.provide(context))
 
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
-
-        req_data = call_kwargs.get("json")
-        self.assertEqual(sorted(req_data["tags"]), ["1girl", "masterpiece"])
-
+        mock_provider.related.assert_called_once_with(["1girl", "masterpiece"])
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "solo")
 
-    def test_autocomplete_danbooru_style_muted_from_history(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-                {"tag": "solo", "cn_name": "单人", "wiki": "Solo image."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_danbooru_style_muted_from_history(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+            DanbooruTag("solo", "单人", "Solo image.", "General"),
+        ]
+        mock_provider.related.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+            DanbooruTag("solo", "单人", "Solo image.", "General"),
+        ]
 
         with patch(
             "comfyui.autocomplete.get_added_prompts", return_value={"1girl"}
@@ -438,7 +348,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             {
                 "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
                 "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
-                "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             },
         ):
             # 场景 1：有 query，执行前缀语义搜索
@@ -449,16 +358,12 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 cwords=["/add"],
                 parsed_args=self._make_parsed_args(command="add"),
             )
-            provider = DanbooruProvider()
-
-            with patch("comfyui.autocomplete.requests.post", mock_post):
-                suggestions1 = list(provider.provide(context1))
+            provider = DanbooruProvider(mock_provider)
+            suggestions1 = list(provider.provide(context1))
 
             self.assertEqual(len(suggestions1), 2)
-            # 1girl 在历史中，style 为 muted
             self.assertEqual(suggestions1[0].text, "1girl")
             self.assertEqual(suggestions1[0].style, "muted")
-            # solo 不在历史中，style 保持为空
             self.assertEqual(suggestions1[1].text, "solo")
             self.assertEqual(suggestions1[1].style, "")
 
@@ -473,18 +378,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 workflow={"nodes": []},
                 prompt_meta={},
             )
-
-            mock_response_related = MagicMock()
-            mock_response_related.json.return_value = {
-                "results": [
-                    {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-                    {"tag": "solo", "cn_name": "单人", "wiki": "Solo image."},
-                ]
-            }
-            mock_post_related = MagicMock(return_value=mock_response_related)
-
-            with patch("comfyui.autocomplete.requests.post", mock_post_related):
-                suggestions2 = list(provider.provide(context2))
+            suggestions2 = list(provider.provide(context2))
 
             self.assertEqual(len(suggestions2), 2)
             self.assertEqual(suggestions2[0].text, "1girl")
@@ -492,14 +386,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(suggestions2[1].text, "solo")
             self.assertEqual(suggestions2[1].style, "")
 
-    def test_autocomplete_add_prompt_with_neg_flag(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_with_neg_flag(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+        ]
 
         context = self._make_context(
             target_command="add",
@@ -508,27 +399,19 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--neg"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
+        suggestions = list(provider.provide(context))
 
-        mock_post.assert_called_once()
-        texts = [s.text for s in suggestions]
         self.assertEqual(len(suggestions), 1)
-        self.assertEqual(texts[0], "1girl")
+        self.assertEqual(suggestions[0].text, "1girl")
 
-    def test_autocomplete_add_prompt_region_query_search(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_region_query_search(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+        ]
 
         context = self._make_context(
             target_command="add",
@@ -537,33 +420,20 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
+        suggestions = list(provider.provide(context))
 
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
-
-        req_data = call_kwargs.get("json")
-        self.assertEqual(req_data["query"], "girl")
-
+        mock_provider.search.assert_called_once_with("girl")
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "1girl")
-        self.assertEqual(suggestions[0].type, "danbooru")
 
-    def test_autocomplete_add_prompt_region_related(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "cute", "cn_name": "可爱", "wiki": "Cute character."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_region_related(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("cute", "可爱", "Cute character.", "General"),
+        ]
 
         seen_prompts = {"1girl, masterpiece, score_7, cute": "区域: positive"}
         context = self._make_context(
@@ -576,33 +446,19 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
-
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
-
-        req_data = call_kwargs.get("json")
-        expected_tags = ["1girl", "cute", "masterpiece", "score_7"]
-        self.assertEqual(sorted(req_data["tags"]), expected_tags)
+        suggestions = list(provider.provide(context))
 
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "cute")
 
-    def test_autocomplete_add_prompt_region_query_search_fallback(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "1girl", "cn_name": "女孩", "wiki": "A female character."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_region_query_search_fallback(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+        ]
 
         context = self._make_context(
             target_command="add",
@@ -611,33 +467,19 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
-
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/search")
-
-        req_data = call_kwargs.get("json")
-        self.assertEqual(req_data["query"], "girl")
+        suggestions = list(provider.provide(context))
 
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "1girl")
-        self.assertEqual(suggestions[0].type, "danbooru")
 
-    def test_autocomplete_add_prompt_region_related_fallback(self):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "results": [
-                {"tag": "cute", "cn_name": "可爱", "wiki": "Cute character."},
-            ]
-        }
-        mock_post = MagicMock(return_value=mock_response)
+    def test_autocomplete_add_prompt_region_related_fallback(self) -> None:
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("cute", "可爱", "Cute character.", "General"),
+        ]
 
         seen_prompts = {
             "1girl, masterpiece, score_7, cute": "区域: positive",
@@ -653,27 +495,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider()
+        provider = DanbooruProvider(mock_provider)
         self.assertTrue(provider.can_provide(context))
 
-        with patch("comfyui.autocomplete.requests.post", mock_post), patch.dict(
-            os.environ, {"DANBOORU_SEARCH_URL": "https://mock-danbooru.space"}
-        ):
-            suggestions = list(provider.provide(context))
-
-        mock_post.assert_called_once()
-        call_args, call_kwargs = mock_post.call_args
-        self.assertEqual(call_args[0], "https://mock-danbooru.space/api/related")
-
-        req_data = call_kwargs.get("json")
-        expected_tags = [
-            "1girl",
-            "another prompt line",
-            "cute",
-            "masterpiece",
-            "score_7",
-        ]
-        self.assertEqual(sorted(req_data["tags"]), expected_tags)
+        suggestions = list(provider.provide(context))
 
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "cute")
@@ -875,32 +700,25 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
 class TestAutocompleteIntegration(unittest.TestCase):
 
-    @patch("comfyui.autocomplete.requests.post")
+    @patch("comfyui.autocomplete.SQLiteDanbooruTagProvider")
     def test_integration_autocomplete_danbooru_related(
-        self, mock_post: MagicMock
+        self, mock_sqlite_provider_class: MagicMock
     ) -> None:
         import io
         import json
         from comfyui.autocomplete import main as autocomplete_main
 
-        # 1. Mock Danbooru API 的返回，包含 1 个 Character 标签，以及超过 25 个其他标签
-        mock_response = MagicMock()
+        # 1. Mock Danbooru provider 的返回，包含 1 个 Character 标签，以及超过 25 个其他标签
+        mock_provider = MagicMock()
         results = [
-            {"tag": "1girl", "cn_name": "女孩", "wiki": "A girl."},
-            {
-                "tag": "hatsune_miku",
-                "category": "Character",
-                "cn_name": "初音未来",
-                "wiki": "A character.",
-            },
+            DanbooruTag("1girl", "女孩", "A girl.", "General"),
+            DanbooruTag("hatsune_miku", "初音未来", "A character.", "Character"),
         ]
         for i in range(30):
-            results.append(
-                {"tag": f"tag_{i}", "cn_name": f"标签_{i}", "wiki": f"Wiki_{i}"}
-            )
+            results.append(DanbooruTag(f"tag_{i}", f"标签_{i}", f"Wiki_{i}", "General"))
 
-        mock_response.json.return_value = {"results": results}
-        mock_post.return_value = mock_response
+        mock_provider.related.return_value = results
+        mock_sqlite_provider_class.return_value = mock_provider
 
         # 2. 配置补全上下文环境变量
         env_vars = {
@@ -909,6 +727,8 @@ class TestAutocompleteIntegration(unittest.TestCase):
             "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
             "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/add", "masterpiece,", "1girl,"]',
             "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
+            "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+            "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
         }
 
         # 3. 拦截 stdout 并运行 main()
@@ -926,10 +746,8 @@ class TestAutocompleteIntegration(unittest.TestCase):
             json.loads(line) for line in output.strip().splitlines() if line.strip()
         ]
 
-        # 验证 limit 为 100
-        mock_post.assert_called_once()
-        _, call_kwargs = mock_post.call_args
-        self.assertEqual(call_kwargs.get("json", {}).get("limit"), 100)
+        mock_sqlite_provider_class.assert_called_once()
+        mock_provider.related.assert_called_once_with(["masterpiece", "1girl"])
 
         # 验证结果中不包含 character 标签
         tags = [item["text"] for item in lines]

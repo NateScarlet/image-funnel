@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 from unittest.mock import patch
 
+from .db import SQLiteContext
 from .operation_history import OperationHistory
 
 
@@ -19,8 +20,8 @@ def _query(history: OperationHistory, sql: str, params: tuple[object, ...] = ())
 def test_record_writes_to_db():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
-        history.ensure_db()
+        history = OperationHistory(SQLiteContext(db_path))
+
         history.record("add", {"prompt": "1girl"})
 
         rows = _query(history, "SELECT command, data FROM history ORDER BY id")
@@ -32,8 +33,8 @@ def test_record_writes_to_db():
 def test_record_multiple():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
-        history.ensure_db()
+        history = OperationHistory(SQLiteContext(db_path))
+
         history.record("add", {"prompt": "1girl"})
         history.record("remove", {"prompt": "bad hands"})
 
@@ -49,7 +50,7 @@ def test_record_multiple():
 def test_extract_params_queue():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(command="queue")
         history.extract_params(args)
 
@@ -60,7 +61,7 @@ def test_extract_params_queue():
 def test_extract_params_add():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(command="add", prompt=["1girl", "solo"])
         history.extract_params(args)
 
@@ -73,7 +74,7 @@ def test_extract_params_add():
 def test_extract_params_remove():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(command="remove", prompt=["bad hands"])
         history.extract_params(args)
 
@@ -87,7 +88,7 @@ def test_extract_params_remove():
 def test_extract_params_adjust_lora():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(
             command="adjust", adjust_type="lora", name="my_lora", weight="0.5"
         )
@@ -104,7 +105,7 @@ def test_extract_params_adjust_lora():
 def test_extract_params_adjust_cfg():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(command="adjust", adjust_type="cfg", weight="7.0")
         history.extract_params(args)
 
@@ -115,7 +116,7 @@ def test_extract_params_adjust_cfg():
 def test_extract_params_adjust_aspect():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "test.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         args = argparse.Namespace(command="adjust", adjust_type="aspect", ratio="16:9")
         history.extract_params(args)
 
@@ -138,8 +139,8 @@ def test_from_env():
 def test_get_added_prompts():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, ".io.github.natescarlet.hook.db")
-        history = OperationHistory(db_path)
-        history.ensure_db()
+        history = OperationHistory(SQLiteContext(db_path))
+
         history.record("add", {"prompt": "1girl"})
         history.record("add", {"prompt": "solo"})
         history.record("remove", {"prompt": "bad hands"})
@@ -155,6 +156,6 @@ def test_get_added_prompts():
 def test_get_added_prompts_db_not_exist():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = os.path.join(tmp, "non_exist_dir", ".io.github.natescarlet.hook.db")
-        history = OperationHistory(db_path)
+        history = OperationHistory(SQLiteContext(db_path))
         res = history.get_added_prompts(["1girl"])
         assert res == set()
