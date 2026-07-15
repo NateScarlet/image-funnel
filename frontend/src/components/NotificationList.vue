@@ -105,7 +105,9 @@ function triggerAction(notification: Notification) {
 <style scoped>
 .notification-enter-active,
 .notification-leave-active {
-  transition: all 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .notification-enter-from {

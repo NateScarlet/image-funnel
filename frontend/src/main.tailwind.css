@@ -99,3 +99,15 @@
     max-width: 100dvw;
   }
 }
+
+/* 尊重系统"减少动效"偏好，全局禁用过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
