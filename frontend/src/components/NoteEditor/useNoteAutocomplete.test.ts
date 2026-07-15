@@ -34,15 +34,17 @@ const hookList = [
 const mockHooksData = { value: { hooks: hookList } };
 const mockAutocompleteData = ref<unknown>(undefined);
 
-const mockUseQuery = vi.hoisted(() => vi.fn((document: unknown, _options: unknown) => {
-  if (document === "HooksDocument") {
-    return { data: mockHooksData, loading: { value: false } };
-  }
-  return {
-    data: mockAutocompleteData,
-    loading: { value: false },
-  };
-}));
+const mockUseQuery = vi.hoisted(() =>
+  vi.fn((document: unknown, _options: unknown) => {
+    if (document === "HooksDocument") {
+      return { data: mockHooksData, loading: { value: false } };
+    }
+    return {
+      data: mockAutocompleteData,
+      loading: { value: false },
+    };
+  }),
+);
 
 vi.mock("@/graphql/utils/useQuery", () => ({
   default: mockUseQuery,
@@ -159,7 +161,7 @@ describe("useNoteAutocomplete composable", () => {
 
     const { activeIndex, handleKeySpace } = createAutocomplete();
     const event = new KeyboardEvent("keydown", { key: " ", ctrlKey: true });
-    
+
     handleKeySpace(event);
     expect(activeIndex.value).toBe(0);
   });
@@ -180,6 +182,28 @@ describe("useNoteAutocomplete composable", () => {
     expect(params.start).toBe(1); // trigger index (after '/')
     expect(params.end).toBe(3); // selectionEnd
     expect(params.selectStart).toBe(1 + sug.text.length + 1); // selectStart
+  });
+
+  test("activeIndex preserves selection when suggestion text is unchanged after model change", () => {
+    // 初始状态：指令名补全，建议为 [adjust, add]
+    model.value = "/a";
+    cursorStart.value = 2;
+    cursorEnd.value = 2;
+
+    const { activeIndex, suggestions, handleKeyDown } = createAutocomplete();
+
+    handleKeyDown(); // 选中 adjust
+    expect(activeIndex.value).toBe(0);
+    expect(suggestions.value[0].text).toBe("adjust");
+
+    // 修改模型为 "/ad"（仍匹配 adjust），建议列表不变
+    model.value = "/ad";
+    cursorStart.value = 3;
+    cursorEnd.value = 3;
+
+    // 同一建议文本仍在同一位置，activeIndex 应保持
+    expect(suggestions.value[0].text).toBe("adjust");
+    expect(activeIndex.value).toBe(0);
   });
 
   test("isSearching is false when query completes with empty results", () => {

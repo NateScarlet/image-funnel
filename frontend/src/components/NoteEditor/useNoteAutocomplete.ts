@@ -62,16 +62,12 @@ export function useNoteAutocomplete(options: Options) {
     return hooksData.value?.hooks.filter((h) => h.directive != null) || [];
   });
 
-  const directiveNames = computed(() =>
-    directives.value.map((h) => h.directive?.name ?? "")
-  );
+  const directiveNames = computed(() => directives.value.map((h) => h.directive?.name ?? ""));
 
   const currentHook = computed(() => {
     const dirName = state.value?.directiveName;
     if (!dirName) return null;
-    return (
-      hooksData.value?.hooks.find((h) => h.directive?.name === dirName) ?? null
-    );
+    return hooksData.value?.hooks.find((h) => h.directive?.name === dirName) ?? null;
   });
 
   const enabled = computed(() => {
@@ -85,28 +81,34 @@ export function useNoteAutocomplete(options: Options) {
       toValue(options.cursorStart),
       menuVisible.value,
       dismissed.value,
-      directiveNames.value
-    )
+      directiveNames.value,
+    ),
   );
 
-  // activeIndex 声明式重置：query 变化时自动重置为 -1
-  const activeIndexBuffer = ref({ queryKey: "", index: -1 });
+  // 获取指定索引的建议文本，作为 activeIndex buffer 的 key（纯函数，不依赖 activeIndex 自身）
+  function getSuggestionText(index: number): string {
+    if (index < 0 || index >= suggestions.value.length) return "";
+    return suggestions.value[index].text;
+  }
+
+  // activeIndex 声明式重置：使用建议的 text 作为 key，而非 query
+  // 不同 query 可能返回相同结果（如筛选前缀恰好是所有候选的共通前缀），
+  // 此时不重置更符合直觉，且比较建议文本开销也更小
+  const activeIndexBuffer = ref({ key: "", index: -1 });
   const activeIndex = computed({
     get: () => {
-      const key = state.value?.query ?? "";
-      return activeIndexBuffer.value.queryKey === key
-        ? activeIndexBuffer.value.index
-        : -1;
+      if (activeIndexBuffer.value.index < 0) return -1;
+      const currentKey = getSuggestionText(activeIndexBuffer.value.index);
+      return activeIndexBuffer.value.key === currentKey ? activeIndexBuffer.value.index : -1;
     },
     set: (val: number) => {
-      const key = state.value?.query ?? "";
-      activeIndexBuffer.value = { queryKey: key, index: val };
+      activeIndexBuffer.value = { key: getSuggestionText(val), index: val };
     },
   });
 
   const dynamicLoadingCount = ref(0);
   const dynamicLoading = computed(
-    () => (options.loadingCount?.value ?? dynamicLoadingCount.value) > 0
+    () => (options.loadingCount?.value ?? dynamicLoadingCount.value) > 0,
   );
 
   const variablesRaw = computed(() => {
@@ -121,10 +123,7 @@ export function useNoteAutocomplete(options: Options) {
       input: {
         hookId: currentHook.value?.id ?? "",
         noteId: toValue(options.noteId),
-        linePrefix: getLinePrefix(
-          toValue(options.model),
-          toValue(options.cursorStart)
-        ),
+        linePrefix: getLinePrefix(toValue(options.model), toValue(options.cursorStart)),
         query: s.query,
       },
     };
@@ -146,7 +145,7 @@ export function useNoteAutocomplete(options: Options) {
         updateVariablesDebounced(newVal);
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   const { data: autocompleteData } = useQuery(HookAutocompleteDocument, {
@@ -156,13 +155,11 @@ export function useNoteAutocomplete(options: Options) {
   });
 
   const isDebouncing = computed(() => {
-    return (
-      variablesRaw.value !== null && !isEqual(variablesRaw.value, variables.value)
-    );
+    return variablesRaw.value !== null && !isEqual(variablesRaw.value, variables.value);
   });
 
   const currentLinePrefix = computed(() =>
-    getLinePrefix(toValue(options.model), toValue(options.cursorStart))
+    getLinePrefix(toValue(options.model), toValue(options.cursorStart)),
   );
 
   // API 建议（委托给纯函数）
@@ -174,8 +171,8 @@ export function useNoteAutocomplete(options: Options) {
         | undefined,
       autocompleteData.value?.hookAutocomplete ?? [],
       currentHook.value?.id ?? null,
-      currentLinePrefix.value
-    )
+      currentLinePrefix.value,
+    ),
   );
 
   // 动态加载判断（委托给纯函数）
@@ -188,8 +185,8 @@ export function useNoteAutocomplete(options: Options) {
         | undefined,
       currentHook.value?.id ?? null,
       currentLinePrefix.value,
-      autocompleteData.value?.hookAutocomplete ?? []
-    )
+      autocompleteData.value?.hookAutocomplete ?? [],
+    ),
   );
 
   const isSearching = computed(() => {
@@ -213,8 +210,8 @@ export function useNoteAutocomplete(options: Options) {
       directives.value as HookInfo[],
       parsedRules.value,
       apiSuggestions.value,
-      enabled.value
-    )
+      enabled.value,
+    ),
   );
 
   function resetDismissed() {
@@ -239,8 +236,7 @@ export function useNoteAutocomplete(options: Options) {
         activeIndex.value = suggestions.value.length - 1;
       } else {
         activeIndex.value =
-          (activeIndex.value - 1 + suggestions.value.length) %
-          suggestions.value.length;
+          (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
       }
     }
   }
@@ -274,25 +270,15 @@ export function useNoteAutocomplete(options: Options) {
   // #region 建议提交（纯计算，返回 InsertParams，调用方负责 DOM 操作）
 
   /** 计算选择建议后的插入参数，返回 null 表示无操作 */
-  function handleSelectSuggestion(
-    sug: Suggestion,
-    selectionEnd: number
-  ): InsertParams | null {
+  function handleSelectSuggestion(sug: Suggestion, selectionEnd: number): InsertParams | null {
     const s = state.value;
     if (!s) return null;
     return computeSuggestionInsertion(sug, s, selectionEnd);
   }
 
   /** 计算 Enter 键确认后的插入参数，返回 null 表示无需处理（由调用方让事件继续传播） */
-  function handleKeyEnter(
-    e: KeyboardEvent,
-    selectionEnd: number
-  ): InsertParams | null {
-    if (
-      state.value?.show &&
-      suggestions.value.length &&
-      activeIndex.value !== -1
-    ) {
+  function handleKeyEnter(e: KeyboardEvent, selectionEnd: number): InsertParams | null {
+    if (state.value?.show && suggestions.value.length && activeIndex.value !== -1) {
       const sug = suggestions.value[activeIndex.value];
       const s = state.value;
       const text = toValue(options.model);
@@ -317,7 +303,7 @@ export function useNoteAutocomplete(options: Options) {
       if (!show) {
         updateVariablesDebounced.cancel();
       }
-    }
+    },
   );
 
   function flushDebounced() {
