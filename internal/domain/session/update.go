@@ -113,9 +113,31 @@ func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image
 	}
 	s.queue = newQueue
 
-	s.currentIdx = 0
+        s.currentIdx = 0
 	s.updatedAt = time.Now()
 
+	return nil
+}
+
+// tryAdvanceRound 在队列已处理完且 Keep 数超过 targetKeep 时自动推进到下一轮。
+// 消除 MarkImage 与 removeImageByRelPath 之间的重复逻辑。
+func (s *Session) tryAdvanceRound() error {
+	if s.currentIdx >= len(s.queue) {
+		stats := s.Stats()
+		if stats.TotalKept > s.targetKeep {
+			var newQueue []*image.Image
+			for _, idx := range s.queue {
+				img := s.images[idx]
+				action := s.actions[img.ID()]
+				if action == shared.ImageActionKeep {
+					newQueue = append(newQueue, img)
+				}
+			}
+			if err := s.NextRound(nil, newQueue); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

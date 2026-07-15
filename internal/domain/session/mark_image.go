@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"main/internal/apperror"
-	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"time"
@@ -76,24 +75,8 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	// 已在队列末尾时（含刚推进 OR 乱序标记时已越界），检查是否需要开启新一轮。
 	// 乱序标记已越界的情况：用户在"刚完成"状态下回头改变某张图片为 Keep，
 	// 使 Kept > targetKeep，此时必须触发 NextRound，否则 currentImage 将永远为 null。
-	if s.currentIdx >= len(s.queue) {
-		stats := s.Stats()
-
-		if stats.TotalKept > s.targetKeep {
-			var newQueue []*image.Image
-			for _, idx := range s.queue {
-				img := s.images[idx]
-				action := s.actions[img.ID()]
-				if action == shared.ImageActionKeep {
-					newQueue = append(newQueue, img)
-				}
-			}
-
-			// 开启新一轮
-			if err := s.NextRound(nil, newQueue); err != nil {
-				return err
-			}
-		}
+	if err := s.tryAdvanceRound(); err != nil {
+		return err
 	}
 
 	return nil

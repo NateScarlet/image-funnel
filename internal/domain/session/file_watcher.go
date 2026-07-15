@@ -63,10 +63,20 @@ func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEve
 		if img != nil {
 			// 创建或更新
 			filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(sess.Filter()))
-			changed = sess.UpdateImage(img, filterFunc(img))
+			var err error
+			changed, err = sess.UpdateImage(img, filterFunc(img))
+			if err != nil {
+				release()
+				return err
+			}
 		} else {
 			// 删除，或未获取到图片的创建/更新（按删除处理）
-			changed = sess.removeImageByRelPath(relPath, true)
+			var err error
+			changed, err = sess.removeImageByRelPath(relPath, true)
+			if err != nil {
+				release()
+				return err
+			}
 		}
 
 		if changed {

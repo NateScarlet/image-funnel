@@ -7,7 +7,7 @@ import (
 )
 
 // UpdateImage 更新会话中的图片信息
-func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
+func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) (bool, error) {
 	idx, ok := s.indexByRelPath[img.RelPath()]
 	var oldQueueIndex = -1 // 在 queue 中的索引
 	var oldImageIndex = -1 // 在 images 中的索引
@@ -33,9 +33,9 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 				delete(s.removed, img.ID())
 			}
 			s.addFilteredImage(img)
-			return true
+			return true, nil
 		}
-		return false
+		return false, nil
 	}
 
 	// 如果不匹配过滤器，从 queue 中移除
@@ -75,10 +75,10 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) bool {
 	}
 
 	s.updatedAt = time.Now()
-	return true
+	return true, nil
 }
 
-func (s *Session) removeImageByRelPath(relPath string, force bool) bool {
+func (s *Session) removeImageByRelPath(relPath string, force bool) (bool, error) {
 	var targetIndex = -1
 	var targetImgIndex = -1
 
@@ -92,13 +92,13 @@ func (s *Session) removeImageByRelPath(relPath string, force bool) bool {
 	}
 
 	if targetIndex == -1 {
-		return false
+		return false, nil
 	}
 
 	// 如果该图片已有用户操作记录，且非强制移除，则保留它在队列中，以维护 undo stack 的完整性
 	if !force {
 		if _, hasAction := s.actions[s.images[targetImgIndex].ID()]; hasAction {
-			return false
+			return false, nil
 		}
 	}
 
@@ -119,8 +119,13 @@ func (s *Session) removeImageByRelPath(relPath string, force bool) bool {
 
 	// 注意：我们不从 s.images 中移除图片，保持"只增不减"并维持索引稳定性
 
+	// 删除后检查是否需要推进到下一轮（与 MarkImage 行为一致）
+	if err := s.tryAdvanceRound(); err != nil {
+		return false, err
+	}
+
 	s.updatedAt = time.Now()
-	return true
+	return true, nil
 }
 
 func (s *Session) addFilteredImage(img *image.Image) error {

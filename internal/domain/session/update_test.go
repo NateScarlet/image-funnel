@@ -29,7 +29,8 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 
 	assert.Equal(t, 1, len(ImagesOf(session)))
 
-	session.removeImageByRelPath(imgA.RelPath(), false)
+	_, err := session.removeImageByRelPath(imgA.RelPath(), false)
+	require.NoError(t, err)
 	assert.Equal(t, 0, session.CurrentSize())
 
 	imgAFresh := image.New(
@@ -44,7 +45,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 		1080,
 	)
 
-	err := session.NextRound(filter, []*image.Image{imgAFresh})
+	err = session.NextRound(filter, []*image.Image{imgAFresh})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(session.queue))
