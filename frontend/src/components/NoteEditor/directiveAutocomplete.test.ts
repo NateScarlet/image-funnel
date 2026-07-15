@@ -1,8 +1,6 @@
 import { describe, test, expect } from "vitest";
 import { parseUsage, getArgsContext, getSuggestionsForRules } from "./directiveAutocomplete";
 
-
-
 const sampleUsage = `
 /adjust lora <name> <weight> [-u] [-j <N>] [--no-skip]
 /adjust prompt <text> <weight> [-u] [-j <N>] [--skip-add] [--no-skip] [--neg] [--region <region>]... [--node <node-id>]...

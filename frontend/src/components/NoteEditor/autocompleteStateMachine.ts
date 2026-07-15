@@ -201,11 +201,7 @@ export function computeSuggestions(
 
   const staticResults = getSuggestionsForRules(rules, confirmedTokens, q);
 
-  if (
-    enabled &&
-    !q.startsWith("-") &&
-    apiSuggestions.length > 0
-  ) {
+  if (enabled && !q.startsWith("-") && apiSuggestions.length > 0) {
     const nonPositional = staticResults.filter((item) => item.type !== "positional");
     return [...apiSuggestions, ...nonPositional];
   }

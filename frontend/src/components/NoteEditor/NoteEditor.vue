@@ -33,11 +33,7 @@
       </template>
 
       <!-- 派发按钮：可即时触发的笔记钩子，放入二级菜单防止误触 -->
-      <div
-        v-if="dispatchableHooks.length"
-        ref="dispatchMenuRef"
-        class="relative"
-      >
+      <div v-if="dispatchableHooks.length" ref="dispatchMenuRef" class="relative">
         <button
           type="button"
           class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
@@ -79,10 +75,7 @@
               showDispatchMenu = false;
             "
           >
-            <svg
-              class="w-4 h-4 text-secondary-400 shrink-0"
-              viewBox="0 0 24 24"
-            >
+            <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
               <path :d="mdiLightningBolt" fill="currentColor" />
             </svg>
             <span>{{ h.name }}</span>
@@ -104,11 +97,7 @@
           <div
             class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
           >
-            {{
-              autocompleteState?.type === "name"
-                ? "选择笔记指令"
-                : "指令参数建议"
-            }}
+            {{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}
           </div>
           <div
             v-if="isSearching"
@@ -215,16 +204,8 @@ import { HooksDocument, DispatchNoteHookDocument } from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
-import {
-  mdiConsole,
-  mdiLightningBolt,
-  mdiChevronDown,
-  mdiLoading,
-} from "@mdi/js";
-import {
-  useNoteAutocomplete,
-  computeDirectiveInsertion,
-} from "./useNoteAutocomplete";
+import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
+import { useNoteAutocomplete, computeDirectiveInsertion } from "./useNoteAutocomplete";
 import type { InsertParams } from "./useNoteAutocomplete";
 import type { Suggestion } from "./directiveAutocomplete";
 
@@ -274,10 +255,7 @@ const dispatchableHooks = computed(() => {
       if (!h.canDispatchByNote) return false;
       if (!h.directive) return false;
       // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
-      const escapedName = h.directive.name.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
+      const escapedName = h.directive.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
       return regex.test(model.value);
     }) || []
@@ -303,9 +281,7 @@ async function triggerDispatch(hookId: string, hookName: string) {
     try {
       await props.onBeforeDispatch();
     } catch (err) {
-      showError(
-        `保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`
-      );
+      showError(`保存笔记修改失败: ${err instanceof Error ? err.message : String(err)}`);
       isDispatching.value = false;
       return;
     }
@@ -414,7 +390,7 @@ function onInsertDirective(dirName: string) {
     dirName,
     model.value,
     textareaRef.value?.selectionStart ?? 0,
-    textareaRef.value?.selectionEnd ?? 0
+    textareaRef.value?.selectionEnd ?? 0,
   );
   applyInsertion(params);
 }

@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "generate:graphql": "graphql-codegen --config codegen.ts",
     "build:tsc": "vue-tsc --noEmit -p ./src/tsconfig.json",
-    "check": "pnpm run lint:fix && pnpm run build:tsc && pnpm test",
+    "check": "pnpm run lint:fix && pnpm run build:tsc && pnpm test && pnpm fmt",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "fmt": "oxfmt .",

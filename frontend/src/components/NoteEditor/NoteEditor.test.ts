@@ -63,46 +63,48 @@ const hookList = [
 const mockHooksData = { value: { hooks: hookList } };
 const mockAutocompleteData = ref<unknown>(undefined);
 
-const mockUseQuery = vi.hoisted(() => vi.fn((document: unknown, options: unknown) => {
-  if (document === "HooksDocument") {
-    return { data: mockHooksData, loading: { value: false } };
-  }
+const mockUseQuery = vi.hoisted(() =>
+  vi.fn((document: unknown, options: unknown) => {
+    if (document === "HooksDocument") {
+      return { data: mockHooksData, loading: { value: false } };
+    }
 
-  const opts = options as { variables?: unknown; loadingCount?: { value: number } } | undefined;
+    const opts = options as { variables?: unknown; loadingCount?: { value: number } } | undefined;
 
-  if (opts?.variables) {
-    watch(
-      () => toValue(opts.variables),
-      async (vars) => {
-        if (!vars) {
-          mockAutocompleteData.value = undefined;
-          return;
-        }
-
-        if (opts.loadingCount) {
-          opts.loadingCount.value++;
-        }
-
-        try {
-          const res = await mockQuery(document, { variables: vars });
-          mockAutocompleteData.value = res.data;
-        } catch {
-          // 忽略
-        } finally {
-          if (opts.loadingCount) {
-            opts.loadingCount.value--;
+    if (opts?.variables) {
+      watch(
+        () => toValue(opts.variables),
+        async (vars) => {
+          if (!vars) {
+            mockAutocompleteData.value = undefined;
+            return;
           }
-        }
-      },
-      { immediate: true, deep: true }
-    );
-  }
 
-  return {
-    data: mockAutocompleteData,
-    loading: { value: false },
-  };
-}));
+          if (opts.loadingCount) {
+            opts.loadingCount.value++;
+          }
+
+          try {
+            const res = await mockQuery(document, { variables: vars });
+            mockAutocompleteData.value = res.data;
+          } catch {
+            // 忽略
+          } finally {
+            if (opts.loadingCount) {
+              opts.loadingCount.value--;
+            }
+          }
+        },
+        { immediate: true, deep: true },
+      );
+    }
+
+    return {
+      data: mockAutocompleteData,
+      loading: { value: false },
+    };
+  }),
+);
 
 vi.mock("@/graphql/utils/useQuery", () => ({
   default: mockUseQuery,
@@ -306,7 +308,7 @@ describe("NoteEditor", () => {
     await el.setValue("/add ");
     el.element.selectionStart = 5;
     el.element.selectionEnd = 5;
-    
+
     // 触发 input 事件以启动动态补全防抖
     el.element.dispatchEvent(new Event("input", { bubbles: true }));
     await nextTick();
@@ -462,7 +464,7 @@ describe("NoteEditor", () => {
     await typeInTextarea(createWrapper(), "/add ");
     const menu = getSuggestionMenu();
     expect(menu).not.toBeNull();
-    
+
     // 默认不应该有任何项被高亮选中
     const activeItem = menu?.querySelector(".bg-secondary-500");
     expect(activeItem).toBeNull();
@@ -471,7 +473,7 @@ describe("NoteEditor", () => {
   test("navigates suggestions using Up and Down keys from unselected state", async () => {
     await typeInTextarea(createWrapper(), "/add ");
     const textarea = wrapper.find("textarea");
-    
+
     // 初始状态没有选中
     let menu = getSuggestionMenu();
     expect(menu?.querySelector(".bg-secondary-500")).toBeNull();
@@ -521,9 +523,7 @@ describe("NoteEditor", () => {
   test("prevents default Enter behavior if the selected suggestion will change the text by appending a space", async () => {
     mockQuery.mockResolvedValue({
       data: {
-        hookAutocomplete: [
-          { text: "abc", displayText: "abc", type: "positional" },
-        ],
+        hookAutocomplete: [{ text: "abc", displayText: "abc", type: "positional" }],
       },
     });
 
@@ -546,7 +546,7 @@ describe("NoteEditor", () => {
 
     const menu = getSuggestionMenu();
     expect(menu).not.toBeNull();
-    
+
     await el.trigger("keydown", { key: "ArrowDown" });
     await nextTick();
 
@@ -567,7 +567,12 @@ describe("NoteEditor", () => {
     expect(menu).not.toBeNull();
     expect(menu?.querySelector(".bg-secondary-500")).toBeNull();
 
-    const event = new KeyboardEvent("keydown", { key: " ", ctrlKey: true, bubbles: true, cancelable: true });
+    const event = new KeyboardEvent("keydown", {
+      key: " ",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
     el.element.dispatchEvent(event);
     await nextTick();
 
@@ -581,9 +586,7 @@ describe("NoteEditor", () => {
   test("API suggestions remain rendered during blur grace period (200ms)", async () => {
     mockQuery.mockResolvedValue({
       data: {
-        hookAutocomplete: [
-          { text: "positive", displayText: "positive", type: null },
-        ],
+        hookAutocomplete: [{ text: "positive", displayText: "positive", type: null }],
       },
     });
 
@@ -626,5 +629,3 @@ describe("NoteEditor", () => {
     expect(getSuggestionMenu()).toBeNull();
   });
 });
-
-

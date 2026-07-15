@@ -46,7 +46,7 @@ const props = withDefaults(
     offset: 8,
     disabled: false,
     contentClass: "",
-  }
+  },
 );
 // #endregion
 
@@ -59,11 +59,7 @@ const { floatingStyles } = useFloating(referenceEl, floatingEl, {
   placement: computed(() => props.placement),
   strategy: "fixed", // 采用 fixed 定位确保悬浮菜单层在 fixed 布局的 BatchBar 上定位准确
   whileElementsMounted: autoUpdate,
-  middleware: [
-    floatingOffset(() => ({ mainAxis: props.offset })),
-    flip(),
-    shift(),
-  ],
+  middleware: [floatingOffset(() => ({ mainAxis: props.offset })), flip(), shift()],
 });
 // #endregion
 
@@ -84,17 +80,14 @@ watch(
     if (disabledVal) {
       close();
     }
-  }
+  },
 );
 
 // 点击外部关闭：检测点击区域是否在触发器或浮层内容之外
 function onClickOutside(event: MouseEvent) {
   if (!isOpen.value) return;
   const target = event.target as HTMLElement;
-  if (
-    referenceEl.value?.contains(target) ||
-    floatingEl.value?.contains(target)
-  ) {
+  if (referenceEl.value?.contains(target) || floatingEl.value?.contains(target)) {
     return;
   }
   close();
@@ -120,7 +113,8 @@ useEventListeners(document, ({ on }) => {
 /* 优雅的淡入与微移移动画 */
 .dropdown-fade-enter-active,
 .dropdown-fade-leave-active {
-  transition: opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+  transition:
+    opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .dropdown-fade-enter-from,

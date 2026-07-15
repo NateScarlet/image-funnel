@@ -70,7 +70,7 @@
             <template #content="{ close }">
               <RatingSelector
                 :modelValue="bulkRating"
-                @update:modelValue="val => handleBulkSetRating(val, close)"
+                @update:modelValue="(val) => handleBulkSetRating(val, close)"
               />
             </template>
           </AppDropdown>
@@ -290,7 +290,7 @@ const bulkRating = computed<number>(() => {
 
 async function handleBulkSetRating(
   rating: number | null | readonly number[] | undefined,
-  closeDropdown: () => void
+  closeDropdown: () => void,
 ) {
   if (typeof rating === "number") {
     await props.bulkOps.setRating(rating);

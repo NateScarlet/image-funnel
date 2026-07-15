@@ -21,7 +21,8 @@ const hookList: HookInfo[] = [
     name: "调整图片",
     directive: {
       name: "adjust",
-      usage: "/adjust lora <name> <weight> [-j <N>]\n/adjust prompt <text> <weight> [--region <region>]...",
+      usage:
+        "/adjust lora <name> <weight> [-j <N>]\n/adjust prompt <text> <weight> [--region <region>]...",
       autocomplete: true,
     },
   },
@@ -30,7 +31,8 @@ const hookList: HookInfo[] = [
     name: "添加元素",
     directive: {
       name: "add",
-      usage: "/add [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n给当前目录图片添加提示词",
+      usage:
+        "/add [--neg] [--region <region>]... [--node <node-id>]... <prompt>...\n给当前目录图片添加提示词",
       autocomplete: true,
     },
   },
@@ -218,10 +220,22 @@ describe("computeApiSuggestions", () => {
   test("filters locally when query differs from API query", () => {
     const state = makeArgsState({ query: "pos" });
     const vars = { input: { hookId: "hook2", linePrefix: "/add ", query: "p" } };
-    const result = computeApiSuggestions(state, vars, [
-      rawApiSuggestion,
-      { type: "positional", text: "negative", displayText: "negative", description: null, style: null },
-    ], "hook2", "/add ");
+    const result = computeApiSuggestions(
+      state,
+      vars,
+      [
+        rawApiSuggestion,
+        {
+          type: "positional",
+          text: "negative",
+          displayText: "negative",
+          description: null,
+          style: null,
+        },
+      ],
+      "hook2",
+      "/add ",
+    );
     expect(result).toHaveLength(1);
     expect(result[0].text).toBe("positive");
   });
@@ -297,9 +311,7 @@ describe("computeSuggestions", () => {
 
   test("args mode: skips API suggestions when autocomplete disabled", () => {
     const state = makeArgsState({ directiveName: "noauto", query: "" });
-    const apiSugs: Suggestion[] = [
-      { type: "positional", text: "test", displayText: "test" },
-    ];
+    const apiSugs: Suggestion[] = [{ type: "positional", text: "test", displayText: "test" }];
     const result = computeSuggestions(state, hookList, rules, apiSugs, false);
     // noauto has no autocomplete, so API suggestions should not appear
     const hasApiSug = result.some((s) => s.text === "test");
@@ -333,7 +345,16 @@ describe("needsDynamicLoading", () => {
 
   test("returns false when query starts with -", () => {
     const state = makeArgsState({ query: "-" });
-    expect(needsDynamicLoading(state, true, { input: { hookId: "hook2", linePrefix: "/add ", query: "-" } }, "hook2", "/add ", [])).toBe(false);
+    expect(
+      needsDynamicLoading(
+        state,
+        true,
+        { input: { hookId: "hook2", linePrefix: "/add ", query: "-" } },
+        "hook2",
+        "/add ",
+        [],
+      ),
+    ).toBe(false);
   });
 
   test("returns true when apiQueryVars is undefined", () => {
@@ -413,7 +434,12 @@ describe("computeSuggestionInsertion", () => {
 
   test("positional type: does not append space", () => {
     const state = makeArgsState({ triggerIndex: 5, type: "args" });
-    const sug: Suggestion = { type: "positional", text: "<prompt>", displayText: "<prompt>", placeholder: "<prompt>" };
+    const sug: Suggestion = {
+      type: "positional",
+      text: "<prompt>",
+      displayText: "<prompt>",
+      placeholder: "<prompt>",
+    };
     const params = computeSuggestionInsertion(sug, state, 5) as InsertParams;
     expect(params.textToInsert).toBe("<prompt>");
   });

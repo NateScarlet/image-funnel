@@ -1,9 +1,5 @@
 <template>
-  <AppDropdown
-    v-if="trashHistoryNodes.length > 0"
-    placement="bottom-end"
-    content-class="w-80"
-  >
+  <AppDropdown v-if="trashHistoryNodes.length > 0" placement="bottom-end" content-class="w-80">
     <template #trigger="{ isOpen, toggle }">
       <button
         class="px-4 py-2 text-sm font-medium border rounded-lg transition-all flex items-center gap-2 bg-primary-800/80 hover:bg-primary-700/80 border-primary-700 text-primary-200 hover:text-white cursor-pointer select-none hover:border-red-500/30 active:scale-95"
