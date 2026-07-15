@@ -35,6 +35,8 @@
 
       <img
         :src="img.url256 || img.url"
+        :width="img.width"
+        :height="img.height"
         :alt="img.filename"
         loading="lazy"
         class="object-cover w-full h-full select-none"

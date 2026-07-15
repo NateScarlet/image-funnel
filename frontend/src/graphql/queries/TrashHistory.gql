@@ -12,6 +12,8 @@ query TrashHistory($first: Int, $after: String) {
         coverImage {
           id
           url(width: 256)
+          width
+          height
         }
       }
       cursor
@@ -27,6 +29,8 @@ query TrashHistory($first: Int, $after: String) {
       coverImage {
         id
         url(width: 256)
+        width
+        height
       }
     }
     pageInfo {

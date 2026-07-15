@@ -4,6 +4,8 @@
       <img
         v-if="stats?.latestImage"
         :src="stats.latestImage.url256"
+        :width="stats.latestImage.width"
+        :height="stats.latestImage.height"
         :alt="directoryPath"
         loading="lazy"
         class="w-20 bg-primary-700 object-cover"

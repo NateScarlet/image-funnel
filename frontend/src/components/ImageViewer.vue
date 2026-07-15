@@ -22,6 +22,8 @@
           <img
             ref="imgEl"
             :src="src"
+            :width="image.width"
+            :height="image.height"
             :alt="image.filename"
             :data-image-id="image.id"
             class="object-contain w-full h-full"

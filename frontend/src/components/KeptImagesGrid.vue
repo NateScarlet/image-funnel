@@ -32,6 +32,8 @@
       >
         <img
           :src="image.url256"
+          :width="image.width"
+          :height="image.height"
           :alt="image.filename"
           loading="lazy"
           class="w-full object-cover transition-transform duration-500 group-hover:scale-105 aspect-square [@media(hover:hover)]:h-full"

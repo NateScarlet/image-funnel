@@ -37,6 +37,8 @@
               <img
                 v-if="item.coverImage?.url"
                 :src="item.coverImage.url"
+                :width="item.coverImage.width"
+                :height="item.coverImage.height"
                 class="w-full h-full object-cover"
                 alt="封面"
               />

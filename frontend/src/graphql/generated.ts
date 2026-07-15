@@ -2043,7 +2043,13 @@ export type TrashHistoryQuery = {
         imageCount: number;
         associatedFileCount: number;
         srcRelPath: string;
-        coverImage: { __typename: "Image"; id: string; url: string } | null;
+        coverImage: {
+          __typename: "Image";
+          id: string;
+          url: string;
+          width: number;
+          height: number;
+        } | null;
       };
     }>;
     nodes: Array<{
@@ -2055,7 +2061,13 @@ export type TrashHistoryQuery = {
       imageCount: number;
       associatedFileCount: number;
       srcRelPath: string;
-      coverImage: { __typename: "Image"; id: string; url: string } | null;
+      coverImage: {
+        __typename: "Image";
+        id: string;
+        url: string;
+        width: number;
+        height: number;
+      } | null;
     }>;
     pageInfo: {
       __typename: "PageInfo";
@@ -7713,6 +7725,8 @@ export const TrashHistoryDocument = {
                                       },
                                     ],
                                   },
+                                  { kind: "Field", name: { kind: "Name", value: "width" } },
+                                  { kind: "Field", name: { kind: "Name", value: "height" } },
                                 ],
                               },
                             },
@@ -7754,6 +7768,8 @@ export const TrashHistoryDocument = {
                                 },
                               ],
                             },
+                            { kind: "Field", name: { kind: "Name", value: "width" } },
+                            { kind: "Field", name: { kind: "Name", value: "height" } },
                           ],
                         },
                       },

@@ -82,6 +82,8 @@
               <template v-if="getCachedStats(item.id)?.latestImage">
                 <img
                   :src="getCachedStats(item.id)!.latestImage!.url256"
+                  :width="getCachedStats(item.id)!.latestImage!.width"
+                  :height="getCachedStats(item.id)!.latestImage!.height"
                   class="w-full h-full object-cover"
                   alt="Cover"
                 />
