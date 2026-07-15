@@ -141,6 +141,8 @@
       <div class="relative min-w-36 max-w-60 flex-1 sm:flex-none">
         <input
           v-model="searchQuery"
+          name="search"
+          autocomplete="off"
           type="text"
           placeholder="搜索文件名..."
           class="w-full pl-8 pr-8 h-8 bg-primary-800/80 border border-primary-700 hover:border-primary-600 focus:border-secondary-500 rounded-lg text-xs text-primary-100 placeholder-primary-500 focus:outline-none focus:ring-2 focus:ring-secondary-500/30 transition-all"

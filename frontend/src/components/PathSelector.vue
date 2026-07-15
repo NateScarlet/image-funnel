@@ -38,6 +38,8 @@
       <input
         ref="inputEl"
         v-model="targetDirInput"
+        name="path"
+        autocomplete="off"
         type="text"
         :placeholder="
           pathMode === 'current'

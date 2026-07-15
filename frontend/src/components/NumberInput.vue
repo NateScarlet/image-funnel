@@ -2,7 +2,8 @@
   <input
     ref="inputEl"
     v-model.lazy="valueAsString"
-    type="text"
+    type="number"
+    inputmode="decimal"
     class="text-center font-mono"
     @keydown="onKeydown"
     @wheel="onWheel"
