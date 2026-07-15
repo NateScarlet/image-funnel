@@ -28,7 +28,6 @@ from .__main__ import (
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
-from .config import ComfyUIConfig
 from .operation_history import get_added_prompts
 
 _LOGGER = logging.getLogger(__name__)
@@ -827,11 +826,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    config = ComfyUIConfig.from_env()
-    log_level = getattr(logging, config.logging_level, logging.WARNING)
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
     main()

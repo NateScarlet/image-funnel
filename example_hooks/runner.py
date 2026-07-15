@@ -8,11 +8,22 @@
 # ]
 # ///
 
+import logging
+import os
 import sys
 import importlib
 
 
 def main() -> None:
+    # 在子模块导入前配置全局日志，子模块通过 logging.getLogger(__name__) 即可输出
+    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_str, logging.WARNING)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
     if len(sys.argv) < 2:
         print("Usage: uv run __main__.py <module> [args...]", file=sys.stderr)
         sys.exit(1)
