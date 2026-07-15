@@ -214,9 +214,21 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
 const persistentCache = new PersistentCache(
   "apollo-cache-persist",
   1000, // 1秒防抖
+  (stats) => {
+    const { showInfo } = useNotification();
+    const parts = Object.entries(stats.entityCounts)
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([type, count]) => `${type}=${count}`);
+    showInfo(`缓存恢复完成 (${Math.round(stats.elapsedMs)}ms): ${parts.join(", ")}`, 0);
+  },
 );
 
-await persistentCache.load();
+try {
+  await persistentCache.load();
+} catch (error) {
+  const { showError } = useNotification();
+  showError(`缓存恢复失败: ${error instanceof Error ? error.message : String(error)}`);
+}
 
 const authLink = new ApolloLink((operation, forward) => {
   return new Observable((observer) => {

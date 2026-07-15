@@ -8,6 +8,102 @@ import {
 } from "@apollo/client/core";
 import { get, set } from "idb-keyval";
 
+// #region 持久化筛选
+
+/** 从缓存 key 中提取 __typename，格式为 "Typename:id" */
+export function getTypename(key: string): string | undefined {
+  const colonIndex = key.indexOf(":");
+  return colonIndex === -1 ? undefined : key.substring(0, colonIndex);
+}
+
+/** 从 Directory 实体中提取 stats.latestImage.__ref */
+function latestImageRef(entity: Record<string, unknown>): string | undefined {
+  const stats = entity.stats as Record<string, unknown> | undefined;
+  const latestImage = stats?.latestImage as { __ref?: string } | null | undefined;
+  return latestImage?.__ref;
+}
+
+/** 安全解析时间戳，无效值返回 0 */
+function parseTime(value: unknown): number {
+  if (typeof value !== "string" && typeof value !== "number") return 0;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/**
+ * 筛选缓存数据，仅保留需要持久化的内容：
+ * - 非实体 key（ROOT_QUERY 等）始终保留
+ * - Directory 实体全部保留，上限 200 条，按 latestImage.modTime 降序
+ * - Image 实体仅保留被保留的 Directory.stats.latestImage 引用的
+ * - 其他实体类型全部排除
+ */
+export function filterForPersistence(
+  data: NormalizedCacheObject,
+  maxDirectories = 200,
+): NormalizedCacheObject {
+  const directories: Array<{ key: string; entity: Record<string, unknown> }> = [];
+  const images = new Map<string, unknown>();
+
+  for (const [key, value] of Object.entries(data)) {
+    if (!value) continue;
+    const typename = getTypename(key);
+    if (typename === "Directory") {
+      directories.push({ key, entity: value as Record<string, unknown> });
+    } else if (typename === "Image") {
+      images.set(key, value);
+    }
+  }
+
+  directories.sort((a, b) => {
+    const aRef = latestImageRef(a.entity);
+    const bRef = latestImageRef(b.entity);
+    if (!aRef && !bRef) return 0;
+    if (!aRef) return 1;
+    if (!bRef) return -1;
+
+    const aImage = images.get(aRef) as Record<string, unknown> | undefined;
+    const bImage = images.get(bRef) as Record<string, unknown> | undefined;
+    return parseTime(bImage?.modTime) - parseTime(aImage?.modTime);
+  });
+
+  const keptDirectories = directories.slice(0, maxDirectories);
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!value) continue;
+    const typename = getTypename(key);
+    if (!typename) {
+      result[key] = value;
+    }
+  }
+
+  for (const dir of keptDirectories) {
+    result[dir.key] = dir.entity;
+    const ref = latestImageRef(dir.entity);
+    if (ref) {
+      const img = images.get(ref);
+      if (img) {
+        result[ref] = img;
+      }
+    }
+  }
+
+  return result as NormalizedCacheObject;
+}
+
+// #endregion
+
+// #region 加载统计
+
+export interface LoadStats {
+  elapsedMs: number;
+  entityCounts: Record<string, number>;
+}
+
+export type LoadCompleteCallback = (stats: LoadStats) => void;
+
+// #endregion
+
 /**
  * 带持久化功能的 InMemoryCache
  * 使用 IndexedDB (idb-keyval) 进行异步存储，支持结构化克隆算法，无需 JSON 序列化
@@ -18,17 +114,16 @@ export class PersistentCache extends InMemoryCache {
   constructor(
     private storageKey: string,
     private debounceMs: number,
+    private onLoadComplete?: LoadCompleteCallback,
   ) {
     super();
   }
 
   // #region 持久化相关方法
 
-  /**
-   * 异步恢复缓存数据
-   * 应在应用启动时调用
-   */
   async load(): Promise<void> {
+    const start = performance.now();
+
     try {
       const data = await get<NormalizedCacheObject>(this.storageKey);
       if (data) {
@@ -36,6 +131,24 @@ export class PersistentCache extends InMemoryCache {
       }
     } catch (error) {
       console.error("恢复缓存失败:", error);
+      throw error;
+    }
+
+    const elapsedMs = performance.now() - start;
+
+    if (elapsedMs > 1000 && this.onLoadComplete) {
+      const currentData = super.extract();
+      const entityCounts: Record<string, number> = {};
+      for (const key of Object.keys(currentData)) {
+        const typename = getTypename(key);
+        if (typename) {
+          entityCounts[typename] = (entityCounts[typename] || 0) + 1;
+        }
+      }
+      if (Object.keys(currentData).length === 0) {
+        entityCounts["(empty)"] = 1;
+      }
+      this.onLoadComplete({ elapsedMs, entityCounts });
     }
   }
 
@@ -46,10 +159,9 @@ export class PersistentCache extends InMemoryCache {
 
     this.saveTimeout = setTimeout(() => {
       try {
-        // extract() 获取的是普通 JS 对象，IndexedDB 可以直接存储
         const data = super.extract();
-        // 这是一个异步操作，不需要等待它完成
-        set(this.storageKey, data).catch((error) => {
+        const filtered = filterForPersistence(data);
+        set(this.storageKey, filtered).catch((error) => {
           console.error("保存缓存失败:", error);
         });
       } catch (error) {

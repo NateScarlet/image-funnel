@@ -13,7 +13,7 @@
     "typescript/consistent-type-imports": "error",
     "typescript/no-unnecessary-type-assertion": "off",
     "typescript/no-unsafe-type-assertion": "off",
-    "eslint/no-underscore-dangle": ["error", { "allow": ["__typename"] }],
+    "eslint/no-underscore-dangle": ["error", { "allow": ["__typename", "__ref"] }],
     "no-console": "off",
     "no-debugger": "error"
   },
