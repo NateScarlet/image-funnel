@@ -1,8 +1,11 @@
+import logging
 import unittest
 import os
 import argparse
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
+
+logging.disable(logging.CRITICAL)
 from .autocomplete import (
     AutocompleteContext,
     WorkflowPromptProvider,

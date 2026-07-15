@@ -1,9 +1,12 @@
 # 只允许使用项目测试脚本运行测试
 
+import logging
 import os
 import unittest
 from unittest.mock import patch
 from typing import Any, Dict, Optional
+
+logging.disable(logging.CRITICAL)
 
 from retention import main
 

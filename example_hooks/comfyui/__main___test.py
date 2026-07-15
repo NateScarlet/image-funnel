@@ -1,9 +1,12 @@
 # 只允许使用项目测试脚本运行测试
 
+import logging
 import unittest
 import os
 import json
 from PIL import Image
+
+logging.disable(logging.CRITICAL)
 
 from .__main__ import get_relative_output_dir
 from .prompt_fragment import strip_comments_for_prompt

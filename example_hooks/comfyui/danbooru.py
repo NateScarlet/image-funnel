@@ -456,7 +456,6 @@ def update_cache(
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
     try:
         method = sys.argv[1]
         key_arg = sys.argv[2]
@@ -469,4 +468,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

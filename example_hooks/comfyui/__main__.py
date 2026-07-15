@@ -149,13 +149,6 @@ def main(config: Optional[ComfyUIConfig] = None) -> None:
     if config is None:
         config = ComfyUIConfig.from_env()
 
-    log_level = getattr(logging, config.logging_level, logging.WARNING)
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     args = parse_args()
     _LOGGER.debug("args %s", (args,))
 
@@ -585,4 +578,11 @@ def parse_args(args: Optional[List[str]] = None):
 
 
 if __name__ == "__main__":
-    main()
+    config = ComfyUIConfig.from_env()
+    log_level = getattr(logging, config.logging_level, logging.WARNING)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    main(config)

@@ -20,15 +20,6 @@ def parse_args():
 
 
 def main() -> None:
-    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
-    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
-    log_level = getattr(logging, log_level_str, logging.WARNING)
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     args = parse_args()
     suffix = args.suffix.strip()
     if not suffix:
@@ -80,4 +71,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # 从 HOOK_LOGGING_LEVEL 环境变量读取日志级别，默认 WARNING
+    log_level_str = os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper()
+    log_level = getattr(logging, log_level_str, logging.WARNING)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     main()
