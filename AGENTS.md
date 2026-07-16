@@ -99,13 +99,12 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 
 ## 关键约定
 
-- **依赖注入：** 所有实现所需的依赖都应该显式注入而不是依赖自己尝试获取并尝试降级
+- **依赖注入：**　**禁止**可选依赖，调用者必须显式传入空实现；**禁止**自己创建自己的依赖，仅允许在程序最外层入口构建依赖
 - **快速失败：**　逻辑不能正常进行应直接报错中止流程而不是尝试容错继续流程，**禁止**出错只记录日志然后告诉调用者正常完成，**禁止**添加未要求的错误处理，忽略错误数据或跳过操作**必须**先获得用户明确允许。如果你认为错误不影响主进程，则应该使用fire-and-forget模式异步处理而不是同步等待结果，既然等待结果就说明它会影响主进程。
 - **日志不是有效处理：** 记录日志不等于处理了错误。仅记录日志⽽不通过退出码、异常或返回值向调用者传递失败状态，等同于静默忽略错误。Hook 脚本的调用者（前端）只通过退出码判断成功与否，内部日志即使输出了也等于没处理。
 - **调试友好：**　错误捕获禁止直接忽略任何错误，要么进行有意义的处理，要么只忽略具体的错误类型，禁止忽略错误，如果确定不可能出错应该添加panic。
 - **立即实现：**　立即实现所有用户要求的功能，不能偷懒用注释标记为以后实现
 - **完整重构：**　内部接口更改应修改所有调用者使用新的接口，不得以向下兼容为由保留旧的接口，
-- **依赖注入：**　**禁止**可选依赖，调用者必须显式传入空实现；**禁止**自己创建自己的依赖
 
 ### 术语
 
@@ -118,7 +117,6 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **无 `Get` 前缀**: 查询方法直接使用大写名称，如 `Session()` 而非 `GetSession()`
 - **`iter.Seq` / `iter.Seq2[T, error]`**: 使用迭代器模式减少数组分配
 - **构造函数**: 使用 `New` 前缀，如需清理，将清理函数作为第二个返回值
-- **依赖注入**: 构造函数应通过参数接受所有依赖，不得在内部自行 `New*()` 构建。调用者（如 `main.go`）负责组装依赖图。这适用于 handler、service、factory 等所有带构造函数的类型
 - **事件发布模式**: 移除统一的 `EventBus` 接口，改为直接依赖 `pubsub.Topic[T]`。领域层发布领域对象（如 `*pairing.Request`、`*device.Device`），应用层订阅后通过 `DTOFactory` 转换为 DTO。事件类型在 `shared` 包中定义（如 `FileChangedEvent`、`MetadataUpdatedEvent`），或直接在领域层使用领域对象。`main.go` 负责创建所有 `pubsub.Topic` 实例并注入到各组件
 - **编译时接口检查**: 使用 `var _ Interface = (*Impl)(nil)`
 - **错误处理**: 绝不静默忽略错误，使用 `errors` 包处理
@@ -191,15 +189,14 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
 - **错误通知去重**: Apollo Client 的全局 `ErrorLink`（`frontend/src/graphql/client.ts`）会自动捕获所有 GraphQL 和网络错误并通过 `showError` 显示。因此：
-   - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知
-   - 调用方**禁止**仅使用 `console.error` 吞掉错误，这会阻止用户看到错误
-   - 若调用方需要自行处理错误（如本地状态、特殊降级），应以 `context: { suppressError: true }` 传递给 `mutate()` / `query()` 以抑制全局通知，避免双重提示
+  - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知
+  - 调用方**禁止**仅使用 `console.error` 吞掉错误，这会阻止用户看到错误
+  - 若调用方需要自行处理错误（如本地状态、特殊降级），应以 `context: { suppressError: true }` 传递给 `mutate()` / `query()` 以抑制全局通知，避免双重提示
 
 ### Python
 
 - 标注所有参数类型，尽量避免 Any
 - 必须使用项目提供的 `pwsh ./scripts/check-python.ps1` 脚本进行类型检查、单元测试和格式化，禁止手动运行底层的测试或格式化工具
-
 
 ### 通用
 
