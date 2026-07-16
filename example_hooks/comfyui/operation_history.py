@@ -8,9 +8,24 @@
 import argparse
 import json
 import os
-
+from dataclasses import dataclass
+from typing import Any
 
 from .db import SQLiteContext
+
+
+@dataclass
+class RemoveRecord:
+    """历史 remove 操作的完整参数记录"""
+
+    prompt: str
+    region: list[str] | None = None
+    node: list[str] | None = None
+    neg: bool = False
+    raw: bool = False
+    hard: bool = False
+    all: bool = False
+    no_skip: bool = False
 
 
 class OperationHistory:
@@ -27,7 +42,7 @@ class OperationHistory:
     def from_env() -> "OperationHistory":
         return OperationHistory(SQLiteContext.from_env())
 
-    def record(self, command: str, data: dict[str, str]) -> None:
+    def record(self, command: str, data: dict[str, Any]) -> None:
         with self.db_ctx.transaction() as conn:
             conn.execute(
                 "INSERT INTO history (command, data) VALUES (?, ?)",
@@ -47,8 +62,17 @@ class OperationHistory:
             return
 
         if cmd in ("add", "remove"):
+            base = {
+                "region": args.region,
+                "node": args.node,
+                "neg": args.neg,
+                "raw": args.raw,
+                "hard": getattr(args, "hard", False),
+                "all": getattr(args, "all", False),
+                "no_skip": args.no_skip,
+            }
             for prompt in args.prompt:
-                self.record(cmd, {"prompt": prompt})
+                self.record(cmd, {**base, "prompt": prompt})
             return
 
         if cmd == "adjust":
@@ -87,6 +111,17 @@ class OperationHistory:
             candidates,
         ).fetchall()
         return {row[0] for row in rows}
+
+    def list_remove(self) -> list[RemoveRecord]:
+        """返回所有历史 remove 操作的去重列表，按首次出现顺序排列。"""
+        with self.db_ctx.transaction() as conn:
+            rows = conn.execute(
+                "SELECT data, MIN(id) FROM history "
+                "WHERE command = 'remove' "
+                "GROUP BY data "
+                "ORDER BY MIN(id)"
+            ).fetchall()
+            return [RemoveRecord(**json.loads(row[0])) for row in rows]
 
 
 def get_added_prompts(candidates: list[str]) -> set[str]:

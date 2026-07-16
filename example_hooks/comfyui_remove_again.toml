@@ -1,0 +1,26 @@
+id = "comfyui-remove-again"
+name = "重放历史移除操作"
+description = "重放当前目录所有历史 /remove 操作，保留原始范围参数"
+command = "uv run runner.py comfyui remove-again"
+
+[directive]
+name = "remove-again"
+usage = """
+/remove-again
+基于当前目录的操作历史，将所有历史 /remove 操作（含原始范围参数）合并为一个变体。
+在会话提交后触发，也可以手动通过笔记触发。
+"""
+on_success_action = "COMMENT_OUT"
+on_fail_action = "REMOVE"
+
+[on.post_commit_session.note_scan]
+ignore_directive = false
+
+[on.note_dispatch]
+
+[env]
+HOOK_JOBS = "4"
+HOOK_IMAGE_RATING = "4"
+HOOK_MAX_MATCH = "4"
+HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
+HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"
