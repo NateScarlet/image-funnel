@@ -30,3 +30,4 @@ node_modules/
 frontend/public/static/open-dir/
 
 __pycache__
+.scratch
