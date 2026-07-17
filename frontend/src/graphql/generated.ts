@@ -510,8 +510,8 @@ export type NotificationFragment = {
   status: NotificationStatus;
   readAt: string | null;
   dismissedAt: string | null;
-  notAfter: string | null;
-  notBefore: string | null;
+  notAfter: string;
+  notBefore: string;
   createdAt: string;
   updatedAt: string;
   detailsURL: string | null;
@@ -1351,8 +1351,8 @@ export type UpdateNotificationMutation = {
       status: NotificationStatus;
       readAt: string | null;
       dismissedAt: string | null;
-      notAfter: string | null;
-      notBefore: string | null;
+      notAfter: string;
+      notBefore: string;
       createdAt: string;
       updatedAt: string;
       detailsURL: string | null;
@@ -2051,8 +2051,8 @@ export type NotificationChannelsQuery = {
         status: NotificationStatus;
         readAt: string | null;
         dismissedAt: string | null;
-        notAfter: string | null;
-        notBefore: string | null;
+        notAfter: string;
+        notBefore: string;
         createdAt: string;
         updatedAt: string;
         detailsURL: string | null;
@@ -2092,8 +2092,8 @@ export type NotificationsQuery = {
         status: NotificationStatus;
         readAt: string | null;
         dismissedAt: string | null;
-        notAfter: string | null;
-        notBefore: string | null;
+        notAfter: string;
+        notBefore: string;
         createdAt: string;
         updatedAt: string;
         detailsURL: string | null;
@@ -2418,8 +2418,8 @@ export type NotificationChangedSubscription = {
       status: NotificationStatus;
       readAt: string | null;
       dismissedAt: string | null;
-      notAfter: string | null;
-      notBefore: string | null;
+      notAfter: string;
+      notBefore: string;
       createdAt: string;
       updatedAt: string;
       detailsURL: string | null;

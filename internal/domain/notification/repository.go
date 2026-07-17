@@ -56,6 +56,4 @@ type Repository interface {
 	Find(ctx context.Context, options ...FindOption) iter.Seq2[*Notification, error]
 	// Channels 遍历获取频道及统计数据
 	Channels(ctx context.Context) iter.Seq2[*ChannelStats, error]
-	// Delete 删除通知，不存在返回 apperror.NewErrDocumentNotFound
-	Delete(ctx context.Context, id string) error
 }

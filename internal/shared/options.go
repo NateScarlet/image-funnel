@@ -37,19 +37,23 @@ func (o *MarkImageOptions) Duration() scalar.Duration {
 
 // #region SendNotificationOptions
 
-// SendNotificationOptions 发送通知的可选参数
+// SendNotificationOptions 发送通知的可选参数，不可变
 type SendNotificationOptions struct {
-	NotAfter   time.Time
-	NotBefore  time.Time
-	DetailsURL scalar.URI
+	notAfter   time.Time
+	notBefore  time.Time
+	detailsURL scalar.URI
+	body       string
+	priority   NotificationPriority
 }
 
 // SendNotificationOption 是用于设置 SendNotificationOptions 的函数类型
 type SendNotificationOption func(*SendNotificationOptions)
 
-// NewSendNotificationOptions 创建一个新的 SendNotificationOptions 实例
+// NewSendNotificationOptions 创建一个新的 SendNotificationOptions 实例，提供默认值
 func NewSendNotificationOptions(opts ...SendNotificationOption) *SendNotificationOptions {
-	o := &SendNotificationOptions{}
+	o := &SendNotificationOptions{
+		priority: NotificationPriorityNormal,
+	}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -58,32 +62,51 @@ func NewSendNotificationOptions(opts ...SendNotificationOption) *SendNotificatio
 
 // WithNotAfter 设置过期时间
 func WithNotAfter(t time.Time) SendNotificationOption {
-	return func(o *SendNotificationOptions) { o.NotAfter = t }
+	return func(o *SendNotificationOptions) { o.notAfter = t }
 }
 
 // WithNotBefore 设置最早可见时间
 func WithNotBefore(t time.Time) SendNotificationOption {
-	return func(o *SendNotificationOptions) { o.NotBefore = t }
+	return func(o *SendNotificationOptions) { o.notBefore = t }
 }
 
 // WithDetailsURL 设置详情 URL
 func WithDetailsURL(u scalar.URI) SendNotificationOption {
-	return func(o *SendNotificationOptions) { o.DetailsURL = u }
+	return func(o *SendNotificationOptions) { o.detailsURL = u }
+}
+
+// WithBody 设置正文
+func WithBody(body string) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.body = body }
+}
+
+// WithPriority 设置优先级
+func WithPriority(p NotificationPriority) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.priority = p }
+}
+
+// Getters
+func (o *SendNotificationOptions) NotAfter() time.Time    { return o.notAfter }
+func (o *SendNotificationOptions) NotBefore() time.Time   { return o.notBefore }
+func (o *SendNotificationOptions) DetailsURL() scalar.URI { return o.detailsURL }
+func (o *SendNotificationOptions) Body() string           { return o.body }
+func (o *SendNotificationOptions) Priority() NotificationPriority {
+	return o.priority
 }
 
 // #endregion
 
 // #region UpdateNotificationOptions
 
-// UpdateNotificationOptions 更新通知内容的可选参数
+// UpdateNotificationOptions 更新通知内容的可选参数，不可变
 type UpdateNotificationOptions struct {
-	Title      string
-	Body       string
-	Priority   NotificationPriority
-	NotAfter   time.Time
-	NotBefore  time.Time
-	DetailsURL scalar.URI
-	UpdatedAt  time.Time
+	title      string
+	body       string
+	priority   NotificationPriority
+	notAfter   time.Time
+	notBefore  time.Time
+	detailsURL scalar.URI
+	updatedAt  time.Time
 }
 
 // UpdateNotificationOption 是用于设置 UpdateNotificationOptions 的函数类型
@@ -100,37 +123,46 @@ func NewUpdateNotificationOptions(opts ...UpdateNotificationOption) *UpdateNotif
 
 // WithUpdateTitle 设置标题
 func WithUpdateTitle(title string) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.Title = title }
+	return func(o *UpdateNotificationOptions) { o.title = title }
 }
 
 // WithUpdateBody 设置正文
 func WithUpdateBody(body string) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.Body = body }
+	return func(o *UpdateNotificationOptions) { o.body = body }
 }
 
 // WithUpdatePriority 设置优先级
 func WithUpdatePriority(p NotificationPriority) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.Priority = p }
+	return func(o *UpdateNotificationOptions) { o.priority = p }
 }
 
 // WithUpdateNotAfter 设置过期时间
 func WithUpdateNotAfter(t time.Time) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.NotAfter = t }
+	return func(o *UpdateNotificationOptions) { o.notAfter = t }
 }
 
 // WithUpdateNotBefore 设置最早可见时间
 func WithUpdateNotBefore(t time.Time) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.NotBefore = t }
+	return func(o *UpdateNotificationOptions) { o.notBefore = t }
 }
 
 // WithUpdateDetailsURL 设置详情 URL
 func WithUpdateDetailsURL(u scalar.URI) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.DetailsURL = u }
+	return func(o *UpdateNotificationOptions) { o.detailsURL = u }
 }
 
 // WithUpdateTime 设置更新时间
 func WithUpdateTime(t time.Time) UpdateNotificationOption {
-	return func(o *UpdateNotificationOptions) { o.UpdatedAt = t }
+	return func(o *UpdateNotificationOptions) { o.updatedAt = t }
 }
+
+// Getters
+func (o *UpdateNotificationOptions) Title() string                     { return o.title }
+func (o *UpdateNotificationOptions) Body() string                      { return o.body }
+func (o *UpdateNotificationOptions) Priority() NotificationPriority    { return o.priority }
+func (o *UpdateNotificationOptions) NotAfter() time.Time               { return o.notAfter }
+func (o *UpdateNotificationOptions) NotBefore() time.Time              { return o.notBefore }
+func (o *UpdateNotificationOptions) DetailsURL() scalar.URI            { return o.detailsURL }
+func (o *UpdateNotificationOptions) UpdatedAt() time.Time              { return o.updatedAt }
 
 // #endregion

@@ -15,8 +15,6 @@ func (h *Handler) SendNotification(
 	tag string,
 	channel string,
 	title string,
-	body string,
-	priority shared.NotificationPriority,
 	opts ...shared.SendNotificationOption,
 ) (id scalar.ID, didCreate bool, err error) {
 	defer func() {
@@ -33,19 +31,25 @@ func (h *Handler) SendNotification(
 		}
 	}()
 
-	result, err := h.service.SendNotification(ctx, tag, channel, title, body, priority, opts...)
+	result, err := h.service.SendNotification(ctx, tag, channel, title, opts...)
+	if err != nil {
+		return scalar.ID{}, false, err
+	}
+
+	// 通过 pubsub 推送完整通知，实现读写分离
+	notif, err := h.repo.Get(ctx, result.ID().String())
 	if err != nil {
 		return scalar.ID{}, false, err
 	}
 
 	eventType := shared.NotificationEventTypeSent
-	if !result.DidCreate {
+	if !result.DidCreate() {
 		eventType = shared.NotificationEventTypeUpdated
 	}
 	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
 		Event:        eventType,
-		Notification: h.dtoFactory.New(result.Notification),
+		Notification: h.dtoFactory.New(notif),
 	})
 
-	return result.Notification.ID(), result.DidCreate, nil
+	return result.ID(), result.DidCreate(), nil
 }

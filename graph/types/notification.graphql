@@ -20,10 +20,10 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   readAt: Time
   "关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭"
   dismissedAt: Time
-  "过期时间，到达后通知将被自动删除。零值表示不自动过期"
-  notAfter: Time
-  "最早可见时间，到达后对用户可见。零值表示立即可见"
-  notBefore: Time
+  "过期时间，到达后通知将被自动删除"
+  notAfter: Time!
+  "最早可见时间，到达后对用户可见"
+  notBefore: Time!
   "创建时间"
   createdAt: Time!
   "最后更新时间"

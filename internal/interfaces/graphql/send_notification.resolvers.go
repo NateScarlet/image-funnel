@@ -22,14 +22,11 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 	if input.DetailsURL != nil {
 		opts = append(opts, shared.WithDetailsURL(*input.DetailsURL))
 	}
-
-	body := ""
 	if input.Body != nil {
-		body = *input.Body
+		opts = append(opts, shared.WithBody(*input.Body))
 	}
-	priority := shared.NotificationPriorityNormal
 	if input.Priority != nil {
-		priority = *input.Priority
+		opts = append(opts, shared.WithPriority(*input.Priority))
 	}
 
 	id, didCreate, err := r.app.SendNotification(
@@ -37,8 +34,6 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		input.Tag,
 		input.Channel,
 		input.Title,
-		body,
-		priority,
 		opts...,
 	)
 	if err != nil {

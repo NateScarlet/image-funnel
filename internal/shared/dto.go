@@ -313,8 +313,16 @@ type NotificationFilters struct {
 
 type NotificationConnectionDTO struct {
 	Edges    []*NotificationEdgeDTO
-	Nodes    []*NotificationDTO
 	PageInfo *PageInfoDTO
+}
+
+// Nodes 按需从 Edges 组装节点列表
+func (c *NotificationConnectionDTO) Nodes() []*NotificationDTO {
+	nodes := make([]*NotificationDTO, len(c.Edges))
+	for i, edge := range c.Edges {
+		nodes[i] = edge.Node
+	}
+	return nodes
 }
 
 type NotificationEdgeDTO struct {
@@ -330,8 +338,16 @@ type NotificationChannelDTO struct {
 
 type NotificationChannelConnectionDTO struct {
 	Edges    []*NotificationChannelEdgeDTO
-	Nodes    []*NotificationChannelDTO
 	PageInfo *PageInfoDTO
+}
+
+// Nodes 按需从 Edges 组装节点列表
+func (c *NotificationChannelConnectionDTO) Nodes() []*NotificationChannelDTO {
+	nodes := make([]*NotificationChannelDTO, len(c.Edges))
+	for i, edge := range c.Edges {
+		nodes[i] = edge.Node
+	}
+	return nodes
 }
 
 type NotificationChannelEdgeDTO struct {
@@ -343,6 +359,23 @@ type NotificationChangedEventDTO struct {
 	Event        NotificationEventType
 	Notification *NotificationDTO
 }
+
+// SendNotificationResult 发送通知的结果，不可变
+type SendNotificationResult struct {
+	id        scalar.ID
+	didCreate bool
+}
+
+// NewSendNotificationResult 创建发送结果
+func NewSendNotificationResult(id scalar.ID, didCreate bool) *SendNotificationResult {
+	return &SendNotificationResult{id: id, didCreate: didCreate}
+}
+
+// ID 获取通知 ID
+func (r *SendNotificationResult) ID() scalar.ID { return r.id }
+
+// DidCreate 是否新建
+func (r *SendNotificationResult) DidCreate() bool { return r.didCreate }
 
 // #endregion
 

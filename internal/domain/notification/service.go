@@ -22,22 +22,14 @@ func NewService(repo Repository) *Service {
 
 // #region SendNotification
 
-// SendNotificationResult 发送通知的结果
-type SendNotificationResult struct {
-	Notification *Notification
-	DidCreate    bool
-}
-
 // SendNotification 发送或覆盖通知
 func (s *Service) SendNotification(
 	ctx context.Context,
 	tag string,
 	channel string,
 	title string,
-	body string,
-	priority shared.NotificationPriority,
 	opts ...shared.SendNotificationOption,
-) (*SendNotificationResult, error) {
+) (*shared.SendNotificationResult, error) {
 	existing, err := s.repo.GetByTag(ctx, tag)
 	if err != nil {
 		return nil, err
@@ -55,20 +47,25 @@ func (s *Service) SendNotification(
 		}
 		now := time.Now()
 		options := shared.NewSendNotificationOptions(opts...)
-		if err := existing.Update(
-			shared.WithUpdateTitle(title),
-			shared.WithUpdateBody(body),
-			shared.WithUpdatePriority(priority),
-			shared.WithUpdateNotAfter(options.NotAfter),
-			shared.WithUpdateNotBefore(options.NotBefore),
-			shared.WithUpdateDetailsURL(options.DetailsURL),
-			shared.WithUpdateTime(now),
-		); err != nil {
+		// 使用独立 setter 而非一个巨大的 Update
+		if err := existing.setTitle(title); err != nil {
 			return nil, err
 		}
+		existing.setBody(options.Body())
+		existing.setPriority(options.Priority())
+		if !options.NotAfter().IsZero() {
+			existing.setNotAfter(options.NotAfter())
+		}
+		if !options.NotBefore().IsZero() {
+			existing.setNotBefore(options.NotBefore())
+		}
+		if !options.DetailsURL().IsZero() {
+			existing.setDetailsURL(options.DetailsURL())
+		}
+		existing.setUpdatedAt(now)
 		notif = existing
 	} else {
-		notif, err = s.factory.New(tag, channel, title, body, priority, opts...)
+		notif, err = s.factory.New(tag, channel, title, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -79,10 +76,7 @@ func (s *Service) SendNotification(
 		return nil, err
 	}
 
-	return &SendNotificationResult{
-		Notification: notif,
-		DidCreate:    actualDidCreate,
-	}, nil
+	return shared.NewSendNotificationResult(notif.ID(), actualDidCreate), nil
 }
 
 // #endregion
@@ -124,7 +118,7 @@ func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notifica
 	}
 
 	now := time.Now()
-	notif.SetNotAfter(now)
+	notif.setNotAfter(now)
 
 	_, err = s.repo.Save(ctx, notif)
 	if err != nil {

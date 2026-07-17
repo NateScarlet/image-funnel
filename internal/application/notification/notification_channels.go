@@ -47,10 +47,6 @@ func (h *Handler) NotificationChannels(
 			}, nil
 		},
 		func(edges []*shared.NotificationChannelEdgeDTO, pageInfo pagination.PageInfo) (*shared.NotificationChannelConnectionDTO, error) {
-			var nodes = make([]*shared.NotificationChannelDTO, len(edges))
-			for i, edge := range edges {
-				nodes[i] = edge.Node
-			}
 			var startCursor, endCursor string
 			if pageInfo.StartCursor != nil {
 				startCursor = *pageInfo.StartCursor
@@ -60,7 +56,6 @@ func (h *Handler) NotificationChannels(
 			}
 			return &shared.NotificationChannelConnectionDTO{
 				Edges: edges,
-				Nodes: nodes,
 				PageInfo: &shared.PageInfoDTO{
 					HasNextPage:     pageInfo.HasNextPage,
 					HasPreviousPage: pageInfo.HasPreviousPage,

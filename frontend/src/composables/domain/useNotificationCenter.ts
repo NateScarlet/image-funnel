@@ -59,15 +59,15 @@ const init = once(() => {
   // 使用 render 模式：根据响应式 currentTime 筛选可见通知
   const visibleNotifications = computed(() => {
     return channelNotifications.value.filter((n) => {
-      if (n.notBefore && isFuture(n.notBefore)) return false;
-      if (n.notAfter && isPast(n.notAfter)) return false;
+      if (isFuture(n.notBefore)) return false;
+      if (isPast(n.notAfter)) return false;
       return true;
     });
   });
 
   // refreshOn 监听所有通知的 notBefore/notAfter，在时间到达时自动刷新 currentTime
   refreshOn(() => {
-    const times: (string | null | undefined)[] = [];
+    const times: string[] = [];
     for (const n of channelNotifications.value) {
       times.push(n.notBefore);
       times.push(n.notAfter);
@@ -101,8 +101,8 @@ const init = once(() => {
   }) {
     if (shownToastIds.has(n.id)) return;
     // 时间检查：不在窗口内则跳过
-    if (n.notBefore && isFuture(n.notBefore)) return;
-    if (n.notAfter && isPast(n.notAfter)) return;
+    if (isFuture(n.notBefore)) return;
+    if (isPast(n.notAfter)) return;
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title);
     if (n.priority === NotificationPriority.HIGH) {

@@ -17,7 +17,7 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 	var b util.FilterBuilder[*Notification]
 
 	if len(filters.Channel) > 0 {
-		chSet := util.AddToSet[string](nil, filters.Channel...)
+		chSet := util.AddToSet(nil, filters.Channel...)
 		b.Add(func(n *Notification) bool {
 			return chSet.Has(n.Channel())
 		})

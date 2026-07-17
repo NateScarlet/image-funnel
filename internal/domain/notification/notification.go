@@ -35,7 +35,7 @@ func (n *Notification) Title() string                         { return n.title }
 func (n *Notification) Body() string                          { return n.body }
 func (n *Notification) Priority() shared.NotificationPriority { return n.priority }
 func (n *Notification) ReadAt() time.Time                     { return n.readAt }
-func (n *Notification) DismissedAt() time.Time                 { return n.dismissedAt }
+func (n *Notification) DismissedAt() time.Time                { return n.dismissedAt }
 func (n *Notification) NotAfter() time.Time                   { return n.notAfter }
 func (n *Notification) NotBefore() time.Time                  { return n.notBefore }
 func (n *Notification) CreatedAt() time.Time                  { return n.createdAt }
@@ -50,35 +50,9 @@ func (n *Notification) Status() shared.NotificationStatus {
 	return shared.NotificationStatusActive
 }
 
-// Update 更新通知内容，通过 setter 进行校验
-func (n *Notification) Update(opts ...shared.UpdateNotificationOption) error {
-	o := shared.NewUpdateNotificationOptions(opts...)
-	if o.Title != "" {
-		if err := n.SetTitle(o.Title); err != nil {
-			return err
-		}
-	}
-	if o.Body != "" {
-		n.SetBody(o.Body)
-	}
-	if !o.Priority.IsZero() {
-		n.SetPriority(o.Priority)
-	}
-	if !o.NotAfter.IsZero() {
-		n.SetNotAfter(o.NotAfter)
-	}
-	if !o.NotBefore.IsZero() {
-		n.SetNotBefore(o.NotBefore)
-	}
-	if !o.DetailsURL.IsZero() {
-		n.SetDetailsURL(o.DetailsURL)
-	}
-	n.SetUpdatedAt(o.UpdatedAt)
-	return nil
-}
+// #region 内部 setter（不导出，仅同包内 Service 使用）
 
-// SetTitle 设置标题，校验非空
-func (n *Notification) SetTitle(title string) error {
+func (n *Notification) setTitle(title string) error {
 	if title == "" {
 		return fmt.Errorf("title is required")
 	}
@@ -86,35 +60,31 @@ func (n *Notification) SetTitle(title string) error {
 	return nil
 }
 
-// SetBody 设置正文
-func (n *Notification) SetBody(body string) {
+func (n *Notification) setBody(body string) {
 	n.body = body
 }
 
-// SetPriority 设置优先级
-func (n *Notification) SetPriority(p shared.NotificationPriority) {
+func (n *Notification) setPriority(p shared.NotificationPriority) {
 	n.priority = p
 }
 
-// SetNotAfter 设置过期时间
-func (n *Notification) SetNotAfter(t time.Time) {
+func (n *Notification) setNotAfter(t time.Time) {
 	n.notAfter = t
 }
 
-// SetNotBefore 设置最早可见时间
-func (n *Notification) SetNotBefore(t time.Time) {
+func (n *Notification) setNotBefore(t time.Time) {
 	n.notBefore = t
 }
 
-// SetDetailsURL 设置详情 URL
-func (n *Notification) SetDetailsURL(u scalar.URI) {
+func (n *Notification) setDetailsURL(u scalar.URI) {
 	n.detailsURL = u
 }
 
-// SetUpdatedAt 设置更新时间
-func (n *Notification) SetUpdatedAt(t time.Time) {
+func (n *Notification) setUpdatedAt(t time.Time) {
 	n.updatedAt = t
 }
+
+// #endregion
 
 // MarkRead 标记已读
 func (n *Notification) MarkRead(at time.Time, now time.Time) {
@@ -179,12 +149,11 @@ func FromRepository(
 type Factory struct{}
 
 // New 创建新通知，负责校验和默认值
+// body 和 priority 通过 opts 传递，默认值由 NewSendNotificationOptions 提供
 func (f *Factory) New(
 	tag string,
 	channel string,
 	title string,
-	body string,
-	priority shared.NotificationPriority,
 	opts ...shared.SendNotificationOption,
 ) (*Notification, error) {
 	// 校验：tag 必须是 UUID，避免无意冲突
@@ -195,21 +164,22 @@ func (f *Factory) New(
 	if title == "" {
 		return nil, fmt.Errorf("title is required")
 	}
-	// 优先级默认普通
-	if priority.IsZero() {
-		priority = shared.NotificationPriorityNormal
-	}
 
 	options := shared.NewSendNotificationOptions(opts...)
 
+	// priority 必须非零（默认值已在 NewSendNotificationOptions 中提供，为零说明调用者错误覆盖）
+	if options.Priority().IsZero() {
+		return nil, fmt.Errorf("priority is required")
+	}
+
 	now := time.Now()
 	// notBefore 默认当前时间
-	notBefore := options.NotBefore
+	notBefore := options.NotBefore()
 	if notBefore.IsZero() {
 		notBefore = now
 	}
 	// notAfter 默认 notBefore + 7 天
-	notAfter := options.NotAfter
+	notAfter := options.NotAfter()
 	if notAfter.IsZero() {
 		notAfter = notBefore.Add(7 * 24 * time.Hour)
 	}
@@ -217,8 +187,8 @@ func (f *Factory) New(
 	// ID 基于 tag 生成，确保同 tag 的 ID 稳定
 	id := scalar.ToID("notify:" + tag)
 	return FromRepository(
-		id, tag, channel, title, body, priority,
+		id, tag, channel, title, options.Body(), options.Priority(),
 		time.Time{}, time.Time{}, notAfter, notBefore,
-		now, now, options.DetailsURL,
+		now, now, options.DetailsURL(),
 	)
 }

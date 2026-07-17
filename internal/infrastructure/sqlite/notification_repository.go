@@ -181,22 +181,6 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 	return notif, nil
 }
 
-// Delete 删除通知，不存在返回 apperror.NewErrDocumentNotFound
-func (r *NotificationRepository) Delete(ctx context.Context, id string) error {
-	result, err := r.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = ?", id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
-		return apperror.NewErrDocumentNotFound(scalar.ToID(id))
-	}
-	return nil
-}
-
 // Find 遍历所有通知，利用 filter 粗筛（可索引加速），细筛由 FilterBuilder 兜底
 func (r *NotificationRepository) Find(ctx context.Context, options ...notification.FindOption) iter.Seq2[*notification.Notification, error] {
 	opts := notification.NewFindOptions(options...)

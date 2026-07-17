@@ -3274,10 +3274,10 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   readAt: Time
   "关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭"
   dismissedAt: Time
-  "过期时间，到达后通知将被自动删除。零值表示不自动过期"
-  notAfter: Time
-  "最早可见时间，到达后对用户可见。零值表示立即可见"
-  notBefore: Time
+  "过期时间，到达后通知将被自动删除"
+  notAfter: Time!
+  "最早可见时间，到达后对用户可见"
+  notBefore: Time!
   "创建时间"
   createdAt: Time!
   "最后更新时间"
@@ -11198,9 +11198,9 @@ func (ec *executionContext) _Notification_notAfter(ctx context.Context, field gr
 			return obj.NotAfter, nil
 		},
 		nil,
-		ec.marshalOTime2timeᚐTime,
+		ec.marshalNTime2timeᚐTime,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -11227,9 +11227,9 @@ func (ec *executionContext) _Notification_notBefore(ctx context.Context, field g
 			return obj.NotBefore, nil
 		},
 		nil,
-		ec.marshalOTime2timeᚐTime,
+		ec.marshalNTime2timeᚐTime,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -11580,7 +11580,7 @@ func (ec *executionContext) _NotificationChannelConnection_nodes(ctx context.Con
 		field,
 		ec.fieldContext_NotificationChannelConnection_nodes,
 		func(ctx context.Context) (any, error) {
-			return obj.Nodes, nil
+			return obj.Nodes(), nil
 		},
 		nil,
 		ec.marshalNNotificationChannel2ᚕᚖmainᚋinternalᚋsharedᚐNotificationChannelDTOᚄ,
@@ -11593,7 +11593,7 @@ func (ec *executionContext) fieldContext_NotificationChannelConnection_nodes(_ c
 	fc = &graphql.FieldContext{
 		Object:     "NotificationChannelConnection",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
@@ -11757,7 +11757,7 @@ func (ec *executionContext) _NotificationConnection_nodes(ctx context.Context, f
 		field,
 		ec.fieldContext_NotificationConnection_nodes,
 		func(ctx context.Context) (any, error) {
-			return obj.Nodes, nil
+			return obj.Nodes(), nil
 		},
 		nil,
 		ec.marshalNNotification2ᚕᚖmainᚋinternalᚋsharedᚐNotificationDTOᚄ,
@@ -11770,7 +11770,7 @@ func (ec *executionContext) fieldContext_NotificationConnection_nodes(_ context.
 	fc = &graphql.FieldContext{
 		Object:     "NotificationConnection",
 		Field:      field,
-		IsMethod:   false,
+		IsMethod:   true,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
@@ -21514,8 +21514,14 @@ func (ec *executionContext) _Notification(ctx context.Context, sel ast.Selection
 			out.Values[i] = ec._Notification_dismissedAt(ctx, field, obj)
 		case "notAfter":
 			out.Values[i] = ec._Notification_notAfter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "notBefore":
 			out.Values[i] = ec._Notification_notBefore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createdAt":
 			out.Values[i] = ec._Notification_createdAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -24462,13 +24468,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

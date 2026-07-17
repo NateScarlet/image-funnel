@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"main/internal/apperror"
 	"main/internal/domain/notification"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -145,18 +144,4 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Equal(t, "hook:test", channels[1].Channel)
 	assert.Equal(t, 1, channels[1].UnreadCount)
 	assert.Equal(t, "notif:11111111-1111-1111-1111-111111111111", channels[1].LatestNotificationID.String())
-
-	// 6. 测试 Delete：删除通知，不存在返回 apperror
-	err = repo.Delete(ctx, got.ID().String())
-	require.NoError(t, err)
-
-	// 验证已删除
-	_, err = repo.Get(ctx, got.ID().String())
-	require.Error(t, err)
-	assert.True(t, apperror.IsNotFound(err))
-
-	// 再次删除应返回 apperror
-	err = repo.Delete(ctx, got.ID().String())
-	require.Error(t, err)
-	assert.True(t, apperror.IsNotFound(err))
 }
