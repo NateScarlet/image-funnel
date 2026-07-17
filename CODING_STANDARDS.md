@@ -35,6 +35,7 @@
 - **仓库构造权**: 领域实体的原始构造函数（如 `New`）不应导出供包外调用。外部构造入口统一为 `FromRepository` 专用方法，该方法内部调用非导出的构造函数与 `encodeID` 生成 ID。只有仓库实现有权限构造领域对象。
 - **通过仓库获取 ID**: 当外部代码需要领域实体的 ID 时，应通过仓库获取领域对象后调用 `.ID()`，不得自行编码。需要目录 ID 的组件（如 `ImageScanner`、`image.Handler`）应注入 `directory.Repository`，通过 `Get` 获取 `*Directory` 后取其 `ID()`，而非从路径字符串自行编码。
 - **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.Service.GetDirectory` 转为领域对象再获取 `RelPath()`），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
+- **应用层返回基础数据，接口层按需查询**: 应用层 handler 应返回基础数据（如 ID、状态值），不应预先查询接口层可能需要的数据。接口层（如 GQL resolver）有需要时自行按需调用应用层的查询方法获取完整数据。例如 GQL 层：Mutation resolver 调用应用层获取基础结果后，再通过 `r.app.Notification(ctx, id)` 查询完整 DTO 组装 Payload，而非让应用层 handler 返回完整 DTO。
 - **仓库接口极简设计**: `Repository` 接口必须保持极简且高度专注于数据的核心持久化（如 CRUD）。禁止为了计算物理绝对路径或辅助其他层创建空对象等非持久化行为而在接口中强行添加辅助方法。任何物理基准路径（如 `rootDir`）等硬件细节应通过依赖注入传入对应的领域服务（`Service`）或相关组件内部，由其内部自行处理。
 - **空实体回退机制内聚**: 当部分接口为了支持 GraphQL 等层级的非空约束（如 `NonNull!`）需要对缺失的数据进行“空实体”回退（Fallback）时，空实体的构造和物理绝对路径计算应属于领域层 Service 的内聚职责（通常由 Service 的私有方法如 `newEmpty` 统一创建）。应用层禁止获取物理路径属性后手动拼装实体，以避免职责边界外泄与属性构建不一致。
 - **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，笔记列表查询应放在 `application/note.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改
@@ -87,7 +88,6 @@
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
-- **Mutation 返回完整数据**: Mutation 的 Payload 应返回操作后的完整数据，而非仅返回 ID 等最小字段。读写分离模式不适用于 GraphQL 接口层——客户端通过 Mutation 直接获取结果，不应再发起额外查询。若 Payload 中包含 Go struct 未绑定的字段，gqlgen 会自动生成对应 resolver。
 - **错误通知去重**: Apollo Client 的全局 `ErrorLink`（`frontend/src/graphql/client.ts`）会自动捕获所有 GraphQL 和网络错误并通过 `showError` 显示。因此：
   - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知
   - 调用方**禁止**仅使用 `console.error` 吞掉错误，这会阻止用户看到错误
