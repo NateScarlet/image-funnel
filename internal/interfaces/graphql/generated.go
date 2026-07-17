@@ -3315,7 +3315,7 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   """
   该频道最新一条通知
   """
-  latestNotification: Notification
+  latestNotification: Notification!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/notification_filters_input.graphql", Input: `"通知筛选条件"
@@ -11460,9 +11460,9 @@ func (ec *executionContext) _NotificationChannel_latestNotification(ctx context.
 			return obj.LatestNotification, nil
 		},
 		nil,
-		ec.marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -21405,6 +21405,9 @@ func (ec *executionContext) _NotificationChannel(ctx context.Context, sel ast.Se
 			}
 		case "latestNotification":
 			out.Values[i] = ec._NotificationChannel_latestNotification(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24128,13 +24131,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -25805,13 +25808,6 @@ func (ec *executionContext) unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋshar
 	}
 	res, err := ec.unmarshalInputNoteFiltersInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationDTO) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._Notification(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐNotificationFiltersInput(ctx context.Context, v any) (*NotificationFiltersInput, error) {

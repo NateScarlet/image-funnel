@@ -65,6 +65,13 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 	);
 	CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
+
+	CREATE TABLE IF NOT EXISTS channel_summary (
+		channel TEXT PRIMARY KEY,
+		unread_count INTEGER NOT NULL DEFAULT 0,
+		latest_notification_id TEXT NOT NULL,
+		FOREIGN KEY (latest_notification_id) REFERENCES notifications(id)
+	);
 	`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
@@ -141,6 +148,9 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 
 	// 在同一个事务内顺手清理过期通知，避免额外占用 SQLite 连接
 	_, _ = tx.ExecContext(ctx, deleteExpiredSQL, time.Now().Format(time.RFC3339Nano))
+
+	// 刷新该频道物化视图（单查询避免 Channels 的 N+1）
+	r.refreshChannelSummary(ctx, tx, notif.Channel())
 
 	if err := tx.Commit(); err != nil {
 		return false, err
@@ -223,72 +233,110 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 	}
 }
 
-// Channels 遍历获取所有频道统计信息
+// Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
-		nowStr := time.Now().Format(time.RFC3339Nano)
-
-		query := `
-		SELECT channel,
-		       SUM(CASE WHEN (read_at IS NULL OR read_at = '0001-01-01T00:00:00Z' OR read_at = '') THEN 1 ELSE 0 END) as unread_count
-		FROM notifications
-		WHERE (not_after IS NULL OR not_after = '0001-01-01T00:00:00Z' OR not_after = '' OR not_after > ?)
-		  AND (not_before IS NULL OR not_before = '0001-01-01T00:00:00Z' OR not_before = '' OR not_before <= ?)
-		GROUP BY channel
-		`
-		rows, err := r.db.QueryContext(ctx, query, nowStr, nowStr)
+		rows, err := r.db.QueryContext(ctx, `
+			SELECT cs.channel, cs.unread_count,
+			       n.id, n.tag, n.channel, n.title, n.body, n.priority,
+			       n.read_at, n.dismissed_at, n.not_after, n.not_before,
+			       n.created_at, n.updated_at, n.detail_url
+			FROM channel_summary cs
+			LEFT JOIN notifications n ON n.id = cs.latest_notification_id
+			ORDER BY cs.channel
+		`)
 		if err != nil {
 			yield(nil, err)
 			return
 		}
 		defer rows.Close()
 
-		var statsList []*notification.ChannelStats
 		for rows.Next() {
-			var cs notification.ChannelStats
-			if err := rows.Scan(&cs.Channel, &cs.UnreadCount); err != nil {
+			cs, err := scanChannelSummaryRow(rows)
+			if err != nil {
 				if !yield(nil, err) {
 					return
 				}
 				continue
 			}
-			statsList = append(statsList, &cs)
-		}
-
-		if err := rows.Err(); err != nil {
-			yield(nil, err)
-			return
-		}
-		rows.Close()
-
-		for _, cs := range statsList {
-			latestQuery := `
-			SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url
-			FROM notifications
-			WHERE channel = ?
-			  AND (not_after IS NULL OR not_after = '0001-01-01T00:00:00Z' OR not_after = '' OR not_after > ?)
-			  AND (not_before IS NULL OR not_before = '0001-01-01T00:00:00Z' OR not_before = '' OR not_before <= ?)
-			ORDER BY created_at DESC, id DESC
-			LIMIT 1
-			`
-
-			notif, err := scanNotificationRow(r.db.QueryRowContext(ctx, latestQuery, cs.Channel, nowStr, nowStr))
-			if err == sql.ErrNoRows {
-				cs.LatestNotification = nil
-			} else if err != nil {
-				if !yield(nil, err) {
-					return
-				}
-				continue
-			} else {
-				cs.LatestNotification = notif
+			if cs.LatestNotification == nil {
+				continue // 对应通知已被物理删除，跳过
 			}
-
 			if !yield(cs, nil) {
 				return
 			}
 		}
+
+		if err := rows.Err(); err != nil {
+			yield(nil, err)
+		}
 	}
+}
+
+// refreshChannelSummary 在写事务内刷新频道的物化视图
+func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) {
+	nowStr := time.Now().Format(time.RFC3339Nano)
+
+	// 删除无可见通知的频道摘要
+	_, _ = tx.ExecContext(ctx, `
+		DELETE FROM channel_summary WHERE channel = ? AND NOT EXISTS (
+			SELECT 1 FROM notifications n WHERE n.channel = ?
+			  AND (n.not_after IS NULL OR n.not_after = '' OR n.not_after = '0001-01-01T00:00:00Z' OR n.not_after > ?)
+			  AND (n.not_before IS NULL OR n.not_before = '' OR n.not_before = '0001-01-01T00:00:00Z' OR n.not_before <= ?)
+		)
+	`, channel, channel, nowStr, nowStr)
+
+	// 重新计算并写入频道摘要
+	_, _ = tx.ExecContext(ctx, `
+		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
+		SELECT n.channel,
+		       SUM(CASE WHEN (n.read_at IS NULL OR n.read_at = '' OR n.read_at = '0001-01-01T00:00:00Z') THEN 1 ELSE 0 END),
+		       (SELECT n2.id FROM notifications n2
+		        WHERE n2.channel = n.channel
+		          AND (n2.not_after IS NULL OR n2.not_after = '' OR n2.not_after = '0001-01-01T00:00:00Z' OR n2.not_after > ?)
+		          AND (n2.not_before IS NULL OR n2.not_before = '' OR n2.not_before = '0001-01-01T00:00:00Z' OR n2.not_before <= ?)
+		        ORDER BY n2.created_at DESC, n2.id DESC LIMIT 1)
+		FROM notifications n
+		WHERE n.channel = ?
+		  AND (n.not_after IS NULL OR n.not_after = '' OR n.not_after = '0001-01-01T00:00:00Z' OR n.not_after > ?)
+		  AND (n.not_before IS NULL OR n.not_before = '' OR n.not_before = '0001-01-01T00:00:00Z' OR n.not_before <= ?)
+		GROUP BY n.channel
+	`, nowStr, nowStr, channel, nowStr, nowStr)
+}
+
+// scanChannelSummaryRow 扫描 channel_summary JOIN notifications 的一行
+func scanChannelSummaryRow(s rowScanner) (*notification.ChannelStats, error) {
+	var (
+		cs                                                     notification.ChannelStats
+		id, tag, channel, title, body, priorityStr             string
+		readAtStr, dismissedAtStr, notAfterStr, notBeforeStr    string
+		createdAtStr, updatedAtStr, detailURLStr                string
+	)
+	err := s.Scan(
+		&cs.Channel, &cs.UnreadCount,
+		&id, &tag, &channel, &title, &body, &priorityStr,
+		&readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr,
+		&createdAtStr, &updatedAtStr, &detailURLStr,
+	)
+	if err == sql.ErrNoRows {
+		return nil, err
+	} else if err != nil {
+		return nil, err
+	}
+
+	// LEFT JOIN 无匹配时 id 为空字符串
+	if id == "" {
+		return &cs, nil
+	}
+
+	notif, err := parseNotificationRow(id, tag, channel, title, body, priorityStr,
+		readAtStr, dismissedAtStr, notAfterStr, notBeforeStr,
+		createdAtStr, updatedAtStr, detailURLStr)
+	if err != nil {
+		return nil, err
+	}
+	cs.LatestNotification = notif
+	return &cs, nil
 }
 
 // #region 辅助方法
@@ -297,16 +345,12 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// scanNotificationRow 从 sql.Row 或 sql.Rows 扫描一行并构造领域对象
-func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
-	var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
-	err := s.Scan(
-		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
-	)
-	if err != nil {
-		return nil, err
-	}
-
+// parseNotificationRow 从已扫描的字符串字段构造领域对象
+func parseNotificationRow(
+	id, tag, channel, title, body, priorityStr string,
+	readAtStr, dismissedAtStr, notAfterStr, notBeforeStr string,
+	createdAtStr, updatedAtStr, detailURLStr string,
+) (*notification.Notification, error) {
 	priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
 	if err != nil {
 		return nil, fmt.Errorf("parse notification priority: %w", err)
@@ -346,6 +390,21 @@ func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
 		readAt, dismissedAt, notAfter, notBefore,
 		createdAt, updatedAt, detailURL,
 	), nil
+}
+
+// scanNotificationRow 从 sql.Row 或 sql.Rows 扫描一行并构造领域对象
+func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
+	var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
+	err := s.Scan(
+		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseNotificationRow(id, tag, channel, title, body, priorityStr,
+		readAtStr, dismissedAtStr, notAfterStr, notBeforeStr,
+		createdAtStr, updatedAtStr, detailURLStr)
 }
 
 func parseTime(s string) (time.Time, error) {

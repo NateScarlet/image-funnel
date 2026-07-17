@@ -2048,7 +2048,7 @@ export type NotificationChannelsQuery = {
       createdAt: string;
       updatedAt: string;
       detailURL: string | null;
-    } | null;
+    };
   }>;
 };
 

@@ -93,27 +93,23 @@ const init = once(() => {
     },
   });
 
-  // 应用加载时一次性弹历史未读通知
+  // 应用加载时弹每个频道最新一条未读通知（不依赖 useQuery）
   void loadAndToastInitialUnreads();
 
   async function loadAndToastInitialUnreads() {
-    for (const ch of channels.value) {
-      if (ch.unreadCount > 0) {
-        const { data } = await query(NotificationsDocument, {
-          variables: { channel: ch.channel },
-          fetchPolicy: "network-only",
-        });
-        const nodes = data?.notifications?.nodes ?? [];
-        for (const n of nodes) {
-          // 初始重放：仅 HIGH 和 NORMAL 弹 Toast，LOW 仅首次收到时弹
-          if (
-            !n.readAt &&
-            n.status === NotificationStatus.ACTIVE &&
-            n.priority !== NotificationPriority.LOW
-          ) {
-            spawnToast(n);
-          }
-        }
+    const { data: chData } = await query(NotificationChannelsDocument, {
+      fetchPolicy: "network-only",
+    });
+    const chs = chData?.notificationChannels ?? [];
+    for (const ch of chs) {
+      const n = ch.latestNotification;
+      if (
+        n &&
+        !n.readAt &&
+        n.status === NotificationStatus.ACTIVE &&
+        n.priority !== NotificationPriority.LOW
+      ) {
+        spawnToast(n);
       }
     }
   }

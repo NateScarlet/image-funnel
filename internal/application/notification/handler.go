@@ -76,6 +76,13 @@ func (h *Handler) SendNotification(
 
 	var notif *domnotif.Notification
 	if existing != nil {
+		if existing.Channel() != channel {
+			return nil, false, apperror.New(
+				"CHANNEL_CONFLICT",
+				"notification with tag "+tag+" already exists in channel "+existing.Channel(),
+				"标签 "+tag+" 已存在于频道 "+existing.Channel()+" 中",
+			)
+		}
 		existing.Update(title, body, priority, notAfterVal, notBeforeVal, detailURL, now)
 		notif = existing
 	} else {

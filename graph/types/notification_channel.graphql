@@ -14,5 +14,5 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   """
   该频道最新一条通知
   """
-  latestNotification: Notification
+  latestNotification: Notification!
 }
