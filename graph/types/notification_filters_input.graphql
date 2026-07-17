@@ -1,5 +1,5 @@
 "通知筛选条件"
-input NotificationFiltersInput {
+input NotificationFiltersInput @goModel(model: "main/internal/shared.NotificationFilters") {
   "按状态筛选"
   status: NotificationStatus
   "按优先级筛选"

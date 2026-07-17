@@ -11,13 +11,10 @@ import (
 )
 
 // NotificationChannels is the resolver for the notificationChannels field.
-func (r *queryResolver) NotificationChannels(ctx context.Context, filterBy *NotificationFiltersInput) ([]*shared.NotificationChannelDTO, error) {
+func (r *queryResolver) NotificationChannels(ctx context.Context, filterBy *shared.NotificationFilters) ([]*shared.NotificationChannelDTO, error) {
 	var f shared.NotificationFilters
 	if filterBy != nil {
-		f.Status = filterBy.Status
-		f.Priority = filterBy.Priority
-		f.Read = filterBy.Read
-		f.VisibleAt = filterBy.VisibleAt
+		f = *filterBy
 	}
 
 	return r.app.NotificationChannels(ctx, f)

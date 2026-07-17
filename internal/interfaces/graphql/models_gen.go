@@ -260,18 +260,6 @@ type MoveImagesPayload struct {
 type Mutation struct {
 }
 
-// 通知筛选条件
-type NotificationFiltersInput struct {
-	// 按状态筛选
-	Status *enum.Enum[shared.NotificationStatusMeta] `json:"status,omitempty"`
-	// 按优先级筛选
-	Priority *enum.Enum[shared.NotificationPriorityMeta] `json:"priority,omitempty"`
-	// 按已读状态筛选（true=已读，false=未读）
-	Read *bool `json:"read,omitempty"`
-	// 可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间
-	VisibleAt *time.Time `json:"visibleAt,omitempty"`
-}
-
 type Query struct {
 }
 
