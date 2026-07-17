@@ -18,6 +18,8 @@ resolver:
   dir: internal/interfaces/graphql
   package: graphql
 models:
+  URI:
+    model: main/internal/scalar.URI
   Time:
     model: main/internal/interfaces/graphql.Time
   Upload:

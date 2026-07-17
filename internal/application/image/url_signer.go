@@ -3,6 +3,7 @@ package image
 import (
 	"fmt"
 	"net/url"
+	"main/internal/scalar"
 )
 
 type SignOption func(url.Values)
@@ -26,5 +27,5 @@ func WithRaw() SignOption {
 }
 
 type URLSigner interface {
-	GenerateSignedURL(absPath string, opts ...SignOption) (string, error)
+	GenerateSignedURL(absPath string, opts ...SignOption) (scalar.URI, error)
 }

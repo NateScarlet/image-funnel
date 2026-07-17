@@ -31,6 +31,7 @@ func (f *DTOFactory) New(n *domnotif.Notification) *shared.NotificationDTO {
 		NotBefore:   n.NotBefore(),
 		CreatedAt:   n.CreatedAt(),
 		UpdatedAt:   n.UpdatedAt(),
+		DetailURL:   n.DetailURL(),
 	}
 }
 

@@ -335,6 +335,7 @@ type ComplexityRoot struct {
 		Body        func(childComplexity int) int
 		Channel     func(childComplexity int) int
 		CreatedAt   func(childComplexity int) int
+		DetailURL   func(childComplexity int) int
 		DismissedAt func(childComplexity int) int
 		ID          func(childComplexity int) int
 		NotAfter    func(childComplexity int) int
@@ -548,8 +549,8 @@ type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
 }
 type ImageResolver interface {
-	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error)
-	RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error)
+	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error)
+	RawURL(ctx context.Context, obj *shared.ImageDTO) (*scalar.URI, error)
 
 	Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error)
 }
@@ -1828,6 +1829,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Notification.CreatedAt(childComplexity), true
+	case "Notification.detailURL":
+		if e.complexity.Notification.DetailURL == nil {
+			break
+		}
+
+		return e.complexity.Notification.DetailURL(childComplexity), true
 	case "Notification.dismissedAt":
 		if e.complexity.Notification.DismissedAt == nil {
 			break
@@ -3253,6 +3260,10 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   最后更新时间
   """
   updatedAt: Time!
+  """
+  关联的详情 URL，支持 http, https, file, open-dir 等协议
+  """
+  detailURL: URI
 }
 
 type NotificationConnection
@@ -4060,6 +4071,8 @@ input SendNotificationInput {
   notAfter: Time
   "最早可见时间，在此之前不显示。空字符串表示立即可见"
   notBefore: Time
+  "关联的详情 URL，支持 http, https, file, open-dir 等协议"
+  detailURL: URI
   "客户端变更标识，用于幂等"
   clientMutationId: String
 }
@@ -7948,7 +7961,7 @@ func (ec *executionContext) _Image_url(ctx context.Context, field graphql.Collec
 			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int), fc.Args["quality"].(*int))
 		},
 		nil,
-		ec.marshalNURI2string,
+		ec.marshalNURI2ᚖmainᚋinternalᚋscalarᚐURI,
 		true,
 		true,
 	)
@@ -7988,7 +8001,7 @@ func (ec *executionContext) _Image_rawURL(ctx context.Context, field graphql.Col
 			return ec.resolvers.Image().RawURL(ctx, obj)
 		},
 		nil,
-		ec.marshalNURI2string,
+		ec.marshalNURI2ᚖmainᚋinternalᚋscalarᚐURI,
 		true,
 		true,
 	)
@@ -11256,6 +11269,35 @@ func (ec *executionContext) fieldContext_Notification_updatedAt(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Notification_detailURL(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_detailURL,
+		func(ctx context.Context) (any, error) {
+			return obj.DetailURL, nil
+		},
+		nil,
+		ec.marshalOURI2mainᚋinternalᚋscalarᚐURI,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_detailURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type URI does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NotificationChangedEvent_event(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChangedEventDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11335,6 +11377,8 @@ func (ec *executionContext) fieldContext_NotificationChangedEvent_notification(_
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -11450,6 +11494,8 @@ func (ec *executionContext) fieldContext_NotificationChannel_latestNotification(
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -11542,6 +11588,8 @@ func (ec *executionContext) fieldContext_NotificationConnection_nodes(_ context.
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -11638,6 +11686,8 @@ func (ec *executionContext) fieldContext_NotificationEdge_node(_ context.Context
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -12904,6 +12954,8 @@ func (ec *executionContext) fieldContext_SendNotificationPayload_notification(_ 
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -15527,6 +15579,8 @@ func (ec *executionContext) fieldContext_UpdateNotificationPayload_notification(
 				return ec.fieldContext_Notification_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailURL":
+				return ec.fieldContext_Notification_detailURL(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
@@ -18188,7 +18242,7 @@ func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Cont
 		asMap["priority"] = "NORMAL"
 	}
 
-	fieldsInOrder := [...]string{"tag", "channel", "title", "body", "priority", "notAfter", "notBefore", "clientMutationId"}
+	fieldsInOrder := [...]string{"tag", "channel", "title", "body", "priority", "notAfter", "notBefore", "detailURL", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18244,6 +18298,13 @@ func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Cont
 				return it, err
 			}
 			it.NotBefore = data
+		case "detailURL":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("detailURL"))
+			data, err := ec.unmarshalOURI2ᚖmainᚋinternalᚋscalarᚐURI(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DetailURL = data
 		case "clientMutationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -21205,6 +21266,8 @@ func (ec *executionContext) _Notification(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "detailURL":
+			out.Values[i] = ec._Notification_detailURL(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -25021,20 +25084,30 @@ func (ec *executionContext) marshalNTrashImagesPayload2ᚖmainᚋinternalᚋinte
 	return ec._TrashImagesPayload(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNURI2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalString(v)
+func (ec *executionContext) unmarshalNURI2mainᚋinternalᚋscalarᚐURI(ctx context.Context, v any) (scalar.URI, error) {
+	var res scalar.URI
+	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNURI2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
-	_ = sel
-	res := graphql.MarshalString(v)
-	if res == graphql.Null {
+func (ec *executionContext) marshalNURI2mainᚋinternalᚋscalarᚐURI(ctx context.Context, sel ast.SelectionSet, v scalar.URI) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNURI2ᚖmainᚋinternalᚋscalarᚐURI(ctx context.Context, v any) (*scalar.URI, error) {
+	var res = new(scalar.URI)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNURI2ᚖmainᚋinternalᚋscalarᚐURI(ctx context.Context, sel ast.SelectionSet, v *scalar.URI) graphql.Marshaler {
+	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
 		}
+		return graphql.Null
 	}
-	return res
+	return v
 }
 
 func (ec *executionContext) unmarshalNUndoInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUndoInput(ctx context.Context, v any) (UndoInput, error) {
@@ -25835,6 +25908,32 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	_ = sel
 	res := MarshalTime(*v)
 	return graphql.WrapContextMarshaler(ctx, res)
+}
+
+func (ec *executionContext) unmarshalOURI2mainᚋinternalᚋscalarᚐURI(ctx context.Context, v any) (scalar.URI, error) {
+	var res scalar.URI
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOURI2mainᚋinternalᚋscalarᚐURI(ctx context.Context, sel ast.SelectionSet, v scalar.URI) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalOURI2ᚖmainᚋinternalᚋscalarᚐURI(ctx context.Context, v any) (*scalar.URI, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(scalar.URI)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOURI2ᚖmainᚋinternalᚋscalarᚐURI(ctx context.Context, sel ast.SelectionSet, v *scalar.URI) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOUndoPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUndoPayload(ctx context.Context, sel ast.SelectionSet, v *UndoPayload) graphql.Marshaler {

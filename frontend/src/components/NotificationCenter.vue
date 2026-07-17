@@ -188,6 +188,28 @@ function handleDismiss(id: string) {
           <p v-if="notification.body" class="text-xs text-primary-400 mt-1 line-clamp-2">
             {{ notification.body }}
           </p>
+          <div v-if="notification.detailURL" class="mt-1">
+            <a
+              :href="notification.detailURL"
+              target="_blank"
+              class="inline-flex items-center gap-1 text-xs text-secondary-400 hover:text-secondary-300 hover:underline transition-colors"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+              查看详情
+            </a>
+          </div>
         </div>
       </div>
     </div>

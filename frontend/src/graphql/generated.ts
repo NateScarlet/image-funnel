@@ -299,6 +299,8 @@ export type SendNotificationInput = {
   channel: Scalars["String"]["input"];
   /** 客户端变更标识，用于幂等 */
   clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
+  /** 关联的详情 URL，支持 http, https, file, open-dir 等协议 */
+  detailURL?: InputMaybe<Scalars["URI"]["input"]>;
   /** 过期时间，到达后自动删除。空字符串表示不自动过期 */
   notAfter?: InputMaybe<Scalars["Time"]["input"]>;
   /** 最早可见时间，在此之前不显示。空字符串表示立即可见 */
@@ -498,6 +500,7 @@ export type NotificationFragment = {
   notBefore: string | null;
   createdAt: string;
   updatedAt: string;
+  detailURL: string | null;
 };
 
 export type RatingCountFragment = { __typename: "RatingCount"; rating: number; count: number };
@@ -1338,6 +1341,7 @@ export type UpdateNotificationMutation = {
       notBefore: string | null;
       createdAt: string;
       updatedAt: string;
+      detailURL: string | null;
     };
   };
 };
@@ -2033,6 +2037,7 @@ export type NotificationChannelsQuery = {
       notBefore: string | null;
       createdAt: string;
       updatedAt: string;
+      detailURL: string | null;
     } | null;
   }>;
 };
@@ -2066,6 +2071,7 @@ export type NotificationsQuery = {
         notBefore: string | null;
         createdAt: string;
         updatedAt: string;
+        detailURL: string | null;
       };
     }>;
     nodes: Array<{
@@ -2083,6 +2089,7 @@ export type NotificationsQuery = {
       notBefore: string | null;
       createdAt: string;
       updatedAt: string;
+      detailURL: string | null;
     }>;
     pageInfo: {
       __typename: "PageInfo";
@@ -2407,6 +2414,7 @@ export type NotificationChangedSubscription = {
       notBefore: string | null;
       createdAt: string;
       updatedAt: string;
+      detailURL: string | null;
     };
   };
 };
@@ -2931,6 +2939,7 @@ export const NotificationFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "notBefore" } },
           { kind: "Field", name: { kind: "Name", value: "createdAt" } },
           { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailURL" } },
         ],
       },
     },
@@ -5536,6 +5545,7 @@ export const UpdateNotificationDocument = {
           { kind: "Field", name: { kind: "Name", value: "notBefore" } },
           { kind: "Field", name: { kind: "Name", value: "createdAt" } },
           { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailURL" } },
         ],
       },
     },
@@ -7672,6 +7682,7 @@ export const NotificationChannelsDocument = {
           { kind: "Field", name: { kind: "Name", value: "notBefore" } },
           { kind: "Field", name: { kind: "Name", value: "createdAt" } },
           { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailURL" } },
         ],
       },
     },
@@ -7812,6 +7823,7 @@ export const NotificationsDocument = {
           { kind: "Field", name: { kind: "Name", value: "notBefore" } },
           { kind: "Field", name: { kind: "Name", value: "createdAt" } },
           { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailURL" } },
         ],
       },
     },
@@ -8792,6 +8804,7 @@ export const NotificationChangedDocument = {
           { kind: "Field", name: { kind: "Name", value: "notBefore" } },
           { kind: "Field", name: { kind: "Name", value: "createdAt" } },
           { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailURL" } },
         ],
       },
     },

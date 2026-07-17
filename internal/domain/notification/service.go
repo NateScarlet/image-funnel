@@ -3,6 +3,7 @@ package notification
 import (
 	"time"
 
+	"main/internal/scalar"
 	"main/internal/shared"
 )
 
@@ -25,10 +26,11 @@ func (s *Service) CreateNew(
 	priority shared.NotificationPriority,
 	notAfter time.Time,
 	notBefore time.Time,
+	detailURL scalar.URI,
 ) *Notification {
 	now := time.Now()
 	return newNotification(
 		tag, channel, title, body, priority,
-		time.Time{}, time.Time{}, notAfter, notBefore, now, now,
+		time.Time{}, time.Time{}, notAfter, notBefore, now, now, detailURL,
 	)
 }

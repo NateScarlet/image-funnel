@@ -50,7 +50,7 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 		return nil, fmt.Errorf("read database user_version: %w", err)
 	}
 
-	const expectedVersion = 1
+	const expectedVersion = 2
 	if dbVersion > expectedVersion {
 		db.Close()
 		return nil, fmt.Errorf("database schema version %d is newer than expected version %d", dbVersion, expectedVersion)
@@ -71,7 +71,8 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 			not_after TEXT,
 			not_before TEXT,
 			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
+			updated_at TEXT NOT NULL,
+			detail_url TEXT
 		);
 		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
@@ -85,6 +86,29 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d;", expectedVersion)); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("write schema version: %w", err)
+		}
+	} else if dbVersion == 1 {
+		// 数据库 schema 版本平滑迁移：增加 detail_url 字段并提升 user_version
+		tx, err := db.Begin()
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("begin schema upgrade transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		if _, err := tx.Exec("ALTER TABLE notifications ADD COLUMN detail_url TEXT;"); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("upgrade db schema to v2: %w", err)
+		}
+
+		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d;", expectedVersion)); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("write upgraded schema version: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("commit schema upgrade transaction: %w", err)
 		}
 	}
 
@@ -119,10 +143,9 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	}
 	didCreate = count == 0
 
-	// 修复冲突更新时，强制将主键 id 覆盖为传入实体的 ID 属性，防止 tag 覆盖导致前后端 ID 错乱的不一致 Bug
 	query := `
-	INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(tag) DO UPDATE SET
 		title = excluded.title,
 		body = excluded.body,
@@ -131,7 +154,8 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 		dismissed_at = excluded.dismissed_at,
 		not_after = excluded.not_after,
 		not_before = excluded.not_before,
-		updated_at = excluded.updated_at
+		updated_at = excluded.updated_at,
+		detail_url = excluded.detail_url
 	`
 	_, err = tx.ExecContext(ctx, query,
 		notif.ID().String(),
@@ -146,6 +170,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 		formatTime(notif.NotBefore()),
 		formatTime(notif.CreatedAt()),
 		formatTime(notif.UpdatedAt()),
+		notif.DetailURL().String(),
 	)
 	if err != nil {
 		return false, err
@@ -161,13 +186,13 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 // Get 根据 ID 获取通知，不存在返回 nil, nil
 func (r *NotificationRepository) Get(ctx context.Context, id string) (*notification.Notification, error) {
 	query := `
-	SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at
+	SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url
 	FROM notifications
 	WHERE id = ?
 	`
-	var tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr string
+	var tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr,
+		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -204,24 +229,28 @@ func (r *NotificationRepository) Get(ctx context.Context, id string) (*notificat
 	if err != nil {
 		return nil, err
 	}
+	detailURL, err := scalar.ParseURI(detailURLStr)
+	if err != nil {
+		return nil, err
+	}
 
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
 		readAt, dismissedAt, notAfter, notBefore,
-		createdAt, updatedAt,
+		createdAt, updatedAt, detailURL,
 	), nil
 }
 
 // GetByTag 根据 tag 获取通知，不存在返回 nil, nil
 func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*notification.Notification, error) {
 	query := `
-	SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at
+	SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url
 	FROM notifications
 	WHERE tag = ?
 	`
-	var id, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr string
+	var id, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
 	err := r.db.QueryRowContext(ctx, query, tag).Scan(
-		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr,
+		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -258,11 +287,15 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 	if err != nil {
 		return nil, err
 	}
+	detailURL, err := scalar.ParseURI(detailURLStr)
+	if err != nil {
+		return nil, err
+	}
 
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
 		readAt, dismissedAt, notAfter, notBefore,
-		createdAt, updatedAt,
+		createdAt, updatedAt, detailURL,
 	), nil
 }
 
@@ -273,7 +306,7 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 
 	return func(yield func(*notification.Notification, error) bool) {
 		query := `
-		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at
+		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url
 		FROM notifications
 		WHERE 1=1
 		`
@@ -293,9 +326,9 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 		defer rows.Close()
 
 		for rows.Next() {
-			var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr string
+			var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
 			err := rows.Scan(
-				&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr,
+				&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
 			)
 			if err != nil {
 				if !yield(nil, err) {
@@ -354,11 +387,18 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 				}
 				continue
 			}
+			detailURL, err := scalar.ParseURI(detailURLStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
 
 			notif := notification.FromRepository(
 				scalar.ToID(id), tag, channel, title, body, priority,
 				readAt, dismissedAt, notAfter, notBefore,
-				createdAt, updatedAt,
+				createdAt, updatedAt, detailURL,
 			)
 
 			if !yield(notif, nil) {
@@ -412,7 +452,7 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 
 		for _, cs := range statsList {
 			latestQuery := `
-			SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at
+			SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url
 			FROM notifications
 			WHERE channel = ?
 			  AND (not_after IS NULL OR not_after = '0001-01-01T00:00:00Z' OR not_after = '' OR not_after > ?)
@@ -420,9 +460,9 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 			ORDER BY created_at DESC, id DESC
 			LIMIT 1
 			`
-			var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr string
+			var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailURLStr string
 			err := r.db.QueryRowContext(ctx, latestQuery, cs.Channel, nowStr, nowStr).Scan(
-				&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr,
+				&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailURLStr,
 			)
 			if err == sql.ErrNoRows {
 				cs.LatestNotification = nil
@@ -481,11 +521,18 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 					}
 					continue
 				}
+				detailURL, err := scalar.ParseURI(detailURLStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
 
 				cs.LatestNotification = notification.FromRepository(
 					scalar.ToID(id), tag, channel, title, body, priority,
 					readAt, dismissedAt, notAfter, notBefore,
-					createdAt, updatedAt,
+					createdAt, updatedAt, detailURL,
 				)
 			}
 

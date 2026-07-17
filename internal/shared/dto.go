@@ -300,6 +300,7 @@ type NotificationDTO struct {
 	NotBefore   time.Time            `json:"notBefore"`
 	CreatedAt   time.Time            `json:"createdAt"`
 	UpdatedAt   time.Time            `json:"updatedAt"`
+	DetailURL   scalar.URI           `json:"detailURL"`
 }
 
 type NotificationFilters struct {

@@ -58,6 +58,7 @@ func (h *Handler) SendNotification(
 	priority shared.NotificationPriority,
 	notAfter *time.Time,
 	notBefore *time.Time,
+	detailURL scalar.URI,
 ) (*shared.NotificationDTO, bool, error) {
 	now := time.Now()
 	var notAfterVal, notBeforeVal time.Time
@@ -75,11 +76,11 @@ func (h *Handler) SendNotification(
 
 	var notif *domnotif.Notification
 	if existing != nil {
-		existing.Update(title, body, priority, notAfterVal, notBeforeVal, now)
+		existing.Update(title, body, priority, notAfterVal, notBeforeVal, detailURL, now)
 		notif = existing
 	} else {
 		// 由领域 Service 统一构造新实体，实现 ID 的内聚生成与封装
-		notif = h.service.CreateNew(tag, channel, title, body, priority, notAfterVal, notBeforeVal)
+		notif = h.service.CreateNew(tag, channel, title, body, priority, notAfterVal, notBeforeVal, detailURL)
 	}
 
 	didCreate, err := h.repo.Save(ctx, notif)

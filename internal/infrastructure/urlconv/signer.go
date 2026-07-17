@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"main/internal/application/image"
+	"main/internal/scalar"
 )
 
 type Signer struct {
@@ -24,16 +25,16 @@ func NewSigner(secretKey, rootDir string) *Signer {
 	}
 }
 
-func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (string, error) {
+func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (scalar.URI, error) {
 	relPath, err := s.toRelativePath(absPath)
 	if err != nil {
-		return "", err
+		return scalar.URI{}, err
 	}
 
 	absPathOnDisk := filepath.Join(s.rootDir, relPath)
 	fileInfo, err := os.Stat(absPathOnDisk)
 	if err != nil {
-		return "", fmt.Errorf("failed to get file info: %v", err)
+		return scalar.URI{}, fmt.Errorf("failed to get file info: %v", err)
 	}
 
 	timestamp := fileInfo.ModTime().Unix()
@@ -51,7 +52,7 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (st
 	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
 	params.Set("sig", base64.URLEncoding.EncodeToString(signatureBytes))
 
-	return fmt.Sprintf("image?%s", params.Encode()), nil
+	return scalar.ParseURI(fmt.Sprintf("image?%s", params.Encode()))
 }
 
 func (s *Signer) calculateSignature(relPath, timestamp, size, w, q string) []byte {

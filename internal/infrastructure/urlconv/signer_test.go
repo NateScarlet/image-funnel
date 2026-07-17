@@ -18,13 +18,13 @@ func TestGenerateSignedURL(t *testing.T) {
 
 	signedURL, err := signer.GenerateSignedURL(tempFile)
 	require.NoError(t, err)
-	require.NotEmpty(t, signedURL)
+	require.NotEmpty(t, signedURL.String())
 
-	assert.Contains(t, signedURL, "image?")
-	assert.Contains(t, signedURL, "path=")
-	assert.Contains(t, signedURL, "t=")
-	assert.Contains(t, signedURL, "s=")
-	assert.Contains(t, signedURL, "sig=")
+	assert.Contains(t, signedURL.String(), "image?")
+	assert.Contains(t, signedURL.String(), "path=")
+	assert.Contains(t, signedURL.String(), "t=")
+	assert.Contains(t, signedURL.String(), "s=")
+	assert.Contains(t, signedURL.String(), "sig=")
 }
 
 func TestValidateSignedURL(t *testing.T) {
@@ -39,7 +39,7 @@ func TestValidateSignedURL(t *testing.T) {
 	signedURL, err := signer.GenerateSignedURL(relPath)
 	require.NoError(t, err)
 
-	path, err := signer.ValidateSignedURL(signedURL)
+	path, err := signer.ValidateSignedURL(signedURL.String())
 	require.NoError(t, err)
 	assert.Equal(t, relPath, path)
 }

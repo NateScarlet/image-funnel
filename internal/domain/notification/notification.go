@@ -23,6 +23,7 @@ type Notification struct {
 	notBefore   time.Time
 	createdAt   time.Time
 	updatedAt   time.Time
+	detailURL   scalar.URI
 	deleted     bool
 }
 
@@ -43,6 +44,7 @@ func (n *Notification) NotAfter() time.Time                   { return n.notAfte
 func (n *Notification) NotBefore() time.Time                  { return n.notBefore }
 func (n *Notification) CreatedAt() time.Time                  { return n.createdAt }
 func (n *Notification) UpdatedAt() time.Time                  { return n.updatedAt }
+func (n *Notification) DetailURL() scalar.URI                 { return n.detailURL }
 
 // Status 状态派生: dismissedAt ≠ 0 → DISMISSED，否则 ACTIVE
 func (n *Notification) Status() shared.NotificationStatus {
@@ -53,12 +55,19 @@ func (n *Notification) Status() shared.NotificationStatus {
 }
 
 // Update 更新通知内容
-func (n *Notification) Update(title, body string, priority shared.NotificationPriority, notAfter, notBefore time.Time, at time.Time) {
+func (n *Notification) Update(
+	title, body string,
+	priority shared.NotificationPriority,
+	notAfter, notBefore time.Time,
+	detailURL scalar.URI,
+	at time.Time,
+) {
 	n.title = title
 	n.body = body
 	n.priority = priority
 	n.notAfter = notAfter
 	n.notBefore = notBefore
+	n.detailURL = detailURL
 	n.updatedAt = at
 }
 
@@ -95,6 +104,7 @@ func FromRepository(
 	notBefore time.Time,
 	createdAt time.Time,
 	updatedAt time.Time,
+	detailURL scalar.URI,
 ) *Notification {
 	return &Notification{
 		id:          id,
@@ -109,6 +119,7 @@ func FromRepository(
 		notBefore:   notBefore,
 		createdAt:   createdAt,
 		updatedAt:   updatedAt,
+		detailURL:   detailURL,
 	}
 }
 
@@ -125,7 +136,12 @@ func newNotification(
 	notBefore time.Time,
 	createdAt time.Time,
 	updatedAt time.Time,
+	detailURL scalar.URI,
 ) *Notification {
 	id := scalar.ToID("notif:" + uuid.NewString())
-	return FromRepository(id, tag, channel, title, body, priority, readAt, dismissedAt, notAfter, notBefore, createdAt, updatedAt)
+	return FromRepository(
+		id, tag, channel, title, body, priority,
+		readAt, dismissedAt, notAfter, notBefore,
+		createdAt, updatedAt, detailURL,
+	)
 }

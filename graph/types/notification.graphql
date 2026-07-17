@@ -54,6 +54,10 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   最后更新时间
   """
   updatedAt: Time!
+  """
+  关联的详情 URL，支持 http, https, file, open-dir 等协议
+  """
+  detailURL: URI
 }
 
 type NotificationConnection
