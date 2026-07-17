@@ -51,9 +51,6 @@ func (uri URI) Opaque() string {
 }
 
 func newURI(u url.URL) URI {
-	u.RawPath = ""
-	u.RawFragment = ""
-	u.User = nil
 	return URI{u}
 }
 

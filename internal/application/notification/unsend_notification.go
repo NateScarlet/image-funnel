@@ -27,6 +27,10 @@ func (h *Handler) UnsendNotification(ctx context.Context, tag string) (dto *shar
 	if err != nil {
 		return nil, err
 	}
+	if notif == nil {
+		// 通知不存在，什么都不做
+		return nil, nil
+	}
 
 	dto = h.dtoFactory.New(notif)
 	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{

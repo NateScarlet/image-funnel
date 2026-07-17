@@ -30,7 +30,7 @@ func (s *Service) SendNotification(
 	title string,
 	opts ...shared.SendNotificationOption,
 ) (*shared.SendNotificationResult, error) {
-	existing, err := s.repo.GetByTag(ctx, tag)
+	existing, err := apperror.IgnoreNotFound(s.repo.GetByTag(ctx, tag))
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +124,13 @@ func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *
 
 // UnsendNotification 撤回通知，通过 tag 查找，标记 notAfter 为当前时间
 func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notification, error) {
-	notif, err := s.repo.GetByTag(ctx, tag)
+	notif, err := apperror.IgnoreNotFound(s.repo.GetByTag(ctx, tag))
 	if err != nil {
 		return nil, err
+	}
+	if notif == nil {
+		// 通知不存在，什么都不做
+		return nil, nil
 	}
 
 	now := time.Now()
