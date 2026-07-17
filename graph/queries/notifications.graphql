@@ -1,14 +1,11 @@
 extend type Query {
   """
-  查询指定频道的通知列表，采用 Relay Connection 分页。
-  channel 参数必传以限定到具体频道。
+  查询通知列表，采用 Relay Connection 分页。
+  channel 可作为 filterBy 中的一项筛选，不传则获取所有频道的通知。
   """
   notifications(
-    "频道标识，必传"
-    channel: String!
     "筛选条件"
     filterBy: NotificationFiltersInput
-    "每页条目数，默认 50"
     first: Int = 50
     after: String
   ): NotificationConnection!

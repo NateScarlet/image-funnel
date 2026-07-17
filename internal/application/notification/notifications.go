@@ -2,41 +2,23 @@ package notification
 
 import (
 	"context"
-	"time"
 
 	domnotif "main/internal/domain/notification"
 	"main/internal/pagination"
 	"main/internal/shared"
-
-	"go.uber.org/zap"
 )
 
 // Notifications 获取通知列表，支持过滤及游标分页
 func (h *Handler) Notifications(
 	ctx context.Context,
-	channel string,
+	channel *string,
 	filters shared.NotificationFilters,
 	first *int,
 	after *string,
 ) (conn *shared.NotificationConnectionDTO, err error) {
-	startTime := time.Now()
-
-	defer func() {
-		if err != nil {
-			h.logger.Error("get notifications failed",
-				zap.String("channel", channel),
-				zap.Duration("duration", time.Since(startTime)),
-				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("did get notifications",
-				zap.String("channel", channel),
-				zap.Duration("duration", time.Since(startTime)),
-			)
-		}
-	}()
-
-	filters.Channel = []string{channel}
+	if channel != nil {
+		filters.Channel = []string{*channel}
+	}
 
 	builder := pagination.NewConnectionBufferBuilder[*shared.NotificationDTO, *shared.NotificationEdgeDTO, *shared.NotificationConnectionDTO]()
 	buf := builder(
@@ -72,17 +54,13 @@ func (h *Handler) Notifications(
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)
-	notifFilter := h.filterBuilder.Build(filters)
 
-	filteredSeq := func(yield func(*shared.NotificationDTO, error) bool) {
-		for item, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: []string{channel}})) {
+	// repo 通过 filter 保证只返回符合筛选条件的条目，不在此二次筛选
+	notificationsSeq := func(yield func(*shared.NotificationDTO, error) bool) {
+		for item, err := range h.repo.Find(ctx, domnotif.FindWithFilter(filters)) {
 			if err != nil {
 				yield(nil, err)
 				return
-			}
-
-			if !notifFilter(item) {
-				continue
 			}
 
 			if !yield(h.dtoFactory.New(item), nil) {
@@ -91,7 +69,7 @@ func (h *Handler) Notifications(
 		}
 	}
 
-	err = pagination.ByIndexE(filteredSeq, buf, options...)
+	err = pagination.ByIndexE(notificationsSeq, buf, options...)
 	if err != nil {
 		return nil, err
 	}

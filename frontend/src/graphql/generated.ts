@@ -298,7 +298,7 @@ export type RejectPairingRequestInput = {
 /** 发送通知的输入参数 */
 export type SendNotificationInput = {
   /** 通知正文 */
-  body?: Scalars["String"]["input"];
+  body?: InputMaybe<Scalars["String"]["input"]>;
   /** 频道标识，首次使用自动注册 */
   channel: Scalars["String"]["input"];
   /** 客户端变更标识，用于幂等 */
@@ -309,8 +309,8 @@ export type SendNotificationInput = {
   notAfter?: InputMaybe<Scalars["Time"]["input"]>;
   /** 最早可见时间，在此之前不显示。空字符串表示立即可见 */
   notBefore?: InputMaybe<Scalars["Time"]["input"]>;
-  /** 优先级，默认 NORMAL */
-  priority?: NotificationPriority;
+  /** 优先级 */
+  priority?: InputMaybe<NotificationPriority>;
   /** 客户端唯一标签（UUID），同标签将替换已有通知 */
   tag: Scalars["String"]["input"];
   /** 通知标题 */
@@ -2040,7 +2040,23 @@ export type NotificationChannelsQuery = {
       __typename: "NotificationChannel";
       channel: string;
       unreadCount: number;
-      latestNotificationID: string;
+      latestNotification: {
+        __typename: "Notification";
+        id: string;
+        tag: string;
+        channel: string;
+        title: string;
+        body: string;
+        priority: NotificationPriority;
+        status: NotificationStatus;
+        readAt: string | null;
+        dismissedAt: string | null;
+        notAfter: string | null;
+        notBefore: string | null;
+        createdAt: string;
+        updatedAt: string;
+        detailsURL: string | null;
+      } | null;
     }>;
     pageInfo: {
       __typename: "PageInfo";
@@ -2053,7 +2069,6 @@ export type NotificationChannelsQuery = {
 };
 
 export type NotificationsQueryVariables = Exact<{
-  channel: Scalars["String"]["input"];
   filterBy?: InputMaybe<NotificationFiltersInput>;
   first?: InputMaybe<Scalars["Int"]["input"]>;
   after?: InputMaybe<Scalars["String"]["input"]>;
@@ -7653,7 +7668,19 @@ export const NotificationChannelsDocument = {
                     selections: [
                       { kind: "Field", name: { kind: "Name", value: "channel" } },
                       { kind: "Field", name: { kind: "Name", value: "unreadCount" } },
-                      { kind: "Field", name: { kind: "Name", value: "latestNotificationID" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "latestNotification" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "FragmentSpread",
+                              name: { kind: "Name", value: "Notification" },
+                            },
+                          ],
+                        },
+                      },
                     ],
                   },
                 },
@@ -7676,6 +7703,30 @@ export const NotificationChannelsDocument = {
         ],
       },
     },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
   ],
 } as unknown as DocumentNode<NotificationChannelsQuery, NotificationChannelsQueryVariables>;
 export const NotificationsDocument = {
@@ -7686,14 +7737,6 @@ export const NotificationsDocument = {
       operation: "query",
       name: { kind: "Name", value: "notifications" },
       variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "channel" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
-          },
-        },
         {
           kind: "VariableDefinition",
           variable: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
@@ -7717,11 +7760,6 @@ export const NotificationsDocument = {
             kind: "Field",
             name: { kind: "Name", value: "notifications" },
             arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "channel" },
-                value: { kind: "Variable", name: { kind: "Name", value: "channel" } },
-              },
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "filterBy" },

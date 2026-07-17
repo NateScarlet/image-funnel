@@ -50,28 +50,70 @@ func (n *Notification) Status() shared.NotificationStatus {
 	return shared.NotificationStatusActive
 }
 
-// Update 更新通知内容
-func (n *Notification) Update(opts ...shared.UpdateNotificationOption) {
+// Update 更新通知内容，通过 setter 进行校验
+func (n *Notification) Update(opts ...shared.UpdateNotificationOption) error {
 	o := shared.NewUpdateNotificationOptions(opts...)
 	if o.Title != "" {
-		n.title = o.Title
+		if err := n.SetTitle(o.Title); err != nil {
+			return err
+		}
 	}
 	if o.Body != "" {
-		n.body = o.Body
+		n.SetBody(o.Body)
 	}
 	if !o.Priority.IsZero() {
-		n.priority = o.Priority
+		n.SetPriority(o.Priority)
 	}
 	if !o.NotAfter.IsZero() {
-		n.notAfter = o.NotAfter
+		n.SetNotAfter(o.NotAfter)
 	}
 	if !o.NotBefore.IsZero() {
-		n.notBefore = o.NotBefore
+		n.SetNotBefore(o.NotBefore)
 	}
 	if !o.DetailsURL.IsZero() {
-		n.detailsURL = o.DetailsURL
+		n.SetDetailsURL(o.DetailsURL)
 	}
-	n.updatedAt = o.UpdatedAt
+	n.SetUpdatedAt(o.UpdatedAt)
+	return nil
+}
+
+// SetTitle 设置标题，校验非空
+func (n *Notification) SetTitle(title string) error {
+	if title == "" {
+		return fmt.Errorf("title is required")
+	}
+	n.title = title
+	return nil
+}
+
+// SetBody 设置正文
+func (n *Notification) SetBody(body string) {
+	n.body = body
+}
+
+// SetPriority 设置优先级
+func (n *Notification) SetPriority(p shared.NotificationPriority) {
+	n.priority = p
+}
+
+// SetNotAfter 设置过期时间
+func (n *Notification) SetNotAfter(t time.Time) {
+	n.notAfter = t
+}
+
+// SetNotBefore 设置最早可见时间
+func (n *Notification) SetNotBefore(t time.Time) {
+	n.notBefore = t
+}
+
+// SetDetailsURL 设置详情 URL
+func (n *Notification) SetDetailsURL(u scalar.URI) {
+	n.detailsURL = u
+}
+
+// SetUpdatedAt 设置更新时间
+func (n *Notification) SetUpdatedAt(t time.Time) {
+	n.updatedAt = t
 }
 
 // MarkRead 标记已读
@@ -91,7 +133,7 @@ func (n *Notification) Dismiss(at time.Time, now time.Time) {
 	n.updatedAt = now
 }
 
-// FromRepository 供持久层加载领域对象使用
+// FromRepository 供持久层加载领域对象使用，通过 setter 进行校验
 func FromRepository(
 	id scalar.ID,
 	tag string,
@@ -106,7 +148,16 @@ func FromRepository(
 	createdAt time.Time,
 	updatedAt time.Time,
 	detailsURL scalar.URI,
-) *Notification {
+) (*Notification, error) {
+	// 校验：tag 必须是 UUID
+	if _, err := uuid.Parse(tag); err != nil {
+		return nil, fmt.Errorf("tag must be a valid UUID: %w", err)
+	}
+	// 校验：title 必填
+	if title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+
 	return &Notification{
 		id:          id,
 		tag:         tag,
@@ -121,7 +172,7 @@ func FromRepository(
 		createdAt:   createdAt,
 		updatedAt:   updatedAt,
 		detailsURL:  detailsURL,
-	}
+	}, nil
 }
 
 // Factory 负责创建新的 Notification 实例
@@ -169,5 +220,5 @@ func (f *Factory) New(
 		id, tag, channel, title, body, priority,
 		time.Time{}, time.Time{}, notAfter, notBefore,
 		now, now, options.DetailsURL,
-	), nil
+	)
 }

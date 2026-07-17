@@ -11,10 +11,14 @@ import (
 )
 
 // Notifications is the resolver for the notifications field.
-func (r *queryResolver) Notifications(ctx context.Context, channel string, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error) {
+func (r *queryResolver) Notifications(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error) {
 	var f shared.NotificationFilters
+	var channel *string
 	if filterBy != nil {
 		f = *filterBy
+		if len(f.Channel) > 0 {
+			channel = &f.Channel[0]
+		}
 	}
 
 	return r.app.Notifications(ctx, channel, f, first, after)

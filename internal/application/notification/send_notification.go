@@ -2,8 +2,8 @@ package notification
 
 import (
 	"context"
-	"time"
 
+	"main/internal/scalar"
 	"main/internal/shared"
 
 	"go.uber.org/zap"
@@ -18,31 +18,25 @@ func (h *Handler) SendNotification(
 	body string,
 	priority shared.NotificationPriority,
 	opts ...shared.SendNotificationOption,
-) (dto *shared.NotificationDTO, didCreate bool, err error) {
-	startTime := time.Now()
-
+) (id scalar.ID, didCreate bool, err error) {
 	defer func() {
 		if err != nil {
 			h.logger.Error("send notification failed",
 				zap.String("tag", tag),
-				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did send notification",
 				zap.String("tag", tag),
 				zap.Bool("didCreate", didCreate),
-				zap.Duration("duration", time.Since(startTime)),
 			)
 		}
 	}()
 
 	result, err := h.service.SendNotification(ctx, tag, channel, title, body, priority, opts...)
 	if err != nil {
-		return nil, false, err
+		return scalar.ID{}, false, err
 	}
-
-	dto = h.dtoFactory.New(result.Notification)
 
 	eventType := shared.NotificationEventTypeSent
 	if !result.DidCreate {
@@ -50,8 +44,8 @@ func (h *Handler) SendNotification(
 	}
 	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
 		Event:        eventType,
-		Notification: dto,
+		Notification: h.dtoFactory.New(result.Notification),
 	})
 
-	return dto, result.DidCreate, nil
+	return result.Notification.ID(), result.DidCreate, nil
 }

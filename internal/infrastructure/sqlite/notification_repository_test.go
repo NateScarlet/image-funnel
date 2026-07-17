@@ -25,10 +25,10 @@ func TestNotificationRepository(t *testing.T) {
 	testURI := scalar.MustParseURI("open-dir://some/path?arg=1")
 
 	// 1. 测试 Save (Create)
-	id1 := scalar.ToID("notif:1")
-	n1 := notification.FromRepository(
+	id1 := scalar.ToID("notif:11111111-1111-1111-1111-111111111111")
+	n1, err := notification.FromRepository(
 		id1,
-		"tag-1",
+		"11111111-1111-1111-1111-111111111111",
 		"hook:test",
 		"Test Title 1",
 		"Test Body 1",
@@ -41,6 +41,7 @@ func TestNotificationRepository(t *testing.T) {
 		time.Now().Add(-10*time.Minute),
 		testURI,
 	)
+	require.NoError(t, err)
 
 	didCreate, err := repo.Save(ctx, n1)
 	require.NoError(t, err)
@@ -50,21 +51,21 @@ func TestNotificationRepository(t *testing.T) {
 	got, err := repo.Get(ctx, id1.String())
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Equal(t, "tag-1", got.Tag())
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", got.Tag())
 	assert.Equal(t, "hook:test", got.Channel())
 	assert.Equal(t, "Test Title 1", got.Title())
 	assert.Equal(t, testURI.String(), got.DetailsURL().String())
 
-	gotByTag, err := repo.GetByTag(ctx, "tag-1")
+	gotByTag, err := repo.GetByTag(ctx, "11111111-1111-1111-1111-111111111111")
 	require.NoError(t, err)
 	require.NotNil(t, gotByTag)
 	assert.Equal(t, id1, gotByTag.ID())
 	assert.Equal(t, testURI.String(), gotByTag.DetailsURL().String())
 
 	// 3. 测试 Save (Update - 同 tag)
-	n1Updated := notification.FromRepository(
+	n1Updated, err := notification.FromRepository(
 		scalar.ToID("notif:different-id-will-be-ignored-on-sqlite-upsert"),
-		"tag-1",
+		"11111111-1111-1111-1111-111111111111",
 		"hook:test",
 		"Updated Title",
 		"Updated Body",
@@ -77,13 +78,14 @@ func TestNotificationRepository(t *testing.T) {
 		time.Now(),
 		testURI,
 	)
+	require.NoError(t, err)
 
 	didCreate, err = repo.Save(ctx, n1Updated)
 	require.NoError(t, err)
 	assert.False(t, didCreate)
 
 	// 验证 ID 依然为 id1 且内容已更新
-	got, err = repo.GetByTag(ctx, "tag-1")
+	got, err = repo.GetByTag(ctx, "11111111-1111-1111-1111-111111111111")
 	require.NoError(t, err)
 	assert.Equal(t, id1, got.ID())
 	assert.Equal(t, "Updated Title", got.Title())
@@ -91,9 +93,9 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Equal(t, testURI.String(), got.DetailsURL().String())
 
 	// 4. 测试 Find (List)
-	n2 := notification.FromRepository(
-		scalar.ToID("notif:2"),
-		"tag-2",
+	n2, err := notification.FromRepository(
+		scalar.ToID("notif:22222222-2222-2222-2222-222222222222"),
+		"22222222-2222-2222-2222-222222222222",
 		"hook:another",
 		"Test Title 2",
 		"Test Body 2",
@@ -106,6 +108,7 @@ func TestNotificationRepository(t *testing.T) {
 		time.Now(),
 		scalar.URI{},
 	)
+	require.NoError(t, err)
 	_, err = repo.Save(ctx, n2)
 	require.NoError(t, err)
 
@@ -124,7 +127,7 @@ func TestNotificationRepository(t *testing.T) {
 		filtered = append(filtered, item)
 	}
 	assert.Len(t, filtered, 1)
-	assert.Equal(t, "tag-1", filtered[0].Tag())
+	assert.Equal(t, "11111111-1111-1111-1111-111111111111", filtered[0].Tag())
 
 	// 5. 测试 Channels 聚合
 	var channels []*notification.ChannelStats
@@ -137,11 +140,11 @@ func TestNotificationRepository(t *testing.T) {
 	// 确认排序和统计
 	assert.Equal(t, "hook:another", channels[0].Channel)
 	assert.Equal(t, 1, channels[0].UnreadCount)
-	assert.Equal(t, "notif:2", channels[0].LatestNotificationID.String())
+	assert.Equal(t, "notif:22222222-2222-2222-2222-222222222222", channels[0].LatestNotificationID.String())
 
 	assert.Equal(t, "hook:test", channels[1].Channel)
 	assert.Equal(t, 1, channels[1].UnreadCount)
-	assert.Equal(t, "notif:1", channels[1].LatestNotificationID.String())
+	assert.Equal(t, "notif:11111111-1111-1111-1111-111111111111", channels[1].LatestNotificationID.String())
 
 	// 6. 测试 Delete：删除通知，不存在返回 apperror
 	err = repo.Delete(ctx, got.ID().String())
@@ -157,5 +160,3 @@ func TestNotificationRepository(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, apperror.IsNotFound(err))
 }
-
-

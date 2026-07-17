@@ -3,13 +3,10 @@ package notification
 import (
 	"context"
 	"slices"
-	"time"
 
 	domnotif "main/internal/domain/notification"
 	"main/internal/pagination"
 	"main/internal/shared"
-
-	"go.uber.org/zap"
 )
 
 // NotificationChannels 获取所有通知频道
@@ -19,22 +16,7 @@ func (h *Handler) NotificationChannels(
 	first *int,
 	after *string,
 ) (conn *shared.NotificationChannelConnectionDTO, err error) {
-	startTime := time.Now()
-
-	defer func() {
-		if err != nil {
-			h.logger.Error("get notification channels failed",
-				zap.Duration("duration", time.Since(startTime)),
-				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("did get notification channels",
-				zap.Duration("duration", time.Since(startTime)),
-			)
-		}
-	}()
-
-	cs, err := h.service.GetChannels(ctx, filters)
+	cs, err := h.service.Channels(ctx, filters)
 	if err != nil {
 		return nil, err
 	}

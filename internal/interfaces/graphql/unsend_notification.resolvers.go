@@ -11,12 +11,13 @@ import (
 
 // UnsendNotification is the resolver for the unsendNotification field.
 func (r *mutationResolver) UnsendNotification(ctx context.Context, input UnsendNotificationInput) (*UnsendNotificationPayload, error) {
-	err := r.app.UnsendNotification(ctx, input.Tag)
+	dto, err := r.app.UnsendNotification(ctx, input.Tag)
 	if err != nil {
 		return nil, err
 	}
 
 	return &UnsendNotificationPayload{
+		Notification:     dto,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

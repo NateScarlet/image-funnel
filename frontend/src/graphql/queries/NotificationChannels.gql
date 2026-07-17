@@ -3,7 +3,9 @@ query notificationChannels($filterBy: NotificationFiltersInput, $first: Int, $af
     nodes {
       channel
       unreadCount
-      latestNotificationID
+      latestNotification {
+        ...Notification
+      }
     }
     pageInfo {
       hasNextPage

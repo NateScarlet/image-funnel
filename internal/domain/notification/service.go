@@ -55,7 +55,7 @@ func (s *Service) SendNotification(
 		}
 		now := time.Now()
 		options := shared.NewSendNotificationOptions(opts...)
-		existing.Update(
+		if err := existing.Update(
 			shared.WithUpdateTitle(title),
 			shared.WithUpdateBody(body),
 			shared.WithUpdatePriority(priority),
@@ -63,7 +63,9 @@ func (s *Service) SendNotification(
 			shared.WithUpdateNotBefore(options.NotBefore),
 			shared.WithUpdateDetailsURL(options.DetailsURL),
 			shared.WithUpdateTime(now),
-		)
+		); err != nil {
+			return nil, err
+		}
 		notif = existing
 	} else {
 		notif, err = s.factory.New(tag, channel, title, body, priority, opts...)
@@ -114,22 +116,30 @@ func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *
 
 // #region UnsendNotification
 
-// UnsendNotification 撤回（删除）通知，通过 tag 查找
-func (s *Service) UnsendNotification(ctx context.Context, tag string) error {
+// UnsendNotification 撤回通知，通过 tag 查找，标记 notAfter 为当前时间
+func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notification, error) {
 	notif, err := s.repo.GetByTag(ctx, tag)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.repo.Delete(ctx, notif.ID().String())
+	now := time.Now()
+	notif.SetNotAfter(now)
+
+	_, err = s.repo.Save(ctx, notif)
+	if err != nil {
+		return nil, err
+	}
+
+	return notif, nil
 }
 
 // #endregion
 
 // #region Channels
 
-// GetChannels 获取所有频道及其统计信息
-func (s *Service) GetChannels(ctx context.Context, filters shared.NotificationFilters) ([]*ChannelStats, error) {
+// Channels 获取所有频道及其统计信息
+func (s *Service) Channels(ctx context.Context, filters shared.NotificationFilters) ([]*ChannelStats, error) {
 	var results []*ChannelStats
 
 	for cs, err := range s.repo.Channels(ctx) {

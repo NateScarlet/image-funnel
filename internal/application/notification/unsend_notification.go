@@ -2,29 +2,37 @@ package notification
 
 import (
 	"context"
-	"time"
+
+	"main/internal/shared"
 
 	"go.uber.org/zap"
 )
 
-// UnsendNotification 撤回（删除）通知
-func (h *Handler) UnsendNotification(ctx context.Context, tag string) (err error) {
-	startTime := time.Now()
-
+// UnsendNotification 撤回通知，标记 notAfter 为当前时间
+func (h *Handler) UnsendNotification(ctx context.Context, tag string) (dto *shared.NotificationDTO, err error) {
 	defer func() {
 		if err != nil {
 			h.logger.Error("unsend notification failed",
 				zap.String("tag", tag),
-				zap.Duration("duration", time.Since(startTime)),
 				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did unsend notification",
 				zap.String("tag", tag),
-				zap.Duration("duration", time.Since(startTime)),
 			)
 		}
 	}()
 
-	return h.service.UnsendNotification(ctx, tag)
+	notif, err := h.service.UnsendNotification(ctx, tag)
+	if err != nil {
+		return nil, err
+	}
+
+	dto = h.dtoFactory.New(notif)
+	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:        shared.NotificationEventTypeUnsent,
+		Notification: dto,
+	})
+
+	return dto, nil
 }

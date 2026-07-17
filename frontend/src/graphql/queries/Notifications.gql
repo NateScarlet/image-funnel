@@ -1,10 +1,5 @@
-query notifications(
-  $channel: String!
-  $filterBy: NotificationFiltersInput
-  $first: Int
-  $after: String
-) {
-  notifications(channel: $channel, filterBy: $filterBy, first: $first, after: $after) {
+query notifications($filterBy: NotificationFiltersInput, $first: Int, $after: String) {
+  notifications(filterBy: $filterBy, first: $first, after: $after) {
     edges {
       node {
         ...Notification

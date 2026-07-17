@@ -2,7 +2,7 @@
 通知对象，代表一条系统通知。
 """
 type Notification implements Node @goModel(model: "main/internal/shared.NotificationDTO") {
-  "通知唯一标识符，格式为 notif:{uuid}"
+  "通知唯一标识符"
   id: ID!
   "客户端提供的唯一标签（UUID 格式），用于同标签替换"
   tag: String!
@@ -22,7 +22,7 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   dismissedAt: Time
   "过期时间，到达后通知将被自动删除。零值表示不自动过期"
   notAfter: Time
-  "最早可见时间，到达后才对客户端可见。零值表示立即可见"
+  "最早可见时间，到达后对用户可见。零值表示立即可见"
   notBefore: Time
   "创建时间"
   createdAt: Time!

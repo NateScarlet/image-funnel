@@ -302,9 +302,9 @@ type SendNotificationInput struct {
 	// 通知标题
 	Title string `json:"title"`
 	// 通知正文
-	Body string `json:"body"`
-	// 优先级，默认 NORMAL
-	Priority enum.Enum[shared.NotificationPriorityMeta] `json:"priority"`
+	Body *string `json:"body,omitempty"`
+	// 优先级
+	Priority *enum.Enum[shared.NotificationPriorityMeta] `json:"priority,omitempty"`
 	// 过期时间，到达后自动删除。空字符串表示不自动过期
 	NotAfter *time.Time `json:"notAfter,omitempty"`
 	// 最早可见时间，在此之前不显示。空字符串表示立即可见
@@ -316,8 +316,8 @@ type SendNotificationInput struct {
 }
 
 type SendNotificationPayload struct {
-	// 发送后的通知对象
-	Notification *shared.NotificationDTO `json:"notification"`
+	// 发送后的通知 ID
+	ID scalar.ID `json:"id"`
 	// 是否本次操作为新建通知（false 表示同 tag 更新已有通知）
 	DidCreate bool `json:"didCreate"`
 	// 客户端变更标识，用于幂等
@@ -377,6 +377,8 @@ type UnsendNotificationInput struct {
 }
 
 type UnsendNotificationPayload struct {
+	// 撤回的通知，null 代表对应 tag 的通知不存在
+	Notification *shared.NotificationDTO `json:"notification,omitempty"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }

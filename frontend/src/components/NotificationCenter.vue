@@ -106,7 +106,7 @@ function handleDismiss(id: string) {
             </span>
           </div>
           <p class="text-xs text-primary-500 mt-1">
-            {{ ch.latestNotificationID ? "有新通知" : "暂无通知" }}
+            {{ ch.latestNotification?.title ?? "暂无通知" }}
           </p>
         </div>
 

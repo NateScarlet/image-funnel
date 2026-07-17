@@ -7,9 +7,9 @@ input SendNotificationInput {
   "通知标题"
   title: String!
   "通知正文"
-  body: String! = ""
-  "优先级，默认 NORMAL"
-  priority: NotificationPriority! = NORMAL
+  body: String
+  "优先级"
+  priority: NotificationPriority
   "过期时间，到达后自动删除。空字符串表示不自动过期"
   notAfter: Time
   "最早可见时间，在此之前不显示。空字符串表示立即可见"
@@ -21,8 +21,8 @@ input SendNotificationInput {
 }
 
 type SendNotificationPayload {
-  "发送后的通知对象"
-  notification: Notification!
+  "发送后的通知 ID"
+  id: ID!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
   "客户端变更标识，用于幂等"

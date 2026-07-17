@@ -48,6 +48,7 @@ type ResolverRoot interface {
 	Image() ImageResolver
 	Mutation() MutationResolver
 	Note() NoteResolver
+	NotificationChannel() NotificationChannelResolver
 	Query() QueryResolver
 	Session() SessionResolver
 	Subscription() SubscriptionResolver
@@ -354,9 +355,9 @@ type ComplexityRoot struct {
 	}
 
 	NotificationChannel struct {
-		Channel              func(childComplexity int) int
-		LatestNotificationID func(childComplexity int) int
-		UnreadCount          func(childComplexity int) int
+		Channel            func(childComplexity int) int
+		LatestNotification func(childComplexity int) int
+		UnreadCount        func(childComplexity int) int
 	}
 
 	NotificationChannelConnection struct {
@@ -403,7 +404,7 @@ type ComplexityRoot struct {
 		Meta                 func(childComplexity int) int
 		Node                 func(childComplexity int, id scalar.ID) int
 		NotificationChannels func(childComplexity int, filterBy *shared.NotificationFilters, first *int, after *string) int
-		Notifications        func(childComplexity int, channel string, filterBy *shared.NotificationFilters, first *int, after *string) int
+		Notifications        func(childComplexity int, filterBy *shared.NotificationFilters, first *int, after *string) int
 		PairingRequests      func(childComplexity int) int
 		RootDirectory        func(childComplexity int) int
 		Session              func(childComplexity int, id scalar.ID) int
@@ -426,7 +427,7 @@ type ComplexityRoot struct {
 	SendNotificationPayload struct {
 		ClientMutationID func(childComplexity int) int
 		DidCreate        func(childComplexity int) int
-		Notification     func(childComplexity int) int
+		ID               func(childComplexity int) int
 	}
 
 	Session struct {
@@ -515,6 +516,7 @@ type ComplexityRoot struct {
 
 	UnsendNotificationPayload struct {
 		ClientMutationID func(childComplexity int) int
+		Notification     func(childComplexity int) int
 	}
 
 	UpdateImagesMetadataPayload struct {
@@ -597,6 +599,9 @@ type MutationResolver interface {
 type NoteResolver interface {
 	Title(ctx context.Context, obj *shared.NoteDTO) (string, error)
 }
+type NotificationChannelResolver interface {
+	LatestNotification(ctx context.Context, obj *shared.NotificationChannelDTO) (*shared.NotificationDTO, error)
+}
 type QueryResolver interface {
 	Node(ctx context.Context, id scalar.ID) (Node, error)
 	AuthStatus(ctx context.Context) (*AuthStatus, error)
@@ -606,7 +611,7 @@ type QueryResolver interface {
 	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
 	NotificationChannels(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error)
-	Notifications(ctx context.Context, channel string, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error)
+	Notifications(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error)
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
@@ -1925,12 +1930,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.NotificationChannel.Channel(childComplexity), true
-	case "NotificationChannel.latestNotificationID":
-		if e.complexity.NotificationChannel.LatestNotificationID == nil {
+	case "NotificationChannel.latestNotification":
+		if e.complexity.NotificationChannel.LatestNotification == nil {
 			break
 		}
 
-		return e.complexity.NotificationChannel.LatestNotificationID(childComplexity), true
+		return e.complexity.NotificationChannel.LatestNotification(childComplexity), true
 	case "NotificationChannel.unreadCount":
 		if e.complexity.NotificationChannel.UnreadCount == nil {
 			break
@@ -2124,7 +2129,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.Notifications(childComplexity, args["channel"].(string), args["filterBy"].(*shared.NotificationFilters), args["first"].(*int), args["after"].(*string)), true
+		return e.complexity.Query.Notifications(childComplexity, args["filterBy"].(*shared.NotificationFilters), args["first"].(*int), args["after"].(*string)), true
 	case "Query.pairingRequests":
 		if e.complexity.Query.PairingRequests == nil {
 			break
@@ -2221,12 +2226,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SendNotificationPayload.DidCreate(childComplexity), true
-	case "SendNotificationPayload.notification":
-		if e.complexity.SendNotificationPayload.Notification == nil {
+	case "SendNotificationPayload.id":
+		if e.complexity.SendNotificationPayload.ID == nil {
 			break
 		}
 
-		return e.complexity.SendNotificationPayload.Notification(childComplexity), true
+		return e.complexity.SendNotificationPayload.ID(childComplexity), true
 
 	case "Session.canCommit":
 		if e.complexity.Session.CanCommit == nil {
@@ -2635,6 +2640,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UnsendNotificationPayload.ClientMutationID(childComplexity), true
+	case "UnsendNotificationPayload.notification":
+		if e.complexity.UnsendNotificationPayload.Notification == nil {
+			break
+		}
+
+		return e.complexity.UnsendNotificationPayload.Notification(childComplexity), true
 
 	case "UpdateImagesMetadataPayload.clientMutationId":
 		if e.complexity.UpdateImagesMetadataPayload.ClientMutationID == nil {
@@ -3245,7 +3256,7 @@ input NoteFiltersInput
 通知对象，代表一条系统通知。
 """
 type Notification implements Node @goModel(model: "main/internal/shared.NotificationDTO") {
-  "通知唯一标识符，格式为 notif:{uuid}"
+  "通知唯一标识符"
   id: ID!
   "客户端提供的唯一标签（UUID 格式），用于同标签替换"
   tag: String!
@@ -3265,7 +3276,7 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   dismissedAt: Time
   "过期时间，到达后通知将被自动删除。零值表示不自动过期"
   notAfter: Time
-  "最早可见时间，到达后才对客户端可见。零值表示立即可见"
+  "最早可见时间，到达后对用户可见。零值表示立即可见"
   notBefore: Time
   "创建时间"
   createdAt: Time!
@@ -3310,8 +3321,8 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   channel: String!
   "该频道未读通知数量"
   unreadCount: Int!
-  "该频道最新一条通知的 ID"
-  latestNotificationID: ID!
+  "该频道最新一条通知"
+  latestNotification: Notification
 }
 
 type NotificationChannelConnection
@@ -3330,8 +3341,7 @@ type NotificationChannelEdge
   node: NotificationChannel!
   "用于游标分页的唯一标识符"
   cursor: String!
-}
-`, BuiltIn: false},
+}`, BuiltIn: false},
 	{Name: "../../../graph/types/notification_filters_input.graphql", Input: `"通知筛选条件"
 input NotificationFiltersInput @goModel(model: "main/internal/shared.NotificationFilters") {
   "按频道筛选，匹配任意一个"
@@ -3599,22 +3609,18 @@ extend type Query {
   notificationChannels(
     "筛选条件"
     filterBy: NotificationFiltersInput
-    "每页条目数，默认 50"
     first: Int = 50
     after: String
   ): NotificationChannelConnection!
 }`, BuiltIn: false},
 	{Name: "../../../graph/queries/notifications.graphql", Input: `extend type Query {
   """
-  查询指定频道的通知列表，采用 Relay Connection 分页。
-  channel 参数必传以限定到具体频道。
+  查询通知列表，采用 Relay Connection 分页。
+  channel 可作为 filterBy 中的一项筛选，不传则获取所有频道的通知。
   """
   notifications(
-    "频道标识，必传"
-    channel: String!
     "筛选条件"
     filterBy: NotificationFiltersInput
-    "每页条目数，默认 50"
     first: Int = 50
     after: String
   ): NotificationConnection!
@@ -4084,9 +4090,9 @@ input SendNotificationInput {
   "通知标题"
   title: String!
   "通知正文"
-  body: String! = ""
-  "优先级，默认 NORMAL"
-  priority: NotificationPriority! = NORMAL
+  body: String
+  "优先级"
+  priority: NotificationPriority
   "过期时间，到达后自动删除。空字符串表示不自动过期"
   notAfter: Time
   "最早可见时间，在此之前不显示。空字符串表示立即可见"
@@ -4098,8 +4104,8 @@ input SendNotificationInput {
 }
 
 type SendNotificationPayload {
-  "发送后的通知对象"
-  notification: Notification!
+  "发送后的通知 ID"
+  id: ID!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
   "客户端变更标识，用于幂等"
@@ -4189,13 +4195,15 @@ input UnsendNotificationInput {
 }
 
 type UnsendNotificationPayload {
+  "撤回的通知，null 代表对应 tag 的通知不存在"
+  notification: Notification
   "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 
 extend type Mutation {
   """
-  撤回（删除）指定通知。通知被删除后不可恢复。
+  撤回指定通知。如果存在则标记为已过期，否则什么都不做。
   """
   unsendNotification(input: UnsendNotificationInput!): UnsendNotificationPayload!
 }`, BuiltIn: false},
@@ -4759,26 +4767,21 @@ func (ec *executionContext) field_Query_notificationChannels_args(ctx context.Co
 func (ec *executionContext) field_Query_notifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "channel", ec.unmarshalNString2string)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters)
 	if err != nil {
 		return nil, err
 	}
-	args["channel"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters)
+	args["filterBy"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["filterBy"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["after"] = arg3
+	args["after"] = arg2
 	return args, nil
 }
 
@@ -9889,8 +9892,8 @@ func (ec *executionContext) fieldContext_Mutation_sendNotification(ctx context.C
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "notification":
-				return ec.fieldContext_SendNotificationPayload_notification(ctx, field)
+			case "id":
+				return ec.fieldContext_SendNotificationPayload_id(ctx, field)
 			case "didCreate":
 				return ec.fieldContext_SendNotificationPayload_didCreate(ctx, field)
 			case "clientMutationId":
@@ -10152,6 +10155,8 @@ func (ec *executionContext) fieldContext_Mutation_unsendNotification(ctx context
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "notification":
+				return ec.fieldContext_UnsendNotificationPayload_notification(ctx, field)
 			case "clientMutationId":
 				return ec.fieldContext_UnsendNotificationPayload_clientMutationId(ctx, field)
 			}
@@ -11474,30 +11479,60 @@ func (ec *executionContext) fieldContext_NotificationChannel_unreadCount(_ conte
 	return fc, nil
 }
 
-func (ec *executionContext) _NotificationChannel_latestNotificationID(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChannelDTO) (ret graphql.Marshaler) {
+func (ec *executionContext) _NotificationChannel_latestNotification(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChannelDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_NotificationChannel_latestNotificationID,
+		ec.fieldContext_NotificationChannel_latestNotification,
 		func(ctx context.Context) (any, error) {
-			return obj.LatestNotificationID, nil
+			return ec.resolvers.NotificationChannel().LatestNotification(ctx, obj)
 		},
 		nil,
-		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		ec.marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_NotificationChannel_latestNotificationID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_NotificationChannel_latestNotification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "NotificationChannel",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailsURL":
+				return ec.fieldContext_Notification_detailsURL(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
 	}
 	return fc, nil
@@ -11566,8 +11601,8 @@ func (ec *executionContext) fieldContext_NotificationChannelConnection_nodes(_ c
 				return ec.fieldContext_NotificationChannel_channel(ctx, field)
 			case "unreadCount":
 				return ec.fieldContext_NotificationChannel_unreadCount(ctx, field)
-			case "latestNotificationID":
-				return ec.fieldContext_NotificationChannel_latestNotificationID(ctx, field)
+			case "latestNotification":
+				return ec.fieldContext_NotificationChannel_latestNotification(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type NotificationChannel", field.Name)
 		},
@@ -11642,8 +11677,8 @@ func (ec *executionContext) fieldContext_NotificationChannelEdge_node(_ context.
 				return ec.fieldContext_NotificationChannel_channel(ctx, field)
 			case "unreadCount":
 				return ec.fieldContext_NotificationChannel_unreadCount(ctx, field)
-			case "latestNotificationID":
-				return ec.fieldContext_NotificationChannel_latestNotificationID(ctx, field)
+			case "latestNotification":
+				return ec.fieldContext_NotificationChannel_latestNotification(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type NotificationChannel", field.Name)
 		},
@@ -12473,7 +12508,7 @@ func (ec *executionContext) _Query_notifications(ctx context.Context, field grap
 		ec.fieldContext_Query_notifications,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().Notifications(ctx, fc.Args["channel"].(string), fc.Args["filterBy"].(*shared.NotificationFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+			return ec.resolvers.Query().Notifications(ctx, fc.Args["filterBy"].(*shared.NotificationFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
 		},
 		nil,
 		ec.marshalNNotificationConnection2ᚖmainᚋinternalᚋsharedᚐNotificationConnectionDTO,
@@ -13081,60 +13116,30 @@ func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshTokenExpires
 	return fc, nil
 }
 
-func (ec *executionContext) _SendNotificationPayload_notification(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _SendNotificationPayload_id(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SendNotificationPayload_notification,
+		ec.fieldContext_SendNotificationPayload_id,
 		func(ctx context.Context) (any, error) {
-			return obj.Notification, nil
+			return obj.ID, nil
 		},
 		nil,
-		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_SendNotificationPayload_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SendNotificationPayload_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SendNotificationPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Notification_id(ctx, field)
-			case "tag":
-				return ec.fieldContext_Notification_tag(ctx, field)
-			case "channel":
-				return ec.fieldContext_Notification_channel(ctx, field)
-			case "title":
-				return ec.fieldContext_Notification_title(ctx, field)
-			case "body":
-				return ec.fieldContext_Notification_body(ctx, field)
-			case "priority":
-				return ec.fieldContext_Notification_priority(ctx, field)
-			case "status":
-				return ec.fieldContext_Notification_status(ctx, field)
-			case "readAt":
-				return ec.fieldContext_Notification_readAt(ctx, field)
-			case "dismissedAt":
-				return ec.fieldContext_Notification_dismissedAt(ctx, field)
-			case "notAfter":
-				return ec.fieldContext_Notification_notAfter(ctx, field)
-			case "notBefore":
-				return ec.fieldContext_Notification_notBefore(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_Notification_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Notification_updatedAt(ctx, field)
-			case "detailsURL":
-				return ec.fieldContext_Notification_detailsURL(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -15585,6 +15590,65 @@ func (ec *executionContext) fieldContext_UndoTrashPayload_clientMutationId(_ con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UnsendNotificationPayload_notification(ctx context.Context, field graphql.CollectedField, obj *UnsendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UnsendNotificationPayload_notification,
+		func(ctx context.Context) (any, error) {
+			return obj.Notification, nil
+		},
+		nil,
+		ec.marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UnsendNotificationPayload_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UnsendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailsURL":
+				return ec.fieldContext_Notification_detailsURL(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
 	}
 	return fc, nil
@@ -18397,13 +18461,6 @@ func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	if _, present := asMap["body"]; !present {
-		asMap["body"] = ""
-	}
-	if _, present := asMap["priority"]; !present {
-		asMap["priority"] = "NORMAL"
-	}
-
 	fieldsInOrder := [...]string{"tag", "channel", "title", "body", "priority", "notAfter", "notBefore", "detailsURL", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
@@ -18434,14 +18491,14 @@ func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Cont
 			it.Title = data
 		case "body":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("body"))
-			data, err := ec.unmarshalNString2string(ctx, v)
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Body = data
 		case "priority":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx, v)
+			data, err := ec.unmarshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -21552,18 +21609,46 @@ func (ec *executionContext) _NotificationChannel(ctx context.Context, sel ast.Se
 		case "channel":
 			out.Values[i] = ec._NotificationChannel_channel(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "unreadCount":
 			out.Values[i] = ec._NotificationChannel_unreadCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "latestNotificationID":
-			out.Values[i] = ec._NotificationChannel_latestNotificationID(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+		case "latestNotification":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._NotificationChannel_latestNotification(ctx, field, obj)
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22328,8 +22413,8 @@ func (ec *executionContext) _SendNotificationPayload(ctx context.Context, sel as
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("SendNotificationPayload")
-		case "notification":
-			out.Values[i] = ec._SendNotificationPayload_notification(ctx, field, obj)
+		case "id":
+			out.Values[i] = ec._SendNotificationPayload_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -23136,6 +23221,8 @@ func (ec *executionContext) _UnsendNotificationPayload(ctx context.Context, sel 
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("UnsendNotificationPayload")
+		case "notification":
+			out.Values[i] = ec._UnsendNotificationPayload_notification(ctx, field, obj)
 		case "clientMutationId":
 			out.Values[i] = ec._UnsendNotificationPayload_clientMutationId(ctx, field, obj)
 		default:
@@ -24375,13 +24462,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -25009,23 +25096,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 
@@ -26122,6 +26209,13 @@ func (ec *executionContext) unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋshar
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Notification(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters(ctx context.Context, v any) (*shared.NotificationFilters, error) {
 	if v == nil {
 		return nil, nil
@@ -26193,6 +26287,22 @@ func (ec *executionContext) marshalONotificationPriority2ᚕmainᚋinternalᚋen
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (*enum.Enum[shared.NotificationPriorityMeta], error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(enum.Enum[shared.NotificationPriorityMeta])
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v *enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalONotificationStatus2ᚕmainᚋinternalᚋenumᚐEnumᚄ(ctx context.Context, v any) ([]shared.NotificationStatus, error) {

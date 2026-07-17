@@ -375,10 +375,10 @@ func parseNotificationRow(
 	}
 
 	return notification.FromRepository(
-		scalar.ToID(id), tag, channel, title, body, priority,
-		readAt, dismissedAt, notAfter, notBefore,
-		createdAt, updatedAt, detailsURL,
-	), nil
+			scalar.ToID(id), tag, channel, title, body, priority,
+			readAt, dismissedAt, notAfter, notBefore,
+			createdAt, updatedAt, detailsURL,
+		)
 }
 
 // scanNotificationRow 从 sql.Row 或 sql.Rows 扫描一行并构造领域对象
