@@ -40,6 +40,7 @@
       </button>
 
       <div class="hidden md:flex items-center gap-4">
+        <NotificationCenterButton />
         <DeviceManagerButton />
         <button
           :disabled="!session?.canUndo || undoing"
@@ -93,6 +94,7 @@
           </div>
         </div>
 
+        <NotificationCenterButton variant="menu-item" @click="menuDialog.close()" />
         <DeviceManagerButton variant="menu-item" @click="menuDialog.close()" />
         <button
           :disabled="!session?.canUndo || undoing"
@@ -150,6 +152,7 @@ import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "./DeviceManagerButton.vue";
+import NotificationCenterButton from "./NotificationCenterButton.vue";
 
 const props = defineProps<{
   session: SessionFragment | null | undefined;

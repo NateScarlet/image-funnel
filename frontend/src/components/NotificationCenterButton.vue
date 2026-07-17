@@ -5,7 +5,7 @@ defineProps<{
   variant?: "default" | "menu-item";
 }>();
 
-const { unreadCount, open } = useNotificationCenter();
+const { unreadCount, drawer } = useNotificationCenter();
 </script>
 
 <template>
@@ -16,7 +16,7 @@ const { unreadCount, open } = useNotificationCenter();
         : 'relative w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-all flex items-center gap-3 text-primary-200 hover:text-white active:scale-95 cursor-pointer select-none',
     ]"
     title="通知中心"
-    @click="open"
+    @click="drawer.open()"
   >
     <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path

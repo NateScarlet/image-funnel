@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
-import useModalDrawer from "@/composables/useModalDrawer";
 import { formatDate } from "@/utils/date";
 
 const {
@@ -10,26 +8,11 @@ const {
   selectedChannel,
   channelNotifications,
   selectedChannelUnreadCount,
-  panelOpen,
-  close: closeCenter,
+  drawer,
   selectChannel,
   markAsDismissed,
   markAllAsRead,
 } = useNotificationCenter();
-
-const drawer = useModalDrawer({
-  onDidClose() {
-    closeCenter();
-  },
-});
-
-watch(panelOpen, (val) => {
-  if (val && !drawer.visible.value) {
-    drawer.open();
-  } else if (!val && drawer.visible.value) {
-    drawer.close();
-  }
-});
 
 function handleSelectChannel(channel: string) {
   void selectChannel(channel);

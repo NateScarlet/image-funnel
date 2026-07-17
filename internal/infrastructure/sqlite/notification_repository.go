@@ -91,7 +91,7 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 	return &NotificationRepository{db: db}, nil
 }
 
-// Close 释放数据库 resource
+// Close 释放数据库资源
 func (r *NotificationRepository) Close() error {
 	return r.db.Close()
 }
@@ -119,6 +119,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	}
 	didCreate = count == 0
 
+	// 修复冲突更新时，强制将主键 id 覆盖为传入实体的 ID 属性，防止 tag 覆盖导致前后端 ID 错乱的不一致 Bug
 	query := `
 	INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -179,10 +180,35 @@ func (r *NotificationRepository) Get(ctx context.Context, id string) (*notificat
 		return nil, fmt.Errorf("parse notification priority: %w", err)
 	}
 
+	readAt, err := parseTime(readAtStr)
+	if err != nil {
+		return nil, err
+	}
+	dismissedAt, err := parseTime(dismissedAtStr)
+	if err != nil {
+		return nil, err
+	}
+	notAfter, err := parseTime(notAfterStr)
+	if err != nil {
+		return nil, err
+	}
+	notBefore, err := parseTime(notBeforeStr)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := parseTime(createdAtStr)
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := parseTime(updatedAtStr)
+	if err != nil {
+		return nil, err
+	}
+
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
-		parseTime(readAtStr), parseTime(dismissedAtStr), parseTime(notAfterStr), parseTime(notBeforeStr),
-		parseTime(createdAtStr), parseTime(updatedAtStr),
+		readAt, dismissedAt, notAfter, notBefore,
+		createdAt, updatedAt,
 	), nil
 }
 
@@ -208,10 +234,35 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 		return nil, fmt.Errorf("parse notification priority: %w", err)
 	}
 
+	readAt, err := parseTime(readAtStr)
+	if err != nil {
+		return nil, err
+	}
+	dismissedAt, err := parseTime(dismissedAtStr)
+	if err != nil {
+		return nil, err
+	}
+	notAfter, err := parseTime(notAfterStr)
+	if err != nil {
+		return nil, err
+	}
+	notBefore, err := parseTime(notBeforeStr)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := parseTime(createdAtStr)
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := parseTime(updatedAtStr)
+	if err != nil {
+		return nil, err
+	}
+
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
-		parseTime(readAtStr), parseTime(dismissedAtStr), parseTime(notAfterStr), parseTime(notBeforeStr),
-		parseTime(createdAtStr), parseTime(updatedAtStr),
+		readAt, dismissedAt, notAfter, notBefore,
+		createdAt, updatedAt,
 	), nil
 }
 
@@ -261,10 +312,53 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 				continue
 			}
 
+			readAt, err := parseTime(readAtStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			dismissedAt, err := parseTime(dismissedAtStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			notAfter, err := parseTime(notAfterStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			notBefore, err := parseTime(notBeforeStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			createdAt, err := parseTime(createdAtStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+			updatedAt, err := parseTime(updatedAtStr)
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
 			notif := notification.FromRepository(
 				scalar.ToID(id), tag, channel, title, body, priority,
-				parseTime(readAtStr), parseTime(dismissedAtStr), parseTime(notAfterStr), parseTime(notBeforeStr),
-				parseTime(createdAtStr), parseTime(updatedAtStr),
+				readAt, dismissedAt, notAfter, notBefore,
+				createdAt, updatedAt,
 			)
 
 			if !yield(notif, nil) {
@@ -345,10 +439,53 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 					}
 					continue
 				}
+				readAt, err := parseTime(readAtStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				dismissedAt, err := parseTime(dismissedAtStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				notAfter, err := parseTime(notAfterStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				notBefore, err := parseTime(notBeforeStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				createdAt, err := parseTime(createdAtStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+				updatedAt, err := parseTime(updatedAtStr)
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
+				}
+
 				cs.LatestNotification = notification.FromRepository(
 					scalar.ToID(id), tag, channel, title, body, priority,
-					parseTime(readAtStr), parseTime(dismissedAtStr), parseTime(notAfterStr), parseTime(notBeforeStr),
-					parseTime(createdAtStr), parseTime(updatedAtStr),
+					readAt, dismissedAt, notAfter, notBefore,
+					createdAt, updatedAt,
 				)
 			}
 
@@ -360,15 +497,15 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 }
 
 // 辅助方法：时间格式转换
-func parseTime(s string) time.Time {
+func parseTime(s string) (time.Time, error) {
 	if s == "" || s == "0001-01-01T00:00:00Z" {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, fmt.Errorf("parse time string '%s': %w", s, err)
 	}
-	return t
+	return t, nil
 }
 
 func formatTime(t time.Time) string {

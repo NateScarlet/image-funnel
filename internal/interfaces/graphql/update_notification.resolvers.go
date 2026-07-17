@@ -15,11 +15,23 @@ import (
 func (r *mutationResolver) UpdateNotification(ctx context.Context, id scalar.ID, input UpdateNotificationInput) (*UpdateNotificationPayload, error) {
 	var readAt *time.Time
 	if input.ReadAt.IsSet() {
-		readAt = input.ReadAt.Value()
+		val := input.ReadAt.Value()
+		if val == nil {
+			zero := time.Time{}
+			readAt = &zero
+		} else {
+			readAt = val
+		}
 	}
 	var dismissedAt *time.Time
 	if input.DismissedAt.IsSet() {
-		dismissedAt = input.DismissedAt.Value()
+		val := input.DismissedAt.Value()
+		if val == nil {
+			zero := time.Time{}
+			dismissedAt = &zero
+		} else {
+			dismissedAt = val
+		}
 	}
 
 	dto, err := r.app.Update(ctx, id, readAt, dismissedAt)
