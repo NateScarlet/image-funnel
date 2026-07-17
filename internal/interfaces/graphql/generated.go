@@ -4104,7 +4104,7 @@ input SendNotificationInput {
   notAfter: Time
   "最早可见时间，在此之前不显示。空字符串表示立即可见"
   notBefore: Time
-  "关联的详情 URL，支持 http, https, file, open-dir 等协议"
+  "关联的详情 URL，实际支持哪些协议由网页端决定"
   detailsURL: URI
   "客户端变更标识，用于幂等"
   clientMutationId: String
@@ -24546,13 +24546,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

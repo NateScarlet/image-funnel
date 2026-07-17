@@ -309,7 +309,7 @@ type SendNotificationInput struct {
 	NotAfter *time.Time `json:"notAfter,omitempty"`
 	// 最早可见时间，在此之前不显示。空字符串表示立即可见
 	NotBefore *time.Time `json:"notBefore,omitempty"`
-	// 关联的详情 URL，支持 http, https, file, open-dir 等协议
+	// 关联的详情 URL，实际支持哪些协议由网页端决定
 	DetailsURL *scalar.URI `json:"detailsURL,omitempty"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`

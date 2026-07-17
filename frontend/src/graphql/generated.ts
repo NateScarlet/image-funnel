@@ -303,7 +303,7 @@ export type SendNotificationInput = {
   channel: Scalars["String"]["input"];
   /** 客户端变更标识，用于幂等 */
   clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
-  /** 关联的详情 URL，支持 http, https, file, open-dir 等协议 */
+  /** 关联的详情 URL，实际支持哪些协议由网页端决定 */
   detailsURL?: InputMaybe<Scalars["URI"]["input"]>;
   /** 过期时间，到达后自动删除。空字符串表示不自动过期 */
   notAfter?: InputMaybe<Scalars["Time"]["input"]>;
