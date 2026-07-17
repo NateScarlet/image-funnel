@@ -7,17 +7,17 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
 )
 
 // UnsendNotification is the resolver for the unsendNotification field.
-func (r *mutationResolver) UnsendNotification(ctx context.Context, id scalar.ID) (*UnsendNotificationPayload, error) {
-	deletedId, err := r.app.UnsendNotification(ctx, id)
+func (r *mutationResolver) UnsendNotification(ctx context.Context, input UnsendNotificationInput) (*UnsendNotificationPayload, error) {
+	deletedId, err := r.app.UnsendNotification(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &UnsendNotificationPayload{
-		DeletedID: deletedId,
+		DeletedID:        deletedId,
+		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

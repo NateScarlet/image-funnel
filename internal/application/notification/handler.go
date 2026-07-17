@@ -181,6 +181,11 @@ func (h *Handler) NotificationChannels(
 	ctx context.Context,
 	filters shared.NotificationFilters,
 ) ([]*shared.NotificationChannelDTO, error) {
+	// 有筛选条件时，遍历全量通知后聚合频道统计
+	if filters.Status != nil || filters.Priority != nil || filters.Read != nil {
+		return h.filteredNotificationChannels(ctx, filters)
+	}
+
 	var results []*shared.NotificationChannelDTO
 
 	for cs, err := range h.repo.Channels(ctx) {
@@ -193,6 +198,56 @@ func (h *Handler) NotificationChannels(
 	}
 
 	// 按频道名称字母排序返回
+	slices.SortFunc(results, func(a, b *shared.NotificationChannelDTO) int {
+		if a.Channel < b.Channel {
+			return -1
+		}
+		if a.Channel > b.Channel {
+			return 1
+		}
+		return 0
+	})
+
+	return results, nil
+}
+
+// filteredNotificationChannels 使用筛选条件过滤通知后重新聚合频道统计
+func (h *Handler) filteredNotificationChannels(ctx context.Context, filters shared.NotificationFilters) ([]*shared.NotificationChannelDTO, error) {
+	notifFilter := h.filterBuilder.Build(filters)
+
+	type channelAccum struct {
+		unreadCount int
+		latest      *domnotif.Notification
+	}
+	acc := map[string]*channelAccum{}
+
+	for item, err := range h.repo.Find(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		if !notifFilter(item) {
+			continue
+		}
+
+		ch := item.Channel()
+		a, ok := acc[ch]
+		if !ok {
+			a = &channelAccum{}
+			acc[ch] = a
+		}
+		if item.ReadAt().IsZero() {
+			a.unreadCount++
+		}
+		if a.latest == nil || item.CreatedAt().After(a.latest.CreatedAt()) {
+			a.latest = item
+		}
+	}
+
+	var results []*shared.NotificationChannelDTO
+	for ch, a := range acc {
+		results = append(results, h.dtoFactory.NewChannelWithData(ch, a.unreadCount, a.latest))
+	}
+
 	slices.SortFunc(results, func(a, b *shared.NotificationChannelDTO) int {
 		if a.Channel < b.Channel {
 			return -1

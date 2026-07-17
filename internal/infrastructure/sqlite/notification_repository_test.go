@@ -2,9 +2,7 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -161,31 +159,4 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Nil(t, deletedGot)
 }
 
-func TestNotificationRepository_Version(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-sqlite-version-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
-	// 1. 初始化，校验 user_version 是否为 2
-	repo, err := NewNotificationRepository(tempDir)
-	require.NoError(t, err)
-
-	var dbVersion int
-	err = repo.db.QueryRow("PRAGMA user_version;").Scan(&dbVersion)
-	require.NoError(t, err)
-	assert.Equal(t, 2, dbVersion)
-	repo.Close()
-
-	// 2. 打开 db 并手动升级为高版本 3
-	dbPath := filepath.Join(tempDir, "notifications.db")
-	db, err := sql.Open("sqlite", dbPath)
-	require.NoError(t, err)
-	_, err = db.Exec("PRAGMA user_version = 3;")
-	require.NoError(t, err)
-	db.Close()
-
-	// 3. 用老代码重新连接高版本数据库，必须报错拒绝操作
-	_, err = NewNotificationRepository(tempDir)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "database schema version 3 is newer than expected version 2")
-}

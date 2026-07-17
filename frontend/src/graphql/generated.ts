@@ -342,6 +342,14 @@ export type UndoTrashInput = {
   historyId: Scalars["ID"]["input"];
 };
 
+/** 撤回通知的输入参数 */
+export type UnsendNotificationInput = {
+  /** 客户端变更标识，用于幂等 */
+  clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
+  /** 通知 ID */
+  id: Scalars["ID"]["input"];
+};
+
 export type UpdateImageMetadataInput = {
   /** 图片ID */
   id: Scalars["ID"]["input"];
@@ -368,6 +376,8 @@ export type UpdateNotificationInput = {
   clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
   /** 关闭时间。传 null 表示撤销关闭，不传表示不修改 */
   dismissedAt?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 通知 ID */
+  id: Scalars["ID"]["input"];
   /** 标记已读时间。传 null 表示重置为未读，不传表示不修改 */
   readAt?: InputMaybe<Scalars["Time"]["input"]>;
 };
@@ -1318,7 +1328,6 @@ export type UpdateNoteMutation = {
 };
 
 export type UpdateNotificationMutationVariables = Exact<{
-  id: Scalars["ID"]["input"];
   input: UpdateNotificationInput;
 }>;
 
@@ -1326,6 +1335,7 @@ export type UpdateNotificationMutation = {
   __typename: "Mutation";
   updateNotification: {
     __typename: "UpdateNotificationPayload";
+    clientMutationId: string | null;
     notification: {
       __typename: "Notification";
       id: string;
@@ -5473,14 +5483,6 @@ export const UpdateNotificationDocument = {
       variableDefinitions: [
         {
           kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-        {
-          kind: "VariableDefinition",
           variable: { kind: "Variable", name: { kind: "Name", value: "input" } },
           type: {
             kind: "NonNullType",
@@ -5495,11 +5497,6 @@ export const UpdateNotificationDocument = {
             kind: "Field",
             name: { kind: "Name", value: "updateNotification" },
             arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
-              },
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "input" },
@@ -5519,6 +5516,7 @@ export const UpdateNotificationDocument = {
                     ],
                   },
                 },
+                { kind: "Field", name: { kind: "Name", value: "clientMutationId" } },
               ],
             },
           },

@@ -1,3 +1,11 @@
+"撤回通知的输入参数"
+input UnsendNotificationInput {
+  "通知 ID"
+  id: ID!
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
 type UnsendNotificationPayload {
   "被撤回的通知 ID"
   deletedId: ID!
@@ -9,5 +17,5 @@ extend type Mutation {
   """
   撤回（删除）指定通知。通知被删除后不可恢复。
   """
-  unsendNotification(id: ID!): UnsendNotificationPayload!
+  unsendNotification(input: UnsendNotificationInput!): UnsendNotificationPayload!
 }

@@ -378,6 +378,14 @@ type UndoTrashInput struct {
 	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
+// 撤回通知的输入参数
+type UnsendNotificationInput struct {
+	// 通知 ID
+	ID scalar.ID `json:"id"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 type UnsendNotificationPayload struct {
 	// 被撤回的通知 ID
 	DeletedID scalar.ID `json:"deletedId"`
@@ -413,6 +421,8 @@ type UpdateImagesMetadataPayload struct {
 
 // 更新通知元数据的输入参数，所有字段可选
 type UpdateNotificationInput struct {
+	// 通知 ID
+	ID scalar.ID `json:"id"`
 	// 标记已读时间。传 null 表示重置为未读，不传表示不修改
 	ReadAt graphql.Omittable[*time.Time] `json:"readAt,omitempty"`
 	// 关闭时间。传 null 表示撤销关闭，不传表示不修改

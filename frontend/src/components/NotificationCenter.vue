@@ -11,7 +11,6 @@ const {
   drawer,
   selectChannel,
   markAsDismissed,
-  markAllAsRead,
 } = useNotificationCenter();
 
 function handleSelectChannel(channel: string) {
@@ -20,12 +19,6 @@ function handleSelectChannel(channel: string) {
 
 function handleBack() {
   selectedChannel.value = null;
-}
-
-function handleMarkAllAsRead() {
-  if (selectedChannel.value) {
-    void markAllAsRead(selectedChannel.value);
-  }
 }
 
 function handleDismiss(id: string) {
@@ -61,14 +54,6 @@ function handleDismiss(id: string) {
           </h2>
         </div>
         <div class="flex items-center gap-2">
-          <!-- Mark all read in channel detail -->
-          <button
-            v-if="selectedChannel && selectedChannelUnreadCount > 0"
-            class="text-xs text-primary-400 hover:text-primary-200 transition-colors cursor-pointer"
-            @click="handleMarkAllAsRead"
-          >
-            全部已读
-          </button>
           <span class="text-xs text-primary-500">
             {{ selectedChannel ? `${selectedChannelUnreadCount} 条未读` : `${unreadCount} 条未读` }}
           </span>

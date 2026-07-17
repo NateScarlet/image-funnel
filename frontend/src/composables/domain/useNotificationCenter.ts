@@ -52,6 +52,19 @@ const init = once(() => {
     return channels.value.find((ch) => ch.channel === selectedChannel.value)?.unreadCount ?? 0;
   });
 
+  // 按优先级投递 Toast
+  function spawnToast(n: { id: string; title: string; priority: NotificationPriority }) {
+    if (shownToastIds.has(n.id)) return;
+    shownToastIds.add(n.id);
+    if (n.priority === NotificationPriority.HIGH) {
+      showToast(n.title, "info", 0);
+    } else if (n.priority === NotificationPriority.NORMAL) {
+      showToast(n.title, "info", 5000);
+    } else if (n.priority === NotificationPriority.LOW) {
+      showToast(n.title, "info", 3000);
+    }
+  }
+
   // 监听实时通知变更订阅，随时刷新会话列表，并呈现对应的 Toast
   useSubscription(NotificationChangedDocument, {
     onNext(res) {
@@ -60,21 +73,9 @@ const init = once(() => {
         void refreshSelectedChannel();
       }
 
-      // 实现 Priority 投递 Toast 提示逻辑
       const eventPayload = res.data?.notificationChanged;
       if (eventPayload?.event === NotificationEventType.SENT && eventPayload.notification) {
-        const n = eventPayload.notification;
-        if (!shownToastIds.has(n.id)) {
-          shownToastIds.add(n.id);
-          // HIGH = 手动关闭 (duration = 0)
-          // NORMAL = 自动消失 (duration = 5000ms)
-          // LOW = 静默不弹
-          if (n.priority === NotificationPriority.HIGH) {
-            showToast(n.title, "info", 0);
-          } else if (n.priority === NotificationPriority.NORMAL) {
-            showToast(n.title, "info", 5000);
-          }
-        }
+        spawnToast(eventPayload.notification);
       }
     },
   });
@@ -97,13 +98,8 @@ const init = once(() => {
         });
         const nodes = data?.notifications?.nodes ?? [];
         for (const n of nodes) {
-          if (!n.readAt && n.status === NotificationStatus.ACTIVE && !shownToastIds.has(n.id)) {
-            shownToastIds.add(n.id);
-            if (n.priority === NotificationPriority.HIGH) {
-              showToast(n.title, "info", 0);
-            } else if (n.priority === NotificationPriority.NORMAL) {
-              showToast(n.title, "info", 5000);
-            }
+          if (!n.readAt && n.status === NotificationStatus.ACTIVE) {
+            spawnToast(n);
           }
         }
       }
@@ -130,7 +126,7 @@ const init = once(() => {
 
   async function markAsRead(id: string) {
     await mutate(UpdateNotificationDocument, {
-      variables: { id, input: { readAt: new Date().toISOString() } },
+      variables: { input: { id, readAt: new Date().toISOString() } },
     });
   }
 
@@ -145,7 +141,7 @@ const init = once(() => {
 
   async function markAsDismissed(id: string) {
     await mutate(UpdateNotificationDocument, {
-      variables: { id, input: { dismissedAt: new Date().toISOString() } },
+      variables: { input: { id, dismissedAt: new Date().toISOString() } },
     });
     await refreshSelectedChannel();
   }

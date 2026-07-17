@@ -296,11 +296,11 @@ type ComplexityRoot struct {
 		TrashImages                func(childComplexity int, input TrashImagesInput) int
 		Undo                       func(childComplexity int, input UndoInput) int
 		UndoTrash                  func(childComplexity int, input UndoTrashInput) int
-		UnsendNotification         func(childComplexity int, id scalar.ID) int
+		UnsendNotification         func(childComplexity int, input UnsendNotificationInput) int
 		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
 		UpdateImagesMetadata       func(childComplexity int, input UpdateImagesMetadataInput) int
 		UpdateNote                 func(childComplexity int, id scalar.ID, content string) int
-		UpdateNotification         func(childComplexity int, id scalar.ID, input UpdateNotificationInput) int
+		UpdateNotification         func(childComplexity int, input UpdateNotificationInput) int
 		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
 	}
 
@@ -577,11 +577,11 @@ type MutationResolver interface {
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
-	UnsendNotification(ctx context.Context, id scalar.ID) (*UnsendNotificationPayload, error)
+	UnsendNotification(ctx context.Context, input UnsendNotificationInput) (*UnsendNotificationPayload, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateImagesMetadata(ctx context.Context, input UpdateImagesMetadataInput) (*UpdateImagesMetadataPayload, error)
 	UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error)
-	UpdateNotification(ctx context.Context, id scalar.ID, input UpdateNotificationInput) (*UpdateNotificationPayload, error)
+	UpdateNotification(ctx context.Context, input UpdateNotificationInput) (*UpdateNotificationPayload, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
 type NoteResolver interface {
@@ -1660,7 +1660,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UnsendNotification(childComplexity, args["id"].(scalar.ID)), true
+		return e.complexity.Mutation.UnsendNotification(childComplexity, args["input"].(UnsendNotificationInput)), true
 	case "Mutation.updateImageMetadata":
 		if e.complexity.Mutation.UpdateImageMetadata == nil {
 			break
@@ -1704,7 +1704,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateNotification(childComplexity, args["id"].(scalar.ID), args["input"].(UpdateNotificationInput)), true
+		return e.complexity.Mutation.UpdateNotification(childComplexity, args["input"].(UpdateNotificationInput)), true
 	case "Mutation.updateSession":
 		if e.complexity.Mutation.UpdateSession == nil {
 			break
@@ -2697,6 +2697,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputTrashImagesInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUndoTrashInput,
+		ec.unmarshalInputUnsendNotificationInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateImagesMetadataInput,
 		ec.unmarshalInputUpdateNotificationInput,
@@ -4160,7 +4161,15 @@ extend type Mutation {
   undoTrash(input: UndoTrashInput!): UndoTrashPayload!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/unsend_notification.graphql", Input: `type UnsendNotificationPayload {
+	{Name: "../../../graph/mutations/unsend_notification.graphql", Input: `"撤回通知的输入参数"
+input UnsendNotificationInput {
+  "通知 ID"
+  id: ID!
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+type UnsendNotificationPayload {
   "被撤回的通知 ID"
   deletedId: ID!
   "客户端变更标识，用于幂等"
@@ -4171,7 +4180,7 @@ extend type Mutation {
   """
   撤回（删除）指定通知。通知被删除后不可恢复。
   """
-  unsendNotification(id: ID!): UnsendNotificationPayload!
+  unsendNotification(input: UnsendNotificationInput!): UnsendNotificationPayload!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `extend type Mutation {
@@ -4220,6 +4229,8 @@ extend type Mutation {
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_notification.graphql", Input: `"更新通知元数据的输入参数，所有字段可选"
 input UpdateNotificationInput {
+  "通知 ID"
+  id: ID!
   "标记已读时间。传 null 表示重置为未读，不传表示不修改"
   readAt: Time @goField(omittable: true)
   "关闭时间。传 null 表示撤销关闭，不传表示不修改"
@@ -4239,7 +4250,7 @@ extend type Mutation {
   """
   更新通知的元数据（已读时间、关闭时间）。内容变更请使用 sendNotification 同 tag 重新发送。
   """
-  updateNotification(id: ID!, input: UpdateNotificationInput!): UpdateNotificationPayload!
+  updateNotification(input: UpdateNotificationInput!): UpdateNotificationPayload!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_session.graphql", Input: `"更新会话配置（目标保留数量、筛选条件）"
@@ -4596,11 +4607,11 @@ func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArg
 func (ec *executionContext) field_Mutation_unsendNotification_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUnsendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationInput)
 	if err != nil {
 		return nil, err
 	}
-	args["id"] = arg0
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -4645,16 +4656,11 @@ func (ec *executionContext) field_Mutation_updateNote_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_updateNotification_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationInput)
 	if err != nil {
 		return nil, err
 	}
-	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationInput)
-	if err != nil {
-		return nil, err
-	}
-	args["input"] = arg1
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -10103,7 +10109,7 @@ func (ec *executionContext) _Mutation_unsendNotification(ctx context.Context, fi
 		ec.fieldContext_Mutation_unsendNotification,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UnsendNotification(ctx, fc.Args["id"].(scalar.ID))
+			return ec.resolvers.Mutation().UnsendNotification(ctx, fc.Args["input"].(UnsendNotificationInput))
 		},
 		nil,
 		ec.marshalNUnsendNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationPayload,
@@ -10323,7 +10329,7 @@ func (ec *executionContext) _Mutation_updateNotification(ctx context.Context, fi
 		ec.fieldContext_Mutation_updateNotification,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateNotification(ctx, fc.Args["id"].(scalar.ID), fc.Args["input"].(UpdateNotificationInput))
+			return ec.resolvers.Mutation().UpdateNotification(ctx, fc.Args["input"].(UpdateNotificationInput))
 		},
 		nil,
 		ec.marshalNUpdateNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationPayload,
@@ -18468,6 +18474,40 @@ func (ec *executionContext) unmarshalInputUndoTrashInput(ctx context.Context, ob
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUnsendNotificationInput(ctx context.Context, obj any) (UnsendNotificationInput, error) {
+	var it UnsendNotificationInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateImageMetadataInput(ctx context.Context, obj any) (UpdateImageMetadataInput, error) {
 	var it UpdateImageMetadataInput
 	asMap := map[string]any{}
@@ -18564,13 +18604,20 @@ func (ec *executionContext) unmarshalInputUpdateNotificationInput(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"readAt", "dismissedAt", "clientMutationId"}
+	fieldsInOrder := [...]string{"id", "readAt", "dismissedAt", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
 		case "readAt":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("readAt"))
 			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
@@ -25132,6 +25179,11 @@ func (ec *executionContext) marshalNUndoTrashPayload2ᚖmainᚋinternalᚋshared
 		return graphql.Null
 	}
 	return ec._UndoTrashPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUnsendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationInput(ctx context.Context, v any) (UnsendNotificationInput, error) {
+	res, err := ec.unmarshalInputUnsendNotificationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNUnsendNotificationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationPayload(ctx context.Context, sel ast.SelectionSet, v UnsendNotificationPayload) graphql.Marshaler {
