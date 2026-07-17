@@ -3326,10 +3326,8 @@ input NotificationFiltersInput {
   priority: NotificationPriority
   "按已读状态筛选（true=已读，false=未读）"
   read: Boolean
-  "可见起始时间过滤：只返回 notBefore <= 该值的通知（不传则不过滤）"
-  notBefore: Time
-  "可见截止时间过滤：只返回 notAfter >= 该值的通知（不传则不过滤）"
-  notAfter: Time
+  "可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间"
+  visibleAt: Time
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
@@ -18109,7 +18107,7 @@ func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"status", "priority", "read", "notBefore", "notAfter"}
+	fieldsInOrder := [...]string{"status", "priority", "read", "visibleAt"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18137,20 +18135,13 @@ func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.C
 				return it, err
 			}
 			it.Read = data
-		case "notBefore":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notBefore"))
+		case "visibleAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("visibleAt"))
 			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.NotBefore = data
-		case "notAfter":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notAfter"))
-			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.NotAfter = data
+			it.VisibleAt = data
 		}
 	}
 

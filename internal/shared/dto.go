@@ -308,8 +308,7 @@ type NotificationFilters struct {
 	Status    *NotificationStatus   `json:"status,omitempty"`
 	Priority  *NotificationPriority `json:"priority,omitempty"`
 	Read      *bool                 `json:"read,omitempty"`
-	NotBefore *time.Time            `json:"notBefore,omitempty"`
-	NotAfter  *time.Time            `json:"notAfter,omitempty"`
+	VisibleAt *time.Time            `json:"visibleAt,omitempty"`
 }
 
 type NotificationConnectionDTO struct {

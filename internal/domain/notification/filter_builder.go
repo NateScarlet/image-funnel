@@ -36,14 +36,12 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 		b.Add(func(n *Notification) bool { return !n.readAt.IsZero() == r })
 	}
 
-	if v := filters.NotBefore; v != nil {
+	if v := filters.VisibleAt; v != nil {
 		t := *v
-		b.Add(func(n *Notification) bool { return n.notBefore.IsZero() || !n.notBefore.After(t) })
-	}
-
-	if v := filters.NotAfter; v != nil {
-		t := *v
-		b.Add(func(n *Notification) bool { return n.notAfter.IsZero() || !n.notAfter.Before(t) })
+		b.Add(func(n *Notification) bool {
+			return (n.notBefore.IsZero() || !n.notBefore.After(t)) &&
+				(n.notAfter.IsZero() || !n.notAfter.Before(t))
+		})
 	}
 
 	return b.Build()

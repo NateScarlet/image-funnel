@@ -17,6 +17,7 @@ func (r *queryResolver) NotificationChannels(ctx context.Context, filterBy *Noti
 		f.Status = filterBy.Status
 		f.Priority = filterBy.Priority
 		f.Read = filterBy.Read
+		f.VisibleAt = filterBy.VisibleAt
 	}
 
 	return r.app.NotificationChannels(ctx, f)

@@ -189,7 +189,7 @@ func (h *Handler) NotificationChannels(
 	filters shared.NotificationFilters,
 ) ([]*shared.NotificationChannelDTO, error) {
 	// 有筛选条件时，遍历全量通知后聚合频道统计
-	if filters.Status != nil || filters.Priority != nil || filters.Read != nil {
+	if filters.Status != nil || filters.Priority != nil || filters.Read != nil || filters.VisibleAt != nil {
 		return h.filteredNotificationChannels(ctx, filters)
 	}
 

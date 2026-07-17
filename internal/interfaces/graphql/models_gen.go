@@ -268,10 +268,8 @@ type NotificationFiltersInput struct {
 	Priority *enum.Enum[shared.NotificationPriorityMeta] `json:"priority,omitempty"`
 	// 按已读状态筛选（true=已读，false=未读）
 	Read *bool `json:"read,omitempty"`
-	// 可见起始时间过滤：只返回 notBefore <= 该值的通知（不传则不过滤）
-	NotBefore *time.Time `json:"notBefore,omitempty"`
-	// 可见截止时间过滤：只返回 notAfter >= 该值的通知（不传则不过滤）
-	NotAfter *time.Time `json:"notAfter,omitempty"`
+	// 可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间
+	VisibleAt *time.Time `json:"visibleAt,omitempty"`
 }
 
 type Query struct {

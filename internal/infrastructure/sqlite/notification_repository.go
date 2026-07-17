@@ -208,13 +208,12 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			query += " AND priority = ?"
 			args = append(args, filter.Priority.String())
 		}
-		if filter.NotAfter != nil {
-			query += " AND (not_after IS NULL OR not_after = '' OR not_after = '0001-01-01T00:00:00Z' OR not_after <= ?)"
-			args = append(args, filter.NotAfter.Format(time.RFC3339Nano))
-		}
-		if filter.NotBefore != nil {
-			query += " AND (not_before IS NULL OR not_before = '' OR not_before = '0001-01-01T00:00:00Z' OR not_before >= ?)"
-			args = append(args, filter.NotBefore.Format(time.RFC3339Nano))
+		if filter.VisibleAt != nil {
+			t := filter.VisibleAt.Format(time.RFC3339Nano)
+			query += " AND (not_before IS NULL OR not_before = '' OR not_before = '0001-01-01T00:00:00Z' OR not_before <= ?)"
+			args = append(args, t)
+			query += " AND (not_after IS NULL OR not_after = '' OR not_after = '0001-01-01T00:00:00Z' OR not_after >= ?)"
+			args = append(args, t)
 		}
 
 		query += " ORDER BY created_at DESC, id DESC"
