@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"fmt"
 	"time"
 
 	"main/internal/scalar"
@@ -50,20 +51,27 @@ func (n *Notification) Status() shared.NotificationStatus {
 }
 
 // Update 更新通知内容
-func (n *Notification) Update(
-	title, body string,
-	priority shared.NotificationPriority,
-	notAfter, notBefore time.Time,
-	detailsURL scalar.URI,
-	at time.Time,
-) {
-	n.title = title
-	n.body = body
-	n.priority = priority
-	n.notAfter = notAfter
-	n.notBefore = notBefore
-	n.detailsURL = detailsURL
-	n.updatedAt = at
+func (n *Notification) Update(opts ...shared.UpdateNotificationOption) {
+	o := shared.NewUpdateNotificationOptions(opts...)
+	if o.Title != "" {
+		n.title = o.Title
+	}
+	if o.Body != "" {
+		n.body = o.Body
+	}
+	if !o.Priority.IsZero() {
+		n.priority = o.Priority
+	}
+	if !o.NotAfter.IsZero() {
+		n.notAfter = o.NotAfter
+	}
+	if !o.NotBefore.IsZero() {
+		n.notBefore = o.NotBefore
+	}
+	if !o.DetailsURL.IsZero() {
+		n.detailsURL = o.DetailsURL
+	}
+	n.updatedAt = o.UpdatedAt
 }
 
 // MarkRead 标记已读
@@ -119,23 +127,47 @@ func FromRepository(
 // Factory 负责创建新的 Notification 实例
 type Factory struct{}
 
-// New 创建新通知，ID 基于 tag 生成
+// New 创建新通知，负责校验和默认值
 func (f *Factory) New(
 	tag string,
 	channel string,
 	title string,
 	body string,
 	priority shared.NotificationPriority,
-	notAfter time.Time,
-	notBefore time.Time,
-	detailsURL scalar.URI,
-) *Notification {
+	opts ...shared.SendNotificationOption,
+) (*Notification, error) {
+	// 校验：tag 必须是 UUID，避免无意冲突
+	if _, err := uuid.Parse(tag); err != nil {
+		return nil, fmt.Errorf("tag must be a valid UUID: %w", err)
+	}
+	// 校验：title 必填
+	if title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	// 优先级默认普通
+	if priority.IsZero() {
+		priority = shared.NotificationPriorityNormal
+	}
+
+	options := shared.NewSendNotificationOptions(opts...)
+
 	now := time.Now()
+	// notBefore 默认当前时间
+	notBefore := options.NotBefore
+	if notBefore.IsZero() {
+		notBefore = now
+	}
+	// notAfter 默认 notBefore + 7 天
+	notAfter := options.NotAfter
+	if notAfter.IsZero() {
+		notAfter = notBefore.Add(7 * 24 * time.Hour)
+	}
+
 	// ID 基于 tag 生成，确保同 tag 的 ID 稳定
-	id := scalar.ToID("notif:" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(tag)).String())
+	id := scalar.ToID("notify:" + tag)
 	return FromRepository(
 		id, tag, channel, title, body, priority,
 		time.Time{}, time.Time{}, notAfter, notBefore,
-		now, now, detailsURL,
-	)
+		now, now, options.DetailsURL,
+	), nil
 }

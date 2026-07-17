@@ -2,14 +2,11 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"main/internal/apperror"
 	"main/internal/scalar"
 	"main/internal/shared"
-
-	"github.com/google/uuid"
 )
 
 // Service 协调通知领域的业务规则
@@ -25,18 +22,6 @@ func NewService(repo Repository) *Service {
 
 // #region SendNotification
 
-// SendNotificationInput 发送通知的输入参数
-type SendNotificationInput struct {
-	Tag        string
-	Channel    string
-	Title      string
-	Body       string
-	Priority   shared.NotificationPriority
-	NotAfter   time.Time
-	NotBefore  time.Time
-	DetailsURL scalar.URI
-}
-
 // SendNotificationResult 发送通知的结果
 type SendNotificationResult struct {
 	Notification *Notification
@@ -44,29 +29,16 @@ type SendNotificationResult struct {
 }
 
 // SendNotification 发送或覆盖通知
-func (s *Service) SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationResult, error) {
-	// 校验：tag 必须是 UUID
-	if _, err := uuid.Parse(input.Tag); err != nil {
-		return nil, fmt.Errorf("tag must be a valid UUID: %w", err)
-	}
-	// 校验：title 必填
-	if input.Title == "" {
-		return nil, fmt.Errorf("title is required")
-	}
-	// 优先级默认普通
-	if input.Priority.IsZero() {
-		input.Priority = shared.NotificationPriorityNormal
-	}
-	// notBefore 默认现在
-	if input.NotBefore.IsZero() {
-		input.NotBefore = time.Now()
-	}
-	// notAfter 默认一周后
-	if input.NotAfter.IsZero() {
-		input.NotAfter = time.Now().Add(7 * 24 * time.Hour)
-	}
-
-	existing, err := s.repo.GetByTag(ctx, input.Tag)
+func (s *Service) SendNotification(
+	ctx context.Context,
+	tag string,
+	channel string,
+	title string,
+	body string,
+	priority shared.NotificationPriority,
+	opts ...shared.SendNotificationOption,
+) (*SendNotificationResult, error) {
+	existing, err := s.repo.GetByTag(ctx, tag)
 	if err != nil {
 		return nil, err
 	}
@@ -74,17 +46,30 @@ func (s *Service) SendNotification(ctx context.Context, input SendNotificationIn
 	var notif *Notification
 
 	if existing != nil {
-		if existing.Channel() != input.Channel {
+		if existing.Channel() != channel {
 			return nil, apperror.New(
 				"CHANNEL_CONFLICT",
-				"notification with tag "+input.Tag+" already exists in channel "+existing.Channel(),
-				"标签 "+input.Tag+" 已存在于频道 "+existing.Channel()+" 中",
+				"notification with tag "+tag+" already exists in channel "+existing.Channel(),
+				"标签 "+tag+" 已存在于频道 "+existing.Channel()+" 中",
 			)
 		}
-		existing.Update(input.Title, input.Body, input.Priority, input.NotAfter, input.NotBefore, input.DetailsURL, time.Now())
+		now := time.Now()
+		options := shared.NewSendNotificationOptions(opts...)
+		existing.Update(
+			shared.WithUpdateTitle(title),
+			shared.WithUpdateBody(body),
+			shared.WithUpdatePriority(priority),
+			shared.WithUpdateNotAfter(options.NotAfter),
+			shared.WithUpdateNotBefore(options.NotBefore),
+			shared.WithUpdateDetailsURL(options.DetailsURL),
+			shared.WithUpdateTime(now),
+		)
 		notif = existing
 	} else {
-		notif = s.factory.New(input.Tag, input.Channel, input.Title, input.Body, input.Priority, input.NotAfter, input.NotBefore, input.DetailsURL)
+		notif, err = s.factory.New(tag, channel, title, body, priority, opts...)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	actualDidCreate, err := s.repo.Save(ctx, notif)

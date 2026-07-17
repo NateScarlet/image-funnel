@@ -17,35 +17,23 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 	var b util.FilterBuilder[*Notification]
 
 	if len(filters.Channel) > 0 {
-		chSet := make(map[string]struct{}, len(filters.Channel))
-		for _, ch := range filters.Channel {
-			chSet[ch] = struct{}{}
-		}
+		chSet := util.AddToSet[string](nil, filters.Channel...)
 		b.Add(func(n *Notification) bool {
-			_, ok := chSet[n.Channel()]
-			return ok
+			return chSet.Has(n.Channel())
 		})
 	}
 
 	if len(filters.Status) > 0 {
-		stSet := make(map[shared.NotificationStatus]struct{}, len(filters.Status))
-		for _, st := range filters.Status {
-			stSet[st] = struct{}{}
-		}
+		stSet := util.AddToSet[shared.NotificationStatus](nil, filters.Status...)
 		b.Add(func(n *Notification) bool {
-			_, ok := stSet[n.Status()]
-			return ok
+			return stSet.Has(n.Status())
 		})
 	}
 
 	if len(filters.Priority) > 0 {
-		pSet := make(map[shared.NotificationPriority]struct{}, len(filters.Priority))
-		for _, p := range filters.Priority {
-			pSet[p] = struct{}{}
-		}
+		pSet := util.AddToSet[shared.NotificationPriority](nil, filters.Priority...)
 		b.Add(func(n *Notification) bool {
-			_, ok := pSet[n.Priority()]
-			return ok
+			return pSet.Has(n.Priority())
 		})
 	}
 
@@ -57,12 +45,7 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 	if v := filters.VisibleAt; v != nil {
 		t := *v
 		b.Add(func(n *Notification) bool {
-			// notBefore 默认是创建时间，所以不应为零值
-			notBefore := n.NotBefore()
-			if notBefore.IsZero() {
-				notBefore = n.CreatedAt()
-			}
-			return !notBefore.After(t) &&
+			return !n.NotBefore().After(t) &&
 				(n.NotAfter().IsZero() || !n.NotAfter().Before(t))
 		})
 	}
