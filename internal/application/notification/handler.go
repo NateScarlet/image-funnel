@@ -307,7 +307,53 @@ func (h *Handler) Notifications(
 	return buf.Value()
 }
 
-// SubscribeNotificationChanged 订阅通知全局实时流
+// SubscribeNotificationChanged 订阅通知全局实时流，并在首次建立订阅时重发每个频道最新一条未读通知（低优先级不补发）
 func (h *Handler) SubscribeNotificationChanged(ctx context.Context) iter.Seq2[*shared.NotificationChangedEventDTO, error] {
-	return h.topic.Subscribe(ctx)
+	var replayList []*shared.NotificationChangedEventDTO
+
+	for cs, err := range h.repo.Channels(ctx) {
+		if err != nil {
+			continue
+		}
+
+		var latestUnread *domnotif.Notification
+		for n, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: &cs.Channel})) {
+			if err != nil {
+				break
+			}
+			if n.ReadAt().IsZero() {
+				latestUnread = n
+				break
+			}
+		}
+
+		if latestUnread != nil {
+			// 仅重发非低优先级的未读通知 (LOW 优先级不补发)
+			if latestUnread.Priority() != shared.NotificationPriorityLow {
+				dto := h.dtoFactory.New(latestUnread)
+				replayList = append(replayList, &shared.NotificationChangedEventDTO{
+					Event:        shared.NotificationEventTypeSent, // 模拟 SENT 事件以触发展示和 Toast 唤醒
+					Notification: dto,
+				})
+			}
+		}
+	}
+
+	subSeq := h.topic.Subscribe(ctx)
+
+	return func(yield func(*shared.NotificationChangedEventDTO, error) bool) {
+		// 1. 先补发未读通知事件
+		for _, event := range replayList {
+			if !yield(event, nil) {
+				return
+			}
+		}
+
+		// 2. 然后推送实时的通知事件
+		for event, err := range subSeq {
+			if !yield(event, err) {
+				return
+			}
+		}
+	}
 }
