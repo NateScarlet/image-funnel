@@ -1,6 +1,7 @@
 type UnsendNotificationPayload {
   "被撤回的通知 ID"
   deletedId: ID!
+  "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 

@@ -3257,14 +3257,19 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
 
 type NotificationConnection
   @goModel(model: "main/internal/shared.NotificationConnectionDTO") {
+  "通知连接边列表"
   edges: [NotificationEdge!]!
+  "通知节点列表"
   nodes: [Notification!]!
+  "分页信息"
   pageInfo: PageInfo!
 }
 
 type NotificationEdge
   @goModel(model: "main/internal/shared.NotificationEdgeDTO") {
+  "当前边指向的通知节点"
   node: Notification!
+  "用于游标分页的唯一标识符"
   cursor: String!
 }
 `, BuiltIn: false},
@@ -4064,6 +4069,7 @@ type SendNotificationPayload {
   notification: Notification!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
+  "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 
@@ -4144,6 +4150,7 @@ extend type Mutation {
 	{Name: "../../../graph/mutations/unsend_notification.graphql", Input: `type UnsendNotificationPayload {
   "被撤回的通知 ID"
   deletedId: ID!
+  "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 
@@ -4209,7 +4216,9 @@ input UpdateNotificationInput {
 }
 
 type UpdateNotificationPayload {
+  "更新后的通知对象"
   notification: Notification!
+  "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 
@@ -24009,13 +24018,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

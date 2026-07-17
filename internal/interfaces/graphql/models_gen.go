@@ -327,7 +327,8 @@ type SendNotificationPayload struct {
 	// 发送后的通知对象
 	Notification *shared.NotificationDTO `json:"notification"`
 	// 是否本次操作为新建通知（false 表示同 tag 更新已有通知）
-	DidCreate        bool    `json:"didCreate"`
+	DidCreate bool `json:"didCreate"`
+	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
@@ -377,8 +378,9 @@ type UndoTrashInput struct {
 
 type UnsendNotificationPayload struct {
 	// 被撤回的通知 ID
-	DeletedID        scalar.ID `json:"deletedId"`
-	ClientMutationID *string   `json:"clientMutationId,omitempty"`
+	DeletedID scalar.ID `json:"deletedId"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type UpdateImageMetadataInput struct {
@@ -418,8 +420,10 @@ type UpdateNotificationInput struct {
 }
 
 type UpdateNotificationPayload struct {
-	Notification     *shared.NotificationDTO `json:"notification"`
-	ClientMutationID *string                 `json:"clientMutationId,omitempty"`
+	// 更新后的通知对象
+	Notification *shared.NotificationDTO `json:"notification"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 更新会话配置（目标保留数量、筛选条件）

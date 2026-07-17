@@ -9,7 +9,9 @@ input UpdateNotificationInput {
 }
 
 type UpdateNotificationPayload {
+  "更新后的通知对象"
   notification: Notification!
+  "客户端变更标识，用于幂等"
   clientMutationId: String
 }
 

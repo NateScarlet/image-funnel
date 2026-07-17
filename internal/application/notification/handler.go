@@ -118,17 +118,17 @@ func (h *Handler) UpdateNotification(
 
 	if readAt != nil {
 		if readAt.IsZero() {
-			notif.MarkRead(time.Time{})
+			notif.MarkRead(time.Time{}, time.Now())
 		} else {
-			notif.MarkRead(*readAt)
+			notif.MarkRead(*readAt, time.Now())
 		}
 	}
 
 	if dismissedAt != nil {
 		if dismissedAt.IsZero() {
-			notif.Dismiss(time.Time{})
+			notif.Dismiss(time.Time{}, time.Now())
 		} else {
-			notif.Dismiss(*dismissedAt)
+			notif.Dismiss(*dismissedAt, time.Now())
 		}
 	}
 

@@ -63,18 +63,22 @@ func (n *Notification) Update(title, body string, priority shared.NotificationPr
 }
 
 // MarkRead 标记已读
-func (n *Notification) MarkRead(at time.Time) {
+func (n *Notification) MarkRead(at time.Time, now time.Time) {
 	n.readAt = at
-	n.updatedAt = at
+	n.updatedAt = now
 }
 
 // Dismiss 关闭通知
-func (n *Notification) Dismiss(at time.Time) {
+func (n *Notification) Dismiss(at time.Time, now time.Time) {
 	n.dismissedAt = at
-	if n.readAt.IsZero() {
-		n.readAt = at
+	if at.IsZero() {
+		// 撤销关闭
+	} else {
+		if n.readAt.IsZero() {
+			n.readAt = at
+		}
 	}
-	n.updatedAt = at
+	n.updatedAt = now
 }
 
 // FromRepository 供持久层加载领域对象使用

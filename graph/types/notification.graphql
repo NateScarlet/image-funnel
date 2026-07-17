@@ -58,13 +58,18 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
 
 type NotificationConnection
   @goModel(model: "main/internal/shared.NotificationConnectionDTO") {
+  "通知连接边列表"
   edges: [NotificationEdge!]!
+  "通知节点列表"
   nodes: [Notification!]!
+  "分页信息"
   pageInfo: PageInfo!
 }
 
 type NotificationEdge
   @goModel(model: "main/internal/shared.NotificationEdgeDTO") {
+  "当前边指向的通知节点"
   node: Notification!
+  "用于游标分页的唯一标识符"
   cursor: String!
 }
