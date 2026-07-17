@@ -86,9 +86,6 @@ func (r *NotificationRepository) Close() error {
 	return r.db.Close()
 }
 
-// 清理过期通知的 SQL（在写事务内执行，不单独占用连接）
-const deleteExpiredSQL = `DELETE FROM notifications WHERE not_after IS NOT NULL AND not_after != '' AND not_after != '0001-01-01T00:00:00Z' AND not_after < ?`
-
 // Save 保存通知（新建或更新），返回是否为新建通知
 // 若 notif.IsDeleted() 为 true，则执行物理删除
 func (r *NotificationRepository) Save(ctx context.Context, notif *notification.Notification) (didCreate bool, err error) {
@@ -146,10 +143,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 		}
 	}
 
-	// 在同一个事务内顺手清理过期通知，避免额外占用 SQLite 连接
-	_, _ = tx.ExecContext(ctx, deleteExpiredSQL, time.Now().Format(time.RFC3339Nano))
-
-	// 刷新该频道物化视图（单查询避免 Channels 的 N+1）
+	// 刷新该频道物化视图（写时维护，避免 Channels 的 N+1）
 	r.refreshChannelSummary(ctx, tx, notif.Channel())
 
 	if err := tx.Commit(); err != nil {
@@ -273,35 +267,23 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 	}
 }
 
-// refreshChannelSummary 在写事务内刷新频道的物化视图
+// refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
 func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) {
-	nowStr := time.Now().Format(time.RFC3339Nano)
-
-	// 删除无可见通知的频道摘要
+	// 删除已空频道（该频道所有通知已被物理删除）
 	_, _ = tx.ExecContext(ctx, `
-		DELETE FROM channel_summary WHERE channel = ? AND NOT EXISTS (
-			SELECT 1 FROM notifications n WHERE n.channel = ?
-			  AND (n.not_after IS NULL OR n.not_after = '' OR n.not_after = '0001-01-01T00:00:00Z' OR n.not_after > ?)
-			  AND (n.not_before IS NULL OR n.not_before = '' OR n.not_before = '0001-01-01T00:00:00Z' OR n.not_before <= ?)
-		)
-	`, channel, channel, nowStr, nowStr)
+		DELETE FROM channel_summary WHERE channel = ? AND (
+			SELECT COUNT(*) FROM notifications WHERE channel = ?
+		) = 0
+	`, channel, channel)
 
-	// 重新计算并写入频道摘要
+	// 仅在有通知时写入或更新摘要，避免插入空行
 	_, _ = tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
-		SELECT n.channel,
-		       SUM(CASE WHEN (n.read_at IS NULL OR n.read_at = '' OR n.read_at = '0001-01-01T00:00:00Z') THEN 1 ELSE 0 END),
-		       (SELECT n2.id FROM notifications n2
-		        WHERE n2.channel = n.channel
-		          AND (n2.not_after IS NULL OR n2.not_after = '' OR n2.not_after = '0001-01-01T00:00:00Z' OR n2.not_after > ?)
-		          AND (n2.not_before IS NULL OR n2.not_before = '' OR n2.not_before = '0001-01-01T00:00:00Z' OR n2.not_before <= ?)
-		        ORDER BY n2.created_at DESC, n2.id DESC LIMIT 1)
-		FROM notifications n
-		WHERE n.channel = ?
-		  AND (n.not_after IS NULL OR n.not_after = '' OR n.not_after = '0001-01-01T00:00:00Z' OR n.not_after > ?)
-		  AND (n.not_before IS NULL OR n.not_before = '' OR n.not_before = '0001-01-01T00:00:00Z' OR n.not_before <= ?)
-		GROUP BY n.channel
-	`, nowStr, nowStr, channel, nowStr, nowStr)
+		SELECT ?,
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND (n.read_at IS NULL OR n.read_at = '' OR n.read_at = '0001-01-01T00:00:00Z')),
+		       (SELECT n.id FROM notifications n WHERE n.channel = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
+		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
+	`, channel, channel, channel, channel)
 }
 
 // scanChannelSummaryRow 扫描 channel_summary JOIN notifications 的一行

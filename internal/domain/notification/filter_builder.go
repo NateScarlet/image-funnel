@@ -1,8 +1,6 @@
 package notification
 
 import (
-	"time"
-
 	"main/internal/shared"
 	"main/internal/util"
 )
@@ -18,19 +16,7 @@ func NewFilterBuilder() *FilterBuilder {
 func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notification) bool {
 	var b util.FilterBuilder[*Notification]
 
-	// 1. 自动过滤过期与立即可见时间（这是核心业务逻辑）
-	now := time.Now()
-	b.Add(func(n *Notification) bool {
-		if !n.notAfter.IsZero() && now.After(n.notAfter) {
-			return false
-		}
-		if !n.notBefore.IsZero() && now.Before(n.notBefore) {
-			return false
-		}
-		return true
-	})
-
-	// 2. 按频道过滤
+	// 1. 按频道过滤
 	if v := filters.Channel; v != nil {
 		channel := *v
 		b.Add(func(n *Notification) bool {

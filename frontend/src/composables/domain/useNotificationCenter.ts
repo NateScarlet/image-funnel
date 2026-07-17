@@ -52,6 +52,20 @@ const init = once(() => {
     return channels.value.find((ch) => ch.channel === selectedChannel.value)?.unreadCount ?? 0;
   });
 
+  // 检查通知是否在可显示时间窗口内（notBefore/notAfter 由前端处理）
+  function isTimely(n: { notBefore?: string | null; notAfter?: string | null }): boolean {
+    const now = Date.now();
+    if (n.notBefore) {
+      const t = new Date(n.notBefore).getTime();
+      if (!isNaN(t) && now < t) return false;
+    }
+    if (n.notAfter) {
+      const t = new Date(n.notAfter).getTime();
+      if (!isNaN(t) && now > t) return false;
+    }
+    return true;
+  }
+
   // 根据文本长度计算合理的展示时长
   function toastDuration(title: string): number {
     const len = title.length;
@@ -61,8 +75,14 @@ const init = once(() => {
   }
 
   // 投递 Toast；优先级仅影响是否可关闭（HIGH 需手动确认）
-  function spawnToast(n: { id: string; title: string; priority: NotificationPriority }) {
-    if (shownToastIds.has(n.id)) return;
+  function spawnToast(n: {
+    id: string;
+    title: string;
+    priority: NotificationPriority;
+    notBefore?: string | null;
+    notAfter?: string | null;
+  }) {
+    if (!isTimely(n) || shownToastIds.has(n.id)) return;
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title);
     if (n.priority === NotificationPriority.HIGH) {
