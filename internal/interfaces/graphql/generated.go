@@ -3322,7 +3322,7 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   "该频道未读通知数量"
   unreadCount: Int!
   "该频道最新一条通知"
-  latestNotification: Notification
+  latestNotification: Notification!
 }
 
 type NotificationChannelConnection
@@ -11489,9 +11489,9 @@ func (ec *executionContext) _NotificationChannel_latestNotification(ctx context.
 			return ec.resolvers.NotificationChannel().LatestNotification(ctx, obj)
 		},
 		nil,
-		ec.marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -21625,13 +21625,16 @@ func (ec *executionContext) _NotificationChannel(ctx context.Context, sel ast.Se
 		case "latestNotification":
 			field := field
 
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._NotificationChannel_latestNotification(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -24834,6 +24837,10 @@ func (ec *executionContext) marshalNNoteEdge2ᚖmainᚋinternalᚋsharedᚐNoteE
 	return ec._NoteEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNNotification2mainᚋinternalᚋsharedᚐNotificationDTO(ctx context.Context, sel ast.SelectionSet, v shared.NotificationDTO) graphql.Marshaler {
+	return ec._Notification(ctx, sel, &v)
+}
+
 func (ec *executionContext) marshalNNotification2ᚕᚖmainᚋinternalᚋsharedᚐNotificationDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NotificationDTO) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -25102,23 +25109,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 

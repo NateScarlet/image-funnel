@@ -2056,7 +2056,7 @@ export type NotificationChannelsQuery = {
         createdAt: string;
         updatedAt: string;
         detailsURL: string | null;
-      } | null;
+      };
     }>;
     pageInfo: {
       __typename: "PageInfo";

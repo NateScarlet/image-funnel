@@ -130,20 +130,3 @@ func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notifica
 
 // #endregion
 
-// #region Channels
-
-// Channels 获取所有频道及其统计信息
-func (s *Service) Channels(ctx context.Context, filters shared.NotificationFilters) ([]*ChannelStats, error) {
-	var results []*ChannelStats
-
-	for cs, err := range s.repo.Channels(ctx) {
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, cs)
-	}
-
-	return results, nil
-}
-
-// #endregion

@@ -2,9 +2,7 @@ package notification
 
 import (
 	"context"
-	"slices"
 
-	domnotif "main/internal/domain/notification"
 	"main/internal/pagination"
 	"main/internal/shared"
 )
@@ -16,28 +14,6 @@ func (h *Handler) NotificationChannels(
 	first *int,
 	after *string,
 ) (conn *shared.NotificationChannelConnectionDTO, err error) {
-	cs, err := h.service.Channels(ctx, filters)
-	if err != nil {
-		return nil, err
-	}
-
-	// 按频道名称字母排序
-	slices.SortFunc(cs, func(a, b *domnotif.ChannelStats) int {
-		if a.Channel < b.Channel {
-			return -1
-		}
-		if a.Channel > b.Channel {
-			return 1
-		}
-		return 0
-	})
-
-	// 转换为 DTO 用于分页
-	var allDTOs []*shared.NotificationChannelDTO
-	for _, c := range cs {
-		allDTOs = append(allDTOs, h.dtoFactory.NewChannel(c))
-	}
-
 	builder := pagination.NewConnectionBufferBuilder[*shared.NotificationChannelDTO, *shared.NotificationChannelEdgeDTO, *shared.NotificationChannelConnectionDTO]()
 	buf := builder(
 		func(item *shared.NotificationChannelDTO, cursor string) (*shared.NotificationChannelEdgeDTO, error) {
@@ -68,15 +44,20 @@ func (h *Handler) NotificationChannels(
 
 	options := pagination.OptionFromInput(after, nil, first, nil)
 
-	allSeq := func(yield func(*shared.NotificationChannelDTO, error) bool) {
-		for _, dto := range allDTOs {
-			if !yield(dto, nil) {
+	// 直接使用 repo 的 Channels 流式处理，按 repo 返回的时间顺序
+	chSeq := func(yield func(*shared.NotificationChannelDTO, error) bool) {
+		for cs, err := range h.repo.Channels(ctx) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(h.dtoFactory.NewChannel(cs), nil) {
 				return
 			}
 		}
 	}
 
-	err = pagination.ByIndexE(allSeq, buf, options...)
+	err = pagination.ByIndexE(chSeq, buf, options...)
 	if err != nil {
 		return nil, err
 	}

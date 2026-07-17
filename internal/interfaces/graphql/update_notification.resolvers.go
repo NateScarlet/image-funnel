@@ -7,31 +7,12 @@ package graphql
 
 import (
 	"context"
-	"time"
 )
 
 // UpdateNotification is the resolver for the updateNotification field.
 func (r *mutationResolver) UpdateNotification(ctx context.Context, input UpdateNotificationInput) (*UpdateNotificationPayload, error) {
-	var readAt *time.Time
-	if input.ReadAt.IsSet() {
-		val := input.ReadAt.Value()
-		if val == nil {
-			zero := time.Time{}
-			readAt = &zero
-		} else {
-			readAt = val
-		}
-	}
-	var dismissedAt *time.Time
-	if input.DismissedAt.IsSet() {
-		val := input.DismissedAt.Value()
-		if val == nil {
-			zero := time.Time{}
-			dismissedAt = &zero
-		} else {
-			dismissedAt = val
-		}
-	}
+	readAt := input.ReadAt.Value()
+	dismissedAt := input.DismissedAt.Value()
 
 	dto, err := r.app.UpdateNotification(ctx, input.ID, readAt, dismissedAt)
 	if err != nil {
