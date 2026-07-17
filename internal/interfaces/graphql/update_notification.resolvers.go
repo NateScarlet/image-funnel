@@ -34,7 +34,7 @@ func (r *mutationResolver) UpdateNotification(ctx context.Context, id scalar.ID,
 		}
 	}
 
-	dto, err := r.app.Update(ctx, id, readAt, dismissedAt)
+	dto, err := r.app.UpdateNotification(ctx, id, readAt, dismissedAt)
 	if err != nil {
 		return nil, err
 	}

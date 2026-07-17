@@ -11,7 +11,7 @@ import (
 
 // SendNotification is the resolver for the sendNotification field.
 func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error) {
-	dto, didCreate, err := r.app.Send(
+	dto, didCreate, err := r.app.SendNotification(
 		ctx,
 		input.Tag,
 		input.Channel,

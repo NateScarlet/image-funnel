@@ -48,8 +48,8 @@ func (h *Handler) Notification(ctx context.Context, id scalar.ID) (*shared.Notif
 	return h.dtoFactory.New(notif), nil
 }
 
-// Send 发送或覆盖通知，如果 tag 已存在则更新内容，否则创建新通知
-func (h *Handler) Send(
+// SendNotification 发送或覆盖通知，如果 tag 已存在则更新内容，否则创建新通知
+func (h *Handler) SendNotification(
 	ctx context.Context,
 	tag string,
 	channel string,
@@ -101,8 +101,8 @@ func (h *Handler) Send(
 	return dto, didCreate, nil
 }
 
-// Update 更新通知元数据（已读时间、关闭时间）
-func (h *Handler) Update(
+// UpdateNotification 更新通知元数据（已读时间、关闭时间）
+func (h *Handler) UpdateNotification(
 	ctx context.Context,
 	id scalar.ID,
 	readAt *time.Time,
@@ -146,8 +146,8 @@ func (h *Handler) Update(
 	return dto, nil
 }
 
-// Unsend 撤回（物理删除）通知
-func (h *Handler) Unsend(ctx context.Context, id scalar.ID) (scalar.ID, error) {
+// UnsendNotification 撤回（物理删除）通知
+func (h *Handler) UnsendNotification(ctx context.Context, id scalar.ID) (scalar.ID, error) {
 	notif, err := h.repo.Get(ctx, id.String())
 	if err != nil {
 		return id, err
@@ -175,7 +175,7 @@ func (h *Handler) Unsend(ctx context.Context, id scalar.ID) (scalar.ID, error) {
 	return id, nil
 }
 
-// NotificationChannels 获取所有通知频道，支持 filterBy 过滤未读数和最新通知
+// NotificationChannels 获取所有通知频道
 func (h *Handler) NotificationChannels(
 	ctx context.Context,
 	filters shared.NotificationFilters,
@@ -187,39 +187,8 @@ func (h *Handler) NotificationChannels(
 			return nil, err
 		}
 
-		f := filters
-		f.Channel = &cs.Channel
-
-		notifFilter := h.filterBuilder.Build(f)
-		var matched []*domnotif.Notification
-		unreadCount := 0
-
-		for n, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: f.Channel})) {
-			if err != nil {
-				return nil, err
-			}
-			if notifFilter(n) {
-				matched = append(matched, n)
-				if n.ReadAt().IsZero() {
-					unreadCount++
-				}
-			}
-		}
-
-		if len(matched) > 0 {
-			slices.SortFunc(matched, func(a, b *domnotif.Notification) int {
-				if a.CreatedAt().After(b.CreatedAt()) {
-					return -1
-				}
-				if a.CreatedAt().Before(b.CreatedAt()) {
-					return 1
-				}
-				return 0
-			})
-
-			// 通过 DTOFactory 统一拼装 DTO，保证层级边界
-			results = append(results, h.dtoFactory.NewChannelWithData(cs.Channel, unreadCount, matched[0]))
-		}
+		// 委派给 DTOFactory.NewChannel 统一构造，保证 DTO 边界内聚与减少 Feature Envy
+		results = append(results, h.dtoFactory.NewChannel(cs))
 	}
 
 	// 按频道名称字母排序返回
@@ -307,53 +276,7 @@ func (h *Handler) Notifications(
 	return buf.Value()
 }
 
-// SubscribeNotificationChanged 订阅通知全局实时流，并在首次建立订阅时重发每个频道最新一条未读通知（低优先级不补发）
+// SubscribeNotificationChanged 订阅通知全局实时流
 func (h *Handler) SubscribeNotificationChanged(ctx context.Context) iter.Seq2[*shared.NotificationChangedEventDTO, error] {
-	var replayList []*shared.NotificationChangedEventDTO
-
-	for cs, err := range h.repo.Channels(ctx) {
-		if err != nil {
-			continue
-		}
-
-		var latestUnread *domnotif.Notification
-		for n, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: &cs.Channel})) {
-			if err != nil {
-				break
-			}
-			if n.ReadAt().IsZero() {
-				latestUnread = n
-				break
-			}
-		}
-
-		if latestUnread != nil {
-			// 仅重发非低优先级的未读通知 (LOW 优先级不补发)
-			if latestUnread.Priority() != shared.NotificationPriorityLow {
-				dto := h.dtoFactory.New(latestUnread)
-				replayList = append(replayList, &shared.NotificationChangedEventDTO{
-					Event:        shared.NotificationEventTypeSent, // 模拟 SENT 事件以触发展示和 Toast 唤醒
-					Notification: dto,
-				})
-			}
-		}
-	}
-
-	subSeq := h.topic.Subscribe(ctx)
-
-	return func(yield func(*shared.NotificationChangedEventDTO, error) bool) {
-		// 1. 先补发未读通知事件
-		for _, event := range replayList {
-			if !yield(event, nil) {
-				return
-			}
-		}
-
-		// 2. 然后推送实时的通知事件
-		for event, err := range subSeq {
-			if !yield(event, err) {
-				return
-			}
-		}
-	}
+	return h.topic.Subscribe(ctx)
 }

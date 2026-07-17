@@ -22,7 +22,7 @@ function handleBack() {
   selectedChannel.value = null;
 }
 
-function handleDismissAll() {
+function handleMarkAllAsRead() {
   if (selectedChannel.value) {
     void markAllAsRead(selectedChannel.value);
   }
@@ -65,7 +65,7 @@ function handleDismiss(id: string) {
           <button
             v-if="selectedChannel && selectedChannelUnreadCount > 0"
             class="text-xs text-primary-400 hover:text-primary-200 transition-colors cursor-pointer"
-            @click="handleDismissAll"
+            @click="handleMarkAllAsRead"
           >
             全部已读
           </button>
