@@ -2,6 +2,7 @@
 import { watch } from "vue";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
 import useModalDrawer from "@/composables/useModalDrawer";
+import { formatDate } from "@/utils/date";
 
 const {
   channels,
@@ -46,18 +47,6 @@ function handleDismissAll() {
 
 function handleDismiss(id: string) {
   void markAsDismissed(id);
-}
-
-function timeAgo(isoStr: string): string {
-  if (!isoStr) return "";
-  const diff = Date.now() - new Date(isoStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "刚刚";
-  if (mins < 60) return `${mins}分钟前`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}小时前`;
-  const days = Math.floor(hours / 24);
-  return `${days}天前`;
 }
 </script>
 
@@ -130,7 +119,7 @@ function timeAgo(isoStr: string): string {
         <!-- Unread indicator -->
         <div
           :class="[
-            'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
+            'mt-2 h-2 w-2 shrink-0 rounded-full',
             ch.unreadCount > 0 ? 'bg-secondary-500' : 'bg-transparent',
           ]"
         />
@@ -143,21 +132,21 @@ function timeAgo(isoStr: string): string {
             </span>
             <span
               v-if="ch.unreadCount > 0"
-              class="shrink-0 flex items-center justify-center h-5 min-w-5 rounded-full bg-secondary-600 px-1.5 text-xs font-bold text-white"
+              class="shrink-0 flex items-center justify-center h-5 min-w-5 rounded-full bg-secondary-600 px-2 text-xs font-bold text-white"
             >
               {{ ch.unreadCount }}
             </span>
           </div>
-          <p v-if="ch.latestNotification" class="text-xs text-primary-400 truncate mt-0.5">
+          <p v-if="ch.latestNotification" class="text-xs text-primary-400 truncate mt-1">
             {{ ch.latestNotification.title }}
             {{ ch.latestNotification.body ? ` - ${ch.latestNotification.body}` : "" }}
           </p>
-          <p v-else class="text-xs text-primary-500 mt-0.5">暂无通知</p>
+          <p v-else class="text-xs text-primary-500 mt-1">暂无通知</p>
         </div>
 
         <!-- Timestamp -->
-        <span v-if="ch.latestNotification" class="shrink-0 text-xs text-primary-500 mt-0.5">
-          {{ timeAgo(ch.latestNotification.createdAt) }}
+        <span v-if="ch.latestNotification" class="shrink-0 text-xs text-primary-500 mt-1">
+          {{ formatDate(ch.latestNotification.createdAt) }}
         </span>
       </button>
     </div>
@@ -172,20 +161,20 @@ function timeAgo(isoStr: string): string {
       </div>
 
       <div
-        v-for="n in channelNotifications"
-        :key="n.id"
+        v-for="notification in channelNotifications"
+        :key="notification.id"
         :class="[
           'flex items-start gap-3 px-4 py-3 transition-colors border-b border-primary-700/30',
-          n.status === 'DISMISSED' ? 'opacity-50' : 'hover:bg-primary-700/30',
+          notification.status === 'DISMISSED' ? 'opacity-50' : 'hover:bg-primary-700/30',
         ]"
       >
         <!-- Priority indicator -->
         <div
           :class="[
-            'mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full',
-            n.priority === 'HIGH'
+            'mt-2 h-2 w-2 shrink-0 rounded-full',
+            notification.priority === 'HIGH'
               ? 'bg-red-500'
-              : n.priority === 'NORMAL'
+              : notification.priority === 'NORMAL'
                 ? 'bg-secondary-500'
                 : 'bg-primary-500',
           ]"
@@ -197,24 +186,24 @@ function timeAgo(isoStr: string): string {
             <span
               :class="[
                 'text-sm truncate',
-                n.readAt ? 'text-primary-300' : 'text-primary-100 font-medium',
+                notification.readAt ? 'text-primary-300' : 'text-primary-100 font-medium',
               ]"
             >
-              {{ n.title }}
+              {{ notification.title }}
             </span>
             <div class="flex items-center gap-2 shrink-0">
-              <span class="text-xs text-primary-500">{{ timeAgo(n.createdAt) }}</span>
+              <span class="text-xs text-primary-500">{{ formatDate(notification.createdAt) }}</span>
               <button
-                v-if="n.status === 'ACTIVE'"
+                v-if="notification.status === 'ACTIVE'"
                 class="text-xs text-primary-400 hover:text-primary-200 transition-colors cursor-pointer"
-                @click="handleDismiss(n.id)"
+                @click="handleDismiss(notification.id)"
               >
                 关闭
               </button>
             </div>
           </div>
-          <p v-if="n.body" class="text-xs text-primary-400 mt-0.5 line-clamp-2">
-            {{ n.body }}
+          <p v-if="notification.body" class="text-xs text-primary-400 mt-1 line-clamp-2">
+            {{ notification.body }}
           </p>
         </div>
       </div>

@@ -240,7 +240,8 @@ func main() {
 
 	notifDTOFactory := appnotification.NewDTOFactory()
 	notifFilterBuilder := domnotification.NewFilterBuilder()
-	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifDTOFactory, notifFilterBuilder, notifChangedTopic)
+	notifService := domnotification.NewService(sqliteNotifRepo)
+	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifService, notifDTOFactory, notifFilterBuilder, notifChangedTopic)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 

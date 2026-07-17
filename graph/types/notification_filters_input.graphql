@@ -1,0 +1,9 @@
+"通知筛选条件"
+input NotificationFiltersInput {
+  "按状态筛选"
+  status: NotificationStatus
+  "按优先级筛选"
+  priority: NotificationPriority
+  "按已读状态筛选（true=已读，false=未读）"
+  read: Boolean
+}

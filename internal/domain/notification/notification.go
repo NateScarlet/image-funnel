@@ -5,6 +5,8 @@ import (
 
 	"main/internal/scalar"
 	"main/internal/shared"
+
+	"github.com/google/uuid"
 )
 
 // Notification 表示一条系统通知
@@ -104,4 +106,22 @@ func FromRepository(
 		createdAt:   createdAt,
 		updatedAt:   updatedAt,
 	}
+}
+
+// newNotification 领域内新建通知使用，自动分配 ID
+func newNotification(
+	tag string,
+	channel string,
+	title string,
+	body string,
+	priority shared.NotificationPriority,
+	readAt time.Time,
+	dismissedAt time.Time,
+	notAfter time.Time,
+	notBefore time.Time,
+	createdAt time.Time,
+	updatedAt time.Time,
+) *Notification {
+	id := scalar.ToID("notif:" + uuid.NewString())
+	return FromRepository(id, tag, channel, title, body, priority, readAt, dismissedAt, notAfter, notBefore, createdAt, updatedAt)
 }

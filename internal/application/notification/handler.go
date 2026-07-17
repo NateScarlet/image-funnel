@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"iter"
 	"slices"
 	"time"
@@ -13,13 +12,12 @@ import (
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
-
-	"github.com/google/uuid"
 )
 
 // Handler 协调通知系统的应用层逻辑
 type Handler struct {
 	repo          domnotif.Repository
+	service       *domnotif.Service
 	dtoFactory    *DTOFactory
 	filterBuilder *domnotif.FilterBuilder
 	topic         pubsub.Topic[*shared.NotificationChangedEventDTO]
@@ -27,16 +25,27 @@ type Handler struct {
 
 func NewHandler(
 	repo domnotif.Repository,
+	service *domnotif.Service,
 	dtoFactory *DTOFactory,
 	filterBuilder *domnotif.FilterBuilder,
 	topic pubsub.Topic[*shared.NotificationChangedEventDTO],
 ) *Handler {
 	return &Handler{
 		repo:          repo,
+		service:       service,
 		dtoFactory:    dtoFactory,
 		filterBuilder: filterBuilder,
 		topic:         topic,
 	}
+}
+
+// Notification 获取单条通知
+func (h *Handler) Notification(ctx context.Context, id scalar.ID) (*shared.NotificationDTO, error) {
+	notif, err := h.repo.Get(ctx, id.String())
+	if err != nil {
+		return nil, err
+	}
+	return h.dtoFactory.New(notif), nil
 }
 
 // Send 发送或覆盖通知，如果 tag 已存在则更新内容，否则创建新通知
@@ -51,12 +60,12 @@ func (h *Handler) Send(
 	notBefore *time.Time,
 ) (*shared.NotificationDTO, bool, error) {
 	now := time.Now()
-	var na, nb time.Time
+	var notAfterVal, notBeforeVal time.Time
 	if notAfter != nil {
-		na = *notAfter
+		notAfterVal = *notAfter
 	}
 	if notBefore != nil {
-		nb = *notBefore
+		notBeforeVal = *notBefore
 	}
 
 	existing, err := h.repo.GetByTag(ctx, tag)
@@ -66,14 +75,11 @@ func (h *Handler) Send(
 
 	var notif *domnotif.Notification
 	if existing != nil {
-		existing.Update(title, body, priority, na, nb, now)
+		existing.Update(title, body, priority, notAfterVal, notBeforeVal, now)
 		notif = existing
 	} else {
-		id := scalar.ToID(fmt.Sprintf("notif:%s", uuid.NewString()))
-		notif = domnotif.FromRepository(
-			id, tag, channel, title, body, priority,
-			time.Time{}, time.Time{}, na, nb, now, now,
-		)
+		// 由领域 Service 统一构造新实体，实现 ID 的内聚生成与封装
+		notif = h.service.CreateNew(tag, channel, title, body, priority, notAfterVal, notBeforeVal)
 	}
 
 	didCreate, err := h.repo.Save(ctx, notif)
@@ -211,11 +217,8 @@ func (h *Handler) NotificationChannels(
 				return 0
 			})
 
-			results = append(results, &shared.NotificationChannelDTO{
-				Channel:            cs.Channel,
-				UnreadCount:        unreadCount,
-				LatestNotification: h.dtoFactory.New(matched[0]),
-			})
+			// 通过 DTOFactory 统一拼装 DTO，保证层级边界
+			results = append(results, h.dtoFactory.NewChannelWithData(cs.Channel, unreadCount, matched[0]))
 		}
 	}
 
@@ -277,103 +280,26 @@ func (h *Handler) Notifications(
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)
-	direction, cursorStr, limit, err := pagination.ByDirection(options, true)
-	if err != nil {
-		return nil, err
-	}
-
-	var cursorTime time.Time
-	if cursorStr != "" {
-		cursorTime, err = pagination.TimeFromCursor(cursorStr)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var items []*shared.NotificationDTO
 	notifFilter := h.filterBuilder.Build(filters)
 
-	for n, scanErr := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: &channel})) {
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		if !notifFilter(n) {
-			continue
-		}
-		dto := h.dtoFactory.New(n)
-		items = append(items, dto)
-	}
+	filteredSeq := func(yield func(*shared.NotificationDTO, error) bool) {
+		for item, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: &channel})) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
 
-	if cursorStr != "" {
-		var filtered []*shared.NotificationDTO
-		for _, item := range items {
-			if direction == pagination.ODDescend {
-				if item.CreatedAt.Before(cursorTime) {
-					filtered = append(filtered, item)
-				}
-			} else {
-				if item.CreatedAt.After(cursorTime) {
-					filtered = append(filtered, item)
-				}
+			if !notifFilter(item) {
+				continue
 			}
-		}
-		items = filtered
-	}
 
-	slices.SortFunc(items, func(a, b *shared.NotificationDTO) int {
-		if direction == pagination.ODDescend {
-			if a.CreatedAt.After(b.CreatedAt) {
-				return -1
+			if !yield(h.dtoFactory.New(item), nil) {
+				return
 			}
-			if a.CreatedAt.Before(b.CreatedAt) {
-				return 1
-			}
-			if a.ID.String() > b.ID.String() {
-				return -1
-			}
-			if a.ID.String() < b.ID.String() {
-				return 1
-			}
-			return 0
-		} else {
-			if a.CreatedAt.Before(b.CreatedAt) {
-				return -1
-			}
-			if a.CreatedAt.After(b.CreatedAt) {
-				return 1
-			}
-			if a.ID.String() < b.ID.String() {
-				return -1
-			}
-			if a.ID.String() > b.ID.String() {
-				return 1
-			}
-			return 0
-		}
-	})
-
-	var writer pagination.Writer[*shared.NotificationDTO] = buf
-	if direction == pagination.ODAscend {
-		writer = pagination.NewReverseWriter(buf)
-	}
-
-	hasMore := len(items) > limit
-	if hasMore {
-		items = items[:limit]
-	}
-
-	writer.WriteHasNextPage(hasMore)
-	writer.WriteHasPreviousPage(cursorStr != "")
-
-	for _, item := range items {
-		cursor := pagination.TimeToCursor(item.CreatedAt)
-		err = writer.Write(item, cursor)
-		if err != nil {
-			return nil, err
 		}
 	}
 
-	err = writer.Close()
+	err := pagination.ByIndexE(filteredSeq, buf, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -381,33 +307,7 @@ func (h *Handler) Notifications(
 	return buf.Value()
 }
 
-// SubscribeNotificationChanged 订阅通知变更事件流
+// SubscribeNotificationChanged 订阅通知全局实时流
 func (h *Handler) SubscribeNotificationChanged(ctx context.Context) iter.Seq2[*shared.NotificationChangedEventDTO, error] {
-	return func(yield func(*shared.NotificationChangedEventDTO, error) bool) {
-		for ev, err := range h.topic.Subscribe(ctx) {
-			if err != nil {
-				if !yield(nil, err) {
-					return
-				}
-				continue
-			}
-			if !yield(ev, nil) {
-				return
-			}
-		}
-	}
+	return h.topic.Subscribe(ctx)
 }
-
-// Notification 根据 ID 获取单个通知，用于 GraphQL Node 接口解析
-func (h *Handler) Notification(ctx context.Context, id scalar.ID) (*shared.NotificationDTO, error) {
-	n, err := h.repo.Get(ctx, id.String())
-	if err != nil {
-		return nil, err
-	}
-	if n == nil {
-		return nil, nil // 遵循 DTO 回退与 GraphQL Node 规范
-	}
-	return h.dtoFactory.New(n), nil
-}
-
-

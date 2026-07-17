@@ -33,19 +33,19 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   """
   已读时间戳，零值表示未读
   """
-  readAt: Time!
+  readAt: Time
   """
   关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭
   """
-  dismissedAt: Time!
+  dismissedAt: Time
   """
   过期时间，到达后通知将被自动删除。零值表示不自动过期
   """
-  notAfter: Time!
+  notAfter: Time
   """
   最早可见时间，到达后才对客户端可见。零值表示立即可见
   """
-  notBefore: Time!
+  notBefore: Time
   """
   创建时间
   """

@@ -17,6 +17,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// 编译时接口检查
+var _ notification.Repository = (*NotificationRepository)(nil)
+
 // NotificationRepository 基于 SQLite 的通知存储仓库
 type NotificationRepository struct {
 	db *sql.DB
@@ -40,34 +43,55 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 		return nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
-	// 初始化数据表及索引
-	schema := `
-	CREATE TABLE IF NOT EXISTS notifications (
-		id TEXT PRIMARY KEY,
-		tag TEXT UNIQUE NOT NULL,
-		channel TEXT NOT NULL,
-		title TEXT NOT NULL,
-		body TEXT NOT NULL,
-		priority TEXT NOT NULL,
-		read_at TEXT,
-		dismissed_at TEXT,
-		not_after TEXT,
-		not_before TEXT,
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	);
-	CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
-	CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
-	`
-	if _, err := db.Exec(schema); err != nil {
+	// 数据库 user_version 版本化管理，拒绝高版本操作
+	var dbVersion int
+	if err := db.QueryRow("PRAGMA user_version;").Scan(&dbVersion); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("init notifications schema: %w", err)
+		return nil, fmt.Errorf("read database user_version: %w", err)
+	}
+
+	const expectedVersion = 1
+	if dbVersion > expectedVersion {
+		db.Close()
+		return nil, fmt.Errorf("database schema version %d is newer than expected version %d", dbVersion, expectedVersion)
+	}
+
+	if dbVersion == 0 {
+		// 初始化数据表及索引
+		schema := `
+		CREATE TABLE IF NOT EXISTS notifications (
+			id TEXT PRIMARY KEY,
+			tag TEXT UNIQUE NOT NULL,
+			channel TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			priority TEXT NOT NULL,
+			read_at TEXT,
+			dismissed_at TEXT,
+			not_after TEXT,
+			not_before TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
+		`
+		if _, err := db.Exec(schema); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("init notifications schema: %w", err)
+		}
+
+		// 写入 schema 版本
+		if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d;", expectedVersion)); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("write schema version: %w", err)
+		}
 	}
 
 	return &NotificationRepository{db: db}, nil
 }
 
-// Close 释放数据库资源
+// Close 释放数据库 resource
 func (r *NotificationRepository) Close() error {
 	return r.db.Close()
 }
@@ -150,7 +174,10 @@ func (r *NotificationRepository) Get(ctx context.Context, id string) (*notificat
 		return nil, err
 	}
 
-	priority, _ := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+	priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse notification priority: %w", err)
+	}
 
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
@@ -176,7 +203,10 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 		return nil, err
 	}
 
-	priority, _ := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+	priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse notification priority: %w", err)
+	}
 
 	return notification.FromRepository(
 		scalar.ToID(id), tag, channel, title, body, priority,
@@ -223,7 +253,13 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 				continue
 			}
 
-			priority, _ := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+			priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+			if err != nil {
+				if !yield(nil, fmt.Errorf("parse priority: %w", err)) {
+					return
+				}
+				continue
+			}
 
 			notif := notification.FromRepository(
 				scalar.ToID(id), tag, channel, title, body, priority,
@@ -302,7 +338,13 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 				}
 				continue
 			} else {
-				priority, _ := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+				priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+				if err != nil {
+					if !yield(nil, fmt.Errorf("parse latest priority: %w", err)) {
+						return
+					}
+					continue
+				}
 				cs.LatestNotification = notification.FromRepository(
 					scalar.ToID(id), tag, channel, title, body, priority,
 					parseTime(readAtStr), parseTime(dismissedAtStr), parseTime(notAfterStr), parseTime(notBeforeStr),

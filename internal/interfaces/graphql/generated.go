@@ -3232,19 +3232,19 @@ type Notification implements Node @goModel(model: "main/internal/shared.Notifica
   """
   已读时间戳，零值表示未读
   """
-  readAt: Time!
+  readAt: Time
   """
   关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭
   """
-  dismissedAt: Time!
+  dismissedAt: Time
   """
   过期时间，到达后通知将被自动删除。零值表示不自动过期
   """
-  notAfter: Time!
+  notAfter: Time
   """
   最早可见时间，到达后才对客户端可见。零值表示立即可见
   """
-  notBefore: Time!
+  notBefore: Time
   """
   创建时间
   """
@@ -3299,6 +3299,16 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   该频道最新一条通知
   """
   latestNotification: Notification
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/notification_filters_input.graphql", Input: `"通知筛选条件"
+input NotificationFiltersInput {
+  "按状态筛选"
+  status: NotificationStatus
+  "按优先级筛选"
+  priority: NotificationPriority
+  "按已读状态筛选（true=已读，false=未读）"
+  read: Boolean
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
@@ -3558,17 +3568,7 @@ extend type Query {
   ): [NotificationChannel!]!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/queries/notifications.graphql", Input: `"通知筛选条件"
-input NotificationFiltersInput {
-  "按状态筛选"
-  status: NotificationStatus
-  "按优先级筛选"
-  priority: NotificationPriority
-  "按已读状态筛选（true=已读，false=未读）"
-  read: Boolean
-}
-
-extend type Query {
+	{Name: "../../../graph/queries/notifications.graphql", Input: `extend type Query {
   """
   查询指定频道的通知列表，采用 Relay Connection 分页。
   channel 参数必传以限定到具体频道。
@@ -11083,9 +11083,9 @@ func (ec *executionContext) _Notification_readAt(ctx context.Context, field grap
 			return obj.ReadAt, nil
 		},
 		nil,
-		ec.marshalNTime2timeᚐTime,
+		ec.marshalOTime2timeᚐTime,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -11112,9 +11112,9 @@ func (ec *executionContext) _Notification_dismissedAt(ctx context.Context, field
 			return obj.DismissedAt, nil
 		},
 		nil,
-		ec.marshalNTime2timeᚐTime,
+		ec.marshalOTime2timeᚐTime,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -11141,9 +11141,9 @@ func (ec *executionContext) _Notification_notAfter(ctx context.Context, field gr
 			return obj.NotAfter, nil
 		},
 		nil,
-		ec.marshalNTime2timeᚐTime,
+		ec.marshalOTime2timeᚐTime,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -11170,9 +11170,9 @@ func (ec *executionContext) _Notification_notBefore(ctx context.Context, field g
 			return obj.NotBefore, nil
 		},
 		nil,
-		ec.marshalNTime2timeᚐTime,
+		ec.marshalOTime2timeᚐTime,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -21180,24 +21180,12 @@ func (ec *executionContext) _Notification(ctx context.Context, sel ast.Selection
 			}
 		case "readAt":
 			out.Values[i] = ec._Notification_readAt(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "dismissedAt":
 			out.Values[i] = ec._Notification_dismissedAt(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "notAfter":
 			out.Values[i] = ec._Notification_notAfter(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "notBefore":
 			out.Values[i] = ec._Notification_notBefore(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "createdAt":
 			out.Values[i] = ec._Notification_createdAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -25810,6 +25798,17 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
+	res, err := UnmarshalTime(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTime2timeᚐTime(ctx context.Context, sel ast.SelectionSet, v time.Time) graphql.Marshaler {
+	_ = sel
+	res := MarshalTime(v)
+	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v any) (*time.Time, error) {

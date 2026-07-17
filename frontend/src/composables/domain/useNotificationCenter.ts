@@ -70,6 +70,7 @@ const init = once(() => {
   async function selectChannel(channel: string) {
     selectedChannel.value = channel;
     await refreshSelectedChannel();
+    await markAllAsRead(channel);
   }
 
   async function markAsRead(id: string) {
