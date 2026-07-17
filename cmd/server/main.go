@@ -232,11 +232,12 @@ func main() {
 
 	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
-	sqliteNotifRepo, err := sqlite.NewNotificationRepository(cfg.DataDir)
+	notifDBPath := filepath.Join(cfg.DataDir, "notifications.db")
+	sqliteNotifRepo, notifCleanup, err := sqlite.NewNotificationRepository(notifDBPath)
 	if err != nil {
 		logger.Fatal("failed to initialize sqlite notification repository", zap.Error(err))
 	}
-	defer sqliteNotifRepo.Close()
+	defer notifCleanup()
 
 	notifDTOFactory := appnotification.NewDTOFactory()
 	notifFilterBuilder := domnotification.NewFilterBuilder()

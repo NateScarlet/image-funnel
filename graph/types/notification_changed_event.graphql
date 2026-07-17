@@ -2,12 +2,8 @@
 通知变更事件，通过 subscription 推送给客户端。
 """
 type NotificationChangedEvent @goModel(model: "main/internal/shared.NotificationChangedEventDTO") {
-  """
-  变更类型：SENT / UPDATED / UNSENT
-  """
+  "变更类型：SENT / UPDATED / UNSENT"
   event: NotificationEventType!
-  """
-  变更后的通知对象，UNSENT 事件中仅包含 ID
-  """
+  "变更后的通知对象"
   notification: Notification!
 }

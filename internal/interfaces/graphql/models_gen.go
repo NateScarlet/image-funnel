@@ -310,7 +310,7 @@ type SendNotificationInput struct {
 	// 最早可见时间，在此之前不显示。空字符串表示立即可见
 	NotBefore *time.Time `json:"notBefore,omitempty"`
 	// 关联的详情 URL，支持 http, https, file, open-dir 等协议
-	DetailURL *scalar.URI `json:"detailURL,omitempty"`
+	DetailsURL *scalar.URI `json:"detailsURL,omitempty"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
@@ -370,15 +370,13 @@ type UndoTrashInput struct {
 
 // 撤回通知的输入参数
 type UnsendNotificationInput struct {
-	// 通知 ID
-	ID scalar.ID `json:"id"`
+	// 通知标签
+	Tag string `json:"tag"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type UnsendNotificationPayload struct {
-	// 被撤回的通知 ID
-	DeletedID scalar.ID `json:"deletedId"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }

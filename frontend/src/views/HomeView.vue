@@ -3,7 +3,11 @@
     <div class="max-w-4xl mx-auto">
       <!-- 顶部工具栏 -->
       <div class="flex justify-end gap-2 mb-4">
-        <NotificationCenterButton />
+        <NotificationCenterButton
+          button-class="relative flex items-center gap-2 rounded-lg border border-primary-700 bg-primary-800/80 px-4 py-2 text-sm font-medium text-primary-300 transition-all hover:border-primary-600 hover:bg-primary-700 hover:text-white active:scale-95 cursor-pointer select-none"
+        >
+          <span class="hidden sm:inline">通知</span>
+        </NotificationCenterButton>
         <DeviceManagerButton />
       </div>
 

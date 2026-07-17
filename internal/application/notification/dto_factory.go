@@ -31,7 +31,7 @@ func (f *DTOFactory) New(n *domnotif.Notification) *shared.NotificationDTO {
 		NotBefore:   n.NotBefore(),
 		CreatedAt:   n.CreatedAt(),
 		UpdatedAt:   n.UpdatedAt(),
-		DetailURL:   n.DetailURL(),
+		DetailsURL:  n.DetailsURL(),
 	}
 }
 
@@ -40,14 +40,9 @@ func (f *DTOFactory) NewChannel(cs *domnotif.ChannelStats) *shared.NotificationC
 	if cs == nil {
 		return nil
 	}
-	return f.NewChannelWithData(cs.Channel, cs.UnreadCount, cs.LatestNotification)
-}
-
-// NewChannelWithData 使用自定义数据构造 DTO，保证 DTO 边界内聚
-func (f *DTOFactory) NewChannelWithData(channel string, unreadCount int, latest *domnotif.Notification) *shared.NotificationChannelDTO {
 	return &shared.NotificationChannelDTO{
-		Channel:            channel,
-		UnreadCount:        unreadCount,
-		LatestNotification: f.New(latest),
+		Channel:              cs.Channel,
+		UnreadCount:          cs.UnreadCount,
+		LatestNotificationID: cs.LatestNotificationID,
 	}
 }

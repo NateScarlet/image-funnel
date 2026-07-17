@@ -105,17 +105,13 @@ function handleDismiss(id: string) {
               {{ ch.unreadCount }}
             </span>
           </div>
-          <p v-if="ch.latestNotification" class="text-xs text-primary-400 truncate mt-1">
-            {{ ch.latestNotification.title }}
-            {{ ch.latestNotification.body ? ` - ${ch.latestNotification.body}` : "" }}
+          <p class="text-xs text-primary-500 mt-1">
+            {{ ch.latestNotificationID ? "有新通知" : "暂无通知" }}
           </p>
-          <p v-else class="text-xs text-primary-500 mt-1">暂无通知</p>
         </div>
 
         <!-- Timestamp -->
-        <span v-if="ch.latestNotification" class="shrink-0 text-xs text-primary-500 mt-1">
-          {{ formatDate(ch.latestNotification.createdAt) }}
-        </span>
+        <span class="shrink-0 text-xs text-primary-500 mt-1" />
       </button>
     </div>
 
@@ -173,9 +169,9 @@ function handleDismiss(id: string) {
           <p v-if="notification.body" class="text-xs text-primary-400 mt-1 line-clamp-2">
             {{ notification.body }}
           </p>
-          <div v-if="notification.detailURL" class="mt-1">
+          <div v-if="notification.detailsURL" class="mt-1">
             <a
-              :href="notification.detailURL"
+              :href="notification.detailsURL"
               target="_blank"
               class="inline-flex items-center gap-1 text-xs text-secondary-400 hover:text-secondary-300 hover:underline transition-colors"
             >

@@ -2,10 +2,10 @@ package sqlite
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
+	"main/internal/apperror"
 	"main/internal/domain/notification"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -15,13 +15,10 @@ import (
 )
 
 func TestNotificationRepository(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-sqlite-test-*")
+	// 使用内存数据库，避免文件系统依赖
+	repo, cleanup, err := NewNotificationRepository(":memory:")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	repo, err := NewNotificationRepository(tempDir)
-	require.NoError(t, err)
-	defer repo.Close()
+	defer cleanup()
 
 	ctx := context.Background()
 
@@ -56,13 +53,13 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Equal(t, "tag-1", got.Tag())
 	assert.Equal(t, "hook:test", got.Channel())
 	assert.Equal(t, "Test Title 1", got.Title())
-	assert.Equal(t, testURI.String(), got.DetailURL().String())
+	assert.Equal(t, testURI.String(), got.DetailsURL().String())
 
 	gotByTag, err := repo.GetByTag(ctx, "tag-1")
 	require.NoError(t, err)
 	require.NotNil(t, gotByTag)
 	assert.Equal(t, id1, gotByTag.ID())
-	assert.Equal(t, testURI.String(), gotByTag.DetailURL().String())
+	assert.Equal(t, testURI.String(), gotByTag.DetailsURL().String())
 
 	// 3. 测试 Save (Update - 同 tag)
 	n1Updated := notification.FromRepository(
@@ -91,7 +88,7 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Equal(t, id1, got.ID())
 	assert.Equal(t, "Updated Title", got.Title())
 	assert.Equal(t, shared.NotificationPriorityHigh, got.Priority())
-	assert.Equal(t, testURI.String(), got.DetailURL().String())
+	assert.Equal(t, testURI.String(), got.DetailsURL().String())
 
 	// 4. 测试 Find (List)
 	n2 := notification.FromRepository(
@@ -120,10 +117,9 @@ func TestNotificationRepository(t *testing.T) {
 	}
 	assert.Len(t, list, 2)
 
-	// 4b. 过滤特定 channel
+	// 4b. 过滤特定 channel（数组形式匹配任意一个）
 	var filtered []*notification.Notification
-	ch := "hook:test"
-	for item, err := range repo.Find(ctx, notification.FindWithFilter(shared.NotificationFilters{Channel: &ch})) {
+	for item, err := range repo.Find(ctx, notification.FindWithFilter(shared.NotificationFilters{Channel: []string{"hook:test"}})) {
 		require.NoError(t, err)
 		filtered = append(filtered, item)
 	}
@@ -141,22 +137,25 @@ func TestNotificationRepository(t *testing.T) {
 	// 确认排序和统计
 	assert.Equal(t, "hook:another", channels[0].Channel)
 	assert.Equal(t, 1, channels[0].UnreadCount)
-	assert.Equal(t, "notif:2", channels[0].LatestNotification.ID().String())
+	assert.Equal(t, "notif:2", channels[0].LatestNotificationID.String())
 
 	assert.Equal(t, "hook:test", channels[1].Channel)
 	assert.Equal(t, 1, channels[1].UnreadCount)
-	assert.Equal(t, "notif:1", channels[1].LatestNotification.ID().String())
+	assert.Equal(t, "notif:1", channels[1].LatestNotificationID.String())
 
-	// 6. 测试物理删除 (IsDeleted = true)
-	got.MarkDeleted()
-	didCreate, err = repo.Save(ctx, got)
+	// 6. 测试 Delete：删除通知，不存在返回 apperror
+	err = repo.Delete(ctx, got.ID().String())
 	require.NoError(t, err)
-	assert.False(t, didCreate)
 
 	// 验证已删除
-	deletedGot, err := repo.Get(ctx, got.ID().String())
-	require.NoError(t, err)
-	assert.Nil(t, deletedGot)
+	_, err = repo.Get(ctx, got.ID().String())
+	require.Error(t, err)
+	assert.True(t, apperror.IsNotFound(err))
+
+	// 再次删除应返回 apperror
+	err = repo.Delete(ctx, got.ID().String())
+	require.Error(t, err)
+	assert.True(t, apperror.IsNotFound(err))
 }
 
 

@@ -12,5 +12,5 @@ fragment Notification on Notification {
   notBefore
   createdAt
   updatedAt
-  detailURL
+  detailsURL
 }

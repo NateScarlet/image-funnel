@@ -6,5 +6,8 @@ extend type Query {
   notificationChannels(
     "筛选条件"
     filterBy: NotificationFiltersInput
-  ): [NotificationChannel!]!
+    "每页条目数，默认 50"
+    first: Int = 50
+    after: String
+  ): NotificationChannelConnection!
 }

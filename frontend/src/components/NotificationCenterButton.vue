@@ -2,22 +2,14 @@
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
 
 defineProps<{
-  variant?: "default" | "menu-item";
+  buttonClass?: string;
 }>();
 
 const { unreadCount, drawer } = useNotificationCenter();
 </script>
 
 <template>
-  <button
-    :class="[
-      variant === 'default'
-        ? 'relative flex items-center gap-2 rounded-lg border border-primary-700 bg-primary-800/80 px-4 py-2 text-sm font-medium text-primary-300 transition-all hover:border-primary-600 hover:bg-primary-700 hover:text-white active:scale-95 cursor-pointer select-none'
-        : 'relative w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-all flex items-center gap-3 text-primary-200 hover:text-white active:scale-95 cursor-pointer select-none',
-    ]"
-    title="通知中心"
-    @click="drawer.open()"
-  >
+  <button :class="buttonClass" title="通知中心" @click="drawer.open()">
     <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
       <path
         stroke-linecap="round"
@@ -27,12 +19,7 @@ const { unreadCount, drawer } = useNotificationCenter();
       />
     </svg>
 
-    <template v-if="variant === 'default'">
-      <span class="hidden sm:inline">通知</span>
-    </template>
-    <template v-else>
-      <span class="flex-1 text-left">通知中心</span>
-    </template>
+    <slot />
 
     <span
       v-if="unreadCount > 0"

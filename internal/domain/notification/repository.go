@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 
+	"main/internal/scalar"
 	"main/internal/shared"
 )
 
@@ -38,21 +39,23 @@ func NewFindOptions(opts ...FindOption) *FindOptions {
 
 // ChannelStats 频道统计信息数据
 type ChannelStats struct {
-	Channel            string
-	UnreadCount        int
-	LatestNotification *Notification
+	Channel              string
+	UnreadCount          int
+	LatestNotificationID scalar.ID
 }
 
 // Repository 接口，提供通知存储的核心接口
 type Repository interface {
 	// Save 保存通知（新建或更新）。返回 didCreate 表示是否为新建通知
 	Save(ctx context.Context, notif *Notification) (didCreate bool, err error)
-	// Get 根据 ID 获取通知，不存在返回 nil, nil
+	// Get 根据 ID 获取通知，不存在返回 apperror.NewErrDocumentNotFound
 	Get(ctx context.Context, id string) (*Notification, error)
-	// GetByTag 根据 tag 获取通知，不存在返回 nil, nil
+	// GetByTag 根据 tag 获取通知，不存在返回 apperror.NewErrDocumentNotFound
 	GetByTag(ctx context.Context, tag string) (*Notification, error)
 	// Find 遍历所有通知，支持基于 Options 模式粗筛
 	Find(ctx context.Context, options ...FindOption) iter.Seq2[*Notification, error]
 	// Channels 遍历获取频道及统计数据
 	Channels(ctx context.Context) iter.Seq2[*ChannelStats, error]
+	// Delete 删除通知，不存在返回 apperror.NewErrDocumentNotFound
+	Delete(ctx context.Context, id string) error
 }

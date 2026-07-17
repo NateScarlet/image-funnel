@@ -7,14 +7,20 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
+	appnotification "main/internal/application/notification"
 )
 
 // SendNotification is the resolver for the sendNotification field.
 func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error) {
-	var detailURL scalar.URI
-	if input.DetailURL != nil {
-		detailURL = *input.DetailURL
+	var opts []appnotification.SendNotificationOption
+	if input.NotAfter != nil {
+		opts = append(opts, appnotification.WithNotAfter(*input.NotAfter))
+	}
+	if input.NotBefore != nil {
+		opts = append(opts, appnotification.WithNotBefore(*input.NotBefore))
+	}
+	if input.DetailsURL != nil {
+		opts = append(opts, appnotification.WithDetailsURL(*input.DetailsURL))
 	}
 
 	dto, didCreate, err := r.app.SendNotification(
@@ -24,9 +30,7 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		input.Title,
 		input.Body,
 		input.Priority,
-		input.NotAfter,
-		input.NotBefore,
-		detailURL,
+		opts...,
 	)
 	if err != nil {
 		return nil, err

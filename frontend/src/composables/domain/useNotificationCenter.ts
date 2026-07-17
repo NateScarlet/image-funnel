@@ -6,6 +6,7 @@ import query from "@/graphql/utils/query";
 import mutate from "@/graphql/utils/mutate";
 import useModalDrawer from "@/composables/useModalDrawer";
 import useNotification from "@/composables/useNotification";
+import useCurrentTime from "@/composables/useCurrentTime";
 import {
   NotificationChannelsDocument,
   NotificationChangedDocument,
@@ -18,8 +19,25 @@ import {
   type NotificationFragment,
 } from "@/graphql/generated";
 
-type NotificationChannel = NotificationChannelsQuery["notificationChannels"][number];
+type NotificationChannel = NonNullable<
+  NotificationChannelsQuery["notificationChannels"]
+>["nodes"][number];
 type Notification = NotificationFragment;
+
+// 根据文本长度计算合理的展示时长
+function toastDuration(title: string): number {
+  const len = title.length;
+  if (len < 20) return 3000;
+  if (len < 50) return 5000;
+  return 7000;
+}
+
+// 标记单条通知已读
+async function markAsRead(id: string) {
+  await mutate(UpdateNotificationDocument, {
+    variables: { input: { id, readAt: new Date().toISOString() } },
+  });
+}
 
 const init = once(() => {
   const selectedChannel = ref<string | null>(null);
@@ -36,12 +54,14 @@ const init = once(() => {
     },
   });
 
+  const { currentTime } = useCurrentTime();
+
   const { data: channelsData, refresh: refreshChannels } = useQuery(NotificationChannelsDocument, {
     fetchPolicy: "cache-and-network",
   });
 
   const channels = computed<NotificationChannel[]>(() => {
-    return channelsData.value?.notificationChannels ?? [];
+    return channelsData.value?.notificationChannels?.nodes ?? [];
   });
 
   const unreadCount = computed(() => {
@@ -52,26 +72,18 @@ const init = once(() => {
     return channels.value.find((ch) => ch.channel === selectedChannel.value)?.unreadCount ?? 0;
   });
 
-  // 检查通知是否在可显示时间窗口内（notBefore/notAfter 由前端处理）
+  // 检查通知是否在可显示时间窗口内，基于响应式 currentTime 自动刷新
   function isTimely(n: { notBefore?: string | null; notAfter?: string | null }): boolean {
-    const now = Date.now();
+    const now = currentTime.value;
     if (n.notBefore) {
-      const t = new Date(n.notBefore).getTime();
-      if (!isNaN(t) && now < t) return false;
+      const t = new Date(n.notBefore);
+      if (!isNaN(t.getTime()) && now.toDate() < t) return false;
     }
     if (n.notAfter) {
-      const t = new Date(n.notAfter).getTime();
-      if (!isNaN(t) && now > t) return false;
+      const t = new Date(n.notAfter);
+      if (!isNaN(t.getTime()) && now.toDate() > t) return false;
     }
     return true;
-  }
-
-  // 根据文本长度计算合理的展示时长
-  function toastDuration(title: string): number {
-    const len = title.length;
-    if (len < 20) return 3000;
-    if (len < 50) return 5000;
-    return 7000;
   }
 
   // 投递 Toast；优先级仅影响是否可关闭（HIGH 需手动确认）
@@ -107,8 +119,26 @@ const init = once(() => {
       }
 
       const eventPayload = res.data?.notificationChanged;
-      if (eventPayload?.event === NotificationEventType.SENT && eventPayload.notification) {
-        spawnToast(eventPayload.notification);
+      if (!eventPayload) return;
+
+      const { event, notification } = eventPayload;
+      if (!notification) return;
+
+      if (event === NotificationEventType.SENT) {
+        // 新通知到达，投递 Toast
+        spawnToast(notification);
+      } else if (event === NotificationEventType.UNSENT) {
+        // 通知被撤回，从本地列表移除
+        channelNotifications.value = channelNotifications.value.filter(
+          (n) => n.id !== notification.id,
+        );
+        shownToastIds.delete(notification.id);
+      } else if (event === NotificationEventType.UPDATED) {
+        // 通知更新（可见时间变化等），刷新本地列表
+        if (notification.notBefore || notification.notAfter) {
+          // 时间窗口变化，清除已显示的 Toast 记录以便重新评估
+          shownToastIds.delete(notification.id);
+        }
       }
     },
   });
@@ -120,16 +150,23 @@ const init = once(() => {
     const { data: chData } = await query(NotificationChannelsDocument, {
       fetchPolicy: "network-only",
     });
-    const chs = chData?.notificationChannels ?? [];
+    const chs = chData?.notificationChannels?.nodes ?? [];
     for (const ch of chs) {
-      const n = ch.latestNotification;
-      if (
-        n &&
-        !n.readAt &&
-        n.status === NotificationStatus.ACTIVE &&
-        n.priority !== NotificationPriority.LOW
-      ) {
-        spawnToast(n);
+      if (ch.latestNotificationID && ch.unreadCount > 0) {
+        // 查询该频道最新通知
+        const { data: notifData } = await query(NotificationsDocument, {
+          variables: { channel: ch.channel, first: 1 },
+          fetchPolicy: "network-only",
+        });
+        const latestNotif = notifData?.notifications?.edges?.[0]?.node;
+        if (
+          latestNotif &&
+          !latestNotif.readAt &&
+          latestNotif.status === NotificationStatus.ACTIVE &&
+          latestNotif.priority !== NotificationPriority.LOW
+        ) {
+          spawnToast(latestNotif);
+        }
       }
     }
   }
@@ -140,7 +177,7 @@ const init = once(() => {
       variables: { channel: selectedChannel.value },
       fetchPolicy: "network-only",
     });
-    channelNotifications.value = data?.notifications?.nodes ?? [];
+    channelNotifications.value = data?.notifications?.edges?.map((e) => e.node) ?? [];
   }
 
   async function selectChannel(channel: string) {
@@ -148,12 +185,6 @@ const init = once(() => {
     await refreshSelectedChannel();
     // 自动批量已读
     await markAllAsRead(channel);
-  }
-
-  async function markAsRead(id: string) {
-    await mutate(UpdateNotificationDocument, {
-      variables: { input: { id, readAt: new Date().toISOString() } },
-    });
   }
 
   async function markAllAsRead(_channel: string) {
@@ -184,6 +215,7 @@ const init = once(() => {
     markAllAsRead,
     markAsDismissed,
     refreshChannels,
+    currentTime,
   };
 });
 

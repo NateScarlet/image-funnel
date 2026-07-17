@@ -1,9 +1,15 @@
-query notificationChannels($filterBy: NotificationFiltersInput) {
-  notificationChannels(filterBy: $filterBy) {
-    channel
-    unreadCount
-    latestNotification {
-      ...Notification
+query notificationChannels($filterBy: NotificationFiltersInput, $first: Int, $after: String) {
+  notificationChannels(filterBy: $filterBy, first: $first, after: $after) {
+    nodes {
+      channel
+      unreadCount
+      latestNotificationID
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
     }
   }
 }

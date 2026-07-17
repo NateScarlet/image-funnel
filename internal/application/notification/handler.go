@@ -3,10 +3,10 @@ package notification
 import (
 	"context"
 	"iter"
+	"log/slog"
 	"slices"
 	"time"
 
-	"main/internal/apperror"
 	domnotif "main/internal/domain/notification"
 	"main/internal/pagination"
 	"main/internal/pubsub"
@@ -48,7 +48,34 @@ func (h *Handler) Notification(ctx context.Context, id scalar.ID) (*shared.Notif
 	return h.dtoFactory.New(notif), nil
 }
 
-// SendNotification 发送或覆盖通知，如果 tag 已存在则更新内容，否则创建新通知
+// #region SendNotification
+
+// SendNotificationOptions 发送通知的选项
+type SendNotificationOptions struct {
+	NotAfter   time.Time
+	NotBefore  time.Time
+	DetailsURL scalar.URI
+}
+
+// SendNotificationOption 发送通知的选项函数
+type SendNotificationOption func(*SendNotificationOptions)
+
+// WithNotAfter 设置过期时间
+func WithNotAfter(t time.Time) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.NotAfter = t }
+}
+
+// WithNotBefore 设置最早可见时间
+func WithNotBefore(t time.Time) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.NotBefore = t }
+}
+
+// WithDetailsURL 设置详情 URL
+func WithDetailsURL(u scalar.URI) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.DetailsURL = u }
+}
+
+// SendNotification 发送或覆盖通知
 func (h *Handler) SendNotification(
 	ctx context.Context,
 	tag string,
@@ -56,49 +83,31 @@ func (h *Handler) SendNotification(
 	title string,
 	body string,
 	priority shared.NotificationPriority,
-	notAfter *time.Time,
-	notBefore *time.Time,
-	detailURL scalar.URI,
+	opts ...SendNotificationOption,
 ) (*shared.NotificationDTO, bool, error) {
-	now := time.Now()
-	var notAfterVal, notBeforeVal time.Time
-	if notAfter != nil {
-		notAfterVal = *notAfter
-	}
-	if notBefore != nil {
-		notBeforeVal = *notBefore
+	var options SendNotificationOptions
+	for _, o := range opts {
+		o(&options)
 	}
 
-	existing, err := h.repo.GetByTag(ctx, tag)
+	result, err := h.service.SendNotification(ctx, domnotif.SendNotificationInput{
+		Tag:        tag,
+		Channel:    channel,
+		Title:      title,
+		Body:       body,
+		Priority:   priority,
+		NotAfter:   options.NotAfter,
+		NotBefore:  options.NotBefore,
+		DetailsURL: options.DetailsURL,
+	})
 	if err != nil {
 		return nil, false, err
 	}
 
-	var notif *domnotif.Notification
-	if existing != nil {
-		if existing.Channel() != channel {
-			return nil, false, apperror.New(
-				"CHANNEL_CONFLICT",
-				"notification with tag "+tag+" already exists in channel "+existing.Channel(),
-				"标签 "+tag+" 已存在于频道 "+existing.Channel()+" 中",
-			)
-		}
-		existing.Update(title, body, priority, notAfterVal, notBeforeVal, detailURL, now)
-		notif = existing
-	} else {
-		// 由领域 Service 统一构造新实体，实现 ID 的内聚生成与封装
-		notif = h.service.CreateNew(tag, channel, title, body, priority, notAfterVal, notBeforeVal, detailURL)
-	}
-
-	didCreate, err := h.repo.Save(ctx, notif)
-	if err != nil {
-		return nil, false, err
-	}
-
-	dto := h.dtoFactory.New(notif)
+	dto := h.dtoFactory.New(result.Notification)
 
 	eventType := shared.NotificationEventTypeSent
-	if !didCreate {
+	if !result.DidCreate {
 		eventType = shared.NotificationEventTypeUpdated
 	}
 	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
@@ -106,8 +115,14 @@ func (h *Handler) SendNotification(
 		Notification: dto,
 	})
 
-	return dto, didCreate, nil
+	slog.Debug("sendNotification", "tag", tag, "didCreate", result.DidCreate)
+
+	return dto, result.DidCreate, nil
 }
+
+// #endregion
+
+// #region UpdateNotification
 
 // UpdateNotification 更新通知元数据（已读时间、关闭时间）
 func (h *Handler) UpdateNotification(
@@ -116,31 +131,7 @@ func (h *Handler) UpdateNotification(
 	readAt *time.Time,
 	dismissedAt *time.Time,
 ) (*shared.NotificationDTO, error) {
-	notif, err := h.repo.Get(ctx, id.String())
-	if err != nil {
-		return nil, err
-	}
-	if notif == nil {
-		return nil, apperror.New("NOT_FOUND", "notification not found", "未找到指定通知")
-	}
-
-	if readAt != nil {
-		if readAt.IsZero() {
-			notif.MarkRead(time.Time{}, time.Now())
-		} else {
-			notif.MarkRead(*readAt, time.Now())
-		}
-	}
-
-	if dismissedAt != nil {
-		if dismissedAt.IsZero() {
-			notif.Dismiss(time.Time{}, time.Now())
-		} else {
-			notif.Dismiss(*dismissedAt, time.Now())
-		}
-	}
-
-	_, err = h.repo.Save(ctx, notif)
+	notif, err := h.service.UpdateNotification(ctx, id, readAt, dismissedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -151,61 +142,45 @@ func (h *Handler) UpdateNotification(
 		Notification: dto,
 	})
 
+	slog.Debug("updateNotification", "id", id)
+
 	return dto, nil
 }
 
-// UnsendNotification 撤回（物理删除）通知
-func (h *Handler) UnsendNotification(ctx context.Context, id scalar.ID) (scalar.ID, error) {
-	notif, err := h.repo.Get(ctx, id.String())
+// #endregion
+
+// #region UnsendNotification
+
+// UnsendNotification 撤回（删除）通知
+func (h *Handler) UnsendNotification(ctx context.Context, tag string) error {
+	err := h.service.UnsendNotification(ctx, tag)
 	if err != nil {
-		return id, err
-	}
-	if notif == nil {
-		return id, apperror.New("NOT_FOUND", "notification not found", "未找到指定通知")
+		return err
 	}
 
-	// 标记删除状态
-	notif.MarkDeleted()
+	slog.Debug("unsendNotification", "tag", tag)
 
-	// 物理删除
-	_, err = h.repo.Save(ctx, notif)
-	if err != nil {
-		return id, err
-	}
-
-	// 触发推送，通知前端撤销该通知展示
-	dto := h.dtoFactory.New(notif)
-	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
-		Event:        shared.NotificationEventTypeUnsent,
-		Notification: dto,
-	})
-
-	return id, nil
+	return nil
 }
+
+// #endregion
+
+// #region NotificationChannels
 
 // NotificationChannels 获取所有通知频道
 func (h *Handler) NotificationChannels(
 	ctx context.Context,
 	filters shared.NotificationFilters,
-) ([]*shared.NotificationChannelDTO, error) {
-	// 有筛选条件时，遍历全量通知后聚合频道统计
-	if filters.Status != nil || filters.Priority != nil || filters.Read != nil || filters.VisibleAt != nil {
-		return h.filteredNotificationChannels(ctx, filters)
+	first *int,
+	after *string,
+) (*shared.NotificationChannelConnectionDTO, error) {
+	cs, err := h.service.GetChannels(ctx, filters)
+	if err != nil {
+		return nil, err
 	}
 
-	var results []*shared.NotificationChannelDTO
-
-	for cs, err := range h.repo.Channels(ctx) {
-		if err != nil {
-			return nil, err
-		}
-
-		// 委派给 DTOFactory.NewChannel 统一构造，保证 DTO 边界内聚与减少 Feature Envy
-		results = append(results, h.dtoFactory.NewChannel(cs))
-	}
-
-	// 按频道名称字母排序返回
-	slices.SortFunc(results, func(a, b *shared.NotificationChannelDTO) int {
+	// 按频道名称字母排序
+	slices.SortFunc(cs, func(a, b *domnotif.ChannelStats) int {
 		if a.Channel < b.Channel {
 			return -1
 		}
@@ -215,58 +190,66 @@ func (h *Handler) NotificationChannels(
 		return 0
 	})
 
-	return results, nil
+	// 转换为 DTO 用于分页
+	var allDTOs []*shared.NotificationChannelDTO
+	for _, c := range cs {
+		allDTOs = append(allDTOs, h.dtoFactory.NewChannel(c))
+	}
+
+	builder := pagination.NewConnectionBufferBuilder[*shared.NotificationChannelDTO, *shared.NotificationChannelEdgeDTO, *shared.NotificationChannelConnectionDTO]()
+	buf := builder(
+		func(item *shared.NotificationChannelDTO, cursor string) (*shared.NotificationChannelEdgeDTO, error) {
+			return &shared.NotificationChannelEdgeDTO{
+				Node:   item,
+				Cursor: cursor,
+			}, nil
+		},
+		func(edges []*shared.NotificationChannelEdgeDTO, pageInfo pagination.PageInfo) (*shared.NotificationChannelConnectionDTO, error) {
+			var nodes = make([]*shared.NotificationChannelDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			var startCursor, endCursor string
+			if pageInfo.StartCursor != nil {
+				startCursor = *pageInfo.StartCursor
+			}
+			if pageInfo.EndCursor != nil {
+				endCursor = *pageInfo.EndCursor
+			}
+			return &shared.NotificationChannelConnectionDTO{
+				Edges: edges,
+				Nodes: nodes,
+				PageInfo: &shared.PageInfoDTO{
+					HasNextPage:     pageInfo.HasNextPage,
+					HasPreviousPage: pageInfo.HasPreviousPage,
+					StartCursor:     startCursor,
+					EndCursor:       endCursor,
+				},
+			}, nil
+		},
+	)
+
+	options := pagination.OptionFromInput(after, nil, first, nil)
+
+	allSeq := func(yield func(*shared.NotificationChannelDTO, error) bool) {
+		for _, dto := range allDTOs {
+			if !yield(dto, nil) {
+				return
+			}
+		}
+	}
+
+	err = pagination.ByIndexE(allSeq, buf, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Value()
 }
 
-// filteredNotificationChannels 使用筛选条件过滤通知后重新聚合频道统计
-func (h *Handler) filteredNotificationChannels(ctx context.Context, filters shared.NotificationFilters) ([]*shared.NotificationChannelDTO, error) {
-	notifFilter := h.filterBuilder.Build(filters)
+// #endregion
 
-	type channelAccum struct {
-		unreadCount int
-		latest      *domnotif.Notification
-	}
-	acc := map[string]*channelAccum{}
-
-	for item, err := range h.repo.Find(ctx) {
-		if err != nil {
-			return nil, err
-		}
-		if !notifFilter(item) {
-			continue
-		}
-
-		ch := item.Channel()
-		a, ok := acc[ch]
-		if !ok {
-			a = &channelAccum{}
-			acc[ch] = a
-		}
-		if item.ReadAt().IsZero() {
-			a.unreadCount++
-		}
-		if a.latest == nil || item.CreatedAt().After(a.latest.CreatedAt()) {
-			a.latest = item
-		}
-	}
-
-	var results []*shared.NotificationChannelDTO
-	for ch, a := range acc {
-		results = append(results, h.dtoFactory.NewChannelWithData(ch, a.unreadCount, a.latest))
-	}
-
-	slices.SortFunc(results, func(a, b *shared.NotificationChannelDTO) int {
-		if a.Channel < b.Channel {
-			return -1
-		}
-		if a.Channel > b.Channel {
-			return 1
-		}
-		return 0
-	})
-
-	return results, nil
-}
+// #region Notifications
 
 // Notifications 获取通知列表，支持过滤及游标分页
 func (h *Handler) Notifications(
@@ -276,7 +259,7 @@ func (h *Handler) Notifications(
 	first *int,
 	after *string,
 ) (*shared.NotificationConnectionDTO, error) {
-	filters.Channel = &channel
+	filters.Channel = []string{channel}
 
 	builder := pagination.NewConnectionBufferBuilder[*shared.NotificationDTO, *shared.NotificationEdgeDTO, *shared.NotificationConnectionDTO]()
 	buf := builder(
@@ -315,7 +298,7 @@ func (h *Handler) Notifications(
 	notifFilter := h.filterBuilder.Build(filters)
 
 	filteredSeq := func(yield func(*shared.NotificationDTO, error) bool) {
-		for item, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: &channel})) {
+		for item, err := range h.repo.Find(ctx, domnotif.FindWithFilter(shared.NotificationFilters{Channel: []string{channel}})) {
 			if err != nil {
 				yield(nil, err)
 				return
@@ -338,6 +321,8 @@ func (h *Handler) Notifications(
 
 	return buf.Value()
 }
+
+// #endregion
 
 // SubscribeNotificationChanged 订阅通知全局实时流
 func (h *Handler) SubscribeNotificationChanged(ctx context.Context) iter.Seq2[*shared.NotificationChangedEventDTO, error] {
