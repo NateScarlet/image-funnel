@@ -1,0 +1,70 @@
+"""
+通知对象，代表一条系统通知。
+"""
+type Notification implements Node @goModel(model: "main/internal/shared.NotificationDTO") {
+  """
+  通知唯一标识符，格式为 notif:{uuid}
+  """
+  id: ID!
+  """
+  客户端提供的唯一标签（UUID 格式），用于同标签替换
+  """
+  tag: String!
+  """
+  频道标识，如 "hook:fork"，首次使用自动注册
+  """
+  channel: String!
+  """
+  通知标题
+  """
+  title: String!
+  """
+  通知正文
+  """
+  body: String!
+  """
+  优先级，决定前端投递方式
+  """
+  priority: NotificationPriority!
+  """
+  通知状态（派生字段：dismissedAt ≠ 0 时为 DISMISSED，否则为 ACTIVE）
+  """
+  status: NotificationStatus!
+  """
+  已读时间戳，零值表示未读
+  """
+  readAt: Time!
+  """
+  关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭
+  """
+  dismissedAt: Time!
+  """
+  过期时间，到达后通知将被自动删除。零值表示不自动过期
+  """
+  notAfter: Time!
+  """
+  最早可见时间，到达后才对客户端可见。零值表示立即可见
+  """
+  notBefore: Time!
+  """
+  创建时间
+  """
+  createdAt: Time!
+  """
+  最后更新时间
+  """
+  updatedAt: Time!
+}
+
+type NotificationConnection
+  @goModel(model: "main/internal/shared.NotificationConnectionDTO") {
+  edges: [NotificationEdge!]!
+  nodes: [Notification!]!
+  pageInfo: PageInfo!
+}
+
+type NotificationEdge
+  @goModel(model: "main/internal/shared.NotificationEdgeDTO") {
+  node: Notification!
+  cursor: String!
+}

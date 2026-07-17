@@ -2,7 +2,8 @@
   <div class="min-h-screen bg-primary-900 text-primary-100 p-4 md:p-8">
     <div class="max-w-4xl mx-auto">
       <!-- 顶部工具栏 -->
-      <div class="flex justify-end mb-4">
+      <div class="flex justify-end gap-2 mb-4">
+        <NotificationCenterButton />
         <DeviceManagerButton />
       </div>
 
@@ -31,6 +32,7 @@ import useQuery from "../graphql/utils/useQuery";
 import { MetaDocument } from "../graphql/generated";
 import CreateSessionForm from "../components/CreateSessionForm.vue";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
+import NotificationCenterButton from "../components/NotificationCenterButton.vue";
 
 const loadingCount = ref(0);
 

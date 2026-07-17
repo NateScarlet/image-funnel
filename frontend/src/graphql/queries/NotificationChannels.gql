@@ -1,0 +1,9 @@
+query notificationChannels($filterBy: NotificationFiltersInput) {
+  notificationChannels(filterBy: $filterBy) {
+    channel
+    unreadCount
+    latestNotification {
+      ...Notification
+    }
+  }
+}

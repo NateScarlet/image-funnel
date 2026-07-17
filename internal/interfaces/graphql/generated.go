@@ -291,13 +291,16 @@ type ComplexityRoot struct {
 		MoveImages                 func(childComplexity int, input MoveImagesInput) int
 		RefreshToken               func(childComplexity int, input RefreshTokenInput) int
 		RejectPairingRequest       func(childComplexity int, input RejectPairingRequestInput) int
+		SendNotification           func(childComplexity int, input SendNotificationInput) int
 		SetDirectoryState          func(childComplexity int, input SetDirectoryStateInput) int
 		TrashImages                func(childComplexity int, input TrashImagesInput) int
 		Undo                       func(childComplexity int, input UndoInput) int
 		UndoTrash                  func(childComplexity int, input UndoTrashInput) int
+		UnsendNotification         func(childComplexity int, id scalar.ID) int
 		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
 		UpdateImagesMetadata       func(childComplexity int, input UpdateImagesMetadataInput) int
 		UpdateNote                 func(childComplexity int, id scalar.ID, content string) int
+		UpdateNotification         func(childComplexity int, id scalar.ID, input UpdateNotificationInput) int
 		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
 	}
 
@@ -328,6 +331,44 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 	}
 
+	Notification struct {
+		Body        func(childComplexity int) int
+		Channel     func(childComplexity int) int
+		CreatedAt   func(childComplexity int) int
+		DismissedAt func(childComplexity int) int
+		ID          func(childComplexity int) int
+		NotAfter    func(childComplexity int) int
+		NotBefore   func(childComplexity int) int
+		Priority    func(childComplexity int) int
+		ReadAt      func(childComplexity int) int
+		Status      func(childComplexity int) int
+		Tag         func(childComplexity int) int
+		Title       func(childComplexity int) int
+		UpdatedAt   func(childComplexity int) int
+	}
+
+	NotificationChangedEvent struct {
+		Event        func(childComplexity int) int
+		Notification func(childComplexity int) int
+	}
+
+	NotificationChannel struct {
+		Channel            func(childComplexity int) int
+		LatestNotification func(childComplexity int) int
+		UnreadCount        func(childComplexity int) int
+	}
+
+	NotificationConnection struct {
+		Edges    func(childComplexity int) int
+		Nodes    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	NotificationEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
 	PageInfo struct {
 		EndCursor       func(childComplexity int) int
 		HasNextPage     func(childComplexity int) int
@@ -342,18 +383,20 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		AuthStatus         func(childComplexity int) int
-		ComfyUIWorkflow    func(childComplexity int, id scalar.ID) int
-		Devices            func(childComplexity int) int
-		HookAutocomplete   func(childComplexity int, input HookAutocompleteInput) int
-		Hooks              func(childComplexity int) int
-		Meta               func(childComplexity int) int
-		Node               func(childComplexity int, id scalar.ID) int
-		PairingRequests    func(childComplexity int) int
-		RootDirectory      func(childComplexity int) int
-		Session            func(childComplexity int, id scalar.ID) int
-		SuggestDirectories func(childComplexity int, directoryID scalar.ID, input shared.PathInput) int
-		TrashHistory       func(childComplexity int, first *int, after *string) int
+		AuthStatus           func(childComplexity int) int
+		ComfyUIWorkflow      func(childComplexity int, id scalar.ID) int
+		Devices              func(childComplexity int) int
+		HookAutocomplete     func(childComplexity int, input HookAutocompleteInput) int
+		Hooks                func(childComplexity int) int
+		Meta                 func(childComplexity int) int
+		Node                 func(childComplexity int, id scalar.ID) int
+		NotificationChannels func(childComplexity int, filterBy *NotificationFiltersInput) int
+		Notifications        func(childComplexity int, channel string, filterBy *NotificationFiltersInput, first *int, after *string) int
+		PairingRequests      func(childComplexity int) int
+		RootDirectory        func(childComplexity int) int
+		Session              func(childComplexity int, id scalar.ID) int
+		SuggestDirectories   func(childComplexity int, directoryID scalar.ID, input shared.PathInput) int
+		TrashHistory         func(childComplexity int, first *int, after *string) int
 	}
 
 	RatingCount struct {
@@ -366,6 +409,12 @@ type ComplexityRoot struct {
 		AccessTokenExpiresIn  func(childComplexity int) int
 		RefreshToken          func(childComplexity int) int
 		RefreshTokenExpiresIn func(childComplexity int) int
+	}
+
+	SendNotificationPayload struct {
+		ClientMutationID func(childComplexity int) int
+		DidCreate        func(childComplexity int) int
+		Notification     func(childComplexity int) int
 	}
 
 	Session struct {
@@ -405,6 +454,7 @@ type ComplexityRoot struct {
 		ImageSaved            func(childComplexity int, filterBy *shared.ImageFilters) int
 		NoteSaved             func(childComplexity int, filterBy *shared.NoteFilters) int
 		NoteUpdated           func(childComplexity int, id scalar.ID) int
+		NotificationChanged   func(childComplexity int) int
 		PairingRequestCreated func(childComplexity int) int
 		PairingRequestUpdated func(childComplexity int, code string) int
 		SessionUpdated        func(childComplexity int, id scalar.ID) int
@@ -451,9 +501,19 @@ type ComplexityRoot struct {
 		RestoredCount    func(childComplexity int) int
 	}
 
+	UnsendNotificationPayload struct {
+		ClientMutationID func(childComplexity int) int
+		DeletedID        func(childComplexity int) int
+	}
+
 	UpdateImagesMetadataPayload struct {
 		ClientMutationID func(childComplexity int) int
 		UpdatedCount     func(childComplexity int) int
+	}
+
+	UpdateNotificationPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Notification     func(childComplexity int) int
 	}
 
 	UpdateSessionPayload struct {
@@ -511,13 +571,16 @@ type MutationResolver interface {
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenPayload, error)
 	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
+	SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error)
 	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
+	UnsendNotification(ctx context.Context, id scalar.ID) (*UnsendNotificationPayload, error)
 	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
 	UpdateImagesMetadata(ctx context.Context, input UpdateImagesMetadataInput) (*UpdateImagesMetadataPayload, error)
 	UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error)
+	UpdateNotification(ctx context.Context, id scalar.ID, input UpdateNotificationInput) (*UpdateNotificationPayload, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
 type NoteResolver interface {
@@ -531,6 +594,8 @@ type QueryResolver interface {
 	HookAutocomplete(ctx context.Context, input HookAutocompleteInput) ([]*shared.AutocompleteSuggestionDTO, error)
 	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
+	NotificationChannels(ctx context.Context, filterBy *NotificationFiltersInput) ([]*shared.NotificationChannelDTO, error)
+	Notifications(ctx context.Context, channel string, filterBy *NotificationFiltersInput, first *int, after *string) (*shared.NotificationConnectionDTO, error)
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
 	Session(ctx context.Context, id scalar.ID) (*shared.SessionDTO, error)
@@ -557,6 +622,7 @@ type SubscriptionResolver interface {
 	ImageDeleted(ctx context.Context, filterBy *shared.ImageFilters) (<-chan *DeletedImage, error)
 	NoteUpdated(ctx context.Context, id scalar.ID) (<-chan *shared.NoteDTO, error)
 	NoteSaved(ctx context.Context, filterBy *shared.NoteFilters) (<-chan *shared.NoteDTO, error)
+	NotificationChanged(ctx context.Context) (<-chan *shared.NotificationChangedEventDTO, error)
 	PairingRequestCreated(ctx context.Context) (<-chan *shared.PairingRequestDTO, error)
 	PairingRequestUpdated(ctx context.Context, code string) (<-chan *shared.PairingRequestDTO, error)
 }
@@ -1528,6 +1594,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RejectPairingRequest(childComplexity, args["input"].(RejectPairingRequestInput)), true
+	case "Mutation.sendNotification":
+		if e.complexity.Mutation.SendNotification == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_sendNotification_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SendNotification(childComplexity, args["input"].(SendNotificationInput)), true
 	case "Mutation.setDirectoryState":
 		if e.complexity.Mutation.SetDirectoryState == nil {
 			break
@@ -1572,6 +1649,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UndoTrash(childComplexity, args["input"].(UndoTrashInput)), true
+	case "Mutation.unsendNotification":
+		if e.complexity.Mutation.UnsendNotification == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unsendNotification_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UnsendNotification(childComplexity, args["id"].(scalar.ID)), true
 	case "Mutation.updateImageMetadata":
 		if e.complexity.Mutation.UpdateImageMetadata == nil {
 			break
@@ -1605,6 +1693,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateNote(childComplexity, args["id"].(scalar.ID), args["content"].(string)), true
+	case "Mutation.updateNotification":
+		if e.complexity.Mutation.UpdateNotification == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateNotification_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateNotification(childComplexity, args["id"].(scalar.ID), args["input"].(UpdateNotificationInput)), true
 	case "Mutation.updateSession":
 		if e.complexity.Mutation.UpdateSession == nil {
 			break
@@ -1711,6 +1810,149 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.NoteFilters.ID(childComplexity), true
 
+	case "Notification.body":
+		if e.complexity.Notification.Body == nil {
+			break
+		}
+
+		return e.complexity.Notification.Body(childComplexity), true
+	case "Notification.channel":
+		if e.complexity.Notification.Channel == nil {
+			break
+		}
+
+		return e.complexity.Notification.Channel(childComplexity), true
+	case "Notification.createdAt":
+		if e.complexity.Notification.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.Notification.CreatedAt(childComplexity), true
+	case "Notification.dismissedAt":
+		if e.complexity.Notification.DismissedAt == nil {
+			break
+		}
+
+		return e.complexity.Notification.DismissedAt(childComplexity), true
+	case "Notification.id":
+		if e.complexity.Notification.ID == nil {
+			break
+		}
+
+		return e.complexity.Notification.ID(childComplexity), true
+	case "Notification.notAfter":
+		if e.complexity.Notification.NotAfter == nil {
+			break
+		}
+
+		return e.complexity.Notification.NotAfter(childComplexity), true
+	case "Notification.notBefore":
+		if e.complexity.Notification.NotBefore == nil {
+			break
+		}
+
+		return e.complexity.Notification.NotBefore(childComplexity), true
+	case "Notification.priority":
+		if e.complexity.Notification.Priority == nil {
+			break
+		}
+
+		return e.complexity.Notification.Priority(childComplexity), true
+	case "Notification.readAt":
+		if e.complexity.Notification.ReadAt == nil {
+			break
+		}
+
+		return e.complexity.Notification.ReadAt(childComplexity), true
+	case "Notification.status":
+		if e.complexity.Notification.Status == nil {
+			break
+		}
+
+		return e.complexity.Notification.Status(childComplexity), true
+	case "Notification.tag":
+		if e.complexity.Notification.Tag == nil {
+			break
+		}
+
+		return e.complexity.Notification.Tag(childComplexity), true
+	case "Notification.title":
+		if e.complexity.Notification.Title == nil {
+			break
+		}
+
+		return e.complexity.Notification.Title(childComplexity), true
+	case "Notification.updatedAt":
+		if e.complexity.Notification.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.Notification.UpdatedAt(childComplexity), true
+
+	case "NotificationChangedEvent.event":
+		if e.complexity.NotificationChangedEvent.Event == nil {
+			break
+		}
+
+		return e.complexity.NotificationChangedEvent.Event(childComplexity), true
+	case "NotificationChangedEvent.notification":
+		if e.complexity.NotificationChangedEvent.Notification == nil {
+			break
+		}
+
+		return e.complexity.NotificationChangedEvent.Notification(childComplexity), true
+
+	case "NotificationChannel.channel":
+		if e.complexity.NotificationChannel.Channel == nil {
+			break
+		}
+
+		return e.complexity.NotificationChannel.Channel(childComplexity), true
+	case "NotificationChannel.latestNotification":
+		if e.complexity.NotificationChannel.LatestNotification == nil {
+			break
+		}
+
+		return e.complexity.NotificationChannel.LatestNotification(childComplexity), true
+	case "NotificationChannel.unreadCount":
+		if e.complexity.NotificationChannel.UnreadCount == nil {
+			break
+		}
+
+		return e.complexity.NotificationChannel.UnreadCount(childComplexity), true
+
+	case "NotificationConnection.edges":
+		if e.complexity.NotificationConnection.Edges == nil {
+			break
+		}
+
+		return e.complexity.NotificationConnection.Edges(childComplexity), true
+	case "NotificationConnection.nodes":
+		if e.complexity.NotificationConnection.Nodes == nil {
+			break
+		}
+
+		return e.complexity.NotificationConnection.Nodes(childComplexity), true
+	case "NotificationConnection.pageInfo":
+		if e.complexity.NotificationConnection.PageInfo == nil {
+			break
+		}
+
+		return e.complexity.NotificationConnection.PageInfo(childComplexity), true
+
+	case "NotificationEdge.cursor":
+		if e.complexity.NotificationEdge.Cursor == nil {
+			break
+		}
+
+		return e.complexity.NotificationEdge.Cursor(childComplexity), true
+	case "NotificationEdge.node":
+		if e.complexity.NotificationEdge.Node == nil {
+			break
+		}
+
+		return e.complexity.NotificationEdge.Node(childComplexity), true
+
 	case "PageInfo.endCursor":
 		if e.complexity.PageInfo.EndCursor == nil {
 			break
@@ -1812,6 +2054,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Node(childComplexity, args["id"].(scalar.ID)), true
+	case "Query.notificationChannels":
+		if e.complexity.Query.NotificationChannels == nil {
+			break
+		}
+
+		args, err := ec.field_Query_notificationChannels_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.NotificationChannels(childComplexity, args["filterBy"].(*NotificationFiltersInput)), true
+	case "Query.notifications":
+		if e.complexity.Query.Notifications == nil {
+			break
+		}
+
+		args, err := ec.field_Query_notifications_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Notifications(childComplexity, args["channel"].(string), args["filterBy"].(*NotificationFiltersInput), args["first"].(*int), args["after"].(*string)), true
 	case "Query.pairingRequests":
 		if e.complexity.Query.PairingRequests == nil {
 			break
@@ -1895,6 +2159,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RefreshTokenPayload.RefreshTokenExpiresIn(childComplexity), true
+
+	case "SendNotificationPayload.clientMutationId":
+		if e.complexity.SendNotificationPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.SendNotificationPayload.ClientMutationID(childComplexity), true
+	case "SendNotificationPayload.didCreate":
+		if e.complexity.SendNotificationPayload.DidCreate == nil {
+			break
+		}
+
+		return e.complexity.SendNotificationPayload.DidCreate(childComplexity), true
+	case "SendNotificationPayload.notification":
+		if e.complexity.SendNotificationPayload.Notification == nil {
+			break
+		}
+
+		return e.complexity.SendNotificationPayload.Notification(childComplexity), true
 
 	case "Session.canCommit":
 		if e.complexity.Session.CanCommit == nil {
@@ -2118,6 +2401,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.NoteUpdated(childComplexity, args["id"].(scalar.ID)), true
+	case "Subscription.notificationChanged":
+		if e.complexity.Subscription.NotificationChanged == nil {
+			break
+		}
+
+		return e.complexity.Subscription.NotificationChanged(childComplexity), true
 	case "Subscription.pairingRequestCreated":
 		if e.complexity.Subscription.PairingRequestCreated == nil {
 			break
@@ -2291,6 +2580,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.UndoTrashPayload.RestoredCount(childComplexity), true
 
+	case "UnsendNotificationPayload.clientMutationId":
+		if e.complexity.UnsendNotificationPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UnsendNotificationPayload.ClientMutationID(childComplexity), true
+	case "UnsendNotificationPayload.deletedId":
+		if e.complexity.UnsendNotificationPayload.DeletedID == nil {
+			break
+		}
+
+		return e.complexity.UnsendNotificationPayload.DeletedID(childComplexity), true
+
 	case "UpdateImagesMetadataPayload.clientMutationId":
 		if e.complexity.UpdateImagesMetadataPayload.ClientMutationID == nil {
 			break
@@ -2303,6 +2605,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UpdateImagesMetadataPayload.UpdatedCount(childComplexity), true
+
+	case "UpdateNotificationPayload.clientMutationId":
+		if e.complexity.UpdateNotificationPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UpdateNotificationPayload.ClientMutationID(childComplexity), true
+	case "UpdateNotificationPayload.notification":
+		if e.complexity.UpdateNotificationPayload.Notification == nil {
+			break
+		}
+
+		return e.complexity.UpdateNotificationPayload.Notification(childComplexity), true
 
 	case "UpdateSessionPayload.clientMutationId":
 		if e.complexity.UpdateSessionPayload.ClientMutationID == nil {
@@ -2366,15 +2681,18 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMoveImagesInput,
 		ec.unmarshalInputNoteFiltersInput,
+		ec.unmarshalInputNotificationFiltersInput,
 		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
+		ec.unmarshalInputSendNotificationInput,
 		ec.unmarshalInputSetDirectoryStateInput,
 		ec.unmarshalInputTrashImagesInput,
 		ec.unmarshalInputUndoInput,
 		ec.unmarshalInputUndoTrashInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateImagesMetadataInput,
+		ec.unmarshalInputUpdateNotificationInput,
 		ec.unmarshalInputUpdateSessionInput,
 		ec.unmarshalInputWriteActionsInput,
 	)
@@ -2879,6 +3197,110 @@ input NoteFiltersInput
   "按是否隐藏过滤，为null表示不限制"
   hidden: Boolean
 }`, BuiltIn: false},
+	{Name: "../../../graph/types/notification.graphql", Input: `"""
+通知对象，代表一条系统通知。
+"""
+type Notification implements Node @goModel(model: "main/internal/shared.NotificationDTO") {
+  """
+  通知唯一标识符，格式为 notif:{uuid}
+  """
+  id: ID!
+  """
+  客户端提供的唯一标签（UUID 格式），用于同标签替换
+  """
+  tag: String!
+  """
+  频道标识，如 "hook:fork"，首次使用自动注册
+  """
+  channel: String!
+  """
+  通知标题
+  """
+  title: String!
+  """
+  通知正文
+  """
+  body: String!
+  """
+  优先级，决定前端投递方式
+  """
+  priority: NotificationPriority!
+  """
+  通知状态（派生字段：dismissedAt ≠ 0 时为 DISMISSED，否则为 ACTIVE）
+  """
+  status: NotificationStatus!
+  """
+  已读时间戳，零值表示未读
+  """
+  readAt: Time!
+  """
+  关闭时间戳，非零值时 status 为 DISMISSED。零值表示未关闭
+  """
+  dismissedAt: Time!
+  """
+  过期时间，到达后通知将被自动删除。零值表示不自动过期
+  """
+  notAfter: Time!
+  """
+  最早可见时间，到达后才对客户端可见。零值表示立即可见
+  """
+  notBefore: Time!
+  """
+  创建时间
+  """
+  createdAt: Time!
+  """
+  最后更新时间
+  """
+  updatedAt: Time!
+}
+
+type NotificationConnection
+  @goModel(model: "main/internal/shared.NotificationConnectionDTO") {
+  edges: [NotificationEdge!]!
+  nodes: [Notification!]!
+  pageInfo: PageInfo!
+}
+
+type NotificationEdge
+  @goModel(model: "main/internal/shared.NotificationEdgeDTO") {
+  node: Notification!
+  cursor: String!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/notification_changed_event.graphql", Input: `"""
+通知变更事件，通过 subscription 推送给客户端。
+"""
+type NotificationChangedEvent @goModel(model: "main/internal/shared.NotificationChangedEventDTO") {
+  """
+  变更类型：SENT / UPDATED / UNSENT
+  """
+  event: NotificationEventType!
+  """
+  变更后的通知对象，UNSENT 事件中仅包含 ID
+  """
+  notification: Notification!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/types/notification_channel.graphql", Input: `"""
+通知频道聚合视图，用于会话列表风格展示。
+每个频道聚合其未读计数和最新一条通知预览。
+"""
+type NotificationChannel @goModel(model: "main/internal/shared.NotificationChannelDTO") {
+  """
+  频道标识
+  """
+  channel: String!
+  """
+  该频道未读通知数量
+  """
+  unreadCount: Int!
+  """
+  该频道最新一条通知
+  """
+  latestNotification: Notification
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
   code: String!
   createdAt: Time!
@@ -3019,6 +3441,56 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   """
   REJECT
 }`, BuiltIn: false},
+	{Name: "../../../graph/enums/notification_event_type.graphql", Input: `"""
+通知变更事件类型，用于 subscription 事件推送。
+"""
+enum NotificationEventType {
+  """
+  通知被发送（新增或同标签替换）
+  """
+  SENT
+  """
+  通知内容被更新（标题、正文、优先级等）
+  """
+  UPDATED
+  """
+  通知被撤回（删除）
+  """
+  UNSENT
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/enums/notification_priority.graphql", Input: `"""
+通知优先级，决定前端投递方式。
+"""
+enum NotificationPriority @goModel(model: "main/internal/shared.NotificationPriority") {
+  """
+  高优先级：强提醒，需用户手动确认才能消失
+  """
+  HIGH
+  """
+  标准优先级：Toast 展示后自动消失
+  """
+  NORMAL
+  """
+  低优先级：仅通知中心红点
+  """
+  LOW
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/enums/notification_status.graphql", Input: `"""
+通知状态。
+"""
+enum NotificationStatus @goModel(model: "main/internal/shared.NotificationStatus") {
+  """
+  活跃中，未处理
+  """
+  ACTIVE
+  """
+  已手动关闭，等同于已确认
+  """
+  DISMISSED
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/enums/pairing_request_status.graphql", Input: `enum PairingRequestStatus @goModel(model: "main/internal/shared.PairingRequestStatus") {
   PENDING
   APPROVED
@@ -3075,6 +3547,43 @@ extend type Query {
   """
   node(id: ID!): Node
 }`, BuiltIn: false},
+	{Name: "../../../graph/queries/notification_channels.graphql", Input: `extend type Query {
+  """
+  获取所有通知频道及其未读计数和最新通知预览。
+  返回结果类似聊天会话列表，每个频道最多返回一条最新通知。
+  """
+  notificationChannels(
+    "筛选条件"
+    filterBy: NotificationFiltersInput
+  ): [NotificationChannel!]!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/queries/notifications.graphql", Input: `"通知筛选条件"
+input NotificationFiltersInput {
+  "按状态筛选"
+  status: NotificationStatus
+  "按优先级筛选"
+  priority: NotificationPriority
+  "按已读状态筛选（true=已读，false=未读）"
+  read: Boolean
+}
+
+extend type Query {
+  """
+  查询指定频道的通知列表，采用 Relay Connection 分页。
+  channel 参数必传以限定到具体频道。
+  """
+  notifications(
+    "频道标识，必传"
+    channel: String!
+    "筛选条件"
+    filterBy: NotificationFiltersInput
+    "每页条目数，默认 50"
+    first: Int = 50
+    after: String
+  ): NotificationConnection!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/queries/pairing_requests.graphql", Input: `extend type Query {
   """
   获取当前所有待批准的配对请求。
@@ -3168,6 +3677,14 @@ type DeletedImage {
   """
   noteSaved(filterBy: NoteFiltersInput): Note!
 }`, BuiltIn: false},
+	{Name: "../../../graph/subscriptions/notification_changed.graphql", Input: `extend type Subscription {
+  """
+  订阅通知变更事件。当通知被发送（SENT）、更新（UPDATED）、撤回（UNSENT）时推送。
+  前端通过此订阅实时更新通知中心。
+  """
+  notificationChanged: NotificationChangedEvent!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/subscriptions/pairing_request_created.graphql", Input: `extend type Subscription {
   pairingRequestCreated: PairingRequest!
 }
@@ -3522,6 +4039,42 @@ input RejectPairingRequestInput {
   code: String!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/send_notification.graphql", Input: `"发送通知的输入参数"
+input SendNotificationInput {
+  "客户端唯一标签（UUID），同标签将替换已有通知"
+  tag: String!
+  "频道标识，首次使用自动注册"
+  channel: String!
+  "通知标题"
+  title: String!
+  "通知正文"
+  body: String! = ""
+  "优先级，默认 NORMAL"
+  priority: NotificationPriority! = NORMAL
+  "过期时间，到达后自动删除。空字符串表示不自动过期"
+  notAfter: Time
+  "最早可见时间，在此之前不显示。空字符串表示立即可见"
+  notBefore: Time
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+type SendNotificationPayload {
+  "发送后的通知对象"
+  notification: Notification!
+  "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
+  didCreate: Boolean!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  发送通知。如果 tag 已存在则更新已有通知，否则创建新通知。
+  Hook 脚本可通过 IMAGE_FUNNEL_GRAPHQL_URL 调用此接口反馈执行结果。
+  """
+  sendNotification(input: SendNotificationInput!): SendNotificationPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/set_directory_state.graphql", Input: `input SetDirectoryStateInput {
   "目录的ID"
   id: ID!
@@ -3588,6 +4141,19 @@ extend type Mutation {
   undoTrash(input: UndoTrashInput!): UndoTrashPayload!
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/unsend_notification.graphql", Input: `type UnsendNotificationPayload {
+  "被撤回的通知 ID"
+  deletedId: ID!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  撤回（删除）指定通知。通知被删除后不可恢复。
+  """
+  unsendNotification(id: ID!): UnsendNotificationPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_image_metadata.graphql", Input: `extend type Mutation {
   """
   更新图片的评分和颜色标签。操作即时写入 XMP sidecar 文件，不参与会话提交。
@@ -3632,6 +4198,28 @@ extend type Mutation {
   """
   updateNote(id: ID!, content: String!): Note!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/update_notification.graphql", Input: `"更新通知元数据的输入参数，所有字段可选"
+input UpdateNotificationInput {
+  "标记已读时间。传 null 表示重置为未读，不传表示不修改"
+  readAt: Time @goField(omittable: true)
+  "关闭时间。传 null 表示撤销关闭，不传表示不修改"
+  dismissedAt: Time @goField(omittable: true)
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+type UpdateNotificationPayload {
+  notification: Notification!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  更新通知的元数据（已读时间、关闭时间）。内容变更请使用 sendNotification 同 tag 重新发送。
+  """
+  updateNotification(id: ID!, input: UpdateNotificationInput!): UpdateNotificationPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_session.graphql", Input: `"更新会话配置（目标保留数量、筛选条件）"
 input UpdateSessionInput {
   "会话ID"
@@ -3928,6 +4516,17 @@ func (ec *executionContext) field_Mutation_rejectPairingRequest_args(ctx context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_sendNotification_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_setDirectoryState_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3972,6 +4571,17 @@ func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArg
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_unsendNotification_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateImageMetadata_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4007,6 +4617,22 @@ func (ec *executionContext) field_Mutation_updateNote_args(ctx context.Context, 
 		return nil, err
 	}
 	args["content"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateNotification_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -4062,6 +4688,43 @@ func (ec *executionContext) field_Query_node_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_notificationChannels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐNotificationFiltersInput)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_notifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "channel", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["channel"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐNotificationFiltersInput)
+	if err != nil {
+		return nil, err
+	}
+	args["filterBy"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg3
 	return args, nil
 }
 
@@ -9147,6 +9810,55 @@ func (ec *executionContext) fieldContext_Mutation_rejectPairingRequest(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_sendNotification(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_sendNotification,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().SendNotification(ctx, fc.Args["input"].(SendNotificationInput))
+		},
+		nil,
+		ec.marshalNSendNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_sendNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "notification":
+				return ec.fieldContext_SendNotificationPayload_notification(ctx, field)
+			case "didCreate":
+				return ec.fieldContext_SendNotificationPayload_didCreate(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_SendNotificationPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SendNotificationPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_sendNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_setDirectoryState(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9361,6 +10073,53 @@ func (ec *executionContext) fieldContext_Mutation_undoTrash(ctx context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_unsendNotification(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unsendNotification,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UnsendNotification(ctx, fc.Args["id"].(scalar.ID))
+		},
+		nil,
+		ec.marshalNUnsendNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unsendNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedId":
+				return ec.fieldContext_UnsendNotificationPayload_deletedId(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UnsendNotificationPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UnsendNotificationPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unsendNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_updateImageMetadata(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9528,6 +10287,53 @@ func (ec *executionContext) fieldContext_Mutation_updateNote(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateNote_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateNotification(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateNotification,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateNotification(ctx, fc.Args["id"].(scalar.ID), fc.Args["input"].(UpdateNotificationInput))
+		},
+		nil,
+		ec.marshalNUpdateNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateNotification(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "notification":
+				return ec.fieldContext_UpdateNotificationPayload_notification(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UpdateNotificationPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UpdateNotificationPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateNotification_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10064,6 +10870,801 @@ func (ec *executionContext) fieldContext_NoteFilters_hidden(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Notification_id(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_tag(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_tag,
+		func(ctx context.Context) (any, error) {
+			return obj.Tag, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_tag(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_channel(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_channel,
+		func(ctx context.Context) (any, error) {
+			return obj.Channel, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_channel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_title(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_body(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_body,
+		func(ctx context.Context) (any, error) {
+			return obj.Body, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_body(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_priority(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_priority,
+		func(ctx context.Context) (any, error) {
+			return obj.Priority, nil
+		},
+		nil,
+		ec.marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_priority(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type NotificationPriority does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_status(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type NotificationStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_readAt(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_readAt,
+		func(ctx context.Context) (any, error) {
+			return obj.ReadAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_readAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_dismissedAt(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_dismissedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.DismissedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_dismissedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_notAfter(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_notAfter,
+		func(ctx context.Context) (any, error) {
+			return obj.NotAfter, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_notAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_notBefore(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_notBefore,
+		func(ctx context.Context) (any, error) {
+			return obj.NotBefore, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_notBefore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_createdAt(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Notification_updatedAt(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Notification_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Notification_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Notification",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationChangedEvent_event(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChangedEventDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationChangedEvent_event,
+		func(ctx context.Context) (any, error) {
+			return obj.Event, nil
+		},
+		nil,
+		ec.marshalNNotificationEventType2mainᚋinternalᚋenumᚐEnum,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationChangedEvent_event(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationChangedEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type NotificationEventType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationChangedEvent_notification(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChangedEventDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationChangedEvent_notification,
+		func(ctx context.Context) (any, error) {
+			return obj.Notification, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationChangedEvent_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationChangedEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationChannel_channel(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChannelDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationChannel_channel,
+		func(ctx context.Context) (any, error) {
+			return obj.Channel, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationChannel_channel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationChannel_unreadCount(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChannelDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationChannel_unreadCount,
+		func(ctx context.Context) (any, error) {
+			return obj.UnreadCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationChannel_unreadCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationChannel_latestNotification(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationChannelDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationChannel_latestNotification,
+		func(ctx context.Context) (any, error) {
+			return obj.LatestNotification, nil
+		},
+		nil,
+		ec.marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationChannel_latestNotification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationConnection_edges(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNNotificationEdge2ᚕᚖmainᚋinternalᚋsharedᚐNotificationEdgeDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_NotificationEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_NotificationEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NotificationEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationConnection_nodes(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationConnection_nodes,
+		func(ctx context.Context) (any, error) {
+			return obj.Nodes, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚕᚖmainᚋinternalᚋsharedᚐNotificationDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationConnection_nodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationConnectionDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationEdge_node(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NotificationEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *shared.NotificationEdgeDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NotificationEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NotificationEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NotificationEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PageInfo_hasNextPage(ctx context.Context, field graphql.CollectedField, obj *shared.PageInfoDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10575,6 +12176,104 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_notificationChannels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_notificationChannels,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().NotificationChannels(ctx, fc.Args["filterBy"].(*NotificationFiltersInput))
+		},
+		nil,
+		ec.marshalNNotificationChannel2ᚕᚖmainᚋinternalᚋsharedᚐNotificationChannelDTOᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_notificationChannels(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "channel":
+				return ec.fieldContext_NotificationChannel_channel(ctx, field)
+			case "unreadCount":
+				return ec.fieldContext_NotificationChannel_unreadCount(ctx, field)
+			case "latestNotification":
+				return ec.fieldContext_NotificationChannel_latestNotification(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NotificationChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_notificationChannels_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_notifications(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_notifications,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().Notifications(ctx, fc.Args["channel"].(string), fc.Args["filterBy"].(*NotificationFiltersInput), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNNotificationConnection2ᚖmainᚋinternalᚋsharedᚐNotificationConnectionDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_notifications(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_NotificationConnection_edges(ctx, field)
+			case "nodes":
+				return ec.fieldContext_NotificationConnection_nodes(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_NotificationConnection_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NotificationConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_notifications_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -11141,6 +12840,121 @@ func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshTokenExpires
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SendNotificationPayload_notification(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SendNotificationPayload_notification,
+		func(ctx context.Context) (any, error) {
+			return obj.Notification, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SendNotificationPayload_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SendNotificationPayload_didCreate(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SendNotificationPayload_didCreate,
+		func(ctx context.Context) (any, error) {
+			return obj.DidCreate, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SendNotificationPayload_didCreate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SendNotificationPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SendNotificationPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SendNotificationPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -12617,6 +14431,41 @@ func (ec *executionContext) fieldContext_Subscription_noteSaved(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_notificationChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_notificationChanged,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().NotificationChanged(ctx)
+		},
+		nil,
+		ec.marshalNNotificationChangedEvent2ᚖmainᚋinternalᚋsharedᚐNotificationChangedEventDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_notificationChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "event":
+				return ec.fieldContext_NotificationChangedEvent_event(ctx, field)
+			case "notification":
+				return ec.fieldContext_NotificationChangedEvent_notification(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NotificationChangedEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_pairingRequestCreated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -13503,6 +15352,64 @@ func (ec *executionContext) fieldContext_UndoTrashPayload_clientMutationId(_ con
 	return fc, nil
 }
 
+func (ec *executionContext) _UnsendNotificationPayload_deletedId(ctx context.Context, field graphql.CollectedField, obj *UnsendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UnsendNotificationPayload_deletedId,
+		func(ctx context.Context) (any, error) {
+			return obj.DeletedID, nil
+		},
+		nil,
+		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UnsendNotificationPayload_deletedId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UnsendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UnsendNotificationPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UnsendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UnsendNotificationPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UnsendNotificationPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UnsendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UpdateImagesMetadataPayload_updatedCount(ctx context.Context, field graphql.CollectedField, obj *UpdateImagesMetadataPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13551,6 +15458,92 @@ func (ec *executionContext) _UpdateImagesMetadataPayload_clientMutationId(ctx co
 func (ec *executionContext) fieldContext_UpdateImagesMetadataPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "UpdateImagesMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateNotificationPayload_notification(ctx context.Context, field graphql.CollectedField, obj *UpdateNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateNotificationPayload_notification,
+		func(ctx context.Context) (any, error) {
+			return obj.Notification, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateNotificationPayload_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateNotificationPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UpdateNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateNotificationPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateNotificationPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateNotificationPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -16036,6 +18029,47 @@ func (ec *executionContext) unmarshalInputNoteFiltersInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.Context, obj any) (NotificationFiltersInput, error) {
+	var it NotificationFiltersInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"status", "priority", "read"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalONotificationStatus2ᚖmainᚋinternalᚋenumᚐEnum(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
+		case "read":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("read"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Read = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputPathInput(ctx context.Context, obj any) (shared.PathInput, error) {
 	var it shared.PathInput
 	asMap := map[string]any{}
@@ -16125,6 +18159,89 @@ func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.
 				return it, err
 			}
 			it.Code = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Context, obj any) (SendNotificationInput, error) {
+	var it SendNotificationInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["body"]; !present {
+		asMap["body"] = ""
+	}
+	if _, present := asMap["priority"]; !present {
+		asMap["priority"] = "NORMAL"
+	}
+
+	fieldsInOrder := [...]string{"tag", "channel", "title", "body", "priority", "notAfter", "notBefore", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "tag":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tag"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tag = data
+		case "channel":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channel"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Channel = data
+		case "title":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("title"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Title = data
+		case "body":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("body"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Body = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
+		case "notAfter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notAfter"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NotAfter = data
+		case "notBefore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notBefore"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NotBefore = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -16370,6 +18487,47 @@ func (ec *executionContext) unmarshalInputUpdateImagesMetadataInput(ctx context.
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateNotificationInput(ctx context.Context, obj any) (UpdateNotificationInput, error) {
+	var it UpdateNotificationInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"readAt", "dismissedAt", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "readAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("readAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReadAt = graphql.OmittableOf(data)
+		case "dismissedAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("dismissedAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DismissedAt = graphql.OmittableOf(data)
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateSessionInput(ctx context.Context, obj any) (UpdateSessionInput, error) {
 	var it UpdateSessionInput
 	asMap := map[string]any{}
@@ -16467,6 +18625,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
+	case shared.NotificationDTO:
+		return ec._Notification(ctx, sel, &obj)
+	case *shared.NotificationDTO:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Notification(ctx, sel, obj)
 	case shared.NoteDTO:
 		return ec._Note(ctx, sel, &obj)
 	case *shared.NoteDTO:
@@ -18637,6 +20802,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "sendNotification":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_sendNotification(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "setDirectoryState":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setDirectoryState(ctx, field)
@@ -18662,6 +20834,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "unsendNotification":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unsendNotification(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateImageMetadata":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateImageMetadata(ctx, field)
@@ -18679,6 +20858,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateNote":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateNote(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateNotification":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateNotification(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -18923,6 +21109,288 @@ func (ec *executionContext) _NoteFilters(ctx context.Context, sel ast.SelectionS
 			out.Values[i] = ec._NoteFilters_directoryId(ctx, field, obj)
 		case "hidden":
 			out.Values[i] = ec._NoteFilters_hidden(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var notificationImplementors = []string{"Notification", "Node"}
+
+func (ec *executionContext) _Notification(ctx context.Context, sel ast.SelectionSet, obj *shared.NotificationDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, notificationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Notification")
+		case "id":
+			out.Values[i] = ec._Notification_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tag":
+			out.Values[i] = ec._Notification_tag(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "channel":
+			out.Values[i] = ec._Notification_channel(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "title":
+			out.Values[i] = ec._Notification_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "body":
+			out.Values[i] = ec._Notification_body(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "priority":
+			out.Values[i] = ec._Notification_priority(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._Notification_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "readAt":
+			out.Values[i] = ec._Notification_readAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dismissedAt":
+			out.Values[i] = ec._Notification_dismissedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notAfter":
+			out.Values[i] = ec._Notification_notAfter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notBefore":
+			out.Values[i] = ec._Notification_notBefore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._Notification_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._Notification_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var notificationChangedEventImplementors = []string{"NotificationChangedEvent"}
+
+func (ec *executionContext) _NotificationChangedEvent(ctx context.Context, sel ast.SelectionSet, obj *shared.NotificationChangedEventDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, notificationChangedEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NotificationChangedEvent")
+		case "event":
+			out.Values[i] = ec._NotificationChangedEvent_event(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notification":
+			out.Values[i] = ec._NotificationChangedEvent_notification(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var notificationChannelImplementors = []string{"NotificationChannel"}
+
+func (ec *executionContext) _NotificationChannel(ctx context.Context, sel ast.SelectionSet, obj *shared.NotificationChannelDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, notificationChannelImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NotificationChannel")
+		case "channel":
+			out.Values[i] = ec._NotificationChannel_channel(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unreadCount":
+			out.Values[i] = ec._NotificationChannel_unreadCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "latestNotification":
+			out.Values[i] = ec._NotificationChannel_latestNotification(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var notificationConnectionImplementors = []string{"NotificationConnection"}
+
+func (ec *executionContext) _NotificationConnection(ctx context.Context, sel ast.SelectionSet, obj *shared.NotificationConnectionDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, notificationConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NotificationConnection")
+		case "edges":
+			out.Values[i] = ec._NotificationConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodes":
+			out.Values[i] = ec._NotificationConnection_nodes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._NotificationConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var notificationEdgeImplementors = []string{"NotificationEdge"}
+
+func (ec *executionContext) _NotificationEdge(ctx context.Context, sel ast.SelectionSet, obj *shared.NotificationEdgeDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, notificationEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NotificationEdge")
+		case "node":
+			out.Values[i] = ec._NotificationEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._NotificationEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -19210,6 +21678,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "notificationChannels":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_notificationChannels(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "notifications":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_notifications(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "pairingRequests":
 			field := field
 
@@ -19423,6 +21935,52 @@ func (ec *executionContext) _RefreshTokenPayload(ctx context.Context, sel ast.Se
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var sendNotificationPayloadImplementors = []string{"SendNotificationPayload"}
+
+func (ec *executionContext) _SendNotificationPayload(ctx context.Context, sel ast.SelectionSet, obj *SendNotificationPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sendNotificationPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SendNotificationPayload")
+		case "notification":
+			out.Values[i] = ec._SendNotificationPayload_notification(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "didCreate":
+			out.Values[i] = ec._SendNotificationPayload_didCreate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._SendNotificationPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -19868,6 +22426,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_noteUpdated(ctx, fields[0])
 	case "noteSaved":
 		return ec._Subscription_noteSaved(ctx, fields[0])
+	case "notificationChanged":
+		return ec._Subscription_notificationChanged(ctx, fields[0])
 	case "pairingRequestCreated":
 		return ec._Subscription_pairingRequestCreated(ctx, fields[0])
 	case "pairingRequestUpdated":
@@ -20206,6 +22766,47 @@ func (ec *executionContext) _UndoTrashPayload(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var unsendNotificationPayloadImplementors = []string{"UnsendNotificationPayload"}
+
+func (ec *executionContext) _UnsendNotificationPayload(ctx context.Context, sel ast.SelectionSet, obj *UnsendNotificationPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, unsendNotificationPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UnsendNotificationPayload")
+		case "deletedId":
+			out.Values[i] = ec._UnsendNotificationPayload_deletedId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UnsendNotificationPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var updateImagesMetadataPayloadImplementors = []string{"UpdateImagesMetadataPayload"}
 
 func (ec *executionContext) _UpdateImagesMetadataPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateImagesMetadataPayload) graphql.Marshaler {
@@ -20224,6 +22825,47 @@ func (ec *executionContext) _UpdateImagesMetadataPayload(ctx context.Context, se
 			}
 		case "clientMutationId":
 			out.Values[i] = ec._UpdateImagesMetadataPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var updateNotificationPayloadImplementors = []string{"UpdateNotificationPayload"}
+
+func (ec *executionContext) _UpdateNotificationPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateNotificationPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, updateNotificationPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UpdateNotificationPayload")
+		case "notification":
+			out.Values[i] = ec._UpdateNotificationPayload_notification(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UpdateNotificationPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -21379,13 +24021,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -21745,6 +24387,226 @@ func (ec *executionContext) marshalNNoteEdge2ᚖmainᚋinternalᚋsharedᚐNoteE
 	return ec._NoteEdge(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNNotification2ᚕᚖmainᚋinternalᚋsharedᚐNotificationDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NotificationDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Notification(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNotificationChangedEvent2mainᚋinternalᚋsharedᚐNotificationChangedEventDTO(ctx context.Context, sel ast.SelectionSet, v shared.NotificationChangedEventDTO) graphql.Marshaler {
+	return ec._NotificationChangedEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNNotificationChangedEvent2ᚖmainᚋinternalᚋsharedᚐNotificationChangedEventDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationChangedEventDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NotificationChangedEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNotificationChannel2ᚕᚖmainᚋinternalᚋsharedᚐNotificationChannelDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NotificationChannelDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNNotificationChannel2ᚖmainᚋinternalᚋsharedᚐNotificationChannelDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNotificationChannel2ᚖmainᚋinternalᚋsharedᚐNotificationChannelDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationChannelDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NotificationChannel(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNotificationConnection2mainᚋinternalᚋsharedᚐNotificationConnectionDTO(ctx context.Context, sel ast.SelectionSet, v shared.NotificationConnectionDTO) graphql.Marshaler {
+	return ec._NotificationConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNNotificationConnection2ᚖmainᚋinternalᚋsharedᚐNotificationConnectionDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationConnectionDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NotificationConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNotificationEdge2ᚕᚖmainᚋinternalᚋsharedᚐNotificationEdgeDTOᚄ(ctx context.Context, sel ast.SelectionSet, v []*shared.NotificationEdgeDTO) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNNotificationEdge2ᚖmainᚋinternalᚋsharedᚐNotificationEdgeDTO(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNotificationEdge2ᚖmainᚋinternalᚋsharedᚐNotificationEdgeDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationEdgeDTO) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NotificationEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNNotificationEventType2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationEventTypeMeta], error) {
+	var res enum.Enum[shared.NotificationEventTypeMeta]
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationEventTypeMeta]) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNPageInfo2ᚖmainᚋinternalᚋsharedᚐPageInfoDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PageInfoDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -21909,6 +24771,25 @@ func (ec *executionContext) marshalNRefreshTokenPayload2ᚖmainᚋinternalᚋint
 func (ec *executionContext) unmarshalNRejectPairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestInput(ctx context.Context, v any) (RejectPairingRequestInput, error) {
 	res, err := ec.unmarshalInputRejectPairingRequestInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNSendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationInput(ctx context.Context, v any) (SendNotificationInput, error) {
+	res, err := ec.unmarshalInputSendNotificationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSendNotificationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationPayload(ctx context.Context, sel ast.SelectionSet, v SendNotificationPayload) graphql.Marshaler {
+	return ec._SendNotificationPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSendNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationPayload(ctx context.Context, sel ast.SelectionSet, v *SendNotificationPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SendNotificationPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSession2mainᚋinternalᚋsharedᚐSessionDTO(ctx context.Context, sel ast.SelectionSet, v shared.SessionDTO) graphql.Marshaler {
@@ -22183,6 +25064,20 @@ func (ec *executionContext) marshalNUndoTrashPayload2ᚖmainᚋinternalᚋshared
 	return ec._UndoTrashPayload(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNUnsendNotificationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationPayload(ctx context.Context, sel ast.SelectionSet, v UnsendNotificationPayload) graphql.Marshaler {
+	return ec._UnsendNotificationPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUnsendNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUnsendNotificationPayload(ctx context.Context, sel ast.SelectionSet, v *UnsendNotificationPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UnsendNotificationPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpdateImageMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataInput(ctx context.Context, v any) (UpdateImageMetadataInput, error) {
 	res, err := ec.unmarshalInputUpdateImageMetadataInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -22205,6 +25100,25 @@ func (ec *executionContext) marshalNUpdateImagesMetadataPayload2ᚖmainᚋintern
 		return graphql.Null
 	}
 	return ec._UpdateImagesMetadataPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationInput(ctx context.Context, v any) (UpdateNotificationInput, error) {
+	res, err := ec.unmarshalInputUpdateNotificationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUpdateNotificationPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationPayload(ctx context.Context, sel ast.SelectionSet, v UpdateNotificationPayload) graphql.Marshaler {
+	return ec._UpdateNotificationPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUpdateNotificationPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationPayload(ctx context.Context, sel ast.SelectionSet, v *UpdateNotificationPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UpdateNotificationPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateSessionInput(ctx context.Context, v any) (UpdateSessionInput, error) {
@@ -22771,6 +25685,53 @@ func (ec *executionContext) unmarshalONoteFiltersInput2ᚖmainᚋinternalᚋshar
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalONotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO(ctx context.Context, sel ast.SelectionSet, v *shared.NotificationDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Notification(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐNotificationFiltersInput(ctx context.Context, v any) (*NotificationFiltersInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputNotificationFiltersInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (*enum.Enum[shared.NotificationPriorityMeta], error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(enum.Enum[shared.NotificationPriorityMeta])
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalONotificationPriority2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v *enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalONotificationStatus2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (*enum.Enum[shared.NotificationStatusMeta], error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(enum.Enum[shared.NotificationStatusMeta])
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalONotificationStatus2ᚖmainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v *enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) marshalOPairingRequest2ᚖmainᚋinternalᚋsharedᚐPairingRequestDTO(ctx context.Context, sel ast.SelectionSet, v *shared.PairingRequestDTO) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -22849,6 +25810,23 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v any) (*time.Time, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := UnmarshalTime(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel ast.SelectionSet, v *time.Time) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	res := MarshalTime(*v)
+	return graphql.WrapContextMarshaler(ctx, res)
 }
 
 func (ec *executionContext) marshalOUndoPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUndoPayload(ctx context.Context, sel ast.SelectionSet, v *UndoPayload) graphql.Marshaler {

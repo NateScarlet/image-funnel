@@ -1,0 +1,17 @@
+"""
+通知优先级，决定前端投递方式。
+"""
+enum NotificationPriority @goModel(model: "main/internal/shared.NotificationPriority") {
+  """
+  高优先级：强提醒，需用户手动确认才能消失
+  """
+  HIGH
+  """
+  标准优先级：Toast 展示后自动消失
+  """
+  NORMAL
+  """
+  低优先级：仅通知中心红点
+  """
+  LOW
+}

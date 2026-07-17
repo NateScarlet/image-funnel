@@ -1,0 +1,10 @@
+extend type Query {
+  """
+  获取所有通知频道及其未读计数和最新通知预览。
+  返回结果类似聊天会话列表，每个频道最多返回一条最新通知。
+  """
+  notificationChannels(
+    "筛选条件"
+    filterBy: NotificationFiltersInput
+  ): [NotificationChannel!]!
+}

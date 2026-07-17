@@ -283,3 +283,53 @@ type MetadataUpdatedEvent struct {
 	OldLabel  string
 	OldAction string
 }
+
+// #region Notification DTOs
+
+type NotificationDTO struct {
+	ID          scalar.ID            `json:"id"`
+	Tag         string               `json:"tag"`
+	Channel     string               `json:"channel"`
+	Title       string               `json:"title"`
+	Body        string               `json:"body"`
+	Priority    NotificationPriority `json:"priority"`
+	Status      NotificationStatus   `json:"status"`
+	ReadAt      time.Time            `json:"readAt"`
+	DismissedAt time.Time            `json:"dismissedAt"`
+	NotAfter    time.Time            `json:"notAfter"`
+	NotBefore   time.Time            `json:"notBefore"`
+	CreatedAt   time.Time            `json:"createdAt"`
+	UpdatedAt   time.Time            `json:"updatedAt"`
+}
+
+type NotificationFilters struct {
+	Channel  *string               `json:"channel,omitempty"`
+	Status   *NotificationStatus   `json:"status,omitempty"`
+	Priority *NotificationPriority `json:"priority,omitempty"`
+	Read     *bool                 `json:"read,omitempty"`
+}
+
+type NotificationConnectionDTO struct {
+	Edges    []*NotificationEdgeDTO `json:"edges"`
+	Nodes    []*NotificationDTO     `json:"nodes"`
+	PageInfo *PageInfoDTO           `json:"pageInfo"`
+}
+
+type NotificationEdgeDTO struct {
+	Node   *NotificationDTO `json:"node"`
+	Cursor string           `json:"cursor"`
+}
+
+type NotificationChannelDTO struct {
+	Channel            string           `json:"channel"`
+	UnreadCount        int              `json:"unreadCount"`
+	LatestNotification *NotificationDTO `json:"latestNotification,omitempty"`
+}
+
+type NotificationChangedEventDTO struct {
+	Event        NotificationEventType `json:"event"`
+	Notification *NotificationDTO      `json:"notification"`
+}
+
+// #endregion
+

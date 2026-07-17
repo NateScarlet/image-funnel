@@ -19,12 +19,14 @@ import (
 	apphook "main/internal/application/hook"
 	appimage "main/internal/application/image"
 	appnote "main/internal/application/note"
+	appnotification "main/internal/application/notification"
 	apppairing "main/internal/application/pairing"
 	appsession "main/internal/application/session"
 	ddevice "main/internal/domain/device"
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/note"
+	domnotification "main/internal/domain/notification"
 	"main/internal/domain/pairing"
 	"main/internal/domain/session"
 	"main/internal/infrastructure"
@@ -35,6 +37,7 @@ import (
 	"main/internal/infrastructure/jwt"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
+	"main/internal/infrastructure/sqlite"
 	"main/internal/infrastructure/stdimage"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/infrastructure/winsleep"
@@ -117,6 +120,7 @@ func main() {
 	deviceDeletedTopic, _ := pubsub.NewInMemoryTopic[scalar.ID]()
 	metadataUpdatedTopic, _ := pubsub.NewInMemoryTopic[*shared.MetadataUpdatedEvent]()
 	sessionCommittedTopic, _ := pubsub.NewInMemoryTopic[*shared.SessionCommittedEvent](pubsub.InMemoryTopicWithCapacity(1024))
+	notifChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.NotificationChangedEventDTO](pubsub.InMemoryTopicWithCapacity(4096))
 
 	imageRepo = infrastructure.NewEventPublishingImageRepository(imageRepo, fileChangedTopic, dirRepo)
 
@@ -228,7 +232,17 @@ func main() {
 
 	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler)
+	sqliteNotifRepo, err := sqlite.NewNotificationRepository(cfg.DataDir)
+	if err != nil {
+		logger.Fatal("failed to initialize sqlite notification repository", zap.Error(err))
+	}
+	defer sqliteNotifRepo.Close()
+
+	notifDTOFactory := appnotification.NewDTOFactory()
+	notifFilterBuilder := domnotification.NewFilterBuilder()
+	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifDTOFactory, notifFilterBuilder, notifChangedTopic)
+
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 
 	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL)
 

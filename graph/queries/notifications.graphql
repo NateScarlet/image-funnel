@@ -1,0 +1,25 @@
+"通知筛选条件"
+input NotificationFiltersInput {
+  "按状态筛选"
+  status: NotificationStatus
+  "按优先级筛选"
+  priority: NotificationPriority
+  "按已读状态筛选（true=已读，false=未读）"
+  read: Boolean
+}
+
+extend type Query {
+  """
+  查询指定频道的通知列表，采用 Relay Connection 分页。
+  channel 参数必传以限定到具体频道。
+  """
+  notifications(
+    "频道标识，必传"
+    channel: String!
+    "筛选条件"
+    filterBy: NotificationFiltersInput
+    "每页条目数，默认 50"
+    first: Int = 50
+    after: String
+  ): NotificationConnection!
+}

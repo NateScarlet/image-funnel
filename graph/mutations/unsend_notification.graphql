@@ -1,0 +1,12 @@
+type UnsendNotificationPayload {
+  "被撤回的通知 ID"
+  deletedId: ID!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  撤回（删除）指定通知。通知被删除后不可恢复。
+  """
+  unsendNotification(id: ID!): UnsendNotificationPayload!
+}

@@ -1,0 +1,24 @@
+query notifications(
+  $channel: String!
+  $filterBy: NotificationFiltersInput
+  $first: Int
+  $after: String
+) {
+  notifications(channel: $channel, filterBy: $filterBy, first: $first, after: $after) {
+    edges {
+      node {
+        ...Notification
+      }
+      cursor
+    }
+    nodes {
+      ...Notification
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+  }
+}

@@ -9,6 +9,7 @@
     >
       <template #extra>
         <div class="mr-4 flex items-center gap-3">
+          <NotificationCenterButton />
           <!-- 自动排除控制面板 -->
           <div
             v-if="showAutoRejectControl"
@@ -285,6 +286,7 @@ import SessionHeader from "../components/SessionHeader.vue";
 import SessionActions from "../components/SessionActions.vue";
 import NumberInput from "../components/NumberInput.vue";
 import ToggleSwitch from "../components/ToggleSwitch.vue";
+import NotificationCenterButton from "../components/NotificationCenterButton.vue";
 
 import SwipeDirectionIndicator from "../components/SwipeDirectionIndicator.vue";
 import CompletedView from "../components/CompletedView.vue";

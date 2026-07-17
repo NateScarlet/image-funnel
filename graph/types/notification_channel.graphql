@@ -1,0 +1,18 @@
+"""
+通知频道聚合视图，用于会话列表风格展示。
+每个频道聚合其未读计数和最新一条通知预览。
+"""
+type NotificationChannel @goModel(model: "main/internal/shared.NotificationChannelDTO") {
+  """
+  频道标识
+  """
+  channel: String!
+  """
+  该频道未读通知数量
+  """
+  unreadCount: Int!
+  """
+  该频道最新一条通知
+  """
+  latestNotification: Notification
+}

@@ -2,6 +2,7 @@
   <router-view />
   <Teleport :to="rendererEl">
     <NotificationList />
+    <NotificationCenter />
 
     <hotkeyHelpDialog.component container-class="sm:max-w-lg md:max-w-4xl p-6">
       <HotkeyHelp @close="hotkeyHelpDialog.close" />
@@ -17,6 +18,7 @@
 <script setup lang="ts">
 import { watch } from "vue";
 import NotificationList from "./components/NotificationList.vue";
+import NotificationCenter from "./components/NotificationCenter.vue";
 import HotkeyHelp from "./components/HotkeyHelp.vue";
 import OpenDirHelp from "./components/OpenDirHelp.vue";
 import useFullscreenRendererElement from "./composables/useFullscreenRendererElement";

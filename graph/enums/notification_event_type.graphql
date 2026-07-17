@@ -1,0 +1,17 @@
+"""
+通知变更事件类型，用于 subscription 事件推送。
+"""
+enum NotificationEventType {
+  """
+  通知被发送（新增或同标签替换）
+  """
+  SENT
+  """
+  通知内容被更新（标题、正文、优先级等）
+  """
+  UPDATED
+  """
+  通知被撤回（删除）
+  """
+  UNSENT
+}

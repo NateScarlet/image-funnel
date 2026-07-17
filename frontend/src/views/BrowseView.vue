@@ -113,6 +113,7 @@
 
         <!-- 回收站与设备管理 -->
         <div class="flex items-center gap-3 flex-none">
+          <NotificationCenterButton />
           <TrashHistoryButton />
           <DeviceManagerButton />
         </div>
@@ -253,7 +254,7 @@
 
     <moreMenuDialog.component container-class="p-6 sm:max-w-sm">
       <div class="space-y-3">
-        <!-- 移动端设备管理项 -->
+        <NotificationCenterButton variant="menu-item" @click="moreMenuDialog.close()" />
         <DeviceManagerButton variant="menu-item" @click="moreMenuDialog.close()" />
 
         <!-- 在资源管理器中打开当前目录 -->
@@ -299,6 +300,7 @@ import ImageGrid from "../components/ImageGrid.vue";
 import NoteList from "../components/NoteList.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
+import NotificationCenterButton from "../components/NotificationCenterButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
