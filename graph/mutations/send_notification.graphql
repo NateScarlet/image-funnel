@@ -25,6 +25,8 @@ type SendNotificationPayload {
   id: ID!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
+  "发送后的通知"
+  notification: Notification!
   "客户端变更标识，用于幂等"
   clientMutationId: String
 }

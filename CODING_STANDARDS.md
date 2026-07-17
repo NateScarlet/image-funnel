@@ -87,6 +87,7 @@
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
+- **Mutation 返回完整数据**: Mutation 的 Payload 应返回操作后的完整数据，而非仅返回 ID 等最小字段。读写分离模式不适用于 GraphQL 接口层——客户端通过 Mutation 直接获取结果，不应再发起额外查询。若 Payload 中包含 Go struct 未绑定的字段，gqlgen 会自动生成对应 resolver。
 - **错误通知去重**: Apollo Client 的全局 `ErrorLink`（`frontend/src/graphql/client.ts`）会自动捕获所有 GraphQL 和网络错误并通过 `showError` 显示。因此：
   - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知
   - 调用方**禁止**仅使用 `console.error` 吞掉错误，这会阻止用户看到错误

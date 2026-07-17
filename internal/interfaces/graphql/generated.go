@@ -428,6 +428,7 @@ type ComplexityRoot struct {
 		ClientMutationID func(childComplexity int) int
 		DidCreate        func(childComplexity int) int
 		ID               func(childComplexity int) int
+		Notification     func(childComplexity int) int
 	}
 
 	Session struct {
@@ -2232,6 +2233,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SendNotificationPayload.ID(childComplexity), true
+	case "SendNotificationPayload.notification":
+		if e.complexity.SendNotificationPayload.Notification == nil {
+			break
+		}
+
+		return e.complexity.SendNotificationPayload.Notification(childComplexity), true
 
 	case "Session.canCommit":
 		if e.complexity.Session.CanCommit == nil {
@@ -4108,6 +4115,8 @@ type SendNotificationPayload {
   id: ID!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
+  "发送后的通知"
+  notification: Notification!
   "客户端变更标识，用于幂等"
   clientMutationId: String
 }
@@ -9896,6 +9905,8 @@ func (ec *executionContext) fieldContext_Mutation_sendNotification(ctx context.C
 				return ec.fieldContext_SendNotificationPayload_id(ctx, field)
 			case "didCreate":
 				return ec.fieldContext_SendNotificationPayload_didCreate(ctx, field)
+			case "notification":
+				return ec.fieldContext_SendNotificationPayload_notification(ctx, field)
 			case "clientMutationId":
 				return ec.fieldContext_SendNotificationPayload_clientMutationId(ctx, field)
 			}
@@ -13169,6 +13180,65 @@ func (ec *executionContext) fieldContext_SendNotificationPayload_didCreate(_ con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SendNotificationPayload_notification(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SendNotificationPayload_notification,
+		func(ctx context.Context) (any, error) {
+			return obj.Notification, nil
+		},
+		nil,
+		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SendNotificationPayload_notification(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SendNotificationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Notification_id(ctx, field)
+			case "tag":
+				return ec.fieldContext_Notification_tag(ctx, field)
+			case "channel":
+				return ec.fieldContext_Notification_channel(ctx, field)
+			case "title":
+				return ec.fieldContext_Notification_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Notification_body(ctx, field)
+			case "priority":
+				return ec.fieldContext_Notification_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Notification_status(ctx, field)
+			case "readAt":
+				return ec.fieldContext_Notification_readAt(ctx, field)
+			case "dismissedAt":
+				return ec.fieldContext_Notification_dismissedAt(ctx, field)
+			case "notAfter":
+				return ec.fieldContext_Notification_notAfter(ctx, field)
+			case "notBefore":
+				return ec.fieldContext_Notification_notBefore(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Notification_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Notification_updatedAt(ctx, field)
+			case "detailsURL":
+				return ec.fieldContext_Notification_detailsURL(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Notification", field.Name)
 		},
 	}
 	return fc, nil
@@ -22429,6 +22499,11 @@ func (ec *executionContext) _SendNotificationPayload(ctx context.Context, sel as
 			}
 		case "didCreate":
 			out.Values[i] = ec._SendNotificationPayload_didCreate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notification":
+			out.Values[i] = ec._SendNotificationPayload_notification(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

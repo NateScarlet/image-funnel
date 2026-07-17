@@ -60,28 +60,37 @@ func (n *Notification) setTitle(title string) error {
 	return nil
 }
 
-func (n *Notification) setBody(body string) {
+func (n *Notification) setBody(body string) error {
 	n.body = body
+	return nil
 }
 
-func (n *Notification) setPriority(p shared.NotificationPriority) {
+func (n *Notification) setPriority(p shared.NotificationPriority) error {
+	if p.IsZero() {
+		return fmt.Errorf("priority is required")
+	}
 	n.priority = p
+	return nil
 }
 
-func (n *Notification) setNotAfter(t time.Time) {
+func (n *Notification) setNotAfter(t time.Time) error {
 	n.notAfter = t
+	return nil
 }
 
-func (n *Notification) setNotBefore(t time.Time) {
+func (n *Notification) setNotBefore(t time.Time) error {
 	n.notBefore = t
+	return nil
 }
 
-func (n *Notification) setDetailsURL(u scalar.URI) {
+func (n *Notification) setDetailsURL(u scalar.URI) error {
 	n.detailsURL = u
+	return nil
 }
 
-func (n *Notification) setUpdatedAt(t time.Time) {
+func (n *Notification) setUpdatedAt(t time.Time) error {
 	n.updatedAt = t
+	return nil
 }
 
 // #endregion
@@ -103,7 +112,7 @@ func (n *Notification) Dismiss(at time.Time, now time.Time) {
 	n.updatedAt = now
 }
 
-// FromRepository 供持久层加载领域对象使用，通过 setter 进行校验
+// FromRepository 供持久层加载领域对象使用，不校验（仓库数据已可信）
 func FromRepository(
 	id scalar.ID,
 	tag string,
@@ -119,15 +128,6 @@ func FromRepository(
 	updatedAt time.Time,
 	detailsURL scalar.URI,
 ) (*Notification, error) {
-	// 校验：tag 必须是 UUID
-	if _, err := uuid.Parse(tag); err != nil {
-		return nil, fmt.Errorf("tag must be a valid UUID: %w", err)
-	}
-	// 校验：title 必填
-	if title == "" {
-		return nil, fmt.Errorf("title is required")
-	}
-
 	return &Notification{
 		id:          id,
 		tag:         tag,
@@ -186,9 +186,32 @@ func (f *Factory) New(
 
 	// ID 基于 tag 生成，确保同 tag 的 ID 稳定
 	id := scalar.ToID("notify:" + tag)
-	return FromRepository(
-		id, tag, channel, title, options.Body(), options.Priority(),
-		time.Time{}, time.Time{}, notAfter, notBefore,
-		now, now, options.DetailsURL(),
-	)
+	n := &Notification{
+		id:          id,
+		tag:         tag,
+		channel:     channel,
+		readAt:      time.Time{},
+		dismissedAt: time.Time{},
+		createdAt:   now,
+		updatedAt:   now,
+	}
+	if err := n.setTitle(title); err != nil {
+		return nil, err
+	}
+	if err := n.setBody(options.Body()); err != nil {
+		return nil, err
+	}
+	if err := n.setPriority(options.Priority()); err != nil {
+		return nil, err
+	}
+	if err := n.setNotAfter(notAfter); err != nil {
+		return nil, err
+	}
+	if err := n.setNotBefore(notBefore); err != nil {
+		return nil, err
+	}
+	if err := n.setDetailsURL(options.DetailsURL()); err != nil {
+		return nil, err
+	}
+	return n, nil
 }

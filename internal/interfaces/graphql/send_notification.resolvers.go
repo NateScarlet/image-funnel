@@ -40,9 +40,15 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		return nil, err
 	}
 
+	notif, err := r.app.Notification(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	return &SendNotificationPayload{
 		ID:               id,
 		DidCreate:        didCreate,
+		Notification:     notif,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

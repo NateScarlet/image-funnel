@@ -320,6 +320,8 @@ type SendNotificationPayload struct {
 	ID scalar.ID `json:"id"`
 	// 是否本次操作为新建通知（false 表示同 tag 更新已有通知）
 	DidCreate bool `json:"didCreate"`
+	// 发送后的通知
+	Notification *shared.NotificationDTO `json:"notification"`
 	// 客户端变更标识，用于幂等
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }

@@ -24,14 +24,14 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 	}
 
 	if len(filters.Status) > 0 {
-		stSet := util.AddToSet[shared.NotificationStatus](nil, filters.Status...)
+		stSet := util.AddToSet(nil, filters.Status...)
 		b.Add(func(n *Notification) bool {
 			return stSet.Has(n.Status())
 		})
 	}
 
 	if len(filters.Priority) > 0 {
-		pSet := util.AddToSet[shared.NotificationPriority](nil, filters.Priority...)
+		pSet := util.AddToSet(nil, filters.Priority...)
 		b.Add(func(n *Notification) bool {
 			return pSet.Has(n.Priority())
 		})

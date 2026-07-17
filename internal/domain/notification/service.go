@@ -51,18 +51,30 @@ func (s *Service) SendNotification(
 		if err := existing.setTitle(title); err != nil {
 			return nil, err
 		}
-		existing.setBody(options.Body())
-		existing.setPriority(options.Priority())
+		if err := existing.setBody(options.Body()); err != nil {
+			return nil, err
+		}
+		if err := existing.setPriority(options.Priority()); err != nil {
+			return nil, err
+		}
 		if !options.NotAfter().IsZero() {
-			existing.setNotAfter(options.NotAfter())
+			if err := existing.setNotAfter(options.NotAfter()); err != nil {
+				return nil, err
+			}
 		}
 		if !options.NotBefore().IsZero() {
-			existing.setNotBefore(options.NotBefore())
+			if err := existing.setNotBefore(options.NotBefore()); err != nil {
+				return nil, err
+			}
 		}
 		if !options.DetailsURL().IsZero() {
-			existing.setDetailsURL(options.DetailsURL())
+			if err := existing.setDetailsURL(options.DetailsURL()); err != nil {
+				return nil, err
+			}
 		}
-		existing.setUpdatedAt(now)
+		if err := existing.setUpdatedAt(now); err != nil {
+			return nil, err
+		}
 		notif = existing
 	} else {
 		notif, err = s.factory.New(tag, channel, title, opts...)
@@ -118,7 +130,9 @@ func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notifica
 	}
 
 	now := time.Now()
-	notif.setNotAfter(now)
+	if err := notif.setNotAfter(now); err != nil {
+		return nil, err
+	}
 
 	_, err = s.repo.Save(ctx, notif)
 	if err != nil {
@@ -129,4 +143,3 @@ func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notifica
 }
 
 // #endregion
-
