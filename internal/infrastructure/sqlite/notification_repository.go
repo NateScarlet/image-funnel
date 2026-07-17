@@ -144,7 +144,9 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	}
 
 	// 刷新该频道物化视图（写时维护，避免 Channels 的 N+1）
-	r.refreshChannelSummary(ctx, tx, notif.Channel())
+	if err := r.refreshChannelSummary(ctx, tx, notif.Channel()); err != nil {
+		return false, err
+	}
 
 	if err := tx.Commit(); err != nil {
 		return false, err
@@ -286,22 +288,28 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 }
 
 // refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
-func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) {
+func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) error {
 	// 删除已空频道（该频道所有通知已被物理删除）
-	_, _ = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM channel_summary WHERE channel = ? AND (
 			SELECT COUNT(*) FROM notifications WHERE channel = ?
 		) = 0
-	`, channel, channel)
+	`, channel, channel); err != nil {
+		return fmt.Errorf("refreshChannelSummary delete empty channel %s: %w", channel, err)
+	}
 
 	// 仅在有通知时写入或更新摘要，避免插入空行
-	_, _ = tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
 		SELECT ?,
 		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND (n.read_at IS NULL OR n.read_at = '' OR n.read_at = '0001-01-01T00:00:00Z')),
 		       (SELECT n.id FROM notifications n WHERE n.channel = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, channel, channel)
+	`, channel, channel, channel, channel); err != nil {
+		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
+	}
+
+	return nil
 }
 
 // scanChannelSummaryRow 扫描 channel_summary JOIN notifications 的一行

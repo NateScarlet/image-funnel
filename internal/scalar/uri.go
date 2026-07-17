@@ -99,7 +99,7 @@ func (uri URI) Equal(other URI) bool {
 	return uri.String() == other.String()
 }
 
-// ParseURI 将字符串解析为 URI。如果字符串不带协议 scheme 则报错拦截（保证其格式合规）
+// ParseURI 将字符串解析为 URI。允许相对 URL（此时相对于网页端基础 URL 解析）
 func ParseURI(s string) (_ URI, err error) {
 	defer func() {
 		if err != nil {
