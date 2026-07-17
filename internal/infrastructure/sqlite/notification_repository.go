@@ -43,6 +43,9 @@ func NewNotificationRepository(dataDir string) (*NotificationRepository, error) 
 		return nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
+	// 单连接确保写操作天然序列化，避免 SQLITE_BUSY
+	db.SetMaxOpenConns(1)
+
 	// 初始化数据表及索引（使用 CREATE TABLE IF NOT EXISTS 保证幂等）
 	schema := `
 	CREATE TABLE IF NOT EXISTS notifications (
@@ -76,63 +79,68 @@ func (r *NotificationRepository) Close() error {
 	return r.db.Close()
 }
 
+// 清理过期通知的 SQL（在写事务内执行，不单独占用连接）
+const deleteExpiredSQL = `DELETE FROM notifications WHERE not_after IS NOT NULL AND not_after != '' AND not_after != '0001-01-01T00:00:00Z' AND not_after < ?`
+
 // Save 保存通知（新建或更新），返回是否为新建通知
 // 若 notif.IsDeleted() 为 true，则执行物理删除
 func (r *NotificationRepository) Save(ctx context.Context, notif *notification.Notification) (didCreate bool, err error) {
-	defer r.deleteExpired(ctx)
-
-	if notif.IsDeleted() {
-		// 物理删除
-		_, err = r.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = ?", notif.ID().String())
-		return false, err
-	}
-
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
 
-	// 检查 tag 是否已经存在
-	var count int
-	err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE tag = ?", notif.Tag()).Scan(&count)
-	if err != nil {
-		return false, err
-	}
-	didCreate = count == 0
+	if notif.IsDeleted() {
+		_, err = tx.ExecContext(ctx, "DELETE FROM notifications WHERE id = ?", notif.ID().String())
+		if err != nil {
+			return false, err
+		}
+	} else {
+		// 检查 tag 是否已经存在
+		var count int
+		err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE tag = ?", notif.Tag()).Scan(&count)
+		if err != nil {
+			return false, err
+		}
+		didCreate = count == 0
 
-	query := `
-	INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(tag) DO UPDATE SET
-		title = excluded.title,
-		body = excluded.body,
-		priority = excluded.priority,
-		read_at = excluded.read_at,
-		dismissed_at = excluded.dismissed_at,
-		not_after = excluded.not_after,
-		not_before = excluded.not_before,
-		updated_at = excluded.updated_at,
-		detail_url = excluded.detail_url
-	`
-	_, err = tx.ExecContext(ctx, query,
-		notif.ID().String(),
-		notif.Tag(),
-		notif.Channel(),
-		notif.Title(),
-		notif.Body(),
-		notif.Priority().String(),
-		formatTime(notif.ReadAt()),
-		formatTime(notif.DismissedAt()),
-		formatTime(notif.NotAfter()),
-		formatTime(notif.NotBefore()),
-		formatTime(notif.CreatedAt()),
-		formatTime(notif.UpdatedAt()),
-		notif.DetailURL().String(),
-	)
-	if err != nil {
-		return false, err
+		query := `
+		INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, detail_url)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(tag) DO UPDATE SET
+			title = excluded.title,
+			body = excluded.body,
+			priority = excluded.priority,
+			read_at = excluded.read_at,
+			dismissed_at = excluded.dismissed_at,
+			not_after = excluded.not_after,
+			not_before = excluded.not_before,
+			updated_at = excluded.updated_at,
+			detail_url = excluded.detail_url
+		`
+		_, err = tx.ExecContext(ctx, query,
+			notif.ID().String(),
+			notif.Tag(),
+			notif.Channel(),
+			notif.Title(),
+			notif.Body(),
+			notif.Priority().String(),
+			formatTime(notif.ReadAt()),
+			formatTime(notif.DismissedAt()),
+			formatTime(notif.NotAfter()),
+			formatTime(notif.NotBefore()),
+			formatTime(notif.CreatedAt()),
+			formatTime(notif.UpdatedAt()),
+			notif.DetailURL().String(),
+		)
+		if err != nil {
+			return false, err
+		}
 	}
+
+	// 在同一个事务内顺手清理过期通知，避免额外占用 SQLite 连接
+	_, _ = tx.ExecContext(ctx, deleteExpiredSQL, time.Now().Format(time.RFC3339Nano))
 
 	if err := tx.Commit(); err != nil {
 		return false, err
@@ -356,14 +364,6 @@ func formatTime(t time.Time) string {
 		return "0001-01-01T00:00:00Z"
 	}
 	return t.Format(time.RFC3339Nano)
-}
-
-// deleteExpired 写操作时顺手清理已过期的通知
-func (r *NotificationRepository) deleteExpired(ctx context.Context) {
-	_, _ = r.db.ExecContext(ctx,
-		`DELETE FROM notifications WHERE not_after IS NOT NULL AND not_after != '' AND not_after != '0001-01-01T00:00:00Z' AND not_after < ?`,
-		time.Now().Format(time.RFC3339Nano),
-	)
 }
 
 // #endregion

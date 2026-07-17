@@ -1,4 +1,4 @@
-import { ref, computed, watch } from "vue";
+import { ref, computed } from "vue";
 import { once } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
@@ -52,16 +52,29 @@ const init = once(() => {
     return channels.value.find((ch) => ch.channel === selectedChannel.value)?.unreadCount ?? 0;
   });
 
-  // 按优先级投递 Toast
+  // 根据文本长度计算合理的展示时长
+  function toastDuration(title: string): number {
+    const len = title.length;
+    if (len < 20) return 3000;
+    if (len < 50) return 5000;
+    return 7000;
+  }
+
+  // 投递 Toast；优先级仅影响是否可关闭（HIGH 需手动确认）
   function spawnToast(n: { id: string; title: string; priority: NotificationPriority }) {
     if (shownToastIds.has(n.id)) return;
     shownToastIds.add(n.id);
+    const duration = toastDuration(n.title);
     if (n.priority === NotificationPriority.HIGH) {
-      showToast(n.title, "info", 0);
-    } else if (n.priority === NotificationPriority.NORMAL) {
-      showToast(n.title, "info", 5000);
-    } else if (n.priority === NotificationPriority.LOW) {
-      showToast(n.title, "info", 3000);
+      showToast(n.title, "info", 0, {
+        text: "关闭",
+        onClick: (close) => {
+          void markAsDismissed(n.id);
+          close();
+        },
+      });
+    } else {
+      showToast(n.title, "info", duration);
     }
   }
 
@@ -80,14 +93,8 @@ const init = once(() => {
     },
   });
 
-  async function refreshSelectedChannel() {
-    if (!selectedChannel.value) return;
-    const { data } = await query(NotificationsDocument, {
-      variables: { channel: selectedChannel.value },
-      fetchPolicy: "network-only",
-    });
-    channelNotifications.value = data?.notifications?.nodes ?? [];
-  }
+  // 应用加载时一次性弹历史未读通知
+  void loadAndToastInitialUnreads();
 
   async function loadAndToastInitialUnreads() {
     for (const ch of channels.value) {
@@ -98,7 +105,12 @@ const init = once(() => {
         });
         const nodes = data?.notifications?.nodes ?? [];
         for (const n of nodes) {
-          if (!n.readAt && n.status === NotificationStatus.ACTIVE) {
+          // 初始重放：仅 HIGH 和 NORMAL 弹 Toast，LOW 仅首次收到时弹
+          if (
+            !n.readAt &&
+            n.status === NotificationStatus.ACTIVE &&
+            n.priority !== NotificationPriority.LOW
+          ) {
             spawnToast(n);
           }
         }
@@ -106,16 +118,14 @@ const init = once(() => {
     }
   }
 
-  // 首次加载完成且未读大于 0 时，主动拉取各频道的未读详情并提示 Toast
-  watch(
-    () => channels.value,
-    (newVal, oldVal) => {
-      if (newVal.length > 0 && (!oldVal || oldVal.length === 0)) {
-        void loadAndToastInitialUnreads();
-      }
-    },
-    { immediate: true },
-  );
+  async function refreshSelectedChannel() {
+    if (!selectedChannel.value) return;
+    const { data } = await query(NotificationsDocument, {
+      variables: { channel: selectedChannel.value },
+      fetchPolicy: "network-only",
+    });
+    channelNotifications.value = data?.notifications?.nodes ?? [];
+  }
 
   async function selectChannel(channel: string) {
     selectedChannel.value = channel;
