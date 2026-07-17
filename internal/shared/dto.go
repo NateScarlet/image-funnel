@@ -304,10 +304,12 @@ type NotificationDTO struct {
 }
 
 type NotificationFilters struct {
-	Channel  *string               `json:"channel,omitempty"`
-	Status   *NotificationStatus   `json:"status,omitempty"`
-	Priority *NotificationPriority `json:"priority,omitempty"`
-	Read     *bool                 `json:"read,omitempty"`
+	Channel   *string               `json:"channel,omitempty"`
+	Status    *NotificationStatus   `json:"status,omitempty"`
+	Priority  *NotificationPriority `json:"priority,omitempty"`
+	Read      *bool                 `json:"read,omitempty"`
+	NotBefore *time.Time            `json:"notBefore,omitempty"`
+	NotAfter  *time.Time            `json:"notAfter,omitempty"`
 }
 
 type NotificationConnectionDTO struct {

@@ -3326,6 +3326,10 @@ input NotificationFiltersInput {
   priority: NotificationPriority
   "按已读状态筛选（true=已读，false=未读）"
   read: Boolean
+  "可见起始时间过滤：只返回 notBefore <= 该值的通知（不传则不过滤）"
+  notBefore: Time
+  "可见截止时间过滤：只返回 notAfter >= 该值的通知（不传则不过滤）"
+  notAfter: Time
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
@@ -18105,7 +18109,7 @@ func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"status", "priority", "read"}
+	fieldsInOrder := [...]string{"status", "priority", "read", "notBefore", "notAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18133,6 +18137,20 @@ func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.C
 				return it, err
 			}
 			it.Read = data
+		case "notBefore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notBefore"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NotBefore = data
+		case "notAfter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("notAfter"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NotAfter = data
 		}
 	}
 
@@ -24131,13 +24149,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

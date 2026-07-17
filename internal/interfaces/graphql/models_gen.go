@@ -268,6 +268,10 @@ type NotificationFiltersInput struct {
 	Priority *enum.Enum[shared.NotificationPriorityMeta] `json:"priority,omitempty"`
 	// 按已读状态筛选（true=已读，false=未读）
 	Read *bool `json:"read,omitempty"`
+	// 可见起始时间过滤：只返回 notBefore <= 该值的通知（不传则不过滤）
+	NotBefore *time.Time `json:"notBefore,omitempty"`
+	// 可见截止时间过滤：只返回 notAfter >= 该值的通知（不传则不过滤）
+	NotAfter *time.Time `json:"notAfter,omitempty"`
 }
 
 type Query struct {

@@ -181,7 +181,7 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 	return notif, nil
 }
 
-// Find 遍历所有通知，支持 options 粗筛（利用 Channel 加速过滤）
+// Find 遍历所有通知，利用 filter 粗筛（可索引加速），细筛由 FilterBuilder 兜底
 func (r *NotificationRepository) Find(ctx context.Context, options ...notification.FindOption) iter.Seq2[*notification.Notification, error] {
 	opts := notification.NewFindOptions(options...)
 	filter := opts.Filter()
@@ -196,6 +196,25 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 		if filter.Channel != nil {
 			query += " AND channel = ?"
 			args = append(args, *filter.Channel)
+		}
+		if filter.Read != nil {
+			if *filter.Read {
+				query += " AND (read_at IS NOT NULL AND read_at != '' AND read_at != '0001-01-01T00:00:00Z')"
+			} else {
+				query += " AND (read_at IS NULL OR read_at = '' OR read_at = '0001-01-01T00:00:00Z')"
+			}
+		}
+		if filter.Priority != nil {
+			query += " AND priority = ?"
+			args = append(args, filter.Priority.String())
+		}
+		if filter.NotAfter != nil {
+			query += " AND (not_after IS NULL OR not_after = '' OR not_after = '0001-01-01T00:00:00Z' OR not_after <= ?)"
+			args = append(args, filter.NotAfter.Format(time.RFC3339Nano))
+		}
+		if filter.NotBefore != nil {
+			query += " AND (not_before IS NULL OR not_before = '' OR not_before = '0001-01-01T00:00:00Z' OR not_before >= ?)"
+			args = append(args, filter.NotBefore.Format(time.RFC3339Nano))
 		}
 
 		query += " ORDER BY created_at DESC, id DESC"

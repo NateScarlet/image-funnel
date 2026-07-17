@@ -234,6 +234,10 @@ export enum NotificationEventType {
 
 /** 通知筛选条件 */
 export type NotificationFiltersInput = {
+  /** 可见截止时间过滤：只返回 notAfter >= 该值的通知（不传则不过滤） */
+  notAfter?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 可见起始时间过滤：只返回 notBefore <= 该值的通知（不传则不过滤） */
+  notBefore?: InputMaybe<Scalars["Time"]["input"]>;
   /** 按优先级筛选 */
   priority?: InputMaybe<NotificationPriority>;
   /** 按已读状态筛选（true=已读，false=未读） */
