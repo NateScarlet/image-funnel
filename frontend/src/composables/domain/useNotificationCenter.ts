@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { once } from "es-toolkit";
 import useQuery from "@/graphql/utils/useQuery";
 import useSubscription from "@/graphql/utils/useSubscription";
@@ -15,13 +15,9 @@ import {
   NotificationEventType,
   NotificationPriority,
   NotificationStatus,
-  type NotificationChannelsQuery,
   type NotificationFragment,
 } from "@/graphql/generated";
 
-type NotificationChannel = NonNullable<
-  NotificationChannelsQuery["notificationChannels"]
->["nodes"][number];
 type Notification = NotificationFragment;
 
 // 根据文本长度计算合理的展示时长
@@ -43,8 +39,10 @@ const init = once(() => {
   const selectedChannel = ref<string | null>(null);
   const channelNotifications = ref<Notification[]>([]);
 
-  const { show: showToast } = useNotification();
+  const { show: showToast, remove: removeToast } = useNotification();
   const shownToastIds = new Set<string>();
+  // 追踪 notificationId -> toastId 映射，用于时间到达时关闭 toast
+  const toastIdMap = new Map<string, number>();
 
   // 统一由 useModalDrawer 控制抽屉面板显隐，消除双向同步 watch 反设计
   const drawer = useModalDrawer({
@@ -65,6 +63,9 @@ const init = once(() => {
     });
   });
 
+  // 需要时间感知的 Toast 通知（有 notBefore 或 notAfter 约束）
+  const scheduledNotifications = ref<Notification[]>([]);
+
   // refreshOn 监听所有通知的 notBefore/notAfter，在时间到达时自动刷新 currentTime
   refreshOn(() => {
     const times: string[] = [];
@@ -72,14 +73,39 @@ const init = once(() => {
       times.push(n.notBefore);
       times.push(n.notAfter);
     }
+    for (const n of scheduledNotifications.value) {
+      times.push(n.notBefore);
+      times.push(n.notAfter);
+    }
     return times;
   });
+
+  // 监听 currentTime 变化，重新评估 Toast 显示/隐藏
+  watch(
+    () => currentTime.value,
+    () => {
+      for (const n of scheduledNotifications.value) {
+        // notBefore 到达，且未过期 → 显示 toast
+        if (!isFuture(n.notBefore) && !shownToastIds.has(n.id) && !isPast(n.notAfter)) {
+          showToastImmediate(n);
+        }
+        // notAfter 已过，且正在显示 → 隐藏 toast
+        if (isPast(n.notAfter) && shownToastIds.has(n.id)) {
+          hideToast(n.id);
+        }
+      }
+      // 清理：移除 notAfter 已过且已隐藏的通知
+      scheduledNotifications.value = scheduledNotifications.value.filter(
+        (n) => isFuture(n.notBefore) || !isPast(n.notAfter),
+      );
+    },
+  );
 
   const { data: channelsData, refresh: refreshChannels } = useQuery(NotificationChannelsDocument, {
     fetchPolicy: "cache-and-network",
   });
 
-  const channels = computed<NotificationChannel[]>(() => {
+  const channels = computed(() => {
     return channelsData.value?.notificationChannels?.nodes ?? [];
   });
 
@@ -91,31 +117,52 @@ const init = once(() => {
     return channels.value.find((ch) => ch.channel === selectedChannel.value)?.unreadCount ?? 0;
   });
 
-  // 投递 Toast；优先级仅影响是否可关闭（HIGH 需手动确认）
-  function spawnToast(n: {
-    id: string;
-    title: string;
-    priority: NotificationPriority;
-    notBefore?: string | null;
-    notAfter?: string | null;
-  }) {
-    if (shownToastIds.has(n.id)) return;
-    // 时间检查：不在窗口内则跳过
-    if (isFuture(n.notBefore)) return;
-    if (isPast(n.notAfter)) return;
+  // 立即显示 Toast
+  function showToastImmediate(n: Notification) {
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title);
-    if (n.priority === NotificationPriority.HIGH) {
-      showToast(n.title, "info", 0, {
-        text: "关闭",
-        onClick: (close) => {
-          void markAsDismissed(n.id);
-          close();
-        },
-      });
-    } else {
-      showToast(n.title, "info", duration);
+    const toastId =
+      n.priority === NotificationPriority.HIGH
+        ? showToast(n.title, "info", 0, {
+            text: "关闭",
+            onClick: (close) => {
+              void markAsDismissed(n.id);
+              close();
+            },
+          })
+        : showToast(n.title, "info", duration);
+    toastIdMap.set(n.id, toastId);
+  }
+
+  // 隐藏 Toast（notAfter 到达时调用）
+  function hideToast(id: string) {
+    const toastId = toastIdMap.get(id);
+    if (toastId !== undefined) {
+      removeToast(toastId);
+      toastIdMap.delete(id);
     }
+    shownToastIds.delete(id);
+  }
+
+  // 投递 Toast；有 time 约束的通知支持时间感知（notBefore 到达时显示，notAfter 到达时消失）
+  function spawnToast(n: Notification) {
+    if (shownToastIds.has(n.id)) return;
+
+    // 有 time 约束的通知加入调度列表，以便 watch 响应时间变化
+    if (n.notBefore || n.notAfter) {
+      const existing = scheduledNotifications.value.find((s) => s.id === n.id);
+      if (existing) {
+        Object.assign(existing, n);
+      } else {
+        scheduledNotifications.value.push(n);
+      }
+    }
+
+    // 立即检查是否应该显示
+    if (isFuture(n.notBefore)) return;
+    if (isPast(n.notAfter)) return;
+
+    showToastImmediate(n);
   }
 
   // 监听实时通知变更订阅，随时刷新会话列表，并呈现对应的 Toast
@@ -136,16 +183,19 @@ const init = once(() => {
         // 新通知到达，投递 Toast
         spawnToast(notification);
       } else if (event === NotificationEventType.UNSENT) {
-        // 通知被撤回，从本地列表移除
+        // 通知被撤回，从本地列表和调度列表移除
         channelNotifications.value = channelNotifications.value.filter(
           (n) => n.id !== notification.id,
         );
-        shownToastIds.delete(notification.id);
+        scheduledNotifications.value = scheduledNotifications.value.filter(
+          (n) => n.id !== notification.id,
+        );
+        hideToast(notification.id);
       } else if (event === NotificationEventType.UPDATED) {
-        // 通知更新（可见时间变化等），刷新本地列表
+        // 通知更新（可见时间变化等），重新评估 Toast
         if (notification.notBefore || notification.notAfter) {
-          // 时间窗口变化，清除已显示的 Toast 记录以便重新评估
           shownToastIds.delete(notification.id);
+          spawnToast(notification);
         }
       }
     },
