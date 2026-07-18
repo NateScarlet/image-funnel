@@ -85,14 +85,14 @@ func (s *Service) SendNotification(
 		}
 	}
 
-	actualDidCreate, err := s.repo.Save(ctx, notif)
+	didCreate, err := s.repo.Save(ctx, notif)
 	if err != nil {
 		return nil, err
 	}
 
 	// 领域层发布事件，携带 NotificationID 让接口层按需查询
 	eventType := shared.NotificationEventTypeSent
-	if !actualDidCreate {
+	if !didCreate {
 		eventType = shared.NotificationEventTypeUpdated
 	}
 	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
@@ -102,7 +102,7 @@ func (s *Service) SendNotification(
 		return nil, err
 	}
 
-	return shared.NewSendNotificationResult(notif.ID(), actualDidCreate), nil
+	return shared.NewSendNotificationResult(notif.ID(), didCreate), nil
 }
 
 // #endregion
@@ -110,18 +110,15 @@ func (s *Service) SendNotification(
 // #region UpdateNotification
 
 // UpdateNotification 更新通知元数据（已读时间、关闭时间）
-func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *time.Time, dismissedAt *time.Time) error {
+func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, opts ...UpdateNotificationOption) error {
 	notif, err := s.repo.Get(ctx, id.String())
 	if err != nil {
 		return err
 	}
 
 	now := time.Now()
-	if readAt != nil {
-		notif.MarkRead(*readAt, now)
-	}
-	if dismissedAt != nil {
-		notif.Dismiss(*dismissedAt, now)
+	for _, opt := range opts {
+		opt(notif, now)
 	}
 
 	_, err = s.repo.Save(ctx, notif)

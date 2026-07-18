@@ -29,7 +29,7 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		opts = append(opts, shared.WithPriority(*input.Priority))
 	}
 
-	id, didCreate, err := r.app.SendNotification(
+	result, err := r.app.SendNotification(
 		ctx,
 		input.Tag,
 		input.Channel,
@@ -40,13 +40,13 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		return nil, err
 	}
 
-	notif, err := r.app.Notification(ctx, id)
+	notif, err := r.app.Notification(ctx, result.ID())
 	if err != nil {
 		return nil, err
 	}
 
 	return &SendNotificationPayload{
-		DidCreate:        didCreate,
+		DidCreate:        result.DidCreate(),
 		Notification:     notif,
 		ClientMutationID: input.ClientMutationID,
 	}, nil

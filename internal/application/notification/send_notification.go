@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 
-	"main/internal/scalar"
 	"main/internal/shared"
 
 	"go.uber.org/zap"
@@ -16,25 +15,22 @@ func (h *Handler) SendNotification(
 	channel string,
 	title string,
 	opts ...shared.SendNotificationOption,
-) (id scalar.ID, didCreate bool, err error) {
+) (result *shared.SendNotificationResult, err error) {
 	defer func() {
 		if err != nil {
 			h.logger.Error("send notification failed",
 				zap.String("tag", tag),
+				zap.String("channel", channel),
 				zap.Error(err),
 			)
 		} else {
 			h.logger.Info("did send notification",
+				zap.Stringer("id", result.ID()),
 				zap.String("tag", tag),
-				zap.Bool("didCreate", didCreate),
+				zap.Bool("didCreate", result.DidCreate()),
 			)
 		}
 	}()
 
-	result, err := h.service.SendNotification(ctx, tag, channel, title, opts...)
-	if err != nil {
-		return scalar.ID{}, false, err
-	}
-
-	return result.ID(), result.DidCreate(), nil
+	return h.service.SendNotification(ctx, tag, channel, title, opts...)
 }

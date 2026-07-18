@@ -12,9 +12,6 @@ import (
 
 // LatestNotification is the resolver for the latestNotification field.
 func (r *notificationChannelResolver) LatestNotification(ctx context.Context, obj *shared.NotificationChannelDTO) (*shared.NotificationDTO, error) {
-	if obj.LatestNotificationID.IsZero() {
-		return nil, nil
-	}
 	return r.app.Notification(ctx, obj.LatestNotificationID)
 }
 

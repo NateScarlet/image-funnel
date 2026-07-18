@@ -7,14 +7,21 @@ package graphql
 
 import (
 	"context"
+
+	domnotif "main/internal/domain/notification"
 )
 
 // UpdateNotification is the resolver for the updateNotification field.
 func (r *mutationResolver) UpdateNotification(ctx context.Context, input UpdateNotificationInput) (*UpdateNotificationPayload, error) {
-	readAt := input.ReadAt.Value()
-	dismissedAt := input.DismissedAt.Value()
+	var opts []domnotif.UpdateNotificationOption
+	if input.ReadAt.IsSet() {
+		opts = append(opts, domnotif.WithReadAt(input.ReadAt.Value()))
+	}
+	if input.DismissedAt.IsSet() {
+		opts = append(opts, domnotif.WithDismissedAt(input.DismissedAt.Value()))
+	}
 
-	err := r.app.UpdateNotification(ctx, input.ID, readAt, dismissedAt)
+	err := r.app.UpdateNotification(ctx, input.ID, opts...)
 	if err != nil {
 		return nil, err
 	}

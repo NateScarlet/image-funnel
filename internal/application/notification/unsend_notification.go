@@ -18,6 +18,7 @@ func (h *Handler) UnsendNotification(ctx context.Context, tag string) (id scalar
 			)
 		} else {
 			h.logger.Info("did unsend notification",
+				zap.Stringer("id", id),
 				zap.String("tag", tag),
 			)
 		}

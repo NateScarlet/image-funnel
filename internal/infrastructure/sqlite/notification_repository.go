@@ -25,7 +25,6 @@ var _ notification.Repository = (*NotificationRepository)(nil)
 type NotificationRepository struct {
 	db                 *sql.DB
 	reclaimGracePeriod time.Duration
-	stopCleanup        chan struct{}
 }
 
 // NotificationRepositoryOption 配置选项
@@ -103,17 +102,17 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 	repo := &NotificationRepository{
 		db:                 db,
 		reclaimGracePeriod: 30 * 24 * time.Hour,
-		stopCleanup:        make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(repo)
 	}
 
-	// 启动后台清理 goroutine
-	go repo.runCleanup()
+	// 创建者负责清理：通过 cancel 中止后台 goroutine
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	go repo.runCleanup(cleanupCtx)
 
 	cleanup := func() error {
-		close(repo.stopCleanup)
+		cancelCleanup()
 		return db.Close()
 	}
 
@@ -343,12 +342,12 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 // #region 后台清理
 
 // runCleanup 后台 goroutine，随机延迟 0-1 小时后每 24 小时清理一次过期数据
-func (r *NotificationRepository) runCleanup() {
+func (r *NotificationRepository) runCleanup(ctx context.Context) {
 	// 随机延迟 0-1 小时
 	initialDelay := time.Duration(rand.Int64N(int64(time.Hour)))
 	select {
 	case <-time.After(initialDelay):
-	case <-r.stopCleanup:
+	case <-ctx.Done():
 		return
 	}
 
@@ -360,7 +359,7 @@ func (r *NotificationRepository) runCleanup() {
 
 		select {
 		case <-ticker.C:
-		case <-r.stopCleanup:
+		case <-ctx.Done():
 			return
 		}
 	}

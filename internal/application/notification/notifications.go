@@ -11,14 +11,10 @@ import (
 // Notifications 获取通知列表，支持过滤及游标分页
 func (h *Handler) Notifications(
 	ctx context.Context,
-	channel *string,
 	filters shared.NotificationFilters,
 	first *int,
 	after *string,
 ) (conn *shared.NotificationConnectionDTO, err error) {
-	if channel != nil {
-		filters.Channel = []string{*channel}
-	}
 
 	builder := pagination.NewConnectionBufferBuilder[*shared.NotificationDTO, *shared.NotificationEdgeDTO, *shared.NotificationConnectionDTO]()
 	buf := builder(

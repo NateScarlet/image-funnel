@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	domnotif "main/internal/domain/notification"
 	"main/internal/scalar"
 
 	"go.uber.org/zap"
@@ -13,8 +14,7 @@ import (
 func (h *Handler) UpdateNotification(
 	ctx context.Context,
 	id scalar.ID,
-	readAt *time.Time,
-	dismissedAt *time.Time,
+	opts ...domnotif.UpdateNotificationOption,
 ) (err error) {
 	startTime := time.Now()
 
@@ -33,5 +33,5 @@ func (h *Handler) UpdateNotification(
 		}
 	}()
 
-	return h.service.UpdateNotification(ctx, id, readAt, dismissedAt)
+	return h.service.UpdateNotification(ctx, id, opts...)
 }
