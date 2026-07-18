@@ -427,7 +427,6 @@ type ComplexityRoot struct {
 	SendNotificationPayload struct {
 		ClientMutationID func(childComplexity int) int
 		DidCreate        func(childComplexity int) int
-		ID               func(childComplexity int) int
 		Notification     func(childComplexity int) int
 	}
 
@@ -2227,12 +2226,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SendNotificationPayload.DidCreate(childComplexity), true
-	case "SendNotificationPayload.id":
-		if e.complexity.SendNotificationPayload.ID == nil {
-			break
-		}
-
-		return e.complexity.SendNotificationPayload.ID(childComplexity), true
 	case "SendNotificationPayload.notification":
 		if e.complexity.SendNotificationPayload.Notification == nil {
 			break
@@ -4111,8 +4104,6 @@ input SendNotificationInput {
 }
 
 type SendNotificationPayload {
-  "发送后的通知 ID"
-  id: ID!
   "是否本次操作为新建通知（false 表示同 tag 更新已有通知）"
   didCreate: Boolean!
   "发送后的通知"
@@ -9901,8 +9892,6 @@ func (ec *executionContext) fieldContext_Mutation_sendNotification(ctx context.C
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_SendNotificationPayload_id(ctx, field)
 			case "didCreate":
 				return ec.fieldContext_SendNotificationPayload_didCreate(ctx, field)
 			case "notification":
@@ -13122,35 +13111,6 @@ func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshTokenExpires
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SendNotificationPayload_id(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SendNotificationPayload_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalNID2mainᚋinternalᚋscalarᚐID,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SendNotificationPayload_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SendNotificationPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22492,11 +22452,6 @@ func (ec *executionContext) _SendNotificationPayload(ctx context.Context, sel as
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("SendNotificationPayload")
-		case "id":
-			out.Values[i] = ec._SendNotificationPayload_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "didCreate":
 			out.Values[i] = ec._SendNotificationPayload_didCreate(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -25184,23 +25139,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 

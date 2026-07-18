@@ -12,7 +12,6 @@ import {
   NotificationChangedDocument,
   NotificationsDocument,
   UpdateNotificationDocument,
-  NotificationEventType,
   NotificationPriority,
   NotificationStatus,
   type NotificationFragment,
@@ -85,12 +84,11 @@ const init = once(() => {
     () => currentTime.value,
     () => {
       for (const n of scheduledNotifications.value) {
-        // notBefore 到达，且未过期 → 显示 toast
-        if (!isFuture(n.notBefore) && !shownToastIds.has(n.id) && !isPast(n.notAfter)) {
+        // 直接计算期望状态，然后幂等同步 UI
+        const shouldShow = !isFuture(n.notBefore) && !isPast(n.notAfter);
+        if (shouldShow && !shownToastIds.has(n.id)) {
           showToastImmediate(n);
-        }
-        // notAfter 已过，且正在显示 → 隐藏 toast
-        if (isPast(n.notAfter) && shownToastIds.has(n.id)) {
+        } else if (!shouldShow && shownToastIds.has(n.id)) {
           hideToast(n.id);
         }
       }
@@ -146,8 +144,6 @@ const init = once(() => {
 
   // 投递 Toast；有 time 约束的通知支持时间感知（notBefore 到达时显示，notAfter 到达时消失）
   function spawnToast(n: Notification) {
-    if (shownToastIds.has(n.id)) return;
-
     // 有 time 约束的通知加入调度列表，以便 watch 响应时间变化
     if (n.notBefore || n.notAfter) {
       const existing = scheduledNotifications.value.find((s) => s.id === n.id);
@@ -158,9 +154,12 @@ const init = once(() => {
       }
     }
 
-    // 立即检查是否应该显示
+    // 计算期望状态：应该在时间窗口内显示
     if (isFuture(n.notBefore)) return;
     if (isPast(n.notAfter)) return;
+
+    // 幂等同步 UI：已经是期望状态则什么都不做
+    if (shownToastIds.has(n.id)) return;
 
     showToastImmediate(n);
   }
@@ -176,28 +175,12 @@ const init = once(() => {
       const eventPayload = res.data?.notificationChanged;
       if (!eventPayload) return;
 
-      const { event, notification } = eventPayload;
+      const { notification } = eventPayload;
       if (!notification) return;
 
-      if (event === NotificationEventType.SENT) {
-        // 新通知到达，投递 Toast
-        spawnToast(notification);
-      } else if (event === NotificationEventType.UNSENT) {
-        // 通知被撤回，从本地列表和调度列表移除
-        channelNotifications.value = channelNotifications.value.filter(
-          (n) => n.id !== notification.id,
-        );
-        scheduledNotifications.value = scheduledNotifications.value.filter(
-          (n) => n.id !== notification.id,
-        );
-        hideToast(notification.id);
-      } else if (event === NotificationEventType.UPDATED) {
-        // 通知更新（可见时间变化等），重新评估 Toast
-        if (notification.notBefore || notification.notAfter) {
-          shownToastIds.delete(notification.id);
-          spawnToast(notification);
-        }
-      }
+      // 统一处理：时间感知的渲染层自动处理所有状态变化
+      // UNSENT 时服务端设置 notAfter 为当前时间，时间过滤自然隐藏
+      spawnToast(notification);
     },
   });
 

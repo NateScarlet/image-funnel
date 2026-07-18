@@ -46,7 +46,6 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 	}
 
 	return &SendNotificationPayload{
-		ID:               id,
 		DidCreate:        didCreate,
 		Notification:     notif,
 		ClientMutationID: input.ClientMutationID,

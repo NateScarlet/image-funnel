@@ -316,8 +316,6 @@ type SendNotificationInput struct {
 }
 
 type SendNotificationPayload struct {
-	// 发送后的通知 ID
-	ID scalar.ID `json:"id"`
 	// 是否本次操作为新建通知（false 表示同 tag 更新已有通知）
 	DidCreate bool `json:"didCreate"`
 	// 发送后的通知

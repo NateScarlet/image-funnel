@@ -249,28 +249,24 @@ describe("useNotificationCenter", () => {
 
   // #region 通知撤回
   describe("通知撤回", () => {
-    test("UNSENT 事件清理 scheduledNotifications 并隐藏 toast", () => {
-      mockIsFuture.mockImplementation(
-        ((v: unknown) => v === "2060-01-01") as unknown as () => boolean,
+    test("UNSENT 时服务端设置 notAfter 为当前时间，spawnToast 自然不显示", () => {
+      mockIsPast.mockImplementation(
+        ((v: unknown) => v === "2020-01-01") as unknown as () => boolean,
       );
       const { scheduledNotifications } = useNotificationCenter();
 
       const subscriptionCallback = mockUseSubscription.mock.calls[0]?.[1]?.onNext;
-      const n = mockNotification({ notBefore: "2060-01-01" });
+      // UNSENT 后服务端设置 notAfter 为当前时间（已过期）
+      const n = mockNotification({ notAfter: "2020-01-01" });
 
-      // 先发送 SENT
-      subscriptionCallback({
-        data: { notificationChanged: { event: "SENT", notification: n } },
-      });
-
-      expect(scheduledNotifications.value).toHaveLength(1);
-
-      // 再发送 UNSENT
       subscriptionCallback({
         data: { notificationChanged: { event: "UNSENT", notification: n } },
       });
 
-      expect(scheduledNotifications.value).toHaveLength(0);
+      // notAfter 已过期，不显示 toast
+      expect(mockShowToast).not.toHaveBeenCalled();
+      // 有 time 约束（notAfter），加入调度列表供 watch 管理生命周期
+      expect(scheduledNotifications.value).toHaveLength(1);
     });
   });
   // #endregion
