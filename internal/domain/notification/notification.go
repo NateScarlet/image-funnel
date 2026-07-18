@@ -36,11 +36,26 @@ func (n *Notification) Body() string                          { return n.body }
 func (n *Notification) Priority() shared.NotificationPriority { return n.priority }
 func (n *Notification) ReadAt() time.Time                     { return n.readAt }
 func (n *Notification) DismissedAt() time.Time                { return n.dismissedAt }
-func (n *Notification) NotAfter() time.Time                   { return n.notAfter }
-func (n *Notification) NotBefore() time.Time                  { return n.notBefore }
+func (n *Notification) NotAfter() time.Time {
+	if n.notAfter.IsZero() {
+		return n.NotBefore().Add(7 * 24 * time.Hour)
+	}
+	return n.notAfter
+}
+func (n *Notification) NotBefore() time.Time {
+	if n.notBefore.IsZero() {
+		return n.createdAt
+	}
+	return n.notBefore
+}
 func (n *Notification) CreatedAt() time.Time                  { return n.createdAt }
 func (n *Notification) UpdatedAt() time.Time                  { return n.updatedAt }
 func (n *Notification) DetailsURL() scalar.URI                { return n.detailsURL }
+
+// VisibleAt 判断通知在给定时间点是否可见
+func (n *Notification) VisibleAt(t time.Time) bool {
+	return !n.NotBefore().After(t) && !n.NotAfter().Before(t)
+}
 
 // Status 状态派生: dismissedAt ≠ 0 → DISMISSED，否则 ACTIVE
 func (n *Notification) Status() shared.NotificationStatus {
@@ -167,22 +182,7 @@ func (f *Factory) New(
 
 	options := shared.NewSendNotificationOptions(opts...)
 
-	// priority 必须非零（默认值已在 NewSendNotificationOptions 中提供，为零说明调用者错误覆盖）
-	if options.Priority().IsZero() {
-		return nil, fmt.Errorf("priority is required")
-	}
-
 	now := time.Now()
-	// notBefore 默认当前时间
-	notBefore := options.NotBefore()
-	if notBefore.IsZero() {
-		notBefore = now
-	}
-	// notAfter 默认 notBefore + 7 天
-	notAfter := options.NotAfter()
-	if notAfter.IsZero() {
-		notAfter = notBefore.Add(7 * 24 * time.Hour)
-	}
 
 	// ID 基于 tag 生成，确保同 tag 的 ID 稳定
 	id := scalar.ToID("notify:" + tag)
@@ -204,10 +204,11 @@ func (f *Factory) New(
 	if err := n.setPriority(options.Priority()); err != nil {
 		return nil, err
 	}
-	if err := n.setNotAfter(notAfter); err != nil {
+	// notBefore/notAfter 默认值由 getter 提供（NotBefore → CreatedAt, NotAfter → NotBefore+7d）
+	if err := n.setNotAfter(options.NotAfter()); err != nil {
 		return nil, err
 	}
-	if err := n.setNotBefore(notBefore); err != nil {
+	if err := n.setNotBefore(options.NotBefore()); err != nil {
 		return nil, err
 	}
 	if err := n.setDetailsURL(options.DetailsURL()); err != nil {

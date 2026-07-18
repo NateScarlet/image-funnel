@@ -46,10 +46,12 @@ func (h *Handler) SendNotification(
 	if !result.DidCreate() {
 		eventType = shared.NotificationEventTypeUpdated
 	}
-	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+	if err := h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
 		Event:        eventType,
 		Notification: h.dtoFactory.New(notif),
-	})
+	}); err != nil {
+		return scalar.ID{}, false, err
+	}
 
 	return result.ID(), result.DidCreate(), nil
 }

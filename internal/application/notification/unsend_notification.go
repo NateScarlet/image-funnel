@@ -33,10 +33,12 @@ func (h *Handler) UnsendNotification(ctx context.Context, tag string) (dto *shar
 	}
 
 	dto = h.dtoFactory.New(notif)
-	h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+	if err := h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
 		Event:        shared.NotificationEventTypeUnsent,
 		Notification: dto,
-	})
+	}); err != nil {
+		return nil, err
+	}
 
 	return dto, nil
 }

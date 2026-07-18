@@ -45,8 +45,7 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 	if v := filters.VisibleAt; v != nil {
 		t := *v
 		b.Add(func(n *Notification) bool {
-			return !n.NotBefore().After(t) &&
-				(n.NotAfter().IsZero() || !n.NotAfter().Before(t))
+			return n.VisibleAt(t)
 		})
 	}
 
