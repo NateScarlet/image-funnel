@@ -118,57 +118,6 @@ func (n *Notification) setUpdatedAt(t time.Time) error {
 
 // #endregion
 
-// markRead 标记已读（仅同包 Service 使用）
-func (n *Notification) markRead(at time.Time, now time.Time) {
-	n.readAt = at
-	n.updatedAt = now
-}
-
-// dismiss 关闭通知（仅同包 Service 使用）
-func (n *Notification) dismiss(at time.Time, now time.Time) {
-	n.dismissedAt = at
-	if !at.IsZero() {
-		if n.readAt.IsZero() {
-			n.readAt = at
-		}
-	}
-	n.updatedAt = now
-}
-
-// #region updateNotificationOption（不导出，仅同包 Service 使用）
-
-// updateNotificationOption 更新通知元数据的选项函数
-type updateNotificationOption func(n *Notification, now time.Time)
-
-// withReadAt 设置已读时间。传 nil 表示重置为未读
-func withReadAt(t *time.Time) updateNotificationOption {
-	return func(n *Notification, now time.Time) {
-		if t == nil {
-			n.readAt = time.Time{}
-		} else {
-			n.readAt = *t
-		}
-		n.updatedAt = now
-	}
-}
-
-// withDismissedAt 设置关闭时间。传 nil 表示撤销关闭
-func withDismissedAt(t *time.Time) updateNotificationOption {
-	return func(n *Notification, now time.Time) {
-		if t == nil {
-			n.dismissedAt = time.Time{}
-		} else {
-			n.dismissedAt = *t
-			if n.readAt.IsZero() {
-				n.readAt = *t
-			}
-		}
-		n.updatedAt = now
-	}
-}
-
-// #endregion
-
 // FromRepository 供持久层加载领域对象使用，不校验（仓库数据已可信）
 func FromRepository(
 	id scalar.ID,

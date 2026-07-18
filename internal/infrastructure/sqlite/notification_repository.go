@@ -23,9 +23,7 @@ var _ notification.Repository = (*NotificationRepository)(nil)
 
 // NotificationRepository 基于 SQLite 的通知存储仓库
 type NotificationRepository struct {
-	db                 *sql.DB
-	reclaimGracePeriod time.Duration
-	reclaimErrorHandler func(error)
+	db *sql.DB
 }
 
 // notificationRepositoryOptions 配置选项，不可变
@@ -114,8 +112,7 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 	}
 
 	repo := &NotificationRepository{
-		db:                 db,
-		reclaimGracePeriod: 30 * 24 * time.Hour,
+		db: db,
 	}
 
 	// 应用选项（不可变模式：仅在初始化时读取一次）
@@ -125,12 +122,10 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 	for _, opt := range opts {
 		opt(o)
 	}
-	repo.reclaimGracePeriod = o.reclaimGracePeriod
-	repo.reclaimErrorHandler = o.reclaimErrorHandler
 
 	// 创建者负责清理：通过 cancel 中止后台 goroutine
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
-	go repo.runCleanup(cleanupCtx)
+	go repo.runCleanup(cleanupCtx, o.reclaimGracePeriod, o.reclaimErrorHandler)
 
 	cleanup := func() error {
 		cancelCleanup()
@@ -363,7 +358,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 // #region 后台清理
 
 // runCleanup 后台 goroutine，随机延迟 0-1 小时后每 24 小时清理一次过期数据
-func (r *NotificationRepository) runCleanup(ctx context.Context) {
+func (r *NotificationRepository) runCleanup(ctx context.Context, reclaimGracePeriod time.Duration, reclaimErrorHandler func(error)) {
 	// 随机延迟 0-1 小时
 	initialDelay := time.Duration(rand.Int64N(int64(time.Hour)))
 	select {
@@ -376,7 +371,7 @@ func (r *NotificationRepository) runCleanup(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		r.reclaim()
+			r.reclaim(reclaimGracePeriod, reclaimErrorHandler)
 
 		select {
 		case <-ticker.C:
@@ -387,8 +382,8 @@ func (r *NotificationRepository) runCleanup(ctx context.Context) {
 }
 
 // reclaim 清理 notAfter + reclaimGracePeriod 在当前时间之前的数据
-func (r *NotificationRepository) reclaim() {
-	cutoff := time.Now().Add(-r.reclaimGracePeriod).Format(time.RFC3339Nano)
+func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration, reclaimErrorHandler func(error)) {
+	cutoff := time.Now().Add(-reclaimGracePeriod).Format(time.RFC3339Nano)
 
 	// 删除过期通知以及对应的 channel_summary
 	_, err := r.db.Exec(`
@@ -396,15 +391,15 @@ func (r *NotificationRepository) reclaim() {
 			SELECT channel FROM notifications WHERE not_after != '' AND not_after <= ?
 		)
 	`, cutoff)
-	if err != nil && r.reclaimErrorHandler != nil {
-		r.reclaimErrorHandler(err)
+	if err != nil && reclaimErrorHandler != nil {
+		reclaimErrorHandler(err)
 	}
 
 	_, err = r.db.Exec(`
 		DELETE FROM notifications WHERE not_after != '' AND not_after <= ?
 	`, cutoff)
-	if err != nil && r.reclaimErrorHandler != nil {
-		r.reclaimErrorHandler(err)
+	if err != nil && reclaimErrorHandler != nil {
+		reclaimErrorHandler(err)
 	}
 }
 

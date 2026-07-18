@@ -107,6 +107,8 @@ type UpdateNotificationOptions struct {
 	notBefore  time.Time
 	detailsURL scalar.URI
 	updatedAt  time.Time
+	readAt      *time.Time // nil = 不修改
+	dismissedAt *time.Time // nil = 不修改
 }
 
 // UpdateNotificationOption 是用于设置 UpdateNotificationOptions 的函数类型
@@ -156,6 +158,16 @@ func WithUpdateTime(t time.Time) UpdateNotificationOption {
 	return func(o *UpdateNotificationOptions) { o.updatedAt = t }
 }
 
+// WithUpdateReadAt 设置已读时间
+func WithUpdateReadAt(t time.Time) UpdateNotificationOption {
+	return func(o *UpdateNotificationOptions) { o.readAt = &t }
+}
+
+// WithUpdateDismissedAt 设置关闭时间（同时标记已读）
+func WithUpdateDismissedAt(t time.Time) UpdateNotificationOption {
+	return func(o *UpdateNotificationOptions) { o.dismissedAt = &t }
+}
+
 // Getters
 func (o *UpdateNotificationOptions) Title() string                     { return o.title }
 func (o *UpdateNotificationOptions) Body() string                      { return o.body }
@@ -164,5 +176,7 @@ func (o *UpdateNotificationOptions) NotAfter() time.Time               { return 
 func (o *UpdateNotificationOptions) NotBefore() time.Time              { return o.notBefore }
 func (o *UpdateNotificationOptions) DetailsURL() scalar.URI            { return o.detailsURL }
 func (o *UpdateNotificationOptions) UpdatedAt() time.Time              { return o.updatedAt }
+func (o *UpdateNotificationOptions) ReadAt() *time.Time                { return o.readAt }
+func (o *UpdateNotificationOptions) DismissedAt() *time.Time           { return o.dismissedAt }
 
 // #endregion

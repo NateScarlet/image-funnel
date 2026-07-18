@@ -27,10 +27,11 @@ function toastDuration(title: string, body: string): number {
   return 7000;
 }
 
-// 标记单条通知已读
+// 通过 WS transport 批量已读，Promise.all 并发发送避免逐个 await 等待
 async function markAsRead(id: string) {
   await mutate(UpdateNotificationDocument, {
     variables: { input: { id, readAt: new Date().toISOString() } },
+    context: { transport: "ws" },
   });
 }
 

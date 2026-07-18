@@ -25,7 +25,7 @@
 - **日志**: 使用 zap，日志消息小写，记录耗时用 `duration` 字段，长耗时操作前后用 `will`/`did` 前缀
 - **测试**: 新增功能时添加对应的单元测试，测试文件名与逻辑文件对应
 - **Context**: 使用 `context.Context` 传递请求上下文
-- **类型命名**：不要在命名中重复包名，除名称正好和包名相同
+- **类型/方法命名**：不要在命名中重复包名，除名称正好和包名相同。例如 `notification` 包中的方法应命名为 `Send`、`Unsend` 而非 `SendNotification`、`UnsendNotification`
 - **筛选器**: 每个领域实体统一使用 `FilterBuilder` struct + `Build` 方法模式（参考 `directory.FilterBuilder`），内部使用 `util.FilterBuilder` 和 `util.AddToSet` 构建筛选闭包
 - **筛选器传值**: `Build` 方法接受值类型（非指针），调用方通过 `util.UnwrapPointer` 将可空指针安全转为零值
 - **Filter 传入 0 长度数组**: 所有的过滤条件字段（通常是切片类型）如果传入 0 长度数组，代表“所有对象都不匹配”（应执行过滤并且匹配结果为空），而不是“不筛选”。“不筛选”的语义通过不传递该字段（在 Go 结构体中为 `nil` 指针或 `nil` 切片）来表示。因此，在 FilterBuilder 及其相关逻辑中，应用 `v != nil` 判断是否应用该过滤条件，而不是 `len(v) > 0`。

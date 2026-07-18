@@ -22,10 +22,10 @@ func NewService(repo Repository, factory *Factory, topic pubsub.Topic[*shared.No
 	return &Service{repo: repo, factory: factory, topic: topic}
 }
 
-// #region SendNotification
+// #region Send
 
-// SendNotification 发送或覆盖通知
-func (s *Service) SendNotification(
+// Send 发送或覆盖通知
+func (s *Service) Send(
 	ctx context.Context,
 	tag string,
 	channel string,
@@ -107,70 +107,29 @@ func (s *Service) SendNotification(
 
 // #endregion
 
-// #region UpdateNotification
+// #region Update
 
-// MarkRead 标记通知已读
-func (s *Service) MarkRead(ctx context.Context, id scalar.ID, at time.Time) error {
+// Update 更新通知元数据，使用 shared.UpdateNotificationOption 不可变选项
+func (s *Service) Update(ctx context.Context, id scalar.ID, opts ...shared.UpdateNotificationOption) error {
 	notif, err := s.repo.Get(ctx, id.String())
 	if err != nil {
 		return err
 	}
 
+	options := shared.NewUpdateNotificationOptions(opts...)
 	now := time.Now()
-	notif.markRead(at, now)
 
-	_, err = s.repo.Save(ctx, notif)
-	if err != nil {
-		return err
+	// 基于选项值进行操作，而非由选项直接修改领域对象
+	if v := options.ReadAt(); v != nil {
+		notif.readAt = *v
+		notif.updatedAt = now
 	}
-
-	// 领域层发布事件，携带 NotificationID 让接口层按需查询
-	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
-		Event:          shared.NotificationEventTypeUpdated,
-		NotificationID: id,
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Dismiss 关闭通知（同时标记已读）
-func (s *Service) Dismiss(ctx context.Context, id scalar.ID, at time.Time) error {
-	notif, err := s.repo.Get(ctx, id.String())
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	notif.dismiss(at, now)
-
-	_, err = s.repo.Save(ctx, notif)
-	if err != nil {
-		return err
-	}
-
-	// 领域层发布事件，携带 NotificationID 让接口层按需查询
-	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
-		Event:          shared.NotificationEventTypeUpdated,
-		NotificationID: id,
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// updateNotification 更新通知元数据（已读时间、关闭时间），仅同包内使用
-func (s *Service) updateNotification(ctx context.Context, id scalar.ID, opts ...updateNotificationOption) error {
-	notif, err := s.repo.Get(ctx, id.String())
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	for _, opt := range opts {
-		opt(notif, now)
+	if v := options.DismissedAt(); v != nil {
+		notif.dismissedAt = *v
+		if !v.IsZero() && notif.readAt.IsZero() {
+			notif.readAt = *v
+		}
+		notif.updatedAt = now
 	}
 
 	_, err = s.repo.Save(ctx, notif)
@@ -191,10 +150,10 @@ func (s *Service) updateNotification(ctx context.Context, id scalar.ID, opts ...
 
 // #endregion
 
-// #region UnsendNotification
+// #region Unsend
 
-// UnsendNotification 撤回通知，通过 tag 查找，标记 notAfter 为当前时间
-func (s *Service) UnsendNotification(ctx context.Context, tag string) (scalar.ID, error) {
+// Unsend 撤回通知，通过 tag 查找，标记 notAfter 为当前时间
+func (s *Service) Unsend(ctx context.Context, tag string) (scalar.ID, error) {
 	notif, err := apperror.IgnoreNotFound(s.repo.GetByTag(ctx, tag))
 	if err != nil {
 		return scalar.ID{}, err

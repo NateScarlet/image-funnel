@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// SendNotification 发送或覆盖通知
-func (h *Handler) SendNotification(
+// Send 发送或覆盖通知
+func (h *Handler) Send(
 	ctx context.Context,
 	tag string,
 	channel string,
@@ -32,5 +32,5 @@ func (h *Handler) SendNotification(
 		}
 	}()
 
-	return h.service.SendNotification(ctx, tag, channel, title, opts...)
+	return h.service.Send(ctx, tag, channel, title, opts...)
 }
