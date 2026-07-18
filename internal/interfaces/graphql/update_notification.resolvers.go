@@ -14,13 +14,18 @@ func (r *mutationResolver) UpdateNotification(ctx context.Context, input UpdateN
 	readAt := input.ReadAt.Value()
 	dismissedAt := input.DismissedAt.Value()
 
-	dto, err := r.app.UpdateNotification(ctx, input.ID, readAt, dismissedAt)
+	err := r.app.UpdateNotification(ctx, input.ID, readAt, dismissedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	notif, err := r.app.Notification(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	return &UpdateNotificationPayload{
-		Notification:     dto,
+		Notification:     notif,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

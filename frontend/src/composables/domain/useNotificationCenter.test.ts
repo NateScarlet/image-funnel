@@ -7,6 +7,7 @@ type AnyNotification = any;
 const mockNotification = (overrides: Record<string, unknown> = {}): AnyNotification => ({
   id: "notif-1",
   title: "测试通知",
+  body: "",
   priority: "NORMAL",
   status: "ACTIVE",
   notBefore: null,

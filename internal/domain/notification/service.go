@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"main/internal/apperror"
+	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
@@ -13,11 +14,12 @@ import (
 type Service struct {
 	repo    Repository
 	factory *Factory
+	topic   pubsub.Topic[*shared.NotificationChangedEventDTO]
 }
 
 // NewService 实例化领域服务
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo, factory: &Factory{}}
+func NewService(repo Repository, topic pubsub.Topic[*shared.NotificationChangedEventDTO]) *Service {
+	return &Service{repo: repo, factory: &Factory{}, topic: topic}
 }
 
 // #region SendNotification
@@ -88,6 +90,18 @@ func (s *Service) SendNotification(
 		return nil, err
 	}
 
+	// 领域层发布事件，携带 NotificationID 让接口层按需查询
+	eventType := shared.NotificationEventTypeSent
+	if !actualDidCreate {
+		eventType = shared.NotificationEventTypeUpdated
+	}
+	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:          eventType,
+		NotificationID: notif.ID(),
+	}); err != nil {
+		return nil, err
+	}
+
 	return shared.NewSendNotificationResult(notif.ID(), actualDidCreate), nil
 }
 
@@ -96,10 +110,10 @@ func (s *Service) SendNotification(
 // #region UpdateNotification
 
 // UpdateNotification 更新通知元数据（已读时间、关闭时间）
-func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *time.Time, dismissedAt *time.Time) (*Notification, error) {
+func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *time.Time, dismissedAt *time.Time) error {
 	notif, err := s.repo.Get(ctx, id.String())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	now := time.Now()
@@ -112,10 +126,18 @@ func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *
 
 	_, err = s.repo.Save(ctx, notif)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return notif, nil
+	// 领域层发布事件，携带 NotificationID 让接口层按需查询
+	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:          shared.NotificationEventTypeUpdated,
+		NotificationID: id,
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // #endregion
@@ -123,27 +145,35 @@ func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, readAt *
 // #region UnsendNotification
 
 // UnsendNotification 撤回通知，通过 tag 查找，标记 notAfter 为当前时间
-func (s *Service) UnsendNotification(ctx context.Context, tag string) (*Notification, error) {
+func (s *Service) UnsendNotification(ctx context.Context, tag string) (scalar.ID, error) {
 	notif, err := apperror.IgnoreNotFound(s.repo.GetByTag(ctx, tag))
 	if err != nil {
-		return nil, err
+		return scalar.ID{}, err
 	}
 	if notif == nil {
-		// 通知不存在，什么都不做
-		return nil, nil
+		// 通知不存在，返回空 ID
+		return scalar.ID{}, nil
 	}
 
 	now := time.Now()
 	if err := notif.setNotAfter(now); err != nil {
-		return nil, err
+		return scalar.ID{}, err
 	}
 
 	_, err = s.repo.Save(ctx, notif)
 	if err != nil {
-		return nil, err
+		return scalar.ID{}, err
 	}
 
-	return notif, nil
+	// 领域层发布事件，携带 NotificationID 让接口层按需查询
+	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:          shared.NotificationEventTypeUnsent,
+		NotificationID: notif.ID(),
+	}); err != nil {
+		return scalar.ID{}, err
+	}
+
+	return notif.ID(), nil
 }
 
 // #endregion

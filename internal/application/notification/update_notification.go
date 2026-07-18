@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"main/internal/scalar"
-	"main/internal/shared"
 
 	"go.uber.org/zap"
 )
@@ -16,7 +15,7 @@ func (h *Handler) UpdateNotification(
 	id scalar.ID,
 	readAt *time.Time,
 	dismissedAt *time.Time,
-) (dto *shared.NotificationDTO, err error) {
+) (err error) {
 	startTime := time.Now()
 
 	defer func() {
@@ -34,18 +33,5 @@ func (h *Handler) UpdateNotification(
 		}
 	}()
 
-	notif, err := h.service.UpdateNotification(ctx, id, readAt, dismissedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	dto = h.dtoFactory.New(notif)
-	if err := h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
-		Event:        shared.NotificationEventTypeUpdated,
-		Notification: dto,
-	}); err != nil {
-		return nil, err
-	}
-
-	return dto, nil
+	return h.service.UpdateNotification(ctx, id, readAt, dismissedAt)
 }

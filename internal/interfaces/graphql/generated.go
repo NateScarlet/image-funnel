@@ -48,6 +48,7 @@ type ResolverRoot interface {
 	Image() ImageResolver
 	Mutation() MutationResolver
 	Note() NoteResolver
+	NotificationChangedEvent() NotificationChangedEventResolver
 	NotificationChannel() NotificationChannelResolver
 	Query() QueryResolver
 	Session() SessionResolver
@@ -598,6 +599,9 @@ type MutationResolver interface {
 }
 type NoteResolver interface {
 	Title(ctx context.Context, obj *shared.NoteDTO) (string, error)
+}
+type NotificationChangedEventResolver interface {
+	Notification(ctx context.Context, obj *shared.NotificationChangedEventDTO) (*shared.NotificationDTO, error)
 }
 type NotificationChannelResolver interface {
 	LatestNotification(ctx context.Context, obj *shared.NotificationChannelDTO) (*shared.NotificationDTO, error)
@@ -11369,7 +11373,7 @@ func (ec *executionContext) _NotificationChangedEvent_notification(ctx context.C
 		field,
 		ec.fieldContext_NotificationChangedEvent_notification,
 		func(ctx context.Context) (any, error) {
-			return obj.Notification, nil
+			return ec.resolvers.NotificationChangedEvent().Notification(ctx, obj)
 		},
 		nil,
 		ec.marshalNNotification2ᚖmainᚋinternalᚋsharedᚐNotificationDTO,
@@ -11382,8 +11386,8 @@ func (ec *executionContext) fieldContext_NotificationChangedEvent_notification(_
 	fc = &graphql.FieldContext{
 		Object:     "NotificationChangedEvent",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -21601,13 +21605,44 @@ func (ec *executionContext) _NotificationChangedEvent(ctx context.Context, sel a
 		case "event":
 			out.Values[i] = ec._NotificationChangedEvent_event(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "notification":
-			out.Values[i] = ec._NotificationChangedEvent_notification(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._NotificationChangedEvent_notification(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24501,13 +24536,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

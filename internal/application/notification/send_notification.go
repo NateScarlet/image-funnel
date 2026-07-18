@@ -36,22 +36,5 @@ func (h *Handler) SendNotification(
 		return scalar.ID{}, false, err
 	}
 
-	// 通过 pubsub 推送完整通知，实现读写分离
-	notif, err := h.repo.Get(ctx, result.ID().String())
-	if err != nil {
-		return scalar.ID{}, false, err
-	}
-
-	eventType := shared.NotificationEventTypeSent
-	if !result.DidCreate() {
-		eventType = shared.NotificationEventTypeUpdated
-	}
-	if err := h.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
-		Event:        eventType,
-		Notification: h.dtoFactory.New(notif),
-	}); err != nil {
-		return scalar.ID{}, false, err
-	}
-
 	return result.ID(), result.DidCreate(), nil
 }

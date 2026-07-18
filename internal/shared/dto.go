@@ -356,8 +356,8 @@ type NotificationChannelEdgeDTO struct {
 }
 
 type NotificationChangedEventDTO struct {
-	Event        NotificationEventType
-	Notification *NotificationDTO
+	Event          NotificationEventType
+	NotificationID scalar.ID
 }
 
 // SendNotificationResult 发送通知的结果，不可变

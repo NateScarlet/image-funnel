@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"iter"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -22,22 +23,32 @@ var _ notification.Repository = (*NotificationRepository)(nil)
 
 // NotificationRepository 基于 SQLite 的通知存储仓库
 type NotificationRepository struct {
-	db *sql.DB
+	db                 *sql.DB
+	reclaimGracePeriod time.Duration
+	stopCleanup        chan struct{}
+}
+
+// NotificationRepositoryOption 配置选项
+type NotificationRepositoryOption func(*NotificationRepository)
+
+// WithReclaimGracePeriod 设置过期数据清理前的等待时间，默认 30 天
+func WithReclaimGracePeriod(d time.Duration) NotificationRepositoryOption {
+	return func(r *NotificationRepository) {
+		r.reclaimGracePeriod = d
+	}
 }
 
 // NewNotificationRepository 实例化 SQLite 仓库
 // 返回仓库实例和清理函数作为第二个返回值
-func NewNotificationRepository(dbPath string) (*NotificationRepository, func() error, error) {
+func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	cleanup := func() error { return db.Close() }
-
 	// 开启 WAL 模式以提升并发度
 	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		cleanup()
+		db.Close()
 		return nil, nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
 
@@ -47,11 +58,11 @@ func NewNotificationRepository(dbPath string) (*NotificationRepository, func() e
 	// user_version 检查：当前版本为 1，拒绝更高版本
 	var userVersion int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
-		cleanup()
+		db.Close()
 		return nil, nil, fmt.Errorf("read user_version: %w", err)
 	}
 	if userVersion > 1 {
-		cleanup()
+		db.Close()
 		return nil, nil, fmt.Errorf("database version %d is higher than supported (1)", userVersion)
 	}
 
@@ -84,12 +95,29 @@ func NewNotificationRepository(dbPath string) (*NotificationRepository, func() e
 		PRAGMA user_version = 1;
 		`
 		if _, err := db.Exec(schema); err != nil {
-			cleanup()
+			db.Close()
 			return nil, nil, fmt.Errorf("init notifications schema: %w", err)
 		}
 	}
 
-	return &NotificationRepository{db: db}, cleanup, nil
+	repo := &NotificationRepository{
+		db:                 db,
+		reclaimGracePeriod: 30 * 24 * time.Hour,
+		stopCleanup:        make(chan struct{}),
+	}
+	for _, opt := range opts {
+		opt(repo)
+	}
+
+	// 启动后台清理 goroutine
+	go repo.runCleanup()
+
+	cleanup := func() error {
+		close(repo.stopCleanup)
+		return db.Close()
+	}
+
+	return repo, cleanup, nil
 }
 
 // Save 保存通知（新建或更新），返回是否为新建通知
@@ -311,6 +339,50 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 
 	return nil
 }
+
+// #region 后台清理
+
+// runCleanup 后台 goroutine，随机延迟 0-1 小时后每 24 小时清理一次过期数据
+func (r *NotificationRepository) runCleanup() {
+	// 随机延迟 0-1 小时
+	initialDelay := time.Duration(rand.Int64N(int64(time.Hour)))
+	select {
+	case <-time.After(initialDelay):
+	case <-r.stopCleanup:
+		return
+	}
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		r.reclaim()
+
+		select {
+		case <-ticker.C:
+		case <-r.stopCleanup:
+			return
+		}
+	}
+}
+
+// reclaim 清理 notAfter + reclaimGracePeriod 在当前时间之前的数据
+func (r *NotificationRepository) reclaim() {
+	cutoff := time.Now().Add(-r.reclaimGracePeriod).Format(time.RFC3339Nano)
+
+	// 删除过期通知以及对应的 channel_summary
+	_, _ = r.db.Exec(`
+		DELETE FROM channel_summary WHERE channel IN (
+			SELECT channel FROM notifications WHERE not_after != '' AND not_after <= ?
+		)
+	`, cutoff)
+
+	_, _ = r.db.Exec(`
+		DELETE FROM notifications WHERE not_after != '' AND not_after <= ?
+	`, cutoff)
+}
+
+// #endregion
 
 // #region 辅助方法
 

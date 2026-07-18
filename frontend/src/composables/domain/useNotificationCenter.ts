@@ -19,9 +19,9 @@ import {
 
 type Notification = NotificationFragment;
 
-// 根据文本长度计算合理的展示时长
-function toastDuration(title: string): number {
-  const len = title.length;
+// 根据文本长度计算合理的展示时长（标题 + 正文）
+function toastDuration(title: string, body: string): number {
+  const len = title.length + body.length;
   if (len < 20) return 3000;
   if (len < 50) return 5000;
   return 7000;
@@ -118,7 +118,7 @@ const init = once(() => {
   // 立即显示 Toast
   function showToastImmediate(n: Notification) {
     shownToastIds.add(n.id);
-    const duration = toastDuration(n.title);
+    const duration = toastDuration(n.title, n.body);
     const toastId =
       n.priority === NotificationPriority.HIGH
         ? showToast(n.title, "info", 0, {
