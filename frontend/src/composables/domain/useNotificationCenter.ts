@@ -227,7 +227,7 @@ const init = once(() => {
   async function markAllAsRead(_channel: string) {
     const unreads = channelNotifications.value.filter((n) => !n.readAt);
     if (unreads.length > 0) {
-      // Promise.all 并发调用，极大提升网络效率，避免连续同步阻塞
+      // 通过 WS transport 批量已读，Promise.all 并发发送避免逐个 await 等待
       await Promise.all(unreads.map((n) => markAsRead(n.id)));
     }
     await refreshSelectedChannel();

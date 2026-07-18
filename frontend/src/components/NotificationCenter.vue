@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mdiChevronLeft, mdiBellOutline, mdiOpenInNew } from "@mdi/js";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
 import { formatDate } from "@/utils/date";
 
@@ -40,13 +41,8 @@ function handleDismiss(id: string) {
             class="p-1 rounded-lg hover:bg-primary-700 transition-colors text-primary-400 hover:text-white cursor-pointer"
             @click="handleBack"
           >
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7"
-              />
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path :d="mdiChevronLeft" fill="currentColor" />
             </svg>
           </button>
           <h2 class="text-lg font-bold text-primary-100">
@@ -67,13 +63,8 @@ function handleDismiss(id: string) {
         v-if="channels.length === 0"
         class="flex flex-col items-center justify-center py-16 text-primary-500 text-sm gap-2"
       >
-        <svg class="w-12 h-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
+        <svg class="w-12 h-12 opacity-30" viewBox="0 0 24 24">
+          <path :d="mdiBellOutline" fill="currentColor" />
         </svg>
         <span>暂无通知</span>
       </div>
@@ -175,18 +166,8 @@ function handleDismiss(id: string) {
               target="_blank"
               class="inline-flex items-center gap-1 text-xs text-secondary-400 hover:text-secondary-300 hover:underline transition-colors"
             >
-              <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                />
+              <svg class="w-4 h-4" viewBox="0 0 24 24">
+                <path :d="mdiOpenInNew" fill="currentColor" />
               </svg>
               查看详情
             </a>

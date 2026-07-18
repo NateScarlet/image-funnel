@@ -8,12 +8,9 @@ package graphql
 import (
 	"context"
 	"main/internal/shared"
-	"main/internal/util"
 )
 
 // NotificationChannels is the resolver for the notificationChannels field.
-func (r *queryResolver) NotificationChannels(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error) {
-	f := util.UnwrapPointer(filterBy)
-
-	return r.app.NotificationChannels(ctx, f, first, after)
+func (r *queryResolver) NotificationChannels(ctx context.Context, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error) {
+	return r.app.NotificationChannels(ctx, first, after)
 }

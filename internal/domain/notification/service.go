@@ -18,8 +18,8 @@ type Service struct {
 }
 
 // NewService 实例化领域服务
-func NewService(repo Repository, topic pubsub.Topic[*shared.NotificationChangedEventDTO]) *Service {
-	return &Service{repo: repo, factory: &Factory{}, topic: topic}
+func NewService(repo Repository, factory *Factory, topic pubsub.Topic[*shared.NotificationChangedEventDTO]) *Service {
+	return &Service{repo: repo, factory: factory, topic: topic}
 }
 
 // #region SendNotification
@@ -109,8 +109,60 @@ func (s *Service) SendNotification(
 
 // #region UpdateNotification
 
-// UpdateNotification 更新通知元数据（已读时间、关闭时间）
-func (s *Service) UpdateNotification(ctx context.Context, id scalar.ID, opts ...UpdateNotificationOption) error {
+// MarkRead 标记通知已读
+func (s *Service) MarkRead(ctx context.Context, id scalar.ID, at time.Time) error {
+	notif, err := s.repo.Get(ctx, id.String())
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	notif.markRead(at, now)
+
+	_, err = s.repo.Save(ctx, notif)
+	if err != nil {
+		return err
+	}
+
+	// 领域层发布事件，携带 NotificationID 让接口层按需查询
+	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:          shared.NotificationEventTypeUpdated,
+		NotificationID: id,
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Dismiss 关闭通知（同时标记已读）
+func (s *Service) Dismiss(ctx context.Context, id scalar.ID, at time.Time) error {
+	notif, err := s.repo.Get(ctx, id.String())
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	notif.dismiss(at, now)
+
+	_, err = s.repo.Save(ctx, notif)
+	if err != nil {
+		return err
+	}
+
+	// 领域层发布事件，携带 NotificationID 让接口层按需查询
+	if err := s.topic.Publish(ctx, &shared.NotificationChangedEventDTO{
+		Event:          shared.NotificationEventTypeUpdated,
+		NotificationID: id,
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// updateNotification 更新通知元数据（已读时间、关闭时间），仅同包内使用
+func (s *Service) updateNotification(ctx context.Context, id scalar.ID, opts ...updateNotificationOption) error {
 	notif, err := s.repo.Get(ctx, id.String())
 	if err != nil {
 		return err

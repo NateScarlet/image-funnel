@@ -404,7 +404,7 @@ type ComplexityRoot struct {
 		Hooks                func(childComplexity int) int
 		Meta                 func(childComplexity int) int
 		Node                 func(childComplexity int, id scalar.ID) int
-		NotificationChannels func(childComplexity int, filterBy *shared.NotificationFilters, first *int, after *string) int
+		NotificationChannels func(childComplexity int, first *int, after *string) int
 		Notifications        func(childComplexity int, filterBy *shared.NotificationFilters, first *int, after *string) int
 		PairingRequests      func(childComplexity int) int
 		RootDirectory        func(childComplexity int) int
@@ -614,7 +614,7 @@ type QueryResolver interface {
 	HookAutocomplete(ctx context.Context, input HookAutocompleteInput) ([]*shared.AutocompleteSuggestionDTO, error)
 	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
-	NotificationChannels(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error)
+	NotificationChannels(ctx context.Context, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error)
 	Notifications(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error)
 	PairingRequests(ctx context.Context) ([]*shared.PairingRequestDTO, error)
 	RootDirectory(ctx context.Context) (*shared.DirectoryDTO, error)
@@ -2122,7 +2122,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Query.NotificationChannels(childComplexity, args["filterBy"].(*shared.NotificationFilters), args["first"].(*int), args["after"].(*string)), true
+		return e.complexity.Query.NotificationChannels(childComplexity, args["first"].(*int), args["after"].(*string)), true
 	case "Query.notifications":
 		if e.complexity.Query.Notifications == nil {
 			break
@@ -2739,7 +2739,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputMarkImageInput,
 		ec.unmarshalInputMoveImagesInput,
 		ec.unmarshalInputNoteFiltersInput,
-		ec.unmarshalInputNotificationFiltersInput,
+		ec.unmarshalInputNotificationFilters,
 		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
@@ -3346,8 +3346,8 @@ type NotificationChannelEdge
   "用于游标分页的唯一标识符"
   cursor: String!
 }`, BuiltIn: false},
-	{Name: "../../../graph/types/notification_filters_input.graphql", Input: `"通知筛选条件"
-input NotificationFiltersInput @goModel(model: "main/internal/shared.NotificationFilters") {
+	{Name: "../../../graph/types/notification_filters.graphql", Input: `"通知筛选条件"
+input NotificationFilters @goModel(model: "main/internal/shared.NotificationFilters") {
   "按频道筛选，匹配任意一个"
   channel: [String!]
   "按状态筛选，匹配任意一个"
@@ -3611,8 +3611,6 @@ extend type Query {
   返回结果类似聊天会话列表，每个频道最多返回一条最新通知。
   """
   notificationChannels(
-    "筛选条件"
-    filterBy: NotificationFiltersInput
     first: Int = 50
     after: String
   ): NotificationChannelConnection!
@@ -3624,7 +3622,7 @@ extend type Query {
   """
   notifications(
     "筛选条件"
-    filterBy: NotificationFiltersInput
+    filterBy: NotificationFilters
     first: Int = 50
     after: String
   ): NotificationConnection!
@@ -4750,28 +4748,23 @@ func (ec *executionContext) field_Query_node_args(ctx context.Context, rawArgs m
 func (ec *executionContext) field_Query_notificationChannels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
 	if err != nil {
 		return nil, err
 	}
-	args["filterBy"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	args["first"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
 	if err != nil {
 		return nil, err
 	}
-	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["after"] = arg2
+	args["after"] = arg1
 	return args, nil
 }
 
 func (ec *executionContext) field_Query_notifications_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filterBy", ec.unmarshalONotificationFilters2ᚖmainᚋinternalᚋsharedᚐNotificationFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -12463,7 +12456,7 @@ func (ec *executionContext) _Query_notificationChannels(ctx context.Context, fie
 		ec.fieldContext_Query_notificationChannels,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().NotificationChannels(ctx, fc.Args["filterBy"].(*shared.NotificationFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+			return ec.resolvers.Query().NotificationChannels(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string))
 		},
 		nil,
 		ec.marshalNNotificationChannelConnection2ᚖmainᚋinternalᚋsharedᚐNotificationChannelConnectionDTO,
@@ -18338,7 +18331,7 @@ func (ec *executionContext) unmarshalInputNoteFiltersInput(ctx context.Context, 
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputNotificationFiltersInput(ctx context.Context, obj any) (shared.NotificationFilters, error) {
+func (ec *executionContext) unmarshalInputNotificationFilters(ctx context.Context, obj any) (shared.NotificationFilters, error) {
 	var it shared.NotificationFilters
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
@@ -24536,13 +24529,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -26294,11 +26287,11 @@ func (ec *executionContext) marshalONotification2ᚖmainᚋinternalᚋsharedᚐN
 	return ec._Notification(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalONotificationFiltersInput2ᚖmainᚋinternalᚋsharedᚐNotificationFilters(ctx context.Context, v any) (*shared.NotificationFilters, error) {
+func (ec *executionContext) unmarshalONotificationFilters2ᚖmainᚋinternalᚋsharedᚐNotificationFilters(ctx context.Context, v any) (*shared.NotificationFilters, error) {
 	if v == nil {
 		return nil, nil
 	}
-	res, err := ec.unmarshalInputNotificationFiltersInput(ctx, v)
+	res, err := ec.unmarshalInputNotificationFilters(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 

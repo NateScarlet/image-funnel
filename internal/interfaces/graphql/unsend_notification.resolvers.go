@@ -7,6 +7,7 @@ package graphql
 
 import (
 	"context"
+	"main/internal/apperror"
 )
 
 // UnsendNotification is the resolver for the unsendNotification field.
@@ -16,7 +17,7 @@ func (r *mutationResolver) UnsendNotification(ctx context.Context, input UnsendN
 		return nil, err
 	}
 
-	notif, err := r.app.Notification(ctx, id)
+	notif, err := apperror.IgnoreNotFound(r.app.Notification(ctx, id))
 	if err != nil {
 		return nil, err
 	}

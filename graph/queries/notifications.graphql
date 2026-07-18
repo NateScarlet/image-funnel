@@ -5,7 +5,7 @@ extend type Query {
   """
   notifications(
     "筛选条件"
-    filterBy: NotificationFiltersInput
+    filterBy: NotificationFilters
     first: Int = 50
     after: String
   ): NotificationConnection!

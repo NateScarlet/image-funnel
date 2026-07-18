@@ -4,8 +4,6 @@ extend type Query {
   返回结果类似聊天会话列表，每个频道最多返回一条最新通知。
   """
   notificationChannels(
-    "筛选条件"
-    filterBy: NotificationFiltersInput
     first: Int = 50
     after: String
   ): NotificationChannelConnection!

@@ -8,14 +8,10 @@ package graphql
 import (
 	"context"
 	"main/internal/shared"
+	"main/internal/util"
 )
 
 // Notifications is the resolver for the notifications field.
 func (r *queryResolver) Notifications(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error) {
-	var f shared.NotificationFilters
-	if filterBy != nil {
-		f = *filterBy
-	}
-
-	return r.app.Notifications(ctx, f, first, after)
+	return r.app.Notifications(ctx, util.UnwrapPointer(filterBy), first, after)
 }

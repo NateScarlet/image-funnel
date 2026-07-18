@@ -10,7 +10,6 @@ import (
 // NotificationChannels 获取所有通知频道
 func (h *Handler) NotificationChannels(
 	ctx context.Context,
-	filters shared.NotificationFilters,
 	first *int,
 	after *string,
 ) (conn *shared.NotificationChannelConnectionDTO, err error) {

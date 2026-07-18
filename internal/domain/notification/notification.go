@@ -118,14 +118,14 @@ func (n *Notification) setUpdatedAt(t time.Time) error {
 
 // #endregion
 
-// MarkRead 标记已读
-func (n *Notification) MarkRead(at time.Time, now time.Time) {
+// markRead 标记已读（仅同包 Service 使用）
+func (n *Notification) markRead(at time.Time, now time.Time) {
 	n.readAt = at
 	n.updatedAt = now
 }
 
-// Dismiss 关闭通知
-func (n *Notification) Dismiss(at time.Time, now time.Time) {
+// dismiss 关闭通知（仅同包 Service 使用）
+func (n *Notification) dismiss(at time.Time, now time.Time) {
 	n.dismissedAt = at
 	if !at.IsZero() {
 		if n.readAt.IsZero() {
@@ -135,13 +135,13 @@ func (n *Notification) Dismiss(at time.Time, now time.Time) {
 	n.updatedAt = now
 }
 
-// #region UpdateNotificationOption
+// #region updateNotificationOption（不导出，仅同包 Service 使用）
 
-// UpdateNotificationOption 更新通知元数据的选项函数
-type UpdateNotificationOption func(n *Notification, now time.Time)
+// updateNotificationOption 更新通知元数据的选项函数
+type updateNotificationOption func(n *Notification, now time.Time)
 
-// WithReadAt 设置已读时间。传 nil 表示重置为未读
-func WithReadAt(t *time.Time) UpdateNotificationOption {
+// withReadAt 设置已读时间。传 nil 表示重置为未读
+func withReadAt(t *time.Time) updateNotificationOption {
 	return func(n *Notification, now time.Time) {
 		if t == nil {
 			n.readAt = time.Time{}
@@ -152,8 +152,8 @@ func WithReadAt(t *time.Time) UpdateNotificationOption {
 	}
 }
 
-// WithDismissedAt 设置关闭时间。传 nil 表示撤销关闭
-func WithDismissedAt(t *time.Time) UpdateNotificationOption {
+// withDismissedAt 设置关闭时间。传 nil 表示撤销关闭
+func withDismissedAt(t *time.Time) updateNotificationOption {
 	return func(n *Notification, now time.Time) {
 		if t == nil {
 			n.dismissedAt = time.Time{}

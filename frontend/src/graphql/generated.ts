@@ -233,7 +233,7 @@ export enum NotificationEventType {
 }
 
 /** 通知筛选条件 */
-export type NotificationFiltersInput = {
+export type NotificationFilters = {
   /** 按频道筛选，匹配任意一个 */
   channel?: InputMaybe<Array<Scalars["String"]["input"]>>;
   /** 按优先级筛选，匹配任意一个 */
@@ -2027,7 +2027,6 @@ export type NoteQuery = {
 };
 
 export type NotificationChannelsQueryVariables = Exact<{
-  filterBy?: InputMaybe<NotificationFiltersInput>;
   first?: InputMaybe<Scalars["Int"]["input"]>;
   after?: InputMaybe<Scalars["String"]["input"]>;
 }>;
@@ -2069,7 +2068,7 @@ export type NotificationChannelsQuery = {
 };
 
 export type NotificationsQueryVariables = Exact<{
-  filterBy?: InputMaybe<NotificationFiltersInput>;
+  filterBy?: InputMaybe<NotificationFilters>;
   first?: InputMaybe<Scalars["Int"]["input"]>;
   after?: InputMaybe<Scalars["String"]["input"]>;
 }>;
@@ -7620,11 +7619,6 @@ export const NotificationChannelsDocument = {
       variableDefinitions: [
         {
           kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
-          type: { kind: "NamedType", name: { kind: "Name", value: "NotificationFiltersInput" } },
-        },
-        {
-          kind: "VariableDefinition",
           variable: { kind: "Variable", name: { kind: "Name", value: "first" } },
           type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
         },
@@ -7641,11 +7635,6 @@ export const NotificationChannelsDocument = {
             kind: "Field",
             name: { kind: "Name", value: "notificationChannels" },
             arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "filterBy" },
-                value: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
-              },
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "first" },
@@ -7740,7 +7729,7 @@ export const NotificationsDocument = {
         {
           kind: "VariableDefinition",
           variable: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
-          type: { kind: "NamedType", name: { kind: "Name", value: "NotificationFiltersInput" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "NotificationFilters" } },
         },
         {
           kind: "VariableDefinition",

@@ -1,5 +1,5 @@
-query notificationChannels($filterBy: NotificationFiltersInput, $first: Int, $after: String) {
-  notificationChannels(filterBy: $filterBy, first: $first, after: $after) {
+query notificationChannels($first: Int, $after: String) {
+  notificationChannels(first: $first, after: $after) {
     nodes {
       channel
       unreadCount

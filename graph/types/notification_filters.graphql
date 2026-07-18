@@ -1,5 +1,5 @@
 "通知筛选条件"
-input NotificationFiltersInput @goModel(model: "main/internal/shared.NotificationFilters") {
+input NotificationFilters @goModel(model: "main/internal/shared.NotificationFilters") {
   "按频道筛选，匹配任意一个"
   channel: [String!]
   "按状态筛选，匹配任意一个"

@@ -25,15 +25,29 @@ var _ notification.Repository = (*NotificationRepository)(nil)
 type NotificationRepository struct {
 	db                 *sql.DB
 	reclaimGracePeriod time.Duration
+	reclaimErrorHandler func(error)
+}
+
+// notificationRepositoryOptions 配置选项，不可变
+type notificationRepositoryOptions struct {
+	reclaimGracePeriod  time.Duration
+	reclaimErrorHandler func(error)
 }
 
 // NotificationRepositoryOption 配置选项
-type NotificationRepositoryOption func(*NotificationRepository)
+type NotificationRepositoryOption func(*notificationRepositoryOptions)
 
 // WithReclaimGracePeriod 设置过期数据清理前的等待时间，默认 30 天
 func WithReclaimGracePeriod(d time.Duration) NotificationRepositoryOption {
-	return func(r *NotificationRepository) {
-		r.reclaimGracePeriod = d
+	return func(o *notificationRepositoryOptions) {
+		o.reclaimGracePeriod = d
+	}
+}
+
+// WithReclaimErrorHandler 设置后台清理错误的处理函数，默认丢弃
+func WithReclaimErrorHandler(h func(error)) NotificationRepositoryOption {
+	return func(o *notificationRepositoryOptions) {
+		o.reclaimErrorHandler = h
 	}
 }
 
@@ -103,9 +117,16 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 		db:                 db,
 		reclaimGracePeriod: 30 * 24 * time.Hour,
 	}
-	for _, opt := range opts {
-		opt(repo)
+
+	// 应用选项（不可变模式：仅在初始化时读取一次）
+	o := &notificationRepositoryOptions{
+		reclaimGracePeriod: 30 * 24 * time.Hour,
 	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	repo.reclaimGracePeriod = o.reclaimGracePeriod
+	repo.reclaimErrorHandler = o.reclaimErrorHandler
 
 	// 创建者负责清理：通过 cancel 中止后台 goroutine
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
@@ -370,15 +391,21 @@ func (r *NotificationRepository) reclaim() {
 	cutoff := time.Now().Add(-r.reclaimGracePeriod).Format(time.RFC3339Nano)
 
 	// 删除过期通知以及对应的 channel_summary
-	_, _ = r.db.Exec(`
+	_, err := r.db.Exec(`
 		DELETE FROM channel_summary WHERE channel IN (
 			SELECT channel FROM notifications WHERE not_after != '' AND not_after <= ?
 		)
 	`, cutoff)
+	if err != nil && r.reclaimErrorHandler != nil {
+		r.reclaimErrorHandler(err)
+	}
 
-	_, _ = r.db.Exec(`
+	_, err = r.db.Exec(`
 		DELETE FROM notifications WHERE not_after != '' AND not_after <= ?
 	`, cutoff)
+	if err != nil && r.reclaimErrorHandler != nil {
+		r.reclaimErrorHandler(err)
+	}
 }
 
 // #endregion
