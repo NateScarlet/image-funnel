@@ -67,15 +67,15 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 	// 单连接确保写操作天然序列化，避免 SQLITE_BUSY
 	db.SetMaxOpenConns(1)
 
-	// user_version 检查：当前版本为 2，拒绝更高版本
+	// user_version 检查：当前版本为 1，拒绝更高版本
 	var userVersion int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("read user_version: %w", err)
 	}
-	if userVersion > 2 {
+	if userVersion > 1 {
 		db.Close()
-		return nil, nil, fmt.Errorf("database version %d is higher than supported (2)", userVersion)
+		return nil, nil, fmt.Errorf("database version %d is higher than supported (1)", userVersion)
 	}
 
 	// 初始化数据表及索引
@@ -88,12 +88,12 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 			title TEXT NOT NULL,
 			body TEXT NOT NULL,
 			priority TEXT NOT NULL,
-			read_at TEXT NOT NULL DEFAULT '',
-			dismissed_at TEXT NOT NULL DEFAULT '',
-			not_after TEXT NOT NULL,
-			not_before TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
+			read_at INTEGER NOT NULL DEFAULT 0,
+			dismissed_at INTEGER NOT NULL DEFAULT 0,
+			not_after INTEGER NOT NULL,
+			not_before INTEGER NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
 			details_url TEXT NOT NULL DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
@@ -102,21 +102,14 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 		CREATE TABLE IF NOT EXISTS channel_summary (
 			channel TEXT PRIMARY KEY,
 			unread_count INTEGER NOT NULL DEFAULT 0,
-			latest_notification_id TEXT NOT NULL
+			latest_notification_id TEXT NOT NULL,
+			expires_at INTEGER NOT NULL DEFAULT 0
 		);
 		PRAGMA user_version = 1;
 		`
 		if _, err := db.Exec(schema); err != nil {
 			db.Close()
 			return nil, nil, fmt.Errorf("init notifications schema: %w", err)
-		}
-	}
-
-	// v1 → v2：时间字段从 TEXT(RFC3339Nano) 转为 INTEGER(unix 毫秒时间戳)，channel_summary 增加 expires_at
-	if userVersion < 2 {
-		if err := migrateV1ToV2(db); err != nil {
-			db.Close()
-			return nil, nil, fmt.Errorf("migrate v1 to v2: %w", err)
 		}
 	}
 
@@ -143,135 +136,6 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 	}
 
 	return repo, cleanup, nil
-}
-
-// migrateV1ToV2 将时间字段从 TEXT 转为 INTEGER(unix 毫秒)，channel_summary 增加 expires_at
-func migrateV1ToV2(db *sql.DB) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin migration tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// 创建新表
-	if _, err := tx.Exec(`
-		CREATE TABLE notifications_v2 (
-			id TEXT PRIMARY KEY,
-			tag TEXT UNIQUE NOT NULL,
-			channel TEXT NOT NULL,
-			title TEXT NOT NULL,
-			body TEXT NOT NULL,
-			priority TEXT NOT NULL,
-			read_at INTEGER NOT NULL DEFAULT 0,
-			dismissed_at INTEGER NOT NULL DEFAULT 0,
-			not_after INTEGER NOT NULL,
-			not_before INTEGER NOT NULL,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL,
-			details_url TEXT NOT NULL DEFAULT ''
-		)
-	`); err != nil {
-		return fmt.Errorf("create notifications_v2: %w", err)
-	}
-
-	// 读取旧数据，在 Go 中转换时间格式后写入新表
-	rows, err := tx.Query(`SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications`)
-	if err != nil {
-		return fmt.Errorf("read old notifications: %w", err)
-	}
-
-	for rows.Next() {
-		var (
-			id, tag, channel, title, body, priority                                                     string
-			readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailsURL string
-		)
-		if err := rows.Scan(&id, &tag, &channel, &title, &body, &priority, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailsURL); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan old notification: %w", err)
-		}
-
-		if _, err := tx.Exec(`INSERT INTO notifications_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			id, tag, channel, title, body, priority,
-			parseTimeToMs(readAtStr),
-			parseTimeToMs(dismissedAtStr),
-			parseTimeToMs(notAfterStr),
-			parseTimeToMs(notBeforeStr),
-			parseTimeToMs(createdAtStr),
-			parseTimeToMs(updatedAtStr),
-			detailsURL,
-		); err != nil {
-			rows.Close()
-			return fmt.Errorf("insert converted notification: %w", err)
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate old notifications: %w", err)
-	}
-
-	// 替换旧表
-	if _, err := tx.Exec(`DROP TABLE notifications`); err != nil {
-		return fmt.Errorf("drop old notifications: %w", err)
-	}
-	if _, err := tx.Exec(`ALTER TABLE notifications_v2 RENAME TO notifications`); err != nil {
-		return fmt.Errorf("rename notifications_v2: %w", err)
-	}
-
-	// 重建索引
-	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC)`); err != nil {
-		return fmt.Errorf("create index channel_created: %w", err)
-	}
-	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag)`); err != nil {
-		return fmt.Errorf("create index tag: %w", err)
-	}
-
-	// 重建 channel_summary 并添加 expires_at
-	if _, err := tx.Exec(`DROP TABLE IF EXISTS channel_summary`); err != nil {
-		return fmt.Errorf("drop old channel_summary: %w", err)
-	}
-	if _, err := tx.Exec(`
-		CREATE TABLE channel_summary (
-			channel TEXT PRIMARY KEY,
-			unread_count INTEGER NOT NULL DEFAULT 0,
-			latest_notification_id TEXT NOT NULL,
-			expires_at INTEGER NOT NULL DEFAULT 0
-		)
-	`); err != nil {
-		return fmt.Errorf("create channel_summary v2: %w", err)
-	}
-
-	// 重新填充 channel_summary
-	now := time.Now().UnixMilli()
-	if _, err := tx.Exec(`
-		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
-		SELECT channel,
-		       COUNT(CASE WHEN read_at = 0 THEN 1 END),
-		       (SELECT n2.id FROM notifications n2 WHERE n2.channel = n.channel AND n2.not_before <= ? ORDER BY n2.created_at DESC, n2.id DESC LIMIT 1),
-		       COALESCE((SELECT MIN(n3.not_before) FROM notifications n3 WHERE n3.channel = n.channel AND n3.not_before > ?), 0)
-		FROM notifications n
-		GROUP BY channel
-	`, now, now); err != nil {
-		return fmt.Errorf("repopulate channel_summary: %w", err)
-	}
-
-	if _, err := tx.Exec(`PRAGMA user_version = 2`); err != nil {
-		return fmt.Errorf("set user_version: %w", err)
-	}
-
-	return tx.Commit()
-}
-
-// parseTimeToMs 将 RFC3339Nano 字符串转为 unix 毫秒，空字符串视为 0
-func parseTimeToMs(s string) int64 {
-	if s == "" {
-		return 0
-	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		// 迁移中遇到非法时间字符串，返回 0（会丢失数据，但不应发生）
-		return 0
-	}
-	return t.UnixMilli()
 }
 
 // Save 保存通知（新建或更新），返回是否为新建通知
@@ -619,6 +483,12 @@ type notificationPO struct {
 }
 
 func newNotificationPO(n *notification.Notification) *notificationPO {
+	timeToMs := func(t time.Time) int64 {
+		if t.IsZero() {
+			return 0
+		}
+		return t.UnixMilli()
+	}
 	return &notificationPO{
 		ID:          n.ID().String(),
 		Tag:         n.Tag(),
@@ -626,12 +496,12 @@ func newNotificationPO(n *notification.Notification) *notificationPO {
 		Title:       n.Title(),
 		Body:        n.Body(),
 		Priority:    n.Priority().String(),
-		ReadAt:      formatTime(n.ReadAt()),
-		DismissedAt: formatTime(n.DismissedAt()),
-		NotAfter:    formatTime(n.NotAfter()),
-		NotBefore:   formatTime(n.NotBefore()),
-		CreatedAt:   formatTime(n.CreatedAt()),
-		UpdatedAt:   formatTime(n.UpdatedAt()),
+		ReadAt:      timeToMs(n.ReadAt()),
+		DismissedAt: timeToMs(n.DismissedAt()),
+		NotAfter:    timeToMs(n.NotAfter()),
+		NotBefore:   timeToMs(n.NotBefore()),
+		CreatedAt:   timeToMs(n.CreatedAt()),
+		UpdatedAt:   timeToMs(n.UpdatedAt()),
 		DetailsURL:  n.DetailsURL().String(),
 	}
 }
@@ -647,14 +517,21 @@ func (po *notificationPO) DomainObject() (*notification.Notification, error) {
 		return nil, fmt.Errorf("parse notification detailsURL: %w", err)
 	}
 
+	msToTime := func(ms int64) time.Time {
+		if ms == 0 {
+			return time.Time{}
+		}
+		return time.UnixMilli(ms)
+	}
+
 	return notification.FromRepository(
 		scalar.ToID(po.ID), po.Tag, po.Channel, po.Title, po.Body, priority,
-		parseTime(po.ReadAt),
-		parseTime(po.DismissedAt),
-		parseTime(po.NotAfter),
-		parseTime(po.NotBefore),
-		parseTime(po.CreatedAt),
-		parseTime(po.UpdatedAt),
+		msToTime(po.ReadAt),
+		msToTime(po.DismissedAt),
+		msToTime(po.NotAfter),
+		msToTime(po.NotBefore),
+		msToTime(po.CreatedAt),
+		msToTime(po.UpdatedAt),
 		detailsURL,
 	)
 }
@@ -672,22 +549,6 @@ func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
 	}
 
 	return po.DomainObject()
-}
-
-// parseTime 将 unix 毫秒时间戳转为 time.Time，0 视为零值
-func parseTime(ms int64) time.Time {
-	if ms == 0 {
-		return time.Time{}
-	}
-	return time.UnixMilli(ms)
-}
-
-// formatTime 将 time.Time 转为 unix 毫秒时间戳，零值返回 0
-func formatTime(t time.Time) int64 {
-	if t.IsZero() {
-		return 0
-	}
-	return t.UnixMilli()
 }
 
 // #endregion
