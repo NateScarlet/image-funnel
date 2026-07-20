@@ -13,7 +13,6 @@ import {
   NotificationsDocument,
   UpdateNotificationDocument,
   NotificationPriority,
-  NotificationStatus,
   type NotificationFragment,
 } from "@/graphql/generated";
 
@@ -155,16 +154,14 @@ const init = once(() => {
     shownToastIds.delete(id);
   }
 
-  // 投递 Toast；有 time 约束的通知支持时间感知（notBefore 到达时显示，notAfter 到达时消失）
+  // 投递 Toast；所有通知都有时间约束（notBefore/notAfter 为 NonNull），支持时间感知
   function spawnToast(n: Notification) {
-    // 有 time 约束的通知加入调度列表，以便 watch 响应时间变化
-    if (n.notBefore || n.notAfter) {
-      const existing = scheduledNotifications.value.find((s) => s.id === n.id);
-      if (existing) {
-        Object.assign(existing, n);
-      } else {
-        scheduledNotifications.value.push(n);
-      }
+    // 加入调度列表，以便 watch 响应时间变化（notBefore 到达时显示，notAfter 到达时消失）
+    const existing = scheduledNotifications.value.find((s) => s.id === n.id);
+    if (existing) {
+      Object.assign(existing, n);
+    } else {
+      scheduledNotifications.value.push(n);
     }
 
     // 计算期望状态：应该在时间窗口内显示
@@ -204,15 +201,11 @@ const init = once(() => {
     });
     const chs = chData?.notificationChannels?.nodes ?? [];
     for (const ch of chs) {
+      // unreadCount > 0 已确认有未读，latestNotification 是最新一条
+      // status/readAt 由服务端派生，不在客户端重新实现
       if (ch.latestNotification && ch.unreadCount > 0) {
-        // 直接使用频道中的最新通知
         const latestNotif = ch.latestNotification;
-        if (
-          latestNotif &&
-          !latestNotif.readAt &&
-          latestNotif.status === NotificationStatus.ACTIVE &&
-          latestNotif.priority !== NotificationPriority.LOW
-        ) {
+        if (latestNotif.priority !== NotificationPriority.LOW) {
           spawnToast(latestNotif);
         }
       }

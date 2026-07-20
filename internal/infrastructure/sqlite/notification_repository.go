@@ -88,13 +88,13 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 			title TEXT NOT NULL,
 			body TEXT NOT NULL,
 			priority TEXT NOT NULL,
-			read_at TEXT,
-			dismissed_at TEXT,
+			read_at TEXT NOT NULL DEFAULT '',
+			dismissed_at TEXT NOT NULL DEFAULT '',
 			not_after TEXT NOT NULL,
 			not_before TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
-			details_url TEXT
+			details_url TEXT NOT NULL DEFAULT ''
 		);
 		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
