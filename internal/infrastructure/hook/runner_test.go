@@ -13,6 +13,7 @@ import (
 	"time"
 
 	domimage "main/internal/domain/image"
+	"main/internal/domain/directory"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -80,6 +81,34 @@ func (m *mockImageRepository) Find(ctx context.Context, relPath string) iter.Seq
 			}
 		}
 	}
+}
+
+// mockDirectoryRepository 模拟目录仓库
+type mockDirectoryRepository struct {
+	dirs map[string]*directory.Directory
+}
+
+func (m *mockDirectoryRepository) Get(ctx context.Context, relPath string) (*directory.Directory, error) {
+	if m.dirs == nil {
+		return nil, os.ErrNotExist
+	}
+	d, ok := m.dirs[relPath]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return d, nil
+}
+
+func (m *mockDirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+	return func(yield func(*directory.Directory, error) bool) {}
+}
+
+func (m *mockDirectoryRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
+	return nil, os.ErrNotExist
+}
+
+func (m *mockDirectoryRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
+	return nil
 }
 
 func TestRunner_TOML_Parsing(t *testing.T) {
@@ -155,7 +184,14 @@ label = [""]
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewExample()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
+
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			"": directory.FromRepository(""),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
 	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
 	defer runner.Close()
 
@@ -291,18 +327,164 @@ command = "echo test_error_out >&2 && exit 42"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
+
+	// 构建 mock 目录仓库，使得路径能推导出目录信息
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			"": directory.FromRepository(""),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
 	defer runner.Close()
 
+	// 使用绝对路径，使得 dirRelFromAbsPath 能正确推导目录信息
+	absPath := filepath.Join(tempDir, "a.png")
+
 	// 触发成功钩子，应该同步等待并返回 nil
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{"a.png"}, scalar.ToID("hk:success-test"), "image_dispatch")
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:success-test"), "image_dispatch")
 	assert.NoError(t, err)
 
 	// 触发失败钩子，应该同步等待并返回错误，且错误信息中包含退出码和 stderr 输出
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{"a.png"}, scalar.ToID("hk:fail-test"), "image_dispatch")
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:fail-test"), "image_dispatch")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "test_error_out")
 	assert.Contains(t, err.Error(), "exit status 42")
+}
+
+func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-direnv-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	flagFile := filepath.Join(tempDir, "dir_env_flag")
+
+	// 使用 shell 命令输出目录环境变量到文件，使用 | 作为分隔符避免与目录 ID 中的 : 冲突
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile
+	} else {
+		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile
+	}
+
+	tomlContent := `
+id = "direnv-test"
+name = "目录环境变量测试"
+command = '` + cmdStr + `'
+
+[on.post_update_image_metadata]
+rating = [4]
+label = [""]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "direnv.toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewExample()
+
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			"": directory.FromRepository(""),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner.debouncer.duration = 10 * time.Millisecond
+	defer runner.Close()
+
+	// 等待监听器就绪
+	time.Sleep(10 * time.Millisecond)
+
+	// 发布匹配过滤条件的事件，触发 post_update_image_metadata 钩子
+	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
+		ID:        scalar.ToID("img:1:a.png"),
+		Path:      filepath.Join(tempDir, "a.png"),
+		Rating:    4,
+		Label:     "",
+		Action:    "keep",
+		OldRating: 0,
+		OldLabel:  "",
+		OldAction: "",
+	})
+
+	assert.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "应触发钩子并写入 flag 文件")
+
+	// 读取 flag 文件内容验证环境变量
+	contentBytes, err := os.ReadFile(flagFile)
+	assert.NoError(t, err)
+	result := strings.TrimSpace(string(contentBytes))
+
+	// 验证格式为 "dir:{relPath}|{relPath}"，使用 | 作为分隔符
+	parts := strings.SplitN(result, "|", 2)
+	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
+	assert.Contains(t, parts[0], "dir:", "DIRECTORY_ID 应以 dir: 开头")
+}
+
+func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-direnv-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	flagFile := filepath.Join(tempDir, "trigger_dir_env_flag")
+
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile
+	} else {
+		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile
+	}
+
+	tomlContent := `
+id = "trigger-direnv-test"
+name = "触发目录环境变量测试"
+command = '` + cmdStr + `'
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "trigger-direnv.toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewExample()
+
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			"subdir": directory.FromRepository("subdir"),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	defer runner.Close()
+
+	// 创建一个位于子目录中的文件，确保目录信息可推导
+	subDir := filepath.Join(tempDir, "subdir")
+	err = os.MkdirAll(subDir, 0755)
+	assert.NoError(t, err)
+	absPath := filepath.Join(subDir, "test.png")
+
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:trigger-direnv-test"), "image_dispatch")
+	assert.NoError(t, err)
+
+	assert.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "Trigger 应成功执行钩子并写入 flag 文件")
+
+	contentBytes, err := os.ReadFile(flagFile)
+	assert.NoError(t, err)
+	result := strings.TrimSpace(string(contentBytes))
+
+	parts := strings.SplitN(result, "|", 2)
+	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
+	assert.Contains(t, parts[0], "dir:", "DIRECTORY_ID 应以 dir: 开头")
+	assert.Equal(t, "subdir", parts[1], "DIRECTORY_REL_PATH 应为 subdir")
 }
 
 func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {

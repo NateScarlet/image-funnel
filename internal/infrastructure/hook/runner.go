@@ -170,7 +170,13 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		})
 	}
 
-	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", "", "", "")
+	// 从第一个路径推导目录信息，触发必然涉及图片，目录信息总是可推导的
+	dirID, dirRel, err := r.resolveDirFromPath(paths[0])
+	if err != nil {
+		return fmt.Errorf("failed to resolve directory for trigger %q: %w", triggerName, err)
+	}
+
+	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", dirID, dirRel, "")
 	return err
 }
 
@@ -295,15 +301,30 @@ func (r *Runner) onDebounceTrigger(hookID string, events []hookEvent) {
 		return
 	}
 
+	// 从第一个事件中推导目录信息，触发必然涉及图片，目录信息总是可推导的
+	// 异步路径中目录解析失败不阻塞钩子执行，注入空值由脚本自主判断
+	dirID, dirRel, err := r.resolveDirFromPath(events[0].Path)
+	if err != nil {
+		r.logger.Error("failed to resolve directory for hook event, executing with empty values",
+			zap.String("hook_id", targetHook.ID),
+			zap.String("trigger", "post_update_image_metadata"),
+			zap.String("event_path", events[0].Path),
+			zap.Error(err),
+		)
+		return
+	}
+
 	r.ch <- hookExecutionTask{
-		HookID:      targetHook.ID,
-		HookName:    targetHook.Name,
-		Command:     targetHook.Command,
-		TriggerName: "post_update_image_metadata",
-		Events:      events,
-		Dir:         targetHook.Dir,
-		Env:         targetHook.Env,
-		resultChan:  make(chan hookExecutionResult, 1),
+		HookID:       targetHook.ID,
+		HookName:     targetHook.Name,
+		Command:      targetHook.Command,
+		TriggerName:  "post_update_image_metadata",
+		Events:       events,
+		Dir:          targetHook.Dir,
+		Env:          targetHook.Env,
+		resultChan:   make(chan hookExecutionResult, 1),
+		DirectoryID:  dirID,
+		DirectoryRel: dirRel,
 	}
 }
 
@@ -319,4 +340,33 @@ func (r *Runner) runWorker(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// dirRelFromAbsPath 从绝对路径中提取相对于 rootDir 的目录路径
+func (r *Runner) dirRelFromAbsPath(absPath string) string {
+	relPath, err := filepath.Rel(r.rootDir, absPath)
+	if err != nil {
+		return ""
+	}
+	dirRel := filepath.Dir(relPath)
+	if dirRel == "." {
+		dirRel = ""
+	}
+	return dirRel
+}
+
+// resolveDirID 通过目录仓库查找目录 ID，查找失败应向上传播错误
+func (r *Runner) resolveDirID(dirRel string) (string, error) {
+	dir, err := r.dirRepo.Get(context.Background(), dirRel)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
+	}
+	return dir.ID().String(), nil
+}
+
+// resolveDirFromPath 从绝对路径中推导目录信息，返回目录 ID 和相对路径
+func (r *Runner) resolveDirFromPath(absPath string) (dirID, dirRel string, err error) {
+	dirRel = r.dirRelFromAbsPath(absPath)
+	dirID, err = r.resolveDirID(dirRel)
+	return
 }
