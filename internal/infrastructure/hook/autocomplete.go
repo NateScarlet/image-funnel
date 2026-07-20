@@ -49,21 +49,31 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 		return nil, nil
 	}
 
-	// 构建笔记和配套图片的绝对路径
+	// 构建笔记和配套图片的路径与 ID
 	var noteAbsPath string
+	var imageIDs []string
+	var imagePaths []string
 	if noteRelPath != "" {
 		noteAbsPath = filepath.Join(r.rootDir, noteRelPath)
 	}
-	imgRelPath, ok := associatedImageRelPath(noteRelPath)
-	var imgAbsPath string
-	if ok {
-		imgAbsPath = filepath.Join(r.rootDir, imgRelPath)
+	if imgRelPath, ok := associatedImageRelPath(noteRelPath); ok {
+		imagePaths = []string{filepath.Join(r.rootDir, imgRelPath)}
+		img, err := r.imgRepo.Get(ctx, imgRelPath)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to resolve associated image for autocomplete: %w", err)
+		}
+		if img != nil {
+			imageIDs = []string{img.ID().String()}
+		}
 	}
 
 	cmd := newHookCmd(ctx, targetHook.Directive.Autocomplete.Command)
 	cmd.Dir = targetHook.Dir
 
-	env := buildAutocompleteEnv(targetHook, noteAbsPath, imgAbsPath, linePrefix, query, r.rootDir, r.graphqlURL)
+	env, err := r.buildAutocompleteEnv(ctx, targetHook, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build autocomplete env: %w", err)
+	}
 	cmd.Env = env
 
 	var stdout, stderr bytes.Buffer
@@ -129,41 +139,23 @@ func parseLineContext(linePrefix, query string) (cwords []string, cwordIdx int, 
 	return
 }
 
-func buildAutocompleteEnv(targetHook *hookConfig, noteAbsPath, imgAbsPath, linePrefix, query, rootDir, graphqlURL string) []string {
-	env := os.Environ()
-	env = append(env, "PYTHONIOENCODING=utf-8")
-	env = append(env, "PYTHONUTF8=1")
-
-	if noteAbsPath != "" {
-		notePathsJSON, _ := json.Marshal([]string{noteAbsPath})
-		env = append(env, "IMAGE_FUNNEL_NOTE_PATHS="+string(notePathsJSON))
-	}
-	if imgAbsPath != "" {
-		imgPathsJSON, _ := json.Marshal([]string{imgAbsPath})
-		env = append(env, "IMAGE_FUNNEL_IMAGE_PATHS="+string(imgPathsJSON))
+func (r *Runner) buildAutocompleteEnv(ctx context.Context, targetHook *hookConfig, linePrefix, query string, imageIDs, imagePaths []string, noteAbsPath string) ([]string, error) {
+	env, err := r.buildBaseEnv(ctx, targetHook.ID, targetHook.Name, "autocomplete", imageIDs, imagePaths, noteAbsPath, targetHook.Env)
+	if err != nil {
+		return nil, err
 	}
 
 	// 类似 bash COMP_WORDS / COMP_CWORD / prev word 的解析上下文
 	cwords, cwordIdx, prevWord := parseLineContext(linePrefix, query)
-	cwordsJSON, _ := json.Marshal(cwords)
+	cwordsJSON := mustJSON(cwords)
 	env = append(env, "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS="+string(cwordsJSON))
 	env = append(env, fmt.Sprintf("IMAGE_FUNNEL_AUTOCOMPLETE_CWORD_IDX=%d", cwordIdx))
 	env = append(env, "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD="+prevWord)
 
 	env = append(env, "IMAGE_FUNNEL_AUTOCOMPLETE_LINE_PREFIX="+linePrefix)
 	env = append(env, "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY="+query)
-	env = append(env, "IMAGE_FUNNEL_ROOT_DIR="+rootDir)
 
-	if graphqlURL != "" {
-		env = append(env, "IMAGE_FUNNEL_GRAPHQL_URL="+graphqlURL)
-	}
-
-	// 注入 TOML [env] 的自定义变量
-	for k, v := range targetHook.Env {
-		env = append(env, k+"="+v)
-	}
-
-	return env
+	return env, nil
 }
 
 func parseAutocompleteJSONL(data []byte) ([]*hook.AutocompleteSuggestion, error) {
