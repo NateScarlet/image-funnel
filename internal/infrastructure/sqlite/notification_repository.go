@@ -67,15 +67,15 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 	// 单连接确保写操作天然序列化，避免 SQLITE_BUSY
 	db.SetMaxOpenConns(1)
 
-	// user_version 检查：当前版本为 1，拒绝更高版本
+	// user_version 检查：当前版本为 2，拒绝更高版本
 	var userVersion int
 	if err := db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("read user_version: %w", err)
 	}
-	if userVersion > 1 {
+	if userVersion > 2 {
 		db.Close()
-		return nil, nil, fmt.Errorf("database version %d is higher than supported (1)", userVersion)
+		return nil, nil, fmt.Errorf("database version %d is higher than supported (2)", userVersion)
 	}
 
 	// 初始化数据表及索引
@@ -112,6 +112,14 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 		}
 	}
 
+	// v1 → v2：时间字段从 TEXT(RFC3339Nano) 转为 INTEGER(unix 毫秒时间戳)，channel_summary 增加 expires_at
+	if userVersion < 2 {
+		if err := migrateV1ToV2(db); err != nil {
+			db.Close()
+			return nil, nil, fmt.Errorf("migrate v1 to v2: %w", err)
+		}
+	}
+
 	repo := &NotificationRepository{
 		db:            db,
 		filterBuilder: filterBuilder,
@@ -135,6 +143,135 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 	}
 
 	return repo, cleanup, nil
+}
+
+// migrateV1ToV2 将时间字段从 TEXT 转为 INTEGER(unix 毫秒)，channel_summary 增加 expires_at
+func migrateV1ToV2(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 创建新表
+	if _, err := tx.Exec(`
+		CREATE TABLE notifications_v2 (
+			id TEXT PRIMARY KEY,
+			tag TEXT UNIQUE NOT NULL,
+			channel TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			priority TEXT NOT NULL,
+			read_at INTEGER NOT NULL DEFAULT 0,
+			dismissed_at INTEGER NOT NULL DEFAULT 0,
+			not_after INTEGER NOT NULL,
+			not_before INTEGER NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			details_url TEXT NOT NULL DEFAULT ''
+		)
+	`); err != nil {
+		return fmt.Errorf("create notifications_v2: %w", err)
+	}
+
+	// 读取旧数据，在 Go 中转换时间格式后写入新表
+	rows, err := tx.Query(`SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications`)
+	if err != nil {
+		return fmt.Errorf("read old notifications: %w", err)
+	}
+
+	for rows.Next() {
+		var (
+			id, tag, channel, title, body, priority                                                     string
+			readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailsURL string
+		)
+		if err := rows.Scan(&id, &tag, &channel, &title, &body, &priority, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailsURL); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan old notification: %w", err)
+		}
+
+		if _, err := tx.Exec(`INSERT INTO notifications_v2 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			id, tag, channel, title, body, priority,
+			parseTimeToMs(readAtStr),
+			parseTimeToMs(dismissedAtStr),
+			parseTimeToMs(notAfterStr),
+			parseTimeToMs(notBeforeStr),
+			parseTimeToMs(createdAtStr),
+			parseTimeToMs(updatedAtStr),
+			detailsURL,
+		); err != nil {
+			rows.Close()
+			return fmt.Errorf("insert converted notification: %w", err)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate old notifications: %w", err)
+	}
+
+	// 替换旧表
+	if _, err := tx.Exec(`DROP TABLE notifications`); err != nil {
+		return fmt.Errorf("drop old notifications: %w", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE notifications_v2 RENAME TO notifications`); err != nil {
+		return fmt.Errorf("rename notifications_v2: %w", err)
+	}
+
+	// 重建索引
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC)`); err != nil {
+		return fmt.Errorf("create index channel_created: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag)`); err != nil {
+		return fmt.Errorf("create index tag: %w", err)
+	}
+
+	// 重建 channel_summary 并添加 expires_at
+	if _, err := tx.Exec(`DROP TABLE IF EXISTS channel_summary`); err != nil {
+		return fmt.Errorf("drop old channel_summary: %w", err)
+	}
+	if _, err := tx.Exec(`
+		CREATE TABLE channel_summary (
+			channel TEXT PRIMARY KEY,
+			unread_count INTEGER NOT NULL DEFAULT 0,
+			latest_notification_id TEXT NOT NULL,
+			expires_at INTEGER NOT NULL DEFAULT 0
+		)
+	`); err != nil {
+		return fmt.Errorf("create channel_summary v2: %w", err)
+	}
+
+	// 重新填充 channel_summary
+	now := time.Now().UnixMilli()
+	if _, err := tx.Exec(`
+		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
+		SELECT channel,
+		       COUNT(CASE WHEN read_at = 0 THEN 1 END),
+		       (SELECT n2.id FROM notifications n2 WHERE n2.channel = n.channel AND n2.not_before <= ? ORDER BY n2.created_at DESC, n2.id DESC LIMIT 1),
+		       COALESCE((SELECT MIN(n3.not_before) FROM notifications n3 WHERE n3.channel = n.channel AND n3.not_before > ?), 0)
+		FROM notifications n
+		GROUP BY channel
+	`, now, now); err != nil {
+		return fmt.Errorf("repopulate channel_summary: %w", err)
+	}
+
+	if _, err := tx.Exec(`PRAGMA user_version = 2`); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// parseTimeToMs 将 RFC3339Nano 字符串转为 unix 毫秒，空字符串视为 0
+func parseTimeToMs(s string) int64 {
+	if s == "" {
+		return 0
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		// 迁移中遇到非法时间字符串，返回 0（会丢失数据，但不应发生）
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // Save 保存通知（新建或更新），返回是否为新建通知
@@ -237,11 +374,11 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			}
 		}
 		if filter.Read != nil {
-			// formatTime 对零值返回空字符串而非 NULL，所以 read_at 不会为 NULL
+			// read_at 为 0 表示未读（零值代表未设置已读时间）
 			if *filter.Read {
-				query += " AND read_at != ''"
+				query += " AND read_at != 0"
 			} else {
-				query += " AND read_at = ''"
+				query += " AND read_at = 0"
 			}
 		}
 		if len(filter.Priority) > 0 {
@@ -250,22 +387,22 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 				args = append(args, p.String())
 			}
 		}
-		if filter.VisibleAt != nil {
-			t := filter.VisibleAt.Format(time.RFC3339Nano)
+		if !filter.VisibleAt.IsZero() {
+			t := filter.VisibleAt.UnixMilli()
 			query += " AND not_before <= ?"
 			args = append(args, t)
 			query += " AND not_after >= ?"
 			args = append(args, t)
 		}
-		if filter.PendingAt != nil {
+		if !filter.PendingAt.IsZero() {
 			// not_before > t：在时间点 t 尚未到达可见时间（未来才可见）
 			query += " AND not_before > ?"
-			args = append(args, filter.PendingAt.Format(time.RFC3339Nano))
+			args = append(args, filter.PendingAt.UnixMilli())
 		}
-		if filter.ExpiredAt != nil {
+		if !filter.ExpiredAt.IsZero() {
 			// not_after < t：在时间点 t 已超出可见截止（已过期）
 			query += " AND not_after < ?"
-			args = append(args, filter.ExpiredAt.Format(time.RFC3339Nano))
+			args = append(args, filter.ExpiredAt.UnixMilli())
 		}
 
 		query += " ORDER BY created_at DESC, id DESC"
@@ -302,8 +439,15 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 }
 
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
+// 查询前先刷新过期的摘要（pending→active 时间转换）
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
+		// 刷新所有过期的摘要行
+		if err := r.refreshExpiredSummaries(ctx); err != nil {
+			yield(nil, err)
+			return
+		}
+
 		rows, err := r.db.QueryContext(ctx, `
 			SELECT channel, unread_count, latest_notification_id
 			FROM channel_summary
@@ -339,18 +483,51 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 	}
 }
 
+// refreshExpiredSummaries 刷新所有 expires_at 已过期的频道摘要
+// 单连接模式天然序列化，无需额外并发去重
+func (r *NotificationRepository) refreshExpiredSummaries(ctx context.Context) error {
+	now := time.Now().UnixMilli()
+
+	// 刷新过期的摘要行：pending 通知已变为 visible
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
+		SELECT cs.channel,
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = cs.channel AND n.read_at = 0),
+		       (SELECT n.id FROM notifications n WHERE n.channel = cs.channel AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1),
+		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = cs.channel AND n.not_before > ?), 0)
+		FROM channel_summary cs
+		WHERE cs.expires_at > 0 AND cs.expires_at <= ?
+	`, now, now, now); err != nil {
+		return fmt.Errorf("refreshExpiredSummaries: %w", err)
+	}
+
+	// 删除已空的频道
+	if _, err := r.db.ExecContext(ctx, `
+		DELETE FROM channel_summary WHERE (
+			SELECT COUNT(*) FROM notifications WHERE channel = channel_summary.channel
+		) = 0
+	`); err != nil {
+		return fmt.Errorf("refreshExpiredSummaries delete empty: %w", err)
+	}
+
+	return nil
+}
+
 // refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
 func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) error {
+	now := time.Now().UnixMilli()
+
 	// 先写入或更新摘要
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `
-		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
+		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
 		SELECT ?,
-		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ''),
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = 0),
 		       -- latestNotification 语义：当前可见通知（not_before <= now）中创建时间最新的
-		       (SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
+		       (SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1),
+		       -- expires_at：下一条待发送通知的 notBefore，没有则 0 永不过期
+		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before > ?), 0)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, channel, now, channel); err != nil {
+	`, channel, channel, channel, now, channel, now, channel); err != nil {
 		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
 	}
 
@@ -396,7 +573,7 @@ func (r *NotificationRepository) runCleanup(ctx context.Context, reclaimGracePer
 
 // reclaim 清理 notAfter + reclaimGracePeriod 在当前时间之前的数据
 func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error {
-	cutoff := time.Now().Add(-reclaimGracePeriod).Format(time.RFC3339Nano)
+	cutoff := time.Now().Add(-reclaimGracePeriod).UnixMilli()
 
 	// 删除过期通知以及对应的 channel_summary
 	if _, err := r.db.Exec(`
@@ -424,7 +601,7 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// notificationPO 通知的持久化对象
+// notificationPO 通知的持久化对象，时间字段使用 unix 毫秒时间戳
 type notificationPO struct {
 	ID          string
 	Tag         string
@@ -432,12 +609,12 @@ type notificationPO struct {
 	Title       string
 	Body        string
 	Priority    string
-	ReadAt      string
-	DismissedAt string
-	NotAfter    string
-	NotBefore   string
-	CreatedAt   string
-	UpdatedAt   string
+	ReadAt      int64
+	DismissedAt int64
+	NotAfter    int64
+	NotBefore   int64
+	CreatedAt   int64
+	UpdatedAt   int64
 	DetailsURL  string
 }
 
@@ -465,30 +642,6 @@ func (po *notificationPO) DomainObject() (*notification.Notification, error) {
 		return nil, fmt.Errorf("parse notification priority: %w", err)
 	}
 
-	readAt, err := parseTime(po.ReadAt)
-	if err != nil {
-		return nil, err
-	}
-	dismissedAt, err := parseTime(po.DismissedAt)
-	if err != nil {
-		return nil, err
-	}
-	notAfter, err := parseTime(po.NotAfter)
-	if err != nil {
-		return nil, err
-	}
-	notBefore, err := parseTime(po.NotBefore)
-	if err != nil {
-		return nil, err
-	}
-	createdAt, err := parseTime(po.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	updatedAt, err := parseTime(po.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
 	detailsURL, err := scalar.ParseURI(po.DetailsURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse notification detailsURL: %w", err)
@@ -496,8 +649,13 @@ func (po *notificationPO) DomainObject() (*notification.Notification, error) {
 
 	return notification.FromRepository(
 		scalar.ToID(po.ID), po.Tag, po.Channel, po.Title, po.Body, priority,
-		readAt, dismissedAt, notAfter, notBefore,
-		createdAt, updatedAt, detailsURL,
+		parseTime(po.ReadAt),
+		parseTime(po.DismissedAt),
+		parseTime(po.NotAfter),
+		parseTime(po.NotBefore),
+		parseTime(po.CreatedAt),
+		parseTime(po.UpdatedAt),
+		detailsURL,
 	)
 }
 
@@ -516,22 +674,20 @@ func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
 	return po.DomainObject()
 }
 
-func parseTime(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
+// parseTime 将 unix 毫秒时间戳转为 time.Time，0 视为零值
+func parseTime(ms int64) time.Time {
+	if ms == 0 {
+		return time.Time{}
 	}
-	t, err := time.Parse(time.RFC3339Nano, s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("parse time string '%s': %w", s, err)
-	}
-	return t, nil
+	return time.UnixMilli(ms)
 }
 
-func formatTime(t time.Time) string {
+// formatTime 将 time.Time 转为 unix 毫秒时间戳，零值返回 0
+func formatTime(t time.Time) int64 {
 	if t.IsZero() {
-		return ""
+		return 0
 	}
-	return t.UTC().Format(time.RFC3339Nano)
+	return t.UnixMilli()
 }
 
 // #endregion
