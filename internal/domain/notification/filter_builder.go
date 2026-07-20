@@ -49,5 +49,17 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 		})
 	}
 
+	if v := filters.PendingAt; v != nil {
+		t := *v
+		// notBefore > t：在时间点 t 尚未到达可见时间（未来才可见）
+		b.Add(func(n *Notification) bool { return n.NotBefore().After(t) })
+	}
+
+	if v := filters.ExpiredAt; v != nil {
+		t := *v
+		// notAfter < t：在时间点 t 已超出可见截止（已过期）
+		b.Add(func(n *Notification) bool { return n.NotAfter().Before(t) })
+	}
+
 	return b.Build()
 }

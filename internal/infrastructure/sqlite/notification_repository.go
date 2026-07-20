@@ -257,6 +257,16 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			query += " AND not_after >= ?"
 			args = append(args, t)
 		}
+		if filter.PendingAt != nil {
+			// not_before > t：在时间点 t 尚未到达可见时间（未来才可见）
+			query += " AND not_before > ?"
+			args = append(args, filter.PendingAt.Format(time.RFC3339Nano))
+		}
+		if filter.ExpiredAt != nil {
+			// not_after < t：在时间点 t 已超出可见截止（已过期）
+			query += " AND not_after < ?"
+			args = append(args, filter.ExpiredAt.Format(time.RFC3339Nano))
+		}
 
 		query += " ORDER BY created_at DESC, id DESC"
 
@@ -332,13 +342,15 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 // refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
 func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) error {
 	// 先写入或更新摘要
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
 		SELECT ?,
 		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ''),
-		       (SELECT n.id FROM notifications n WHERE n.channel = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
+		       -- latestNotification 语义：当前可见通知（not_before <= now）中创建时间最新的
+		       (SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, channel, channel); err != nil {
+	`, channel, channel, channel, now, channel); err != nil {
 		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
 	}
 
@@ -519,7 +531,7 @@ func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format(time.RFC3339Nano)
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 // #endregion

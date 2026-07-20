@@ -7,7 +7,6 @@ package graphql
 
 import (
 	"context"
-
 	"main/internal/shared"
 	"main/internal/util"
 )

@@ -194,6 +194,8 @@ const init = once(() => {
 
   // 应用加载时弹每个频道最新一条未读通知（不依赖 useQuery）
   void loadAndToastInitialUnreads();
+  // 恢复调度列表：页面刷新后内存状态清空，重新从服务端加载 notBefore 在未来的通知
+  void restoreScheduledNotifications();
 
   async function loadAndToastInitialUnreads() {
     const { data: chData } = await query(NotificationChannelsDocument, {
@@ -208,6 +210,24 @@ const init = once(() => {
         if (latestNotif.priority !== NotificationPriority.LOW) {
           spawnToast(latestNotif);
         }
+      }
+    }
+  }
+
+  // 恢复调度列表：查询所有 notBefore 在未来的通知，加入调度列表以便时间到达时自动显示
+  // 页面刷新后 scheduledNotifications 内存状态清空，此函数负责重建
+  async function restoreScheduledNotifications() {
+    const { data } = await query(NotificationsDocument, {
+      // pendingAt: now 让服务端直接筛选 notBefore > now 的通知，无需客户端二次过滤
+      variables: { filterBy: { pendingAt: new Date().toISOString() } },
+      fetchPolicy: "network-only",
+    });
+    const notifs = data?.notifications?.edges?.map((e) => e.node) ?? [];
+    for (const n of notifs) {
+      // 服务端已过滤，所有结果都是 notBefore 在未来的，直接加入调度列表
+      const existing = scheduledNotifications.value.find((s) => s.id === n.id);
+      if (!existing) {
+        scheduledNotifications.value.push(n);
       }
     }
   }

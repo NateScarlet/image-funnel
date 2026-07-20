@@ -7,7 +7,7 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   channel: String!
   "该频道未读通知数量"
   unreadCount: Int!
-  "该频道最新一条通知"
+  "该频道最新一条可见通知（notBefore <= now，不包含未来通知）"
   latestNotification: Notification!
 }
 

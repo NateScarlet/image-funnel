@@ -10,4 +10,8 @@ input NotificationFilters @goModel(model: "main/internal/shared.NotificationFilt
   read: Boolean
   "可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间"
   visibleAt: Time
+  "在指定时间是否未来才可见（notBefore > pendingAt），不传则不过滤"
+  pendingAt: Time
+  "在指定时间是否已过期（notAfter < expiredAt），不传则不过滤"
+  expiredAt: Time
 }

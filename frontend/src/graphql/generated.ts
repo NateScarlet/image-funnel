@@ -236,6 +236,10 @@ export enum NotificationEventType {
 export type NotificationFilters = {
   /** 按频道筛选，匹配任意一个 */
   channel?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  /** 在指定时间是否已过期（notAfter < expiredAt），不传则不过滤 */
+  expiredAt?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 在指定时间是否未来才可见（notBefore > pendingAt），不传则不过滤 */
+  pendingAt?: InputMaybe<Scalars["Time"]["input"]>;
   /** 按优先级筛选，匹配任意一个 */
   priority?: InputMaybe<Array<NotificationPriority>>;
   /** 按已读状态筛选（true=已读，false=未读） */

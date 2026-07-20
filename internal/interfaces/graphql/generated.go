@@ -3325,7 +3325,7 @@ type NotificationChannel @goModel(model: "main/internal/shared.NotificationChann
   channel: String!
   "该频道未读通知数量"
   unreadCount: Int!
-  "该频道最新一条通知"
+  "该频道最新一条可见通知（notBefore <= now，不包含未来通知）"
   latestNotification: Notification!
 }
 
@@ -3358,6 +3358,10 @@ input NotificationFilters @goModel(model: "main/internal/shared.NotificationFilt
   read: Boolean
   "可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间"
   visibleAt: Time
+  "在指定时间是否未来才可见（notBefore > pendingAt），不传则不过滤"
+  pendingAt: Time
+  "在指定时间是否已过期（notAfter < expiredAt），不传则不过滤"
+  expiredAt: Time
 }`, BuiltIn: false},
 	{Name: "../../../graph/types/pairing_request.graphql", Input: `type PairingRequest @goModel(model: "main/internal/shared.PairingRequestDTO") {
   code: String!
@@ -18338,7 +18342,7 @@ func (ec *executionContext) unmarshalInputNotificationFilters(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"channel", "status", "priority", "read", "visibleAt"}
+	fieldsInOrder := [...]string{"channel", "status", "priority", "read", "visibleAt", "pendingAt", "expiredAt"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18380,6 +18384,20 @@ func (ec *executionContext) unmarshalInputNotificationFilters(ctx context.Contex
 				return it, err
 			}
 			it.VisibleAt = data
+		case "pendingAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pendingAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PendingAt = data
+		case "expiredAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expiredAt"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ExpiredAt = data
 		}
 	}
 
@@ -24529,13 +24547,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -25167,23 +25185,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 
