@@ -171,7 +171,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 	}
 
 	// 从第一个路径推导目录信息，触发必然涉及图片，目录信息总是可推导的
-	dirID, dirRel, err := r.resolveDirFromPath(paths[0])
+	dirID, dirRel, err := r.resolveDirFromPath(ctx, paths[0])
 	if err != nil {
 		return fmt.Errorf("failed to resolve directory for trigger %q: %w", triggerName, err)
 	}
@@ -302,10 +302,9 @@ func (r *Runner) onDebounceTrigger(hookID string, events []hookEvent) {
 	}
 
 	// 从第一个事件中推导目录信息，触发必然涉及图片，目录信息总是可推导的
-	// 异步路径中目录解析失败不阻塞钩子执行，注入空值由脚本自主判断
-	dirID, dirRel, err := r.resolveDirFromPath(events[0].Path)
+	dirID, dirRel, err := r.resolveDirFromPath(r.ctx, events[0].Path)
 	if err != nil {
-		r.logger.Error("failed to resolve directory for hook event, executing with empty values",
+		r.logger.Error("failed to resolve directory for hook event, skipping",
 			zap.String("hook_id", targetHook.ID),
 			zap.String("trigger", "post_update_image_metadata"),
 			zap.String("event_path", events[0].Path),
@@ -348,16 +347,12 @@ func (r *Runner) dirRelFromAbsPath(absPath string) string {
 	if err != nil {
 		return ""
 	}
-	dirRel := filepath.Dir(relPath)
-	if dirRel == "." {
-		dirRel = ""
-	}
-	return dirRel
+	return filepath.Dir(relPath)
 }
 
 // resolveDirID 通过目录仓库查找目录 ID，查找失败应向上传播错误
-func (r *Runner) resolveDirID(dirRel string) (string, error) {
-	dir, err := r.dirRepo.Get(context.Background(), dirRel)
+func (r *Runner) resolveDirID(ctx context.Context, dirRel string) (string, error) {
+	dir, err := r.dirRepo.Get(ctx, dirRel)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
 	}
@@ -365,8 +360,8 @@ func (r *Runner) resolveDirID(dirRel string) (string, error) {
 }
 
 // resolveDirFromPath 从绝对路径中推导目录信息，返回目录 ID 和相对路径
-func (r *Runner) resolveDirFromPath(absPath string) (dirID, dirRel string, err error) {
+func (r *Runner) resolveDirFromPath(ctx context.Context, absPath string) (dirID, dirRel string, err error) {
 	dirRel = r.dirRelFromAbsPath(absPath)
-	dirID, err = r.resolveDirID(dirRel)
+	dirID, err = r.resolveDirID(ctx, dirRel)
 	return
 }

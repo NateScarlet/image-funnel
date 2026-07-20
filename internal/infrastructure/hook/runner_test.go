@@ -187,7 +187,7 @@ label = [""]
 
 	mockDirRepo := &mockDirectoryRepository{
 		dirs: map[string]*directory.Directory{
-			"": directory.FromRepository(""),
+			".": directory.FromRepository("."),
 		},
 	}
 
@@ -331,7 +331,7 @@ command = "echo test_error_out >&2 && exit 42"
 	// 构建 mock 目录仓库，使得路径能推导出目录信息
 	mockDirRepo := &mockDirectoryRepository{
 		dirs: map[string]*directory.Directory{
-			"": directory.FromRepository(""),
+			".": directory.FromRepository("."),
 		},
 	}
 
@@ -389,9 +389,10 @@ label = [""]
 
 	mockDirRepo := &mockDirectoryRepository{
 		dirs: map[string]*directory.Directory{
-			"": directory.FromRepository(""),
+			".": directory.FromRepository("."),
 		},
 	}
+	expectedDir := mockDirRepo.dirs["."]
 
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
 	runner.debouncer.duration = 10 * time.Millisecond
@@ -419,10 +420,10 @@ label = [""]
 	assert.NoError(t, err)
 	result := strings.TrimSpace(string(contentBytes))
 
-	// 验证格式为 "dir:{relPath}|{relPath}"，使用 | 作为分隔符
+	// 使用 | 作为分隔符避免与 ID 中的 : 冲突
 	parts := strings.SplitN(result, "|", 2)
 	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
-	assert.Contains(t, parts[0], "dir:", "DIRECTORY_ID 应以 dir: 开头")
+	assert.Equal(t, expectedDir.ID().String(), parts[0], "DIRECTORY_ID 应与目录仓库返回的 ID 一致")
 }
 
 func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
@@ -462,6 +463,7 @@ command = '` + cmdStr + `'
 			"subdir": directory.FromRepository("subdir"),
 		},
 	}
+	expectedDir := mockDirRepo.dirs["subdir"]
 
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
 	defer runner.Close()
@@ -483,8 +485,48 @@ command = '` + cmdStr + `'
 
 	parts := strings.SplitN(result, "|", 2)
 	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
-	assert.Contains(t, parts[0], "dir:", "DIRECTORY_ID 应以 dir: 开头")
+	assert.Equal(t, expectedDir.ID().String(), parts[0], "DIRECTORY_ID 应与目录仓库返回的 ID 一致")
 	assert.Equal(t, "subdir", parts[1], "DIRECTORY_REL_PATH 应为 subdir")
+}
+
+func TestRunner_Trigger_DirectoryResolveFailure(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-dir-fail-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	flagFile := filepath.Join(tempDir, "should_not_exist")
+	tomlContent := `
+id = "dir-fail-test"
+name = "目录解析失败测试"
+command = 'echo "should not run" > ` + flagFile + `'
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "dir-fail.toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+
+	// 目录仓库为空，任何路径都无法解析
+	mockDirRepo := &mockDirectoryRepository{dirs: map[string]*directory.Directory{}}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	defer runner.Close()
+
+	absPath := filepath.Join(tempDir, "unknown_subdir", "a.png")
+	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:dir-fail-test"), "image_dispatch")
+	assert.Error(t, err, "目录解析失败时应返回错误")
+	assert.Contains(t, err.Error(), "failed to resolve directory")
+
+	// 验证钩子没有被执行
+	_, err = os.Stat(flagFile)
+	assert.True(t, os.IsNotExist(err), "目录解析失败时不应执行钩子")
 }
 
 func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {
