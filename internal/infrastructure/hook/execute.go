@@ -124,16 +124,14 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		"PYTHONUTF8=1",
 	)
 
+	// 目录信息由所有调用路径保证始终存在，无条件注入环境变量
+	env = append(env, "IMAGE_FUNNEL_DIRECTORY_ID="+task.DirectoryID)
+	env = append(env, "IMAGE_FUNNEL_DIRECTORY_REL_PATH="+task.DirectoryRel)
+
 	if task.NotePath != "" {
 		noteAbsPath := filepath.Join(r.rootDir, task.NotePath)
 		mPathsJSON, _ := json.Marshal([]string{noteAbsPath})
 		env = append(env, "IMAGE_FUNNEL_NOTE_PATHS="+string(mPathsJSON))
-	}
-	if task.DirectoryID != "" {
-		env = append(env, "IMAGE_FUNNEL_DIRECTORY_ID="+task.DirectoryID)
-	}
-	if task.DirectoryRel != "" {
-		env = append(env, "IMAGE_FUNNEL_DIRECTORY_REL_PATH="+task.DirectoryRel)
 	}
 	env = append(env, "IMAGE_FUNNEL_HOOK_RUN_ID="+task.RunID)
 
