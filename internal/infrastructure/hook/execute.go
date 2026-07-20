@@ -3,15 +3,12 @@ package hook
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"main/internal/scalar"
 
 	"go.uber.org/zap"
 )
@@ -87,9 +84,6 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		paths = append(paths, ev.Path)
 	}
 
-	idsJSON, _ := json.Marshal(ids)
-	pathsJSON, _ := json.Marshal(paths)
-
 	if len(task.Events) == 1 {
 		rating = task.Events[0].Rating
 		label = task.Events[0].Label
@@ -106,53 +100,28 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	// 生成临时文件路径供脚本通过 IMAGE_FUNNEL_ACTION 写入覆盖操作，不提前创建文件
 	actionFilePath := filepath.Join(os.TempDir(), fmt.Sprintf("image_funnel_action_%s.txt", task.RunID))
 
-	env := append(os.Environ(),
-		"IMAGE_FUNNEL_HOOK_ID="+task.HookID,
-		"IMAGE_FUNNEL_HOOK_NAME="+task.HookName,
-		"IMAGE_FUNNEL_TRIGGER="+task.TriggerName,
-		"IMAGE_FUNNEL_IMAGE_IDS="+string(idsJSON),
-		"IMAGE_FUNNEL_IMAGE_PATHS="+string(pathsJSON),
+	var noteAbsPath string
+	if task.NotePath != "" {
+		noteAbsPath = filepath.Join(r.rootDir, task.NotePath)
+	}
+
+	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env)
+	if buildErr != nil {
+		task.resultChan <- hookExecutionResult{Error: fmt.Errorf("failed to build hook env: %w", buildErr)}
+		return
+	}
+
+	env = append(env,
 		"IMAGE_FUNNEL_IMAGE_RATING="+fmt.Sprintf("%d", rating),
 		"IMAGE_FUNNEL_IMAGE_LABEL="+label,
 		"IMAGE_FUNNEL_IMAGE_ACTION="+action,
 		"IMAGE_FUNNEL_IMAGE_OLD_RATING="+fmt.Sprintf("%d", oldRating),
 		"IMAGE_FUNNEL_IMAGE_OLD_LABEL="+oldLabel,
 		"IMAGE_FUNNEL_IMAGE_OLD_ACTION="+oldAction,
-		"IMAGE_FUNNEL_ROOT_DIR="+r.rootDir,
 		"IMAGE_FUNNEL_ACTION="+actionFilePath,
-		"PYTHONIOENCODING=utf-8",
-		"PYTHONUTF8=1",
 	)
 
-	// 目录信息由所有调用路径保证始终存在，无条件注入环境变量
-	env = append(env, "IMAGE_FUNNEL_DIRECTORY_ID="+task.DirectoryID)
-	env = append(env, "IMAGE_FUNNEL_DIRECTORY_REL_PATH="+task.DirectoryRel)
-
-	if task.NotePath != "" {
-		noteAbsPath := filepath.Join(r.rootDir, task.NotePath)
-		mPathsJSON, _ := json.Marshal([]string{noteAbsPath})
-		env = append(env, "IMAGE_FUNNEL_NOTE_PATHS="+string(mPathsJSON))
-	}
 	env = append(env, "IMAGE_FUNNEL_HOOK_RUN_ID="+task.RunID)
-
-	// 注入来自 TOML 配置文件中 [env] 节的自定义环境变量
-	for k, v := range task.Env {
-		env = append(env, k+"="+v)
-	}
-
-	if r.graphqlURL != "" {
-		env = append(env, "IMAGE_FUNNEL_GRAPHQL_URL="+r.graphqlURL)
-	}
-
-	if r.tokenSource != nil {
-		// 签发临时的 JWT 令牌供外部脚本高频访问 GraphQL API 鉴权使用
-		tok, err := r.tokenSource.NewAccessToken(ctx, scalar.ToID("hook-runner"))
-		if err == nil {
-			env = append(env, "IMAGE_FUNNEL_TOKEN="+tok.String())
-		} else {
-			r.logger.Warn("failed to generate temporary token for hook", zap.Error(err))
-		}
-	}
 
 	cmd.Env = env
 

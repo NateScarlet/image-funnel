@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"main/internal/domain/device"
 	domimage "main/internal/domain/image"
 	"main/internal/domain/directory"
 	"main/internal/pubsub"
@@ -21,6 +22,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
+
+// mockToken 模拟 device.Token
+type mockToken struct{}
+
+func (m *mockToken) String() string            { return "mock-token" }
+func (m *mockToken) UserID() scalar.ID         { return scalar.ToID("usr:mock") }
+func (m *mockToken) Expire() time.Time         { return time.Now().Add(time.Hour) }
+func (m *mockToken) IssueAt() time.Time        { return time.Now() }
+func (m *mockToken) JTI() string               { return "mock-jti" }
+
+// mockTokenSource 模拟 device.TokenSource
+type mockTokenSource struct{}
+
+func (m *mockTokenSource) NewAccessToken(ctx context.Context, deviceID scalar.ID) (device.Token, error) {
+	return &mockToken{}, nil
+}
+func (m *mockTokenSource) NewRefreshToken(ctx context.Context, deviceID scalar.ID) (device.Token, error) {
+	return &mockToken{}, nil
+}
+func (m *mockTokenSource) VerifyAccessToken(ctx context.Context, rawToken string) (device.Token, error) {
+	return &mockToken{}, nil
+}
+func (m *mockTokenSource) VerifyRefreshToken(ctx context.Context, rawToken string) (device.Token, error) {
+	return &mockToken{}, nil
+}
 
 type mockMetadataUpdatedSub struct {
 	subscribers []chan *shared.MetadataUpdatedEvent
@@ -139,7 +165,7 @@ label = [""]
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil)
 	defer runner.Close()
 
 	hooks, err := runner.List(context.Background())
@@ -191,7 +217,7 @@ label = [""]
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo)
 	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
 	defer runner.Close()
 
@@ -283,7 +309,7 @@ TEST_VAR_TWO = "val2"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil)
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()
@@ -335,7 +361,7 @@ command = "echo test_error_out >&2 && exit 42"
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo)
 	defer runner.Close()
 
 	// 使用绝对路径，使得 dirRelFromAbsPath 能正确推导目录信息
@@ -394,7 +420,7 @@ label = [""]
 	}
 	expectedDir := mockDirRepo.dirs["."]
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo)
 	runner.debouncer.duration = 10 * time.Millisecond
 	defer runner.Close()
 
@@ -465,7 +491,7 @@ command = '` + cmdStr + `'
 	}
 	expectedDir := mockDirRepo.dirs["subdir"]
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo)
 	defer runner.Close()
 
 	// 创建一个位于子目录中的文件，确保目录信息可推导
@@ -516,7 +542,7 @@ command = 'echo "should not run" > ` + flagFile + `'
 	// 目录仓库为空，任何路径都无法解析
 	mockDirRepo := &mockDirectoryRepository{dirs: map[string]*directory.Directory{}}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, nil, nil, mockDirRepo)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo)
 	defer runner.Close()
 
 	absPath := filepath.Join(tempDir, "unknown_subdir", "a.png")
@@ -563,8 +589,13 @@ command = '` + cmdStr + `'
 	imgID := scalar.ToID("img:1")
 	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, imgRepo, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo)
 	defer runner.Close()
 
 	noteRelPath := "test.png.md"
@@ -639,9 +670,16 @@ command = '` + cmdScan + `'
 	imgID := scalar.ToID("img:1")
 	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, imgRepo, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo)
 	defer runner.Close()
+
+	// 等待...
 
 	err = os.WriteFile(filepath.Join(tempDir, "test.png.md"), []byte("Hello world note"), 0644)
 	assert.NoError(t, err)
@@ -756,7 +794,13 @@ on_fail_action = "KEEP"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo)
 	defer runner.Close()
 
 	// 准备笔记文件
@@ -857,7 +901,7 @@ name = "strict"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()
@@ -909,7 +953,7 @@ command = '''%s'''
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", nil, &mockImageRepository{}, nil, nil)
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil)
 	defer runner.Close()
 
 	// 启动一个会被取消的 context
