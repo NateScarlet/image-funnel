@@ -89,10 +89,20 @@ const init = once(() => {
 
   // refreshOn 监听所有通知的 notBefore/notAfter，在时间到达时自动刷新 currentTime
   refreshOn(() => {
-    const allTimes = channelNotifications.value
-      .concat(scheduledNotifications.value)
-      .flatMap((n) => [n.notBefore, n.notAfter]);
-    return allTimes;
+    const cn = channelNotifications.value;
+    const sn = scheduledNotifications.value;
+    return {
+      *[Symbol.iterator]() {
+        for (const n of cn) {
+          yield n.notBefore;
+          yield n.notAfter;
+        }
+        for (const n of sn) {
+          yield n.notBefore;
+          yield n.notAfter;
+        }
+      },
+    };
   });
 
   // 监听 currentTime 变化，重新评估 Toast 显示/隐藏
@@ -172,7 +182,7 @@ const init = once(() => {
     onNext(res) {
       void refreshChannels();
       if (selectedChannel.value) {
-        void refreshSelectedChannel();
+        void refreshNotifications();
       }
 
       const eventPayload = res.data?.notificationChanged;
@@ -211,14 +221,9 @@ const init = once(() => {
     }
   }
 
-  async function refreshSelectedChannel() {
-    if (!selectedChannel.value) return;
-    await refreshNotifications();
-  }
-
   async function selectChannel(channel: string) {
     selectedChannel.value = channel;
-    await refreshSelectedChannel();
+    await refreshNotifications();
     // 自动批量已读
     await markAllAsRead(channel);
   }
@@ -229,14 +234,14 @@ const init = once(() => {
       // 通过 WS transport 批量已读，Promise.all 并发发送避免逐个 await 等待
       await Promise.all(unreads.map((n) => markAsRead(n.id)));
     }
-    await refreshSelectedChannel();
+    await refreshNotifications();
   }
 
   async function markAsDismissed(id: string) {
     await mutate(UpdateNotificationDocument, {
       variables: { input: { id, dismissedAt: new Date().toISOString() } },
     });
-    await refreshSelectedChannel();
+    await refreshNotifications();
   }
 
   return {
