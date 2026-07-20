@@ -6,10 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"main/internal/apperror"
 	"main/internal/domain/hook"
 	"main/internal/scalar"
 
@@ -58,8 +58,8 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 	}
 	if imgRelPath, ok := associatedImageRelPath(noteRelPath); ok {
 		imagePaths = []string{filepath.Join(r.rootDir, imgRelPath)}
-		img, err := r.imgRepo.Get(ctx, imgRelPath)
-		if err != nil && !os.IsNotExist(err) {
+		img, err := apperror.IgnoreNotFound(r.imgRepo.Get(ctx, imgRelPath))
+		if err != nil {
 			return nil, fmt.Errorf("failed to resolve associated image for autocomplete: %w", err)
 		}
 		if img != nil {
