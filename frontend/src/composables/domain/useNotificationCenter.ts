@@ -37,7 +37,6 @@ async function markAsRead(id: string) {
 
 const init = once(() => {
   const selectedChannel = ref<string | null>(null);
-  const channelNotifications = ref<Notification[]>([]);
 
   const { show: showToast, remove: removeToast } = useNotification();
   const shownToastIds = new Set<string>();
@@ -48,11 +47,36 @@ const init = once(() => {
   const drawer = useModalDrawer({
     onDidClose() {
       selectedChannel.value = null;
-      channelNotifications.value = [];
     },
   });
 
   const { currentTime, refreshOn, isPast, isFuture } = useCurrentTime();
+
+  // 需要时间感知的 Toast 通知（有 notBefore 或 notAfter 约束）
+  const scheduledNotifications = ref<Notification[]>([]);
+
+  const { data: channelsData, refresh: refreshChannels } = useQuery(NotificationChannelsDocument, {
+    fetchPolicy: "cache-and-network",
+  });
+
+  const { data: notificationsData, refresh: refreshNotifications } = useQuery(
+    NotificationsDocument,
+    {
+      variables: computed(() => {
+        if (!selectedChannel.value) return undefined;
+        return { filterBy: { channel: [selectedChannel.value] } };
+      }),
+      fetchPolicy: "network-only",
+    },
+  );
+
+  const channels = computed(() => {
+    return channelsData.value?.notificationChannels?.nodes ?? [];
+  });
+
+  const channelNotifications = computed(
+    () => notificationsData.value?.notifications?.edges?.map((e) => e.node) ?? [],
+  );
 
   // 使用 render 模式：根据响应式 currentTime 筛选可见通知
   const visibleNotifications = computed(() => {
@@ -63,21 +87,12 @@ const init = once(() => {
     });
   });
 
-  // 需要时间感知的 Toast 通知（有 notBefore 或 notAfter 约束）
-  const scheduledNotifications = ref<Notification[]>([]);
-
   // refreshOn 监听所有通知的 notBefore/notAfter，在时间到达时自动刷新 currentTime
   refreshOn(() => {
-    const times: string[] = [];
-    for (const n of channelNotifications.value) {
-      times.push(n.notBefore);
-      times.push(n.notAfter);
-    }
-    for (const n of scheduledNotifications.value) {
-      times.push(n.notBefore);
-      times.push(n.notAfter);
-    }
-    return times;
+    const allTimes = channelNotifications.value
+      .concat(scheduledNotifications.value)
+      .flatMap((n) => [n.notBefore, n.notAfter]);
+    return allTimes;
   });
 
   // 监听 currentTime 变化，重新评估 Toast 显示/隐藏
@@ -85,28 +100,14 @@ const init = once(() => {
     () => currentTime.value,
     () => {
       for (const n of scheduledNotifications.value) {
-        // 直接计算期望状态，然后幂等同步 UI
-        const shouldShow = !isFuture(n.notBefore) && !isPast(n.notAfter);
-        if (shouldShow && !shownToastIds.has(n.id)) {
-          showToastImmediate(n);
-        } else if (!shouldShow && shownToastIds.has(n.id)) {
+        if (isFuture(n.notBefore) || isPast(n.notAfter)) {
           hideToast(n.id);
+        } else {
+          showToastImmediate(n);
         }
       }
-      // 清理：移除 notAfter 已过且已隐藏的通知
-      scheduledNotifications.value = scheduledNotifications.value.filter(
-        (n) => isFuture(n.notBefore) || !isPast(n.notAfter),
-      );
     },
   );
-
-  const { data: channelsData, refresh: refreshChannels } = useQuery(NotificationChannelsDocument, {
-    fetchPolicy: "cache-and-network",
-  });
-
-  const channels = computed(() => {
-    return channelsData.value?.notificationChannels?.nodes ?? [];
-  });
 
   const unreadCount = computed(() => {
     return channels.value.reduce((sum, ch) => sum + ch.unreadCount, 0);
@@ -118,6 +119,7 @@ const init = once(() => {
 
   // 立即显示 Toast
   function showToastImmediate(n: Notification) {
+    if (shownToastIds.has(n.id)) return;
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title, n.body);
     const toastId =
@@ -211,11 +213,7 @@ const init = once(() => {
 
   async function refreshSelectedChannel() {
     if (!selectedChannel.value) return;
-    const { data } = await query(NotificationsDocument, {
-      variables: { filterBy: { channel: [selectedChannel.value] } },
-      fetchPolicy: "network-only",
-    });
-    channelNotifications.value = data?.notifications?.edges?.map((e) => e.node) ?? [];
+    await refreshNotifications();
   }
 
   async function selectChannel(channel: string) {

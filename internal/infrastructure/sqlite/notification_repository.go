@@ -89,8 +89,8 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 			priority TEXT NOT NULL,
 			read_at TEXT,
 			dismissed_at TEXT,
-			not_after TEXT,
-			not_before TEXT,
+			not_after TEXT NOT NULL,
+			not_before TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			details_url TEXT
@@ -165,20 +165,11 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 		updated_at = excluded.updated_at,
 		details_url = excluded.details_url
 	`
+	po := newNotificationPO(notif)
 	_, err = tx.ExecContext(ctx, query,
-		notif.ID().String(),
-		notif.Tag(),
-		notif.Channel(),
-		notif.Title(),
-		notif.Body(),
-		notif.Priority().String(),
-		formatTime(notif.ReadAt()),
-		formatTime(notif.DismissedAt()),
-		formatTime(notif.NotAfter()),
-		formatTime(notif.NotBefore()),
-		formatTime(notif.CreatedAt()),
-		formatTime(notif.UpdatedAt()),
-		notif.DetailsURL().String(),
+		po.ID, po.Tag, po.Channel, po.Title, po.Body, po.Priority,
+		po.ReadAt, po.DismissedAt, po.NotAfter, po.NotBefore,
+		po.CreatedAt, po.UpdatedAt, po.DetailsURL,
 	)
 	if err != nil {
 		return false, err
@@ -257,9 +248,9 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 		}
 		if filter.VisibleAt != nil {
 			t := filter.VisibleAt.Format(time.RFC3339Nano)
-			query += " AND (not_before IS NULL OR not_before = '' OR not_before <= ?)"
+			query += " AND not_before <= ?"
 			args = append(args, t)
-			query += " AND (not_after IS NULL OR not_after = '' OR not_after >= ?)"
+			query += " AND not_after >= ?"
 			args = append(args, t)
 		}
 
@@ -332,16 +323,7 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 
 // refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
 func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) error {
-	// 删除已空频道（该频道所有通知已被物理删除）
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM channel_summary WHERE channel = ? AND (
-			SELECT COUNT(*) FROM notifications WHERE channel = ?
-		) = 0
-	`, channel, channel); err != nil {
-		return fmt.Errorf("refreshChannelSummary delete empty channel %s: %w", channel, err)
-	}
-
-	// 仅在有通知时写入或更新摘要，避免插入空行
+	// 先写入或更新摘要
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
 		SELECT ?,
@@ -350,6 +332,15 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
 	`, channel, channel, channel, channel); err != nil {
 		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
+	}
+
+	// 再删除已空频道（该频道所有通知已被物理删除）
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM channel_summary WHERE channel = ? AND (
+			SELECT COUNT(*) FROM notifications WHERE channel = ?
+		) = 0
+	`, channel, channel); err != nil {
+		return fmt.Errorf("refreshChannelSummary delete empty channel %s: %w", channel, err)
 	}
 
 	return nil
@@ -371,7 +362,9 @@ func (r *NotificationRepository) runCleanup(ctx context.Context, reclaimGracePer
 	defer ticker.Stop()
 
 	for {
-			r.reclaim(reclaimGracePeriod, reclaimErrorHandler)
+		if err := r.reclaim(reclaimGracePeriod); err != nil && reclaimErrorHandler != nil {
+			reclaimErrorHandler(err)
+		}
 
 		select {
 		case <-ticker.C:
@@ -382,25 +375,25 @@ func (r *NotificationRepository) runCleanup(ctx context.Context, reclaimGracePer
 }
 
 // reclaim 清理 notAfter + reclaimGracePeriod 在当前时间之前的数据
-func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration, reclaimErrorHandler func(error)) {
+func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error {
 	cutoff := time.Now().Add(-reclaimGracePeriod).Format(time.RFC3339Nano)
 
 	// 删除过期通知以及对应的 channel_summary
-	_, err := r.db.Exec(`
+	if _, err := r.db.Exec(`
 		DELETE FROM channel_summary WHERE channel IN (
-			SELECT channel FROM notifications WHERE not_after != '' AND not_after <= ?
+			SELECT channel FROM notifications WHERE not_after <= ?
 		)
-	`, cutoff)
-	if err != nil && reclaimErrorHandler != nil {
-		reclaimErrorHandler(err)
+	`, cutoff); err != nil {
+		return fmt.Errorf("reclaim channel_summary: %w", err)
 	}
 
-	_, err = r.db.Exec(`
-		DELETE FROM notifications WHERE not_after != '' AND not_after <= ?
-	`, cutoff)
-	if err != nil && reclaimErrorHandler != nil {
-		reclaimErrorHandler(err)
+	if _, err := r.db.Exec(`
+		DELETE FROM notifications WHERE not_after <= ?
+	`, cutoff); err != nil {
+		return fmt.Errorf("reclaim notifications: %w", err)
 	}
+
+	return nil
 }
 
 // #endregion
@@ -411,66 +404,96 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-// parseNotificationRow 从已扫描的字符串字段构造领域对象
-func parseNotificationRow(
-	id, tag, channel, title, body, priorityStr string,
-	readAtStr, dismissedAtStr, notAfterStr, notBeforeStr string,
-	createdAtStr, updatedAtStr, detailsURLStr string,
-) (*notification.Notification, error) {
-	priority, err := enum.Parse[shared.NotificationPriorityMeta](priorityStr)
+// notificationPO 通知的持久化对象
+type notificationPO struct {
+	ID          string
+	Tag         string
+	Channel     string
+	Title       string
+	Body        string
+	Priority    string
+	ReadAt      string
+	DismissedAt string
+	NotAfter    string
+	NotBefore   string
+	CreatedAt   string
+	UpdatedAt   string
+	DetailsURL  string
+}
+
+func newNotificationPO(n *notification.Notification) *notificationPO {
+	return &notificationPO{
+		ID:          n.ID().String(),
+		Tag:         n.Tag(),
+		Channel:     n.Channel(),
+		Title:       n.Title(),
+		Body:        n.Body(),
+		Priority:    n.Priority().String(),
+		ReadAt:      formatTime(n.ReadAt()),
+		DismissedAt: formatTime(n.DismissedAt()),
+		NotAfter:    formatTime(n.NotAfter()),
+		NotBefore:   formatTime(n.NotBefore()),
+		CreatedAt:   formatTime(n.CreatedAt()),
+		UpdatedAt:   formatTime(n.UpdatedAt()),
+		DetailsURL:  n.DetailsURL().String(),
+	}
+}
+
+func (po *notificationPO) DomainObject() (*notification.Notification, error) {
+	priority, err := enum.Parse[shared.NotificationPriorityMeta](po.Priority)
 	if err != nil {
 		return nil, fmt.Errorf("parse notification priority: %w", err)
 	}
 
-	readAt, err := parseTime(readAtStr)
+	readAt, err := parseTime(po.ReadAt)
 	if err != nil {
 		return nil, err
 	}
-	dismissedAt, err := parseTime(dismissedAtStr)
+	dismissedAt, err := parseTime(po.DismissedAt)
 	if err != nil {
 		return nil, err
 	}
-	notAfter, err := parseTime(notAfterStr)
+	notAfter, err := parseTime(po.NotAfter)
 	if err != nil {
 		return nil, err
 	}
-	notBefore, err := parseTime(notBeforeStr)
+	notBefore, err := parseTime(po.NotBefore)
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := parseTime(createdAtStr)
+	createdAt, err := parseTime(po.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	updatedAt, err := parseTime(updatedAtStr)
+	updatedAt, err := parseTime(po.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
-	detailsURL, err := scalar.ParseURI(detailsURLStr)
+	detailsURL, err := scalar.ParseURI(po.DetailsURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse notification detailsURL: %w", err)
 	}
 
 	return notification.FromRepository(
-			scalar.ToID(id), tag, channel, title, body, priority,
-			readAt, dismissedAt, notAfter, notBefore,
-			createdAt, updatedAt, detailsURL,
-		)
+		scalar.ToID(po.ID), po.Tag, po.Channel, po.Title, po.Body, priority,
+		readAt, dismissedAt, notAfter, notBefore,
+		createdAt, updatedAt, detailsURL,
+	)
 }
 
 // scanNotificationRow 从 sql.Row 或 sql.Rows 扫描一行并构造领域对象
 func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
-	var id, tag, channel, title, body, priorityStr, readAtStr, dismissedAtStr, notAfterStr, notBeforeStr, createdAtStr, updatedAtStr, detailsURLStr string
+	var po notificationPO
 	err := s.Scan(
-		&id, &tag, &channel, &title, &body, &priorityStr, &readAtStr, &dismissedAtStr, &notAfterStr, &notBeforeStr, &createdAtStr, &updatedAtStr, &detailsURLStr,
+		&po.ID, &po.Tag, &po.Channel, &po.Title, &po.Body, &po.Priority,
+		&po.ReadAt, &po.DismissedAt, &po.NotAfter, &po.NotBefore,
+		&po.CreatedAt, &po.UpdatedAt, &po.DetailsURL,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return parseNotificationRow(id, tag, channel, title, body, priorityStr,
-		readAtStr, dismissedAtStr, notAfterStr, notBeforeStr,
-		createdAtStr, updatedAtStr, detailsURLStr)
+	return po.DomainObject()
 }
 
 func parseTime(s string) (time.Time, error) {
