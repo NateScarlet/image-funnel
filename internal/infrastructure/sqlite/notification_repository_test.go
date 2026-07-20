@@ -15,7 +15,7 @@ import (
 
 func TestNotificationRepository(t *testing.T) {
 	// 使用内存数据库，避免文件系统依赖
-	repo, cleanup, err := NewNotificationRepository(":memory:")
+	repo, cleanup, err := NewNotificationRepository(":memory:", notification.NewFilterBuilder())
 	require.NoError(t, err)
 	defer cleanup()
 

@@ -23,7 +23,8 @@ var _ notification.Repository = (*NotificationRepository)(nil)
 
 // NotificationRepository 基于 SQLite 的通知存储仓库
 type NotificationRepository struct {
-	db *sql.DB
+	db            *sql.DB
+	filterBuilder *notification.FilterBuilder
 }
 
 // notificationRepositoryOptions 配置选项，不可变
@@ -51,7 +52,7 @@ func WithReclaimErrorHandler(h func(error)) NotificationRepositoryOption {
 
 // NewNotificationRepository 实例化 SQLite 仓库
 // 返回仓库实例和清理函数作为第二个返回值
-func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
+func NewNotificationRepository(dbPath string, filterBuilder *notification.FilterBuilder, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite db: %w", err)
@@ -112,7 +113,8 @@ func NewNotificationRepository(dbPath string, opts ...NotificationRepositoryOpti
 	}
 
 	repo := &NotificationRepository{
-		db: db,
+		db:            db,
+		filterBuilder: filterBuilder,
 	}
 
 	// 应用选项（不可变模式：仅在初始化时读取一次）
@@ -219,7 +221,7 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 func (r *NotificationRepository) Find(ctx context.Context, options ...notification.FindOption) iter.Seq2[*notification.Notification, error] {
 	opts := notification.NewFindOptions(options...)
 	filter := opts.Filter()
-	filterFunc := notification.NewFilterBuilder().Build(filter)
+	filterFunc := r.filterBuilder.Build(filter)
 
 	return func(yield func(*notification.Notification, error) bool) {
 		query := `
@@ -235,10 +237,11 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			}
 		}
 		if filter.Read != nil {
+			// formatTime 对零值返回空字符串而非 NULL，所以 read_at 不会为 NULL
 			if *filter.Read {
-				query += " AND (read_at IS NOT NULL AND read_at != '')"
+				query += " AND read_at != ''"
 			} else {
-				query += " AND (read_at IS NULL OR read_at = '')"
+				query += " AND read_at = ''"
 			}
 		}
 		if len(filter.Priority) > 0 {
@@ -332,7 +335,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id)
 		SELECT ?,
-		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND (n.read_at IS NULL OR n.read_at = '')),
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ''),
 		       (SELECT n.id FROM notifications n WHERE n.channel = ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
 	`, channel, channel, channel, channel); err != nil {

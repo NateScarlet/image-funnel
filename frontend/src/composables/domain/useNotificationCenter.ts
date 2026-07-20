@@ -181,9 +181,7 @@ const init = once(() => {
   useSubscription(NotificationChangedDocument, {
     onNext(res) {
       void refreshChannels();
-      if (selectedChannel.value) {
-        void refreshNotifications();
-      }
+      void refreshNotifications();
 
       const eventPayload = res.data?.notificationChanged;
       if (!eventPayload) return;
@@ -223,8 +221,7 @@ const init = once(() => {
 
   async function selectChannel(channel: string) {
     selectedChannel.value = channel;
-    await refreshNotifications();
-    // 自动批量已读
+    // 自动批量已读（selectedChannel 变化已通过响应式 variables 触发 useQuery 重新查询）
     await markAllAsRead(channel);
   }
 
