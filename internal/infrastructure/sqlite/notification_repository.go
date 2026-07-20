@@ -234,6 +234,26 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 				args = append(args, ch)
 			}
 		}
+		if filter.Read != nil {
+			if *filter.Read {
+				query += " AND (read_at IS NOT NULL AND read_at != '')"
+			} else {
+				query += " AND (read_at IS NULL OR read_at = '')"
+			}
+		}
+		if len(filter.Priority) > 0 {
+			query += " AND priority IN (?" + strings.Repeat(",?", len(filter.Priority)-1) + ")"
+			for _, p := range filter.Priority {
+				args = append(args, p.String())
+			}
+		}
+		if filter.VisibleAt != nil {
+			t := filter.VisibleAt.Format(time.RFC3339Nano)
+			query += " AND not_before <= ?"
+			args = append(args, t)
+			query += " AND not_after >= ?"
+			args = append(args, t)
+		}
 
 		query += " ORDER BY created_at DESC, id DESC"
 
