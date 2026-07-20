@@ -517,12 +517,7 @@ func (po *notificationPO) DomainObject() (*notification.Notification, error) {
 		return nil, fmt.Errorf("parse notification detailsURL: %w", err)
 	}
 
-	msToTime := func(ms int64) time.Time {
-		if ms == 0 {
-			return time.Time{}
-		}
-		return time.UnixMilli(ms)
-	}
+	msToTime := func(ms int64) time.Time { return time.UnixMilli(ms) }
 
 	return notification.FromRepository(
 		scalar.ToID(po.ID), po.Tag, po.Channel, po.Title, po.Body, priority,
