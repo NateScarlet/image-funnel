@@ -7,6 +7,7 @@ import (
 	"iter"
 	"math/rand/v2"
 	"strings"
+	"sync"
 	"time"
 
 	"main/internal/apperror"
@@ -21,10 +22,14 @@ import (
 // 编译时接口检查
 var _ notification.Repository = (*NotificationRepository)(nil)
 
+// zeroTimeMs time.Time{} 对应的 unix 毫秒值，用于数据库中表示未设置的时间
+const zeroTimeMs int64 = -62135596800000
+
 // NotificationRepository 基于 SQLite 的通知存储仓库
 type NotificationRepository struct {
 	db            *sql.DB
 	filterBuilder *notification.FilterBuilder
+	refreshMu     sync.Mutex
 }
 
 // notificationRepositoryOptions 配置选项，不可变
@@ -88,8 +93,8 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 			title TEXT NOT NULL,
 			body TEXT NOT NULL,
 			priority TEXT NOT NULL,
-			read_at INTEGER NOT NULL DEFAULT 0,
-			dismissed_at INTEGER NOT NULL DEFAULT 0,
+			read_at INTEGER NOT NULL DEFAULT -62135596800000,
+			dismissed_at INTEGER NOT NULL DEFAULT -62135596800000,
 			not_after INTEGER NOT NULL,
 			not_before INTEGER NOT NULL,
 			created_at INTEGER NOT NULL,
@@ -238,12 +243,12 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			}
 		}
 		if filter.Read != nil {
-			// read_at 为 0 表示未读（零值代表未设置已读时间）
 			if *filter.Read {
-				query += " AND read_at != 0"
+				query += " AND read_at != ?"
 			} else {
-				query += " AND read_at = 0"
+				query += " AND read_at = ?"
 			}
+			args = append(args, zeroTimeMs)
 		}
 		if len(filter.Priority) > 0 {
 			query += " AND priority IN (?" + strings.Repeat(",?", len(filter.Priority)-1) + ")"
@@ -348,20 +353,22 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 }
 
 // refreshExpiredSummaries 刷新所有 expires_at 已过期的频道摘要
-// 单连接模式天然序列化，无需额外并发去重
+// 通过 mutex 去重：多个并发调用只有第一个执行实际刷新，后续调用等待第一个完成后直接返回
 func (r *NotificationRepository) refreshExpiredSummaries(ctx context.Context) error {
+	r.refreshMu.Lock()
+	defer r.refreshMu.Unlock()
 	now := time.Now().UnixMilli()
 
 	// 刷新过期的摘要行：pending 通知已变为 visible
 	if _, err := r.db.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
 		SELECT cs.channel,
-		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = cs.channel AND n.read_at = 0),
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = cs.channel AND n.read_at = ?),
 		       (SELECT n.id FROM notifications n WHERE n.channel = cs.channel AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1),
 		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = cs.channel AND n.not_before > ?), 0)
 		FROM channel_summary cs
 		WHERE cs.expires_at > 0 AND cs.expires_at <= ?
-	`, now, now, now); err != nil {
+	`, zeroTimeMs, now, now, now); err != nil {
 		return fmt.Errorf("refreshExpiredSummaries: %w", err)
 	}
 
@@ -385,13 +392,13 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 	if _, err := tx.ExecContext(ctx, `
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
 		SELECT ?,
-		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = 0),
+		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ?),
 		       -- latestNotification 语义：当前可见通知（not_before <= now）中创建时间最新的
 		       (SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1),
 		       -- expires_at：下一条待发送通知的 notBefore，没有则 0 永不过期
 		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before > ?), 0)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, channel, now, channel, now, channel); err != nil {
+	`, channel, channel, zeroTimeMs, channel, now, channel, now, channel); err != nil {
 		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
 	}
 
@@ -483,12 +490,7 @@ type notificationPO struct {
 }
 
 func newNotificationPO(n *notification.Notification) *notificationPO {
-	timeToMs := func(t time.Time) int64 {
-		if t.IsZero() {
-			return 0
-		}
-		return t.UnixMilli()
-	}
+	timeToMs := func(t time.Time) int64 { return t.UnixMilli() }
 	return &notificationPO{
 		ID:          n.ID().String(),
 		Tag:         n.Tag(),
