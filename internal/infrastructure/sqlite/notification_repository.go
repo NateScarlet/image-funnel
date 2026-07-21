@@ -108,8 +108,10 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 			channel TEXT PRIMARY KEY,
 			unread_count INTEGER NOT NULL DEFAULT 0,
 			latest_notification_id TEXT NOT NULL,
+			latest_not_before INTEGER NOT NULL DEFAULT 0,
 			expires_at INTEGER NOT NULL DEFAULT 0
 		);
+		CREATE INDEX IF NOT EXISTS idx_channel_summary_latest_not_before ON channel_summary(latest_not_before DESC);
 		PRAGMA user_version = 1;
 		`
 		if _, err := db.Exec(schema); err != nil {
@@ -315,7 +317,7 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 		rows, err := r.db.QueryContext(ctx, `
 			SELECT channel, unread_count, latest_notification_id, expires_at
 			FROM channel_summary
-			ORDER BY channel
+			ORDER BY latest_not_before DESC, channel ASC
 		`)
 		if err != nil {
 			yield(nil, err)
@@ -425,15 +427,17 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 
 	// 先写入或更新摘要
 	if _, err := tx.ExecContext(ctx, `
-		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, expires_at)
+		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
 		SELECT ?,
 		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ?),
 		       -- latestNotification 语义：当前可见通知（not_before <= now）中创建时间最新的
 		       COALESCE((SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1), ''),
+		       -- latest_not_before 语义：当前可见通知中最新的 not_before，若无可见通知则 0
+		       COALESCE((SELECT MAX(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before <= ?), 0),
 		       -- expires_at：下一条待发送通知的 notBefore，没有则 0 永不过期
 		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before > ?), 0)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, zeroTimeMs, channel, now, channel, now, channel); err != nil {
+	`, channel, channel, zeroTimeMs, channel, now, channel, now, channel, now, channel); err != nil {
 		return fmt.Errorf("refreshChannelSummaryTx upsert channel %s: %w", channel, err)
 	}
 

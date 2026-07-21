@@ -102,7 +102,7 @@ func TestNotificationRepository(t *testing.T) {
 		time.Time{},
 		time.Time{},
 		time.Now().Add(24*365*10*time.Hour),
-		time.Now().Add(-1*time.Hour),
+		time.Now().Add(-2*time.Hour),        // notBefore: 2 小时前
 		time.Now(),
 		time.Now(),
 		scalar.URI{},
@@ -128,7 +128,7 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Len(t, filtered, 1)
 	assert.Equal(t, "11111111-1111-1111-1111-111111111111", filtered[0].Tag())
 
-	// 5. 测试 Channels 聚合
+	// 5. 测试 Channels 聚合（按 latest_not_before DESC 排序）
 	var channels []*notification.ChannelStats
 	for ch, err := range repo.Channels(ctx) {
 		require.NoError(t, err)
@@ -136,14 +136,14 @@ func TestNotificationRepository(t *testing.T) {
 	}
 	assert.Len(t, channels, 2)
 
-	// 确认排序和统计
-	assert.Equal(t, "hook:another", channels[0].Channel)
+	// 确认排序和统计：hook:test (notBefore -1h) 应该在 hook:another (notBefore -2h) 之前
+	assert.Equal(t, "hook:test", channels[0].Channel)
 	assert.Equal(t, 1, channels[0].UnreadCount)
-	assert.Equal(t, "notif:22222222-2222-2222-2222-222222222222", channels[0].LatestNotificationID.String())
+	assert.Equal(t, "notif:11111111-1111-1111-1111-111111111111", channels[0].LatestNotificationID.String())
 
-	assert.Equal(t, "hook:test", channels[1].Channel)
+	assert.Equal(t, "hook:another", channels[1].Channel)
 	assert.Equal(t, 1, channels[1].UnreadCount)
-	assert.Equal(t, "notif:11111111-1111-1111-1111-111111111111", channels[1].LatestNotificationID.String())
+	assert.Equal(t, "notif:22222222-2222-2222-2222-222222222222", channels[1].LatestNotificationID.String())
 
 	// 6. 测试 Channels 被动增量刷新（pending 状态变为 visible 时）
 	n3, err := notification.FromRepository(
