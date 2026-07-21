@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
+import threading
 from dataclasses import dataclass
 from typing import List, Protocol, Optional
 import requests
@@ -97,6 +99,7 @@ class SQLiteDanbooruTagLoader:
         self.loader = loader
         self.db_ctx = db_ctx
         self.ttl = ttl
+        self._lock = threading.Lock()
 
     def load(self, tag: str) -> Optional[DanbooruTag]:
         if not tag.strip():
@@ -105,10 +108,11 @@ class SQLiteDanbooruTagLoader:
         now = int(time.time())
         # 1. 尝试从 SQLite 中读取精确匹配的缓存
         try:
-            row = self.db_ctx.connection.execute(
-                "SELECT cn_name, wiki, category, updated_at FROM danbooru_tag_cache WHERE tag = ?",
-                (tag,),
-            ).fetchone()
+            with self._lock:
+                row = self.db_ctx.connection.execute(
+                    "SELECT cn_name, wiki, category, updated_at FROM danbooru_tag_cache WHERE tag = ?",
+                    (tag,),
+                ).fetchone()
             if row:
                 cn_name, wiki, category, updated_at = row
                 if now - updated_at < self.ttl:
@@ -128,15 +132,16 @@ class SQLiteDanbooruTagLoader:
         """保存/更新单个 Tag 的详情至缓存。"""
         now = int(time.time())
         try:
-            with self.db_ctx.transaction() as conn:
-                conn.execute(
-                    "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
-                    (now - self.ttl,),
-                )
-                conn.execute(
-                    "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
-                    (item.tag, item.cn_name, item.wiki, item.category, now),
-                )
+            with self._lock:
+                with self.db_ctx.transaction() as conn:
+                    conn.execute(
+                        "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
+                        (now - self.ttl,),
+                    )
+                    conn.execute(
+                        "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                        (item.tag, item.cn_name, item.wiki, item.category, now),
+                    )
         except Exception as e:
             _LOGGER.warning("SQLite tag cache write error: %s", e)
 
@@ -243,21 +248,21 @@ class AkizukiDanbooruTagProvider:
             results = res_json.get("results", [])
             _LOGGER.debug("Danbooru related search returned %d items", len(results))
 
-            tags_list: List[DanbooruTag] = []
-            for item in results:
+            def _load_single_tag(item: dict) -> DanbooruTag:
                 tag = item["tag"]
                 loaded = self.loader.load(tag)
                 if loaded:
-                    tags_list.append(loaded)
-                    continue
-                tags_list.append(
-                    DanbooruTag(
-                        tag=tag,
-                        cn_name=item["cn_name"],
-                        wiki=item.get("wiki", ""),
-                        category=item["category"],
-                    )
+                    return loaded
+                return DanbooruTag(
+                    tag=tag,
+                    cn_name=item["cn_name"],
+                    wiki=item.get("wiki", ""),
+                    category=item["category"],
                 )
+
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                tags_list = list(executor.map(_load_single_tag, results))
+
             return tags_list
         except requests.RequestException as e:
             _LOGGER.error("Failed to fetch Danbooru related tags: %s", e, exc_info=True)

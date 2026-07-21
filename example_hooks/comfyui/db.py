@@ -69,7 +69,7 @@ class SQLiteContext:
         if self._conn is None:
             if self.db_path != ":memory:":
                 os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-            self._conn = sqlite3.connect(self.db_path)
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
             for sql in _MIGRATIONS:
                 self._conn.execute(sql)
             self._conn.commit()
