@@ -355,7 +355,7 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 			}
 
 			if expiresAt > 0 && expiresAt <= now {
-				// 收集在结果集开头的过期频道
+				// 收集在结果集开头的过期频道（无论此前是否有可见通知，到期必须刷新）
 				expiredChannels = append(expiredChannels, cs.Channel)
 				continue
 			}
@@ -368,7 +368,10 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 				return
 			}
 
-			// 无过期项场景：单循环直接直通输出当前及后续所有新鲜项
+			// 无过期项场景：单循环直通输出当前及后续新鲜项（过滤无可见通知频道）
+			if latestNotificationID == "" {
+				continue
+			}
 			cs.LatestNotificationID = scalar.ToID(latestNotificationID)
 			if !yield(&cs, nil) {
 				rows.Close()
@@ -413,7 +416,7 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 			}
 			continue
 		}
-		if rCS, ok := res.(*refreshedChannelSummary); ok && rCS != nil {
+		if rCS, ok := res.(*refreshedChannelSummary); ok && rCS != nil && rCS.cs != nil && rCS.cs.LatestNotificationID.String() != "" {
 			refreshed = append(refreshed, rCS)
 		}
 	}
@@ -446,7 +449,7 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 	}
 
 	// 2. 如果存在之前已经 scan 到的首个新鲜项，进行交替输出
-	if firstFreshCS != nil {
+	if firstFreshCS != nil && firstFreshLatestID != "" {
 		if !yieldRefreshedGe(firstFreshNotBefore, firstFreshCS.Channel) {
 			return
 		}
@@ -455,11 +458,11 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 			return
 		}
 
-		// 3. 继续流式查询后续所有新鲜项
+		// 3. 继续流式查询后续所有新鲜项（仅查询有可见通知的频道）
 		freshRows, err := r.db.QueryContext(ctx, `
 			SELECT channel, unread_count, latest_notification_id, latest_not_before
 			FROM channel_summary
-			WHERE expires_at = 0 OR expires_at > ?
+			WHERE (expires_at = 0 OR expires_at > ?) AND latest_notification_id != ''
 			ORDER BY latest_not_before DESC, channel ASC
 		`, now)
 		if err != nil {
@@ -486,7 +489,7 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 				skippedFirst = true
 				continue
 			}
-			// 步骤 1 刷新过期频道后，其在数据库里的 expires_at 已更新为 0，
+			// 步骤 1 刷新过期频道后，其在数据库里的 expires_at 已更新，
 			// 此处跳过已在 expiredChannels 中由步骤 1 刷新的频道，避免重复输出。
 			if slices.Contains(expiredChannels, itemCS.Channel) {
 				continue
@@ -556,33 +559,72 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 	return &refreshedChannelSummary{cs: &cs, latestNotBefore: latestNotBefore}, nil
 }
 
-// refreshChannelSummaryTx 在写事务内用标量子查询刷新频道物化视图
+// refreshChannelSummaryTx 在写事务内更新特定频道的物化视图摘要
+// 如果刷新后该频道既无可见通知又无未来等待发送/过期的事件，将其从 channel_summary 中彻底删除
 func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx *sql.Tx, channel string) error {
 	now := time.Now().UnixMilli()
 
-	// 先写入或更新摘要
-	if _, err := tx.ExecContext(ctx, `
-		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
-		SELECT ?,
-		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ?),
-		       -- latestNotification 语义：当前可见通知（not_before <= now）中 not_before 最新的
-		       COALESCE((SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.not_before DESC, n.id DESC LIMIT 1), ''),
-		       -- latest_not_before 语义：当前可见通知中最新的 not_before，若无可见通知则 0
-		       COALESCE((SELECT MAX(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before <= ?), 0),
-		       -- expires_at：下一条待发送通知的 notBefore，没有则 0 永不过期
-		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before > ?), 0)
-		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
-	`, channel, channel, zeroTimeMs, channel, now, channel, now, channel, now, channel); err != nil {
-		return fmt.Errorf("refreshChannelSummaryTx upsert channel %s: %w", channel, err)
+	// 1. 查找最新一条可见通知及未读计数（必须为可见通知：not_before <= now 且未过期）
+	var (
+		latestID        string
+		latestNotBefore int64
+		unreadCount     int
+	)
+	err := tx.QueryRowContext(ctx, `
+		SELECT
+			COALESCE(n.id, ''),
+			COALESCE(n.not_before, 0),
+			(
+				SELECT COUNT(*) FROM notifications u
+				WHERE u.channel = ?
+				  AND u.read_at = ?
+				  AND u.not_before <= ?
+				  AND (u.not_after = ? OR u.not_after > ?)
+			)
+		FROM notifications n
+		WHERE n.channel = ?
+		  AND n.not_before <= ?
+		  AND (n.not_after = ? OR n.not_after > ?)
+		ORDER BY n.not_before DESC, n.id DESC
+		LIMIT 1
+	`, channel, zeroTimeMs, now, zeroTimeMs, now, channel, now, zeroTimeMs, now).Scan(&latestID, &latestNotBefore, &unreadCount)
+
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("refreshChannelSummaryTx query visible notification %s: %w", channel, err)
 	}
 
-	// 再删除已空频道（该频道所有通知已被物理删除）
+	// 2. 计算 expires_at：下一条 pending 通知到达（not_before > now）或当前可见通知过期（not_after > now）的最早时间
+	var expiresAt int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT COALESCE(MIN(t), 0) FROM (
+			SELECT not_before AS t FROM notifications WHERE channel = ? AND not_before > ?
+			UNION ALL
+			SELECT not_after AS t FROM notifications WHERE channel = ? AND not_before <= ? AND not_after > ? AND not_after != ?
+		)
+	`, channel, now, channel, now, now, zeroTimeMs).Scan(&expiresAt)
+	if err != nil {
+		return fmt.Errorf("refreshChannelSummaryTx compute expires_at %s: %w", channel, err)
+	}
+
+	// 3. 如果既无可见通知，也无未来的定时/过期事件，清理该频道摘要
+	if latestID == "" && expiresAt == 0 {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM channel_summary WHERE channel = ?", channel); err != nil {
+			return fmt.Errorf("refreshChannelSummaryTx delete channel %s: %w", channel, err)
+		}
+		return nil
+	}
+
+	// 4. 写入/更新摘要
 	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM channel_summary WHERE channel = ? AND (
-			SELECT COUNT(*) FROM notifications WHERE channel = ?
-		) = 0
-	`, channel, channel); err != nil {
-		return fmt.Errorf("refreshChannelSummaryTx delete empty channel %s: %w", channel, err)
+		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(channel) DO UPDATE SET
+			unread_count = excluded.unread_count,
+			latest_notification_id = excluded.latest_notification_id,
+			latest_not_before = excluded.latest_not_before,
+			expires_at = excluded.expires_at
+	`, channel, unreadCount, latestID, latestNotBefore, expiresAt); err != nil {
+		return fmt.Errorf("refreshChannelSummaryTx upsert channel %s: %w", channel, err)
 	}
 
 	return nil

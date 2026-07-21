@@ -11,7 +11,7 @@ const mockNotification = (overrides: Record<string, unknown> = {}): AnyNotificat
   priority: "NORMAL",
   status: "ACTIVE",
   notBefore: new Date(0).toISOString(),
-  notAfter: new Date(0).toISOString(),
+  notAfter: "9999-12-31T23:59:59.999Z",
   readAt: null,
   dismissedAt: null,
   detailURL: null,

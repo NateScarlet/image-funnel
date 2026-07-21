@@ -165,7 +165,7 @@ func TestNotificationRepository(t *testing.T) {
 	_, err = repo.Save(ctx, n3)
 	require.NoError(t, err)
 
-	// Save 时未到 notBefore，LatestNotificationID 为空
+	// Save 时未到 notBefore，该频道尚无可见通知，符合 GraphQL NonNull 规范不应该返回
 	channels = nil
 	for ch, err := range repo.Channels(ctx) {
 		require.NoError(t, err)
@@ -173,10 +173,9 @@ func TestNotificationRepository(t *testing.T) {
 			channels = append(channels, ch)
 		}
 	}
-	require.Len(t, channels, 1)
-	assert.Equal(t, "", channels[0].LatestNotificationID.String())
+	assert.Len(t, channels, 0)
 
-	// 等待 15ms 使 notBefore 过期，再次调用 Channels 触发被动增量刷新
+	// 等待 15ms 使 notBefore 到达，再次调用 Channels 触发被动增量刷新
 	time.Sleep(15 * time.Millisecond)
 
 	channels = nil
