@@ -582,8 +582,8 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 	// 1. 若频道既无可见通知又无 pending 通知，物理清理其在 channel_summary 中的摘要
 	// EXPLAIN QUERY PLAN:
 	// SEARCH channel_summary USING INDEX sqlite_autoindex_channel_summary_1 (channel=?)
-	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
-	// SCALAR SUBQUERY 2: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
+	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=? AND not_before<?)
+	// SCALAR SUBQUERY 2: SEARCH notifications USING COVERING INDEX idx_notifications_channel_not_before (channel=? AND not_before>?)
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM channel_summary
 		WHERE channel = :channel
@@ -596,13 +596,16 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 	// 2. 纯 SQL 计算并写入/更新摘要（单次 CTE 子查询获取最新通知 id 与 not_before，使用命名参数消除重复）
 	// EXPLAIN QUERY PLAN:
 	// SCAN CONSTANT ROW
-	// MATERIALIZE visible: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
-	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
-	// SCALAR SUBQUERY 2: SCAN visible
+	// MATERIALIZE visible: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=? AND not_before<?)
+	// SCAN visible
+	// SCALAR SUBQUERY 1: SEARCH notifications USING COVERING INDEX idx_notifications_channel_not_before (channel=? AND not_before>?)
+	// SCALAR SUBQUERY 2: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=? AND not_before<?)
 	// SCALAR SUBQUERY 3: SCAN visible
-	// SCALAR SUBQUERY 4: COMPOUND QUERY (MIN(t) UNION ALL)
-	//   LEFT-MOST SUBQUERY: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
-	//   UNION ALL: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
+	// SCALAR SUBQUERY 4: SCAN visible
+	// SCALAR SUBQUERY 7: CO-ROUTINE (subquery-6)
+	//   COMPOUND QUERY
+	//   LEFT-MOST SUBQUERY: SEARCH notifications USING COVERING INDEX idx_notifications_channel_not_before (channel=? AND not_before>?)
+	//   UNION ALL: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=? AND not_before<?)
 	if _, err := tx.ExecContext(ctx, `
 		WITH visible AS (
 			SELECT id, not_before
