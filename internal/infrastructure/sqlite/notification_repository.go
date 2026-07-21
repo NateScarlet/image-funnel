@@ -564,46 +564,83 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx *sql.Tx, channel string) error {
 	now := time.Now().UnixMilli()
 
-	// 1. 查找最新一条可见通知及未读计数（必须为可见通知：not_before <= now 且未过期）
-	var (
-		latestID        string
-		latestNotBefore int64
-		unreadCount     int
-	)
+	// 1. 查询待发送/未生效通知（not_before > now）的最早生效时间
+	var nextPendingNotBefore int64
 	err := tx.QueryRowContext(ctx, `
-		SELECT
-			COALESCE(n.id, ''),
-			COALESCE(n.not_before, 0),
-			(
-				SELECT COUNT(*) FROM notifications u
-				WHERE u.channel = ?
-				  AND u.read_at = ?
-				  AND u.not_before <= ?
-				  AND (u.not_after = ? OR u.not_after > ?)
-			)
-		FROM notifications n
-		WHERE n.channel = ?
-		  AND n.not_before <= ?
-		  AND (n.not_after = ? OR n.not_after > ?)
-		ORDER BY n.not_before DESC, n.id DESC
-		LIMIT 1
-	`, channel, zeroTimeMs, now, zeroTimeMs, now, channel, now, zeroTimeMs, now).Scan(&latestID, &latestNotBefore, &unreadCount)
-
-	if err != nil && err != sql.ErrNoRows {
-		return fmt.Errorf("refreshChannelSummaryTx query visible notification %s: %w", channel, err)
+		SELECT COALESCE(MIN(not_before), 0)
+		FROM notifications
+		WHERE channel = ? AND not_before > ?
+	`, channel, now).Scan(&nextPendingNotBefore)
+	if err != nil {
+		return fmt.Errorf("refreshChannelSummaryTx query next pending %s: %w", channel, err)
 	}
 
-	// 2. 计算 expires_at：下一条 pending 通知到达（not_before > now）或当前可见通知过期（not_after > now）的最早时间
-	var expiresAt int64
-	err = tx.QueryRowContext(ctx, `
-		SELECT COALESCE(MIN(t), 0) FROM (
-			SELECT not_before AS t FROM notifications WHERE channel = ? AND not_before > ?
-			UNION ALL
-			SELECT not_after AS t FROM notifications WHERE channel = ? AND not_before <= ? AND not_after > ? AND not_after != ?
-		)
-	`, channel, now, channel, now, now, zeroTimeMs).Scan(&expiresAt)
+	// 2. 查询当前可见通知（not_before <= now 且未过期）的摘要数据：
+	//    - 最新一条通知 (id, not_before)
+	//    - 未读数量 unread_count
+	//    - 最早过期时间 min_not_after
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, not_before, read_at, not_after
+		FROM notifications
+		WHERE channel = ?
+		  AND not_before <= ?
+		  AND (not_after = ? OR not_after >= ?)
+		ORDER BY not_before DESC, id DESC
+	`, channel, now, zeroTimeMs, now)
 	if err != nil {
-		return fmt.Errorf("refreshChannelSummaryTx compute expires_at %s: %w", channel, err)
+		return fmt.Errorf("refreshChannelSummaryTx query visible notifications %s: %w", channel, err)
+	}
+	defer rows.Close()
+
+	var (
+		latestID         string
+		latestNotBefore  int64
+		unreadCount      int
+		earliestNotAfter int64
+	)
+
+	for rows.Next() {
+		var (
+			id        string
+			notBefore int64
+			readAt    int64
+			notAfter  int64
+		)
+		if err := rows.Scan(&id, &notBefore, &readAt, &notAfter); err != nil {
+			return fmt.Errorf("refreshChannelSummaryTx scan visible %s: %w", channel, err)
+		}
+
+		if latestID == "" {
+			latestID = id
+			latestNotBefore = notBefore
+		}
+
+		if readAt == zeroTimeMs {
+			unreadCount++
+		}
+
+		if notAfter != zeroTimeMs && notAfter >= now {
+			if earliestNotAfter == 0 || notAfter < earliestNotAfter {
+				earliestNotAfter = notAfter
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("refreshChannelSummaryTx rows err %s: %w", channel, err)
+	}
+
+	// 计算 expires_at：待发送最早生效时间与可见通知最早过期时间中的较小者
+	var expiresAt int64
+	if nextPendingNotBefore > 0 && earliestNotAfter > 0 {
+		if nextPendingNotBefore < earliestNotAfter {
+			expiresAt = nextPendingNotBefore
+		} else {
+			expiresAt = earliestNotAfter
+		}
+	} else if nextPendingNotBefore > 0 {
+		expiresAt = nextPendingNotBefore
+	} else if earliestNotAfter > 0 {
+		expiresAt = earliestNotAfter
 	}
 
 	// 3. 如果既无可见通知，也无未来的定时/过期事件，清理该频道摘要
@@ -663,21 +700,58 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 	r.writeMu.Lock()
 	defer r.writeMu.Unlock()
 
+	ctx := context.Background()
 	cutoff := time.Now().Add(-reclaimGracePeriod).UnixMilli()
 
-	// 删除过期通知以及对应的 channel_summary
-	if _, err := r.db.Exec(`
-		DELETE FROM channel_summary WHERE channel IN (
-			SELECT channel FROM notifications WHERE not_after <= ?
-		)
-	`, cutoff); err != nil {
-		return fmt.Errorf("reclaim channel_summary: %w", err)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reclaim BeginTx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. 查找所有包含本次要清理过期的通知的频道
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT channel FROM notifications
+		WHERE not_after <= ? AND not_after != ?
+	`, cutoff, zeroTimeMs)
+	if err != nil {
+		return fmt.Errorf("reclaim find affected channels: %w", err)
+	}
+	var affectedChannels []string
+	for rows.Next() {
+		var ch string
+		if err := rows.Scan(&ch); err != nil {
+			rows.Close()
+			return fmt.Errorf("reclaim scan channel: %w", err)
+		}
+		affectedChannels = append(affectedChannels, ch)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("reclaim rows err: %w", err)
+	}
+	rows.Close()
+
+	if len(affectedChannels) == 0 {
+		return nil
 	}
 
-	if _, err := r.db.Exec(`
-		DELETE FROM notifications WHERE not_after <= ?
-	`, cutoff); err != nil {
-		return fmt.Errorf("reclaim notifications: %w", err)
+	// 2. 删除超期通知
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM notifications WHERE not_after <= ? AND not_after != ?
+	`, cutoff, zeroTimeMs); err != nil {
+		return fmt.Errorf("reclaim delete notifications: %w", err)
+	}
+
+	// 3. 为受影响的频道刷新正确的摘要（若所有通知均已被删，refreshChannelSummaryTx 会自动删除对应的 channel_summary 记录）
+	for _, ch := range affectedChannels {
+		if err := r.refreshChannelSummaryTx(ctx, tx, ch); err != nil {
+			return fmt.Errorf("reclaim refreshChannelSummaryTx %s: %w", ch, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reclaim Commit: %w", err)
 	}
 
 	return nil
