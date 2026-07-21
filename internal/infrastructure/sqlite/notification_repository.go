@@ -184,7 +184,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	}
 
 	// 刷新该频道物化视图（写时维护，避免 Channels 的 N+1）
-	if err := r.refreshChannelSummary(ctx, tx, notif.Channel()); err != nil {
+	if err := r.refreshChannelSummaryTx(ctx, tx, notif.Channel()); err != nil {
 		return false, err
 	}
 
@@ -355,7 +355,7 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 			// 被动刷新：若该频道 expires_at 已到/已过期，通过 singleflight 精准触发该频道的增量刷新
 			if item.expiresAt > 0 && item.expiresAt <= now {
 				res, err, _ := r.sf.Do(cs.Channel, func() (any, error) {
-					return r.refreshChannel(ctx, cs.Channel)
+					return r.refreshChannelSummary(ctx, cs.Channel)
 				})
 				if err != nil {
 					if !yield(nil, err) {
@@ -378,21 +378,21 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 	}
 }
 
-// refreshChannel 在独立的单键 singleflight 中增量刷新并返回特定频道的摘要信息
+// refreshChannelSummary 在独立的单键 singleflight 中增量刷新并返回特定频道的摘要信息
 // 如果刷新后该频道没有通知（已删除），返回 (nil, nil)
-func (r *NotificationRepository) refreshChannel(ctx context.Context, channel string) (*notification.ChannelStats, error) {
+func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, channel string) (*notification.ChannelStats, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("refreshChannel BeginTx %s: %w", channel, err)
+		return nil, fmt.Errorf("refreshChannelSummary BeginTx %s: %w", channel, err)
 	}
 	defer tx.Rollback()
 
-	if err := r.refreshChannelSummary(ctx, tx, channel); err != nil {
+	if err := r.refreshChannelSummaryTx(ctx, tx, channel); err != nil {
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("refreshChannel Commit %s: %w", channel, err)
+		return nil, fmt.Errorf("refreshChannelSummary Commit %s: %w", channel, err)
 	}
 
 	// 读取更新后的频道摘要
@@ -416,8 +416,8 @@ func (r *NotificationRepository) refreshChannel(ctx context.Context, channel str
 	return &cs, nil
 }
 
-// refreshChannelSummary 在写事务内用标量子查询刷新频道物化视图
-func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *sql.Tx, channel string) error {
+// refreshChannelSummaryTx 在写事务内用标量子查询刷新频道物化视图
+func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx *sql.Tx, channel string) error {
 	now := time.Now().UnixMilli()
 
 	// 先写入或更新摘要
@@ -431,7 +431,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 		       COALESCE((SELECT MIN(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before > ?), 0)
 		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ?) > 0
 	`, channel, channel, zeroTimeMs, channel, now, channel, now, channel); err != nil {
-		return fmt.Errorf("refreshChannelSummary upsert channel %s: %w", channel, err)
+		return fmt.Errorf("refreshChannelSummaryTx upsert channel %s: %w", channel, err)
 	}
 
 	// 再删除已空频道（该频道所有通知已被物理删除）
@@ -440,7 +440,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, tx *
 			SELECT COUNT(*) FROM notifications WHERE channel = ?
 		) = 0
 	`, channel, channel); err != nil {
-		return fmt.Errorf("refreshChannelSummary delete empty channel %s: %w", channel, err)
+		return fmt.Errorf("refreshChannelSummaryTx delete empty channel %s: %w", channel, err)
 	}
 
 	return nil
