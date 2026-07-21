@@ -14,8 +14,8 @@ import (
 )
 
 func TestNotificationRepository(t *testing.T) {
-	// 使用内存数据库，避免文件系统依赖
-	repo, cleanup, err := NewNotificationRepository(":memory:", notification.NewFilterBuilder())
+	// 使用共享内存数据库 DSN
+	repo, cleanup, err := NewNotificationRepository("file::memory:?mode=memory&cache=shared", notification.NewFilterBuilder())
 	require.NoError(t, err)
 	defer cleanup()
 

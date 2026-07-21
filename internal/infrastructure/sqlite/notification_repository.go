@@ -58,13 +58,10 @@ func WithReclaimErrorHandler(h func(error)) NotificationRepositoryOption {
 	}
 }
 
-// NewNotificationRepository 实例化 SQLite 仓库
+// NewNotificationRepository 实例化 SQLite 仓库，直接传入 dsn 字符串
 // 返回仓库实例和清理函数作为第二个返回值
-func NewNotificationRepository(dbPath string, filterBuilder *notification.FilterBuilder, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
-	if dbPath == ":memory:" {
-		dbPath = "file::memory:?mode=memory&cache=shared"
-	}
-	db, err := sql.Open("sqlite", dbPath)
+func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBuilder, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite db: %w", err)
 	}
@@ -223,8 +220,8 @@ func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*not
 		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
 		FROM notifications WHERE tag = ?
 		`, tag))
-		if err == sql.ErrNoRows {
-			return nil, apperror.NewErrDocumentNotFound(scalar.ToID(tag))
+	if err == sql.ErrNoRows {
+		return nil, apperror.New("NOT_FOUND", fmt.Sprintf("notification with tag %q not found", tag), fmt.Sprintf("未找到标签为 %q 的通知", tag))
 	} else if err != nil {
 		return nil, err
 	}
@@ -322,7 +319,7 @@ type refreshedChannelSummary struct {
 
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
 // 通过 SQL 排序优先返回过期项（ORDER BY CASE WHEN expires_at > 0 AND expires_at <= ? THEN 0 ELSE 1 END ASC）：
-// 1. 无过期项时（绝大多数正常情况）：零内存分配，直接在当前 rows 上 100% 纯流式输出；
+// 1. 无过期项时（绝大多数正常情况）：零内存分配，单循环纯流式直通输出；
 // 2. 有过期项时：扫描并收集过期频道后关闭 rows 释放锁，通过 singleflight 增量刷新并与新鲜项交替归并输出。
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
@@ -360,48 +357,21 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 			if expiresAt > 0 && expiresAt <= now {
 				// 收集在结果集开头的过期频道
 				expiredChannels = append(expiredChannels, cs.Channel)
-			} else {
-				// 遇到第一个新鲜项！
-				// 如果 expiredChannels 为空（绝大多数正常情况），说明整张表没有过期项！
-				// 直接在当前 rows 游标上 100% 纯流式输出，零内存切片分配
-				if len(expiredChannels) == 0 {
-					cs.LatestNotificationID = scalar.ToID(latestNotificationID)
-					if !yield(&cs, nil) {
-						rows.Close()
-						return
-					}
-					// 剩下的所有新鲜项全都是纯流式直通输出！
-					for rows.Next() {
-						var (
-							itemCS               notification.ChannelStats
-							latestNotificationID string
-							latestNotBefore      int64
-							expiresAt            int64
-						)
-						err := rows.Scan(&itemCS.Channel, &itemCS.UnreadCount, &latestNotificationID, &latestNotBefore, &expiresAt)
-						if err != nil {
-							rows.Close()
-							yield(nil, err)
-							return
-						}
-						itemCS.LatestNotificationID = scalar.ToID(latestNotificationID)
-						if !yield(&itemCS, nil) {
-							rows.Close()
-							return
-						}
-					}
-					if err := rows.Err(); err != nil {
-						rows.Close()
-						yield(nil, err)
-					} else {
-						rows.Close()
-					}
-					return
-				}
+				continue
+			}
 
+			// 遇到第一个新鲜项！
+			if len(expiredChannels) > 0 {
 				// 存在过期项：先关闭当前 rows 释放锁，再执行单键增量刷新与归并输出
 				rows.Close()
 				r.yieldChannelsWithExpired(ctx, yield, expiredChannels, &cs, latestNotificationID, latestNotBefore, now)
+				return
+			}
+
+			// 无过期项场景：单循环直接直通输出当前及后续所有新鲜项
+			cs.LatestNotificationID = scalar.ToID(latestNotificationID)
+			if !yield(&cs, nil) {
+				rows.Close()
 				return
 			}
 		}
@@ -430,11 +400,6 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 	now int64,
 ) {
 	refreshCtx := context.WithoutCancel(ctx)
-
-	expiredSet := make(map[string]bool, len(expiredChannels))
-	for _, ch := range expiredChannels {
-		expiredSet[ch] = true
-	}
 
 	// 1. 刷新所有过期频道并收集结果
 	var refreshed []*refreshedChannelSummary
@@ -521,8 +486,9 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 				skippedFirst = true
 				continue
 			}
-			// 避免重复输出已经刷新的过期频道
-			if expiredSet[itemCS.Channel] {
+			// 步骤 1 刷新过期频道后，其在数据库里的 expires_at 已更新为 0，
+			// 此处跳过已在 expiredChannels 中由步骤 1 刷新的频道，避免重复输出。
+			if slices.Contains(expiredChannels, itemCS.Channel) {
 				continue
 			}
 
@@ -599,8 +565,8 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
 		SELECT ?,
 		       (SELECT COUNT(*) FROM notifications n WHERE n.channel = ? AND n.read_at = ?),
-		       -- latestNotification 语义：当前可见通知（not_before <= now）中创建时间最新的
-		       COALESCE((SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.created_at DESC, n.id DESC LIMIT 1), ''),
+		       -- latestNotification 语义：当前可见通知（not_before <= now）中 not_before 最新的
+		       COALESCE((SELECT n.id FROM notifications n WHERE n.channel = ? AND n.not_before <= ? ORDER BY n.not_before DESC, n.id DESC LIMIT 1), ''),
 		       -- latest_not_before 语义：当前可见通知中最新的 not_before，若无可见通知则 0
 		       COALESCE((SELECT MAX(n.not_before) FROM notifications n WHERE n.channel = ? AND n.not_before <= ?), 0),
 		       -- expires_at：下一条待发送通知的 notBefore，没有则 0 永不过期
