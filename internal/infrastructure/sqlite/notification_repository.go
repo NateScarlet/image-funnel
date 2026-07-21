@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"iter"
 	"math/rand/v2"
-	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"main/internal/apperror"
@@ -31,6 +31,7 @@ type NotificationRepository struct {
 	db            *sql.DB
 	filterBuilder *notification.FilterBuilder
 	sf            singleflight.Group
+	writeMu       sync.Mutex
 }
 
 // notificationRepositoryOptions 配置选项，不可变
@@ -59,19 +60,19 @@ func WithReclaimErrorHandler(h func(error)) NotificationRepositoryOption {
 // NewNotificationRepository 实例化 SQLite 仓库
 // 返回仓库实例和清理函数作为第二个返回值
 func NewNotificationRepository(dbPath string, filterBuilder *notification.FilterBuilder, opts ...NotificationRepositoryOption) (*NotificationRepository, func() error, error) {
+	if dbPath == ":memory:" {
+		dbPath = "file::memory:?mode=memory&cache=shared"
+	}
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite db: %w", err)
 	}
 
-	// 开启 WAL 模式以提升并发度
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+	// 开启 WAL 模式与 busy_timeout 以提升并发读写性能
+	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;"); err != nil {
 		db.Close()
 		return nil, nil, fmt.Errorf("enable WAL mode: %w", err)
 	}
-
-	// 单连接确保写操作天然序列化，避免 SQLITE_BUSY
-	db.SetMaxOpenConns(1)
 
 	// user_version 检查：当前版本为 1，拒绝更高版本
 	var userVersion int
@@ -148,6 +149,9 @@ func NewNotificationRepository(dbPath string, filterBuilder *notification.Filter
 
 // Save 保存通知（新建或更新），返回是否为新建通知
 func (r *NotificationRepository) Save(ctx context.Context, notif *notification.Notification) (didCreate bool, err error) {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -310,95 +314,41 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 	}
 }
 
-type refreshedChannelSummary struct {
-	cs              *notification.ChannelStats
-	latestNotBefore int64
-}
-
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
-// 优先按 expires_at 是否过期排序（过期项在前，新鲜项在后）：
-// 无过期项时（绝大多数正常情况）零内存分配纯流式返回；有过期项时在游标释放后增量刷新并归并交替输出。
+// 为避免在 rows 遍历期间执行写操作导致 modernc.org/sqlite 驱动内部互斥锁死锁，
+// 先读取全量行并关闭 rows，随后通过 singleflight 精准被动增量刷新过期的频道。
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
-		now := time.Now().UnixMilli()
-
 		rows, err := r.db.QueryContext(ctx, `
-			SELECT channel, unread_count, latest_notification_id, latest_not_before, expires_at
+			SELECT channel, unread_count, latest_notification_id, expires_at
 			FROM channel_summary
-			ORDER BY
-				CASE WHEN expires_at > 0 AND expires_at <= ? THEN 0 ELSE 1 END ASC,
-				latest_not_before DESC,
-				channel ASC
-		`, now)
+			ORDER BY latest_not_before DESC, channel ASC
+		`)
 		if err != nil {
 			yield(nil, err)
 			return
 		}
 
-		var expiredChannels []string
+		type summaryItem struct {
+			cs        notification.ChannelStats
+			expiresAt int64
+		}
+		var items []summaryItem
 
 		for rows.Next() {
 			var (
-				cs                   notification.ChannelStats
+				item                 summaryItem
 				latestNotificationID string
-				latestNotBefore      int64
-				expiresAt            int64
 			)
-			err := rows.Scan(&cs.Channel, &cs.UnreadCount, &latestNotificationID, &latestNotBefore, &expiresAt)
+			err := rows.Scan(&item.cs.Channel, &item.cs.UnreadCount, &latestNotificationID, &item.expiresAt)
 			if err != nil {
 				rows.Close()
 				yield(nil, err)
 				return
 			}
-
-			if expiresAt > 0 && expiresAt <= now {
-				// 收集在结果集开头的过期频道
-				expiredChannels = append(expiredChannels, cs.Channel)
-			} else {
-				// 遇到第一个新鲜项！
-				// 如果 expiredChannels 为空（绝大多数正常情况），直接在当前 rows 上纯流式输出
-				if len(expiredChannels) == 0 {
-					cs.LatestNotificationID = scalar.ToID(latestNotificationID)
-					if !yield(&cs, nil) {
-						rows.Close()
-						return
-					}
-					// 剩下的新鲜项全都是纯流式输出
-					for rows.Next() {
-						var (
-							itemCS               notification.ChannelStats
-							latestNotificationID string
-							latestNotBefore      int64
-							expiresAt            int64
-						)
-						err := rows.Scan(&itemCS.Channel, &itemCS.UnreadCount, &latestNotificationID, &latestNotBefore, &expiresAt)
-						if err != nil {
-							rows.Close()
-							yield(nil, err)
-							return
-						}
-						itemCS.LatestNotificationID = scalar.ToID(latestNotificationID)
-						if !yield(&itemCS, nil) {
-							rows.Close()
-							return
-						}
-					}
-					if err := rows.Err(); err != nil {
-						rows.Close()
-						yield(nil, err)
-					} else {
-						rows.Close()
-					}
-					return
-				}
-
-				// 存在过期项：先关闭当前 rows 释放读锁，才能执行单键增量刷新与归并输出
-				rows.Close()
-				r.yieldChannelsWithExpired(ctx, yield, expiredChannels, &cs, latestNotificationID, latestNotBefore, now)
-				return
-			}
+			item.cs.LatestNotificationID = scalar.ToID(latestNotificationID)
+			items = append(items, item)
 		}
-
 		if err := rows.Err(); err != nil {
 			rows.Close()
 			yield(nil, err)
@@ -406,144 +356,44 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 		}
 		rows.Close()
 
-		// 表中全都是过期项
-		if len(expiredChannels) > 0 {
-			r.yieldChannelsWithExpired(ctx, yield, expiredChannels, nil, "", 0, now)
-		}
-	}
-}
+		now := time.Now().UnixMilli()
+		refreshCtx := context.WithoutCancel(ctx)
 
-func (r *NotificationRepository) yieldChannelsWithExpired(
-	ctx context.Context,
-	yield func(*notification.ChannelStats, error) bool,
-	expiredChannels []string,
-	firstFreshCS *notification.ChannelStats,
-	firstFreshLatestID string,
-	firstFreshNotBefore int64,
-	now int64,
-) {
-	refreshCtx := context.WithoutCancel(ctx)
-
-	expiredSet := make(map[string]bool, len(expiredChannels))
-	for _, ch := range expiredChannels {
-		expiredSet[ch] = true
-	}
-
-	// 1. 刷新所有过期频道并收集结果
-	var refreshed []*refreshedChannelSummary
-	for _, ch := range expiredChannels {
-		res, err, _ := r.sf.Do(ch, func() (any, error) {
-			return r.refreshChannelSummary(refreshCtx, ch)
-		})
-		if err != nil {
-			if !yield(nil, err) {
-				return
-			}
-			continue
-		}
-		if rCS, ok := res.(*refreshedChannelSummary); ok && rCS != nil {
-			refreshed = append(refreshed, rCS)
-		}
-	}
-
-	// 按 latestNotBefore DESC, channel ASC 排序已刷新的过期项
-	slices.SortFunc(refreshed, func(a, b *refreshedChannelSummary) int {
-		if a.latestNotBefore != b.latestNotBefore {
-			if a.latestNotBefore > b.latestNotBefore {
-				return -1
-			}
-			return 1
-		}
-		return strings.Compare(a.cs.Channel, b.cs.Channel)
-	})
-
-	// 辅助闭包：输出所有 latestNotBefore >= targetNotBefore 的已刷新过期项
-	yieldRefreshedGe := func(targetNotBefore int64, targetChannel string) bool {
-		for len(refreshed) > 0 {
-			item := refreshed[0]
-			if item.latestNotBefore > targetNotBefore || (item.latestNotBefore == targetNotBefore && item.cs.Channel < targetChannel) {
-				refreshed = refreshed[1:]
-				if !yield(item.cs, nil) {
-					return false
+		for _, item := range items {
+			cs := item.cs
+			// 被动刷新：若该频道 expires_at 已到/已过期，通过 singleflight 精准触发该频道的增量刷新
+			// 使用 context.WithoutCancel 避免单个调用者取消 context 导致共享给其他调用者的 singleflight 任务失败
+			if item.expiresAt > 0 && item.expiresAt <= now {
+				res, err, _ := r.sf.Do(cs.Channel, func() (any, error) {
+					return r.refreshChannelSummary(refreshCtx, cs.Channel)
+				})
+				if err != nil {
+					if !yield(nil, err) {
+						return
+					}
+					continue
 				}
-			} else {
-				break
-			}
-		}
-		return true
-	}
-
-	// 2. 如果存在之前已经 scan 到的首个新鲜项，进行交替输出
-	if firstFreshCS != nil {
-		if !yieldRefreshedGe(firstFreshNotBefore, firstFreshCS.Channel) {
-			return
-		}
-		firstFreshCS.LatestNotificationID = scalar.ToID(firstFreshLatestID)
-		if !yield(firstFreshCS, nil) {
-			return
-		}
-
-		// 3. 继续流式查询后续所有新鲜项
-		freshRows, err := r.db.QueryContext(ctx, `
-			SELECT channel, unread_count, latest_notification_id, latest_not_before
-			FROM channel_summary
-			WHERE expires_at = 0 OR expires_at > ?
-			ORDER BY latest_not_before DESC, channel ASC
-		`, now)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-		defer freshRows.Close()
-
-		skippedFirst := false
-		for freshRows.Next() {
-			var (
-				itemCS               notification.ChannelStats
-				latestNotificationID string
-				latestNotBefore      int64
-			)
-			err := freshRows.Scan(&itemCS.Channel, &itemCS.UnreadCount, &latestNotificationID, &latestNotBefore)
-			if err != nil {
-				if !yield(nil, err) {
-					return
+				updatedStats, ok := res.(*notification.ChannelStats)
+				if !ok || updatedStats == nil {
+					// 频道无有效通知已被删除
+					continue
 				}
-				continue
-			}
-			if !skippedFirst && itemCS.Channel == firstFreshCS.Channel {
-				skippedFirst = true
-				continue
-			}
-			// 避免重复输出已经刷新的过期频道
-			if expiredSet[itemCS.Channel] {
-				continue
+				cs = *updatedStats
 			}
 
-			if !yieldRefreshedGe(latestNotBefore, itemCS.Channel) {
+			if !yield(&cs, nil) {
 				return
 			}
-			itemCS.LatestNotificationID = scalar.ToID(latestNotificationID)
-			if !yield(&itemCS, nil) {
-				return
-			}
-		}
-		if err := freshRows.Err(); err != nil {
-			yield(nil, err)
-			return
-		}
-	}
-
-	// 4. 发送剩余所有已刷新的过期项
-	for _, item := range refreshed {
-		if !yield(item.cs, nil) {
-			return
 		}
 	}
 }
 
 // refreshChannelSummary 在独立的单键 singleflight 中增量刷新并返回特定频道的摘要信息
 // 如果刷新后该频道没有通知（已删除），返回 (nil, nil)
-func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, channel string) (*refreshedChannelSummary, error) {
+func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, channel string) (*notification.ChannelStats, error) {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("refreshChannelSummary BeginTx %s: %w", channel, err)
@@ -562,14 +412,13 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 	var (
 		cs                   notification.ChannelStats
 		latestNotificationID string
-		latestNotBefore      int64
 	)
 	cs.Channel = channel
 	err = r.db.QueryRowContext(ctx, `
-		SELECT unread_count, latest_notification_id, latest_not_before
+		SELECT unread_count, latest_notification_id
 		FROM channel_summary
 		WHERE channel = ?
-	`, channel).Scan(&cs.UnreadCount, &latestNotificationID, &latestNotBefore)
+	`, channel).Scan(&cs.UnreadCount, &latestNotificationID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -577,7 +426,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 	}
 
 	cs.LatestNotificationID = scalar.ToID(latestNotificationID)
-	return &refreshedChannelSummary{cs: &cs, latestNotBefore: latestNotBefore}, nil
+	return &cs, nil
 }
 
 // refreshChannelSummaryTx 在写事务内用标量子查询刷新频道物化视图
@@ -642,6 +491,9 @@ func (r *NotificationRepository) runCleanup(ctx context.Context, reclaimGracePer
 
 // reclaim 清理 notAfter + reclaimGracePeriod 在当前时间之前的数据
 func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+
 	cutoff := time.Now().Add(-reclaimGracePeriod).UnixMilli()
 
 	// 删除过期通知以及对应的 channel_summary
