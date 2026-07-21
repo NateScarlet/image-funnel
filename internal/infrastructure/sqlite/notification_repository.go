@@ -157,6 +157,8 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	defer tx.Rollback()
 
 	// 检查 tag 是否已经存在
+	// EXPLAIN QUERY PLAN:
+	// SEARCH notifications USING COVERING INDEX sqlite_autoindex_notifications_2 (tag=?)
 	var count int
 	err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE tag = ?", notif.Tag()).Scan(&count)
 	if err != nil {
@@ -202,6 +204,8 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 
 // Get 根据 ID 获取通知，不存在返回 apperror.NewErrDocumentNotFound
 func (r *NotificationRepository) Get(ctx context.Context, id string) (*notification.Notification, error) {
+	// EXPLAIN QUERY PLAN:
+	// SEARCH notifications USING INDEX sqlite_autoindex_notifications_1 (id=?)
 	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx, `
 		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
 		FROM notifications WHERE id = ?
@@ -216,6 +220,8 @@ func (r *NotificationRepository) Get(ctx context.Context, id string) (*notificat
 
 // GetByTag 根据 tag 获取通知，不存在返回 apperror.NewErrDocumentNotFound
 func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*notification.Notification, error) {
+	// EXPLAIN QUERY PLAN:
+	// SEARCH notifications USING INDEX sqlite_autoindex_notifications_2 (tag=?)
 	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx, `
 		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
 		FROM notifications WHERE tag = ?
@@ -281,6 +287,8 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 
 		query += " ORDER BY created_at DESC, id DESC"
 
+		// EXPLAIN QUERY PLAN:
+		// SEARCH notifications USING INDEX idx_notifications_channel_created
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			yield(nil, err)
@@ -318,21 +326,24 @@ type refreshedChannelSummary struct {
 }
 
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
-// 通过 SQL 排序优先返回过期项（ORDER BY CASE WHEN expires_at <= ? THEN 0 ELSE 1 END ASC）：
+// 通过 SQL 排序优先返回过期项（ORDER BY CASE WHEN expires_at <= :now THEN 0 ELSE 1 END ASC）：
 // 1. 无过期项时（绝大多数正常情况）：零内存分配，单循环纯流式直通输出；
 // 2. 有过期项时：扫描并收集过期频道后关闭 rows 释放锁，通过 singleflight 增量刷新并与新鲜项交替归并输出。
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
 		now := time.Now().UnixMilli()
 
+		// EXPLAIN QUERY PLAN:
+		// SCAN channel_summary
+		// USE TEMP B-TREE FOR ORDER BY
 		rows, err := r.db.QueryContext(ctx, `
 			SELECT channel, unread_count, latest_notification_id, latest_not_before, expires_at
 			FROM channel_summary
 			ORDER BY
-				CASE WHEN expires_at <= ? THEN 0 ELSE 1 END ASC,
+				CASE WHEN expires_at <= :now THEN 0 ELSE 1 END ASC,
 				latest_not_before DESC,
 				channel ASC
-		`, now)
+		`, sql.Named("now", now))
 		if err != nil {
 			yield(nil, err)
 			return
@@ -459,12 +470,15 @@ func (r *NotificationRepository) yieldChannelsWithExpired(
 		}
 
 		// 3. 继续流式查询后续所有新鲜项（仅查询有可见通知的频道）
+		// EXPLAIN QUERY PLAN:
+		// SCAN channel_summary USING INDEX idx_channel_summary_latest_not_before
+		// USE TEMP B-TREE FOR LAST TERM OF ORDER BY
 		freshRows, err := r.db.QueryContext(ctx, `
 			SELECT channel, unread_count, latest_notification_id, latest_not_before
 			FROM channel_summary
-			WHERE expires_at > ? AND latest_notification_id != ''
+			WHERE expires_at > :now AND latest_notification_id != ''
 			ORDER BY latest_not_before DESC, channel ASC
-		`, now)
+		`, sql.Named("now", now))
 		if err != nil {
 			yield(nil, err)
 			return
@@ -538,6 +552,8 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 	}
 
 	// 读取更新后的频道摘要
+	// EXPLAIN QUERY PLAN:
+	// SEARCH channel_summary USING INDEX sqlite_autoindex_channel_summary_1 (channel=?)
 	var (
 		cs                   notification.ChannelStats
 		latestNotificationID string
@@ -558,52 +574,67 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 	return &refreshedChannelSummary{cs: &cs, latestNotBefore: latestNotBefore}, nil
 }
 
-// refreshChannelSummaryTx 在写事务内用纯 SQL 标量子查询更新特定频道的物化视图摘要
-// 如果刷新后该频道既无可见通知又无未来等待发送/过期的事件，将其从 channel_summary 中彻底删除
+// refreshChannelSummaryTx 在写事务内用纯 SQL 标量子查询与 CTE 更新特定频道的物化视图摘要
+// 如果刷新后该频道既无可见通知又无未来等待发送的事件，将其从 channel_summary 中彻底删除
 func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx *sql.Tx, channel string) error {
 	now := time.Now().UnixMilli()
 
 	// 1. 若频道既无可见通知又无 pending 通知，物理清理其在 channel_summary 中的摘要
+	// EXPLAIN QUERY PLAN:
+	// SEARCH channel_summary USING INDEX sqlite_autoindex_channel_summary_1 (channel=?)
+	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	// SCALAR SUBQUERY 2: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM channel_summary
-		WHERE channel = ?
-		  AND (SELECT COUNT(*) FROM notifications WHERE channel = ? AND not_before <= ? AND (not_after = ? OR not_after >= ?)) = 0
-		  AND (SELECT COUNT(*) FROM notifications WHERE channel = ? AND not_before > ?) = 0
-	`, channel, channel, now, zeroTimeMs, now, channel, now); err != nil {
+		WHERE channel = :channel
+		  AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after >= :now) = 0
+		  AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) = 0
+	`, sql.Named("channel", channel), sql.Named("now", now)); err != nil {
 		return fmt.Errorf("refreshChannelSummaryTx delete channel %s: %w", channel, err)
 	}
 
-	// 2. 纯 SQL 计算并写入/更新摘要
+	// 2. 纯 SQL 计算并写入/更新摘要（单次 CTE 子查询获取最新通知 id 与 not_before，使用命名参数消除重复）
+	// EXPLAIN QUERY PLAN:
+	// SCAN CONSTANT ROW
+	// MATERIALIZE visible: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	// SCALAR SUBQUERY 2: SCAN visible
+	// SCALAR SUBQUERY 3: SCAN visible
+	// SCALAR SUBQUERY 4: COMPOUND QUERY (MIN(t) UNION ALL)
+	//   LEFT-MOST SUBQUERY: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	//   UNION ALL: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
 	if _, err := tx.ExecContext(ctx, `
+		WITH visible AS (
+			SELECT id, not_before
+			FROM notifications
+			WHERE channel = :channel AND not_before <= :now AND not_after >= :now
+			ORDER BY not_before DESC, id DESC
+			LIMIT 1
+		)
 		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
 		SELECT
-			?,
-			(SELECT COUNT(*) FROM notifications WHERE channel = ? AND read_at = ? AND not_before <= ? AND (not_after = ? OR not_after >= ?)),
-			COALESCE((SELECT id FROM notifications WHERE channel = ? AND not_before <= ? AND (not_after = ? OR not_after >= ?) ORDER BY not_before DESC, id DESC LIMIT 1), ''),
-			COALESCE((SELECT MAX(not_before) FROM notifications WHERE channel = ? AND not_before <= ? AND (not_after = ? OR not_after >= ?)), 0),
+			:channel,
+			(SELECT COUNT(*) FROM notifications WHERE channel = :channel AND read_at = :zeroTimeMs AND not_before <= :now AND not_after >= :now),
+			COALESCE((SELECT id FROM visible), ''),
+			COALESCE((SELECT not_before FROM visible), 0),
 			COALESCE((
 				SELECT MIN(t) FROM (
-					SELECT not_before AS t FROM notifications WHERE channel = ? AND not_before > ?
+					SELECT not_before AS t FROM notifications WHERE channel = :channel AND not_before > :now
 					UNION ALL
-					SELECT not_after AS t FROM notifications WHERE channel = ? AND not_before <= ? AND not_after != ? AND not_after >= ?
+					SELECT not_after AS t FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after >= :now
 				)
 			), 0)
-		WHERE (SELECT COUNT(*) FROM notifications WHERE channel = ? AND not_before <= ? AND (not_after = ? OR not_after >= ?)) > 0
-		   OR (SELECT COUNT(*) FROM notifications WHERE channel = ? AND not_before > ?) > 0
+		WHERE (SELECT COUNT(*) FROM visible) > 0
+		   OR (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) > 0
 		ON CONFLICT(channel) DO UPDATE SET
 			unread_count = excluded.unread_count,
 			latest_notification_id = excluded.latest_notification_id,
 			latest_not_before = excluded.latest_not_before,
 			expires_at = excluded.expires_at
 	`,
-		channel,
-		channel, zeroTimeMs, now, zeroTimeMs, now,
-		channel, now, zeroTimeMs, now,
-		channel, now, zeroTimeMs, now,
-		channel, now,
-		channel, now, zeroTimeMs, now,
-		channel, now, zeroTimeMs, now,
-		channel, now,
+		sql.Named("channel", channel),
+		sql.Named("now", now),
+		sql.Named("zeroTimeMs", zeroTimeMs),
 	); err != nil {
 		return fmt.Errorf("refreshChannelSummaryTx upsert channel %s: %w", channel, err)
 	}
@@ -654,10 +685,12 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 	defer tx.Rollback()
 
 	// 1. 查找所有包含本次要清理过期的通知的频道
+	// EXPLAIN QUERY PLAN:
+	// SCAN notifications USING INDEX idx_notifications_channel_created
 	rows, err := tx.QueryContext(ctx, `
 		SELECT DISTINCT channel FROM notifications
-		WHERE not_after <= ? AND not_after != ?
-	`, cutoff, zeroTimeMs)
+		WHERE not_after <= :cutoff
+	`, sql.Named("cutoff", cutoff))
 	if err != nil {
 		return fmt.Errorf("reclaim find affected channels: %w", err)
 	}
@@ -681,9 +714,11 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 	}
 
 	// 2. 删除超期通知
+	// EXPLAIN QUERY PLAN:
+	// SCAN notifications
 	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM notifications WHERE not_after <= ? AND not_after != ?
-	`, cutoff, zeroTimeMs); err != nil {
+		DELETE FROM notifications WHERE not_after <= :cutoff
+	`, sql.Named("cutoff", cutoff)); err != nil {
 		return fmt.Errorf("reclaim delete notifications: %w", err)
 	}
 
