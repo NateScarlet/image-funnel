@@ -308,11 +308,11 @@ type NotificationFilters struct {
 	Status      []NotificationStatus
 	Priority    []NotificationPriority
 	Read        *bool
-	VisibleAt   *time.Time
+	VisibleAt   time.Time
 	// 在指定时间是否未来才可见（notBefore > PendingAt）
-	PendingAt   *time.Time
+	PendingAt   time.Time
 	// 在指定时间是否已过期（notAfter < ExpiredAt）
-	ExpiredAt   *time.Time
+	ExpiredAt   time.Time
 }
 
 type NotificationConnectionDTO struct {

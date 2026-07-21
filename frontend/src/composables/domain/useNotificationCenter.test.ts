@@ -122,8 +122,8 @@ describe("useNotificationCenter", () => {
       spawnToast(n);
 
       expect(mockShowToast).not.toHaveBeenCalled();
-      expect(scheduledNotifications.value).toHaveLength(1);
-      expect(scheduledNotifications.value[0].id).toBe("notif-1");
+      expect(scheduledNotifications.value.size).toBe(1);
+      expect(scheduledNotifications.value.get("notif-1")?.id).toBe("notif-1");
     });
 
     test("notAfter 已过期时，不显示 toast", () => {
@@ -226,7 +226,7 @@ describe("useNotificationCenter", () => {
       spawnToast(mockNotification({ notBefore: "2060-01-01" }));
       spawnToast(mockNotification({ id: "notif-2", notAfter: "2060-01-01" }));
 
-      expect(scheduledNotifications.value).toHaveLength(2);
+      expect(scheduledNotifications.value.size).toBe(2);
     });
 
     test("更新已存在的通知", () => {
@@ -242,8 +242,8 @@ describe("useNotificationCenter", () => {
       const updated = mockNotification({ notBefore: "2060-01-01", notAfter: "2070-01-01" });
       spawnToast(updated);
 
-      expect(scheduledNotifications.value).toHaveLength(1);
-      expect(scheduledNotifications.value[0].notAfter).toBe("2070-01-01");
+      expect(scheduledNotifications.value.size).toBe(1);
+      expect(scheduledNotifications.value.get("notif-1")?.notAfter).toBe("2070-01-01");
     });
   });
   // #endregion
@@ -267,7 +267,7 @@ describe("useNotificationCenter", () => {
       // notAfter 已过期，不显示 toast
       expect(mockShowToast).not.toHaveBeenCalled();
       // 有 time 约束（notAfter），加入调度列表供 watch 管理生命周期
-      expect(scheduledNotifications.value).toHaveLength(1);
+      expect(scheduledNotifications.value.size).toBe(1);
     });
   });
   // #endregion

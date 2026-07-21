@@ -144,4 +144,48 @@ func TestNotificationRepository(t *testing.T) {
 	assert.Equal(t, "hook:test", channels[1].Channel)
 	assert.Equal(t, 1, channels[1].UnreadCount)
 	assert.Equal(t, "notif:11111111-1111-1111-1111-111111111111", channels[1].LatestNotificationID.String())
+
+	// 6. 测试 Channels 被动增量刷新（pending 状态变为 visible 时）
+	n3, err := notification.FromRepository(
+		scalar.ToID("notif:33333333-3333-3333-3333-333333333333"),
+		"33333333-3333-3333-3333-333333333333",
+		"hook:pending",
+		"Future Title",
+		"Future Body",
+		shared.NotificationPriorityNormal,
+		time.Time{},
+		time.Time{},
+		time.Now().Add(24*time.Hour),
+		time.Now().Add(10*time.Millisecond), // 10ms 后可见
+		time.Now(),
+		time.Now(),
+		scalar.URI{},
+	)
+	require.NoError(t, err)
+	_, err = repo.Save(ctx, n3)
+	require.NoError(t, err)
+
+	// Save 时未到 notBefore，LatestNotificationID 为空
+	channels = nil
+	for ch, err := range repo.Channels(ctx) {
+		require.NoError(t, err)
+		if ch.Channel == "hook:pending" {
+			channels = append(channels, ch)
+		}
+	}
+	require.Len(t, channels, 1)
+	assert.Equal(t, "", channels[0].LatestNotificationID.String())
+
+	// 等待 15ms 使 notBefore 过期，再次调用 Channels 触发被动增量刷新
+	time.Sleep(15 * time.Millisecond)
+
+	channels = nil
+	for ch, err := range repo.Channels(ctx) {
+		require.NoError(t, err)
+		if ch.Channel == "hook:pending" {
+			channels = append(channels, ch)
+		}
+	}
+	require.Len(t, channels, 1)
+	assert.Equal(t, "notif:33333333-3333-3333-3333-333333333333", channels[0].LatestNotificationID.String())
 }

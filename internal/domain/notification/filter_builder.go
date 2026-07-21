@@ -42,23 +42,20 @@ func (fb *FilterBuilder) Build(filters shared.NotificationFilters) func(*Notific
 		b.Add(func(n *Notification) bool { return !n.ReadAt().IsZero() == r })
 	}
 
-	if v := filters.VisibleAt; v != nil {
-		t := *v
+	if v := filters.VisibleAt; !v.IsZero() {
 		b.Add(func(n *Notification) bool {
-			return n.VisibleAt(t)
+			return n.VisibleAt(v)
 		})
 	}
 
-	if v := filters.PendingAt; v != nil {
-		t := *v
+	if v := filters.PendingAt; !v.IsZero() {
 		// notBefore > t：在时间点 t 尚未到达可见时间（未来才可见）
-		b.Add(func(n *Notification) bool { return n.NotBefore().After(t) })
+		b.Add(func(n *Notification) bool { return n.NotBefore().After(v) })
 	}
 
-	if v := filters.ExpiredAt; v != nil {
-		t := *v
+	if v := filters.ExpiredAt; !v.IsZero() {
 		// notAfter < t：在时间点 t 已超出可见截止（已过期）
-		b.Add(func(n *Notification) bool { return n.NotAfter().Before(t) })
+		b.Add(func(n *Notification) bool { return n.NotAfter().Before(v) })
 	}
 
 	return b.Build()

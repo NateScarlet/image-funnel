@@ -51,8 +51,8 @@ const init = once(() => {
 
   const { currentTime, refreshOn, isPast, isFuture } = useCurrentTime();
 
-  // 需要时间感知的 Toast 通知（有 notBefore 或 notAfter 约束）
-  const scheduledNotifications = ref<Notification[]>([]);
+  // 需要时间感知的 Toast 通知（有 notBefore 或 notAfter 约束），Map 支持 O(1) 查找
+  const scheduledNotifications = ref<Map<string, Notification>>(new Map());
 
   const { data: channelsData, refresh: refreshChannels } = useQuery(NotificationChannelsDocument, {
     fetchPolicy: "cache-and-network",
@@ -89,7 +89,7 @@ const init = once(() => {
   // refreshOn 监听所有通知的 notBefore/notAfter，在时间到达时自动刷新 currentTime
   refreshOn(() => {
     const cn = channelNotifications.value;
-    const sn = scheduledNotifications.value;
+    const sn = scheduledNotifications.value.values();
     return {
       *[Symbol.iterator]() {
         for (const n of cn) {
@@ -108,7 +108,7 @@ const init = once(() => {
   watch(
     () => currentTime.value,
     () => {
-      for (const n of scheduledNotifications.value) {
+      for (const n of scheduledNotifications.value.values()) {
         if (isFuture(n.notBefore) || isPast(n.notAfter)) {
           hideToast(n.id);
         } else {
@@ -157,11 +157,11 @@ const init = once(() => {
   // 投递 Toast；所有通知都有时间约束（notBefore/notAfter 为 NonNull），支持时间感知
   function spawnToast(n: Notification) {
     // 加入调度列表，以便 watch 响应时间变化（notBefore 到达时显示，notAfter 到达时消失）
-    const existing = scheduledNotifications.value.find((s) => s.id === n.id);
+    const existing = scheduledNotifications.value.get(n.id);
     if (existing) {
       Object.assign(existing, n);
     } else {
-      scheduledNotifications.value.push(n);
+      scheduledNotifications.value.set(n.id, n);
     }
 
     // 计算期望状态：应该在时间窗口内显示
@@ -225,9 +225,8 @@ const init = once(() => {
     const notifs = data?.notifications?.edges?.map((e) => e.node) ?? [];
     for (const n of notifs) {
       // 服务端已过滤，所有结果都是 notBefore 在未来的，直接加入调度列表
-      const existing = scheduledNotifications.value.find((s) => s.id === n.id);
-      if (!existing) {
-        scheduledNotifications.value.push(n);
+      if (!scheduledNotifications.value.has(n.id)) {
+        scheduledNotifications.value.set(n.id, n);
       }
     }
   }
