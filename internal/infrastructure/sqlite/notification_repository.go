@@ -101,7 +101,7 @@ func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBui
 			updated_at INTEGER NOT NULL,
 			details_url TEXT NOT NULL
 		);
-		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
+		CREATE INDEX IF NOT EXISTS idx_notifications_channel_not_before ON notifications(channel, not_before DESC, id DESC);
 		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
 
 		CREATE TABLE IF NOT EXISTS channel_summary (
@@ -288,7 +288,7 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 		query += " ORDER BY created_at DESC, id DESC"
 
 		// EXPLAIN QUERY PLAN:
-		// SEARCH notifications USING INDEX idx_notifications_channel_created
+		// SEARCH notifications USING INDEX idx_notifications_channel_not_before
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			yield(nil, err)
@@ -582,8 +582,8 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 	// 1. 若频道既无可见通知又无 pending 通知，物理清理其在 channel_summary 中的摘要
 	// EXPLAIN QUERY PLAN:
 	// SEARCH channel_summary USING INDEX sqlite_autoindex_channel_summary_1 (channel=?)
-	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
-	// SCALAR SUBQUERY 2: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
+	// SCALAR SUBQUERY 2: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM channel_summary
 		WHERE channel = :channel
@@ -596,13 +596,13 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 	// 2. 纯 SQL 计算并写入/更新摘要（单次 CTE 子查询获取最新通知 id 与 not_before，使用命名参数消除重复）
 	// EXPLAIN QUERY PLAN:
 	// SCAN CONSTANT ROW
-	// MATERIALIZE visible: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
-	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	// MATERIALIZE visible: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
+	// SCALAR SUBQUERY 1: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
 	// SCALAR SUBQUERY 2: SCAN visible
 	// SCALAR SUBQUERY 3: SCAN visible
 	// SCALAR SUBQUERY 4: COMPOUND QUERY (MIN(t) UNION ALL)
-	//   LEFT-MOST SUBQUERY: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
-	//   UNION ALL: SEARCH notifications USING INDEX idx_notifications_channel_created (channel=?)
+	//   LEFT-MOST SUBQUERY: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
+	//   UNION ALL: SEARCH notifications USING INDEX idx_notifications_channel_not_before (channel=?)
 	if _, err := tx.ExecContext(ctx, `
 		WITH visible AS (
 			SELECT id, not_before
