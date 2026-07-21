@@ -102,6 +102,7 @@ func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBui
 			details_url TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_notifications_channel_not_before ON notifications(channel, not_before DESC, id DESC);
+		CREATE INDEX IF NOT EXISTS idx_notifications_not_after ON notifications(not_after);
 		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
 
 		CREATE TABLE IF NOT EXISTS channel_summary (
@@ -179,6 +180,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 		not_before = excluded.not_before,
 		updated_at = excluded.updated_at,
 		details_url = excluded.details_url
+	WHERE excluded.updated_at >= notifications.updated_at
 	`
 	po := newNotificationPO(notif)
 	_, err = tx.ExecContext(ctx, query,
@@ -614,7 +616,7 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 			ORDER BY not_before DESC, id DESC
 			LIMIT 1
 		)
-		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
+		INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
 		SELECT
 			:channel,
 			(SELECT COUNT(*) FROM notifications WHERE channel = :channel AND read_at = :zeroTimeMs AND not_before <= :now AND not_after > :now),
@@ -629,11 +631,6 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 			), 0)
 		WHERE (SELECT COUNT(*) FROM visible) > 0
 		   OR (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) > 0
-		ON CONFLICT(channel) DO UPDATE SET
-			unread_count = excluded.unread_count,
-			latest_notification_id = excluded.latest_notification_id,
-			latest_not_before = excluded.latest_not_before,
-			expires_at = excluded.expires_at
 	`,
 		sql.Named("channel", channel),
 		sql.Named("now", now),
@@ -718,7 +715,7 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 
 	// 2. 删除超期通知
 	// EXPLAIN QUERY PLAN:
-	// SCAN notifications
+	// SEARCH notifications USING INDEX idx_notifications_not_after (not_after<?)
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM notifications WHERE not_after <= :cutoff
 	`, sql.Named("cutoff", cutoff)); err != nil {

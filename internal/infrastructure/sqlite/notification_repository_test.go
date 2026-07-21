@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -12,6 +13,54 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestExplainQueryPlans 用于手动校验与打印所有核心 SQL 语句的 SQLite EXPLAIN QUERY PLAN 结果
+func TestExplainQueryPlans(t *testing.T) {
+	t.Skip("手动校验 EXPLAIN QUERY PLAN 时取消 Skip 运行")
+
+	repo, cleanup, err := NewNotificationRepository("file::memory:?mode=memory&cache=shared", notification.NewFilterBuilder())
+	require.NoError(t, err)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	queries := map[string]string{
+		"Get":             `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE id = ?`,
+		"GetByTag":        `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE tag = ?`,
+		"SaveCheckTag":    `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM notifications WHERE tag = ?`,
+		"Find":            `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE 1=1 AND channel IN ('hook:test') AND not_before <= 100 AND not_after > 100 ORDER BY created_at DESC, id DESC`,
+		"Channels":        `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before, expires_at FROM channel_summary ORDER BY CASE WHEN expires_at <= :now THEN 0 ELSE 1 END ASC, latest_not_before DESC, channel ASC`,
+		"freshRows":       `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before FROM channel_summary WHERE expires_at > :now AND latest_notification_id != '' ORDER BY latest_not_before DESC, channel ASC`,
+		"refreshSummary":  `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before FROM channel_summary WHERE channel = ?`,
+		"refreshTxDelete": `EXPLAIN QUERY PLAN DELETE FROM channel_summary WHERE channel = :channel AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after > :now) = 0 AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) = 0`,
+		"refreshTxUpsert": `EXPLAIN QUERY PLAN WITH visible AS (SELECT id, not_before FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after > :now ORDER BY not_before DESC, id DESC LIMIT 1) INSERT OR REPLACE INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at) SELECT :channel, (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND read_at = :zeroTimeMs AND not_before <= :now AND not_after > :now), COALESCE((SELECT id FROM visible), ''), COALESCE((SELECT not_before FROM visible), 0), COALESCE((SELECT MIN(t) FROM (SELECT not_before AS t FROM notifications WHERE channel = :channel AND not_before > :now UNION ALL SELECT not_after AS t FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after > :now)), 0) WHERE (SELECT COUNT(*) FROM visible) > 0 OR (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) > 0`,
+		"reclaimFind":     `EXPLAIN QUERY PLAN SELECT DISTINCT channel FROM notifications WHERE not_after <= :cutoff`,
+		"reclaimDelete":   `EXPLAIN QUERY PLAN DELETE FROM notifications WHERE not_after <= :cutoff`,
+	}
+	for name, q := range queries {
+		dummyArgs := []any{
+			sql.Named("channel", "test"),
+			sql.Named("now", int64(0)),
+			sql.Named("zeroTimeMs", zeroTimeMs),
+			sql.Named("cutoff", int64(0)),
+			"test", "test", "test", 0, 0, 0, 0,
+		}
+		rows, err := repo.db.QueryContext(ctx, q, dummyArgs...)
+		if err != nil {
+			t.Logf("EXPLAIN %s ERROR: %v", name, err)
+			continue
+		}
+		t.Logf("=== EXPLAIN %s ===", name)
+		for rows.Next() {
+			var id, parent, notused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &notused, &detail); err == nil {
+				t.Logf("  %s", detail)
+			}
+		}
+		rows.Close()
+	}
+}
 
 func TestNotificationRepository(t *testing.T) {
 	// 使用共享内存数据库 DSN
