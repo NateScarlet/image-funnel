@@ -648,7 +648,7 @@ const isAutoRejectActive = computed(() => {
 
 // 监听图片加载、超时时长、实际是否生效，内联控制定时器启动与清理
 watch(
-  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent, swiping],
+  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent, swiping, marking],
   ([active, timeout, loadedEvent, isSwiping], _, onCleanup) => {
     if (!active || !loadedEvent || !currentImage.value || isSwiping) {
       return;
