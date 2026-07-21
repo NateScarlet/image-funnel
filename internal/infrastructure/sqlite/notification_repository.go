@@ -271,7 +271,7 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 			t := filter.VisibleAt.UnixMilli()
 			query += " AND not_before <= ?"
 			args = append(args, t)
-			query += " AND not_after >= ?"
+			query += " AND not_after > ?"
 			args = append(args, t)
 		}
 		if !filter.PendingAt.IsZero() {
@@ -587,7 +587,7 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM channel_summary
 		WHERE channel = :channel
-		  AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after >= :now) = 0
+		  AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after > :now) = 0
 		  AND (SELECT COUNT(*) FROM notifications WHERE channel = :channel AND not_before > :now) = 0
 	`, sql.Named("channel", channel), sql.Named("now", now)); err != nil {
 		return fmt.Errorf("refreshChannelSummaryTx delete channel %s: %w", channel, err)
@@ -607,21 +607,21 @@ func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx
 		WITH visible AS (
 			SELECT id, not_before
 			FROM notifications
-			WHERE channel = :channel AND not_before <= :now AND not_after >= :now
+			WHERE channel = :channel AND not_before <= :now AND not_after > :now
 			ORDER BY not_before DESC, id DESC
 			LIMIT 1
 		)
 		INSERT INTO channel_summary (channel, unread_count, latest_notification_id, latest_not_before, expires_at)
 		SELECT
 			:channel,
-			(SELECT COUNT(*) FROM notifications WHERE channel = :channel AND read_at = :zeroTimeMs AND not_before <= :now AND not_after >= :now),
+			(SELECT COUNT(*) FROM notifications WHERE channel = :channel AND read_at = :zeroTimeMs AND not_before <= :now AND not_after > :now),
 			COALESCE((SELECT id FROM visible), ''),
 			COALESCE((SELECT not_before FROM visible), 0),
 			COALESCE((
 				SELECT MIN(t) FROM (
 					SELECT not_before AS t FROM notifications WHERE channel = :channel AND not_before > :now
 					UNION ALL
-					SELECT not_after AS t FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after >= :now
+					SELECT not_after AS t FROM notifications WHERE channel = :channel AND not_before <= :now AND not_after > :now
 				)
 			), 0)
 		WHERE (SELECT COUNT(*) FROM visible) > 0
