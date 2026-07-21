@@ -113,6 +113,11 @@
 
         <!-- 回收站与设备管理 -->
         <div class="flex items-center gap-3 flex-none">
+          <NotificationCenterButton
+            button-class="relative flex items-center gap-2 rounded-lg border border-primary-700 bg-primary-800/80 px-4 py-2 text-sm font-medium text-primary-300 transition-all hover:border-primary-600 hover:bg-primary-700 hover:text-white active:scale-95 cursor-pointer select-none"
+          >
+            <span class="hidden sm:inline">通知</span>
+          </NotificationCenterButton>
           <TrashHistoryButton />
           <DeviceManagerButton />
         </div>
@@ -253,7 +258,12 @@
 
     <moreMenuDialog.component container-class="p-6 sm:max-w-sm">
       <div class="space-y-3">
-        <!-- 移动端设备管理项 -->
+        <NotificationCenterButton
+          button-class="relative w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-all flex items-center gap-3 text-primary-200 hover:text-white active:scale-95 cursor-pointer select-none"
+          @click="moreMenuDialog.close()"
+        >
+          <span class="flex-1 text-left">通知中心</span>
+        </NotificationCenterButton>
         <DeviceManagerButton variant="menu-item" @click="moreMenuDialog.close()" />
 
         <!-- 在资源管理器中打开当前目录 -->
@@ -299,6 +309,7 @@ import ImageGrid from "../components/ImageGrid.vue";
 import NoteList from "../components/NoteList.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
+import NotificationCenterButton from "../components/NotificationCenterButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";

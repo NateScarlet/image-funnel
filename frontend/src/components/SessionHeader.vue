@@ -40,6 +40,11 @@
       </button>
 
       <div class="hidden md:flex items-center gap-4">
+        <NotificationCenterButton
+          button-class="relative flex items-center gap-2 rounded-lg border border-primary-700 bg-primary-800/80 px-4 py-2 text-sm font-medium text-primary-300 transition-all hover:border-primary-600 hover:bg-primary-700 hover:text-white active:scale-95 cursor-pointer select-none"
+        >
+          <span class="hidden sm:inline">通知</span>
+        </NotificationCenterButton>
         <DeviceManagerButton />
         <button
           :disabled="!session?.canUndo || undoing"
@@ -93,6 +98,12 @@
           </div>
         </div>
 
+        <NotificationCenterButton
+          button-class="relative w-full py-3 px-4 bg-primary-700 hover:bg-primary-600 rounded-lg font-medium transition-all flex items-center gap-3 text-primary-200 hover:text-white active:scale-95 cursor-pointer select-none"
+          @click="menuDialog.close()"
+        >
+          <span class="flex-1 text-left">通知中心</span>
+        </NotificationCenterButton>
         <DeviceManagerButton variant="menu-item" @click="menuDialog.close()" />
         <button
           :disabled="!session?.canUndo || undoing"
@@ -150,6 +161,7 @@ import useQuery from "@/graphql/utils/useQuery";
 import { MetaDocument, SessionFragment } from "@/graphql/generated";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "./DeviceManagerButton.vue";
+import NotificationCenterButton from "./NotificationCenterButton.vue";
 
 const props = defineProps<{
   session: SessionFragment | null | undefined;

@@ -6,6 +6,7 @@ import (
 	"main/internal/application/hook"
 	appimage "main/internal/application/image"
 	"main/internal/application/note"
+	"main/internal/application/notification"
 	"main/internal/application/pairing"
 	"main/internal/application/session"
 )
@@ -17,6 +18,7 @@ type imageHandler = appimage.Handler
 type deviceHandler = device.Handler
 type pairingHandler = pairing.Handler
 type hookHandler = hook.Handler
+type notificationHandler = notification.Handler
 
 // Root 直接嵌入了各个领域 Handler，可直接使用所有被提升的 Handler 方法。
 // 【警告】所有领域的 Handler 方法全局不应该重名（例如列表查询应直接使用返回类型命名，如 Devices/Hooks 替代通用的 List），
@@ -29,6 +31,7 @@ type Root struct {
 	*deviceHandler
 	*pairingHandler
 	*hookHandler
+	*notificationHandler
 }
 
 func NewRoot(
@@ -39,14 +42,17 @@ func NewRoot(
 	deviceHandler *device.Handler,
 	pairingHandler *pairing.Handler,
 	hookHandler *hook.Handler,
+	notificationHandler *notification.Handler,
 ) *Root {
 	return &Root{
-		sessionHandler:   sessionHandler,
-		directoryHandler: directoryHandler,
-		noteHandler:      noteHandler,
-		imageHandler:     imageHandler,
-		deviceHandler:    deviceHandler,
-		pairingHandler:   pairingHandler,
-		hookHandler:      hookHandler,
+		sessionHandler:      sessionHandler,
+		directoryHandler:    directoryHandler,
+		noteHandler:         noteHandler,
+		imageHandler:        imageHandler,
+		deviceHandler:       deviceHandler,
+		pairingHandler:      pairingHandler,
+		hookHandler:         hookHandler,
+		notificationHandler: notificationHandler,
 	}
 }
+

@@ -1,0 +1,17 @@
+query notificationChannels($first: Int, $after: String) {
+  notificationChannels(first: $first, after: $after) {
+    nodes {
+      channel
+      unreadCount
+      latestNotification {
+        ...Notification
+      }
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+  }
+}

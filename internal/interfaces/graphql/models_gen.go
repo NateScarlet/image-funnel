@@ -3,10 +3,16 @@
 package graphql
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"main/internal/enum"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"strconv"
 	"time"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
 // 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
@@ -287,6 +293,37 @@ type RejectPairingRequestInput struct {
 	Code string `json:"code"`
 }
 
+// 发送通知的输入参数
+type SendNotificationInput struct {
+	// 客户端唯一标签（UUID），同标签将替换已有通知
+	Tag string `json:"tag"`
+	// 频道标识，首次使用自动注册
+	Channel string `json:"channel"`
+	// 通知标题
+	Title string `json:"title"`
+	// 通知正文
+	Body *string `json:"body,omitempty"`
+	// 优先级
+	Priority *enum.Enum[shared.NotificationPriorityMeta] `json:"priority,omitempty"`
+	// 过期时间，到达后自动删除。空字符串表示不自动过期
+	NotAfter *time.Time `json:"notAfter,omitempty"`
+	// 最早可见时间，在此之前不显示。空字符串表示立即可见
+	NotBefore *time.Time `json:"notBefore,omitempty"`
+	// 关联的详情 URL，实际支持哪些协议由网页端决定
+	DetailsURL *scalar.URI `json:"detailsURL,omitempty"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type SendNotificationPayload struct {
+	// 是否本次操作为新建通知（false 表示同 tag 更新已有通知）
+	DidCreate bool `json:"didCreate"`
+	// 发送后的通知
+	Notification *shared.NotificationDTO `json:"notification"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 type SetDirectoryStateInput struct {
 	// 目录的ID
 	ID scalar.ID `json:"id"`
@@ -331,6 +368,21 @@ type UndoTrashInput struct {
 	ClientMutationID *string   `json:"clientMutationId,omitempty"`
 }
 
+// 撤回通知的输入参数
+type UnsendNotificationInput struct {
+	// 通知标签
+	Tag string `json:"tag"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UnsendNotificationPayload struct {
+	// 撤回的通知，null 代表对应 tag 的通知不存在
+	Notification *shared.NotificationDTO `json:"notification,omitempty"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 type UpdateImageMetadataInput struct {
 	// 图片ID
 	ID scalar.ID `json:"id"`
@@ -357,6 +409,25 @@ type UpdateImagesMetadataPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
+// 更新通知元数据的输入参数，所有字段可选
+type UpdateNotificationInput struct {
+	// 通知 ID
+	ID scalar.ID `json:"id"`
+	// 标记已读时间。传 null 表示重置为未读，不传表示不修改
+	ReadAt graphql.Omittable[*time.Time] `json:"readAt,omitempty"`
+	// 关闭时间。传 null 表示撤销关闭，不传表示不修改
+	DismissedAt graphql.Omittable[*time.Time] `json:"dismissedAt,omitempty"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UpdateNotificationPayload struct {
+	// 更新后的通知对象
+	Notification *shared.NotificationDTO `json:"notification"`
+	// 客户端变更标识，用于幂等
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 // 更新会话配置（目标保留数量、筛选条件）
 type UpdateSessionInput struct {
 	// 会话ID
@@ -372,4 +443,65 @@ type UpdateSessionPayload struct {
 	// 更新后的会话对象
 	Session          *shared.SessionDTO `json:"session"`
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
+}
+
+// 通知变更事件类型，用于 subscription 事件推送。
+type NotificationEventType string
+
+const (
+	// 通知被发送（新增或同标签替换）
+	NotificationEventTypeSent NotificationEventType = "SENT"
+	// 通知内容被更新（标题、正文、优先级等）
+	NotificationEventTypeUpdated NotificationEventType = "UPDATED"
+	// 通知被撤回（删除）
+	NotificationEventTypeUnsent NotificationEventType = "UNSENT"
+)
+
+var AllNotificationEventType = []NotificationEventType{
+	NotificationEventTypeSent,
+	NotificationEventTypeUpdated,
+	NotificationEventTypeUnsent,
+}
+
+func (e NotificationEventType) IsValid() bool {
+	switch e {
+	case NotificationEventTypeSent, NotificationEventTypeUpdated, NotificationEventTypeUnsent:
+		return true
+	}
+	return false
+}
+
+func (e NotificationEventType) String() string {
+	return string(e)
+}
+
+func (e *NotificationEventType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationEventType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationEventType", str)
+	}
+	return nil
+}
+
+func (e NotificationEventType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationEventType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationEventType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }

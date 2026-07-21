@@ -37,3 +37,40 @@ var (
 )
 
 type PairingRequestStatus = enum.Enum[PairingRequestStatusMeta]
+
+// #region Notification Enums
+
+type NotificationPriorityMeta struct{}
+
+var notificationPriority = enum.New[NotificationPriorityMeta]()
+var (
+	NotificationPriorityHigh   = notificationPriority.Define("HIGH")
+	NotificationPriorityNormal = notificationPriority.Define("NORMAL")
+	NotificationPriorityLow    = notificationPriority.Define("LOW")
+)
+
+type NotificationPriority = enum.Enum[NotificationPriorityMeta]
+
+type NotificationStatusMeta struct{}
+
+var notificationStatus = enum.New[NotificationStatusMeta]()
+var (
+	NotificationStatusActive    = notificationStatus.Define("ACTIVE")
+	NotificationStatusDismissed = notificationStatus.Define("DISMISSED")
+)
+
+type NotificationStatus = enum.Enum[NotificationStatusMeta]
+
+type NotificationEventTypeMeta struct{}
+
+var notificationEventType = enum.New[NotificationEventTypeMeta]()
+var (
+	NotificationEventTypeSent    = notificationEventType.Define("SENT")
+	NotificationEventTypeUpdated = notificationEventType.Define("UPDATED")
+	NotificationEventTypeUnsent  = notificationEventType.Define("UNSENT")
+)
+
+type NotificationEventType = enum.Enum[NotificationEventTypeMeta]
+
+// #endregion
+

@@ -1,0 +1,7 @@
+extend type Subscription {
+  """
+  订阅通知变更事件。当通知被发送（SENT）、更新（UPDATED）、撤回（UNSENT）时推送。
+  前端通过此订阅实时更新通知中心。
+  """
+  notificationChanged: NotificationChangedEvent!
+}

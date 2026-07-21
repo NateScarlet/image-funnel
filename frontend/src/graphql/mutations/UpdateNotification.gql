@@ -1,0 +1,8 @@
+mutation updateNotification($input: UpdateNotificationInput!) {
+  updateNotification(input: $input) {
+    notification {
+      ...Notification
+    }
+    clientMutationId
+  }
+}

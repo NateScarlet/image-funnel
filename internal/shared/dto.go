@@ -283,3 +283,103 @@ type MetadataUpdatedEvent struct {
 	OldLabel  string
 	OldAction string
 }
+
+// #region Notification DTOs
+
+type NotificationDTO struct {
+	ID          scalar.ID
+	Tag         string
+	Channel     string
+	Title       string
+	Body        string
+	Priority    NotificationPriority
+	Status      NotificationStatus
+	ReadAt      time.Time
+	DismissedAt time.Time
+	NotAfter    time.Time
+	NotBefore   time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DetailsURL  scalar.URI
+}
+
+type NotificationFilters struct {
+	Channel     []string
+	Status      []NotificationStatus
+	Priority    []NotificationPriority
+	Read        *bool
+	VisibleAt   time.Time
+	// 在指定时间是否未来才可见（notBefore > PendingAt）
+	PendingAt   time.Time
+	// 在指定时间是否已过期（notAfter < ExpiredAt）
+	ExpiredAt   time.Time
+}
+
+type NotificationConnectionDTO struct {
+	Edges    []*NotificationEdgeDTO
+	PageInfo *PageInfoDTO
+}
+
+// Nodes 按需从 Edges 组装节点列表
+func (c *NotificationConnectionDTO) Nodes() []*NotificationDTO {
+	nodes := make([]*NotificationDTO, len(c.Edges))
+	for i, edge := range c.Edges {
+		nodes[i] = edge.Node
+	}
+	return nodes
+}
+
+type NotificationEdgeDTO struct {
+	Node   *NotificationDTO
+	Cursor string
+}
+
+type NotificationChannelDTO struct {
+	Channel              string
+	UnreadCount          int
+	LatestNotificationID scalar.ID
+}
+
+type NotificationChannelConnectionDTO struct {
+	Edges    []*NotificationChannelEdgeDTO
+	PageInfo *PageInfoDTO
+}
+
+// Nodes 按需从 Edges 组装节点列表
+func (c *NotificationChannelConnectionDTO) Nodes() []*NotificationChannelDTO {
+	nodes := make([]*NotificationChannelDTO, len(c.Edges))
+	for i, edge := range c.Edges {
+		nodes[i] = edge.Node
+	}
+	return nodes
+}
+
+type NotificationChannelEdgeDTO struct {
+	Node   *NotificationChannelDTO
+	Cursor string
+}
+
+type NotificationChangedEventDTO struct {
+	Event          NotificationEventType
+	NotificationID scalar.ID
+}
+
+// SendNotificationResult 发送通知的结果，不可变
+type SendNotificationResult struct {
+	id        scalar.ID
+	didCreate bool
+}
+
+// NewSendNotificationResult 创建发送结果
+func NewSendNotificationResult(id scalar.ID, didCreate bool) *SendNotificationResult {
+	return &SendNotificationResult{id: id, didCreate: didCreate}
+}
+
+// ID 获取通知 ID
+func (r *SendNotificationResult) ID() scalar.ID { return r.id }
+
+// DidCreate 是否新建
+func (r *SendNotificationResult) DidCreate() bool { return r.didCreate }
+
+// #endregion
+

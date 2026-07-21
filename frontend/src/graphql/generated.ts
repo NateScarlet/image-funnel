@@ -222,6 +222,52 @@ export type NoteFiltersInput = {
   id?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };
 
+/** 通知变更事件类型，用于 subscription 事件推送。 */
+export enum NotificationEventType {
+  /** 通知被发送（新增或同标签替换） */
+  SENT = "SENT",
+  /** 通知被撤回（删除） */
+  UNSENT = "UNSENT",
+  /** 通知内容被更新（标题、正文、优先级等） */
+  UPDATED = "UPDATED",
+}
+
+/** 通知筛选条件 */
+export type NotificationFilters = {
+  /** 按频道筛选，匹配任意一个 */
+  channel?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  /** 在指定时间是否已过期（notAfter < expiredAt），不传则不过滤 */
+  expiredAt?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 在指定时间是否未来才可见（notBefore > pendingAt），不传则不过滤 */
+  pendingAt?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 按优先级筛选，匹配任意一个 */
+  priority?: InputMaybe<Array<NotificationPriority>>;
+  /** 按已读状态筛选（true=已读，false=未读） */
+  read?: InputMaybe<Scalars["Boolean"]["input"]>;
+  /** 按状态筛选，匹配任意一个 */
+  status?: InputMaybe<Array<NotificationStatus>>;
+  /** 可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间 */
+  visibleAt?: InputMaybe<Scalars["Time"]["input"]>;
+};
+
+/** 通知优先级，决定前端投递方式。 */
+export enum NotificationPriority {
+  /** 高优先级：强提醒，需用户手动确认才能消失 */
+  HIGH = "HIGH",
+  /** 低优先级：仅通知中心红点 */
+  LOW = "LOW",
+  /** 标准优先级：Toast 展示后自动消失 */
+  NORMAL = "NORMAL",
+}
+
+/** 通知状态。 */
+export enum NotificationStatus {
+  /** 活跃中，未处理 */
+  ACTIVE = "ACTIVE",
+  /** 已手动关闭，等同于已确认 */
+  DISMISSED = "DISMISSED",
+}
+
 export enum PairingRequestStatus {
   APPROVED = "APPROVED",
   PENDING = "PENDING",
@@ -253,6 +299,28 @@ export type RejectPairingRequestInput = {
   code: Scalars["String"]["input"];
 };
 
+/** 发送通知的输入参数 */
+export type SendNotificationInput = {
+  /** 通知正文 */
+  body?: InputMaybe<Scalars["String"]["input"]>;
+  /** 频道标识，首次使用自动注册 */
+  channel: Scalars["String"]["input"];
+  /** 客户端变更标识，用于幂等 */
+  clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
+  /** 关联的详情 URL，实际支持哪些协议由网页端决定 */
+  detailsURL?: InputMaybe<Scalars["URI"]["input"]>;
+  /** 过期时间，到达后自动删除。空字符串表示不自动过期 */
+  notAfter?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 最早可见时间，在此之前不显示。空字符串表示立即可见 */
+  notBefore?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 优先级 */
+  priority?: InputMaybe<NotificationPriority>;
+  /** 客户端唯一标签（UUID），同标签将替换已有通知 */
+  tag: Scalars["String"]["input"];
+  /** 通知标题 */
+  title: Scalars["String"]["input"];
+};
+
 export type SetDirectoryStateInput = {
   /** 目录的ID */
   id: Scalars["ID"]["input"];
@@ -282,6 +350,14 @@ export type UndoTrashInput = {
   historyId: Scalars["ID"]["input"];
 };
 
+/** 撤回通知的输入参数 */
+export type UnsendNotificationInput = {
+  /** 客户端变更标识，用于幂等 */
+  clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
+  /** 通知标签 */
+  tag: Scalars["String"]["input"];
+};
+
 export type UpdateImageMetadataInput = {
   /** 图片ID */
   id: Scalars["ID"]["input"];
@@ -300,6 +376,18 @@ export type UpdateImagesMetadataInput = {
   label?: InputMaybe<Scalars["String"]["input"]>;
   /** 新的评分值（0-5），为null表示不修改 */
   rating?: InputMaybe<Scalars["Int"]["input"]>;
+};
+
+/** 更新通知元数据的输入参数，所有字段可选 */
+export type UpdateNotificationInput = {
+  /** 客户端变更标识，用于幂等 */
+  clientMutationId?: InputMaybe<Scalars["String"]["input"]>;
+  /** 关闭时间。传 null 表示撤销关闭，不传表示不修改 */
+  dismissedAt?: InputMaybe<Scalars["Time"]["input"]>;
+  /** 通知 ID */
+  id: Scalars["ID"]["input"];
+  /** 标记已读时间。传 null 表示重置为未读，不传表示不修改 */
+  readAt?: InputMaybe<Scalars["Time"]["input"]>;
 };
 
 /** 更新会话配置（目标保留数量、筛选条件） */
@@ -413,6 +501,24 @@ export type NoteFragment = {
   rawContent: string;
   hidden: boolean;
   modTime: string;
+};
+
+export type NotificationFragment = {
+  __typename: "Notification";
+  id: string;
+  tag: string;
+  channel: string;
+  title: string;
+  body: string;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  readAt: string | null;
+  dismissedAt: string | null;
+  notAfter: string;
+  notBefore: string;
+  createdAt: string;
+  updatedAt: string;
+  detailsURL: string | null;
 };
 
 export type RatingCountFragment = { __typename: "RatingCount"; rating: number; count: number };
@@ -1229,6 +1335,35 @@ export type UpdateNoteMutation = {
   };
 };
 
+export type UpdateNotificationMutationVariables = Exact<{
+  input: UpdateNotificationInput;
+}>;
+
+export type UpdateNotificationMutation = {
+  __typename: "Mutation";
+  updateNotification: {
+    __typename: "UpdateNotificationPayload";
+    clientMutationId: string | null;
+    notification: {
+      __typename: "Notification";
+      id: string;
+      tag: string;
+      channel: string;
+      title: string;
+      body: string;
+      priority: NotificationPriority;
+      status: NotificationStatus;
+      readAt: string | null;
+      dismissedAt: string | null;
+      notAfter: string;
+      notBefore: string;
+      createdAt: string;
+      updatedAt: string;
+      detailsURL: string | null;
+    };
+  };
+};
+
 export type UpdateSessionMutationVariables = Exact<{
   input: UpdateSessionInput;
 }>;
@@ -1393,6 +1528,7 @@ export type BrowseDirectoriesQuery = {
       }
     | { __typename: "Image"; id: string }
     | { __typename: "Note"; id: string }
+    | { __typename: "Notification"; id: string }
     | null;
 };
 
@@ -1482,6 +1618,7 @@ export type BrowseImagesQuery = {
       }
     | { __typename: "Image"; id: string }
     | { __typename: "Note"; id: string }
+    | { __typename: "Notification"; id: string }
     | null;
 };
 
@@ -1533,6 +1670,7 @@ export type BrowseNotesQuery = {
       }
     | { __typename: "Image"; id: string }
     | { __typename: "Note"; id: string }
+    | { __typename: "Notification"; id: string }
     | null;
 };
 
@@ -1663,6 +1801,7 @@ export type DirectoryLastSessionQuery = {
       }
     | { __typename: "Image" }
     | { __typename: "Note" }
+    | { __typename: "Notification" }
     | null;
 };
 
@@ -1719,6 +1858,7 @@ export type DirectoryStateQuery = {
       }
     | { __typename: "Image" }
     | { __typename: "Note" }
+    | { __typename: "Notification" }
     | null;
 };
 
@@ -1773,6 +1913,7 @@ export type DirectoryStatsQuery = {
       }
     | { __typename: "Image" }
     | { __typename: "Note" }
+    | { __typename: "Notification" }
     | null;
 };
 
@@ -1885,7 +2026,90 @@ export type NoteQuery = {
         hidden: boolean;
         modTime: string;
       }
+    | { __typename: "Notification" }
     | null;
+};
+
+export type NotificationChannelsQueryVariables = Exact<{
+  first?: InputMaybe<Scalars["Int"]["input"]>;
+  after?: InputMaybe<Scalars["String"]["input"]>;
+}>;
+
+export type NotificationChannelsQuery = {
+  __typename: "Query";
+  notificationChannels: {
+    __typename: "NotificationChannelConnection";
+    nodes: Array<{
+      __typename: "NotificationChannel";
+      channel: string;
+      unreadCount: number;
+      latestNotification: {
+        __typename: "Notification";
+        id: string;
+        tag: string;
+        channel: string;
+        title: string;
+        body: string;
+        priority: NotificationPriority;
+        status: NotificationStatus;
+        readAt: string | null;
+        dismissedAt: string | null;
+        notAfter: string;
+        notBefore: string;
+        createdAt: string;
+        updatedAt: string;
+        detailsURL: string | null;
+      };
+    }>;
+    pageInfo: {
+      __typename: "PageInfo";
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+      startCursor: string | null;
+      endCursor: string | null;
+    };
+  };
+};
+
+export type NotificationsQueryVariables = Exact<{
+  filterBy?: InputMaybe<NotificationFilters>;
+  first?: InputMaybe<Scalars["Int"]["input"]>;
+  after?: InputMaybe<Scalars["String"]["input"]>;
+}>;
+
+export type NotificationsQuery = {
+  __typename: "Query";
+  notifications: {
+    __typename: "NotificationConnection";
+    edges: Array<{
+      __typename: "NotificationEdge";
+      cursor: string;
+      node: {
+        __typename: "Notification";
+        id: string;
+        tag: string;
+        channel: string;
+        title: string;
+        body: string;
+        priority: NotificationPriority;
+        status: NotificationStatus;
+        readAt: string | null;
+        dismissedAt: string | null;
+        notAfter: string;
+        notBefore: string;
+        createdAt: string;
+        updatedAt: string;
+        detailsURL: string | null;
+      };
+    }>;
+    pageInfo: {
+      __typename: "PageInfo";
+      hasNextPage: boolean;
+      hasPreviousPage: boolean;
+      startCursor: string | null;
+      endCursor: string | null;
+    };
+  };
 };
 
 export type PairingRequestsQueryVariables = Exact<{ [key: string]: never }>;
@@ -2176,6 +2400,33 @@ export type NoteSavedSubscription = {
     rawContent: string;
     hidden: boolean;
     modTime: string;
+  };
+};
+
+export type NotificationChangedSubscriptionVariables = Exact<{ [key: string]: never }>;
+
+export type NotificationChangedSubscription = {
+  __typename: "Subscription";
+  notificationChanged: {
+    __typename: "NotificationChangedEvent";
+    event: NotificationEventType;
+    notification: {
+      __typename: "Notification";
+      id: string;
+      tag: string;
+      channel: string;
+      title: string;
+      body: string;
+      priority: NotificationPriority;
+      status: NotificationStatus;
+      readAt: string | null;
+      dismissedAt: string | null;
+      notAfter: string;
+      notBefore: string;
+      createdAt: string;
+      updatedAt: string;
+      detailsURL: string | null;
+    };
   };
 };
 
@@ -2676,6 +2927,35 @@ export const DirectoryStatsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<DirectoryStatsFragment, unknown>;
+export const NotificationFragmentDoc = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<NotificationFragment, unknown>;
 export const DirectoryFragmentDoc = {
   kind: "Document",
   definitions: [
@@ -5194,6 +5474,82 @@ export const UpdateNoteDocument = {
     },
   ],
 } as unknown as DocumentNode<UpdateNoteMutation, UpdateNoteMutationVariables>;
+export const UpdateNotificationDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "updateNotification" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "input" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "UpdateNotificationInput" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateNotification" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: { kind: "Variable", name: { kind: "Name", value: "input" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "notification" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "FragmentSpread", name: { kind: "Name", value: "Notification" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "clientMutationId" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<UpdateNotificationMutation, UpdateNotificationMutationVariables>;
 export const UpdateSessionDocument = {
   kind: "Document",
   definitions: [
@@ -7257,6 +7613,233 @@ export const NoteDocument = {
     },
   ],
 } as unknown as DocumentNode<NoteQuery, NoteQueryVariables>;
+export const NotificationChannelsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "notificationChannels" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "first" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "after" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "notificationChannels" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "first" },
+                value: { kind: "Variable", name: { kind: "Name", value: "first" } },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "after" },
+                value: { kind: "Variable", name: { kind: "Name", value: "after" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "nodes" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "channel" } },
+                      { kind: "Field", name: { kind: "Name", value: "unreadCount" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "latestNotification" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "FragmentSpread",
+                              name: { kind: "Name", value: "Notification" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "pageInfo" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "hasNextPage" } },
+                      { kind: "Field", name: { kind: "Name", value: "hasPreviousPage" } },
+                      { kind: "Field", name: { kind: "Name", value: "startCursor" } },
+                      { kind: "Field", name: { kind: "Name", value: "endCursor" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<NotificationChannelsQuery, NotificationChannelsQueryVariables>;
+export const NotificationsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "notifications" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "NotificationFilters" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "first" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "after" } },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "notifications" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "filterBy" },
+                value: { kind: "Variable", name: { kind: "Name", value: "filterBy" } },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "first" },
+                value: { kind: "Variable", name: { kind: "Name", value: "first" } },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "after" },
+                value: { kind: "Variable", name: { kind: "Name", value: "after" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "edges" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "node" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "FragmentSpread",
+                              name: { kind: "Name", value: "Notification" },
+                            },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "cursor" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "pageInfo" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "hasNextPage" } },
+                      { kind: "Field", name: { kind: "Name", value: "hasPreviousPage" } },
+                      { kind: "Field", name: { kind: "Name", value: "startCursor" } },
+                      { kind: "Field", name: { kind: "Name", value: "endCursor" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<NotificationsQuery, NotificationsQueryVariables>;
 export const PairingRequestsDocument = {
   kind: "Document",
   definitions: [
@@ -8179,6 +8762,68 @@ export const NoteSavedDocument = {
     },
   ],
 } as unknown as DocumentNode<NoteSavedSubscription, NoteSavedSubscriptionVariables>;
+export const NotificationChangedDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "subscription",
+      name: { kind: "Name", value: "notificationChanged" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "notificationChanged" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "event" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "notification" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "FragmentSpread", name: { kind: "Name", value: "Notification" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "Notification" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Notification" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          { kind: "Field", name: { kind: "Name", value: "id" } },
+          { kind: "Field", name: { kind: "Name", value: "tag" } },
+          { kind: "Field", name: { kind: "Name", value: "channel" } },
+          { kind: "Field", name: { kind: "Name", value: "title" } },
+          { kind: "Field", name: { kind: "Name", value: "body" } },
+          { kind: "Field", name: { kind: "Name", value: "priority" } },
+          { kind: "Field", name: { kind: "Name", value: "status" } },
+          { kind: "Field", name: { kind: "Name", value: "readAt" } },
+          { kind: "Field", name: { kind: "Name", value: "dismissedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "notAfter" } },
+          { kind: "Field", name: { kind: "Name", value: "notBefore" } },
+          { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+          { kind: "Field", name: { kind: "Name", value: "detailsURL" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  NotificationChangedSubscription,
+  NotificationChangedSubscriptionVariables
+>;
 export const PairingRequestCreatedDocument = {
   kind: "Document",
   definitions: [

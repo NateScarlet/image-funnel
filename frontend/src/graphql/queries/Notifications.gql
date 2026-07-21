@@ -1,0 +1,16 @@
+query notifications($filterBy: NotificationFilters, $first: Int, $after: String) {
+  notifications(filterBy: $filterBy, first: $first, after: $after) {
+    edges {
+      node {
+        ...Notification
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+  }
+}

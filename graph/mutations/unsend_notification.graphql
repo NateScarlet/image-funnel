@@ -1,0 +1,21 @@
+"撤回通知的输入参数"
+input UnsendNotificationInput {
+  "通知标签"
+  tag: String!
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+type UnsendNotificationPayload {
+  "撤回的通知，null 代表对应 tag 的通知不存在"
+  notification: Notification
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  撤回指定通知。如果存在则标记为已过期，否则什么都不做。
+  """
+  unsendNotification(input: UnsendNotificationInput!): UnsendNotificationPayload!
+}

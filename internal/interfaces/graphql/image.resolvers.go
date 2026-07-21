@@ -8,11 +8,12 @@ package graphql
 import (
 	"context"
 	"main/internal/application/image"
+	"main/internal/scalar"
 	"main/internal/shared"
 )
 
 // URL is the resolver for the url field.
-func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (string, error) {
+func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error) {
 	var opts []image.SignOption
 	if width != nil && *width < obj.Width {
 		opts = append(opts, image.WithWidth(*width))
@@ -20,12 +21,20 @@ func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *in
 	if quality != nil {
 		opts = append(opts, image.WithQuality(*quality))
 	}
-	return r.signer.GenerateSignedURL(obj.AbsPath, opts...)
+	uri, err := r.signer.GenerateSignedURL(obj.AbsPath, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &uri, nil
 }
 
 // RawURL is the resolver for the rawURL field.
-func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (string, error) {
-	return r.signer.GenerateSignedURL(obj.AbsPath, image.WithRaw())
+func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (*scalar.URI, error) {
+	uri, err := r.signer.GenerateSignedURL(obj.AbsPath, image.WithRaw())
+	if err != nil {
+		return nil, err
+	}
+	return &uri, nil
 }
 
 // Note is the resolver for the note field.

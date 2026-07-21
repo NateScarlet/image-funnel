@@ -1,0 +1,16 @@
+fragment Notification on Notification {
+  id
+  tag
+  channel
+  title
+  body
+  priority
+  status
+  readAt
+  dismissedAt
+  notAfter
+  notBefore
+  createdAt
+  updatedAt
+  detailsURL
+}

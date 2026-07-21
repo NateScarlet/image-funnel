@@ -1,0 +1,25 @@
+"更新通知元数据的输入参数，所有字段可选"
+input UpdateNotificationInput {
+  "通知 ID"
+  id: ID!
+  "标记已读时间。传 null 表示重置为未读，不传表示不修改"
+  readAt: Time @goField(omittable: true)
+  "关闭时间。传 null 表示撤销关闭，不传表示不修改"
+  dismissedAt: Time @goField(omittable: true)
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+type UpdateNotificationPayload {
+  "更新后的通知对象"
+  notification: Notification!
+  "客户端变更标识，用于幂等"
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  更新通知的元数据（已读时间、关闭时间）。内容变更请使用 sendNotification 同 tag 重新发送。
+  """
+  updateNotification(input: UpdateNotificationInput!): UpdateNotificationPayload!
+}

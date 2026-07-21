@@ -1,0 +1,2 @@
+# GraphQL resolver 文件主要内容是手写的，不应标记为 generated
+internal/interfaces/graphql/*.resolvers.go -linguist-generated

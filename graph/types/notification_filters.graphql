@@ -1,0 +1,17 @@
+"通知筛选条件"
+input NotificationFilters @goModel(model: "main/internal/shared.NotificationFilters") {
+  "按频道筛选，匹配任意一个"
+  channel: [String!]
+  "按状态筛选，匹配任意一个"
+  status: [NotificationStatus!]
+  "按优先级筛选，匹配任意一个"
+  priority: [NotificationPriority!]
+  "按已读状态筛选（true=已读，false=未读）"
+  read: Boolean
+  "可见时间过滤：只返回在该时刻可见的通知（notBefore <= visibleAt <= notAfter，字段为空的视为不限制），不传则不过滤时间"
+  visibleAt: Time
+  "在指定时间是否未来才可见（notBefore > pendingAt），不传则不过滤"
+  pendingAt: Time
+  "在指定时间是否已过期（notAfter < expiredAt），不传则不过滤"
+  expiredAt: Time
+}

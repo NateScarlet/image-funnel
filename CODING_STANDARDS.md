@@ -11,6 +11,7 @@
 
 ## Go
 
+- **日志**：项目使用 zap, **禁止**引入其他日志库。
 - **错误处理：**：循环中各项不互相依赖的场景，使用 `util.ErrorsBuilder` 各自处理后返回合并的错误，而不是直接日志记录后跳过或中途停止。
 - **资源释放：**：局部资源比如锁或文件，尽量使用单独方法或IIFE搭配defer确保释放
 - **无 `Get` 前缀**: 查询方法直接使用大写名称，如 `Session()` 而非 `GetSession()`
@@ -24,7 +25,7 @@
 - **日志**: 使用 zap，日志消息小写，记录耗时用 `duration` 字段，长耗时操作前后用 `will`/`did` 前缀
 - **测试**: 新增功能时添加对应的单元测试，测试文件名与逻辑文件对应
 - **Context**: 使用 `context.Context` 传递请求上下文
-- **类型命名**：不要在命名中重复包名，除名称正好和包名相同
+- **类型/方法命名**：不要在命名中重复包名，除名称正好和包名相同。例如 `notification` 包中的方法应命名为 `Send`、`Unsend` 而非 `SendNotification`、`UnsendNotification`
 - **筛选器**: 每个领域实体统一使用 `FilterBuilder` struct + `Build` 方法模式（参考 `directory.FilterBuilder`），内部使用 `util.FilterBuilder` 和 `util.AddToSet` 构建筛选闭包
 - **筛选器传值**: `Build` 方法接受值类型（非指针），调用方通过 `util.UnwrapPointer` 将可空指针安全转为零值
 - **Filter 传入 0 长度数组**: 所有的过滤条件字段（通常是切片类型）如果传入 0 长度数组，代表“所有对象都不匹配”（应执行过滤并且匹配结果为空），而不是“不筛选”。“不筛选”的语义通过不传递该字段（在 Go 结构体中为 `nil` 指针或 `nil` 切片）来表示。因此，在 FilterBuilder 及其相关逻辑中，应用 `v != nil` 判断是否应用该过滤条件，而不是 `len(v) > 0`。
@@ -34,6 +35,7 @@
 - **仓库构造权**: 领域实体的原始构造函数（如 `New`）不应导出供包外调用。外部构造入口统一为 `FromRepository` 专用方法，该方法内部调用非导出的构造函数与 `encodeID` 生成 ID。只有仓库实现有权限构造领域对象。
 - **通过仓库获取 ID**: 当外部代码需要领域实体的 ID 时，应通过仓库获取领域对象后调用 `.ID()`，不得自行编码。需要目录 ID 的组件（如 `ImageScanner`、`image.Handler`）应注入 `directory.Repository`，通过 `Get` 获取 `*Directory` 后取其 `ID()`，而非从路径字符串自行编码。
 - **应用层职责**: 应用层仅负责编排业务流程和翻译参数（如将接口层传入的 `directoryID` 通过 `directory.Service.GetDirectory` 转为领域对象再获取 `RelPath()`），所有规整文件名、路径拼接、ID 生成、冲突校验等具体业务逻辑应在领域层内执行
+- **应用层返回基础数据，接口层按需查询**: 应用层 handler 应返回基础数据（如 ID、状态值），不应预先查询接口层可能需要的数据。接口层（如 GQL resolver）有需要时自行按需调用应用层的查询方法获取完整数据。例如 GQL 层：Mutation resolver 调用应用层获取基础结果后，再通过 `r.app.Notification(ctx, id)` 查询完整 DTO 组装 Payload，而非让应用层 handler 返回完整 DTO。
 - **仓库接口极简设计**: `Repository` 接口必须保持极简且高度专注于数据的核心持久化（如 CRUD）。禁止为了计算物理绝对路径或辅助其他层创建空对象等非持久化行为而在接口中强行添加辅助方法。任何物理基准路径（如 `rootDir`）等硬件细节应通过依赖注入传入对应的领域服务（`Service`）或相关组件内部，由其内部自行处理。
 - **空实体回退机制内聚**: 当部分接口为了支持 GraphQL 等层级的非空约束（如 `NonNull!`）需要对缺失的数据进行“空实体”回退（Fallback）时，空实体的构造和物理绝对路径计算应属于领域层 Service 的内聚职责（通常由 Service 的私有方法如 `newEmpty` 统一创建）。应用层禁止获取物理路径属性后手动拼装实体，以避免职责边界外泄与属性构建不一致。
 - **应用层方法归属**: Handler 中的方法应根据操作对象归属到正确的领域包。如图片查询/订阅/移动操作应放在 `application/image.Handler`，笔记列表查询应放在 `application/note.Handler`，而非全部堆在 `application/directory.Handler`。`Root` 通过嵌入所有 handler 自动提升方法，GraphQL resolver 无需修改

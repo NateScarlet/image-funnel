@@ -1,0 +1,13 @@
+"""
+通知状态。
+"""
+enum NotificationStatus @goModel(model: "main/internal/shared.NotificationStatus") {
+  """
+  活跃中，未处理
+  """
+  ACTIVE
+  """
+  已手动关闭，等同于已确认
+  """
+  DISMISSED
+}
