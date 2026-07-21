@@ -5,6 +5,9 @@ import (
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 // Directories 获取子目录列表，支持过滤与基于 Relay 规范的游标分页
@@ -15,6 +18,23 @@ func (h *Handler) Directories(
 	first *int,
 	after *string,
 ) (connection *shared.DirectoryConnectionDTO, err error) {
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("directories failed",
+				zap.Stringer("parentID", parentID),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("did directories",
+				zap.Stringer("parentID", parentID),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	parentDir, err := h.dirSvc.GetDirectory(ctx, parentID)
 	if err != nil {
 		return nil, err

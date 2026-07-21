@@ -23,6 +23,12 @@
 - **业务错误**: 使用 `internal/apperror` 包
 - **枚举**: 放在 `internal/shared/enums.go`
 - **日志**: 使用 zap，日志消息小写，记录耗时用 `duration` 字段，长耗时操作前后用 `will`/`did` 前缀
+- **应用层日志**: 所有应用层 Handler 的公开方法必须记录日志，遵循 `will`/`did` 模式：
+  - 在 `defer` 中统一处理成功与失败日志，包含 `duration` 字段
+  - 失败时使用 `Error` 级别记录错误信息与关键参数
+  - 成功时使用 `Info` 级别记录 `did` 前缀与关键参数
+  - 订阅方法（返回 `iter.Seq2`）在创建订阅时记录 `will subscribe to` 日志
+  - 所有 Handler 必须通过 `NewHandler` 注入 `*zap.Logger` 依赖
 - **测试**: 新增功能时添加对应的单元测试，测试文件名与逻辑文件对应
 - **Context**: 使用 `context.Context` 传递请求上下文
 - **类型/方法命名**：不要在命名中重复包名，除名称正好和包名相同。例如 `notification` 包中的方法应命名为 `Send`、`Unsend` 而非 `SendNotification`、`UnsendNotification`

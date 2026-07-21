@@ -204,13 +204,14 @@ func main() {
 	filterBuilder := domdirectory.NewFilterBuilder()
 
 	directoryHandler := appdirectory.NewHandler(
-		dirAnalyzer,
-		directoryDTOFactory,
-		filterBuilder,
-		dirRepo,
-		dirSvc,
-		fileChangedTopic,
-	)
+			logger,
+			dirAnalyzer,
+			directoryDTOFactory,
+			filterBuilder,
+			dirRepo,
+			dirSvc,
+			fileChangedTopic,
+		)
 
 	sessionHandler := appsession.NewHandler(
 		sessionService,
@@ -224,7 +225,7 @@ func main() {
 	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
 	noteFilterBuilder := note.NewFilterBuilder()
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
-	noteHandler := appnote.NewHandler(noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
+	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
 	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
 
@@ -245,9 +246,9 @@ func main() {
 	}
 	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, deviceSavedTopic, deviceDeletedTopic)
 	pairingDTOFactory := apppairing.NewDTOFactory()
-	pairingHandler := apppairing.NewHandler(authService, pairingService, pairingDTOFactory)
+	pairingHandler := apppairing.NewHandler(logger, authService, pairingService, pairingDTOFactory)
 
-	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
+	hookHandler := apphook.NewHandler(logger, hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 

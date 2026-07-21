@@ -11,6 +11,7 @@ import (
 
 // NoteSaved 订阅笔记改变（新接口，支持目录/ID/是否隐藏等条件灵活过滤）
 func (h *Handler) NoteSaved(ctx context.Context, filter *shared.NoteFilters) iter.Seq2[*shared.NoteDTO, error] {
+	h.logger.Info("will subscribe to note saved")
 	return func(yield func(*shared.NoteDTO, error) bool) {
 		var filters shared.NoteFilters
 		if filter != nil {

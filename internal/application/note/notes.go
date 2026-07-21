@@ -7,6 +7,8 @@ import (
 	"main/internal/shared"
 	"slices"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Notes 获取目录下的笔记列表，支持过滤与基于 Relay 规范的游标分页
@@ -17,6 +19,23 @@ func (h *Handler) Notes(
 	first *int,
 	after *string,
 ) (connection *shared.NoteConnectionDTO, err error) {
+	startTime := time.Now()
+
+	defer func() {
+		if err != nil {
+			h.logger.Error("notes failed",
+				zap.Stringer("id", id),
+				zap.Duration("duration", time.Since(startTime)),
+				zap.Error(err),
+			)
+		} else {
+			h.logger.Info("did notes",
+				zap.Stringer("id", id),
+				zap.Duration("duration", time.Since(startTime)),
+			)
+		}
+	}()
+
 	dirInfo, err := h.dirSvc.GetDirectory(ctx, id)
 	if err != nil {
 		return nil, err

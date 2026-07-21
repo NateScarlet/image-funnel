@@ -25,7 +25,7 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	dtoFactory := NewDTOFactory(nil)
 	filterBuilder := directory.NewFilterBuilder()
 
-	handler := NewHandler(nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
+	handler := NewHandler(logger, nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
 	// 将 batchWindow 缩短到 40ms 方便快速测试
 	handler.dirEntryDeletedBatchWindow = 40 * time.Millisecond
 

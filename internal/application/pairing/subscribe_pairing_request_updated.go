@@ -7,6 +7,7 @@ import (
 )
 
 func (h *Handler) SubscribePairingRequestUpdated(ctx context.Context) iter.Seq2[*shared.PairingRequestDTO, error] {
+	h.logger.Info("will subscribe to pairing request updated")
 	return func(yield func(*shared.PairingRequestDTO, error) bool) {
 		for event, err := range h.pairingSvc.SubscribeRequestResolved(ctx) {
 			if err != nil {

@@ -4,6 +4,8 @@ import (
 	"context"
 
 	domain "main/internal/domain/hook"
+
+	"go.uber.org/zap"
 )
 
 // ImageService 用于动态获取图片物理路径的依赖接口，解决领域间直接依赖问题
@@ -17,10 +19,12 @@ type Handler struct {
 	runner       domain.Runner
 	imageService ImageService
 	dtoFactory   *DTOFactory
+	logger       *zap.Logger
 }
 
-func NewHandler(repo domain.Repository, runner domain.Runner, imageService ImageService, dtoFactory *DTOFactory) *Handler {
+func NewHandler(logger *zap.Logger, repo domain.Repository, runner domain.Runner, imageService ImageService, dtoFactory *DTOFactory) *Handler {
 	return &Handler{
+		logger:       logger,
 		repo:         repo,
 		runner:       runner,
 		imageService: imageService,

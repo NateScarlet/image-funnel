@@ -88,7 +88,7 @@ func TestDirectoryChanged_NoThrottle(t *testing.T) {
 	dtoFactory := NewDTOFactory(nil)
 	filterBuilder := directory.NewFilterBuilder()
 
-	handler := NewHandler(nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
+	handler := NewHandler(logger, nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
 
 	results := handler.DirectoryChanged(ctx, shared.DirectoryFilters{}, DirectoryChangedWithThrottle(0))
 
@@ -132,7 +132,7 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 	dtoFactory := NewDTOFactory(nil)
 	filterBuilder := directory.NewFilterBuilder()
 
-	handler := NewHandler(nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
+	handler := NewHandler(logger, nil, dtoFactory, filterBuilder, repo, dirSvc, pub)
 
 	throttleTime := 40 * time.Millisecond
 	results := handler.DirectoryChanged(ctx, shared.DirectoryFilters{}, DirectoryChangedWithThrottle(throttleTime))

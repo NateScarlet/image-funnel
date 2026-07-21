@@ -5,6 +5,8 @@ import (
 	"main/internal/domain/note"
 	"main/internal/pubsub"
 	"main/internal/shared"
+
+	"go.uber.org/zap"
 )
 
 type Handler struct {
@@ -14,9 +16,11 @@ type Handler struct {
 	fileChangedSub   pubsub.Topic[*shared.FileChangedEvent]
 	dtoFactory       *DTOFactory
 	filterBuilder    *note.FilterBuilder
+	logger           *zap.Logger
 }
 
 func NewHandler(
+	logger *zap.Logger,
 	repo note.Repository,
 	service *note.Service,
 	dirSvc *directory.Service,
@@ -25,6 +29,7 @@ func NewHandler(
 	filterBuilder *note.FilterBuilder,
 ) *Handler {
 	return &Handler{
+		logger:         logger,
 		repo:           repo,
 		service:        service,
 		dirSvc:         dirSvc,

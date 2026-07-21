@@ -6,10 +6,15 @@ import (
 	"main/internal/scalar"
 	"main/internal/shared"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 // NoteUpdated 订阅特定笔记更新
 func (h *Handler) NoteUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shared.NoteDTO, error] {
+	h.logger.Info("will subscribe to note updated",
+		zap.Stringer("id", id),
+	)
 	return func(yield func(*shared.NoteDTO, error) bool) {
 		for event, err := range h.fileChangedSub.Subscribe(ctx) {
 			if err != nil {
