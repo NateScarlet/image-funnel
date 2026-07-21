@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { mdiChevronLeft, mdiBellOutline, mdiOpenInNew } from "@mdi/js";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
 import { formatDate } from "@/utils/date";
@@ -13,6 +14,19 @@ const {
   selectChannel,
   markAsDismissed,
 } = useNotificationCenter();
+
+// 跟踪已展开的通知 ID，支持点击正文或按钮切换展开/折叠
+const expandedIds = ref(new Set<string>());
+
+function toggleExpand(id: string) {
+  const next = new Set(expandedIds.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  expandedIds.value = next;
+}
 
 function handleSelectChannel(channel: string) {
   void selectChannel(channel);
@@ -157,9 +171,22 @@ function handleDismiss(id: string) {
               </button>
             </div>
           </div>
-          <p v-if="notification.body" class="text-xs text-primary-400 mt-1 line-clamp-2">
+          <!-- 通知正文：点击展开/折叠，默认折叠两行 -->
+          <p
+            v-if="notification.body"
+            class="text-xs text-primary-400 mt-1 cursor-pointer select-none"
+            :class="{ 'line-clamp-2': !expandedIds.has(notification.id) }"
+            @click="toggleExpand(notification.id)"
+          >
             {{ notification.body }}
           </p>
+          <button
+            v-if="notification.body"
+            class="text-xs text-secondary-400 hover:text-secondary-300 transition-colors cursor-pointer mt-1"
+            @click="toggleExpand(notification.id)"
+          >
+            {{ expandedIds.has(notification.id) ? "收起" : "展开" }}
+          </button>
           <div v-if="notification.detailsURL" class="mt-1">
             <a
               :href="notification.detailsURL"
