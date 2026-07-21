@@ -671,11 +671,12 @@ class DanbooruProvider(AutocompleteProvider):
 
             if prompt_tags:
                 try:
-                    tags = self.provider.related(prompt_tags)
+                    target_categories = ["General", "Artist", "Copyright", "Meta"]
+                    tags = self.provider.related(
+                        prompt_tags, target_categories=target_categories
+                    )
                     suggestions: List[AutocompleteSuggestion] = []
                     for item in tags:
-                        if item.category == "Character":
-                            continue
                         display = (
                             f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
                         )

@@ -285,7 +285,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.related.return_value = [
             DanbooruTag("sailor_collar", "水手领", "A collar style.", "General"),
-            DanbooruTag("hatsune_miku", "初音未来", "Vocaloid character.", "Character"),
             DanbooruTag("skirt", "裙子", "A bottom wear.", "General"),
         ]
 
@@ -301,7 +300,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         suggestions = list(provider.provide(context))
 
-        mock_provider.related.assert_called_once_with(["masterpiece", "1girl"])
+        mock_provider.related.assert_called_once_with(
+            ["masterpiece", "1girl"],
+            target_categories=["General", "Artist", "Copyright", "Meta"],
+        )
 
         self.assertEqual(len(suggestions), 2)
         self.assertEqual(suggestions[0].text, "sailor_collar")
@@ -329,7 +331,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         suggestions = list(provider.provide(context))
 
-        mock_provider.related.assert_called_once_with(["1girl", "masterpiece"])
+        mock_provider.related.assert_called_once_with(
+            ["1girl", "masterpiece"],
+            target_categories=["General", "Artist", "Copyright", "Meta"],
+        )
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "solo")
 
@@ -789,18 +794,17 @@ class TestAutocompleteIntegration(unittest.TestCase):
         ]
 
         mock_sqlite_provider_class.assert_called_once()
-        mock_provider.related.assert_called_once_with(["masterpiece", "1girl"])
+        mock_provider.related.assert_called_once_with(
+            ["masterpiece", "1girl"],
+            target_categories=["General", "Artist", "Copyright", "Meta"],
+        )
 
-        # 验证结果中不包含 character 标签
         tags = [item["text"] for item in lines]
-        self.assertNotIn("hatsune_miku", tags)
         self.assertIn("1girl", tags)
         self.assertIn("tag_0", tags)
 
-        # 验证结果被限制在最前 20 个常规标签内（1girl + tag_0 到 tag_18）
         self.assertEqual(len(lines), 20)
         self.assertEqual(lines[0]["text"], "1girl")
-        self.assertEqual(lines[19]["text"], "tag_18")
 
 
 if __name__ == "__main__":

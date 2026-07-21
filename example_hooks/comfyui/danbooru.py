@@ -5,10 +5,9 @@ import os
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 import threading
 from dataclasses import dataclass
-from typing import List, Protocol, Optional
+from typing import List, Protocol, Optional, Any, Dict, cast
 import requests
 
 from .db import SQLiteContext
@@ -153,7 +152,11 @@ class DanbooruTagProvider(Protocol):
         """前缀搜索 Danbooru 提示词。"""
         ...
 
-    def related(self, tags: List[str]) -> List[DanbooruTag]:
+    def related(
+        self,
+        tags: List[str],
+        target_categories: Optional[List[str]] = None,
+    ) -> List[DanbooruTag]:
         """联想与指定 tags 列表相关的提示词。"""
         ...
 
@@ -225,17 +228,23 @@ class AkizukiDanbooruTagProvider:
             _LOGGER.error("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
             raise
 
-    def related(self, tags: List[str]) -> List[DanbooruTag]:
+    def related(
+        self,
+        tags: List[str],
+        target_categories: Optional[List[str]] = None,
+    ) -> List[DanbooruTag]:
         if not tags:
             return []
 
         api_url = f"{self.search_url}/api/related"
 
-        payload = {
+        payload: Dict[str, Any] = {
             "tags": tags,
             "limit": 100,
             "show_nsfw": self.show_nsfw,
         }
+        if target_categories is not None:
+            payload["target_categories"] = target_categories
 
         try:
             _LOGGER.debug(
@@ -244,24 +253,24 @@ class AkizukiDanbooruTagProvider:
             response = requests.post(api_url, json=payload, timeout=5.0)
             _LOGGER.debug("Danbooru related response status: %d", response.status_code)
             response.raise_for_status()
-            res_json = response.json()
-            results = res_json.get("results", [])
+            res_json = cast(Dict[str, Any], response.json())
+            results = cast(List[Dict[str, Any]], res_json.get("results", []))
             _LOGGER.debug("Danbooru related search returned %d items", len(results))
 
-            def _load_single_tag(item: dict) -> DanbooruTag:
-                tag = item["tag"]
-                loaded = self.loader.load(tag)
-                if loaded:
-                    return loaded
-                return DanbooruTag(
+            tags_list: List[DanbooruTag] = []
+            for item in results:
+                tag = cast(str, item["tag"])
+                cn_name = cast(str, item.get("cn_name", ""))
+                wiki = cast(str, item.get("wiki", ""))
+                category = cast(str, item.get("category", ""))
+                tag_item = DanbooruTag(
                     tag=tag,
-                    cn_name=item["cn_name"],
-                    wiki=item.get("wiki", ""),
-                    category=item["category"],
+                    cn_name=cn_name,
+                    wiki=wiki,
+                    category=category,
                 )
-
-            with ThreadPoolExecutor(max_workers=16) as executor:
-                tags_list = list(executor.map(_load_single_tag, results))
+                tags_list.append(tag_item)
+                self.loader.write_cache(tag_item)
 
             return tags_list
         except requests.RequestException as e:
@@ -330,10 +339,22 @@ class SQLiteDanbooruTagProvider:
         except Exception as e:
             _LOGGER.warning("SQLite search cache write error: %s", e)
 
-    def write_related_cache(self, tags: List[str], results: List[DanbooruTag]) -> None:
+    def _make_related_cache_key(
+        self, tags: List[str], target_categories: Optional[List[str]] = None
+    ) -> str:
+        if target_categories is None:
+            return json.dumps(tags)
+        return json.dumps({"tags": tags, "target_categories": target_categories})
+
+    def write_related_cache(
+        self,
+        tags: List[str],
+        results: List[DanbooruTag],
+        target_categories: Optional[List[str]] = None,
+    ) -> None:
         """持久化写入联想词结果至 SQLite 缓存中，并执行过期数据清理。"""
         now = int(time.time())
-        tags_key = json.dumps(tags)
+        tags_key = self._make_related_cache_key(tags, target_categories)
         try:
             data_str = json.dumps(
                 [item.__dict__ for item in results], ensure_ascii=False
@@ -390,11 +411,15 @@ class SQLiteDanbooruTagProvider:
         self.write_search_cache(query, results)
         return results
 
-    def related(self, tags: List[str]) -> List[DanbooruTag]:
+    def related(
+        self,
+        tags: List[str],
+        target_categories: Optional[List[str]] = None,
+    ) -> List[DanbooruTag]:
         if not tags:
             return []
 
-        tags_key = json.dumps(tags)
+        tags_key = self._make_related_cache_key(tags, target_categories)
         now = int(time.time())
         cached_results = None
         is_stale = False
@@ -425,13 +450,13 @@ class SQLiteDanbooruTagProvider:
 
         # 4. 如果没有缓存，则同步请求上游
         try:
-            results = self.provider.related(tags)
+            results = self.provider.related(tags, target_categories=target_categories)
         except Exception as e:
             _LOGGER.error("Danbooru related upstream error: %s", e, exc_info=True)
             raise
 
         # 5. 写入缓存并清理已过期缓存
-        self.write_related_cache(tags, results)
+        self.write_related_cache(tags, results, target_categories=target_categories)
         return results
 
 
@@ -455,9 +480,25 @@ def update_cache(
             results = akizuki.search(key_arg)
             provider.write_search_cache(key_arg, results)
         elif method == "related":
-            tags = json.loads(key_arg)
-            results = akizuki.related(tags)
-            provider.write_related_cache(tags, results)
+            try:
+                parsed = json.loads(key_arg)
+                if isinstance(parsed, dict):
+                    parsed_dict = cast(Dict[str, Any], parsed)
+                    tags = cast(List[str], parsed_dict.get("tags", []))
+                    target_categories = cast(
+                        Optional[List[str]], parsed_dict.get("target_categories")
+                    )
+                else:
+                    tags = cast(List[str], parsed)
+                    target_categories = None
+            except Exception:
+                tags = []
+                target_categories = None
+
+            results = akizuki.related(tags, target_categories=target_categories)
+            provider.write_related_cache(
+                tags, results, target_categories=target_categories
+            )
 
 
 def main() -> None:

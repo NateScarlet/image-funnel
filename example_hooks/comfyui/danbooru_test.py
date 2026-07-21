@@ -130,12 +130,13 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         provider = AkizukiDanbooruTagProvider(
             "https://mock-api.com", loader=self.loader
         )
-        provider.related(["1girl"])
+        provider.related(["1girl"], target_categories=["General", "Artist"])
         _, call_kwargs = mock_post.call_args
         payload = call_kwargs.get("json", {})
         self.assertEqual(payload["tags"], ["1girl"])
         self.assertEqual(payload["limit"], 100)
         self.assertFalse(payload["show_nsfw"])
+        self.assertEqual(payload["target_categories"], ["General", "Artist"])
 
         mock_post.reset_mock()
         provider_nsfw = AkizukiDanbooruTagProvider(
@@ -145,6 +146,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
         _, call_kwargs = mock_post.call_args
         payload = call_kwargs.get("json", {})
         self.assertTrue(payload["show_nsfw"])
+        self.assertNotIn("target_categories", payload)
 
     def test_from_env(self) -> None:
         with patch.dict(os.environ, {"DANBOORU_SEARCH_INCLUDE_NSFW": "true"}):
