@@ -93,23 +93,23 @@ func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBui
 			title TEXT NOT NULL,
 			body TEXT NOT NULL,
 			priority TEXT NOT NULL,
-			read_at INTEGER NOT NULL DEFAULT -62135596800000,
-			dismissed_at INTEGER NOT NULL DEFAULT -62135596800000,
+			read_at INTEGER NOT NULL,
+			dismissed_at INTEGER NOT NULL,
 			not_after INTEGER NOT NULL,
 			not_before INTEGER NOT NULL,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,
-			details_url TEXT NOT NULL DEFAULT ''
+			details_url TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_notifications_channel_created ON notifications(channel, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_notifications_tag ON notifications(tag);
 
 		CREATE TABLE IF NOT EXISTS channel_summary (
 			channel TEXT PRIMARY KEY,
-			unread_count INTEGER NOT NULL DEFAULT 0,
+			unread_count INTEGER NOT NULL,
 			latest_notification_id TEXT NOT NULL,
-			latest_not_before INTEGER NOT NULL DEFAULT 0,
-			expires_at INTEGER NOT NULL DEFAULT 0
+			latest_not_before INTEGER NOT NULL,
+			expires_at INTEGER NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_channel_summary_latest_not_before ON channel_summary(latest_not_before DESC);
 		PRAGMA user_version = 1;
