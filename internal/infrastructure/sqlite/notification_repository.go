@@ -308,7 +308,8 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 }
 
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
-// rows 扫描完成后若检测到有 expires_at 过期，关闭 rows 后通过 singleflight 精准增量刷新相应频道
+// 为避免在 rows 遍历期间执行写操作导致 SQLite 驱动内部死锁，先读取并关闭 rows，
+// 随后通过 singleflight 精准被动增量刷新过期的频道。
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
 		rows, err := r.db.QueryContext(ctx, `
@@ -349,13 +350,15 @@ func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notifi
 		rows.Close()
 
 		now := time.Now().UnixMilli()
+		refreshCtx := context.WithoutCancel(ctx)
 
 		for _, item := range items {
 			cs := item.cs
 			// 被动刷新：若该频道 expires_at 已到/已过期，通过 singleflight 精准触发该频道的增量刷新
+			// 使用 context.WithoutCancel 避免单个调用者取消 context 导致共享给其他调用者的 singleflight 任务失败
 			if item.expiresAt > 0 && item.expiresAt <= now {
 				res, err, _ := r.sf.Do(cs.Channel, func() (any, error) {
-					return r.refreshChannelSummary(ctx, cs.Channel)
+					return r.refreshChannelSummary(refreshCtx, cs.Channel)
 				})
 				if err != nil {
 					if !yield(nil, err) {
