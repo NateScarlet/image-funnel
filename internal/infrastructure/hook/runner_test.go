@@ -745,6 +745,64 @@ command = '` + cmdScan + `'
 	assert.Equal(t, filepath.Join(tempDir, "test.png.md"), mPaths[0], "无指令笔记扫描钩子的 NotePaths 应正确携带")
 }
 
+// TestRunner_PostCommitSession_DirectoryID 验证 post_commit_session 纯提交钩子
+// 在没有图片路径和笔记路径时，IMAGE_FUNNEL_DIRECTORY_ID 仍能正确注入
+func TestRunner_PostCommitSession_DirectoryID(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "post-commit-dir-id-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	flagFile := filepath.Join(tempDir, "dir_id_flag")
+
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID" > ` + flagFile
+	} else {
+		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID% > ` + flagFile
+	}
+
+	tomlContent := `
+id = "post-commit-dir-id"
+name = "提交时目录ID注入测试"
+command = '` + cmdStr + `'
+
+[on.post_commit_session]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "dirid.toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+
+	expectedDir := directory.FromRepository("subdir")
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			"subdir": expectedDir,
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	err = runner.OnCommitSession(context.Background(), expectedDir.ID(), "subdir")
+	assert.NoError(t, err)
+
+	assert.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "纯提交钩子应成功执行并写入 flag 文件")
+
+	contentBytes, err := os.ReadFile(flagFile)
+	assert.NoError(t, err)
+	result := strings.TrimSpace(string(contentBytes))
+
+	// 验证回退机制：即使没有图片路径或笔记路径，DIRECTORY_ID 也能正确注入
+	assert.Equal(t, expectedDir.ID().String(), result,
+		"post_commit_session 纯提交钩子应正确注入 IMAGE_FUNNEL_DIRECTORY_ID（回退到调用者传入的目录信息）")
+}
+
 func TestSplitArgs_Simple(t *testing.T) {
 	assert.Equal(t, []string{"arg1", "arg2", "arg3"}, splitArgs("arg1 arg2 arg3"))
 }

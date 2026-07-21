@@ -19,7 +19,8 @@ func mustJSON(v any) string {
 }
 
 // buildBaseEnv 构建所有钩子脚本共用的基础环境变量
-func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName string, imageIDs, imagePaths []string, noteAbsPath string, customEnv map[string]string) ([]string, error) {
+// dirID 和 dirRel 作为回退值：当无法从路径推导目录信息时使用（例如 post_commit_session 触发器）
+func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName string, imageIDs, imagePaths []string, noteAbsPath string, customEnv map[string]string, dirID string, dirRel string) ([]string, error) {
 	imageIDsJSON := mustJSON(imageIDs)
 	imagePathsJSON := mustJSON(imagePaths)
 
@@ -30,21 +31,19 @@ func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName
 		notePathsJSON = "[]"
 	}
 
-	// 从第一个可用路径推导目录信息
-	var dirRel string
+	// 从第一个可用路径推导目录信息，无法推导时使用调用者传入的回退值
 	if noteAbsPath != "" {
 		dirRel = r.dirRelFromAbsPath(noteAbsPath)
 	} else if len(imagePaths) > 0 {
 		dirRel = r.dirRelFromAbsPath(imagePaths[0])
 	}
 
-	var dirID string
 	if dirRel != "" {
-		dir, err := r.dirRepo.Get(ctx, dirRel)
+		resolvedID, err := r.resolveDirID(ctx, dirRel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
 		}
-		dirID = dir.ID().String()
+		dirID = resolvedID
 	}
 
 	env := append(os.Environ(),

@@ -108,7 +108,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		noteAbsPath = filepath.Join(r.rootDir, task.NotePath)
 	}
 
-	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env)
+	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env, task.DirectoryID, task.DirectoryRel)
 	if buildErr != nil {
 		execErr := fmt.Errorf("failed to build hook env: %w", buildErr)
 		r.sendHookNotification(ctx, task, execErr, "", "")

@@ -140,7 +140,7 @@ func parseLineContext(linePrefix, query string) (cwords []string, cwordIdx int, 
 }
 
 func (r *Runner) buildAutocompleteEnv(ctx context.Context, targetHook *hookConfig, linePrefix, query string, imageIDs, imagePaths []string, noteAbsPath string) ([]string, error) {
-	env, err := r.buildBaseEnv(ctx, targetHook.ID, targetHook.Name, "autocomplete", imageIDs, imagePaths, noteAbsPath, targetHook.Env)
+	env, err := r.buildBaseEnv(ctx, targetHook.ID, targetHook.Name, "autocomplete", imageIDs, imagePaths, noteAbsPath, targetHook.Env, "", "")
 	if err != nil {
 		return nil, err
 	}
