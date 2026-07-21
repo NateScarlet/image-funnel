@@ -20,7 +20,7 @@ type connectionBufferImpl[T any, TEdge any, TConnection any] struct {
 // Reverse implements db.PaginationWriter
 func (w *connectionBufferImpl[T, TEdge, TConnection]) Reverse() {
 	slices.Reverse(w.edges)
-	w.pageInfo.Reverse()
+	ReversePageInfo(&w.pageInfo)
 }
 
 // WriteHasNextPage implements db.PaginationWriter
@@ -40,7 +40,7 @@ func (w *connectionBufferImpl[T, TEdge, TConnection]) Write(item T, cursor strin
 		return
 	}
 	w.edges = append(w.edges, edge)
-	w.pageInfo.UpdateCursor(cursor)
+	UpdatePageInfoCursor(&w.pageInfo, cursor)
 	return
 }
 

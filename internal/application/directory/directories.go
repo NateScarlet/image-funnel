@@ -29,28 +29,16 @@ func (h *Handler) Directories(
 			}, nil
 		},
 		func(edges []*shared.DirectoryEdgeDTO, pageInfo pagination.PageInfo) (*shared.DirectoryConnectionDTO, error) {
-			var nodes = make([]*shared.DirectoryDTO, len(edges))
-			for i, edge := range edges {
-				nodes[i] = edge.Node
-			}
-			var startCursor, endCursor string
-			if pageInfo.StartCursor != nil {
-				startCursor = *pageInfo.StartCursor
-			}
-			if pageInfo.EndCursor != nil {
-				endCursor = *pageInfo.EndCursor
-			}
-			return &shared.DirectoryConnectionDTO{
-				Edges: edges,
-				Nodes: nodes,
-				PageInfo: &shared.PageInfoDTO{
-					HasNextPage:     pageInfo.HasNextPage,
-					HasPreviousPage: pageInfo.HasPreviousPage,
-					StartCursor:     startCursor,
-					EndCursor:       endCursor,
-				},
-			}, nil
-		},
+				var nodes = make([]*shared.DirectoryDTO, len(edges))
+				for i, edge := range edges {
+					nodes[i] = edge.Node
+				}
+				return &shared.DirectoryConnectionDTO{
+					Edges:    edges,
+					Nodes:    nodes,
+					PageInfo: &pageInfo,
+				}, nil
+			},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)

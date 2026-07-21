@@ -25,23 +25,11 @@ func (h *Handler) Notifications(
 			}, nil
 		},
 		func(edges []*shared.NotificationEdgeDTO, pageInfo pagination.PageInfo) (*shared.NotificationConnectionDTO, error) {
-			var startCursor, endCursor string
-			if pageInfo.StartCursor != nil {
-				startCursor = *pageInfo.StartCursor
-			}
-			if pageInfo.EndCursor != nil {
-				endCursor = *pageInfo.EndCursor
-			}
-			return &shared.NotificationConnectionDTO{
-				Edges: edges,
-				PageInfo: &shared.PageInfoDTO{
-					HasNextPage:     pageInfo.HasNextPage,
-					HasPreviousPage: pageInfo.HasPreviousPage,
-					StartCursor:     startCursor,
-					EndCursor:       endCursor,
-				},
-			}, nil
-		},
+				return &shared.NotificationConnectionDTO{
+					Edges:    edges,
+					PageInfo: &pageInfo,
+				}, nil
+			},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)
