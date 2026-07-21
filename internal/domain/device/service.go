@@ -231,9 +231,7 @@ func (s *Service) FinishRegistration(ctx context.Context, sessionKey string, res
 		if err != nil {
 			return nil, nil, err
 		}
-		if s.deviceSavedPub != nil {
-			s.deviceSavedPub.Publish(ctx, newDevice)
-		}
+		s.deviceSavedPub.Publish(ctx, newDevice)
 		// 若使用的是 setupToken，在首次成功后将其清除
 		if !hasDevices && s.setupToken != "" && providedSetupToken == s.setupToken {
 			s.setupToken = ""
@@ -328,9 +326,7 @@ func (s *Service) FinishLogin(ctx context.Context, sessionKey string, responseJS
 	if err != nil {
 		return nil, err
 	}
-	if s.deviceSavedPub != nil {
-		s.deviceSavedPub.Publish(ctx, matchedDevice)
-	}
+	s.deviceSavedPub.Publish(ctx, matchedDevice)
 
 	return matchedDevice, nil
 }
@@ -372,9 +368,7 @@ func (s *Service) ApproveRequest(ctx context.Context, code string) error {
 	if err != nil {
 		return err
 	}
-	if s.deviceSavedPub != nil {
-		s.deviceSavedPub.Publish(ctx, newDevice)
-	}
+	s.deviceSavedPub.Publish(ctx, newDevice)
 
 	return s.pairingSvc.Delete(ctx, code, shared.PairingRequestStatusApproved)
 }
@@ -388,15 +382,13 @@ func (s *Service) RejectRequest(ctx context.Context, code string) error {
 func (s *Service) Delete(ctx context.Context, id scalar.ID) error {
 	// 删除设备前，吊销其刷新令牌
 	if device, err := s.repo.Get(ctx, id); err == nil && device.RefreshTokenID() != "" {
-		if s.revocationList != nil {
-			revokeFn, err := s.revocationList.PrepareRevoke(ctx, device.RefreshTokenID(), device.RefreshTokenExpiresAt())
-			if err == nil {
-				if commitErr := revokeFn(); commitErr != nil && !errors.Is(commitErr, ErrTokenAlreadyRevoked) {
-					s.logger.Warn("failed to commit revoke refresh token on device delete", zap.Error(commitErr))
-				}
-			} else if !errors.Is(err, ErrTokenAlreadyRevoked) {
-				s.logger.Warn("failed to prepare revoke refresh token on device delete", zap.Error(err))
+		revokeFn, err := s.revocationList.PrepareRevoke(ctx, device.RefreshTokenID(), device.RefreshTokenExpiresAt())
+		if err == nil {
+			if commitErr := revokeFn(); commitErr != nil && !errors.Is(commitErr, ErrTokenAlreadyRevoked) {
+				s.logger.Warn("failed to commit revoke refresh token on device delete", zap.Error(commitErr))
 			}
+		} else if !errors.Is(err, ErrTokenAlreadyRevoked) {
+			s.logger.Warn("failed to prepare revoke refresh token on device delete", zap.Error(err))
 		}
 	}
 
@@ -404,9 +396,7 @@ func (s *Service) Delete(ctx context.Context, id scalar.ID) error {
 	if err != nil {
 		return err
 	}
-	if s.deviceDeletedPub != nil {
-		s.deviceDeletedPub.Publish(ctx, id)
-	}
+	s.deviceDeletedPub.Publish(ctx, id)
 	return nil
 }
 
@@ -434,9 +424,7 @@ func (s *Service) UpdateRefreshToken(ctx context.Context, deviceID scalar.ID, jt
 	if err != nil {
 		return err
 	}
-	if s.deviceSavedPub != nil {
-		s.deviceSavedPub.Publish(ctx, device)
-	}
+	s.deviceSavedPub.Publish(ctx, device)
 	return nil
 }
 
@@ -471,7 +459,7 @@ func (s *Service) Count(ctx context.Context) (int, error) {
 
 // PrepareRevoke 准备吊销指定的刷新令牌，如果已被吊销则返回 ErrTokenAlreadyRevoked
 func (s *Service) PrepareRevoke(ctx context.Context, jti string, expiresAt time.Time) (RevokeFunc, error) {
-	if s.revocationList == nil || jti == "" {
+	if jti == "" {
 		return func() error { return nil }, nil
 	}
 	return s.revocationList.PrepareRevoke(ctx, jti, expiresAt)

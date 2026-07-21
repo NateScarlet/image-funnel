@@ -7,21 +7,19 @@ import (
 )
 
 func (h *Handler) SubscribeSaved(ctx context.Context) iter.Seq2[*shared.DeviceDTO, error] {
-	if h.deviceSavedSub != nil {
-		return func(yield func(*shared.DeviceDTO, error) bool) {
-			for dev, err := range h.deviceSavedSub.Subscribe(ctx) {
-				if err != nil {
-					if !yield(nil, err) {
-						return
-					}
-					continue
-				}
-				dto := h.dtoFactory.New(dev)
-				if !yield(dto, nil) {
+	h.logger.Info("will subscribe to device saved")
+	return func(yield func(*shared.DeviceDTO, error) bool) {
+		for dev, err := range h.deviceSavedSub.Subscribe(ctx) {
+			if err != nil {
+				if !yield(nil, err) {
 					return
 				}
+				continue
+			}
+			dto := h.dtoFactory.New(dev)
+			if !yield(dto, nil) {
+				return
 			}
 		}
 	}
-	return func(yield func(*shared.DeviceDTO, error) bool) {}
 }

@@ -51,15 +51,13 @@ func (h *Handler) UpdateSession(
 	}
 
 	// 自动同步修改后的会话配置到历史存储中，用作下次创建会话时的回退配置
-	if h.lastSessionSaver != nil {
-		sess, release, errAcquire := h.sessionService.Acquire(ctx, sessionID)
-		if errAcquire == nil {
-			if err := h.lastSessionSaver.SaveLastSession(ctx, sess.DirectoryID(), sessionID, sess.Filter(), sess.TargetKeep()); err != nil {
-				release()
-				return fmt.Errorf("failed to save last session: %w", err)
-			}
+	sess, release, errAcquire := h.sessionService.Acquire(ctx, sessionID)
+	if errAcquire == nil {
+		if err := h.lastSessionSaver.SaveLastSession(ctx, sess.DirectoryID(), sessionID, sess.Filter(), sess.TargetKeep()); err != nil {
 			release()
+			return fmt.Errorf("failed to save last session: %w", err)
 		}
+		release()
 	}
 
 	return nil

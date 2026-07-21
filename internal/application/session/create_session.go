@@ -39,10 +39,8 @@ func (h *Handler) CreateSession(
 	}
 
 	// 自动同步新建会话配置到历史存储中，用作下次创建会话时的回退配置
-	if h.lastSessionSaver != nil {
-		if err := h.lastSessionSaver.SaveLastSession(ctx, directoryId, sessionID, filter, target_keep); err != nil {
-			return sessionID, fmt.Errorf("failed to save last session: %w", err)
-		}
+	if err := h.lastSessionSaver.SaveLastSession(ctx, directoryId, sessionID, filter, target_keep); err != nil {
+		return sessionID, fmt.Errorf("failed to save last session: %w", err)
 	}
 
 	return sessionID, nil

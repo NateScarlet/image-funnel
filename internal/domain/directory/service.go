@@ -83,9 +83,7 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		}
 
 		// 发布事件
-		if s.fileChangedPub != nil {
-			s.fileChangedPub.Publish(ctx, event)
-		}
+		s.fileChangedPub.Publish(ctx, event)
 	}
 }
 

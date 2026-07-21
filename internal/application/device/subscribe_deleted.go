@@ -7,8 +7,6 @@ import (
 )
 
 func (h *Handler) SubscribeDeleted(ctx context.Context) iter.Seq2[scalar.ID, error] {
-	if h.deviceDeletedSub != nil {
-		return h.deviceDeletedSub.Subscribe(ctx)
-	}
-	return func(yield func(scalar.ID, error) bool) {}
+	h.logger.Info("will subscribe to device deleted")
+	return h.deviceDeletedSub.Subscribe(ctx)
 }

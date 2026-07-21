@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"main/internal/domain/pairing"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 
@@ -63,6 +64,32 @@ func (m *mockDeviceDeletedPub) Subscribe(ctx context.Context) iter.Seq2[scalar.I
 	return func(yield func(scalar.ID, error) bool) {}
 }
 
+// mockRevocationList 模拟令牌吊销列表
+type mockRevocationList struct{}
+
+func (m *mockRevocationList) PrepareRevoke(ctx context.Context, id string, expiresAt time.Time) (RevokeFunc, error) {
+	return func() error { return nil }, nil
+}
+
+// mockPairingRepo 模拟配对请求仓库
+type mockPairingRepo struct{}
+
+func (m *mockPairingRepo) Save(ctx context.Context, req *pairing.Request) error {
+	return nil
+}
+
+func (m *mockPairingRepo) Get(ctx context.Context, code string) (*pairing.Request, error) {
+	return nil, os.ErrNotExist
+}
+
+func (m *mockPairingRepo) Delete(ctx context.Context, code string) error {
+	return nil
+}
+
+func (m *mockPairingRepo) Find(ctx context.Context) iter.Seq2[*pairing.Request, error] {
+	return func(yield func(*pairing.Request, error) bool) {}
+}
+
 func TestService_UpdateRefreshToken(t *testing.T) {
 	ctx := context.Background()
 
@@ -70,7 +97,16 @@ func TestService_UpdateRefreshToken(t *testing.T) {
 	repo := &mockRepository{}
 	deviceSavedPub := &mockDeviceSavedPub{}
 	deviceDeletedPub := &mockDeviceDeletedPub{}
+	revocationList := &mockRevocationList{}
 	factory := NewFactory()
+
+	// 创建配对服务（测试不依赖其功能，仅需传入非 nil 实现）
+	pairingRepo := &mockPairingRepo{}
+	prTopic, prTopicCleanup := pubsub.NewInMemoryTopic[*pairing.Request]()
+	defer prTopicCleanup()
+	prResolvedTopic, prResolvedTopicCleanup := pubsub.NewInMemoryTopic[*pairing.RequestResolvedEvent]()
+	defer prResolvedTopicCleanup()
+	pairingSvc := pairing.NewService(pairingRepo, prTopic, prResolvedTopic, prTopic, prResolvedTopic)
 
 	// 2. 创建一个测试设备并存入仓库
 	deviceID := scalar.NewID()
@@ -90,7 +126,7 @@ func TestService_UpdateRefreshToken(t *testing.T) {
 	_ = repo.Save(ctx, dev)
 
 	// 3. 构建 Service 实例
-	service, err := NewService(repo, nil, zap.NewNop(), "localhost", []string{"http://localhost"}, deviceSavedPub, deviceDeletedPub, nil, factory)
+	service, err := NewService(repo, pairingSvc, zap.NewNop(), "localhost", []string{"http://localhost"}, deviceSavedPub, deviceDeletedPub, revocationList, factory)
 	if err != nil {
 		t.Fatalf("failed to create device service: %v", err)
 	}

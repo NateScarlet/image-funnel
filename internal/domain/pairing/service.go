@@ -59,9 +59,7 @@ func (s *Service) Create(
 		return nil, err
 	}
 
-	if s.prCreatedPub != nil {
-		s.prCreatedPub.Publish(ctx, req)
-	}
+	s.prCreatedPub.Publish(ctx, req)
 
 	return req, nil
 }
@@ -87,30 +85,22 @@ func (s *Service) Delete(ctx context.Context, code string, status shared.Pairing
 		return err
 	}
 
-	if s.prResolvedPub != nil {
-		s.prResolvedPub.Publish(ctx, &RequestResolvedEvent{
-			Request: req,
-			Status:  status,
-		})
-	}
+	s.prResolvedPub.Publish(ctx, &RequestResolvedEvent{
+		Request: req,
+		Status:  status,
+	})
 
 	return nil
 }
 
 // SubscribeRequestCreated 订阅新配对请求产生的事件通道。
 func (s *Service) SubscribeRequestCreated(ctx context.Context) iter.Seq2[*Request, error] {
-	if s.prCreatedSub != nil {
-		return s.prCreatedSub.Subscribe(ctx)
-	}
-	return func(yield func(*Request, error) bool) {}
+	return s.prCreatedSub.Subscribe(ctx)
 }
 
 // SubscribeRequestResolved 订阅配对请求被解决（批准或拒绝）的事件通道。
 func (s *Service) SubscribeRequestResolved(ctx context.Context) iter.Seq2[*RequestResolvedEvent, error] {
-	if s.prResolvedSub != nil {
-		return s.prResolvedSub.Subscribe(ctx)
-	}
-	return func(yield func(*RequestResolvedEvent, error) bool) {}
+	return s.prResolvedSub.Subscribe(ctx)
 }
 
 // Find 返回所有当前的配对请求。
