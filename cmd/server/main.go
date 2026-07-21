@@ -147,8 +147,25 @@ func main() {
 	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, fileChangedTopic, cfg.AbsRootDir, dirRepo, logger)
 	defer dirServiceCleanup()
 
+	notifFilterBuilder := domnotification.NewFilterBuilder()
+	notifDBPath := filepath.Join(cfg.DataDir, "notifications.db")
+	sqliteNotifRepo, notifCleanup, err := sqlite.NewNotificationRepository(notifDBPath, notifFilterBuilder,
+		sqlite.WithReclaimErrorHandler(func(err error) {
+			logger.Error("notification reclaim error", zap.Error(err))
+		}),
+	)
+	if err != nil {
+		logger.Fatal("failed to initialize sqlite notification repository", zap.Error(err))
+	}
+	defer notifCleanup()
+
+	notifDTOFactory := appnotification.NewDTOFactory()
+	notifFactory := &domnotification.Factory{}
+	notifService := domnotification.NewService(sqliteNotifRepo, notifFactory, notifChangedTopic)
+	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifService, notifDTOFactory, notifFilterBuilder, notifChangedTopic, logger)
+
 	// 初始化外部钩子服务
-	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, metadataUpdatedTopic, fileChangedTopic, cfg.BaseURL+"/graphql", tokenSource, imageRepo, dirSvc, dirRepo)
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, metadataUpdatedTopic, fileChangedTopic, cfg.BaseURL+"/graphql", tokenSource, imageRepo, dirSvc, dirRepo, notifHandler)
 	defer hookRunner.Close()
 
 	if cfg.EnableDirectoryStatsCache && statsCache != nil {
@@ -231,23 +248,6 @@ func main() {
 	pairingHandler := apppairing.NewHandler(authService, pairingService, pairingDTOFactory)
 
 	hookHandler := apphook.NewHandler(hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
-
-	notifFilterBuilder := domnotification.NewFilterBuilder()
-	notifDBPath := filepath.Join(cfg.DataDir, "notifications.db")
-    sqliteNotifRepo, notifCleanup, err := sqlite.NewNotificationRepository(notifDBPath, notifFilterBuilder,
-        sqlite.WithReclaimErrorHandler(func(err error) {
-            logger.Error("notification reclaim error", zap.Error(err))
-        }),
-    )
-	if err != nil {
-		logger.Fatal("failed to initialize sqlite notification repository", zap.Error(err))
-	}
-	defer notifCleanup()
-
-	notifDTOFactory := appnotification.NewDTOFactory()
-    notifFactory := &domnotification.Factory{}
-    notifService := domnotification.NewService(sqliteNotifRepo, notifFactory, notifChangedTopic)
-	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifService, notifDTOFactory, notifFilterBuilder, notifChangedTopic, logger)
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 

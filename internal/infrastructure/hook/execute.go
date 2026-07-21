@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/shared"
+
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -107,7 +110,9 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 
 	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env)
 	if buildErr != nil {
-		task.resultChan <- hookExecutionResult{Error: fmt.Errorf("failed to build hook env: %w", buildErr)}
+		execErr := fmt.Errorf("failed to build hook env: %w", buildErr)
+		r.sendHookNotification(ctx, task, execErr, "", "")
+		task.resultChan <- hookExecutionResult{Error: execErr}
 		return
 	}
 
@@ -158,11 +163,14 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 			zap.String("stderr", stderrStr),
 		)
 		stderrTrimmed := strings.TrimSpace(stderrStr)
+		var execErr error
 		if stderrTrimmed != "" {
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrTrimmed), Stdout: stdoutStr, Stderr: stderrStr}
+			execErr = fmt.Errorf("hook script failed: %w, stderr: %s", err, stderrTrimmed)
 		} else {
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("hook script failed: %w", err), Stdout: stdoutStr, Stderr: stderrStr}
+			execErr = fmt.Errorf("hook script failed: %w", err)
 		}
+		r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
+		task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
 		return
 	}
 
@@ -188,7 +196,9 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		} else {
 			errMsg := fmt.Sprintf("failed to read IMAGE_FUNNEL_ACTION file: %v", readErr)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID), zap.String("path", actionFilePath))
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg), Stdout: stdoutStr, Stderr: stderrStr}
+			execErr := fmt.Errorf("%s", errMsg)
+			r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
+			task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
 			return
 		}
 	} else {
@@ -196,12 +206,60 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		if overrideAction != "" && !isValidDirectiveAction(overrideAction) {
 			errMsg := fmt.Sprintf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", overrideAction)
 			r.logger.Error(errMsg, zap.String("hook_id", task.HookID))
-			task.resultChan <- hookExecutionResult{Error: fmt.Errorf("%s", errMsg), Stdout: stdoutStr, Stderr: stderrStr}
+			execErr := fmt.Errorf("%s", errMsg)
+			r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
+			task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
 			return
 		}
 	}
 
+	r.sendHookNotification(ctx, task, nil, stdoutStr, stderrStr)
 	task.resultChan <- hookExecutionResult{Action: overrideAction, Stdout: stdoutStr, Stderr: stderrStr}
+}
+
+// sendHookNotification 捕获钩子执行状态并向通用通知系统发送反馈
+func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTask, execErr error, stdoutStr, stderrStr string) {
+	if r.notifSender == nil {
+		return
+	}
+
+	hookName := task.HookName
+	if hookName == "" {
+		hookName = task.HookID
+	}
+
+	var title string
+	var priority shared.NotificationPriority
+	var body string
+
+	if execErr != nil {
+		priority = shared.NotificationPriorityHigh
+		title = fmt.Sprintf("钩子 [%s] 执行失败", hookName)
+		stderrTrimmed := strings.TrimSpace(stderrStr)
+		if stderrTrimmed != "" {
+			body = stderrTrimmed
+		} else {
+			body = execErr.Error()
+		}
+	} else {
+		priority = shared.NotificationPriorityLow
+		title = fmt.Sprintf("钩子 [%s] 执行成功", hookName)
+		body = strings.TrimSpace(stdoutStr)
+	}
+
+	tag := uuid.NewString()
+	var opts []shared.SendNotificationOption
+	opts = append(opts, shared.WithPriority(priority))
+	if body != "" {
+		opts = append(opts, shared.WithBody(body))
+	}
+
+	if _, err := r.notifSender.Send(ctx, tag, "hooks", title, opts...); err != nil {
+		r.logger.Error("failed to send hook notification",
+			zap.String("hook_id", task.HookID),
+			zap.Error(err),
+		)
+	}
 }
 
 // isValidDirectiveAction 检查操作是否为支持的指令操作

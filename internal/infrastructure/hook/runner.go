@@ -39,6 +39,7 @@ type Runner struct {
 	imgRepo            image.Repository
 	dirSvc             directoryService
 	dirRepo            directory.Repository
+	notifSender        shared.NotificationSender
 	ch                 chan hookExecutionTask
 	debouncer          *debouncer
 	ctx                context.Context
@@ -61,7 +62,12 @@ func NewRunner(
 	imgRepo image.Repository,
 	dirSvc directoryService,
 	dirRepo directory.Repository,
+	notifSender shared.NotificationSender,
 ) *Runner {
+	if notifSender == nil {
+		panic("notifSender is required")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Runner{
 		rootDir:            rootDir,
@@ -74,6 +80,7 @@ func NewRunner(
 		imgRepo:            imgRepo,
 		dirSvc:             dirSvc,
 		dirRepo:            dirRepo,
+		notifSender:        notifSender,
 		ch:                 make(chan hookExecutionTask, 1024),
 		ctx:                ctx,
 		cancel:             cancel,
