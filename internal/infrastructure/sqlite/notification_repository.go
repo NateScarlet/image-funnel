@@ -678,59 +678,12 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 	ctx := context.Background()
 	cutoff := time.Now().Add(-reclaimGracePeriod).UnixMilli()
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("reclaim BeginTx: %w", err)
-	}
-	defer tx.Rollback()
-
-	// 1. 查找所有包含本次要清理过期的通知的频道
-	// EXPLAIN QUERY PLAN:
-	// SCAN notifications USING INDEX idx_notifications_channel_created
-	rows, err := tx.QueryContext(ctx, `
-		SELECT DISTINCT channel FROM notifications
-		WHERE not_after <= :cutoff
-	`, sql.Named("cutoff", cutoff))
-	if err != nil {
-		return fmt.Errorf("reclaim find affected channels: %w", err)
-	}
-	var affectedChannels []string
-	for rows.Next() {
-		var ch string
-		if err := rows.Scan(&ch); err != nil {
-			rows.Close()
-			return fmt.Errorf("reclaim scan channel: %w", err)
-		}
-		affectedChannels = append(affectedChannels, ch)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return fmt.Errorf("reclaim rows err: %w", err)
-	}
-	rows.Close()
-
-	if len(affectedChannels) == 0 {
-		return nil
-	}
-
-	// 2. 删除超期通知
 	// EXPLAIN QUERY PLAN:
 	// SEARCH notifications USING INDEX idx_notifications_not_after (not_after<?)
-	if _, err := tx.ExecContext(ctx, `
+	if _, err := r.db.ExecContext(ctx, `
 		DELETE FROM notifications WHERE not_after <= :cutoff
 	`, sql.Named("cutoff", cutoff)); err != nil {
 		return fmt.Errorf("reclaim delete notifications: %w", err)
-	}
-
-	// 3. 为受影响的频道刷新正确的摘要（若所有通知均已被删，refreshChannelSummaryTx 会自动删除对应的 channel_summary 记录）
-	for _, ch := range affectedChannels {
-		if err := r.refreshChannelSummaryTx(ctx, tx, ch); err != nil {
-			return fmt.Errorf("reclaim refreshChannelSummaryTx %s: %w", ch, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("reclaim Commit: %w", err)
 	}
 
 	return nil

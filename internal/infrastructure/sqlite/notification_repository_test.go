@@ -236,4 +236,30 @@ func TestNotificationRepository(t *testing.T) {
 	}
 	require.Len(t, channels, 1)
 	assert.Equal(t, "notif:33333333-3333-3333-3333-333333333333", channels[0].LatestNotificationID.String())
+
+	// 7. 测试 reclaim 物理清理过期的旧通知
+	nExpired, err := notification.FromRepository(
+		scalar.ToID("notif:44444444-4444-4444-4444-444444444444"),
+		"44444444-4444-4444-4444-444444444444",
+		"hook:expired",
+		"Expired Title",
+		"Expired Body",
+		shared.NotificationPriorityNormal,
+		time.Time{},
+		time.Time{},
+		time.Now().Add(-100*24*time.Hour), // notAfter: 100 天前已过期
+		time.Now().Add(-101*24*time.Hour),
+		time.Now().Add(-101*24*time.Hour),
+		time.Now().Add(-101*24*time.Hour),
+		scalar.URI{},
+	)
+	require.NoError(t, err)
+	_, err = repo.Save(ctx, nExpired)
+	require.NoError(t, err)
+
+	err = repo.reclaim(30 * 24 * time.Hour)
+	require.NoError(t, err)
+
+	_, err = repo.Get(ctx, "notif:44444444-4444-4444-4444-444444444444")
+	assert.Error(t, err)
 }
