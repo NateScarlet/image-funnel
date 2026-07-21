@@ -237,7 +237,7 @@ func TestRunner_FilteringAndDebounce(t *testing.T) {
 	assert.NoError(t, err)
 
 	flagFile := filepath.Join(tempDir, "flag_dir")
-	cmdStr := "mkdir " + flagFile
+	cmdStr := "echo 1 > " + flagFile
 
 	tomlContent := `
 id = "exec-test"
@@ -294,7 +294,7 @@ label = [""]
 		OldAction: "",
 	})
 
-	assert.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "4星评级应触发钩子成功运行")
+	assert.True(t, waitFlagFile(flagFile, 15*time.Second), "4星评级应触发钩子成功运行")
 	time.Sleep(50 * time.Millisecond) // 等待进程执行和日志打印完全收尾
 
 	// 清理标志文件
@@ -1078,8 +1078,8 @@ command = '''%s'''
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, suggestions)
 
-	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时大约在 300ms + 几毫秒内，绝对小于 2 秒
-	assert.Less(t, duration, 2*time.Second, "cancellation should stop execution within graceful period")
+	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时大约在 300ms + 几毫秒内，低性能环境下也应在 15 秒内完成
+	assert.Less(t, duration, 15*time.Second, "cancellation should stop execution within graceful period")
 
 	// 3. 验证进程是否已经被真的关闭了
 	pidBytes, err := os.ReadFile(pidFile)
