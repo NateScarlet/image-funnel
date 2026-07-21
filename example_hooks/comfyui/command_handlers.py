@@ -9,7 +9,7 @@
 import logging
 from typing import Dict, List, Set, Any, Optional, Protocol, cast
 
-from graphql_utils import GraphQLClient
+from graphql_utils import GraphQLClient, progress_notification
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .seed_manager import SeedManager
@@ -37,6 +37,8 @@ class CommandContext:
         label_to_set: Optional[str],
         history: operation_history.OperationHistory,
         client: GraphQLClient,
+        hook_name: str,
+        run_id: str,
     ):
         self.img_id = img_id
         self.path = path
@@ -48,7 +50,14 @@ class CommandContext:
         self.label_to_set = label_to_set
         self.client = client
         self.history = history
+        self.hook_name = hook_name
+        self.run_id = run_id
         self.skipped: bool = False
+
+    @property
+    def progress_tag(self) -> str:
+        """进度通知 tag，格式 hook-progress-<hook_name>-<run_id>"""
+        return f"hook-progress-{self.hook_name}-{self.run_id}"
 
     def update_label(self) -> None:
         if self.label_to_set and self.img_id:
@@ -80,13 +89,19 @@ class QueueHandler:
             pair, pair.date_filename_nodes, pair.title_to_node
         )
 
-        for q_idx in range(ctx.jobs):
-            if ctx.jobs > 1:
-                _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, ctx.jobs)
-            if seed_mgr.update_seeds() == 0:
-                raise ValueError(f"Failed to update any seeds for image: {ctx.path}.")
-            filename_mgr.update_output_filenames()
-            _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
+        with progress_notification(
+            ctx.client, ctx.progress_tag, "hooks", "提交 ComfyUI 任务", total=ctx.jobs
+        ) as update:
+            for q_idx in range(ctx.jobs):
+                if ctx.jobs > 1:
+                    _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, ctx.jobs)
+                update(q_idx + 1, ctx.jobs, f"提交第 {q_idx + 1} 次任务")
+                if seed_mgr.update_seeds() == 0:
+                    raise ValueError(
+                        f"Failed to update any seeds for image: {ctx.path}."
+                    )
+                filename_mgr.update_output_filenames()
+                _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
 
         ctx.update_label()
 
@@ -253,29 +268,49 @@ class AdjustHandler:
         else:
             raise ValueError(f"unexpected adjust type '{ctx.args.adjust_type}'")
 
-        variant_count = 0
-        for _ in variant_gen:
-            variant_count += 1
-            if variant_count > 1:
-                enable_seed_update = True
-            for _ in range(ctx.jobs):
-                if enable_seed_update:
-                    if seed_mgr.update_seeds() == 0:
-                        raise ValueError(
-                            f"Failed to update any seeds for image: {ctx.path}."
-                        )
-                filename_mgr.update_output_filenames()
-                _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
+        # 收集所有变体以计算总进度
+        variants = list(variant_gen)
+        variant_count = len(variants)
+        # 当 variant_count == 0 且 no_skip 时，仍会提交 ctx.jobs 次
+        total_steps = variant_count * ctx.jobs if variant_count > 0 else ctx.jobs
 
-        if variant_count == 0 and ctx.args.no_skip:
-            for _ in range(ctx.jobs):
-                if enable_seed_update:
-                    if seed_mgr.update_seeds() == 0:
-                        raise ValueError(
-                            f"Failed to update any seeds for image: {ctx.path}."
-                        )
-                filename_mgr.update_output_filenames()
-                _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
+        with progress_notification(
+            ctx.client, ctx.progress_tag, "hooks", "调整权重并提交", total=total_steps
+        ) as update:
+            step = 0
+            for v_idx, _ in enumerate(variants):
+                if v_idx > 0:
+                    enable_seed_update = True
+                for j_idx in range(ctx.jobs):
+                    step += 1
+                    update(
+                        step,
+                        total_steps,
+                        f"变体 {v_idx + 1}/{variant_count}，第 {j_idx + 1} 次提交",
+                    )
+                    if enable_seed_update:
+                        if seed_mgr.update_seeds() == 0:
+                            raise ValueError(
+                                f"Failed to update any seeds for image: {ctx.path}."
+                            )
+                    filename_mgr.update_output_filenames()
+                    _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
+
+            if variant_count == 0 and ctx.args.no_skip:
+                for j_idx in range(ctx.jobs):
+                    step += 1
+                    update(
+                        step,
+                        total_steps,
+                        f"无变体，第 {j_idx + 1} 次提交",
+                    )
+                    if enable_seed_update:
+                        if seed_mgr.update_seeds() == 0:
+                            raise ValueError(
+                                f"Failed to update any seeds for image: {ctx.path}."
+                            )
+                    filename_mgr.update_output_filenames()
+                    _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
 
         processed = variant_count > 0 or ctx.args.no_skip
         if not processed:

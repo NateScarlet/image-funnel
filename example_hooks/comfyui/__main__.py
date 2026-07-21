@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, Iterable, ca
 import logging
 import argparse
 
-from graphql_utils import GraphQLClient
+from graphql_utils import GraphQLClient, progress_notification
 from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
@@ -210,91 +210,106 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     op_history = operation_history.OperationHistory.from_env()
     op_history.extract_params(args)
 
+    # 构建进度通知 tag
+    run_id = os.environ.get("IMAGE_FUNNEL_HOOK_RUN_ID", "unknown")
+    progress_tag = f"hook-progress-{config.hook_name}-{run_id}"
+
     has_errors = False
     success_count = 0
 
-    for idx, (img_id, path) in enumerate(targets):
-        if not os.path.exists(path):
-            _LOGGER.error(f"File does not exist: {path}")
-            has_errors = True
-            continue
-        _LOGGER.debug("[%d/%d] Processing image: %s", idx + 1, len(targets), path)
+    with progress_notification(
+        client, progress_tag, "hooks", "ComfyUI 批量处理", total=len(targets)
+    ) as update:
+        for idx, (img_id, path) in enumerate(targets):
+            if not os.path.exists(path):
+                _LOGGER.error(f"File does not exist: {path}")
+                has_errors = True
+                continue
+            _LOGGER.debug("[%d/%d] Processing image: %s", idx + 1, len(targets), path)
 
-        prompt: Dict[str, Any]
-        workflow: Dict[str, Any]
+            # 更新进度通知
+            update(idx + 1, len(targets), f"处理图片 {os.path.basename(path)}")
 
-        try:
-            with Image.open(path) as img:
-                info: Any = img.info
-                prompt_str: Optional[str] = info.get("prompt")
-                workflow_str: Optional[str] = info.get("workflow")
+            prompt: Dict[str, Any]
+            workflow: Dict[str, Any]
 
-                if not prompt_str:
-                    _LOGGER.error(
-                        f"This PNG image does not contain prompt metadata from ComfyUI: {path}"
+            try:
+                with Image.open(path) as img:
+                    info: Any = img.info
+                    prompt_str: Optional[str] = info.get("prompt")
+                    workflow_str: Optional[str] = info.get("workflow")
+
+                    if not prompt_str:
+                        _LOGGER.error(
+                            f"This PNG image does not contain prompt metadata from ComfyUI: {path}"
+                        )
+                        has_errors = True
+                        continue
+
+                    # 必须同时包含 prompt 且 workflow 有效，否则由于无法更新种子会导致重复生成
+                    if not workflow_str:
+                        _LOGGER.error(
+                            f"This PNG image does not contain workflow metadata from ComfyUI: {path}"
+                        )
+                        has_errors = True
+                        continue
+
+                    prompt = json.loads(prompt_str)
+                    workflow_data: Any = json.loads(workflow_str)
+
+                    if (
+                        not isinstance(workflow_data, dict)
+                        or "nodes" not in workflow_data
+                    ):
+                        _LOGGER.error(
+                            f"This PNG image contains an invalid ComfyUI workflow (missing 'nodes'): {path}"
+                        )
+                        has_errors = True
+                        continue
+                    workflow = cast(Dict[str, Any], workflow_data)
+            except (OSError, ValueError) as e:
+                _LOGGER.error(f"Failed to read PNG properties: {e}")
+                has_errors = True
+                continue
+
+            try:
+                if config.hook_output_dir == ":inherit:":
+                    _LOGGER.debug(
+                        "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
                     )
-                    has_errors = True
-                    continue
-
-                # 必须同时包含 prompt 且 workflow 有效，否则由于无法更新种子会导致重复生成
-                if not workflow_str:
-                    _LOGGER.error(
-                        f"This PNG image does not contain workflow metadata from ComfyUI: {path}"
+                else:
+                    rel_dir = get_relative_output_dir(
+                        path, config.comfyui_output_dir, config.hook_output_dir
                     )
-                    has_errors = True
-                    continue
+                    pair = WorkflowPromptPair(workflow, prompt)
+                    FilenameManager(
+                        pair, pair.date_filename_nodes, pair.title_to_node
+                    ).adjust_output_directory(rel_dir)
+            except (ValueError, OSError) as e:
+                _LOGGER.error(f"Failed to adjust output directory: {e}")
+                has_errors = True
+                continue
 
-                prompt = json.loads(prompt_str)
-                workflow_data: Any = json.loads(workflow_str)
-
-                if not isinstance(workflow_data, dict) or "nodes" not in workflow_data:
-                    _LOGGER.error(
-                        f"This PNG image contains an invalid ComfyUI workflow (missing 'nodes'): {path}"
-                    )
-                    has_errors = True
-                    continue
-                workflow = cast(Dict[str, Any], workflow_data)
-        except (OSError, ValueError) as e:
-            _LOGGER.error(f"Failed to read PNG properties: {e}")
-            has_errors = True
-            continue
-
-        try:
-            if config.hook_output_dir == ":inherit:":
-                _LOGGER.debug(
-                    "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
-                )
-            else:
-                rel_dir = get_relative_output_dir(
-                    path, config.comfyui_output_dir, config.hook_output_dir
-                )
-                pair = WorkflowPromptPair(workflow, prompt)
-                FilenameManager(
-                    pair, pair.date_filename_nodes, pair.title_to_node
-                ).adjust_output_directory(rel_dir)
-        except (ValueError, OSError) as e:
-            _LOGGER.error(f"Failed to adjust output directory: {e}")
-            has_errors = True
-            continue
-
-        handler = COMMAND_HANDLERS.get(args.command)
-        if handler is None:
-            raise ValueError(f"Unknown command: '{args.command}'")
-        ctx = CommandContext(
-            img_id=img_id,
-            path=path,
-            prompt=prompt,
-            workflow=workflow,
-            args=args,
-            comfyui_url=config.comfyui_url,
-            jobs=jobs,
-            label_to_set=config.label_to_set,
-            client=client,
-            history=op_history,
-        )
-        handler.run(ctx)
-        if not ctx.skipped:
-            success_count += 1
+            handler = COMMAND_HANDLERS.get(args.command)
+            if handler is None:
+                raise ValueError(f"Unknown command: '{args.command}'")
+            ctx = CommandContext(
+                img_id=img_id,
+                path=path,
+                prompt=prompt,
+                workflow=workflow,
+                args=args,
+                comfyui_url=config.comfyui_url,
+                jobs=jobs,
+                label_to_set=config.label_to_set,
+                client=client,
+                history=op_history,
+                hook_name=config.hook_name,
+                run_id=run_id,
+            )
+            handler.run(ctx)
+            if not ctx.skipped:
+                success_count += 1
 
     print(f"processed {success_count}/{len(targets)} image(s) successfully.")
 

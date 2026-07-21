@@ -24,6 +24,7 @@ class ComfyUIConfig:
     required_rating: Optional[int] = None
     hook_output_dir: str = ""
     comfyui_output_dir: str = ""
+    hook_name: str = ""
     trigger: str = ""
     action_path: str = ""
     logging_level: str = "WARNING"
@@ -61,6 +62,7 @@ class ComfyUIConfig:
             required_rating=required_rating,
             hook_output_dir=os.getenv("HOOK_OUTPUT_DIR", ""),
             comfyui_output_dir=os.getenv("COMFYUI_OUTPUT_DIR", ""),
+            hook_name=os.getenv("IMAGE_FUNNEL_HOOK_NAME", ""),
             trigger=os.getenv("IMAGE_FUNNEL_TRIGGER", ""),
             action_path=os.getenv("IMAGE_FUNNEL_ACTION", ""),
             logging_level=os.getenv("HOOK_LOGGING_LEVEL", "WARNING").upper(),

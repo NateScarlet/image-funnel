@@ -4,7 +4,8 @@
 import os
 import json
 import urllib.request
-from typing import Dict, List, Tuple, Any, Optional
+from contextlib import contextmanager
+from typing import Callable, Dict, Generator, List, Tuple, Any, Optional
 
 
 class GraphQLClient:
@@ -49,6 +50,54 @@ class GraphQLClient:
             if "errors" in res:
                 raise ValueError(f"GraphQL returned errors: {res['errors']}")
             return res["data"]
+
+    # #region 通知相关方法
+
+    def send_notification(
+        self,
+        tag: str,
+        channel: str,
+        title: str,
+        body: str = "",
+        priority: str = "LOW",
+    ) -> None:
+        """发送通知到指定频道，相同 tag 的通知会覆盖更新。"""
+        query = """
+        mutation SendNotification($input: SendNotificationInput!) {
+          sendNotification(input: $input) {
+            didCreate
+            notification {
+              id
+            }
+          }
+        }
+        """
+        variables: Dict[str, Any] = {
+            "input": {
+                "tag": tag,
+                "channel": channel,
+                "title": title,
+                "body": body,
+                "priority": priority,
+            }
+        }
+        self.execute(query, variables)
+
+    def unsend_notification(self, tag: str) -> None:
+        """撤回指定 tag 的通知。"""
+        query = """
+        mutation UnsendNotification($input: UnsendNotificationInput!) {
+          unsendNotification(input: $input) {
+            notification {
+              id
+            }
+          }
+        }
+        """
+        variables = {"input": {"tag": tag}}
+        self.execute(query, variables)
+
+    # #endregion
 
     def update_image_label(self, image_id: str, label: str) -> None:
         """通过 GraphQL 更新图片颜色标签。"""
@@ -122,3 +171,47 @@ class GraphQLClient:
             }
         }
         self.execute(query, variables)
+
+
+# #region 进度通知上下文管理器
+
+# 进度更新回调类型：接收当前进度、总数和描述消息
+ProgressUpdate = Callable[[int, int, str], None]
+
+
+@contextmanager
+def progress_notification(
+    client: GraphQLClient,
+    tag: str,
+    channel: str,
+    title: str,
+    *,
+    total: int = 0,
+) -> Generator[ProgressUpdate, None, None]:
+    """进度通知上下文管理器。
+
+    进入时创建进度通知，退出时（无论正常或异常）自动清理。
+
+    用法:
+        with progress_notification(client, "my-tag", "hooks", "处理中", total=10) as update:
+            update(1, 10, "开始处理...")
+            do_work()
+            update(2, 10, "继续处理...")
+    """
+
+    def update(current: int, step_total: int, message: str) -> None:
+        """更新进度通知正文，以相同 tag 覆盖之前的通知。"""
+        body = f"{message} ({current}/{step_total})"
+        client.send_notification(tag, channel, title, body, "LOW")
+
+    # 进入时创建初始进度通知
+    client.send_notification(tag, channel, title, "准备中...", "LOW")
+
+    try:
+        yield update
+    finally:
+        # 退出时清理进度通知，最终结果由后端 Runner 自动发送
+        client.unsend_notification(tag)
+
+
+# #endregion
