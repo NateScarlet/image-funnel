@@ -101,12 +101,13 @@
 
           <button
             class="w-full py-1.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
+            :class="{ 'pointer-events-none opacity-40 cursor-not-allowed': expiredSize === 0 }"
             @click="emptyTrashHistory"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
               <path :d="mdiDeleteSweep" fill="currentColor" />
             </svg>
-            <span>清理超过保留期的文件</span>
+            <span>{{ cleanupButtonText }}</span>
           </button>
         </div>
       </div>
@@ -121,6 +122,8 @@ import AppDropdown from "./AppDropdown.vue";
 import useTrash from "@/composables/domain/useTrash";
 import useNotification from "@/composables/useNotification";
 import useStorage from "@/composables/useStorage";
+import useCurrentTime from "@/composables/useCurrentTime";
+import Duration from "@/utils/Duration";
 import { formatSize } from "@/utils/formatSize";
 import basename from "@/utils/basename";
 import type { TrashHistoryQuery } from "@/graphql/generated";
@@ -167,6 +170,55 @@ const totalTrashSize = computed(() => {
     (acc: number, item: TrashHistoryItem) => acc + item.totalFileSize,
     0,
   );
+});
+
+const { currentTime, refreshOn } = useCurrentTime();
+
+// 将 ISO 8601 保留期转为毫秒数，解析失败时返回极大值防止误判全部过期
+const minAgeMs = computed(() => {
+  const dur = Duration.parse(trashMinAge.value);
+  return dur.valid ? dur.toMilliseconds() : Number.MAX_SAFE_INTEGER;
+});
+
+// 每个条目的过期时间戳（trashedAt + minAgeMs）
+const itemExpiryTimes = computed(() => {
+  const cutoff = minAgeMs.value;
+  return trashHistoryNodes.value.map((item) => ({
+    size: item.totalFileSize,
+    expiryTime: new Date(item.trashedAt).getTime() + cutoff,
+  }));
+});
+
+// 当前已加载数据中超过保留期的条目总大小
+const expiredSize = computed(() => {
+  const now = currentTime.value.getTime();
+  return itemExpiryTimes.value
+    .filter((item) => item.expiryTime <= now)
+    .reduce((acc, item) => acc + item.size, 0);
+});
+
+// 是否还有下一页数据
+const hasNextPage = computed(() => {
+  return trashHistoryData.value?.trashHistory?.pageInfo?.hasNextPage ?? false;
+});
+
+// 清理按钮文本
+const cleanupButtonText = computed(() => {
+  const size = formatSize(expiredSize.value);
+  if (hasNextPage.value) {
+    return `清理 ≥${size}`;
+  }
+  return `清理 ${size}`;
+});
+
+// 监听下一个条目超过保留期的时间点，到达时自动刷新按钮文本
+refreshOn(() => {
+  const now = currentTime.value.getTime();
+  const futureTimes = itemExpiryTimes.value.map((item) => item.expiryTime).filter((t) => t > now);
+  if (futureTimes.length === 0) {
+    return undefined;
+  }
+  return Math.min(...futureTimes);
 });
 
 function formatTrashSize(size: number) {
