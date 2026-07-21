@@ -230,8 +230,9 @@ export function useNoteAutocomplete(options: Options) {
 
   // #region 键盘交互
 
-  function handleKeyUp() {
+  function handleKeyUp(e: KeyboardEvent) {
     if (state.value?.show && suggestions.value.length) {
+      e.preventDefault();
       if (activeIndex.value === -1) {
         activeIndex.value = suggestions.value.length - 1;
       } else {
@@ -241,8 +242,9 @@ export function useNoteAutocomplete(options: Options) {
     }
   }
 
-  function handleKeyDown() {
+  function handleKeyDown(e: KeyboardEvent) {
     if (state.value?.show && suggestions.value.length) {
+      e.preventDefault();
       if (activeIndex.value === -1) {
         activeIndex.value = 0;
       } else {

@@ -141,17 +141,41 @@ describe("useNoteAutocomplete composable", () => {
 
     expect(activeIndex.value).toBe(-1); // default not selected
 
-    handleKeyDown();
+    const downEvent1 = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    handleKeyDown(downEvent1);
     expect(activeIndex.value).toBe(0);
+    expect(downEvent1.defaultPrevented).toBe(true);
 
-    handleKeyDown();
+    const downEvent2 = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    handleKeyDown(downEvent2);
     expect(activeIndex.value).toBe(1);
+    expect(downEvent2.defaultPrevented).toBe(true);
 
-    handleKeyDown();
+    const downEvent3 = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    handleKeyDown(downEvent3);
     expect(activeIndex.value).toBe(0); // circular
+    expect(downEvent3.defaultPrevented).toBe(true);
 
-    handleKeyUp();
+    const upEvent = new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true });
+    handleKeyUp(upEvent);
     expect(activeIndex.value).toBe(1); // circular up
+    expect(upEvent.defaultPrevented).toBe(true);
+  });
+
+  test("up and down keys do not prevent default when autocomplete is not active", () => {
+    model.value = "hello world";
+    cursorStart.value = 5;
+    cursorEnd.value = 5;
+
+    const { handleKeyDown, handleKeyUp } = createAutocomplete();
+
+    const downEvent = new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true });
+    handleKeyDown(downEvent);
+    expect(downEvent.defaultPrevented).toBe(false);
+
+    const upEvent = new KeyboardEvent("keydown", { key: "ArrowUp", cancelable: true });
+    handleKeyUp(upEvent);
+    expect(upEvent.defaultPrevented).toBe(false);
   });
 
   test("Ctrl+Space selects the first item immediately", () => {
@@ -192,7 +216,7 @@ describe("useNoteAutocomplete composable", () => {
 
     const { activeIndex, suggestions, handleKeyDown } = createAutocomplete();
 
-    handleKeyDown(); // 选中 adjust
+    handleKeyDown(new KeyboardEvent("keydown", { key: "ArrowDown", cancelable: true })); // 选中 adjust
     expect(activeIndex.value).toBe(0);
     expect(suggestions.value[0].text).toBe("adjust");
 
