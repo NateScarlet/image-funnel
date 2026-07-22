@@ -277,18 +277,54 @@ const init = once(() => {
     }
   }
 
+  const markingReadIds = new Set<string>();
+
+  // 监听选中频道及频道通知，有未读通知时自动批量标记已读
+  watch(
+    [selectedChannel, channelNotifications],
+    async ([channel, notifs]) => {
+      if (!channel || !notifs || notifs.length === 0) return;
+      const unreads = notifs.filter((n) => !n.readAt && !markingReadIds.has(n.id));
+      if (unreads.length === 0) return;
+
+      for (const n of unreads) {
+        markingReadIds.add(n.id);
+      }
+      try {
+        await Promise.all(unreads.map((n) => markAsRead(n.id)));
+        await refreshChannels();
+        await refreshNotifications();
+      } finally {
+        for (const n of unreads) {
+          markingReadIds.delete(n.id);
+        }
+      }
+    },
+    { immediate: true },
+  );
+
   async function selectChannel(channel: string) {
     selectedChannel.value = channel;
-    // 自动批量已读（selectedChannel 变化已通过响应式 variables 触发 useQuery 重新查询）
     await markAllAsRead(channel);
   }
 
-  async function markAllAsRead(_channel: string) {
-    const unreads = channelNotifications.value.filter((n) => !n.readAt);
-    if (unreads.length > 0) {
-      // 通过 WS transport 批量已读，Promise.all 并发发送避免逐个 await 等待
-      await Promise.all(unreads.map((n) => markAsRead(n.id)));
+  async function markAllAsRead(channel: string) {
+    const currentUnreads = channelNotifications.value.filter((n) => !n.readAt);
+    if (currentUnreads.length > 0) {
+      await Promise.all(currentUnreads.map((n) => markAsRead(n.id)));
     }
+    const { data } = await query(NotificationsDocument, {
+      variables: { filterBy: { channel: [channel], read: false } },
+      fetchPolicy: "network-only",
+    });
+    const unreads = data?.notifications?.edges?.map((e) => e.node) ?? [];
+    const unreadsToMark = unreads.filter(
+      (n) => !n.readAt && !currentUnreads.some((cu) => cu.id === n.id),
+    );
+    if (unreadsToMark.length > 0) {
+      await Promise.all(unreadsToMark.map((n) => markAsRead(n.id)));
+    }
+    await refreshChannels();
     await refreshNotifications();
   }
 

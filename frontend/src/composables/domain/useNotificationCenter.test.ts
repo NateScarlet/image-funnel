@@ -271,4 +271,35 @@ describe("useNotificationCenter", () => {
     });
   });
   // #endregion
+
+  // #region 频道选择与自动已读
+  describe("selectChannel 与自动标记已读", () => {
+    test("选择频道时，向服务端查询并自动标记该频道未读通知为已读", async () => {
+      const { selectChannel, selectedChannel } = useNotificationCenter();
+
+      const mockUnreadNotif = mockNotification({
+        id: "notif-unread",
+        channel: "hooks",
+        readAt: null,
+      });
+      mockQuery.mockResolvedValueOnce({
+        data: {
+          notifications: {
+            edges: [{ node: mockUnreadNotif }],
+          },
+        },
+      });
+
+      await selectChannel("hooks");
+
+      expect(selectedChannel.value).toBe("hooks");
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: { input: expect.objectContaining({ id: "notif-unread" }) },
+        }),
+      );
+    });
+  });
+  // #endregion
 });

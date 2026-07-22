@@ -16,7 +16,6 @@ const {
   bodyDialogTitle,
   bodyDialogBody,
   selectChannel,
-  markAsDismissed,
 } = useNotificationCenter();
 
 // 跟踪已展开的通知 ID，支持点击正文或按钮切换展开/折叠
@@ -38,10 +37,6 @@ function handleSelectChannel(channel: string) {
 
 function handleBack() {
   selectedChannel.value = null;
-}
-
-function handleDismiss(id: string) {
-  void markAsDismissed(id);
 }
 </script>
 
@@ -136,10 +131,7 @@ function handleDismiss(id: string) {
       <div
         v-for="notification in channelNotifications"
         :key="notification.id"
-        :class="[
-          'flex items-start gap-3 px-4 py-3 transition-colors border-b border-primary-700/30',
-          notification.status === 'DISMISSED' ? 'opacity-50' : 'hover:bg-primary-700/30',
-        ]"
+        class="flex items-start gap-3 px-4 py-3 hover:bg-primary-700/30 transition-colors border-b border-primary-700/30"
       >
         <!-- Priority indicator -->
         <div
@@ -156,24 +148,12 @@ function handleDismiss(id: string) {
         <!-- Content -->
         <div class="flex-1 min-w-0">
           <div class="flex items-center justify-between gap-2">
-            <span
-              :class="[
-                'text-sm truncate',
-                notification.readAt ? 'text-primary-300' : 'text-primary-100 font-medium',
-              ]"
-            >
+            <span class="text-sm font-medium text-primary-100 truncate">
               {{ notification.title }}
             </span>
-            <div class="flex items-center gap-2 shrink-0">
-              <span class="text-xs text-primary-500">{{ formatDate(notification.createdAt) }}</span>
-              <button
-                v-if="notification.status === 'ACTIVE'"
-                class="text-xs text-primary-400 hover:text-primary-200 transition-colors cursor-pointer"
-                @click="handleDismiss(notification.id)"
-              >
-                关闭
-              </button>
-            </div>
+            <span class="text-xs text-primary-500 shrink-0">{{
+              formatDate(notification.createdAt)
+            }}</span>
           </div>
           <!-- 通知正文：点击展开/折叠，默认折叠两行 -->
           <p
