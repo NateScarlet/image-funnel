@@ -44,6 +44,12 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
+    except Exception as e:
+        # 目标模块执行出错时，清除 runpy 内部清理 sys.modules 失败产生的次要错误，
+        # 避免异常链污染原始错误消息
+        if e.__context__ is not None:
+            e.__context__ = None
+        raise
 
 
 if __name__ == "__main__":
