@@ -79,6 +79,9 @@
 - **导航禁用规范**: 当需要禁用某个导航项时，不应在 `RouterLink` 与 `button/div` 之间切换标签类型，应保持 `<RouterLink>` 的语义，并通过 CSS 样式类（如 `pointer-events-none opacity-40 cursor-not-allowed`）从浏览器层面对其禁用。同时，已被 `pointer-events-none` 禁用的元素上不得添加额外的 `@click` 防御性事件阻止逻辑，避免过度防御。
 - **Composable 加载状态规范**: Composable 内部不应负责管理和返回 `loading` 状态，避免“多此一举”。如果调用者关心加载状态，composable 应当允许传入可选的 `loadingCount?: Ref<number>` 参数；如果不传入，内部不应为此创建多余的内部状态监控。加载状态的计算（例如 `computed(() => loadingCount.value > 0)`）应全权交由调用侧组件本地管理。
 - **优先使用项目已存在工具**：实现某些通用逻辑时，先检查项目是否已经存在通用工具，或者考虑是否应该先实现一个通用工具，比如事件监听项目已经提供了 useEventListeners，不应该自己再重复手动实现
+- **移动端优先与触屏 Hover 规范**: 本项目遵循**移动端优先**原则（移动端主要用于筛选，桌面端用于管理结果）。在交互设计中：
+  - **禁止**直接通过 `@mouseenter` / `@mouseover` 修改列表的选择/活动状态（如 `activeIndex`）。在移动端触屏设备上，当浮层或组件在原触摸坐标处挂载/展开时，移动端浏览器会自动触发合成的 `mouseenter` 事件，从而引发误选中问题（如默认选中第二项）。
+  - 如需保留桌面端鼠标 Hover 切换高亮功能，必须校验指针类型（如使用 `@pointerenter` 配合 `e.pointerType === 'mouse'`），确保仅在真实鼠标划过时触发状态变更，忽略触屏（`pointerType === 'touch'`）合成事件。
 
 ## GraphQL
 

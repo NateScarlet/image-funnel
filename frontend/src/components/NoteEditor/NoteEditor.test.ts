@@ -628,4 +628,23 @@ describe("NoteEditor", () => {
     // 200ms 之后，菜单被隐藏
     expect(getSuggestionMenu()).toBeNull();
   });
+
+  test("ignores pointerenter events from touch input", async () => {
+    await typeInTextarea(createWrapper(), "/a");
+    const menu = getSuggestionMenu();
+    expect(menu).not.toBeNull();
+
+    const buttons = Array.from(menu!.querySelectorAll("button"));
+    expect(buttons.length).toBeGreaterThan(1);
+
+    // 触发 touch 类型的 pointerenter，不应该设为 active
+    buttons[1].dispatchEvent(new PointerEvent("pointerenter", { bubbles: true, pointerType: "touch" }));
+    await nextTick();
+    expect(buttons[1].classList.contains("bg-secondary-500")).toBe(false);
+
+    // 触发 mouse 类型的 pointerenter，应该设为 active
+    buttons[1].dispatchEvent(new PointerEvent("pointerenter", { bubbles: true, pointerType: "mouse" }));
+    await nextTick();
+    expect(buttons[1].classList.contains("bg-secondary-500")).toBe(true);
+  });
 });

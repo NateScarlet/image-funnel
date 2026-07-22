@@ -123,7 +123,7 @@
                   : 'hover:bg-primary-800 text-primary-200'
             "
             @click="onSelectSuggestion(sug)"
-            @mouseenter="activeIndex = idx"
+            @pointerenter="onOptionPointerEnter(idx, $event)"
           >
             <div class="flex items-center gap-2 font-bold text-xs sm:text-sm">
               <span
@@ -376,6 +376,12 @@ function applyInsertion(params: InsertParams) {
 function onSelectSuggestion(sug: Suggestion) {
   const p = handleSelectSuggestion(sug, textareaRef.value?.selectionEnd ?? 0);
   if (p) applyInsertion(p);
+}
+
+function onOptionPointerEnter(idx: number, e: PointerEvent) {
+  if (e.pointerType === "mouse") {
+    activeIndex.value = idx;
+  }
 }
 
 /** Enter 键确认 */
