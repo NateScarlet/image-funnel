@@ -120,6 +120,12 @@ class AddHandler:
         if fragment:
             fragment.add(prompt_str_arg, raw=ctx.args.raw, no_skip=ctx.args.no_skip)
 
+            # 默认从非目标区域移除重复提示词，--keep 保留现有行为
+            if not getattr(ctx.args, "keep", False):
+                _remove_from_other_regions(
+                    pair, prompt_str_arg, fragment.node_id, fragment.region, ctx.args
+                )
+
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
         ctx.update_label()
 
@@ -174,6 +180,41 @@ def _clip_text_encode_nodes(prompt: Dict[str, Any]) -> List[str]:
         if isinstance(node, dict)
         and cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
     ]
+
+
+def _remove_from_other_regions(
+    pair: WorkflowPromptPair,
+    prompt_str: str,
+    target_node_id: str,
+    target_region: str,
+    args: Any,
+) -> None:
+    """从目标节点中非目标区域移除重复的提示词（与 /remove 相同的匹配逻辑）"""
+    from .prompt_locator import REGION_START_RE
+
+    # 生成变体（与 /remove 逻辑一致：原词、下划线、空格三种形态）
+    remove_prompts: Set[str] = set()
+    remove_prompts.update(
+        (prompt_str, prompt_str.replace("_", " "), prompt_str.replace(" ", "_"))
+    )
+
+    wf_text = pair.get_workflow_node_text(target_node_id)
+    if not wf_text:
+        return
+
+    # 扫描目标节点中的所有区域
+    all_regions: Set[str] = set()
+    for m in REGION_START_RE.finditer(wf_text):
+        all_regions.add(m.group(1))
+
+    # 从非目标区域移除
+    for region in all_regions:
+        if region == target_region:
+            continue
+        fragment = PromptFragment(pair, target_node_id, region=region)
+        for variant in remove_prompts:
+            # no_skip=True 静默跳过不存在的情况
+            fragment.remove(variant, raw=args.raw, hard=False, no_skip=True)
 
 
 # #endregion

@@ -386,6 +386,11 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="node-id",
         help="Target node ID, can be specified multiple times; highest priority",
     )
+    add_parser.add_argument(
+        "--keep",
+        action="store_true",
+        help="保留非目标区域中已有的同名提示词，不移除",
+    )
     add_parser.add_argument("prompt", nargs="+", help="The prompt text to add")
 
     remove_parser = subparsers.add_parser(
