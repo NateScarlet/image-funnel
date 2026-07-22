@@ -175,7 +175,7 @@ describe("useNotificationCenter", () => {
         "测试通知",
         "info",
         0,
-        expect.objectContaining({ text: "关闭" }),
+        expect.arrayContaining([expect.objectContaining({ text: "关闭" })]),
       );
     });
 

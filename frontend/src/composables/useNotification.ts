@@ -12,7 +12,7 @@ export interface Notification {
   type: NotificationType;
   message: string;
   duration?: number;
-  action?: NotificationAction;
+  actions?: NotificationAction[];
 }
 
 const notifications = ref<Notification[]>([]);
@@ -23,7 +23,7 @@ export default function useNotification() {
     message: string,
     type: NotificationType = "info",
     duration = 3000,
-    action?: NotificationAction,
+    actions?: NotificationAction[],
   ) {
     const id = nextId;
     nextId++;
@@ -32,7 +32,7 @@ export default function useNotification() {
       type,
       message,
       duration,
-      action,
+      actions,
     };
 
     notifications.value.push(notification);

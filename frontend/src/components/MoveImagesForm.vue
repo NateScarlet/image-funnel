@@ -228,13 +228,15 @@ async function handleMoveImages() {
         "success",
         8000,
         targetAbsoluteDirectory
-          ? {
-              text: "在资源管理器中打开",
-              onClick: (closeNotification) => {
-                revealInExplorer(targetAbsoluteDirectory);
-                closeNotification();
+          ? [
+              {
+                text: "在资源管理器中打开",
+                onClick: (closeNotification) => {
+                  revealInExplorer(targetAbsoluteDirectory);
+                  closeNotification();
+                },
               },
-            }
+            ]
           : undefined,
       );
     }

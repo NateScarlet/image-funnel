@@ -5,7 +5,9 @@ import useSubscription from "@/graphql/utils/useSubscription";
 import query from "@/graphql/utils/query";
 import mutate from "@/graphql/utils/mutate";
 import useModalDrawer from "@/composables/useModalDrawer";
+import useModalDialog from "@/composables/useModalDialog";
 import useNotification from "@/composables/useNotification";
+import type { NotificationAction } from "@/composables/useNotification";
 import useCurrentTime from "@/composables/useCurrentTime";
 import {
   NotificationChannelsDocument,
@@ -48,6 +50,17 @@ const init = once(() => {
       selectedChannel.value = null;
     },
   });
+
+  // 通知正文弹窗：展示 Hook 执行的 stderr 详情
+  const bodyDialogTitle = ref("");
+  const bodyDialogBody = ref("");
+  const bodyDialog = useModalDialog();
+
+  function openBodyDialog(title: string, body: string) {
+    bodyDialogTitle.value = title;
+    bodyDialogBody.value = body;
+    void bodyDialog.open();
+  }
 
   const { currentTime, refreshOn, isPast, isFuture } = useCurrentTime();
 
@@ -133,15 +146,48 @@ const init = once(() => {
     const duration = toastDuration(n.title, n.body);
     const toastId =
       n.priority === NotificationPriority.HIGH
-        ? showToast(n.title, "info", 0, {
-            text: "关闭",
-            onClick: (close) => {
-              void markAsDismissed(n.id);
-              close();
-            },
-          })
+        ? showToast(n.title, "info", 0, buildActions(n))
         : showToast(n.title, "info", duration);
     toastIdMap.set(n.id, toastId);
+  }
+
+  // 为 HIGH 优先级通知构建操作按钮数组
+  function buildActions(n: Notification): NotificationAction[] {
+    const actions: NotificationAction[] = [];
+
+    // hooks 频道的失败通知：显示"查看正文"按钮，打开对话框展示 stderr 堆栈
+    if (n.channel === "hooks") {
+      actions.push({
+        text: "查看正文",
+        onClick: (close) => {
+          openBodyDialog(n.title, n.body);
+          close();
+        },
+      });
+    }
+
+    // hooks 频道如果有 detailsURL，显示"查看详情"按钮打开详情链接
+    if (n.channel === "hooks" && n.detailsURL) {
+      const url = n.detailsURL;
+      actions.push({
+        text: "查看详情",
+        onClick: (close) => {
+          window.open(url, "_blank");
+          close();
+        },
+      });
+    }
+
+    // 关闭按钮
+    actions.push({
+      text: "关闭",
+      onClick: (close) => {
+        void markAsDismissed(n.id);
+        close();
+      },
+    });
+
+    return actions;
   }
 
   // 隐藏 Toast（notAfter 到达时调用）
@@ -260,6 +306,9 @@ const init = once(() => {
     channelNotifications: visibleNotifications,
     selectedChannelUnreadCount,
     drawer,
+    bodyDialog,
+    bodyDialogTitle,
+    bodyDialogBody,
     selectChannel,
     markAsRead,
     markAllAsRead,

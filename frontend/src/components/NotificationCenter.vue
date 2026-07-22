@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { mdiChevronLeft, mdiBellOutline, mdiOpenInNew } from "@mdi/js";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
+import NotificationBodyDialog from "@/components/NotificationBodyDialog.vue";
 import { formatDate } from "@/utils/date";
 
 const {
@@ -11,6 +12,9 @@ const {
   channelNotifications,
   selectedChannelUnreadCount,
   drawer,
+  bodyDialog,
+  bodyDialogTitle,
+  bodyDialogBody,
   selectChannel,
   markAsDismissed,
 } = useNotificationCenter();
@@ -203,4 +207,13 @@ function handleDismiss(id: string) {
       </div>
     </div>
   </drawer.component>
+
+  <!-- 通知正文弹窗：展示 Hook 执行的 stderr 详情 -->
+  <bodyDialog.component container-class="sm:max-w-lg">
+    <NotificationBodyDialog
+      :title="bodyDialogTitle"
+      :body="bodyDialogBody"
+      @close="bodyDialog.close()"
+    />
+  </bodyDialog.component>
 </template>

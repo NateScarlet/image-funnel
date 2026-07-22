@@ -35,12 +35,17 @@
         </div>
         <div class="flex-1 min-w-0">
           <div class="text-sm font-medium">{{ notification.message }}</div>
-          <div v-if="notification.action" class="mt-2">
+          <div
+            v-if="notification.actions && notification.actions.length > 0"
+            class="mt-2 flex gap-2"
+          >
             <button
+              v-for="(action, idx) in notification.actions"
+              :key="idx"
               class="px-2 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer"
-              @click.stop="triggerAction(notification)"
+              @click.stop="triggerAction(action, notification)"
             >
-              {{ notification.action.text }}
+              {{ action.text }}
             </button>
           </div>
         </div>
@@ -60,7 +65,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import useNotification from "../composables/useNotification";
-import type { Notification } from "../composables/useNotification";
+import type { Notification, NotificationAction } from "../composables/useNotification";
 import {
   mdiClose,
   mdiAlertCircleOutline,
@@ -95,9 +100,9 @@ const typeClasses: Record<string, string> = {
   info: "bg-blue-900/90 text-blue-100 border border-blue-700",
 };
 
-function triggerAction(notification: Notification) {
-  if (notification.action && notification.action.onClick) {
-    notification.action.onClick(() => remove(notification.id));
+function triggerAction(action: NotificationAction, notification: Notification) {
+  if (action.onClick) {
+    action.onClick(() => remove(notification.id));
   }
 }
 </script>
