@@ -189,6 +189,49 @@ describe("useNotificationCenter", () => {
       expect(mockShowToast).toHaveBeenCalledWith("测试通知", "info", expect.any(Number));
       expect(mockShowToast).toHaveBeenCalledTimes(1);
     });
+
+    test("非 hooks 频道带 detailsURL 的通知生成查看详情按钮且点击在 window.open 中打开", () => {
+      const windowOpenSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({
+        priority: "HIGH",
+        channel: "system",
+        detailsURL: "https://example.com/details",
+      });
+      spawnToast(n);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const actions = (mockShowToast.mock.calls[0] as any[])[3];
+      expect(actions).toEqual(
+        expect.arrayContaining([expect.objectContaining({ text: "查看详情" })]),
+      );
+
+      const detailAction = actions.find((a: { text: string }) => a.text === "查看详情");
+      const closeFn = vi.fn();
+      detailAction.onClick(closeFn);
+
+      expect(windowOpenSpy).toHaveBeenCalledWith("https://example.com/details", "_blank");
+      expect(closeFn).toHaveBeenCalled();
+
+      windowOpenSpy.mockRestore();
+    });
+
+    test("hooks 频道带 detailsURL 的通知生成查看正文和查看详情按钮", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({
+        priority: "HIGH",
+        channel: "hooks",
+        detailsURL: "https://example.com/hook-details",
+      });
+      spawnToast(n);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const actions = (mockShowToast.mock.calls[0] as any[])[3];
+      const texts = actions.map((a: { text: string }) => a.text);
+      expect(texts).toEqual(["查看正文", "查看详情", "关闭"]);
+    });
   });
   // #endregion
 

@@ -144,14 +144,15 @@ const init = once(() => {
     if (shownToastIds.has(n.id)) return;
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title, n.body);
+    const actions = buildActions(n);
     const toastId =
       n.priority === NotificationPriority.HIGH
-        ? showToast(n.title, "info", 0, buildActions(n))
-        : showToast(n.title, "info", duration);
+        ? showToast(n.title, "info", 0, actions, n.body)
+        : showToast(n.title, "info", duration, actions.length > 0 ? actions : undefined, n.body);
     toastIdMap.set(n.id, toastId);
   }
 
-  // 为 HIGH 优先级通知构建操作按钮数组
+  // 为通知构建操作按钮数组
   function buildActions(n: Notification): NotificationAction[] {
     const actions: NotificationAction[] = [];
 
@@ -166,8 +167,8 @@ const init = once(() => {
       });
     }
 
-    // hooks 频道如果有 detailsURL，显示"查看详情"按钮打开详情链接
-    if (n.channel === "hooks" && n.detailsURL) {
+    // 如果有 detailsURL，显示"查看详情"按钮打开详情链接
+    if (n.detailsURL) {
       const url = n.detailsURL;
       actions.push({
         text: "查看详情",
@@ -178,14 +179,16 @@ const init = once(() => {
       });
     }
 
-    // 关闭按钮
-    actions.push({
-      text: "关闭",
-      onClick: (close) => {
-        void markAsDismissed(n.id);
-        close();
-      },
-    });
+    // HIGH 优先级通知不可自动关闭，提供关闭按钮
+    if (n.priority === NotificationPriority.HIGH) {
+      actions.push({
+        text: "关闭",
+        onClick: (close) => {
+          void markAsDismissed(n.id);
+          close();
+        },
+      });
+    }
 
     return actions;
   }
@@ -277,6 +280,7 @@ const init = once(() => {
     }
   }
 
+  // #region 自动标记已读
   const markingReadIds = new Set<string>();
 
   // 监听选中频道及频道通知，有未读通知时自动批量标记已读
@@ -293,7 +297,6 @@ const init = once(() => {
       try {
         await Promise.all(unreads.map((n) => markAsRead(n.id)));
         await refreshChannels();
-        await refreshNotifications();
       } finally {
         for (const n of unreads) {
           markingReadIds.delete(n.id);
@@ -325,8 +328,8 @@ const init = once(() => {
       await Promise.all(unreadsToMark.map((n) => markAsRead(n.id)));
     }
     await refreshChannels();
-    await refreshNotifications();
   }
+  // #endregion
 
   async function markAsDismissed(id: string) {
     await mutate(UpdateNotificationDocument, {
