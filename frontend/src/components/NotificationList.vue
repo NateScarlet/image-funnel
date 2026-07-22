@@ -36,6 +36,12 @@
         <div class="flex-1 min-w-0">
           <div class="text-sm font-medium">{{ notification.message }}</div>
           <div
+            v-if="notification.body"
+            class="mt-1 text-xs opacity-90 break-words whitespace-pre-wrap"
+          >
+            {{ notification.body }}
+          </div>
+          <div
             v-if="notification.actions && notification.actions.length > 0"
             class="mt-2 flex gap-2"
           >

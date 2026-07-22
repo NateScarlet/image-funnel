@@ -176,6 +176,7 @@ describe("useNotificationCenter", () => {
         "info",
         0,
         expect.arrayContaining([expect.objectContaining({ text: "关闭" })]),
+        "",
       );
     });
 
@@ -185,9 +186,44 @@ describe("useNotificationCenter", () => {
       const n = mockNotification({ priority: "NORMAL" });
       spawnToast(n);
 
-      // NORMAL 优先级只传 3 个参数（title, type, duration），没有 action 按钮
-      expect(mockShowToast).toHaveBeenCalledWith("测试通知", "info", expect.any(Number));
+      expect(mockShowToast).toHaveBeenCalledWith(
+        "测试通知",
+        "info",
+        expect.any(Number),
+        undefined,
+        "",
+      );
       expect(mockShowToast).toHaveBeenCalledTimes(1);
+    });
+
+    test("带 body 的通知触发 spawnToast 时将 body 传入 toast 载荷", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({ title: "带正文通知", body: "这是通知正文" });
+      spawnToast(n);
+
+      expect(mockShowToast).toHaveBeenCalledWith(
+        "带正文通知",
+        "info",
+        expect.any(Number),
+        undefined,
+        "这是通知正文",
+      );
+    });
+
+    test("不带 body 的通知触发 spawnToast 时传入空 body", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({ title: "无正文通知", body: "" });
+      spawnToast(n);
+
+      expect(mockShowToast).toHaveBeenCalledWith(
+        "无正文通知",
+        "info",
+        expect.any(Number),
+        undefined,
+        "",
+      );
     });
 
     test("非 hooks 频道带 detailsURL 的通知生成查看详情按钮且点击在 window.open 中打开", () => {

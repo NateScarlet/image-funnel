@@ -11,19 +11,25 @@ export interface Notification {
   id: number;
   type: NotificationType;
   message: string;
+  body?: string;
   duration?: number;
   actions?: NotificationAction[];
 }
 
+// #region 全局状态
 const notifications = ref<Notification[]>([]);
 
 let nextId = 0;
+// #endregion
+
 export default function useNotification() {
+  // #region 显示通知
   function show(
     message: string,
     type: NotificationType = "info",
     duration = 3000,
     actions?: NotificationAction[],
+    body?: string,
   ) {
     const id = nextId;
     nextId++;
@@ -31,6 +37,7 @@ export default function useNotification() {
       id,
       type,
       message,
+      body,
       duration,
       actions,
     };
@@ -46,22 +53,24 @@ export default function useNotification() {
     return id;
   }
 
-  function showError(message: string, duration = 5000) {
-    return show(message, "error", duration);
+  function showError(message: string, duration = 5000, body?: string) {
+    return show(message, "error", duration, undefined, body);
   }
 
-  function showSuccess(message: string, duration = 3000) {
-    return show(message, "success", duration);
+  function showSuccess(message: string, duration = 3000, body?: string) {
+    return show(message, "success", duration, undefined, body);
   }
 
-  function showInfo(message: string, duration = 3000) {
-    return show(message, "info", duration);
+  function showInfo(message: string, duration = 3000, body?: string) {
+    return show(message, "info", duration, undefined, body);
   }
 
-  function showWarning(message: string, duration = 3000) {
-    return show(message, "warning", duration);
+  function showWarning(message: string, duration = 3000, body?: string) {
+    return show(message, "warning", duration, undefined, body);
   }
+  // #endregion
 
+  // #region 管理通知
   function remove(id: number) {
     const index = notifications.value.findIndex((n) => n.id === id);
     if (index !== -1) {
@@ -72,6 +81,7 @@ export default function useNotification() {
   function clear() {
     notifications.value = [];
   }
+  // #endregion
 
   return {
     notifications,
