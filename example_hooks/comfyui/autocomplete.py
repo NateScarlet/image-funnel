@@ -6,6 +6,7 @@ import sys
 import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import argparse
 from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, cast
 from PIL import Image
@@ -28,7 +29,7 @@ from .__main__ import (
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
-from .operation_history import get_added_prompts
+from .operation_history import get_added_prompts, get_added_prompt_times
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -572,6 +573,29 @@ class FailedDanbooruProvider(AutocompleteProvider):
         )
 
 
+def _format_relative_time(created_at: str) -> str:
+    """将 ISO 时间戳转为人类可读的相对时间描述"""
+    try:
+        dt = datetime.fromisoformat(created_at)
+    except ValueError:
+        return "之前"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    diff = now - dt
+    seconds = int(diff.total_seconds())
+    if seconds < 60:
+        return "刚刚"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}分钟前"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}小时前"
+    days = hours // 24
+    return f"{days}天前"
+
+
 class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
 
@@ -600,14 +624,38 @@ class DanbooruProvider(AutocompleteProvider):
             return cleaned_text in context.seen_prompts
 
         def apply_styles(
-            suggestions: List[AutocompleteSuggestion], added: Set[str]
+            suggestions: List[AutocompleteSuggestion],
+            added: Set[str],
+            added_times: dict[str, str],
         ) -> Iterator[AutocompleteSuggestion]:
             for s in suggestions:
                 if is_in_workflow(s.text):
                     s.style = "muted"
+                    s.description = f"(已有) {s.description}"
                 elif not s.style and s.text in added:
                     s.style = "muted"
+                    created_at = added_times.get(s.text, "")
+                    relative = (
+                        _format_relative_time(created_at) if created_at else "之前"
+                    )
+                    s.description = f"({relative}已请求) {s.description}"
                 yield s
+
+        # 统一处理历史查询和样式应用的辅助函数
+        def _yield_styled(
+            suggestions: List[AutocompleteSuggestion],
+        ) -> Iterator[AutocompleteSuggestion]:
+            added: Set[str] = (
+                get_added_prompts([s.text for s in suggestions])
+                if has_history
+                else set()
+            )
+            added_times = (
+                get_added_prompt_times([s.text for s in suggestions])
+                if has_history
+                else {}
+            )
+            yield from apply_styles(suggestions, added, added_times)
 
         has_history = (
             "IMAGE_FUNNEL_ROOT_DIR" in os.environ
@@ -646,12 +694,7 @@ class DanbooruProvider(AutocompleteProvider):
                 )
                 return
 
-            added: Set[str] = (
-                get_added_prompts([s.text for s in suggestions])
-                if has_history
-                else set()
-            )
-            yield from apply_styles(suggestions, added)
+            yield from _yield_styled(suggestions)
         else:
             # 当前词未输入，执行关联联想
             prompt_tags = _extract_prompt_tags(
@@ -707,12 +750,7 @@ class DanbooruProvider(AutocompleteProvider):
                     )
                     return
 
-                added: Set[str] = (
-                    get_added_prompts([s.text for s in suggestions])
-                    if has_history
-                    else set()
-                )
-                yield from apply_styles(suggestions, added)
+                yield from _yield_styled(suggestions)
 
 
 def autocomplete(

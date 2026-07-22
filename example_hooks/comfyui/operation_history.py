@@ -123,7 +123,29 @@ class OperationHistory:
             ).fetchall()
             return [RemoveRecord(**json.loads(row[0])) for row in rows]
 
+    def get_added_prompt_times(self, candidates: list[str]) -> dict[str, str]:
+        """返回 candidates 中各提示词最近一次添加的 created_at 时间戳字典。"""
+        if not candidates:
+            return {}
+
+        if self.db_path != ":memory:" and not os.path.isfile(self.db_path):
+            return {}
+
+        placeholders = ",".join("?" * len(candidates))
+        rows = self.db_ctx.connection.execute(
+            f"SELECT json_extract(data, '$.prompt'), MAX(created_at) FROM history "
+            f"WHERE command = 'add' AND json_extract(data, '$.prompt') IN ({placeholders}) "
+            f"GROUP BY json_extract(data, '$.prompt')",
+            candidates,
+        ).fetchall()
+        return {row[0]: row[1] for row in rows}
+
 
 def get_added_prompts(candidates: list[str]) -> set[str]:
     """返回 candidates 中已在历史记录中存在的提示词集合。"""
     return OperationHistory.from_env().get_added_prompts(candidates)
+
+
+def get_added_prompt_times(candidates: list[str]) -> dict[str, str]:
+    """返回 candidates 中各提示词最近一次添加的 created_at 时间戳字典。"""
+    return OperationHistory.from_env().get_added_prompt_times(candidates)
