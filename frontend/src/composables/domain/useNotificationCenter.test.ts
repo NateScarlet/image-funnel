@@ -280,12 +280,13 @@ describe("useNotificationCenter", () => {
       windowOpenSpy.mockRestore();
     });
 
-    test("hooks 频道带 detailsURL 的通知生成查看正文和查看详情按钮", () => {
+    test("body 长度超过 150 字符时显示查看正文按钮", () => {
       const { spawnToast } = useNotificationCenter();
 
+      const longBody = "x".repeat(151);
       const n = mockNotification({
         priority: "HIGH",
-        channel: "hooks",
+        body: longBody,
         detailsURL: "https://example.com/hook-details",
       });
       spawnToast(n);
@@ -294,6 +295,40 @@ describe("useNotificationCenter", () => {
       const actions = (mockShowToast.mock.calls[0] as any[])[3];
       const texts = actions.map((a: { text: string }) => a.text);
       expect(texts).toEqual(["查看正文", "查看详情", "关闭"]);
+    });
+
+    test("body 长度不超过 150 字符时不显示查看正文按钮", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const shortBody = "x".repeat(150);
+      const n = mockNotification({
+        priority: "HIGH",
+        body: shortBody,
+        detailsURL: "https://example.com/details",
+      });
+      spawnToast(n);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const actions = (mockShowToast.mock.calls[0] as any[])[3];
+      const texts = actions.map((a: { text: string }) => a.text);
+      expect(texts).toEqual(["查看详情", "关闭"]);
+    });
+
+    test("非 hooks 频道 body 较长时也显示查看正文按钮", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const longBody = "x".repeat(151);
+      const n = mockNotification({
+        priority: "HIGH",
+        channel: "system",
+        body: longBody,
+      });
+      spawnToast(n);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const actions = (mockShowToast.mock.calls[0] as any[])[3];
+      const texts = actions.map((a: { text: string }) => a.text);
+      expect(texts).toEqual(["查看正文", "关闭"]);
     });
   });
   // #endregion

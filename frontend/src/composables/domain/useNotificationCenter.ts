@@ -156,8 +156,8 @@ const init = once(() => {
   function buildActions(n: Notification): NotificationAction[] {
     const actions: NotificationAction[] = [];
 
-    // hooks 频道的失败通知：显示"查看正文"按钮，打开对话框展示 stderr 堆栈
-    if (n.channel === "hooks") {
+    // body 较长（可能被截断）时显示"查看正文"按钮，打开对话框展示完整内容
+    if (n.body.length > 150) {
       actions.push({
         text: "查看正文",
         onClick: (close) => {
