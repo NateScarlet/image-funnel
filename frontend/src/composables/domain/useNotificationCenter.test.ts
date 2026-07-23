@@ -165,6 +165,33 @@ describe("useNotificationCenter", () => {
       expect(mockShowToast).toHaveBeenCalledTimes(1);
     });
 
+    test("readAt 已设置的通知不显示 toast", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({ readAt: "2025-01-01T00:00:00.000Z" });
+      spawnToast(n);
+
+      expect(mockShowToast).not.toHaveBeenCalled();
+    });
+
+    test("dismissedAt 已设置的通知不显示 toast", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({ dismissedAt: "2025-01-01T00:00:00.000Z" });
+      spawnToast(n);
+
+      expect(mockShowToast).not.toHaveBeenCalled();
+    });
+
+    test("readAt 和 dismissedAt 都为 null 时正常显示 toast", () => {
+      const { spawnToast } = useNotificationCenter();
+
+      const n = mockNotification({ readAt: null, dismissedAt: null });
+      spawnToast(n);
+
+      expect(mockShowToast).toHaveBeenCalledTimes(1);
+    });
+
     test("HIGH 优先级通知 toast 不可自动关闭", () => {
       const { spawnToast } = useNotificationCenter();
 

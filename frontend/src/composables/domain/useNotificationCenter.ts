@@ -205,6 +205,11 @@ const init = once(() => {
 
   // 投递 Toast；所有通知都有时间约束（notBefore/notAfter 为 NonNull），支持时间感知
   function spawnToast(n: Notification) {
+    // 已读或已关闭的通知不显示 toast，避免 markAllAsRead 等操作触发 NotificationChanged
+    // 订阅回调时重新弹出已处理的 toast
+    if (n.readAt) return;
+    if (n.dismissedAt) return;
+
     // 加入调度列表，以便 watch 响应时间变化（notBefore 到达时显示，notAfter 到达时消失）
     const existing = scheduledNotifications.value.get(n.id);
     if (existing) {
