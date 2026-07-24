@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"main/internal/domain/device"
-	domimage "main/internal/domain/image"
 	"main/internal/domain/directory"
+	domimage "main/internal/domain/image"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -27,11 +27,11 @@ import (
 // mockToken 模拟 device.Token
 type mockToken struct{}
 
-func (m *mockToken) String() string            { return "mock-token" }
-func (m *mockToken) UserID() scalar.ID         { return scalar.ToID("usr:mock") }
-func (m *mockToken) Expire() time.Time         { return time.Now().Add(time.Hour) }
-func (m *mockToken) IssueAt() time.Time        { return time.Now() }
-func (m *mockToken) JTI() string               { return "mock-jti" }
+func (m *mockToken) String() string     { return "mock-token" }
+func (m *mockToken) UserID() scalar.ID  { return scalar.ToID("usr:mock") }
+func (m *mockToken) Expire() time.Time  { return time.Now().Add(time.Hour) }
+func (m *mockToken) IssueAt() time.Time { return time.Now() }
+func (m *mockToken) JTI() string        { return "mock-jti" }
 
 // mockTokenSource 模拟 device.TokenSource
 type mockTokenSource struct{}
@@ -152,7 +152,7 @@ type sentNotification struct {
 	Opts    *shared.SendNotificationOptions
 }
 
-func (m *mockNotificationSender) Send(
+func (m *mockNotificationSender) SendNotification(
 	ctx context.Context,
 	tag string,
 	channel string,

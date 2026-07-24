@@ -6,7 +6,7 @@ import (
 
 // NotificationSender 通用通知发送接口
 type NotificationSender interface {
-	Send(
+	SendNotification(
 		ctx context.Context,
 		tag string,
 		channel string,

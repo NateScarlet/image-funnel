@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Unsend 撤回通知，标记 notAfter 为当前时间
-func (h *Handler) Unsend(ctx context.Context, tag string) (id scalar.ID, err error) {
+// UnsendNotification 撤回通知，标记 notAfter 为当前时间
+func (h *Handler) UnsendNotification(ctx context.Context, tag string) (id scalar.ID, err error) {
 	defer func() {
 		if err != nil {
 			h.logger.Error("unsend notification failed",

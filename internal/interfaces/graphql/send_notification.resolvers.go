@@ -29,7 +29,7 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 		opts = append(opts, shared.WithPriority(*input.Priority))
 	}
 
-	result, err := r.app.Send(
+	result, err := r.app.SendNotification(
 		ctx,
 		input.Tag,
 		input.Channel,

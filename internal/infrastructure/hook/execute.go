@@ -254,7 +254,7 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 		opts = append(opts, shared.WithBody(body))
 	}
 
-	if _, err := r.notifSender.Send(ctx, tag, "hooks", title, opts...); err != nil {
+	if _, err := r.notifSender.SendNotification(ctx, tag, "hooks", title, opts...); err != nil {
 		r.logger.Error("failed to send hook notification",
 			zap.String("hook_id", task.HookID),
 			zap.Error(err),
