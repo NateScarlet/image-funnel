@@ -219,10 +219,6 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 
 // sendHookNotification 捕获钩子执行状态并向通用通知系统发送反馈
 func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTask, execErr error, stdoutStr, stderrStr string) {
-	if r.notifSender == nil {
-		return
-	}
-
 	hookName := task.HookName
 	if hookName == "" {
 		hookName = task.HookID
@@ -232,19 +228,18 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	var priority shared.NotificationPriority
 	var body string
 
+	title = task.NotePath
+
+	var sb = new(strings.Builder)
+	sb.WriteString(stderrStr)
 	if execErr != nil {
 		priority = shared.NotificationPriorityHigh
-		title = fmt.Sprintf("钩子 [%s] 执行失败", hookName)
-		stderrTrimmed := strings.TrimSpace(stderrStr)
-		if stderrTrimmed != "" {
-			body = stderrTrimmed
-		} else {
-			body = execErr.Error()
+		if stderrStr != "" {
+			sb.WriteString("---\n# stderr\n")
+			sb.WriteString(stderrStr)
 		}
 	} else {
 		priority = shared.NotificationPriorityLow
-		title = fmt.Sprintf("钩子 [%s] 执行成功", hookName)
-		body = strings.TrimSpace(stdoutStr)
 	}
 
 	tag := uuid.NewString()
@@ -254,7 +249,7 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 		opts = append(opts, shared.WithBody(body))
 	}
 
-	if _, err := r.notifSender.SendNotification(ctx, tag, "hooks", title, opts...); err != nil {
+	if _, err := r.notifSender.SendNotification(ctx, tag, hookName, title, opts...); err != nil {
 		r.logger.Error("failed to send hook notification",
 			zap.String("hook_id", task.HookID),
 			zap.Error(err),
