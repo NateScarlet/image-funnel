@@ -148,7 +148,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	dir, err := s.directoryResolver.GetDirectory(ctx, session.DirectoryID())
 	if err == nil && dir != nil {
-		if err := s.hookRunner.OnCommitSession(ctx, dir.ID(), dir.RelPath()); err != nil {
+		if err := s.hookRunner.OnCommitSession(ctx, dir.RelPath()); err != nil {
 			errs = append(errs, err)
 		}
 	}

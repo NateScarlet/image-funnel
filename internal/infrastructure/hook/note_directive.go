@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/domain/directory"
 	domhook "main/internal/domain/hook"
 	"main/internal/scalar"
 	"main/internal/util"
@@ -22,7 +23,7 @@ var fastCheckReg = regexp.MustCompile(`(?m)^[ \t]*/[a-zA-Z0-9_-]+`)
 
 var directiveReg = regexp.MustCompile(`(?m)^[ \t]*/([a-zA-Z0-9_-]+)(?:\s+([^\r\n]*))?\r?\n?`)
 
-func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dirRelPath string, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
+func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Directory, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
 	fastCheck := fastCheckReg.MatchString(content)
 	contentSummary := content
 	if len(contentSummary) > 500 {
@@ -110,8 +111,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 		events      []hookEvent
 		args        []string
 		relPath     string
-		dirID       string
-		dirRelPath  string
+		dir         *directory.Directory
 		action      string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
 		stdout      string    // 脚本标准输出
 		stderr      string    // 脚本标准错误输出
@@ -221,8 +221,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 			events:      evs,
 			args:        args,
 			relPath:     relPath,
-			dirID:       dirID.String(),
-			dirRelPath:  dirRelPath,
+			dir:         dir,
 		})
 	}
 
@@ -267,7 +266,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dirID scalar.ID, dir
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
 	errB := util.NewErrorsBuilder(len(pending))
 	for i, p := range pending {
-		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dirID, p.dirRelPath, runID)
+		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID)
 		if err != nil {
 			errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, err))
 		}

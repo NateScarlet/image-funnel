@@ -87,7 +87,7 @@ type Repository interface {
 // Runner 外部钩子执行器接口
 type Runner interface {
 	Trigger(ctx context.Context, ids []string, paths []string, hookID scalar.ID, triggerName string) error
-	OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error
+	OnCommitSession(ctx context.Context, dirRelPath string) error
 	TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error
 	Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*AutocompleteSuggestion, error)
 }

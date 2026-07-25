@@ -729,7 +729,7 @@ command = '` + cmdScan + `'
 	err = os.WriteFile(filepath.Join(tempDir, "test.png.md"), []byte("Hello world note"), 0644)
 	assert.NoError(t, err)
 
-	err = runner.OnCommitSession(context.Background(), scalar.ToID("dir:1"), "")
+	err = runner.OnCommitSession(context.Background(), ".")
 	assert.NoError(t, err)
 
 	assert.True(t, waitFlagFile(flagPure, 1500*time.Millisecond), "纯提交钩子应成功执行")
@@ -789,7 +789,7 @@ command = '` + cmdStr + `'
 	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	err = runner.OnCommitSession(context.Background(), expectedDir.ID(), "subdir")
+	err = runner.OnCommitSession(context.Background(), "subdir")
 	assert.NoError(t, err)
 
 	assert.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "纯提交钩子应成功执行并写入 flag 文件")
@@ -917,7 +917,7 @@ Other text.`
 	assert.NoError(t, err)
 
 	// 运行指令处理
-	ok, err := runner.executeNoteDirectives(context.Background(), scalar.ToID("dir:1"), "", noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.Error(t, err)
 	assert.True(t, ok)
 

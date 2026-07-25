@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"main/internal/domain/directory"
 	"sync"
 	"time"
 )
@@ -27,19 +28,17 @@ type hookExecutionResult struct {
 
 // hookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
 type hookExecutionTask struct {
-	HookID       string
-	HookName     string
-	Command      string   // 基础命令（如 "uv run comfyui.py remove"）
-	ExtraArgs    []string // 额外参数，原样传递给命令
-	TriggerName  string
-	Events       []hookEvent
-	Dir          string                   // 执行外部命令时的当前工作目录
-	Env          map[string]string        // 传递给外部脚本的自定义环境变量集合
-	NotePath     string                   // 笔记文件的相对路径
-	DirectoryID  string                   // 会话或笔记所在的目录ID
-	DirectoryRel string                   // 目录的相对路径
-	resultChan   chan hookExecutionResult // 用于接收外部脚本执行结果的通道
-	RunID        string                   // 指令运行 ID 注入环境变量
+	HookID      string
+	HookName    string
+	Command     string   // 基础命令（如 "uv run comfyui.py remove"）
+	ExtraArgs   []string // 额外参数，原样传递给命令
+	TriggerName string
+	Events      []hookEvent
+	Env         map[string]string // 传递给外部脚本的自定义环境变量集合
+	NotePath    string            // 笔记文件的相对路径
+	dir         *directory.Directory
+	resultChan  chan hookExecutionResult // 用于接收外部脚本执行结果的通道
+	RunID       string                   // 指令运行 ID 注入环境变量
 }
 
 // debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件

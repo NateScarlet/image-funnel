@@ -55,7 +55,6 @@ type hookConfig struct {
 		} `toml:"note_dispatch"`
 	} `toml:"on"`
 	Env map[string]string `toml:"env"` // 允许在 TOML 中配置自定义环境变量，键值对都为字符串
-	Dir string            `toml:"-"`   // Hook 配置文件所在的父目录
 }
 
 // filters 元数据更新筛选条件，专门用于外部钩子中的事件过滤
@@ -139,8 +138,6 @@ func (r *Runner) loadHooks() ([]hookConfig, error) {
 			r.logger.Warn("failed to parse hook config toml", zap.String("path", path), zap.Error(err))
 			continue
 		}
-
-		cfg.Dir = filepath.Dir(path) // 记录 Hook 配置文件所在目录
 
 		if cfg.Directive != nil {
 			if cfg.Directive.OnSuccessAction == "" {

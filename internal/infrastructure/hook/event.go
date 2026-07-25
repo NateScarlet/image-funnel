@@ -38,13 +38,13 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 		return nil
 	}
 
-	dirRelPath := filepath.Dir(event.RelPath)
-	if dirRelPath == "." {
-		dirRelPath = ""
+	dir, err := r.dirRepo.Get(r.ctx, filepath.Dir(event.RelPath))
+	if err != nil {
+		return fmt.Errorf("failed to get directory for note update: %w", err)
 	}
 
 	// 1. 处理包含指令的钩子：执行指令并回写文本
-	_, err = r.executeNoteDirectives(r.ctx, event.DirectoryID, dirRelPath, event.RelPath, content, "post_update_note", scalar.ID{})
+	_, err = r.executeNoteDirectives(r.ctx, dir, event.RelPath, content, "post_update_note", scalar.ID{})
 	if err != nil {
 		return fmt.Errorf("failed to process note directives: %w", err)
 	}
@@ -72,7 +72,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 		}
 		errB := util.NewErrorsBuilder(len(noDirectiveHooks))
 		for _, h := range noDirectiveHooks {
-			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, event.DirectoryID.String(), dirRelPath, ""); hookErr != nil {
+			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, dir, ""); hookErr != nil {
 				errB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 			}
 		}

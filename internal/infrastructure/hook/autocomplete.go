@@ -68,7 +68,7 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 	}
 
 	cmd := newHookCmd(ctx, targetHook.Directive.Autocomplete.Command)
-	cmd.Dir = targetHook.Dir
+	cmd.Dir = r.hooksDir
 
 	env, err := r.buildAutocompleteEnv(ctx, targetHook, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
 	if err != nil {

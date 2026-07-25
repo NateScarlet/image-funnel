@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/domain/directory"
 	"main/internal/shared"
 
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ import (
 
 // executeHookSync 同步执行钩子并返回解析后的操作、stdout 和 stderr
 // 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
-func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dirID string, dirRel string, runID string) (action string, stdout string, stderr string, err error) {
+func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dir *directory.Directory, runID string) (action string, stdout string, stderr string, err error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
@@ -38,19 +39,17 @@ func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []h
 	fullCommand := strings.Join(cmdParts, " ")
 
 	r.ch <- hookExecutionTask{
-		HookID:       hook.ID,
-		HookName:     hook.Name,
-		Command:      fullCommand,
-		ExtraArgs:    extraArgs,
-		TriggerName:  triggerName,
-		Events:       events,
-		Dir:          hook.Dir,
-		Env:          hook.Env,
-		NotePath:     notePath,
-		DirectoryID:  dirID,
-		DirectoryRel: dirRel,
-		resultChan:   resChan,
-		RunID:        runID,
+		HookID:      hook.ID,
+		HookName:    hook.Name,
+		Command:     fullCommand,
+		ExtraArgs:   extraArgs,
+		TriggerName: triggerName,
+		Events:      events,
+		Env:         hook.Env,
+		NotePath:    notePath,
+		dir:         dir,
+		resultChan:  resChan,
+		RunID:       runID,
 	}
 
 	select {
@@ -98,7 +97,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 
 	cmd := newHookCmd(ctx, task.Command)
 
-	cmd.Dir = task.Dir // 将脚本的工作目录设置为 Hook 配置文件所在的目录
+	cmd.Dir = r.hooksDir // 将脚本的工作目录设置为 Hook 配置文件所在的目录
 
 	// 生成临时文件路径供脚本通过 IMAGE_FUNNEL_ACTION 写入覆盖操作，不提前创建文件
 	actionFilePath := filepath.Join(os.TempDir(), fmt.Sprintf("image_funnel_action_%s.txt", task.RunID))
@@ -108,7 +107,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		noteAbsPath = filepath.Join(r.rootDir, task.NotePath)
 	}
 
-	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env, task.DirectoryID, task.DirectoryRel)
+	env, buildErr := r.buildBaseEnv(ctx, task.HookID, task.HookName, task.TriggerName, ids, paths, noteAbsPath, task.Env, task.dir.ID().String(), task.dir.RelPath())
 	if buildErr != nil {
 		execErr := fmt.Errorf("failed to build hook env: %w", buildErr)
 		r.sendHookNotification(ctx, task, execErr, "", "")
@@ -230,7 +229,7 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 
 	title = task.NotePath
 	if title == "" {
-		title = task.DirectoryRel
+		title = task.dir.RelPath()
 	}
 	if title == "" {
 		title = task.Command + strings.Join(task.ExtraArgs, " ")

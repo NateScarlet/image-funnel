@@ -39,11 +39,11 @@ func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName
 	}
 
 	if dirRel != "" {
-		resolvedID, err := r.resolveDirID(ctx, dirRel)
+		resolvedDir, err := r.dirRepo.Get(ctx, dirRel)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
 		}
-		dirID = resolvedID
+		dirID = resolvedDir.ID().String()
 	}
 
 	env := append(os.Environ(),

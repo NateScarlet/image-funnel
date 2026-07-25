@@ -13,13 +13,19 @@ import (
 	"go.uber.org/zap"
 )
 
-func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error {
+func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 	// 触发异步后台任务，尽快返回给调用者
 	go func() {
 		logErr := func(msg string, err error) {
 			if err != nil {
 				r.logger.Error(msg, zap.Error(err))
 			}
+		}
+
+		dir, err := r.dirRepo.Get(r.ctx, dirRelPath)
+		if err != nil {
+			logErr("failed to get directory for post_commit_session", err)
+			return
 		}
 
 		hooks, err := r.loadHooks()
@@ -38,7 +44,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 
 		pureErrB := util.NewErrorsBuilder(len(pureCommitHooks))
 		for _, h := range pureCommitHooks {
-			if _, _, _, err := r.executeHookSync(h, "post_commit_session", nil, nil, "", dirID.String(), dirRelPath, ""); err != nil {
+			if _, _, _, err := r.executeHookSync(h, "post_commit_session", nil, nil, "", dir, ""); err != nil {
 				pureErrB.Add(fmt.Errorf("hook %s: %w", h.ID, err))
 			}
 		}
@@ -68,7 +74,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 			}
 
 			// 2a. 带有指令的钩子：解析与执行指令
-			_, err = r.executeNoteDirectives(r.ctx, dirID, dirRelPath, noteRelPath, string(contentBytes), "post_commit_session", scalar.ID{})
+			_, err = r.executeNoteDirectives(r.ctx, dir, noteRelPath, string(contentBytes), "post_commit_session", scalar.ID{})
 			if err != nil {
 				noteErrB.Add(fmt.Errorf("failed to process note directives for %s: %w", noteRelPath, err))
 				continue
@@ -91,7 +97,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPat
 				} else {
 					scanErrB := util.NewErrorsBuilder(len(noDirectiveNoteScanHooks))
 					for _, h := range noDirectiveNoteScanHooks {
-						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dirID.String(), dirRelPath, ""); hookErr != nil {
+						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dir, ""); hookErr != nil {
 							scanErrB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 						}
 					}

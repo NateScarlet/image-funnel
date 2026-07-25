@@ -178,12 +178,12 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 	}
 
 	// 从第一个路径推导目录信息，触发必然涉及图片，目录信息总是可推导的
-	dirID, dirRel, err := r.resolveDirFromPath(ctx, paths[0])
+	dir, err := r.resolveDirFromPath(ctx, paths[0])
 	if err != nil {
 		return fmt.Errorf("failed to resolve directory for trigger %q: %w", triggerName, err)
 	}
 
-	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", dirID, dirRel, "")
+	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", dir, "")
 	return err
 }
 
@@ -224,12 +224,11 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 		dirRelPath = ""
 	}
 
-	// 依照领域仓库通过相对路径加载目录实体以提取其 ID，避免外部自行编码
+	// 依照领域仓库通过相对路径加载目录实体
 	dir, err := r.dirRepo.Get(ctx, dirRelPath)
 	if err != nil {
 		return fmt.Errorf("failed to get directory for note dispatch: %w", err)
 	}
-	dirID := dir.ID()
 
 	if targetHook.Directive != nil && targetHook.Directive.Name != "" {
 		r.logger.Debug("TriggerForNote directive matches, will execute directives", zap.String("directiveName", targetHook.Directive.Name))
@@ -240,7 +239,7 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 		}
 		content := string(contentBytes)
 
-		executed, err := r.executeNoteDirectives(ctx, dirID, dirRelPath, noteRelPath, content, "note_dispatch", hookID)
+		executed, err := r.executeNoteDirectives(ctx, dir, noteRelPath, content, "note_dispatch", hookID)
 		r.logger.Debug("TriggerForNote executeNoteDirectives finished", zap.Bool("executed", executed), zap.Error(err))
 		if err != nil {
 			return err
@@ -248,14 +247,14 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 
 		if !executed {
 			r.logger.Debug("TriggerForNote not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
+			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "")
 			return err
 		}
 		return nil
 	}
 
 	r.logger.Debug("TriggerForNote no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dirID.String(), dirRelPath, "")
+	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "")
 	return err
 }
 
@@ -309,7 +308,7 @@ func (r *Runner) onDebounceTrigger(hookID string, events []hookEvent) {
 	}
 
 	// 从第一个事件中推导目录信息，触发必然涉及图片，目录信息总是可推导的
-	dirID, dirRel, err := r.resolveDirFromPath(r.ctx, events[0].Path)
+	dir, err := r.resolveDirFromPath(r.ctx, events[0].Path)
 	if err != nil {
 		r.logger.Error("failed to resolve directory for hook event, skipping",
 			zap.String("hook_id", targetHook.ID),
@@ -321,16 +320,14 @@ func (r *Runner) onDebounceTrigger(hookID string, events []hookEvent) {
 	}
 
 	r.ch <- hookExecutionTask{
-		HookID:       targetHook.ID,
-		HookName:     targetHook.Name,
-		Command:      targetHook.Command,
-		TriggerName:  "post_update_image_metadata",
-		Events:       events,
-		Dir:          targetHook.Dir,
-		Env:          targetHook.Env,
-		resultChan:   make(chan hookExecutionResult, 1),
-		DirectoryID:  dirID,
-		DirectoryRel: dirRel,
+		HookID:      targetHook.ID,
+		HookName:    targetHook.Name,
+		Command:     targetHook.Command,
+		TriggerName: "post_update_image_metadata",
+		Events:      events,
+		Env:         targetHook.Env,
+		resultChan:  make(chan hookExecutionResult, 1),
+		dir:         dir,
 	}
 }
 
@@ -357,18 +354,12 @@ func (r *Runner) dirRelFromAbsPath(absPath string) string {
 	return filepath.Dir(relPath)
 }
 
-// resolveDirID 通过目录仓库查找目录 ID，查找失败应向上传播错误
-func (r *Runner) resolveDirID(ctx context.Context, dirRel string) (string, error) {
+// resolveDirFromPath 从绝对路径中推导目录实体
+func (r *Runner) resolveDirFromPath(ctx context.Context, absPath string) (*directory.Directory, error) {
+	dirRel := r.dirRelFromAbsPath(absPath)
 	dir, err := r.dirRepo.Get(ctx, dirRel)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
+		return nil, fmt.Errorf("failed to resolve directory for %q: %w", dirRel, err)
 	}
-	return dir.ID().String(), nil
-}
-
-// resolveDirFromPath 从绝对路径中推导目录信息，返回目录 ID 和相对路径
-func (r *Runner) resolveDirFromPath(ctx context.Context, absPath string) (dirID, dirRel string, err error) {
-	dirRel = r.dirRelFromAbsPath(absPath)
-	dirID, err = r.resolveDirID(ctx, dirRel)
-	return
+	return dir, nil
 }

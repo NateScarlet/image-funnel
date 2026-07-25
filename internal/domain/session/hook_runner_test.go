@@ -14,7 +14,7 @@ func (r *FakeHookRunner) Trigger(ctx context.Context, ids []string, paths []stri
 	return nil
 }
 
-func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirID scalar.ID, dirRelPath string) error {
+func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 	return nil
 }
 
