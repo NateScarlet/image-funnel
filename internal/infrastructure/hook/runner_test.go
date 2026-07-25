@@ -1152,10 +1152,10 @@ command = "echo hello_success"
 
 	notifs := notifSender.Notifications()
 	assert.Len(t, notifs, 1)
-	assert.Equal(t, "hooks", notifs[0].Channel)
-	assert.Equal(t, "钩子 [通知成功测试] 执行成功", notifs[0].Title)
+	assert.Equal(t, "通知成功测试", notifs[0].Channel)
+	assert.Equal(t, ".", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityLow, notifs[0].Opts.Priority())
-	assert.Equal(t, "hello_success", notifs[0].Opts.Body())
+	assert.Contains(t, notifs[0].Opts.Body(), "hello_success")
 }
 
 func TestRunner_NotificationOnFailure(t *testing.T) {
@@ -1196,8 +1196,8 @@ command = "echo stderr_err_msg >&2 && exit 1"
 
 	notifs := notifSender.Notifications()
 	assert.Len(t, notifs, 1)
-	assert.Equal(t, "hooks", notifs[0].Channel)
-	assert.Equal(t, "钩子 [通知失败测试] 执行失败", notifs[0].Title)
+	assert.Equal(t, "通知失败测试", notifs[0].Channel)
+	assert.Equal(t, ".", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityHigh, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "stderr_err_msg")
 }

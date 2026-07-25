@@ -236,7 +236,7 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	}
 
 	var sb = new(strings.Builder)
-	sb.WriteString(stderrStr)
+	sb.WriteString(stdoutStr)
 	if execErr != nil {
 		priority = shared.NotificationPriorityHigh
 		if stderrStr != "" {
@@ -246,6 +246,7 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	} else {
 		priority = shared.NotificationPriorityLow
 	}
+	body = sb.String()
 
 	tag := uuid.NewString()
 	var opts []shared.SendNotificationOption
