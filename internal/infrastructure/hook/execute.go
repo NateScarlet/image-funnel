@@ -229,6 +229,12 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	var body string
 
 	title = task.NotePath
+	if title == "" {
+		title = task.DirectoryRel
+	}
+	if title == "" {
+		title = task.Command + strings.Join(task.ExtraArgs, " ")
+	}
 
 	var sb = new(strings.Builder)
 	sb.WriteString(stderrStr)
