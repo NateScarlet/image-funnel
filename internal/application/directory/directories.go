@@ -5,9 +5,6 @@ import (
 	"main/internal/pagination"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"time"
-
-	"go.uber.org/zap"
 )
 
 // Directories 获取子目录列表，支持过滤与基于 Relay 规范的游标分页
@@ -18,23 +15,6 @@ func (h *Handler) Directories(
 	first *int,
 	after *string,
 ) (connection *shared.DirectoryConnectionDTO, err error) {
-	startTime := time.Now()
-
-	defer func() {
-		if err != nil {
-			h.logger.Error("directories failed",
-				zap.Stringer("parentID", parentID),
-				zap.Duration("duration", time.Since(startTime)),
-				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("did directories",
-				zap.Stringer("parentID", parentID),
-				zap.Duration("duration", time.Since(startTime)),
-			)
-		}
-	}()
-
 	parentDir, err := h.dirSvc.GetDirectory(ctx, parentID)
 	if err != nil {
 		return nil, err
@@ -49,16 +29,16 @@ func (h *Handler) Directories(
 			}, nil
 		},
 		func(edges []*shared.DirectoryEdgeDTO, pageInfo pagination.PageInfo) (*shared.DirectoryConnectionDTO, error) {
-				var nodes = make([]*shared.DirectoryDTO, len(edges))
-				for i, edge := range edges {
-					nodes[i] = edge.Node
-				}
-				return &shared.DirectoryConnectionDTO{
-					Edges:    edges,
-					Nodes:    nodes,
-					PageInfo: &pageInfo,
-				}, nil
-			},
+			var nodes = make([]*shared.DirectoryDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			return &shared.DirectoryConnectionDTO{
+				Edges:    edges,
+				Nodes:    nodes,
+				PageInfo: &pageInfo,
+			}, nil
+		},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)

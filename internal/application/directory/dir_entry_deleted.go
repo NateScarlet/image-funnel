@@ -6,14 +6,11 @@ import (
 	"main/internal/scalar"
 	"main/internal/shared"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // DirEntryDeleted 订阅目录内的文件/目录被删除或移走（重命名为其他名字）的事件
 // 合并 500ms 内的删除事件作为一批响应，避免批量删除时产生巨量响应
 func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) iter.Seq2[[]*shared.DirEntryDeletedDTO, error] {
-	h.logger.Info("will subscribe to dir entry deleted")
 	return func(yield func([]*shared.DirEntryDeletedDTO, error) bool) {
 		// 将 iter.Seq2 转换为 channel，以便与 select 一起实现非阻塞的批量排空
 		type eventItem struct {
@@ -50,7 +47,6 @@ func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) i
 					return
 				}
 				if item.err != nil {
-					h.logger.Error("dir entry deleted event error", zap.Error(item.err))
 					yield(nil, item.err)
 					return
 				}
@@ -80,10 +76,9 @@ func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) i
 							break drainLoop
 						}
 						if nextItem.err != nil {
-								h.logger.Error("dir entry deleted event error", zap.Error(nextItem.err))
-								yield(nil, nextItem.err)
-								return
-							}
+							yield(nil, nextItem.err)
+							return
+						}
 						filterAndAppend(nextItem)
 					default:
 						break drainLoop

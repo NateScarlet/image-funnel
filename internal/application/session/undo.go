@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: 重命名为 UndoMarkImage
 func (h *Handler) Undo(ctx context.Context, sessionID scalar.ID) (err error) {
 	startTime := time.Now()
 	defer func() {

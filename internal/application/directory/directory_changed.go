@@ -7,8 +7,6 @@ import (
 	"main/internal/shared"
 	"main/internal/util"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 func NewDirectoryChangedOptions(options ...DirectoryChangedOption) *DirectoryChangedOptions {
@@ -37,10 +35,6 @@ func DirectoryChangedWithThrottle(throttle time.Duration) DirectoryChangedOption
 func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.DirectoryFilters, options ...DirectoryChangedOption) iter.Seq2[*shared.DirectoryDTO, error] {
 	var opts = NewDirectoryChangedOptions(options...)
 
-	h.logger.Info("will subscribe to directory changed",
-		zap.Duration("throttle", opts.throttle),
-	)
-
 	keyOf := func(event *shared.FileChangedEvent, err error) scalar.ID {
 		if err != nil {
 			var zero scalar.ID
@@ -55,7 +49,6 @@ func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.Directory
 		var filter = h.filterBuilder.Build(filters)
 		for event, err := range throttledSeq {
 			if err != nil {
-				h.logger.Error("directory changed event error", zap.Error(err))
 				if !yield(nil, err) {
 					return
 				}

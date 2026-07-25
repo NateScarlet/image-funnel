@@ -8,6 +8,7 @@ import (
 )
 
 // FindMatchedImages 根据筛选条件查询所有匹配的图片列表
+// TODO: 改为让 [image.Repository.Find] 支持筛选条件来实现
 func (h *Handler) FindMatchedImages(
 	ctx context.Context,
 	filterBy shared.ImageFilters,
