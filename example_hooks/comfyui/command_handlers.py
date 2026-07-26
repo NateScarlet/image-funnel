@@ -92,12 +92,12 @@ class QueueHandler:
         )
 
         with progress_notification(
-            ctx.client, ctx.progress_tag, "hooks", "提交 ComfyUI 任务"
+            ctx.client, ctx.progress_tag, "ComfyUI 队列提交", "提交 ComfyUI 任务"
         ) as update:
             for q_idx in range(ctx.jobs):
                 if ctx.jobs > 1:
                     _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, ctx.jobs)
-                update(q_idx + 1, ctx.jobs, f"提交第 {q_idx + 1} 次任务")
+                update(f"提交第 {q_idx + 1} 次任务 ({q_idx + 1}/{ctx.jobs})")
                 if seed_mgr.update_seeds() == 0:
                     raise ValueError(
                         f"Failed to update any seeds for image: {ctx.path}."
@@ -318,7 +318,7 @@ class AdjustHandler:
         total_steps = variant_count * ctx.jobs if variant_count > 0 else ctx.jobs
 
         with progress_notification(
-            ctx.client, ctx.progress_tag, "hooks", "调整权重并提交"
+            ctx.client, ctx.progress_tag, "ComfyUI 权重调整", "调整权重并提交"
         ) as update:
             step = 0
             for v_idx, _ in enumerate(variants):
@@ -326,11 +326,7 @@ class AdjustHandler:
                     enable_seed_update = True
                 for j_idx in range(ctx.jobs):
                     step += 1
-                    update(
-                        step,
-                        total_steps,
-                        f"变体 {v_idx + 1}/{variant_count}，第 {j_idx + 1} 次提交",
-                    )
+                    update(f"变体 {v_idx + 1}/{variant_count}，第 {j_idx + 1} 次提交")
                     if enable_seed_update:
                         if seed_mgr.update_seeds() == 0:
                             raise ValueError(
@@ -342,11 +338,7 @@ class AdjustHandler:
             if variant_count == 0 and ctx.args.no_skip:
                 for j_idx in range(ctx.jobs):
                     step += 1
-                    update(
-                        step,
-                        total_steps,
-                        f"无变体，第 {j_idx + 1} 次提交",
-                    )
+                    update(f"无变体，第 {j_idx + 1} 次提交 ({step}/{total_steps})")
                     if enable_seed_update:
                         if seed_mgr.update_seeds() == 0:
                             raise ValueError(

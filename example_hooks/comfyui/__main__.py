@@ -215,13 +215,49 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     # 构建进度通知 tag
     progress_tag = str(uuid.uuid4())
 
+    # 根据命令构造频道和标题
+    if args.command == "queue":
+        channel = "ComfyUI 队列提交"
+        title = "提交 ComfyUI 任务"
+    elif args.command == "add":
+        channel = "ComfyUI 添加提示词"
+        preview = " ".join(args.prompt)
+        if len(preview) > 60:
+            preview = preview[:60] + "…"
+        title = f"添加提示词「{preview}」"
+    elif args.command == "remove":
+        channel = "ComfyUI 移除提示词"
+        preview = " ".join(args.prompt)
+        if len(preview) > 60:
+            preview = preview[:60] + "…"
+        title = f"移除提示词「{preview}」"
+    elif args.command == "remove-again":
+        channel = "ComfyUI 移除提示词"
+        title = "重放历史移除操作"
+    elif args.command == "adjust":
+        channel = "ComfyUI 权重调整"
+        if args.adjust_type == "lora":
+            title = f"调整 Lora「{args.name}」至 {args.weight}"
+        elif args.adjust_type == "prompt":
+            preview = args.text
+            if len(preview) > 60:
+                preview = preview[:60] + "…"
+            title = f"调整提示词「{preview}」至 {args.weight}"
+        elif args.adjust_type == "cfg":
+            title = f"调整 CFG 至 {args.weight}"
+        elif args.adjust_type == "aspect":
+            title = f"调整宽高比至 {args.ratio}"
+        else:
+            title = "调整权重"
+    else:
+        channel = "ComfyUI"
+        title = f"{args.command} 操作"
+
     has_errors = False
     success_count = 0
     skip_reasons: list[str] = []
 
-    with progress_notification(
-        client, progress_tag, "hooks", "ComfyUI 批量处理"
-    ) as update:
+    with progress_notification(client, progress_tag, channel, title) as update:
         for idx, (img_id, path) in enumerate(targets):
             if not os.path.exists(path):
                 _LOGGER.error(f"File does not exist: {path}")
@@ -230,7 +266,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
             _LOGGER.debug("[%d/%d] Processing image: %s", idx + 1, len(targets), path)
 
             # 更新进度通知
-            update(idx + 1, len(targets), f"处理图片 {os.path.basename(path)}")
+            update(f"处理图片 {os.path.basename(path)} ({idx + 1}/{len(targets)})")
 
             prompt: Dict[str, Any]
             workflow: Dict[str, Any]

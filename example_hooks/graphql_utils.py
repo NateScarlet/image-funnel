@@ -182,8 +182,8 @@ class GraphQLClient:
 
 # #region 进度通知上下文管理器
 
-# 进度更新回调类型：接收当前进度、总数和描述消息
-ProgressUpdate = Callable[[int, int, str], None]
+# 进度更新回调类型：接收通知正文
+ProgressUpdate = Callable[[str], None]
 
 
 @contextmanager
@@ -195,19 +195,18 @@ def progress_notification(
 ) -> Generator[ProgressUpdate, None, None]:
     """进度通知上下文管理器。
 
-    使用 <base_uuid>.progress 作为通知标签，方便编排多个相关通知。
+    使用 <base_uuid>.progress 作为通知标签。
+    channel: 通知频道，中文操作类别
+    title: 通知标题，包含具体操作参数以区分不同指令
 
     用法:
-        with progress_notification(client, "550e8400-e29b-41d4-a716-446655440000", "hooks", "处理中") as update:
-            update(1, 10, "开始处理...")
-            do_work()
-            update(2, 10, "继续处理...")
+        with progress_notification(client, uuid, "ComfyUI 添加提示词", "添加提示词「masterpiece」") as update:
+            update("处理图片 foo.jpg (1/10)")
     """
     tag = f"{base_uuid}.progress"
 
-    def update(current: int, step_total: int, message: str) -> None:
+    def update(body: str) -> None:
         """更新进度通知正文，以相同 tag 覆盖之前的通知。"""
-        body = f"{message} ({current}/{step_total})"
         client.send_notification(channel, title, tag=tag, body=body, priority="LOW")
 
     # 进入时创建初始进度通知
