@@ -92,7 +92,7 @@ class QueueHandler:
         )
 
         with progress_notification(
-            ctx.client, ctx.progress_tag, "hooks", "提交 ComfyUI 任务", total=ctx.jobs
+            ctx.client, ctx.progress_tag, "hooks", "提交 ComfyUI 任务"
         ) as update:
             for q_idx in range(ctx.jobs):
                 if ctx.jobs > 1:
@@ -318,7 +318,7 @@ class AdjustHandler:
         total_steps = variant_count * ctx.jobs if variant_count > 0 else ctx.jobs
 
         with progress_notification(
-            ctx.client, ctx.progress_tag, "hooks", "调整权重并提交", total=total_steps
+            ctx.client, ctx.progress_tag, "hooks", "调整权重并提交"
         ) as update:
             step = 0
             for v_idx, _ in enumerate(variants):

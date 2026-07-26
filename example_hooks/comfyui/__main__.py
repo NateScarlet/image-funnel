@@ -220,7 +220,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     skip_reasons: list[str] = []
 
     with progress_notification(
-        client, progress_tag, "hooks", "ComfyUI 批量处理", total=len(targets)
+        client, progress_tag, "hooks", "ComfyUI 批量处理"
     ) as update:
         for idx, (img_id, path) in enumerate(targets):
             if not os.path.exists(path):

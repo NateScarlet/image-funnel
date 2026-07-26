@@ -192,15 +192,13 @@ def progress_notification(
     base_uuid: str,
     channel: str,
     title: str,
-    *,
-    total: int = 0,
 ) -> Generator[ProgressUpdate, None, None]:
     """进度通知上下文管理器。
 
     使用 <base_uuid>.progress 作为通知标签，方便编排多个相关通知。
 
     用法:
-        with progress_notification(client, "550e8400-e29b-41d4-a716-446655440000", "hooks", "处理中", total=10) as update:
+        with progress_notification(client, "550e8400-e29b-41d4-a716-446655440000", "hooks", "处理中") as update:
             update(1, 10, "开始处理...")
             do_work()
             update(2, 10, "继续处理...")
