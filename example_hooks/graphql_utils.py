@@ -3,6 +3,7 @@
 
 import os
 import json
+import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from typing import Callable, Dict, Generator, List, Tuple, Any, Optional
@@ -29,12 +30,10 @@ class GraphQLClient:
         return cls(url, token)
 
     def execute(
-        self, query: str, variables: Optional[Dict[str, Any]] = None
+        self, query: str, variables: Dict[str, Any]
     ) -> Dict[str, Any]:
         """发送 GraphQL 请求的底座方法。"""
-        payload: Dict[str, Any] = {"query": query}
-        if variables is not None:
-            payload["variables"] = variables
+        payload: Dict[str, Any] = {"query": query, "variables": variables}
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -45,11 +44,17 @@ class GraphQLClient:
                 "Authorization": f"Bearer {self._token}",
             },
         )
-        with urllib.request.urlopen(req) as f:
-            res = json.loads(f.read().decode("utf-8"))
-            if "errors" in res:
-                raise ValueError(f"GraphQL returned errors: {res['errors']}")
-            return res["data"]
+        try:
+            with urllib.request.urlopen(req) as f:
+                res = json.loads(f.read().decode("utf-8"))
+                if "errors" in res:
+                    raise ValueError(f"GraphQL returned errors: {res['errors']}")
+                return res["data"]
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"GraphQL HTTP {e.code}: {body}"
+            ) from e
 
     # #region 通知相关方法
 
@@ -87,7 +92,7 @@ class GraphQLClient:
         }
         if tag:
             variables["input"]["tag"] = tag
-        return self.execute(query)["sendNotification"]
+        return self.execute(query, variables)["sendNotification"]
 
     def unsend_notification(self, tag: str) -> None:
         """撤回指定 tag 的通知。"""
