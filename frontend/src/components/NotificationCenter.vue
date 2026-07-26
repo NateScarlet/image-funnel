@@ -155,12 +155,11 @@ function handleBack() {
               formatDate(notification.createdAt)
             }}</span>
           </div>
-          <!-- 通知正文：点击展开/折叠，默认折叠两行 -->
+          <!-- 通知正文：默认折叠两行，点击不影响选中 -->
           <p
             v-if="notification.body"
-            class="text-xs text-primary-400 mt-1 cursor-pointer select-text"
+            class="text-xs text-primary-400 mt-1 select-text"
             :class="{ 'line-clamp-2': !expandedIds.has(notification.id) }"
-            @click="toggleExpand(notification.id)"
           >
             {{ notification.body }}
           </p>
