@@ -178,14 +178,26 @@ def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
         indices = sorted(list(set(indices)))
         return [COMMON_VALUES[idx] for idx in indices]
 
-    m_shift = re.match(r"^([wh]?)([+-]\d+)$", ratio_expr_clean)
+    m_shift = re.match(r"^([wh]?)([+-]?\d+)$", ratio_expr_clean)
     if m_shift:
         prefix = m_shift.group(1) or "w"
         shift = int(m_shift.group(2))
+        if shift == 0:
+            return [COMMON_VALUES[curr_idx]]
 
-        effective_shift = -shift if prefix == "h" else shift
-        target_idx = max(0, min(len(COMMON_RATIOS) - 1, curr_idx + effective_shift))
-        return [COMMON_VALUES[target_idx]]
+        direction = 1 if shift > 0 else -1
+        abs_n = abs(shift)
+        effective_direction = -direction if prefix == "h" else direction
+
+        indices = []
+        for i in range(1, abs_n + 1):
+            offset = effective_direction * i
+            target_idx = max(0, min(len(COMMON_RATIOS) - 1, curr_idx + offset))
+            indices.append(target_idx)
+
+        unique_indices = list(dict.fromkeys(indices))
+
+        return [COMMON_VALUES[idx] for idx in unique_indices]
 
     if ":" in ratio_expr_clean:
         try:

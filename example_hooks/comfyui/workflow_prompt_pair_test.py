@@ -2100,6 +2100,134 @@ class TestAspectAdjustment(unittest.TestCase):
         self.assertEqual(prompt["1"]["inputs"]["width"], 896)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
 
+    def test_aspect_shift_range_positive(self):
+        """+3 从 1:1 生成 +1,+2,+3 共三档变体"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "+3"
+            )
+        )
+        # +1→9:7, +2→19:13, +3→7:4 共 3 个变体
+        self.assertEqual(len(variants), 3)
+
+    def test_aspect_shift_range_negative(self):
+        """-2 从 1:1 生成 -1,-2 共两档变体"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "-2"
+            )
+        )
+        # -1→7:9, -2→13:19 共 2 个变体
+        self.assertEqual(len(variants), 2)
+
+    def test_aspect_shift_bare_number(self):
+        """3（无符号）等同于 +3"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "3"
+            )
+        )
+        self.assertEqual(len(variants), 3)
+
+    def test_aspect_shift_h_prefix(self):
+        """h+2 从 1:1 向窄方向生成 -1,-2 共两档变体"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "h+2"
+            )
+        )
+        # -1→7:9, -2→13:19 共 2 个变体
+        self.assertEqual(len(variants), 2)
+
+    def test_aspect_shift_zero(self):
+        """0 或 +0 仅返回当前档"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [1024, 1024, 1],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        variants = list(
+            variant_engine.generate_aspect_variants(
+                WeightManager(pair), prompt, pair.nodes_cache, "0"
+            )
+        )
+        self.assertEqual(len(variants), 1)
+
     def test_aspect_symmetric_variants(self):
         # 原始 1024x1024 (1:1), 索引为 4
         workflow = {

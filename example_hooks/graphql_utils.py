@@ -29,9 +29,7 @@ class GraphQLClient:
             raise ValueError("Environment variable IMAGE_FUNNEL_TOKEN is missing.")
         return cls(url, token)
 
-    def execute(
-        self, query: str, variables: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def execute(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
         """发送 GraphQL 请求的底座方法。"""
         payload: Dict[str, Any] = {"query": query, "variables": variables}
 
@@ -52,9 +50,7 @@ class GraphQLClient:
                 return res["data"]
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"GraphQL HTTP {e.code}: {body}"
-            ) from e
+            raise RuntimeError(f"GraphQL HTTP {e.code}: {body}") from e
 
     # #region 通知相关方法
 
