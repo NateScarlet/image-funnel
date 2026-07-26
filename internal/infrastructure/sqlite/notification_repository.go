@@ -146,7 +146,8 @@ func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBui
 	return repo, cleanup, nil
 }
 
-// Save 保存通知（新建或更新），返回是否为新建通知
+// Save 保存通知（新建或更新），返回是否为新建通知。
+// 版本冲突（更新的 updated_at 早于数据库中的版本）时返回 VERSION_CONFLICT 错误。
 func (r *NotificationRepository) Save(ctx context.Context, notif *notification.Notification) (didCreate bool, err error) {
 	r.writeMu.Lock()
 	defer r.writeMu.Unlock()
@@ -183,13 +184,25 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	WHERE excluded.updated_at >= notifications.updated_at
 	`
 	po := newNotificationPO(notif)
-	_, err = tx.ExecContext(ctx, query,
+	res, err := tx.ExecContext(ctx, query,
 		po.ID, po.Tag, po.Channel, po.Title, po.Body, po.Priority,
 		po.ReadAt, po.DismissedAt, po.NotAfter, po.NotBefore,
 		po.CreatedAt, po.UpdatedAt, po.DetailsURL,
 	)
 	if err != nil {
 		return false, err
+	}
+
+	// 对于更新操作，检测版本冲突：WHERE 条件不满足时未修改任何行
+	if !didCreate {
+		n, checkErr := res.RowsAffected()
+		if checkErr == nil && n == 0 {
+			return false, apperror.New(
+				"VERSION_CONFLICT",
+				fmt.Sprintf("notification with tag %q has newer version in database", po.Tag),
+				fmt.Sprintf("通知 %q 已被其他进程修改", po.Tag),
+			)
+		}
 	}
 
 	// 刷新该频道物化视图（写时维护，避免 Channels 的 N+1）

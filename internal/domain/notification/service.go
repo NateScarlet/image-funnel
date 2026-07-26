@@ -172,6 +172,9 @@ func (s *Service) Unsend(ctx context.Context, tag string) (scalar.ID, error) {
 	if err := notif.setNotAfter(now); err != nil {
 		return scalar.ID{}, err
 	}
+	if err := notif.setUpdatedAt(now); err != nil {
+		return scalar.ID{}, err
+	}
 
 	_, err = s.repo.Save(ctx, notif)
 	if err != nil {

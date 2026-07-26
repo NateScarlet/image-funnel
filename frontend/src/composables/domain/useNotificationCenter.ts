@@ -220,7 +220,13 @@ const init = once(() => {
 
     // 计算期望状态：应该在时间窗口内显示
     if (isFuture(n.notBefore)) return;
-    if (isPast(n.notAfter)) return;
+    if (isPast(n.notAfter)) {
+      // notAfter 已过期（例如 UNSENT 事件），隐藏已有 Toast
+      if (shownToastIds.has(n.id)) {
+        hideToast(n.id);
+      }
+      return;
+    }
 
     // 幂等同步 UI：已经是期望状态则什么都不做
     if (shownToastIds.has(n.id)) return;
