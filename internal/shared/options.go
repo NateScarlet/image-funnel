@@ -39,6 +39,7 @@ func (o *MarkImageOptions) Duration() scalar.Duration {
 
 // SendNotificationOptions 发送通知的可选参数，不可变
 type SendNotificationOptions struct {
+	tag        string
 	notAfter   time.Time
 	notBefore  time.Time
 	detailsURL scalar.URI
@@ -58,6 +59,11 @@ func NewSendNotificationOptions(opts ...SendNotificationOption) *SendNotificatio
 		opt(o)
 	}
 	return o
+}
+
+// WithTag 设置通知标签。未指定时由服务端自动生成 UUID。
+func WithTag(tag string) SendNotificationOption {
+	return func(o *SendNotificationOptions) { o.tag = tag }
 }
 
 // WithNotAfter 设置过期时间
@@ -86,6 +92,7 @@ func WithPriority(p NotificationPriority) SendNotificationOption {
 }
 
 // Getters
+func (o *SendNotificationOptions) Tag() string            { return o.tag }
 func (o *SendNotificationOptions) NotAfter() time.Time    { return o.notAfter }
 func (o *SendNotificationOptions) NotBefore() time.Time   { return o.notBefore }
 func (o *SendNotificationOptions) DetailsURL() scalar.URI { return o.detailsURL }

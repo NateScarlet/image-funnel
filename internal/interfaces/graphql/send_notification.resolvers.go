@@ -13,6 +13,9 @@ import (
 // SendNotification is the resolver for the sendNotification field.
 func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error) {
 	var opts []shared.SendNotificationOption
+	if input.Tag != nil {
+		opts = append(opts, shared.WithTag(*input.Tag))
+	}
 	if input.NotAfter != nil {
 		opts = append(opts, shared.WithNotAfter(*input.NotAfter))
 	}
@@ -31,7 +34,6 @@ func (r *mutationResolver) SendNotification(ctx context.Context, input SendNotif
 
 	result, err := r.app.SendNotification(
 		ctx,
-		input.Tag,
 		input.Channel,
 		input.Title,
 		opts...,

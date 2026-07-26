@@ -8,7 +8,6 @@ import (
 type NotificationSender interface {
 	SendNotification(
 		ctx context.Context,
-		tag string,
 		channel string,
 		title string,
 		opts ...SendNotificationOption,

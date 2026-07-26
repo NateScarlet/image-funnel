@@ -1,7 +1,7 @@
 "发送通知的输入参数"
 input SendNotificationInput {
-  "客户端唯一标签（UUID），同标签将替换已有通知"
-  tag: String!
+  "客户端唯一标签（UUID 或 <UUID>.<后缀>），同标签将替换已有通知。未指定时由服务端自动生成"
+  tag: String
   "频道标识，首次使用自动注册"
   channel: String!
   "通知标题"
@@ -32,6 +32,7 @@ type SendNotificationPayload {
 extend type Mutation {
   """
   发送通知。如果 tag 已存在则更新已有通知，否则创建新通知。
+  tag 未指定时由服务端自动生成 UUID。tag 支持 <UUID>.<后缀> 格式，方便将 UUID 作为命名空间使用。
   Hook 脚本可通过 IMAGE_FUNNEL_GRAPHQL_URL 调用此接口反馈执行结果。
   """
   sendNotification(input: SendNotificationInput!): SendNotificationPayload!

@@ -4089,8 +4089,8 @@ input RejectPairingRequestInput {
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/send_notification.graphql", Input: `"发送通知的输入参数"
 input SendNotificationInput {
-  "客户端唯一标签（UUID），同标签将替换已有通知"
-  tag: String!
+  "客户端唯一标签（UUID 或 <UUID>.<后缀>），同标签将替换已有通知。未指定时由服务端自动生成"
+  tag: String
   "频道标识，首次使用自动注册"
   channel: String!
   "通知标题"
@@ -4121,6 +4121,7 @@ type SendNotificationPayload {
 extend type Mutation {
   """
   发送通知。如果 tag 已存在则更新已有通知，否则创建新通知。
+  tag 未指定时由服务端自动生成 UUID。tag 支持 <UUID>.<后缀> 格式，方便将 UUID 作为命名空间使用。
   Hook 脚本可通过 IMAGE_FUNNEL_GRAPHQL_URL 调用此接口反馈执行结果。
   """
   sendNotification(input: SendNotificationInput!): SendNotificationPayload!
@@ -18515,7 +18516,7 @@ func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Cont
 		switch k {
 		case "tag":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tag"))
-			data, err := ec.unmarshalNString2string(ctx, v)
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -24547,13 +24548,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -25185,23 +25186,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 

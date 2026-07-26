@@ -2,6 +2,7 @@ package notification
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"main/internal/scalar"
@@ -154,6 +155,15 @@ func FromRepository(
 // Factory 负责创建新的 Notification 实例
 type Factory struct{}
 
+// validateTag 校验 tag 格式：必须是 UUID 或 <UUID>.<suffix>。
+func validateTag(tag string) error {
+	before, _, _ := strings.Cut(tag, ".")
+	if _, err := uuid.Parse(before); err != nil {
+		return fmt.Errorf("tag must be a UUID or <UUID>.<suffix>: %w", err)
+	}
+	return nil
+}
+
 // New 创建新通知，负责校验和默认值
 // body 和 priority 通过 opts 传递，默认值由 NewSendNotificationOptions 提供
 func (f *Factory) New(
@@ -162,9 +172,9 @@ func (f *Factory) New(
 	title string,
 	opts ...shared.SendNotificationOption,
 ) (*Notification, error) {
-	// 校验：tag 必须是 UUID，避免无意冲突
-	if _, err := uuid.Parse(tag); err != nil {
-		return nil, fmt.Errorf("tag must be a valid UUID: %w", err)
+	// 校验：tag 必须是 UUID 或 <UUID>.<suffix> 格式，避免无意冲突
+	if err := validateTag(tag); err != nil {
+		return nil, err
 	}
 	options := shared.NewSendNotificationOptions(opts...)
 

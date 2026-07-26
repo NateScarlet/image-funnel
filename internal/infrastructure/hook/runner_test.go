@@ -154,7 +154,6 @@ type sentNotification struct {
 
 func (m *mockNotificationSender) SendNotification(
 	ctx context.Context,
-	tag string,
 	channel string,
 	title string,
 	opts ...shared.SendNotificationOption,
@@ -165,6 +164,7 @@ func (m *mockNotificationSender) SendNotification(
 		return nil, m.sendErr
 	}
 	options := shared.NewSendNotificationOptions(opts...)
+	tag := options.Tag()
 	m.notifications = append(m.notifications, sentNotification{
 		Tag:     tag,
 		Channel: channel,

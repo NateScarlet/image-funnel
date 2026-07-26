@@ -11,11 +11,12 @@ import (
 // SendNotification 发送或覆盖通知
 func (h *Handler) SendNotification(
 	ctx context.Context,
-	tag string,
 	channel string,
 	title string,
 	opts ...shared.SendNotificationOption,
 ) (result *shared.SendNotificationResult, err error) {
+	options := shared.NewSendNotificationOptions(opts...)
+	tag := options.Tag()
 	defer func() {
 		if err != nil {
 			h.logger.Error("send notification failed",
@@ -32,7 +33,7 @@ func (h *Handler) SendNotification(
 		}
 	}()
 
-	return h.service.Send(ctx, tag, channel, title, opts...)
+	return h.service.Send(ctx, channel, title, opts...)
 }
 
 var _ shared.NotificationSender = (*Handler)(nil)

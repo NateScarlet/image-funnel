@@ -295,8 +295,8 @@ type RejectPairingRequestInput struct {
 
 // 发送通知的输入参数
 type SendNotificationInput struct {
-	// 客户端唯一标签（UUID），同标签将替换已有通知
-	Tag string `json:"tag"`
+	// 客户端唯一标签（UUID 或 <UUID>.<后缀>），同标签将替换已有通知。未指定时由服务端自动生成
+	Tag *string `json:"tag,omitempty"`
 	// 频道标识，首次使用自动注册
 	Channel string `json:"channel"`
 	// 通知标题

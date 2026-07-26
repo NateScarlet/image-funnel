@@ -13,7 +13,6 @@ import (
 	"main/internal/domain/directory"
 	"main/internal/shared"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -248,14 +247,13 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	}
 	body = sb.String()
 
-	tag := uuid.NewString()
 	var opts []shared.SendNotificationOption
 	opts = append(opts, shared.WithPriority(priority))
 	if body != "" {
 		opts = append(opts, shared.WithBody(body))
 	}
 
-	if _, err := r.notifSender.SendNotification(ctx, tag, hookName, title, opts...); err != nil {
+	if _, err := r.notifSender.SendNotification(ctx, hookName, title, opts...); err != nil {
 		r.logger.Error("failed to send hook notification",
 			zap.String("hook_id", task.HookID),
 			zap.Error(err),

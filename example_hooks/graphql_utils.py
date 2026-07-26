@@ -55,33 +55,39 @@ class GraphQLClient:
 
     def send_notification(
         self,
-        tag: str,
         channel: str,
         title: str,
+        *,
+        tag: str = "",
         body: str = "",
         priority: str = "LOW",
-    ) -> None:
-        """发送通知到指定频道，相同 tag 的通知会覆盖更新。"""
+    ) -> Dict[str, Any]:
+        """发送通知到指定频道。tag 未指定时由服务端自动生成 UUID。返回 `sendNotification` 的 data。
+
+        支持 <UUID>.<后缀> 格式，可将 UUID 作为命名空间组织相关通知。
+        """
         query = """
         mutation SendNotification($input: SendNotificationInput!) {
           sendNotification(input: $input) {
             didCreate
             notification {
               id
+              tag
             }
           }
         }
         """
         variables: Dict[str, Any] = {
             "input": {
-                "tag": tag,
                 "channel": channel,
                 "title": title,
                 "body": body,
                 "priority": priority,
             }
         }
-        self.execute(query, variables)
+        if tag:
+            variables["input"]["tag"] = tag
+        return self.execute(query)["sendNotification"]
 
     def unsend_notification(self, tag: str) -> None:
         """撤回指定 tag 的通知。"""
@@ -182,7 +188,7 @@ ProgressUpdate = Callable[[int, int, str], None]
 @contextmanager
 def progress_notification(
     client: GraphQLClient,
-    tag: str,
+    base_uuid: str,
     channel: str,
     title: str,
     *,
@@ -190,22 +196,23 @@ def progress_notification(
 ) -> Generator[ProgressUpdate, None, None]:
     """进度通知上下文管理器。
 
-    进入时创建进度通知，退出时（无论正常或异常）自动清理。
+    使用 <base_uuid>.progress 作为通知标签，方便编排多个相关通知。
 
     用法:
-        with progress_notification(client, "my-tag", "hooks", "处理中", total=10) as update:
+        with progress_notification(client, "550e8400-e29b-41d4-a716-446655440000", "hooks", "处理中", total=10) as update:
             update(1, 10, "开始处理...")
             do_work()
             update(2, 10, "继续处理...")
     """
+    tag = f"{base_uuid}.progress"
 
     def update(current: int, step_total: int, message: str) -> None:
         """更新进度通知正文，以相同 tag 覆盖之前的通知。"""
         body = f"{message} ({current}/{step_total})"
-        client.send_notification(tag, channel, title, body, "LOW")
+        client.send_notification(channel, title, tag=tag, body=body, priority="LOW")
 
     # 进入时创建初始进度通知
-    client.send_notification(tag, channel, title, "准备中...", "LOW")
+    client.send_notification(channel, title, tag=tag, body="准备中...", priority="LOW")
 
     try:
         yield update

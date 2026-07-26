@@ -8,6 +8,8 @@ import (
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+
+	"github.com/google/uuid"
 )
 
 // Service 协调通知领域的业务规则
@@ -27,11 +29,15 @@ func NewService(repo Repository, factory *Factory, topic pubsub.Topic[*shared.No
 // Send 发送或覆盖通知
 func (s *Service) Send(
 	ctx context.Context,
-	tag string,
 	channel string,
 	title string,
 	opts ...shared.SendNotificationOption,
 ) (*shared.SendNotificationResult, error) {
+	options := shared.NewSendNotificationOptions(opts...)
+	tag := options.Tag()
+	if tag == "" {
+		tag = uuid.NewString()
+	}
 	existing, err := apperror.IgnoreNotFound(s.repo.GetByTag(ctx, tag))
 	if err != nil {
 		return nil, err
@@ -48,7 +54,6 @@ func (s *Service) Send(
 			)
 		}
 		now := time.Now()
-		options := shared.NewSendNotificationOptions(opts...)
 		// 使用独立 setter 而非一个巨大的 Update
 		if err := existing.setTitle(title); err != nil {
 			return nil, err
