@@ -97,9 +97,7 @@ def run_retention(client: GraphQLClient) -> None:
             count,
             max_retain,
         )
-        print(
-            f"processed 0 image(s) (retained {count}/{max_retain} for rating {rating})."
-        )
+        print(f"共 {count} 张 {rating} 星图片，未超过保留上限 {max_retain} 张")
         sys.exit(0)
 
     # 按 modTime 升序排列（最旧的在前），超出部分移到回收站
@@ -132,9 +130,7 @@ def run_retention(client: GraphQLClient) -> None:
     result: Dict[str, Any] = client.execute(trash_query, trash_variables)
     moved: int = result["trashImages"]["movedCount"]
 
-    print(
-        f"processed {moved} image(s) (retained {max_retain}/{count} for rating {rating})."
-    )
+    print(f"已清理 {moved} 张较旧 {rating} 星图片，保留最新 {max_retain} 张")
     sys.exit(0)
 
 

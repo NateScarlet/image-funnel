@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+from collections import Counter
 
 from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, Iterable, cast
 import logging
@@ -216,6 +217,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     has_errors = False
     success_count = 0
+    skip_reasons: list[str] = []
 
     with progress_notification(
         client, progress_tag, "hooks", "ComfyUI 批量处理", total=len(targets)
@@ -310,8 +312,54 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
             handler.run(ctx)
             if not ctx.skipped:
                 success_count += 1
+            elif ctx.skip_reason:
+                skip_reasons.append(ctx.skip_reason)
 
-    print(f"processed {success_count}/{len(targets)} image(s) successfully.")
+    skipped = len(targets) - success_count
+    skip_msg = ""
+    if skipped > 0 and skip_reasons:
+        summary = dict(Counter(skip_reasons))
+        parts = [f"跳过 {n} 张：{r}" for r, n in summary.items()]
+        skip_msg = "（" + "；".join(parts) + "）"
+
+    if success_count > 0:
+        if args.command == "add":
+            preview = " ".join(args.prompt)
+            if len(preview) > 40:
+                preview = preview[:40] + "…"
+            print(f"添加了提示词「{preview}」到 {success_count} 张图片{skip_msg}")
+        elif args.command == "remove":
+            preview = " ".join(args.prompt)
+            if len(preview) > 40:
+                preview = preview[:40] + "…"
+            print(f"移除了提示词「{preview}」从 {success_count} 张图片{skip_msg}")
+        elif args.command == "remove-again":
+            print(f"重放了历史移除操作到 {success_count} 张图片{skip_msg}")
+        elif args.command == "queue":
+            print(f"重新入列了 {success_count} 张图片{skip_msg}")
+        elif args.command == "adjust":
+            if args.adjust_type == "lora":
+                print(
+                    f"{success_count} 张图片的 Lora「{args.name}」权重调整为 {args.weight}{skip_msg}"
+                )
+            elif args.adjust_type == "prompt":
+                preview = args.text
+                if len(preview) > 40:
+                    preview = preview[:40] + "…"
+                print(
+                    f"{success_count} 张图片的提示词「{preview}」权重调整为 {args.weight}{skip_msg}"
+                )
+            elif args.adjust_type == "cfg":
+                print(f"{success_count} 张图片的 CFG 调整为 {args.weight}{skip_msg}")
+            elif args.adjust_type == "aspect":
+                print(f"{success_count} 张图片的宽高比调整为 {args.ratio}{skip_msg}")
+    else:
+        if skip_reasons:
+            summary = dict(Counter(skip_reasons))
+            parts = [f"{n} 张：{r}" for r, n in summary.items()]
+            print("没有图片需要处理（" + "；".join(parts) + "）")
+        else:
+            print("没有图片需要处理")
 
     if success_count == 0:
         _write_action_override("KEEP", config.action_path)

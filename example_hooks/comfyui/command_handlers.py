@@ -53,6 +53,7 @@ class CommandContext:
         self.hook_name = hook_name
         self.run_id = run_id
         self.skipped: bool = False
+        self.skip_reason: str = ""
 
     @property
     def progress_tag(self) -> str:
@@ -63,9 +64,10 @@ class CommandContext:
         if self.label_to_set and self.img_id:
             self.client.update_image_label(self.img_id, self.label_to_set)
 
-    def skip(self) -> None:
-        """标记当前图片处理已被跳过"""
+    def skip(self, reason: str = "") -> None:
+        """标记当前图片处理已被跳过，reason 说明原因"""
         self.skipped = True
+        self.skip_reason = reason
 
 
 class CommandHandler(Protocol):
@@ -162,7 +164,7 @@ class RemoveHandler:
                     any_processed = True
 
         if not any_processed:
-            ctx.skip()
+            ctx.skip("未找到待移除的提示词")
             return
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
@@ -227,7 +229,7 @@ class RemoveAgainHandler:
         records = ctx.history.list_remove()
 
         if not records:
-            ctx.skip()
+            ctx.skip("无历史移除记录")
             return
 
         pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
@@ -266,7 +268,7 @@ class RemoveAgainHandler:
                         any_processed = True
 
         if not any_processed:
-            ctx.skip()
+            ctx.skip("历史移除内容已不存在")
             return
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
@@ -355,7 +357,7 @@ class AdjustHandler:
 
         processed = variant_count > 0 or ctx.args.no_skip
         if not processed:
-            ctx.skip()
+            ctx.skip("无有效变体（提示词不存在或权重未变化）")
             return
 
         ctx.update_label()

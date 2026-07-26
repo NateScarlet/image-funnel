@@ -70,7 +70,7 @@ def run_fork(client: GraphQLClient) -> None:
     )
     client.move_images(directory_id, image_ids, dest_dir)
 
-    print(f"processed {len(image_ids)} image(s) successfully.")
+    print(f"移动了 {len(image_ids)} 张图片至「{dest_dir}」")
     sys.exit(0)
 
 
