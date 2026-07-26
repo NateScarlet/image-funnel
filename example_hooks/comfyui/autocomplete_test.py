@@ -302,7 +302,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         mock_provider.related.assert_called_once_with(
             ["masterpiece", "1girl"],
-            target_categories=["General", "Artist", "Copyright", "Meta"],
+            target_categories=["General", "Artist", "Meta"],
         )
 
         self.assertEqual(len(suggestions), 2)
@@ -333,7 +333,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         mock_provider.related.assert_called_once_with(
             ["1girl", "masterpiece"],
-            target_categories=["General", "Artist", "Copyright", "Meta"],
+            target_categories=["General", "Artist", "Meta"],
         )
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "solo")
@@ -796,7 +796,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
         mock_sqlite_provider_class.assert_called_once()
         mock_provider.related.assert_called_once_with(
             ["masterpiece", "1girl"],
-            target_categories=["General", "Artist", "Copyright", "Meta"],
+            target_categories=["General", "Artist", "Meta"],
         )
 
         tags = [item["text"] for item in lines]

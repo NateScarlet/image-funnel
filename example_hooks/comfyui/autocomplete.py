@@ -714,7 +714,7 @@ class DanbooruProvider(AutocompleteProvider):
 
             if prompt_tags:
                 try:
-                    target_categories = ["General", "Artist", "Copyright", "Meta"]
+                    target_categories = ["General", "Artist", "Meta"]
                     tags = self.provider.related(
                         prompt_tags, target_categories=target_categories
                     )
