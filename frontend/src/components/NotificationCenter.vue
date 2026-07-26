@@ -158,7 +158,7 @@ function handleBack() {
           <!-- 通知正文：点击展开/折叠，默认折叠两行 -->
           <p
             v-if="notification.body"
-            class="text-xs text-primary-400 mt-1 cursor-pointer select-none"
+            class="text-xs text-primary-400 mt-1 cursor-pointer select-text"
             :class="{ 'line-clamp-2': !expandedIds.has(notification.id) }"
             @click="toggleExpand(notification.id)"
           >
