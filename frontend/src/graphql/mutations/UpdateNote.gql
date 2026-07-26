@@ -1,5 +1,8 @@
-mutation UpdateNote($id: ID!, $content: String!) {
-  updateNote(id: $id, content: $content) {
-    ...Note
+mutation UpdateNote($input: UpdateNoteInput!) {
+  updateNote(input: $input) {
+    note {
+      ...Note
+    }
+    clientMutationId
   }
 }

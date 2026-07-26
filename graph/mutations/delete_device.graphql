@@ -1,7 +1,12 @@
+type DeleteDevicePayload {
+  clientMutationId: String
+}
+
 extend type Mutation {
-  deleteDevice(input: DeleteDeviceInput!): Boolean!
+  deleteDevice(input: DeleteDeviceInput!): DeleteDevicePayload!
 }
 
 input DeleteDeviceInput {
   id: ID!
+  clientMutationId: String
 }

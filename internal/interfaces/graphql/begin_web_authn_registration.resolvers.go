@@ -17,7 +17,8 @@ func (r *mutationResolver) BeginWebAuthnRegistration(ctx context.Context, input 
 	}
 	return &BeginWebAuthnRegistrationPayload{
 		// 只返回 PublicKeyCredentialCreationOptions，不含外层的 publicKey 包装
-		Options:    options.Response,
-		SessionKey: sessionKey,
+		Options:          options.Response,
+		SessionKey:       sessionKey,
+		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

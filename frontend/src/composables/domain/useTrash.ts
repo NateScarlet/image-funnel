@@ -50,7 +50,7 @@ export default function useTrash() {
 
   async function empty(minAge: string) {
     const res = await mutate(EmptyTrashDocument, {
-      variables: { minAge },
+      variables: { input: { minAge } },
     });
     if (res?.data?.emptyTrash) {
       void refresh();

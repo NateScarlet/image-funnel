@@ -10,7 +10,12 @@ import (
 )
 
 // ApprovePairingRequest is the resolver for the approvePairingRequest field.
-func (r *mutationResolver) ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (bool, error) {
+func (r *mutationResolver) ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (*ApprovePairingRequestPayload, error) {
 	err := r.app.ApprovePairingRequest(ctx, input.Code)
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &ApprovePairingRequestPayload{
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

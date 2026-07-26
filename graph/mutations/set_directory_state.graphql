@@ -3,9 +3,15 @@ input SetDirectoryStateInput {
   id: ID!
   "目录的新状态数据"
   state: DirectoryStateInput!
+  clientMutationId: String
+}
+
+type SetDirectoryStatePayload {
+  directory: Directory!
+  clientMutationId: String
 }
 
 extend type Mutation {
   "设置目录的自定义状态数据"
-  setDirectoryState(input: SetDirectoryStateInput!): Directory!
+  setDirectoryState(input: SetDirectoryStateInput!): SetDirectoryStatePayload!
 }

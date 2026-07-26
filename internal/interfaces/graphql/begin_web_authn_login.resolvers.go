@@ -17,7 +17,8 @@ func (r *mutationResolver) BeginWebAuthnLogin(ctx context.Context, input BeginWe
 	}
 	return &BeginWebAuthnLoginPayload{
 		// 只返回 PublicKeyCredentialRequestOptions，不含外层的 publicKey 包装
-		Options:    options.Response,
-		SessionKey: sessionKey,
+		Options:          options.Response,
+		SessionKey:       sessionKey,
+		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

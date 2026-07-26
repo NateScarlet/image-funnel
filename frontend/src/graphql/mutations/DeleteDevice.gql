@@ -1,3 +1,5 @@
 mutation DeleteDevice($input: DeleteDeviceInput!) {
-  deleteDevice(input: $input)
+  deleteDevice(input: $input) {
+    clientMutationId
+  }
 }

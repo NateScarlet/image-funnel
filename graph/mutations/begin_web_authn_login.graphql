@@ -4,9 +4,11 @@ extend type Mutation {
 
 input BeginWebAuthnLoginInput {
   dummy: Boolean
+  clientMutationId: String
 }
 
 type BeginWebAuthnLoginPayload {
   options: Any!
   sessionKey: String!
+  clientMutationId: String
 }

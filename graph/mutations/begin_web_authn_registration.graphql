@@ -4,9 +4,11 @@ extend type Mutation {
 
 input BeginWebAuthnRegistrationInput {
   setupToken: String
+  clientMutationId: String
 }
 
 type BeginWebAuthnRegistrationPayload {
   options: Any!
   sessionKey: String!
+  clientMutationId: String
 }

@@ -24,5 +24,6 @@ func (r *mutationResolver) FinishWebAuthnLogin(ctx context.Context, input Finish
 		RefreshToken:          refreshTokenRef,
 		RefreshTokenExpiresIn: int(time.Until(refreshExpiresAt).Seconds()),
 		Device:                device,
+		ClientMutationID:      input.ClientMutationID,
 	}, nil
 }

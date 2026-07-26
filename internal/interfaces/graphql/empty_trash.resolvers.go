@@ -7,17 +7,17 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
 )
 
 // EmptyTrash is the resolver for the emptyTrash field.
-func (r *mutationResolver) EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error) {
-	clearedCount, err := r.app.EmptyTrash(ctx, minAge)
+func (r *mutationResolver) EmptyTrash(ctx context.Context, input EmptyTrashInput) (*EmptyTrashPayload, error) {
+	clearedCount, err := r.app.EmptyTrash(ctx, input.MinAge)
 	if err != nil {
 		return nil, err
 	}
 
 	return &EmptyTrashPayload{
-		ClearedCount: clearedCount,
+		ClearedCount:     clearedCount,
+		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

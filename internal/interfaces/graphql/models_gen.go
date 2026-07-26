@@ -20,7 +20,12 @@ type Node interface {
 }
 
 type ApprovePairingRequestInput struct {
-	Code string `json:"code"`
+	Code             string  `json:"code"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type ApprovePairingRequestPayload struct {
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 将文件附加到系统剪贴板，使剪贴板内容可直接粘贴为文件
@@ -45,21 +50,25 @@ type AuthStatus struct {
 }
 
 type BeginWebAuthnLoginInput struct {
-	Dummy *bool `json:"dummy,omitempty"`
+	Dummy            *bool   `json:"dummy,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type BeginWebAuthnLoginPayload struct {
-	Options    any    `json:"options"`
-	SessionKey string `json:"sessionKey"`
+	Options          any     `json:"options"`
+	SessionKey       string  `json:"sessionKey"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type BeginWebAuthnRegistrationInput struct {
-	SetupToken *string `json:"setupToken,omitempty"`
+	SetupToken       *string `json:"setupToken,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type BeginWebAuthnRegistrationPayload struct {
-	Options    any    `json:"options"`
-	SessionKey string `json:"sessionKey"`
+	Options          any     `json:"options"`
+	SessionKey       string  `json:"sessionKey"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 提交当前筛选结果，将操作映射为 XMP 评分写入 sidecar 文件。
@@ -88,7 +97,13 @@ type CreateNoteInput struct {
 	// 笔记主文件名（例如 README，若包含 .md 会自动处理）
 	Name string `json:"name"`
 	// 笔记内容
-	Content string `json:"content"`
+	Content          string  `json:"content"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type CreateNotePayload struct {
+	Note             *shared.NoteDTO `json:"note"`
+	ClientMutationID *string         `json:"clientMutationId,omitempty"`
 }
 
 // 创建新筛选会话
@@ -109,7 +124,12 @@ type CreateSessionPayload struct {
 }
 
 type DeleteDeviceInput struct {
-	ID scalar.ID `json:"id"`
+	ID               scalar.ID `json:"id"`
+	ClientMutationID *string   `json:"clientMutationId,omitempty"`
+}
+
+type DeleteDevicePayload struct {
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 图片删除事件载体，仅保留图片ID
@@ -149,6 +169,12 @@ type DispatchNoteHookPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
+type EmptyTrashInput struct {
+	// 最低存留期，仅清空早于该时间的记录
+	MinAge           scalar.Duration `json:"minAge"`
+	ClientMutationID *string         `json:"clientMutationId,omitempty"`
+}
+
 // 手动清空回收站
 type EmptyTrashPayload struct {
 	// 此次被真正清理的历史数量
@@ -157,8 +183,9 @@ type EmptyTrashPayload struct {
 }
 
 type FinishWebAuthnLoginInput struct {
-	SessionKey string `json:"sessionKey"`
-	Response   string `json:"response"`
+	SessionKey       string  `json:"sessionKey"`
+	Response         string  `json:"response"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type FinishWebAuthnLoginPayload struct {
@@ -171,13 +198,15 @@ type FinishWebAuthnLoginPayload struct {
 	// 刷新令牌的有效秒数（相对时间）
 	RefreshTokenExpiresIn int `json:"refreshTokenExpiresIn"`
 	// 登录成功后返回当前设备信息
-	Device *shared.DeviceDTO `json:"device"`
+	Device           *shared.DeviceDTO `json:"device"`
+	ClientMutationID *string           `json:"clientMutationId,omitempty"`
 }
 
 type FinishWebAuthnRegistrationInput struct {
-	SessionKey string  `json:"sessionKey"`
-	Response   string  `json:"response"`
-	SetupToken *string `json:"setupToken,omitempty"`
+	SessionKey       string  `json:"sessionKey"`
+	Response         string  `json:"response"`
+	SetupToken       *string `json:"setupToken,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 type FinishWebAuthnRegistrationPayload struct {
@@ -190,8 +219,9 @@ type FinishWebAuthnRegistrationPayload struct {
 	// 刷新令牌的有效秒数（相对时间）
 	RefreshTokenExpiresIn *int `json:"refreshTokenExpiresIn,omitempty"`
 	// 注册成功时返回已创建的设备信息
-	Device         *shared.DeviceDTO         `json:"device,omitempty"`
-	PairingRequest *shared.PairingRequestDTO `json:"pairingRequest,omitempty"`
+	Device           *shared.DeviceDTO         `json:"device,omitempty"`
+	PairingRequest   *shared.PairingRequestDTO `json:"pairingRequest,omitempty"`
+	ClientMutationID *string                   `json:"clientMutationId,omitempty"`
 }
 
 // 指令参数自动完成输入
@@ -274,7 +304,8 @@ type RatingCount struct {
 // 刷新 Token 的输入参数
 type RefreshTokenInput struct {
 	// 刷新令牌引用
-	RefreshToken string `json:"refreshToken"`
+	RefreshToken     string  `json:"refreshToken"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 刷新 Token 的响应数据
@@ -286,11 +317,17 @@ type RefreshTokenPayload struct {
 	// 新的刷新令牌引用
 	RefreshToken string `json:"refreshToken"`
 	// 刷新令牌的有效秒数（相对时间）
-	RefreshTokenExpiresIn int `json:"refreshTokenExpiresIn"`
+	RefreshTokenExpiresIn int     `json:"refreshTokenExpiresIn"`
+	ClientMutationID      *string `json:"clientMutationId,omitempty"`
 }
 
 type RejectPairingRequestInput struct {
-	Code string `json:"code"`
+	Code             string  `json:"code"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type RejectPairingRequestPayload struct {
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
 // 发送通知的输入参数
@@ -328,7 +365,13 @@ type SetDirectoryStateInput struct {
 	// 目录的ID
 	ID scalar.ID `json:"id"`
 	// 目录的新状态数据
-	State *shared.DirectoryStateDTO `json:"state"`
+	State            *shared.DirectoryStateDTO `json:"state"`
+	ClientMutationID *string                   `json:"clientMutationId,omitempty"`
+}
+
+type SetDirectoryStatePayload struct {
+	Directory        *shared.DirectoryDTO `json:"directory"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
 }
 
 type Subscription struct {
@@ -389,7 +432,13 @@ type UpdateImageMetadataInput struct {
 	// 新的评分值（0-5），为null表示不修改
 	Rating *int `json:"rating,omitempty"`
 	// 新的颜色标签，为null表示不修改
-	Label *string `json:"label,omitempty"`
+	Label            *string `json:"label,omitempty"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UpdateImageMetadataPayload struct {
+	Image            *shared.ImageDTO `json:"image"`
+	ClientMutationID *string          `json:"clientMutationId,omitempty"`
 }
 
 // 批量更新符合条件的图片的元数据
@@ -407,6 +456,19 @@ type UpdateImagesMetadataPayload struct {
 	// 更新成功的图片数量
 	UpdatedCount     int     `json:"updatedCount"`
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UpdateNoteInput struct {
+	// 笔记ID
+	ID scalar.ID `json:"id"`
+	// 笔记内容
+	Content          string  `json:"content"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type UpdateNotePayload struct {
+	Note             *shared.NoteDTO `json:"note"`
+	ClientMutationID *string         `json:"clientMutationId,omitempty"`
 }
 
 // 更新通知元数据的输入参数，所有字段可选

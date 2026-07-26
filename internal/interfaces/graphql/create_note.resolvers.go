@@ -7,10 +7,16 @@ package graphql
 
 import (
 	"context"
-	"main/internal/shared"
 )
 
 // CreateNote is the resolver for the createNote field.
-func (r *mutationResolver) CreateNote(ctx context.Context, input CreateNoteInput) (*shared.NoteDTO, error) {
-	return r.app.CreateNote(ctx, input.DirectoryID, input.Name, input.Content)
+func (r *mutationResolver) CreateNote(ctx context.Context, input CreateNoteInput) (*CreateNotePayload, error) {
+	note, err := r.app.CreateNote(ctx, input.DirectoryID, input.Name, input.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateNotePayload{
+		Note:             note,
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

@@ -21,7 +21,9 @@ func (r *mutationResolver) FinishWebAuthnRegistration(ctx context.Context, input
 		return nil, err
 	}
 
-	payload := &FinishWebAuthnRegistrationPayload{}
+	payload := &FinishWebAuthnRegistrationPayload{
+		ClientMutationID: input.ClientMutationID,
+	}
 	if accessTokenRef != "" {
 		payload.AccessToken = &accessTokenRef
 		accessExpIn := int(time.Until(accessExpiresAt).Seconds())

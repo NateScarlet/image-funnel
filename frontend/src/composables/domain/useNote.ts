@@ -36,7 +36,7 @@ export default function useNote(id: MaybeRefOrGetter<string | undefined>) {
     const v = toValue(id);
     if (!v) return;
     await mutate(UpdateNoteDocument, {
-      variables: { id: v, content },
+      variables: { input: { id: v, content } },
     });
   }
 

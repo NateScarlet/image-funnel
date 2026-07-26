@@ -1,7 +1,12 @@
+type RejectPairingRequestPayload {
+  clientMutationId: String
+}
+
 extend type Mutation {
-  rejectPairingRequest(input: RejectPairingRequestInput!): Boolean!
+  rejectPairingRequest(input: RejectPairingRequestInput!): RejectPairingRequestPayload!
 }
 
 input RejectPairingRequestInput {
   code: String!
+  clientMutationId: String
 }

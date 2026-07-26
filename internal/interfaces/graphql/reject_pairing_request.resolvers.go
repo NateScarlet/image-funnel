@@ -10,7 +10,12 @@ import (
 )
 
 // RejectPairingRequest is the resolver for the rejectPairingRequest field.
-func (r *mutationResolver) RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error) {
+func (r *mutationResolver) RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (*RejectPairingRequestPayload, error) {
 	err := r.app.RejectPairingRequest(ctx, input.Code)
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &RejectPairingRequestPayload{
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

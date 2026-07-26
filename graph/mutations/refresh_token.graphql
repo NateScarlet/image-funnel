@@ -13,6 +13,7 @@ input RefreshTokenInput {
   刷新令牌引用
   """
   refreshToken: String!
+  clientMutationId: String
 }
 
 """
@@ -35,4 +36,5 @@ type RefreshTokenPayload {
   刷新令牌的有效秒数（相对时间）
   """
   refreshTokenExpiresIn: Int!
+  clientMutationId: String
 }

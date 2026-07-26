@@ -5,11 +5,17 @@ input CreateNoteInput {
   name: String!
   "笔记内容"
   content: String!
+  clientMutationId: String
+}
+
+type CreateNotePayload {
+  note: Note!
+  clientMutationId: String
 }
 
 extend type Mutation {
   """
   创建目录下的笔记内容。如果已存在同名笔记，则返回错误。
   """
-  createNote(input: CreateNoteInput!): Note!
+  createNote(input: CreateNoteInput!): CreateNotePayload!
 }

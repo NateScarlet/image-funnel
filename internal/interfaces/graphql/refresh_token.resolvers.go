@@ -21,5 +21,6 @@ func (r *mutationResolver) RefreshToken(ctx context.Context, input RefreshTokenI
 		AccessTokenExpiresIn:  int(time.Until(accessExpiresAt).Seconds()),
 		RefreshToken:          refreshTokenRef,
 		RefreshTokenExpiresIn: int(time.Until(refreshExpiresAt).Seconds()),
+		ClientMutationID:      input.ClientMutationID,
 	}, nil
 }

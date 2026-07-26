@@ -2,6 +2,7 @@ mutation BeginWebAuthnRegistration($input: BeginWebAuthnRegistrationInput!) {
   beginWebAuthnRegistration(input: $input) {
     options
     sessionKey
+    clientMutationId
   }
 }
 
@@ -18,6 +19,7 @@ mutation FinishWebAuthnRegistration($input: FinishWebAuthnRegistrationInput!) {
       code
       createdAt
     }
+    clientMutationId
   }
 }
 
@@ -25,6 +27,7 @@ mutation BeginWebAuthnLogin($input: BeginWebAuthnLoginInput!) {
   beginWebAuthnLogin(input: $input) {
     options
     sessionKey
+    clientMutationId
   }
 }
 
@@ -37,6 +40,7 @@ mutation FinishWebAuthnLogin($input: FinishWebAuthnLoginInput!) {
     device {
       id
     }
+    clientMutationId
   }
 }
 
@@ -46,5 +50,6 @@ mutation RefreshToken($input: RefreshTokenInput!) {
     accessTokenExpiresIn
     refreshToken
     refreshTokenExpiresIn
+    clientMutationId
   }
 }

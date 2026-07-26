@@ -1,7 +1,12 @@
+type ApprovePairingRequestPayload {
+  clientMutationId: String
+}
+
 extend type Mutation {
-  approvePairingRequest(input: ApprovePairingRequestInput!): Boolean!
+  approvePairingRequest(input: ApprovePairingRequestInput!): ApprovePairingRequestPayload!
 }
 
 input ApprovePairingRequestInput {
   code: String!
+  clientMutationId: String
 }

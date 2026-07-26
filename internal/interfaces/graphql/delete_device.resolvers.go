@@ -10,7 +10,12 @@ import (
 )
 
 // DeleteDevice is the resolver for the deleteDevice field.
-func (r *mutationResolver) DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error) {
+func (r *mutationResolver) DeleteDevice(ctx context.Context, input DeleteDeviceInput) (*DeleteDevicePayload, error) {
 	err := r.app.Delete(ctx, input.ID)
-	return err == nil, err
+	if err != nil {
+		return nil, err
+	}
+	return &DeleteDevicePayload{
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

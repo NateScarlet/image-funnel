@@ -1,7 +1,20 @@
+input UpdateNoteInput {
+  "笔记ID"
+  id: ID!
+  "笔记内容"
+  content: String!
+  clientMutationId: String
+}
+
+type UpdateNotePayload {
+  note: Note!
+  clientMutationId: String
+}
+
 extend type Mutation {
   """
   更新笔记内容。操作即时写入 Markdown 文件，不参与会话提交。
   content 可包含 frontmatter（如 hidden/hide 字段）以控制笔记的隐藏状态。
   """
-  updateNote(id: ID!, content: String!): Note!
+  updateNote(input: UpdateNoteInput!): UpdateNotePayload!
 }

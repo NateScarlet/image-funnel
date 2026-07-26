@@ -1,3 +1,5 @@
 mutation ApprovePairingRequest($input: ApprovePairingRequestInput!) {
-  approvePairingRequest(input: $input)
+  approvePairingRequest(input: $input) {
+    clientMutationId
+  }
 }

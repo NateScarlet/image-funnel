@@ -7,14 +7,19 @@ package graphql
 
 import (
 	"context"
-	"main/internal/scalar"
-	"main/internal/shared"
 )
 
 // UpdateNote is the resolver for the updateNote field.
-func (r *mutationResolver) UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error) {
-	if err := r.app.UpdateNote(ctx, id, content); err != nil {
+func (r *mutationResolver) UpdateNote(ctx context.Context, input UpdateNoteInput) (*UpdateNotePayload, error) {
+	if err := r.app.UpdateNote(ctx, input.ID, input.Content); err != nil {
 		return nil, err
 	}
-	return r.app.Note(ctx, id)
+	note, err := r.app.Note(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateNotePayload{
+		Note:             note,
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

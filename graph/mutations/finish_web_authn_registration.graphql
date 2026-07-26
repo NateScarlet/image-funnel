@@ -6,6 +6,7 @@ input FinishWebAuthnRegistrationInput {
   sessionKey: String!
   response: String!
   setupToken: String
+  clientMutationId: String
 }
 
 type FinishWebAuthnRegistrationPayload {
@@ -30,4 +31,5 @@ type FinishWebAuthnRegistrationPayload {
   """
   device: Device
   pairingRequest: PairingRequest
+  clientMutationId: String
 }

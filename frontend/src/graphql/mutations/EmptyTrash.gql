@@ -1,5 +1,6 @@
-mutation EmptyTrash($minAge: Duration!) {
-  emptyTrash(minAge: $minAge) {
+mutation EmptyTrash($input: EmptyTrashInput!) {
+  emptyTrash(input: $input) {
     clearedCount
+    clientMutationId
   }
 }

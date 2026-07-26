@@ -7,10 +7,16 @@ package graphql
 
 import (
 	"context"
-	"main/internal/shared"
 )
 
 // SetDirectoryState is the resolver for the setDirectoryState field.
-func (r *mutationResolver) SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error) {
-	return r.app.SetState(ctx, input.ID, input.State)
+func (r *mutationResolver) SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*SetDirectoryStatePayload, error) {
+	dir, err := r.app.SetState(ctx, input.ID, input.State)
+	if err != nil {
+		return nil, err
+	}
+	return &SetDirectoryStatePayload{
+		Directory:        dir,
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

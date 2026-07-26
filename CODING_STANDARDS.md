@@ -97,6 +97,7 @@
 - **字段文档**: 每个新增或修改的字段、输入参数、枚举值都必须使用 `"""` 或 `"` 添加说明文档，基于实际实现描述语义而非机械翻译名称。若发现定义与实际实现不一致，用 `TODO:` 标记并说明原因
 - **输入包装**: Mutation 的参数应尽量封装进 `input: *Input!` 中，以提供更好的扩展性，并便于前端获取生成的命名类型。
 - **Schema 拆分粒度**: 禁止在 Mutation 文件的定义中夹带非相关的 Connection/Edge 类型或者 Query 字段。每个 Mutation/Query 所涉及到的自定义业务类型必须放入 `graph/types/` 下，查询字段放入 `graph/queries/` 下，以遵循严格的 `snake_case` 独立拆分规范。
+- **clientMutationId**: 每个 Mutation 的 Input 和 Payload 类型都必须提供 `clientMutationId: String` 字段，用于客户端关联请求与响应。前端应在每次变更操作中自动传入 `clientMutationId` 并在响应中读取回传值以确保缓存更新行为正确。`@public` 鉴权类 Mutation 同样需要支持。
 - **避免冗余 success 字段**: Payload 结构体中禁止定义 `success: Boolean!` 等类似的标识字段。GraphQL 应依赖自带的 Error 抛出机制表达执行失败，只有在正常成功时才返回响应，避免冗余状态字段带来的反模式开发。
 - **错误通知去重**: Apollo Client 的全局 `ErrorLink`（`frontend/src/graphql/client.ts`）会自动捕获所有 GraphQL 和网络错误并通过 `showError` 显示。因此：
   - 调用方**禁止**在 `catch` 块中重复调用 `showError`/`showNotification (..., "error")`，否则会导致重复通知

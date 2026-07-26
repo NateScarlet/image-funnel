@@ -7,14 +7,20 @@ package graphql
 
 import (
 	"context"
-	"main/internal/shared"
 )
 
 // UpdateImageMetadata is the resolver for the updateImageMetadata field.
-func (r *mutationResolver) UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error) {
+func (r *mutationResolver) UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*UpdateImageMetadataPayload, error) {
 	err := r.app.UpdateImageMetadata(ctx, input.ID, input.Rating, input.Label)
 	if err != nil {
 		return nil, err
 	}
-	return r.app.Image(ctx, input.ID)
+	image, err := r.app.Image(ctx, input.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateImageMetadataPayload{
+		Image:            image,
+		ClientMutationID: input.ClientMutationID,
+	}, nil
 }

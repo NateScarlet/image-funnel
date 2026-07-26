@@ -5,6 +5,7 @@ extend type Mutation {
 input FinishWebAuthnLoginInput {
   sessionKey: String!
   response: String!
+  clientMutationId: String
 }
 
 type FinishWebAuthnLoginPayload {
@@ -28,4 +29,5 @@ type FinishWebAuthnLoginPayload {
   登录成功后返回当前设备信息
   """
   device: Device!
+  clientMutationId: String
 }

@@ -5,7 +5,13 @@ type EmptyTrashPayload {
   clientMutationId: String
 }
 
+input EmptyTrashInput {
+  "最低存留期，仅清空早于该时间的记录"
+  minAge: Duration!
+  clientMutationId: String
+}
+
 extend type Mutation {
   "清空回收站中早于指定存留期 (Duration) 的历史记录"
-  emptyTrash(minAge: Duration!): EmptyTrashPayload!
+  emptyTrash(input: EmptyTrashInput!): EmptyTrashPayload!
 }

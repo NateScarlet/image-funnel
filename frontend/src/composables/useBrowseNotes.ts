@@ -162,8 +162,7 @@ export default function useBrowseNotes(
 
     await mutate(UpdateNoteDocument, {
       variables: {
-        id: noteItem.id,
-        content: newRawContent,
+        input: { id: noteItem.id, content: newRawContent },
       },
     });
   }

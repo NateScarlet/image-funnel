@@ -62,6 +62,10 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	ApprovePairingRequestPayload struct {
+		ClientMutationID func(childComplexity int) int
+	}
+
 	AttachFileToClipboardPayload struct {
 		ClientMutationID func(childComplexity int) int
 		Supported        func(childComplexity int) int
@@ -82,13 +86,15 @@ type ComplexityRoot struct {
 	}
 
 	BeginWebAuthnLoginPayload struct {
-		Options    func(childComplexity int) int
-		SessionKey func(childComplexity int) int
+		ClientMutationID func(childComplexity int) int
+		Options          func(childComplexity int) int
+		SessionKey       func(childComplexity int) int
 	}
 
 	BeginWebAuthnRegistrationPayload struct {
-		Options    func(childComplexity int) int
-		SessionKey func(childComplexity int) int
+		ClientMutationID func(childComplexity int) int
+		Options          func(childComplexity int) int
+		SessionKey       func(childComplexity int) int
 	}
 
 	CommitChangesPayload struct {
@@ -98,9 +104,18 @@ type ComplexityRoot struct {
 		Written          func(childComplexity int) int
 	}
 
+	CreateNotePayload struct {
+		ClientMutationID func(childComplexity int) int
+		Note             func(childComplexity int) int
+	}
+
 	CreateSessionPayload struct {
 		ClientMutationID func(childComplexity int) int
 		Session          func(childComplexity int) int
+	}
+
+	DeleteDevicePayload struct {
+		ClientMutationID func(childComplexity int) int
 	}
 
 	DeletedImage struct {
@@ -192,6 +207,7 @@ type ComplexityRoot struct {
 	FinishWebAuthnLoginPayload struct {
 		AccessToken           func(childComplexity int) int
 		AccessTokenExpiresIn  func(childComplexity int) int
+		ClientMutationID      func(childComplexity int) int
 		Device                func(childComplexity int) int
 		RefreshToken          func(childComplexity int) int
 		RefreshTokenExpiresIn func(childComplexity int) int
@@ -200,6 +216,7 @@ type ComplexityRoot struct {
 	FinishWebAuthnRegistrationPayload struct {
 		AccessToken           func(childComplexity int) int
 		AccessTokenExpiresIn  func(childComplexity int) int
+		ClientMutationID      func(childComplexity int) int
 		Device                func(childComplexity int) int
 		PairingRequest        func(childComplexity int) int
 		RefreshToken          func(childComplexity int) int
@@ -286,7 +303,7 @@ type ComplexityRoot struct {
 		DeleteDevice               func(childComplexity int, input DeleteDeviceInput) int
 		DispatchImageHook          func(childComplexity int, input DispatchImageHookInput) int
 		DispatchNoteHook           func(childComplexity int, input DispatchNoteHookInput) int
-		EmptyTrash                 func(childComplexity int, minAge scalar.Duration) int
+		EmptyTrash                 func(childComplexity int, input EmptyTrashInput) int
 		FinishWebAuthnLogin        func(childComplexity int, input FinishWebAuthnLoginInput) int
 		FinishWebAuthnRegistration func(childComplexity int, input FinishWebAuthnRegistrationInput) int
 		MarkImage                  func(childComplexity int, input MarkImageInput) int
@@ -301,7 +318,7 @@ type ComplexityRoot struct {
 		UnsendNotification         func(childComplexity int, input UnsendNotificationInput) int
 		UpdateImageMetadata        func(childComplexity int, input UpdateImageMetadataInput) int
 		UpdateImagesMetadata       func(childComplexity int, input UpdateImagesMetadataInput) int
-		UpdateNote                 func(childComplexity int, id scalar.ID, content string) int
+		UpdateNote                 func(childComplexity int, input UpdateNoteInput) int
 		UpdateNotification         func(childComplexity int, input UpdateNotificationInput) int
 		UpdateSession              func(childComplexity int, input UpdateSessionInput) int
 	}
@@ -421,8 +438,13 @@ type ComplexityRoot struct {
 	RefreshTokenPayload struct {
 		AccessToken           func(childComplexity int) int
 		AccessTokenExpiresIn  func(childComplexity int) int
+		ClientMutationID      func(childComplexity int) int
 		RefreshToken          func(childComplexity int) int
 		RefreshTokenExpiresIn func(childComplexity int) int
+	}
+
+	RejectPairingRequestPayload struct {
+		ClientMutationID func(childComplexity int) int
 	}
 
 	SendNotificationPayload struct {
@@ -457,6 +479,11 @@ type ComplexityRoot struct {
 		TotalKept             func(childComplexity int) int
 		TotalRejected         func(childComplexity int) int
 		TotalShelved          func(childComplexity int) int
+	}
+
+	SetDirectoryStatePayload struct {
+		ClientMutationID func(childComplexity int) int
+		Directory        func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -520,9 +547,19 @@ type ComplexityRoot struct {
 		Notification     func(childComplexity int) int
 	}
 
+	UpdateImageMetadataPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Image            func(childComplexity int) int
+	}
+
 	UpdateImagesMetadataPayload struct {
 		ClientMutationID func(childComplexity int) int
 		UpdatedCount     func(childComplexity int) int
+	}
+
+	UpdateNotePayload struct {
+		ClientMutationID func(childComplexity int) int
+		Note             func(childComplexity int) int
 	}
 
 	UpdateNotificationPayload struct {
@@ -569,31 +606,31 @@ type ImageResolver interface {
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
-	ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (bool, error)
+	ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (*ApprovePairingRequestPayload, error)
 	AttachFileToClipboard(ctx context.Context, input AttachFileToClipboardInput) (*AttachFileToClipboardPayload, error)
 	BeginWebAuthnLogin(ctx context.Context, input BeginWebAuthnLoginInput) (*BeginWebAuthnLoginPayload, error)
 	BeginWebAuthnRegistration(ctx context.Context, input BeginWebAuthnRegistrationInput) (*BeginWebAuthnRegistrationPayload, error)
 	CommitChanges(ctx context.Context, input CommitChangesInput) (*CommitChangesPayload, error)
-	CreateNote(ctx context.Context, input CreateNoteInput) (*shared.NoteDTO, error)
-	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (bool, error)
+	CreateNote(ctx context.Context, input CreateNoteInput) (*CreateNotePayload, error)
+	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (*DeleteDevicePayload, error)
 	DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error)
 	DispatchNoteHook(ctx context.Context, input DispatchNoteHookInput) (*DispatchNoteHookPayload, error)
-	EmptyTrash(ctx context.Context, minAge scalar.Duration) (*EmptyTrashPayload, error)
+	EmptyTrash(ctx context.Context, input EmptyTrashInput) (*EmptyTrashPayload, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenPayload, error)
-	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (bool, error)
+	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (*RejectPairingRequestPayload, error)
 	SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error)
-	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*shared.DirectoryDTO, error)
+	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*SetDirectoryStatePayload, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
 	Undo(ctx context.Context, input UndoInput) (*UndoPayload, error)
 	UndoTrash(ctx context.Context, input UndoTrashInput) (*shared.UndoTrashResultDTO, error)
 	UnsendNotification(ctx context.Context, input UnsendNotificationInput) (*UnsendNotificationPayload, error)
-	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*shared.ImageDTO, error)
+	UpdateImageMetadata(ctx context.Context, input UpdateImageMetadataInput) (*UpdateImageMetadataPayload, error)
 	UpdateImagesMetadata(ctx context.Context, input UpdateImagesMetadataInput) (*UpdateImagesMetadataPayload, error)
-	UpdateNote(ctx context.Context, id scalar.ID, content string) (*shared.NoteDTO, error)
+	UpdateNote(ctx context.Context, input UpdateNoteInput) (*UpdateNotePayload, error)
 	UpdateNotification(ctx context.Context, input UpdateNotificationInput) (*UpdateNotificationPayload, error)
 	UpdateSession(ctx context.Context, input UpdateSessionInput) (*UpdateSessionPayload, error)
 }
@@ -673,6 +710,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
+	case "ApprovePairingRequestPayload.clientMutationId":
+		if e.complexity.ApprovePairingRequestPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.ApprovePairingRequestPayload.ClientMutationID(childComplexity), true
+
 	case "AttachFileToClipboardPayload.clientMutationId":
 		if e.complexity.AttachFileToClipboardPayload.ClientMutationID == nil {
 			break
@@ -736,6 +780,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.AutocompleteSuggestion.Type(childComplexity), true
 
+	case "BeginWebAuthnLoginPayload.clientMutationId":
+		if e.complexity.BeginWebAuthnLoginPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnLoginPayload.ClientMutationID(childComplexity), true
 	case "BeginWebAuthnLoginPayload.options":
 		if e.complexity.BeginWebAuthnLoginPayload.Options == nil {
 			break
@@ -749,6 +799,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.BeginWebAuthnLoginPayload.SessionKey(childComplexity), true
 
+	case "BeginWebAuthnRegistrationPayload.clientMutationId":
+		if e.complexity.BeginWebAuthnRegistrationPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.BeginWebAuthnRegistrationPayload.ClientMutationID(childComplexity), true
 	case "BeginWebAuthnRegistrationPayload.options":
 		if e.complexity.BeginWebAuthnRegistrationPayload.Options == nil {
 			break
@@ -787,6 +843,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.CommitChangesPayload.Written(childComplexity), true
 
+	case "CreateNotePayload.clientMutationId":
+		if e.complexity.CreateNotePayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.CreateNotePayload.ClientMutationID(childComplexity), true
+	case "CreateNotePayload.note":
+		if e.complexity.CreateNotePayload.Note == nil {
+			break
+		}
+
+		return e.complexity.CreateNotePayload.Note(childComplexity), true
+
 	case "CreateSessionPayload.clientMutationId":
 		if e.complexity.CreateSessionPayload.ClientMutationID == nil {
 			break
@@ -799,6 +868,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CreateSessionPayload.Session(childComplexity), true
+
+	case "DeleteDevicePayload.clientMutationId":
+		if e.complexity.DeleteDevicePayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.DeleteDevicePayload.ClientMutationID(childComplexity), true
 
 	case "DeletedImage.id":
 		if e.complexity.DeletedImage.ID == nil {
@@ -1105,6 +1181,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FinishWebAuthnLoginPayload.AccessTokenExpiresIn(childComplexity), true
+	case "FinishWebAuthnLoginPayload.clientMutationId":
+		if e.complexity.FinishWebAuthnLoginPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnLoginPayload.ClientMutationID(childComplexity), true
 	case "FinishWebAuthnLoginPayload.device":
 		if e.complexity.FinishWebAuthnLoginPayload.Device == nil {
 			break
@@ -1136,6 +1218,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FinishWebAuthnRegistrationPayload.AccessTokenExpiresIn(childComplexity), true
+	case "FinishWebAuthnRegistrationPayload.clientMutationId":
+		if e.complexity.FinishWebAuthnRegistrationPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.FinishWebAuthnRegistrationPayload.ClientMutationID(childComplexity), true
 	case "FinishWebAuthnRegistrationPayload.device":
 		if e.complexity.FinishWebAuthnRegistrationPayload.Device == nil {
 			break
@@ -1547,7 +1635,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.EmptyTrash(childComplexity, args["minAge"].(scalar.Duration)), true
+		return e.complexity.Mutation.EmptyTrash(childComplexity, args["input"].(EmptyTrashInput)), true
 	case "Mutation.finishWebAuthnLogin":
 		if e.complexity.Mutation.FinishWebAuthnLogin == nil {
 			break
@@ -1712,7 +1800,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateNote(childComplexity, args["id"].(scalar.ID), args["content"].(string)), true
+		return e.complexity.Mutation.UpdateNote(childComplexity, args["input"].(UpdateNoteInput)), true
 	case "Mutation.updateNotification":
 		if e.complexity.Mutation.UpdateNotification == nil {
 			break
@@ -2205,6 +2293,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RefreshTokenPayload.AccessTokenExpiresIn(childComplexity), true
+	case "RefreshTokenPayload.clientMutationId":
+		if e.complexity.RefreshTokenPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.RefreshTokenPayload.ClientMutationID(childComplexity), true
 	case "RefreshTokenPayload.refreshToken":
 		if e.complexity.RefreshTokenPayload.RefreshToken == nil {
 			break
@@ -2217,6 +2311,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.RefreshTokenPayload.RefreshTokenExpiresIn(childComplexity), true
+
+	case "RejectPairingRequestPayload.clientMutationId":
+		if e.complexity.RejectPairingRequestPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.RejectPairingRequestPayload.ClientMutationID(childComplexity), true
 
 	case "SendNotificationPayload.clientMutationId":
 		if e.complexity.SendNotificationPayload.ClientMutationID == nil {
@@ -2380,6 +2481,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SessionStats.TotalShelved(childComplexity), true
+
+	case "SetDirectoryStatePayload.clientMutationId":
+		if e.complexity.SetDirectoryStatePayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.SetDirectoryStatePayload.ClientMutationID(childComplexity), true
+	case "SetDirectoryStatePayload.directory":
+		if e.complexity.SetDirectoryStatePayload.Directory == nil {
+			break
+		}
+
+		return e.complexity.SetDirectoryStatePayload.Directory(childComplexity), true
 
 	case "Subscription.deviceDeleted":
 		if e.complexity.Subscription.DeviceDeleted == nil {
@@ -2651,6 +2765,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.UnsendNotificationPayload.Notification(childComplexity), true
 
+	case "UpdateImageMetadataPayload.clientMutationId":
+		if e.complexity.UpdateImageMetadataPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UpdateImageMetadataPayload.ClientMutationID(childComplexity), true
+	case "UpdateImageMetadataPayload.image":
+		if e.complexity.UpdateImageMetadataPayload.Image == nil {
+			break
+		}
+
+		return e.complexity.UpdateImageMetadataPayload.Image(childComplexity), true
+
 	case "UpdateImagesMetadataPayload.clientMutationId":
 		if e.complexity.UpdateImagesMetadataPayload.ClientMutationID == nil {
 			break
@@ -2663,6 +2790,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UpdateImagesMetadataPayload.UpdatedCount(childComplexity), true
+
+	case "UpdateNotePayload.clientMutationId":
+		if e.complexity.UpdateNotePayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.UpdateNotePayload.ClientMutationID(childComplexity), true
+	case "UpdateNotePayload.note":
+		if e.complexity.UpdateNotePayload.Note == nil {
+			break
+		}
+
+		return e.complexity.UpdateNotePayload.Note(childComplexity), true
 
 	case "UpdateNotificationPayload.clientMutationId":
 		if e.complexity.UpdateNotificationPayload.ClientMutationID == nil {
@@ -2732,6 +2872,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputDirectoryStateLastSessionInput,
 		ec.unmarshalInputDispatchImageHookInput,
 		ec.unmarshalInputDispatchNoteHookInput,
+		ec.unmarshalInputEmptyTrashInput,
 		ec.unmarshalInputFinishWebAuthnLoginInput,
 		ec.unmarshalInputFinishWebAuthnRegistrationInput,
 		ec.unmarshalInputHookAutocompleteInput,
@@ -2751,6 +2892,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUnsendNotificationInput,
 		ec.unmarshalInputUpdateImageMetadataInput,
 		ec.unmarshalInputUpdateImagesMetadataInput,
+		ec.unmarshalInputUpdateNoteInput,
 		ec.unmarshalInputUpdateNotificationInput,
 		ec.unmarshalInputUpdateSessionInput,
 		ec.unmarshalInputWriteActionsInput,
@@ -3745,12 +3887,17 @@ type DeletedImage {
   "订阅指定会话的变更事件。会话状态变更时（标记、撤销、提交、更新配置）推送完整的会话对象。"
   sessionUpdated(id: ID!): Session!
 }`, BuiltIn: false},
-	{Name: "../../../graph/mutations/approve_pairing_request.graphql", Input: `extend type Mutation {
-  approvePairingRequest(input: ApprovePairingRequestInput!): Boolean!
+	{Name: "../../../graph/mutations/approve_pairing_request.graphql", Input: `type ApprovePairingRequestPayload {
+  clientMutationId: String
+}
+
+extend type Mutation {
+  approvePairingRequest(input: ApprovePairingRequestInput!): ApprovePairingRequestPayload!
 }
 
 input ApprovePairingRequestInput {
   code: String!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/attach_file_to_clipboard.graphql", Input: `"将文件附加到系统剪贴板，使剪贴板内容可直接粘贴为文件"
@@ -3780,11 +3927,13 @@ extend type Mutation {
 
 input BeginWebAuthnLoginInput {
   dummy: Boolean
+  clientMutationId: String
 }
 
 type BeginWebAuthnLoginPayload {
   options: Any!
   sessionKey: String!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/begin_web_authn_registration.graphql", Input: `extend type Mutation {
@@ -3793,11 +3942,13 @@ type BeginWebAuthnLoginPayload {
 
 input BeginWebAuthnRegistrationInput {
   setupToken: String
+  clientMutationId: String
 }
 
 type BeginWebAuthnRegistrationPayload {
   options: Any!
   sessionKey: String!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/commit_changes.graphql", Input: `"""
@@ -3841,13 +3992,19 @@ extend type Mutation {
   name: String!
   "笔记内容"
   content: String!
+  clientMutationId: String
+}
+
+type CreateNotePayload {
+  note: Note!
+  clientMutationId: String
 }
 
 extend type Mutation {
   """
   创建目录下的笔记内容。如果已存在同名笔记，则返回错误。
   """
-  createNote(input: CreateNoteInput!): Note!
+  createNote(input: CreateNoteInput!): CreateNotePayload!
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/create_session.graphql", Input: `"创建新筛选会话"
 input CreateSessionInput {
@@ -3869,12 +4026,17 @@ type CreateSessionPayload {
 type Mutation {
   createSession(input: CreateSessionInput!): CreateSessionPayload!
 }`, BuiltIn: false},
-	{Name: "../../../graph/mutations/delete_device.graphql", Input: `extend type Mutation {
-  deleteDevice(input: DeleteDeviceInput!): Boolean!
+	{Name: "../../../graph/mutations/delete_device.graphql", Input: `type DeleteDevicePayload {
+  clientMutationId: String
+}
+
+extend type Mutation {
+  deleteDevice(input: DeleteDeviceInput!): DeleteDevicePayload!
 }
 
 input DeleteDeviceInput {
   id: ID!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/dispatch_image_hook.graphql", Input: `extend type Mutation {
@@ -3925,9 +4087,15 @@ type EmptyTrashPayload {
   clientMutationId: String
 }
 
+input EmptyTrashInput {
+  "最低存留期，仅清空早于该时间的记录"
+  minAge: Duration!
+  clientMutationId: String
+}
+
 extend type Mutation {
   "清空回收站中早于指定存留期 (Duration) 的历史记录"
-  emptyTrash(minAge: Duration!): EmptyTrashPayload!
+  emptyTrash(input: EmptyTrashInput!): EmptyTrashPayload!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/finish_web_authn_login.graphql", Input: `extend type Mutation {
@@ -3937,6 +4105,7 @@ extend type Mutation {
 input FinishWebAuthnLoginInput {
   sessionKey: String!
   response: String!
+  clientMutationId: String
 }
 
 type FinishWebAuthnLoginPayload {
@@ -3960,6 +4129,7 @@ type FinishWebAuthnLoginPayload {
   登录成功后返回当前设备信息
   """
   device: Device!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/finish_web_authn_registration.graphql", Input: `extend type Mutation {
@@ -3970,6 +4140,7 @@ input FinishWebAuthnRegistrationInput {
   sessionKey: String!
   response: String!
   setupToken: String
+  clientMutationId: String
 }
 
 type FinishWebAuthnRegistrationPayload {
@@ -3994,6 +4165,7 @@ type FinishWebAuthnRegistrationPayload {
   """
   device: Device
   pairingRequest: PairingRequest
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/mark_image.graphql", Input: `"对当前图片执行分类操作（保留/搁置/排除）"
@@ -4055,6 +4227,7 @@ input RefreshTokenInput {
   刷新令牌引用
   """
   refreshToken: String!
+  clientMutationId: String
 }
 
 """
@@ -4077,14 +4250,20 @@ type RefreshTokenPayload {
   刷新令牌的有效秒数（相对时间）
   """
   refreshTokenExpiresIn: Int!
+  clientMutationId: String
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/reject_pairing_request.graphql", Input: `extend type Mutation {
-  rejectPairingRequest(input: RejectPairingRequestInput!): Boolean!
+	{Name: "../../../graph/mutations/reject_pairing_request.graphql", Input: `type RejectPairingRequestPayload {
+  clientMutationId: String
+}
+
+extend type Mutation {
+  rejectPairingRequest(input: RejectPairingRequestInput!): RejectPairingRequestPayload!
 }
 
 input RejectPairingRequestInput {
   code: String!
+  clientMutationId: String
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/send_notification.graphql", Input: `"发送通知的输入参数"
@@ -4132,11 +4311,17 @@ extend type Mutation {
   id: ID!
   "目录的新状态数据"
   state: DirectoryStateInput!
+  clientMutationId: String
+}
+
+type SetDirectoryStatePayload {
+  directory: Directory!
+  clientMutationId: String
 }
 
 extend type Mutation {
   "设置目录的自定义状态数据"
-  setDirectoryState(input: SetDirectoryStateInput!): Directory!
+  setDirectoryState(input: SetDirectoryStateInput!): SetDirectoryStatePayload!
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/mutations/trash_images.graphql", Input: `"将符合条件的图片及其配套文件移到回收站"
@@ -4219,7 +4404,7 @@ extend type Mutation {
   更新图片的评分和颜色标签。操作即时写入 XMP sidecar 文件，不参与会话提交。
   rating 和 label 均为可选，仅传入的字段会被更新。
   """
-  updateImageMetadata(input: UpdateImageMetadataInput!): Image!
+  updateImageMetadata(input: UpdateImageMetadataInput!): UpdateImageMetadataPayload!
 }
 
 input UpdateImageMetadataInput {
@@ -4229,6 +4414,12 @@ input UpdateImageMetadataInput {
   rating: Int
   "新的颜色标签，为null表示不修改"
   label: String
+  clientMutationId: String
+}
+
+type UpdateImageMetadataPayload {
+  image: Image!
+  clientMutationId: String
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_images_metadata.graphql", Input: `"批量更新符合条件的图片的元数据"
 input UpdateImagesMetadataInput {
@@ -4251,12 +4442,25 @@ extend type Mutation {
   updateImagesMetadata(input: UpdateImagesMetadataInput!): UpdateImagesMetadataPayload!
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/mutations/update_note.graphql", Input: `extend type Mutation {
+	{Name: "../../../graph/mutations/update_note.graphql", Input: `input UpdateNoteInput {
+  "笔记ID"
+  id: ID!
+  "笔记内容"
+  content: String!
+  clientMutationId: String
+}
+
+type UpdateNotePayload {
+  note: Note!
+  clientMutationId: String
+}
+
+extend type Mutation {
   """
   更新笔记内容。操作即时写入 Markdown 文件，不参与会话提交。
   content 可包含 frontmatter（如 hidden/hide 字段）以控制笔记的隐藏状态。
   """
-  updateNote(id: ID!, content: String!): Note!
+  updateNote(input: UpdateNoteInput!): UpdateNotePayload!
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/update_notification.graphql", Input: `"更新通知元数据的输入参数，所有字段可选"
 input UpdateNotificationInput {
@@ -4506,11 +4710,11 @@ func (ec *executionContext) field_Mutation_dispatchNoteHook_args(ctx context.Con
 func (ec *executionContext) field_Mutation_emptyTrash_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "minAge", ec.unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNEmptyTrashInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashInput)
 	if err != nil {
 		return nil, err
 	}
-	args["minAge"] = arg0
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -4671,16 +4875,11 @@ func (ec *executionContext) field_Mutation_updateImagesMetadata_args(ctx context
 func (ec *executionContext) field_Mutation_updateNote_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateNoteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNoteInput)
 	if err != nil {
 		return nil, err
 	}
-	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "content", ec.unmarshalNString2string)
-	if err != nil {
-		return nil, err
-	}
-	args["content"] = arg1
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -4996,6 +5195,35 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _ApprovePairingRequestPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *ApprovePairingRequestPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ApprovePairingRequestPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ApprovePairingRequestPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ApprovePairingRequestPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _AttachFileToClipboardPayload_supported(ctx context.Context, field graphql.CollectedField, obj *AttachFileToClipboardPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -5345,6 +5573,35 @@ func (ec *executionContext) fieldContext_BeginWebAuthnLoginPayload_sessionKey(_ 
 	return fc, nil
 }
 
+func (ec *executionContext) _BeginWebAuthnLoginPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnLoginPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnLoginPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _BeginWebAuthnRegistrationPayload_options(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5391,6 +5648,35 @@ func (ec *executionContext) _BeginWebAuthnRegistrationPayload_sessionKey(ctx con
 }
 
 func (ec *executionContext) fieldContext_BeginWebAuthnRegistrationPayload_sessionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeginWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeginWebAuthnRegistrationPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *BeginWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeginWebAuthnRegistrationPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeginWebAuthnRegistrationPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "BeginWebAuthnRegistrationPayload",
 		Field:      field,
@@ -5555,6 +5841,80 @@ func (ec *executionContext) fieldContext_CommitChangesPayload_clientMutationId(_
 	return fc, nil
 }
 
+func (ec *executionContext) _CreateNotePayload_note(ctx context.Context, field graphql.CollectedField, obj *CreateNotePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CreateNotePayload_note,
+		func(ctx context.Context) (any, error) {
+			return obj.Note, nil
+		},
+		nil,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CreateNotePayload_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CreateNotePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Note_relPath(ctx, field)
+			case "content":
+				return ec.fieldContext_Note_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Note_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CreateNotePayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *CreateNotePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CreateNotePayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CreateNotePayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CreateNotePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _CreateSessionPayload_session(ctx context.Context, field graphql.CollectedField, obj *CreateSessionPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5639,6 +5999,35 @@ func (ec *executionContext) _CreateSessionPayload_clientMutationId(ctx context.C
 func (ec *executionContext) fieldContext_CreateSessionPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "CreateSessionPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeleteDevicePayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *DeleteDevicePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeleteDevicePayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeleteDevicePayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeleteDevicePayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -7435,6 +7824,35 @@ func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_device(_ con
 	return fc, nil
 }
 
+func (ec *executionContext) _FinishWebAuthnLoginPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnLoginPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnLoginPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnLoginPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnLoginPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _FinishWebAuthnRegistrationPayload_accessToken(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7626,6 +8044,35 @@ func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_pairi
 				return ec.fieldContext_PairingRequest_status(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PairingRequest", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FinishWebAuthnRegistrationPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *FinishWebAuthnRegistrationPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FinishWebAuthnRegistrationPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FinishWebAuthnRegistrationPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FinishWebAuthnRegistrationPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -9051,7 +9498,7 @@ func (ec *executionContext) _Mutation_approvePairingRequest(ctx context.Context,
 			return ec.resolvers.Mutation().ApprovePairingRequest(ctx, fc.Args["input"].(ApprovePairingRequestInput))
 		},
 		nil,
-		ec.marshalNBoolean2bool,
+		ec.marshalNApprovePairingRequestPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestPayload,
 		true,
 		true,
 	)
@@ -9064,7 +9511,11 @@ func (ec *executionContext) fieldContext_Mutation_approvePairingRequest(ctx cont
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			switch field.Name {
+			case "clientMutationId":
+				return ec.fieldContext_ApprovePairingRequestPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ApprovePairingRequestPayload", field.Name)
 		},
 	}
 	defer func() {
@@ -9170,6 +9621,8 @@ func (ec *executionContext) fieldContext_Mutation_beginWebAuthnLogin(ctx context
 				return ec.fieldContext_BeginWebAuthnLoginPayload_options(ctx, field)
 			case "sessionKey":
 				return ec.fieldContext_BeginWebAuthnLoginPayload_sessionKey(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_BeginWebAuthnLoginPayload_clientMutationId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type BeginWebAuthnLoginPayload", field.Name)
 		},
@@ -9230,6 +9683,8 @@ func (ec *executionContext) fieldContext_Mutation_beginWebAuthnRegistration(ctx 
 				return ec.fieldContext_BeginWebAuthnRegistrationPayload_options(ctx, field)
 			case "sessionKey":
 				return ec.fieldContext_BeginWebAuthnRegistrationPayload_sessionKey(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_BeginWebAuthnRegistrationPayload_clientMutationId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type BeginWebAuthnRegistrationPayload", field.Name)
 		},
@@ -9310,7 +9765,7 @@ func (ec *executionContext) _Mutation_createNote(ctx context.Context, field grap
 			return ec.resolvers.Mutation().CreateNote(ctx, fc.Args["input"].(CreateNoteInput))
 		},
 		nil,
-		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
+		ec.marshalNCreateNotePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐCreateNotePayload,
 		true,
 		true,
 	)
@@ -9324,22 +9779,12 @@ func (ec *executionContext) fieldContext_Mutation_createNote(ctx context.Context
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_Note_id(ctx, field)
-			case "title":
-				return ec.fieldContext_Note_title(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Note_relPath(ctx, field)
-			case "content":
-				return ec.fieldContext_Note_content(ctx, field)
-			case "rawContent":
-				return ec.fieldContext_Note_rawContent(ctx, field)
-			case "hidden":
-				return ec.fieldContext_Note_hidden(ctx, field)
-			case "modTime":
-				return ec.fieldContext_Note_modTime(ctx, field)
+			case "note":
+				return ec.fieldContext_CreateNotePayload_note(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_CreateNotePayload_clientMutationId(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type CreateNotePayload", field.Name)
 		},
 	}
 	defer func() {
@@ -9367,7 +9812,7 @@ func (ec *executionContext) _Mutation_deleteDevice(ctx context.Context, field gr
 			return ec.resolvers.Mutation().DeleteDevice(ctx, fc.Args["input"].(DeleteDeviceInput))
 		},
 		nil,
-		ec.marshalNBoolean2bool,
+		ec.marshalNDeleteDevicePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDevicePayload,
 		true,
 		true,
 	)
@@ -9380,7 +9825,11 @@ func (ec *executionContext) fieldContext_Mutation_deleteDevice(ctx context.Conte
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			switch field.Name {
+			case "clientMutationId":
+				return ec.fieldContext_DeleteDevicePayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DeleteDevicePayload", field.Name)
 		},
 	}
 	defer func() {
@@ -9495,7 +9944,7 @@ func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field grap
 		ec.fieldContext_Mutation_emptyTrash,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().EmptyTrash(ctx, fc.Args["minAge"].(scalar.Duration))
+			return ec.resolvers.Mutation().EmptyTrash(ctx, fc.Args["input"].(EmptyTrashInput))
 		},
 		nil,
 		ec.marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload,
@@ -9582,6 +10031,8 @@ func (ec *executionContext) fieldContext_Mutation_finishWebAuthnLogin(ctx contex
 				return ec.fieldContext_FinishWebAuthnLoginPayload_refreshTokenExpiresIn(ctx, field)
 			case "device":
 				return ec.fieldContext_FinishWebAuthnLoginPayload_device(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_FinishWebAuthnLoginPayload_clientMutationId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type FinishWebAuthnLoginPayload", field.Name)
 		},
@@ -9650,6 +10101,8 @@ func (ec *executionContext) fieldContext_Mutation_finishWebAuthnRegistration(ctx
 				return ec.fieldContext_FinishWebAuthnRegistrationPayload_device(ctx, field)
 			case "pairingRequest":
 				return ec.fieldContext_FinishWebAuthnRegistrationPayload_pairingRequest(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_FinishWebAuthnRegistrationPayload_clientMutationId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type FinishWebAuthnRegistrationPayload", field.Name)
 		},
@@ -9810,6 +10263,8 @@ func (ec *executionContext) fieldContext_Mutation_refreshToken(ctx context.Conte
 				return ec.fieldContext_RefreshTokenPayload_refreshToken(ctx, field)
 			case "refreshTokenExpiresIn":
 				return ec.fieldContext_RefreshTokenPayload_refreshTokenExpiresIn(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_RefreshTokenPayload_clientMutationId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RefreshTokenPayload", field.Name)
 		},
@@ -9839,7 +10294,7 @@ func (ec *executionContext) _Mutation_rejectPairingRequest(ctx context.Context, 
 			return ec.resolvers.Mutation().RejectPairingRequest(ctx, fc.Args["input"].(RejectPairingRequestInput))
 		},
 		nil,
-		ec.marshalNBoolean2bool,
+		ec.marshalNRejectPairingRequestPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestPayload,
 		true,
 		true,
 	)
@@ -9852,7 +10307,11 @@ func (ec *executionContext) fieldContext_Mutation_rejectPairingRequest(ctx conte
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			switch field.Name {
+			case "clientMutationId":
+				return ec.fieldContext_RejectPairingRequestPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RejectPairingRequestPayload", field.Name)
 		},
 	}
 	defer func() {
@@ -9929,7 +10388,7 @@ func (ec *executionContext) _Mutation_setDirectoryState(ctx context.Context, fie
 			return ec.resolvers.Mutation().SetDirectoryState(ctx, fc.Args["input"].(SetDirectoryStateInput))
 		},
 		nil,
-		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		ec.marshalNSetDirectoryStatePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStatePayload,
 		true,
 		true,
 	)
@@ -9943,32 +10402,12 @@ func (ec *executionContext) fieldContext_Mutation_setDirectoryState(ctx context.
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_Directory_id(ctx, field)
-			case "parentId":
-				return ec.fieldContext_Directory_parentId(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Directory_relPath(ctx, field)
-			case "path":
-				return ec.fieldContext_Directory_path(ctx, field)
-			case "root":
-				return ec.fieldContext_Directory_root(ctx, field)
-			case "state":
-				return ec.fieldContext_Directory_state(ctx, field)
-			case "stats":
-				return ec.fieldContext_Directory_stats(ctx, field)
-			case "directories":
-				return ec.fieldContext_Directory_directories(ctx, field)
-			case "directoriesV2":
-				return ec.fieldContext_Directory_directoriesV2(ctx, field)
-			case "images":
-				return ec.fieldContext_Directory_images(ctx, field)
-			case "notes":
-				return ec.fieldContext_Directory_notes(ctx, field)
-			case "lastSession":
-				return ec.fieldContext_Directory_lastSession(ctx, field)
+			case "directory":
+				return ec.fieldContext_SetDirectoryStatePayload_directory(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_SetDirectoryStatePayload_clientMutationId(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type SetDirectoryStatePayload", field.Name)
 		},
 	}
 	defer func() {
@@ -10190,7 +10629,7 @@ func (ec *executionContext) _Mutation_updateImageMetadata(ctx context.Context, f
 			return ec.resolvers.Mutation().UpdateImageMetadata(ctx, fc.Args["input"].(UpdateImageMetadataInput))
 		},
 		nil,
-		ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		ec.marshalNUpdateImageMetadataPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataPayload,
 		true,
 		true,
 	)
@@ -10204,34 +10643,12 @@ func (ec *executionContext) fieldContext_Mutation_updateImageMetadata(ctx contex
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_Image_id(ctx, field)
-			case "filename":
-				return ec.fieldContext_Image_filename(ctx, field)
-			case "size":
-				return ec.fieldContext_Image_size(ctx, field)
-			case "url":
-				return ec.fieldContext_Image_url(ctx, field)
-			case "rawURL":
-				return ec.fieldContext_Image_rawURL(ctx, field)
-			case "modTime":
-				return ec.fieldContext_Image_modTime(ctx, field)
-			case "width":
-				return ec.fieldContext_Image_width(ctx, field)
-			case "height":
-				return ec.fieldContext_Image_height(ctx, field)
-			case "currentRating":
-				return ec.fieldContext_Image_currentRating(ctx, field)
-			case "xmpExists":
-				return ec.fieldContext_Image_xmpExists(ctx, field)
-			case "note":
-				return ec.fieldContext_Image_note(ctx, field)
-			case "label":
-				return ec.fieldContext_Image_label(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Image_relPath(ctx, field)
+			case "image":
+				return ec.fieldContext_UpdateImageMetadataPayload_image(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UpdateImageMetadataPayload_clientMutationId(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type UpdateImageMetadataPayload", field.Name)
 		},
 	}
 	defer func() {
@@ -10303,10 +10720,10 @@ func (ec *executionContext) _Mutation_updateNote(ctx context.Context, field grap
 		ec.fieldContext_Mutation_updateNote,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().UpdateNote(ctx, fc.Args["id"].(scalar.ID), fc.Args["content"].(string))
+			return ec.resolvers.Mutation().UpdateNote(ctx, fc.Args["input"].(UpdateNoteInput))
 		},
 		nil,
-		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
+		ec.marshalNUpdateNotePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotePayload,
 		true,
 		true,
 	)
@@ -10320,22 +10737,12 @@ func (ec *executionContext) fieldContext_Mutation_updateNote(ctx context.Context
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_Note_id(ctx, field)
-			case "title":
-				return ec.fieldContext_Note_title(ctx, field)
-			case "relPath":
-				return ec.fieldContext_Note_relPath(ctx, field)
-			case "content":
-				return ec.fieldContext_Note_content(ctx, field)
-			case "rawContent":
-				return ec.fieldContext_Note_rawContent(ctx, field)
-			case "hidden":
-				return ec.fieldContext_Note_hidden(ctx, field)
-			case "modTime":
-				return ec.fieldContext_Note_modTime(ctx, field)
+			case "note":
+				return ec.fieldContext_UpdateNotePayload_note(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_UpdateNotePayload_clientMutationId(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type UpdateNotePayload", field.Name)
 		},
 	}
 	defer func() {
@@ -13118,6 +13525,64 @@ func (ec *executionContext) fieldContext_RefreshTokenPayload_refreshTokenExpires
 	return fc, nil
 }
 
+func (ec *executionContext) _RefreshTokenPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *RefreshTokenPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RefreshTokenPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RefreshTokenPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RefreshTokenPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RejectPairingRequestPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *RejectPairingRequestPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RejectPairingRequestPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RejectPairingRequestPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RejectPairingRequestPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SendNotificationPayload_didCreate(ctx context.Context, field graphql.CollectedField, obj *SendNotificationPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14212,6 +14677,90 @@ func (ec *executionContext) fieldContext_SessionStats_isCompleted(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SetDirectoryStatePayload_directory(ctx context.Context, field graphql.CollectedField, obj *SetDirectoryStatePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SetDirectoryStatePayload_directory,
+		func(ctx context.Context) (any, error) {
+			return obj.Directory, nil
+		},
+		nil,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SetDirectoryStatePayload_directory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SetDirectoryStatePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			case "directoriesV2":
+				return ec.fieldContext_Directory_directoriesV2(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SetDirectoryStatePayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *SetDirectoryStatePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SetDirectoryStatePayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SetDirectoryStatePayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SetDirectoryStatePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -15715,6 +16264,92 @@ func (ec *executionContext) fieldContext_UnsendNotificationPayload_clientMutatio
 	return fc, nil
 }
 
+func (ec *executionContext) _UpdateImageMetadataPayload_image(ctx context.Context, field graphql.CollectedField, obj *UpdateImageMetadataPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateImageMetadataPayload_image,
+		func(ctx context.Context) (any, error) {
+			return obj.Image, nil
+		},
+		nil,
+		ec.marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateImageMetadataPayload_image(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateImageMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Image_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_Image_filename(ctx, field)
+			case "size":
+				return ec.fieldContext_Image_size(ctx, field)
+			case "url":
+				return ec.fieldContext_Image_url(ctx, field)
+			case "rawURL":
+				return ec.fieldContext_Image_rawURL(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Image_modTime(ctx, field)
+			case "width":
+				return ec.fieldContext_Image_width(ctx, field)
+			case "height":
+				return ec.fieldContext_Image_height(ctx, field)
+			case "currentRating":
+				return ec.fieldContext_Image_currentRating(ctx, field)
+			case "xmpExists":
+				return ec.fieldContext_Image_xmpExists(ctx, field)
+			case "note":
+				return ec.fieldContext_Image_note(ctx, field)
+			case "label":
+				return ec.fieldContext_Image_label(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Image_relPath(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Image", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateImageMetadataPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UpdateImageMetadataPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateImageMetadataPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateImageMetadataPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateImageMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UpdateImagesMetadataPayload_updatedCount(ctx context.Context, field graphql.CollectedField, obj *UpdateImagesMetadataPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15763,6 +16398,80 @@ func (ec *executionContext) _UpdateImagesMetadataPayload_clientMutationId(ctx co
 func (ec *executionContext) fieldContext_UpdateImagesMetadataPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "UpdateImagesMetadataPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateNotePayload_note(ctx context.Context, field graphql.CollectedField, obj *UpdateNotePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateNotePayload_note,
+		func(ctx context.Context) (any, error) {
+			return obj.Note, nil
+		},
+		nil,
+		ec.marshalNNote2ᚖmainᚋinternalᚋsharedᚐNoteDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateNotePayload_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateNotePayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Note_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Note_title(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Note_relPath(ctx, field)
+			case "content":
+				return ec.fieldContext_Note_content(ctx, field)
+			case "rawContent":
+				return ec.fieldContext_Note_rawContent(ctx, field)
+			case "hidden":
+				return ec.fieldContext_Note_hidden(ctx, field)
+			case "modTime":
+				return ec.fieldContext_Note_modTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Note", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UpdateNotePayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *UpdateNotePayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UpdateNotePayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UpdateNotePayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UpdateNotePayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -17495,7 +18204,7 @@ func (ec *executionContext) unmarshalInputApprovePairingRequestInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"code"}
+	fieldsInOrder := [...]string{"code", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17509,6 +18218,13 @@ func (ec *executionContext) unmarshalInputApprovePairingRequestInput(ctx context
 				return it, err
 			}
 			it.Code = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -17563,7 +18279,7 @@ func (ec *executionContext) unmarshalInputBeginWebAuthnLoginInput(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"dummy"}
+	fieldsInOrder := [...]string{"dummy", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17577,6 +18293,13 @@ func (ec *executionContext) unmarshalInputBeginWebAuthnLoginInput(ctx context.Co
 				return it, err
 			}
 			it.Dummy = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -17590,7 +18313,7 @@ func (ec *executionContext) unmarshalInputBeginWebAuthnRegistrationInput(ctx con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"setupToken"}
+	fieldsInOrder := [...]string{"setupToken", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17604,6 +18327,13 @@ func (ec *executionContext) unmarshalInputBeginWebAuthnRegistrationInput(ctx con
 				return it, err
 			}
 			it.SetupToken = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -17658,7 +18388,7 @@ func (ec *executionContext) unmarshalInputCreateNoteInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"directoryId", "name", "content"}
+	fieldsInOrder := [...]string{"directoryId", "name", "content", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17686,6 +18416,13 @@ func (ec *executionContext) unmarshalInputCreateNoteInput(ctx context.Context, o
 				return it, err
 			}
 			it.Content = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -17747,7 +18484,7 @@ func (ec *executionContext) unmarshalInputDeleteDeviceInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id"}
+	fieldsInOrder := [...]string{"id", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17761,6 +18498,13 @@ func (ec *executionContext) unmarshalInputDeleteDeviceInput(ctx context.Context,
 				return it, err
 			}
 			it.ID = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18014,6 +18758,40 @@ func (ec *executionContext) unmarshalInputDispatchNoteHookInput(ctx context.Cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputEmptyTrashInput(ctx context.Context, obj any) (EmptyTrashInput, error) {
+	var it EmptyTrashInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"minAge", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "minAge":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("minAge"))
+			data, err := ec.unmarshalNDuration2mainᚋinternalᚋscalarᚐDuration(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MinAge = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.Context, obj any) (FinishWebAuthnLoginInput, error) {
 	var it FinishWebAuthnLoginInput
 	asMap := map[string]any{}
@@ -18021,7 +18799,7 @@ func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionKey", "response"}
+	fieldsInOrder := [...]string{"sessionKey", "response", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18042,6 +18820,13 @@ func (ec *executionContext) unmarshalInputFinishWebAuthnLoginInput(ctx context.C
 				return it, err
 			}
 			it.Response = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18055,7 +18840,7 @@ func (ec *executionContext) unmarshalInputFinishWebAuthnRegistrationInput(ctx co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionKey", "response", "setupToken"}
+	fieldsInOrder := [...]string{"sessionKey", "response", "setupToken", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18083,6 +18868,13 @@ func (ec *executionContext) unmarshalInputFinishWebAuthnRegistrationInput(ctx co
 				return it, err
 			}
 			it.SetupToken = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18453,7 +19245,7 @@ func (ec *executionContext) unmarshalInputRefreshTokenInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"refreshToken"}
+	fieldsInOrder := [...]string{"refreshToken", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18467,6 +19259,13 @@ func (ec *executionContext) unmarshalInputRefreshTokenInput(ctx context.Context,
 				return it, err
 			}
 			it.RefreshToken = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18480,7 +19279,7 @@ func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"code"}
+	fieldsInOrder := [...]string{"code", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18494,6 +19293,13 @@ func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.
 				return it, err
 			}
 			it.Code = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18590,7 +19396,7 @@ func (ec *executionContext) unmarshalInputSetDirectoryStateInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "state"}
+	fieldsInOrder := [...]string{"id", "state", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18611,6 +19417,13 @@ func (ec *executionContext) unmarshalInputSetDirectoryStateInput(ctx context.Con
 				return it, err
 			}
 			it.State = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18774,7 +19587,7 @@ func (ec *executionContext) unmarshalInputUpdateImageMetadataInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "rating", "label"}
+	fieldsInOrder := [...]string{"id", "rating", "label", "clientMutationId"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18802,6 +19615,13 @@ func (ec *executionContext) unmarshalInputUpdateImageMetadataInput(ctx context.C
 				return it, err
 			}
 			it.Label = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
 		}
 	}
 
@@ -18843,6 +19663,47 @@ func (ec *executionContext) unmarshalInputUpdateImagesMetadataInput(ctx context.
 				return it, err
 			}
 			it.Label = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateNoteInput(ctx context.Context, obj any) (UpdateNoteInput, error) {
+	var it UpdateNoteInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "content", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
 		case "clientMutationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -19042,6 +19903,42 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 
 // region    **************************** object.gotpl ****************************
 
+var approvePairingRequestPayloadImplementors = []string{"ApprovePairingRequestPayload"}
+
+func (ec *executionContext) _ApprovePairingRequestPayload(ctx context.Context, sel ast.SelectionSet, obj *ApprovePairingRequestPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, approvePairingRequestPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ApprovePairingRequestPayload")
+		case "clientMutationId":
+			out.Values[i] = ec._ApprovePairingRequestPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var attachFileToClipboardPayloadImplementors = []string{"AttachFileToClipboardPayload"}
 
 func (ec *executionContext) _AttachFileToClipboardPayload(ctx context.Context, sel ast.SelectionSet, obj *AttachFileToClipboardPayload) graphql.Marshaler {
@@ -19203,6 +20100,8 @@ func (ec *executionContext) _BeginWebAuthnLoginPayload(ctx context.Context, sel 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "clientMutationId":
+			out.Values[i] = ec._BeginWebAuthnLoginPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -19247,6 +20146,8 @@ func (ec *executionContext) _BeginWebAuthnRegistrationPayload(ctx context.Contex
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "clientMutationId":
+			out.Values[i] = ec._BeginWebAuthnRegistrationPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -19318,6 +20219,47 @@ func (ec *executionContext) _CommitChangesPayload(ctx context.Context, sel ast.S
 	return out
 }
 
+var createNotePayloadImplementors = []string{"CreateNotePayload"}
+
+func (ec *executionContext) _CreateNotePayload(ctx context.Context, sel ast.SelectionSet, obj *CreateNotePayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, createNotePayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CreateNotePayload")
+		case "note":
+			out.Values[i] = ec._CreateNotePayload_note(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._CreateNotePayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var createSessionPayloadImplementors = []string{"CreateSessionPayload"}
 
 func (ec *executionContext) _CreateSessionPayload(ctx context.Context, sel ast.SelectionSet, obj *CreateSessionPayload) graphql.Marshaler {
@@ -19336,6 +20278,42 @@ func (ec *executionContext) _CreateSessionPayload(ctx context.Context, sel ast.S
 			}
 		case "clientMutationId":
 			out.Values[i] = ec._CreateSessionPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var deleteDevicePayloadImplementors = []string{"DeleteDevicePayload"}
+
+func (ec *executionContext) _DeleteDevicePayload(ctx context.Context, sel ast.SelectionSet, obj *DeleteDevicePayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, deleteDevicePayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DeleteDevicePayload")
+		case "clientMutationId":
+			out.Values[i] = ec._DeleteDevicePayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -20389,6 +21367,8 @@ func (ec *executionContext) _FinishWebAuthnLoginPayload(ctx context.Context, sel
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "clientMutationId":
+			out.Values[i] = ec._FinishWebAuthnLoginPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -20435,6 +21415,8 @@ func (ec *executionContext) _FinishWebAuthnRegistrationPayload(ctx context.Conte
 			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_device(ctx, field, obj)
 		case "pairingRequest":
 			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_pairingRequest(ctx, field, obj)
+		case "clientMutationId":
+			out.Values[i] = ec._FinishWebAuthnRegistrationPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22465,6 +23447,44 @@ func (ec *executionContext) _RefreshTokenPayload(ctx context.Context, sel ast.Se
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "clientMutationId":
+			out.Values[i] = ec._RefreshTokenPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var rejectPairingRequestPayloadImplementors = []string{"RejectPairingRequestPayload"}
+
+func (ec *executionContext) _RejectPairingRequestPayload(ctx context.Context, sel ast.SelectionSet, obj *RejectPairingRequestPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, rejectPairingRequestPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RejectPairingRequestPayload")
+		case "clientMutationId":
+			out.Values[i] = ec._RejectPairingRequestPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22925,6 +23945,47 @@ func (ec *executionContext) _SessionStats(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var setDirectoryStatePayloadImplementors = []string{"SetDirectoryStatePayload"}
+
+func (ec *executionContext) _SetDirectoryStatePayload(ctx context.Context, sel ast.SelectionSet, obj *SetDirectoryStatePayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, setDirectoryStatePayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SetDirectoryStatePayload")
+		case "directory":
+			out.Values[i] = ec._SetDirectoryStatePayload_directory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._SetDirectoryStatePayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var subscriptionImplementors = []string{"Subscription"}
 
 func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
@@ -23334,6 +24395,47 @@ func (ec *executionContext) _UnsendNotificationPayload(ctx context.Context, sel 
 	return out
 }
 
+var updateImageMetadataPayloadImplementors = []string{"UpdateImageMetadataPayload"}
+
+func (ec *executionContext) _UpdateImageMetadataPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateImageMetadataPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, updateImageMetadataPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UpdateImageMetadataPayload")
+		case "image":
+			out.Values[i] = ec._UpdateImageMetadataPayload_image(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UpdateImageMetadataPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var updateImagesMetadataPayloadImplementors = []string{"UpdateImagesMetadataPayload"}
 
 func (ec *executionContext) _UpdateImagesMetadataPayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateImagesMetadataPayload) graphql.Marshaler {
@@ -23352,6 +24454,47 @@ func (ec *executionContext) _UpdateImagesMetadataPayload(ctx context.Context, se
 			}
 		case "clientMutationId":
 			out.Values[i] = ec._UpdateImagesMetadataPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var updateNotePayloadImplementors = []string{"UpdateNotePayload"}
+
+func (ec *executionContext) _UpdateNotePayload(ctx context.Context, sel ast.SelectionSet, obj *UpdateNotePayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, updateNotePayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UpdateNotePayload")
+		case "note":
+			out.Values[i] = ec._UpdateNotePayload_note(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._UpdateNotePayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -23859,6 +25002,20 @@ func (ec *executionContext) unmarshalNApprovePairingRequestInput2mainᚋinternal
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNApprovePairingRequestPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestPayload(ctx context.Context, sel ast.SelectionSet, v ApprovePairingRequestPayload) graphql.Marshaler {
+	return ec._ApprovePairingRequestPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNApprovePairingRequestPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestPayload(ctx context.Context, sel ast.SelectionSet, v *ApprovePairingRequestPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ApprovePairingRequestPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNAttachFileToClipboardInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐAttachFileToClipboardInput(ctx context.Context, v any) (AttachFileToClipboardInput, error) {
 	res, err := ec.unmarshalInputAttachFileToClipboardInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -24024,6 +25181,20 @@ func (ec *executionContext) unmarshalNCreateNoteInput2mainᚋinternalᚋinterfac
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNCreateNotePayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateNotePayload(ctx context.Context, sel ast.SelectionSet, v CreateNotePayload) graphql.Marshaler {
+	return ec._CreateNotePayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCreateNotePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐCreateNotePayload(ctx context.Context, sel ast.SelectionSet, v *CreateNotePayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CreateNotePayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNCreateSessionInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐCreateSessionInput(ctx context.Context, v any) (CreateSessionInput, error) {
 	res, err := ec.unmarshalInputCreateSessionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -24046,6 +25217,20 @@ func (ec *executionContext) marshalNCreateSessionPayload2ᚖmainᚋinternalᚋin
 func (ec *executionContext) unmarshalNDeleteDeviceInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDeviceInput(ctx context.Context, v any) (DeleteDeviceInput, error) {
 	res, err := ec.unmarshalInputDeleteDeviceInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDeleteDevicePayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDevicePayload(ctx context.Context, sel ast.SelectionSet, v DeleteDevicePayload) graphql.Marshaler {
+	return ec._DeleteDevicePayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDeleteDevicePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐDeleteDevicePayload(ctx context.Context, sel ast.SelectionSet, v *DeleteDevicePayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DeleteDevicePayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDeletedImage2mainᚋinternalᚋinterfacesᚋgraphqlᚐDeletedImage(ctx context.Context, sel ast.SelectionSet, v DeletedImage) graphql.Marshaler {
@@ -24353,6 +25538,11 @@ func (ec *executionContext) marshalNDuration2mainᚋinternalᚋscalarᚐDuration
 	return v
 }
 
+func (ec *executionContext) unmarshalNEmptyTrashInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashInput(ctx context.Context, v any) (EmptyTrashInput, error) {
+	res, err := ec.unmarshalInputEmptyTrashInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNEmptyTrashPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, v EmptyTrashPayload) graphql.Marshaler {
 	return ec._EmptyTrashPayload(ctx, sel, &v)
 }
@@ -24548,13 +25738,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -25186,23 +26376,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 
@@ -25372,6 +26562,20 @@ func (ec *executionContext) unmarshalNRejectPairingRequestInput2mainᚋinternal�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNRejectPairingRequestPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestPayload(ctx context.Context, sel ast.SelectionSet, v RejectPairingRequestPayload) graphql.Marshaler {
+	return ec._RejectPairingRequestPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRejectPairingRequestPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestPayload(ctx context.Context, sel ast.SelectionSet, v *RejectPairingRequestPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RejectPairingRequestPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNSendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationInput(ctx context.Context, v any) (SendNotificationInput, error) {
 	res, err := ec.unmarshalInputSendNotificationInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -25418,6 +26622,20 @@ func (ec *executionContext) marshalNSessionStats2ᚖmainᚋinternalᚋsharedᚐS
 func (ec *executionContext) unmarshalNSetDirectoryStateInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStateInput(ctx context.Context, v any) (SetDirectoryStateInput, error) {
 	res, err := ec.unmarshalInputSetDirectoryStateInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSetDirectoryStatePayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStatePayload(ctx context.Context, sel ast.SelectionSet, v SetDirectoryStatePayload) graphql.Marshaler {
+	return ec._SetDirectoryStatePayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSetDirectoryStatePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐSetDirectoryStatePayload(ctx context.Context, sel ast.SelectionSet, v *SetDirectoryStatePayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SetDirectoryStatePayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNString2string(ctx context.Context, v any) (string, error) {
@@ -25697,6 +26915,20 @@ func (ec *executionContext) unmarshalNUpdateImageMetadataInput2mainᚋinternal�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNUpdateImageMetadataPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataPayload(ctx context.Context, sel ast.SelectionSet, v UpdateImageMetadataPayload) graphql.Marshaler {
+	return ec._UpdateImageMetadataPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUpdateImageMetadataPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImageMetadataPayload(ctx context.Context, sel ast.SelectionSet, v *UpdateImageMetadataPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UpdateImageMetadataPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpdateImagesMetadataInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateImagesMetadataInput(ctx context.Context, v any) (UpdateImagesMetadataInput, error) {
 	res, err := ec.unmarshalInputUpdateImagesMetadataInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -25714,6 +26946,25 @@ func (ec *executionContext) marshalNUpdateImagesMetadataPayload2ᚖmainᚋintern
 		return graphql.Null
 	}
 	return ec._UpdateImagesMetadataPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateNoteInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNoteInput(ctx context.Context, v any) (UpdateNoteInput, error) {
+	res, err := ec.unmarshalInputUpdateNoteInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUpdateNotePayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotePayload(ctx context.Context, sel ast.SelectionSet, v UpdateNotePayload) graphql.Marshaler {
+	return ec._UpdateNotePayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUpdateNotePayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotePayload(ctx context.Context, sel ast.SelectionSet, v *UpdateNotePayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UpdateNotePayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐUpdateNotificationInput(ctx context.Context, v any) (UpdateNotificationInput, error) {
