@@ -7,6 +7,7 @@
 """
 
 import logging
+import uuid
 from typing import Dict, List, Set, Any, Optional, Protocol, cast
 
 from graphql_utils import GraphQLClient, progress_notification
@@ -38,7 +39,6 @@ class CommandContext:
         history: operation_history.OperationHistory,
         client: GraphQLClient,
         hook_name: str,
-        run_id: str,
     ):
         self.img_id = img_id
         self.path = path
@@ -51,14 +51,14 @@ class CommandContext:
         self.client = client
         self.history = history
         self.hook_name = hook_name
-        self.run_id = run_id
+        self._progress_tag = str(uuid.uuid4())
         self.skipped: bool = False
         self.skip_reason: str = ""
 
     @property
     def progress_tag(self) -> str:
-        """进度通知 tag，格式 hook-progress-<hook_name>-<run_id>"""
-        return f"hook-progress-{self.hook_name}-{self.run_id}"
+        """进度通知 tag，调用时生成固定 UUID"""
+        return self._progress_tag
 
     def update_label(self) -> None:
         if self.label_to_set and self.img_id:

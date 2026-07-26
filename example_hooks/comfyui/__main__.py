@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import uuid
 from collections import Counter
 
 from typing import Dict, List, Tuple, Any, Optional, Set, Iterator, Iterable, cast
@@ -212,8 +213,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     op_history.extract_params(args)
 
     # 构建进度通知 tag
-    run_id = os.environ.get("IMAGE_FUNNEL_HOOK_RUN_ID", "unknown")
-    progress_tag = f"hook-progress-{config.hook_name}-{run_id}"
+    progress_tag = str(uuid.uuid4())
 
     has_errors = False
     success_count = 0
@@ -307,7 +307,6 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 client=client,
                 history=op_history,
                 hook_name=config.hook_name,
-                run_id=run_id,
             )
             handler.run(ctx)
             if not ctx.skipped:
