@@ -111,7 +111,9 @@ class GraphQLClient:
         query = """
         mutation UpdateImageMetadata($input: UpdateImageMetadataInput!) {
           updateImageMetadata(input: $input) {
-            id
+            image {
+              id
+            }
           }
         }
         """
