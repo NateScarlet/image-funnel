@@ -694,6 +694,17 @@ class DanbooruProvider(AutocompleteProvider):
                 )
                 return
 
+            # 完全匹配提升到最前（上游 embedding 排序可能不够准确）
+            q_lower = context.query.strip().lower()
+            suggestions.sort(
+                key=lambda s: (
+                    0
+                    if s.text.lower().strip('"').strip("'") == q_lower
+                    or s.displayText.lower().strip('"').strip("'") == q_lower
+                    else 1
+                )
+            )
+
             yield from _yield_styled(suggestions)
         else:
             # 当前词未输入，执行关联联想
