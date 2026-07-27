@@ -55,6 +55,9 @@ def run_retention(client: GraphQLClient) -> None:
                 nodes {
                   id
                   modTime
+                  note {
+                    content
+                  }
                 }
                 pageInfo {
                   hasNextPage
@@ -103,6 +106,14 @@ def run_retention(client: GraphQLClient) -> None:
     # 按 modTime 升序排列（最旧的在前），超出部分移到回收站
     images_raw.sort(key=lambda img: datetime.fromisoformat(img["modTime"]))
     excess = images_raw[: count - max_retain]
+
+    # 不移除存在关联笔记（非空 note.content）的图片
+    excess = [img for img in excess if not img["note"]["content"]]
+    if not excess:
+        _LOGGER.debug("All excess images have non-empty notes, skipping trash.")
+        print(f"共 {count} 张 {rating} 星图片，超过保留上限但待移除图片均有笔记")
+        sys.exit(0)
+
     excess_ids: List[str] = [img["id"] for img in excess]
 
     _LOGGER.debug(

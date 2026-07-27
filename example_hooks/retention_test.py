@@ -50,8 +50,16 @@ class TestRetentionMain(unittest.TestCase):
             "node": {
                 "images": _page(
                     [
-                        {"id": "img:1", "modTime": "2024-01-01T00:00:00Z"},
-                        {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
+                        {
+                            "id": "img:1",
+                            "modTime": "2024-01-01T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                        {
+                            "id": "img:2",
+                            "modTime": "2024-01-02T00:00:00Z",
+                            "note": {"content": ""},
+                        },
                     ]
                 )
             }
@@ -68,9 +76,21 @@ class TestRetentionMain(unittest.TestCase):
             "node": {
                 "images": _page(
                     [
-                        {"id": "img:1", "modTime": "2024-01-01T00:00:00Z"},
-                        {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
-                        {"id": "img:3", "modTime": "2024-01-03T00:00:00Z"},
+                        {
+                            "id": "img:1",
+                            "modTime": "2024-01-01T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                        {
+                            "id": "img:2",
+                            "modTime": "2024-01-02T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                        {
+                            "id": "img:3",
+                            "modTime": "2024-01-03T00:00:00Z",
+                            "note": {"content": ""},
+                        },
                     ]
                 )
             }
@@ -94,11 +114,31 @@ class TestRetentionMain(unittest.TestCase):
                     "node": {
                         "images": _page(
                             [
-                                {"id": "img:1", "modTime": "2024-01-01T00:00:00Z"},
-                                {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
-                                {"id": "img:3", "modTime": "2024-01-03T00:00:00Z"},
-                                {"id": "img:4", "modTime": "2024-01-04T00:00:00Z"},
-                                {"id": "img:5", "modTime": "2024-01-05T00:00:00Z"},
+                                {
+                                    "id": "img:1",
+                                    "modTime": "2024-01-01T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:2",
+                                    "modTime": "2024-01-02T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:3",
+                                    "modTime": "2024-01-03T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:4",
+                                    "modTime": "2024-01-04T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:5",
+                                    "modTime": "2024-01-05T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
                             ]
                         )
                     }
@@ -128,8 +168,16 @@ class TestRetentionMain(unittest.TestCase):
                 "node": {
                     "images": _page(
                         [
-                            {"id": "img:1", "modTime": "2024-01-01T00:00:00Z"},
-                            {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
+                            {
+                                "id": "img:1",
+                                "modTime": "2024-01-01T00:00:00Z",
+                                "note": {"content": ""},
+                            },
+                            {
+                                "id": "img:2",
+                                "modTime": "2024-01-02T00:00:00Z",
+                                "note": {"content": ""},
+                            },
                         ]
                     )
                 }
@@ -198,11 +246,31 @@ class TestRetentionMain(unittest.TestCase):
                     "node": {
                         "images": _page(
                             [
-                                {"id": "img:5", "modTime": "2024-01-05T00:00:00Z"},
-                                {"id": "img:1", "modTime": "2024-01-01T00:00:00Z"},
-                                {"id": "img:3", "modTime": "2024-01-03T00:00:00Z"},
-                                {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
-                                {"id": "img:4", "modTime": "2024-01-04T00:00:00Z"},
+                                {
+                                    "id": "img:5",
+                                    "modTime": "2024-01-05T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:1",
+                                    "modTime": "2024-01-01T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:3",
+                                    "modTime": "2024-01-03T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:2",
+                                    "modTime": "2024-01-02T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:4",
+                                    "modTime": "2024-01-04T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
                             ]
                         )
                     }
@@ -235,6 +303,7 @@ class TestRetentionMain(unittest.TestCase):
                                 {
                                     "id": f"img:{i}",
                                     "modTime": f"2024-01-{i:02d}T00:00:00Z",
+                                    "note": {"content": ""},
                                 }
                                 for i in range(1, 6)
                             ]
@@ -278,10 +347,26 @@ class TestRetentionMain(unittest.TestCase):
                 "node": {
                     "images": _page(
                         [
-                            {"id": "img:1", "modTime": "invalid-date"},
-                            {"id": "img:2", "modTime": "2024-01-02T00:00:00Z"},
-                            {"id": "img:3", "modTime": "2024-01-03T00:00:00Z"},
-                            {"id": "img:4", "modTime": "2024-01-04T00:00:00Z"},
+                            {
+                                "id": "img:1",
+                                "modTime": "invalid-date",
+                                "note": {"content": ""},
+                            },
+                            {
+                                "id": "img:2",
+                                "modTime": "2024-01-02T00:00:00Z",
+                                "note": {"content": ""},
+                            },
+                            {
+                                "id": "img:3",
+                                "modTime": "2024-01-03T00:00:00Z",
+                                "note": {"content": ""},
+                            },
+                            {
+                                "id": "img:4",
+                                "modTime": "2024-01-04T00:00:00Z",
+                                "note": {"content": ""},
+                            },
                         ]
                     )
                 }
@@ -311,6 +396,7 @@ class TestRetentionMain(unittest.TestCase):
                                     {
                                         "id": "img:1",
                                         "modTime": "2024-01-01T00:00:00Z",
+                                        "note": {"content": ""},
                                     },
                                 ],
                                 "pageInfo": {
@@ -329,6 +415,7 @@ class TestRetentionMain(unittest.TestCase):
                                     {
                                         "id": "img:2",
                                         "modTime": "2024-01-02T00:00:00Z",
+                                        "note": {"content": ""},
                                     },
                                 ],
                                 "pageInfo": {
@@ -347,6 +434,7 @@ class TestRetentionMain(unittest.TestCase):
                                     {
                                         "id": "img:3",
                                         "modTime": "2024-01-03T00:00:00Z",
+                                        "note": {"content": ""},
                                     },
                                 ],
                                 "pageInfo": {
@@ -367,6 +455,111 @@ class TestRetentionMain(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         # 应该获取了所有3页的数据
         self.assertEqual(calls, [1, 2, 3])
+
+    def test_excess_all_protected_by_note(self):
+        """所有超出的图片都有非空笔记，不移除任何图片"""
+        mock_client = _make_client()
+        mock_client.execute.return_value = {
+            "node": {
+                "images": _page(
+                    [
+                        {
+                            "id": "img:1",
+                            "modTime": "2024-01-01T00:00:00Z",
+                            "note": {"content": "笔记内容"},
+                        },
+                        {
+                            "id": "img:2",
+                            "modTime": "2024-01-02T00:00:00Z",
+                            "note": {"content": "笔记内容"},
+                        },
+                        {
+                            "id": "img:3",
+                            "modTime": "2024-01-03T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                        {
+                            "id": "img:4",
+                            "modTime": "2024-01-04T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                        {
+                            "id": "img:5",
+                            "modTime": "2024-01-05T00:00:00Z",
+                            "note": {"content": ""},
+                        },
+                    ]
+                )
+            }
+        }
+
+        with self.assertRaises(SystemExit) as cm:
+            run_retention(mock_client)
+        self.assertEqual(cm.exception.code, 0)
+        # 只应有一次查询调用，没有 trash 调用
+        mock_client.execute.assert_called_once()
+
+    def test_excess_partially_protected_by_note(self):
+        """部分超出图片有笔记，仅移除无笔记的超出图片"""
+        mock_client = _make_client()
+        call_log: list[Any] = []
+
+        def side_effect(
+            query: str, variables: Optional[Dict[str, Any]] = None
+        ) -> Dict[str, Any]:
+            call_log.append((query, variables))
+            if "query GetDirectoryImages" in query:
+                return {
+                    "node": {
+                        "images": _page(
+                            [
+                                {
+                                    "id": "img:1",
+                                    "modTime": "2024-01-01T00:00:00Z",
+                                    "note": {"content": "笔记内容"},
+                                },
+                                {
+                                    "id": "img:2",
+                                    "modTime": "2024-01-02T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:3",
+                                    "modTime": "2024-01-03T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:4",
+                                    "modTime": "2024-01-04T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:5",
+                                    "modTime": "2024-01-05T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                            ]
+                        )
+                    }
+                }
+            if "mutation TrashImages" in query and variables is not None:
+                ids: list[str] = variables["input"]["filterBy"]["id"]
+                self.assertEqual(ids, ["img:2"])
+                return {
+                    "trashImages": {
+                        "movedCount": 1,
+                        "historyId": "hist:1",
+                    }
+                }
+            return {}
+
+        mock_client.execute.side_effect = side_effect
+
+        with self.assertRaises(SystemExit) as cm:
+            run_retention(mock_client)
+        self.assertEqual(cm.exception.code, 0)
+        # 有笔记保护的 img:1 不应出现在 trash 列表中
+        self.assertEqual(len(call_log), 2)
 
 
 if __name__ == "__main__":
