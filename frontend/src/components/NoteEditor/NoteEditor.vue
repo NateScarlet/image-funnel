@@ -256,7 +256,7 @@ const dispatchableHooks = computed(() => {
       if (!h.directive) return false;
       // 检查当前笔记内容中是否包含该指令（要求处于行首，前面只有空格或制表符，且指令后面有单词边界）
       const escapedName = h.directive.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}\\b`);
+      const regex = new RegExp(`(?:^|\\r?\\n)[ \\t]*/${escapedName}(?=/|\\s|$)`);
       return regex.test(model.value);
     }) || []
   );
