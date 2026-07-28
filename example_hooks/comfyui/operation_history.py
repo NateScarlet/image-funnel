@@ -57,19 +57,19 @@ class OperationHistory:
 
         cmd = args.command
 
-        if cmd == "queue":
-            self.record("queue", {})
+        if cmd in ("queue", "remove-again"):
+            self.record(cmd, {})
             return
 
         if cmd in ("add", "remove"):
             base = {
-                "region": args.region,
-                "node": args.node,
-                "neg": args.neg,
-                "raw": args.raw,
+                "region": getattr(args, "region", None),
+                "node": getattr(args, "node", None),
+                "neg": getattr(args, "neg", False),
+                "raw": getattr(args, "raw", False),
                 "hard": getattr(args, "hard", False),
                 "all": getattr(args, "all", False),
-                "no_skip": args.no_skip,
+                "no_skip": getattr(args, "no_skip", False),
             }
             for prompt in args.prompt:
                 self.record(cmd, {**base, "prompt": prompt})
