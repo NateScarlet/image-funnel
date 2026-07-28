@@ -164,7 +164,10 @@ class RemoveHandler:
                     any_processed = True
 
         if not any_processed:
-            ctx.skip("未找到待移除的提示词")
+            preview = " ".join(ctx.args.prompt)
+            if len(preview) > 40:
+                preview = preview[:40] + "…"
+            ctx.skip(f"未找到待移除的提示词「{preview}」")
             return
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)

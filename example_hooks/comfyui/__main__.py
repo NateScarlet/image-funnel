@@ -357,6 +357,35 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         parts = [f"跳过 {n} 张：{r}" for r, n in summary.items()]
         skip_msg = "（" + "；".join(parts) + "）"
 
+    def describe_action():
+        if args.command == "add":
+            preview = " ".join(args.prompt)
+            if len(preview) > 40:
+                preview = preview[:40] + "…"
+            return f"添加提示词「{preview}」"
+        elif args.command == "remove":
+            preview = " ".join(args.prompt)
+            if len(preview) > 40:
+                preview = preview[:40] + "…"
+            return f"移除提示词「{preview}」"
+        elif args.command == "remove-again":
+            return "重放移除操作"
+        elif args.command == "queue":
+            return "重新入列"
+        elif args.command == "adjust":
+            if args.adjust_type == "lora":
+                return f"调整 Lora「{args.name}」权重为 {args.weight}"
+            elif args.adjust_type == "prompt":
+                preview = args.text
+                if len(preview) > 40:
+                    preview = preview[:40] + "…"
+                return f"调整提示词「{preview}」权重为 {args.weight}"
+            elif args.adjust_type == "cfg":
+                return f"调整 CFG 为 {args.weight}"
+            elif args.adjust_type == "aspect":
+                return f"调整宽高比为 {args.ratio}"
+        return "处理"
+
     if success_count > 0:
         if args.command == "add":
             preview = " ".join(args.prompt)
@@ -392,9 +421,9 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         if skip_reasons:
             summary = dict(Counter(skip_reasons))
             parts = [f"{n} 张：{r}" for r, n in summary.items()]
-            print("没有图片需要处理（" + "；".join(parts) + "）")
+            print("没有图片需要" + describe_action() + "（" + "；".join(parts) + "）")
         else:
-            print("没有图片需要处理")
+            print("没有图片需要" + describe_action())
 
     if success_count == 0:
         _write_action_override("KEEP", config.action_path)
