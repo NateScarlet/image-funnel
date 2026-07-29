@@ -192,6 +192,24 @@ class TestWeightParser(unittest.TestCase):
             [1.0, 0.7, 0.4],
         )
 
+    # --- parse_weights: .1 缩写语法测试 ---
+
+    def test_parse_dot_shorthand(self):
+        # 支持 0.1 缩写为 .1
+        self.assertEqual(parse_weights(".1"), [0.1])
+        self.assertEqual(parse_weights("-.1"), [-0.1])
+        self.assertEqual(parse_weights(".1:.5:.1"), [0.1, 0.2, 0.3, 0.4, 0.5])
+        self.assertEqual(parse_weights("x-.1", current_value=1.0), [0.9])
+        self.assertEqual(parse_weights("x+.1", current_value=0.5), [0.6])
+        self.assertEqual(
+            parse_weights("x-.1:x+.2:.1", current_value=0.5),
+            [0.4, 0.5, 0.6, 0.7],
+        )
+        self.assertEqual(
+            parse_weights("+-.1:.05", current_value=0.5),
+            [0.4, 0.45, 0.5, 0.55, 0.6],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
