@@ -19,7 +19,7 @@ ignore_directive = false
 [on.note_dispatch]
 
 [env]
-HOOK_JOBS = "4"
+HOOK_JOBS = "2"
 HOOK_IMAGE_RATING = "4"
 HOOK_MAX_MATCH = "4"
 HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
