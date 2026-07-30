@@ -1,5 +1,22 @@
+"""
+认证与访问状态
+"""
 type AuthStatus {
+  """
+  当前设备是否为受信任设备
+  """
   isTrustedDevice: Boolean!
+  """
+  当前请求 IP 是否为受信任 IP
+  """
   isTrustedIP: Boolean!
+  """
+  当前环境是否具有访问权限（受信任设备或受信任 IP）
+  """
   canAccess: Boolean!
+  """
+  当前客户端的 IP 地址
+  """
+  clientIP: String!
 }
+

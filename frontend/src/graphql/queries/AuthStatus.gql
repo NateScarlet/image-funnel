@@ -3,5 +3,6 @@ query AuthStatus {
     isTrustedDevice
     isTrustedIP
     canAccess
+    clientIP
   }
 }

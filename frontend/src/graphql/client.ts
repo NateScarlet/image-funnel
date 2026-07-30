@@ -130,7 +130,9 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
       (i) => i.extensions?.code === "UNAUTHORIZED" || i.extensions?.code === "INVALID_TOKEN",
     );
 
-    if (hasAuthError && !context.anonymous && !context.tokenRefreshed) {
+    const hasRefreshToken = !!tokenStore.value?.refreshToken;
+
+    if (hasAuthError && hasRefreshToken && !context.anonymous && !context.tokenRefreshed) {
       operation.setContext({ tokenRefreshed: true });
       return new Observable((observer) => {
         let handle: { unsubscribe: () => void } | undefined;
@@ -152,8 +154,6 @@ const errorLink = new ErrorLink(({ error, operation, forward }) => {
             });
           })
           .catch((err) => {
-            // 不在此处盲目重定向至登录页。对于因网络波动引发的刷新失败，此处仅传播错误，
-            // 确保用户不会因为网络抖动被强制退出。真正的认证失效（如 INVALID_TOKEN）已由 tokenManager.ts 的错误拦截处理。
             observer.error(err);
           });
 

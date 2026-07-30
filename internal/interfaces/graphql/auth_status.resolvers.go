@@ -19,5 +19,6 @@ func (r *queryResolver) AuthStatus(ctx context.Context) (*AuthStatus, error) {
 		IsTrustedDevice: status.IsTrustedDevice,
 		IsTrustedIP:     status.IsTrustedIP,
 		CanAccess:       status.CanAccess,
+		ClientIP:        status.ClientIP,
 	}, nil
 }

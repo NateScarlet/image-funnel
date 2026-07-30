@@ -73,6 +73,7 @@ type ComplexityRoot struct {
 
 	AuthStatus struct {
 		CanAccess       func(childComplexity int) int
+		ClientIP        func(childComplexity int) int
 		IsTrustedDevice func(childComplexity int) int
 		IsTrustedIP     func(childComplexity int) int
 	}
@@ -736,6 +737,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.AuthStatus.CanAccess(childComplexity), true
+	case "AuthStatus.clientIP":
+		if e.complexity.AuthStatus.ClientIP == nil {
+			break
+		}
+
+		return e.complexity.AuthStatus.ClientIP(childComplexity), true
 	case "AuthStatus.isTrustedDevice":
 		if e.complexity.AuthStatus.IsTrustedDevice == nil {
 			break
@@ -3036,11 +3043,28 @@ directive @public on FIELD_DEFINITION
 directive @oneOf on INPUT_OBJECT
 
 `, BuiltIn: false},
-	{Name: "../../../graph/types/auth_status.graphql", Input: `type AuthStatus {
+	{Name: "../../../graph/types/auth_status.graphql", Input: `"""
+认证与访问状态
+"""
+type AuthStatus {
+  """
+  当前设备是否为受信任设备
+  """
   isTrustedDevice: Boolean!
+  """
+  当前请求 IP 是否为受信任 IP
+  """
   isTrustedIP: Boolean!
+  """
+  当前环境是否具有访问权限（受信任设备或受信任 IP）
+  """
   canAccess: Boolean!
+  """
+  当前客户端的 IP 地址
+  """
+  clientIP: String!
 }
+
 `, BuiltIn: false},
 	{Name: "../../../graph/types/autocomplete_suggestion.graphql", Input: `"自动完成建议"
 type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSuggestionDTO") {
@@ -5365,6 +5389,35 @@ func (ec *executionContext) fieldContext_AuthStatus_canAccess(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AuthStatus_clientIP(ctx context.Context, field graphql.CollectedField, obj *AuthStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AuthStatus_clientIP,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientIP, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AuthStatus_clientIP(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AuthStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -12632,6 +12685,8 @@ func (ec *executionContext) fieldContext_Query_authStatus(_ context.Context, fie
 				return ec.fieldContext_AuthStatus_isTrustedIP(ctx, field)
 			case "canAccess":
 				return ec.fieldContext_AuthStatus_canAccess(ctx, field)
+			case "clientIP":
+				return ec.fieldContext_AuthStatus_clientIP(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AuthStatus", field.Name)
 		},
@@ -20006,6 +20061,11 @@ func (ec *executionContext) _AuthStatus(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "clientIP":
+			out.Values[i] = ec._AuthStatus_clientIP(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -26376,23 +26436,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 

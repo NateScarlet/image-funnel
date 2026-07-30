@@ -43,10 +43,16 @@ type AttachFileToClipboardPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
+// 认证与访问状态
 type AuthStatus struct {
+	// 当前设备是否为受信任设备
 	IsTrustedDevice bool `json:"isTrustedDevice"`
-	IsTrustedIP     bool `json:"isTrustedIP"`
-	CanAccess       bool `json:"canAccess"`
+	// 当前请求 IP 是否为受信任 IP
+	IsTrustedIP bool `json:"isTrustedIP"`
+	// 当前环境是否具有访问权限（受信任设备或受信任 IP）
+	CanAccess bool `json:"canAccess"`
+	// 当前客户端的 IP 地址
+	ClientIP string `json:"clientIP"`
 }
 
 type BeginWebAuthnLoginInput struct {

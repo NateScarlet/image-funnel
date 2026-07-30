@@ -139,7 +139,12 @@ useSubscription(PairingRequestUpdatedDocument, {
           </p>
           <ul class="list-disc space-y-2 pl-5 text-primary-300 text-xs leading-relaxed">
             <li>
-              将对应环境的 IP 地址配置到服务端的
+              将对应环境的 IP 地址<span v-if="authStatus?.clientIP"
+                >（当前 IP：<code
+                  class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs"
+                  >{{ authStatus.clientIP }}</code
+                >）</span
+              >配置到服务端的
               <code class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs">
                 IMAGE_FUNNEL_TRUSTED_IP
               </code>
@@ -227,7 +232,12 @@ useSubscription(PairingRequestUpdatedDocument, {
             </li>
             <li v-else>管理员尚未配置 IMAGE_FUNNEL_BASE_URL。</li>
             <li>
-              将您的当前 IP 地址加入到服务端的
+              将您的当前 IP 地址<span v-if="authStatus?.clientIP"
+                >（<code
+                  class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs"
+                  >{{ authStatus.clientIP }}</code
+                >）</span
+              >加入到服务端的
               <code class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs"
                 >IMAGE_FUNNEL_TRUSTED_IP</code
               >
@@ -282,6 +292,21 @@ useSubscription(PairingRequestUpdatedDocument, {
           <p class="mt-2 text-left text-xs text-primary-400">
             提示：注册新设备时，浏览器可能会弹出 1–3 次系统确认请求，请按照提示操作直到全部完成。
           </p>
+
+          <div class="border-t border-primary-700/50 my-4 pt-4 text-left space-y-2">
+            <p class="text-xs text-primary-300 leading-relaxed">
+              提示：或将当前 IP<span v-if="authStatus?.clientIP"
+                >（<code
+                  class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs"
+                  >{{ authStatus.clientIP }}</code
+                >）</span
+              >配置到服务端的
+              <code class="bg-primary-950 px-1 py-0.5 rounded text-secondary-300 font-mono text-xs"
+                >IMAGE_FUNNEL_TRUSTED_IP</code
+              >
+              环境变量以实现免登录访问。
+            </p>
+          </div>
         </div>
       </div>
     </div>
