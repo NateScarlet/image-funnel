@@ -1,8 +1,9 @@
 import { ref } from "vue";
 import useDevice from "./domain/useDevice";
 
+const visible = ref(false);
+
 export function useDevices() {
-  const visible = ref(false);
   const {
     pairingRequests,
     devices,
