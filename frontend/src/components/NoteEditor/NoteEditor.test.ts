@@ -630,72 +630,72 @@ describe("NoteEditor", () => {
   });
 
   test("dispatchableHooks 不会因 \b 边界匹配问题错误匹配前缀指令名（如 /remove-again 不应匹配 /remove）", async () => {
-  const originalHooks = mockHooksData.value.hooks;
+    const originalHooks = mockHooksData.value.hooks;
 
-  const modifiedHooks = originalHooks.map((h) =>
-    h.id === "hook3" ? { ...h, canDispatchByNote: true } : h,
-  );
-  modifiedHooks.push({
-    id: "hook5",
-    name: "移除指定项",
-    canDispatchByNote: true,
-    directive: {
-      name: "remove-again",
-      usage: "/remove-again <prompt>...",
-      autocomplete: true,
-    },
+    const modifiedHooks = originalHooks.map((h) =>
+      h.id === "hook3" ? { ...h, canDispatchByNote: true } : h,
+    );
+    modifiedHooks.push({
+      id: "hook5",
+      name: "移除指定项",
+      canDispatchByNote: true,
+      directive: {
+        name: "remove-again",
+        usage: "/remove-again <prompt>...",
+        autocomplete: true,
+      },
+    });
+
+    mockHooksData.value.hooks = modifiedHooks;
+
+    wrapper = mount(NoteEditor, {
+      props: {
+        modelValue: "/remove-again\n",
+        "onUpdate:modelValue": (val: string) => wrapper.setProps({ modelValue: val }),
+        noteId: "note1",
+      },
+    });
+    await nextTick();
+
+    expect(wrapper.text()).toContain("动作 (1)");
+
+    mockHooksData.value.hooks = originalHooks;
   });
 
-  mockHooksData.value.hooks = modifiedHooks;
+  test("dispatchableHooks 正确匹配完整指令名（/remove 不应匹配 /remove-again）", async () => {
+    const originalHooks = mockHooksData.value.hooks;
 
-  wrapper = mount(NoteEditor, {
-    props: {
-      modelValue: "/remove-again\n",
-      "onUpdate:modelValue": (val: string) => wrapper.setProps({ modelValue: val }),
-      noteId: "note1",
-    },
+    const modifiedHooks = originalHooks.map((h) =>
+      h.id === "hook3" ? { ...h, canDispatchByNote: true } : h,
+    );
+    modifiedHooks.push({
+      id: "hook5",
+      name: "移除指定项",
+      canDispatchByNote: true,
+      directive: {
+        name: "remove-again",
+        usage: "/remove-again <prompt>...",
+        autocomplete: true,
+      },
+    });
+
+    mockHooksData.value.hooks = modifiedHooks;
+
+    wrapper = mount(NoteEditor, {
+      props: {
+        modelValue: "/remove\n",
+        "onUpdate:modelValue": (val: string) => wrapper.setProps({ modelValue: val }),
+        noteId: "note1",
+      },
+    });
+    await nextTick();
+
+    expect(wrapper.text()).toContain("动作 (1)");
+
+    mockHooksData.value.hooks = originalHooks;
   });
-  await nextTick();
 
-  expect(wrapper.text()).toContain("动作 (1)");
-
-  mockHooksData.value.hooks = originalHooks;
-});
-
-test("dispatchableHooks 正确匹配完整指令名（/remove 不应匹配 /remove-again）", async () => {
-  const originalHooks = mockHooksData.value.hooks;
-
-  const modifiedHooks = originalHooks.map((h) =>
-    h.id === "hook3" ? { ...h, canDispatchByNote: true } : h,
-  );
-  modifiedHooks.push({
-    id: "hook5",
-    name: "移除指定项",
-    canDispatchByNote: true,
-    directive: {
-      name: "remove-again",
-      usage: "/remove-again <prompt>...",
-      autocomplete: true,
-    },
-  });
-
-  mockHooksData.value.hooks = modifiedHooks;
-
-  wrapper = mount(NoteEditor, {
-    props: {
-      modelValue: "/remove\n",
-      "onUpdate:modelValue": (val: string) => wrapper.setProps({ modelValue: val }),
-      noteId: "note1",
-    },
-  });
-  await nextTick();
-
-  expect(wrapper.text()).toContain("动作 (1)");
-
-  mockHooksData.value.hooks = originalHooks;
-});
-
-test("ignores pointerenter events from touch input", async () => {
+  test("ignores pointerenter events from touch input", async () => {
     await typeInTextarea(createWrapper(), "/a");
     const menu = getSuggestionMenu();
     expect(menu).not.toBeNull();

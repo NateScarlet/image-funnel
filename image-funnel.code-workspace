@@ -5,8 +5,15 @@
     },
   ],
   "settings": {
-    "oxc.enableLint": true,
-    "oxc.enableFormat": true,
+    "oxc.enable.oxfmt": true,
+    "oxc.enable.oxlint": true,
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+
+    "editor.formatOnSaveMode": "file",
+    "[typescript]": {
+      "editor.defaultFormatter": "oxc.oxc-vscode",
+    },
   },
   "launch": {
     "version": "0.2.0",
