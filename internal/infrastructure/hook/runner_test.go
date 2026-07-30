@@ -364,6 +364,36 @@ TEST_VAR_TWO = "val2"
 	assert.Equal(t, "val2", configs[0].Env["TEST_VAR_TWO"])
 }
 
+func TestRunner_GraphqlURLEnv_Injection(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-loopback-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "http://127.0.0.1:8000/graphql", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	defer runner.Close()
+
+	env, err := runner.buildBaseEnv(context.Background(), "test-id", "test-name", "test-trigger", nil, nil, "", nil, "", "")
+	assert.NoError(t, err)
+
+	var graphqlURL string
+	for _, e := range env {
+		if strings.HasPrefix(e, "IMAGE_FUNNEL_GRAPHQL_URL=") {
+			graphqlURL = strings.TrimPrefix(e, "IMAGE_FUNNEL_GRAPHQL_URL=")
+			break
+		}
+	}
+
+	assert.Equal(t, "http://127.0.0.1:8000/graphql", graphqlURL)
+}
+
+
 func TestRunner_Trigger_SyncAndError(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-test")
 	assert.NoError(t, err)

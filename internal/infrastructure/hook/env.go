@@ -9,6 +9,8 @@ import (
 	"main/internal/scalar"
 )
 
+// #region 环境变量辅助函数
+
 // mustJSON 序列化值为 JSON，确定不可能出错时应 panic
 func mustJSON(v any) string {
 	b, err := json.Marshal(v)
@@ -17,6 +19,8 @@ func mustJSON(v any) string {
 	}
 	return string(b)
 }
+
+// #endregion
 
 // buildBaseEnv 构建所有钩子脚本共用的基础环境变量
 // dirID 和 dirRel 作为回退值：当无法从路径推导目录信息时使用（例如 post_commit_session 触发器）
