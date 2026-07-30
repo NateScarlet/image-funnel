@@ -7,7 +7,6 @@ import (
 )
 
 func (h *Handler) SubscribeSaved(ctx context.Context) iter.Seq2[*shared.DeviceDTO, error] {
-	h.logger.Info("will subscribe to device saved")
 	return func(yield func(*shared.DeviceDTO, error) bool) {
 		for dev, err := range h.deviceSavedSub.Subscribe(ctx) {
 			if err != nil {
