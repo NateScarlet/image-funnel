@@ -95,18 +95,18 @@
           class="fixed z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 max-h-56 sm:max-h-80 overflow-y-auto min-w-48 max-w-[calc(100vw-2rem)] backdrop-blur-md flex flex-col gap-1"
         >
           <div
-            class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
+            class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none flex items-center justify-between"
           >
-            {{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}
-          </div>
-          <div
-            v-if="isSearching"
-            class="px-3 py-2 text-xs text-primary-400 flex items-center gap-2"
-          >
-            <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24">
-              <path :d="mdiLoading" fill="currentColor" />
-            </svg>
-            加载中…
+            <span>{{ autocompleteState?.type === "name" ? "选择笔记指令" : "指令参数建议" }}</span>
+            <div
+              v-if="isSearching"
+              class="flex items-center gap-1 font-normal normal-case text-primary-400"
+            >
+              <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24">
+                <path :d="mdiLoading" fill="currentColor" />
+              </svg>
+              <span>加载中…</span>
+            </div>
           </div>
           <button
             v-for="(sug, idx) in suggestions"
