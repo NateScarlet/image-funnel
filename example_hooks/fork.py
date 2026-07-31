@@ -15,16 +15,17 @@ _LOGGER = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Image Funnel Fork Hook Script")
-    parser.add_argument("suffix", help="Suffix for the target directory")
+    parser.add_argument(
+        "suffix", nargs="?", default="TODO", help="Suffix for the target directory"
+    )
     return parser.parse_args()
 
 
 def run_fork(client: GraphQLClient) -> None:
     args = parse_args()
-    suffix = args.suffix.strip()
+    suffix = args.suffix.strip() if args.suffix else "TODO"
     if not suffix:
-        _LOGGER.error("Suffix cannot be empty.")
-        sys.exit(1)
+        suffix = "TODO"
 
     image_ids_str: str = os.getenv("IMAGE_FUNNEL_IMAGE_IDS", "")
     label_to_set: Optional[str] = os.getenv("HOOK_IMAGE_SET_LABEL")

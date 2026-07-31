@@ -23,7 +23,7 @@ ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/Suzum
 [接口文档](https://sakizuki-danboorusearch.hf.space/api/openapi.json)
 
 **目录分流 / Fork**
-根据指令参数将筛选保留的图片及配套的 XMP 文件，移动到同级按规则命名的子目录（例如 `原目录名,suffix`）中，以实现图片的物理归类。
+根据指令参数将筛选保留的图片及配套的 XMP 文件，移动到同级按规则命名的子目录（例如 `原目录名,suffix`，未指定 suffix 时默认为 `TODO`）中，以实现图片的物理归类。
 
 **运行器 / Runner**
 外部 Python 脚本的统一调度入口 `runner.py`，负责解析命令行参数并分发给具体子命令模块。

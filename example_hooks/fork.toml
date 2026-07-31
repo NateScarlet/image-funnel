@@ -6,8 +6,8 @@ command = "uv run runner.py fork"
 [directive]
 name = "fork"
 usage = """
-/fork <suffix>
-将图片和配套文件移动到当前目录同级的目录，目录名称为 `当前目录名称,<suffix>` ，suffix 为必填，根目录触发改为创建名称为 <suffix> 的子目录
+/fork [<suffix>]
+将图片和配套文件移动到当前目录同级的目录，目录名称为 `当前目录名称,<suffix>` ，suffix 为可选（默认 TODO），根目录触发改为创建名称为 <suffix> 的子目录
 """
 on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
 
