@@ -50,8 +50,6 @@
         v-model="selectedId"
         class="mb-2"
         :directory="currentDirectory"
-        :filter-rating="filterRating"
-        :target-keep="targetKeep"
       />
 
       <!-- 当有搜索关键字或可选目录大于5个时显示搜索框，防止输入过程中因结果变少导致搜索框消失 -->
@@ -72,8 +70,9 @@
             <DirectoryItem
               v-model="selectedId"
               :directory="item.dir"
-              :filter-rating="filterRating"
-              :target-keep="targetKeep"
+              :filter-rating="item.filterRating"
+              :target-keep="item.targetKeep"
+              :is-completed="item.isCompleted"
               :filtered-out="item.filteredOut"
             />
           </template>
@@ -142,14 +141,13 @@ import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
 import useStorage from "../composables/useStorage";
 import useDirectoryProgress from "../composables/useDirectoryProgress";
-import { useDirectoryStats } from "../composables/domain/useDirectoryBrowse";
+import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import useDirectories from "../composables/useDirectories";
 import useInfiniteScroll from "../composables/useInfiniteScroll";
+import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
 
-const { filterRating, targetKeep } = defineProps<{
-  filterRating: readonly number[];
-  targetKeep: number;
+defineProps<{
   rootPath: string;
 }>();
 
@@ -217,34 +215,30 @@ const items = computed(() => {
   return sortBy(
     directories.value.map((dir) => {
       const stats = getCachedStats(dir.id);
-      const keepCount =
-        stats?.ratingCounts.reduce(
-          (sum: number, rc: { rating: number; count: number }) =>
-            sum + (filterRating.includes(rc.rating) ? rc.count : 0),
-          0,
-        ) ?? 0;
+      const completion = evaluateDirectoryCompletion(dir, stats);
 
       const unratedCount =
         stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)
           ?.count ?? 0;
 
-      const isCompleted = stats?.subdirectoryCount === 0 && keepCount <= targetKeep;
       const isSmallUnrated = stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
 
       // 判定是否本身不满足筛选（已达标或未评级图片过少），但由于有子目录而必须显示
       const isFilteredOutButShown =
         stats &&
         stats.subdirectoryCount > 0 &&
-        ((!showCompletedDirectories.value && keepCount <= targetKeep) ||
+        ((!showCompletedDirectories.value && completion.isCompleted) ||
           (!showSmallUnrated.value && unratedCount < minUnratedCount.value));
 
       return {
         key: dir.id,
         dir,
         stats,
-        isCompleted,
+        isCompleted: completion.isCompleted,
+        filterRating: completion.filterRating,
+        targetKeep: completion.targetKeep,
+        keepCount: completion.keepCount,
         unratedCount,
-        keepCount,
         isSmallUnrated,
         isFilteredOutButShown,
       };
@@ -336,7 +330,7 @@ watch(
   filteredItems,
   (newItems) => {
     const navigableDirectoryIds = newItems
-      .filter((item) => item.keepCount > targetKeep)
+      .filter((item) => item.keepCount > item.targetKeep)
       .map((item) => item.dir.id);
 
     if (currentDirectory.value) {

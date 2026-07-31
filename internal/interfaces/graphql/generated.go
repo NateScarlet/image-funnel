@@ -25798,13 +25798,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -26436,23 +26436,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 

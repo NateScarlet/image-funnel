@@ -64,19 +64,24 @@ import useQuery from "../graphql/utils/useQuery";
 import { MetaDocument } from "../graphql/generated";
 import type { DirectoryFragment } from "../graphql/generated";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
+import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
 
-const {
-  directory,
-  filterRating,
-  targetKeep,
-  filteredOut = false,
-} = defineProps<{
-  directory: DirectoryFragment;
-  filterRating: readonly number[];
-  targetKeep: number;
-  // 标记目录是否因为不匹配全局筛选条件（如已达标、小未评级等）而被过滤隐藏
-  filteredOut?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    directory: DirectoryFragment;
+    filterRating?: readonly number[];
+    targetKeep?: number;
+    isCompleted?: boolean;
+    // 标记目录是否因为不匹配全局筛选条件（如已达标、小未评级等）而被过滤隐藏
+    filteredOut?: boolean;
+  }>(),
+  {
+    filterRating: () => [],
+    targetKeep: 0,
+    isCompleted: undefined,
+    filteredOut: false,
+  },
+);
 
 const { getCachedStats } = useDirectoryStats();
 
@@ -85,22 +90,19 @@ const selectedId = defineModel<string>();
 const { data: metaData } = useQuery(MetaDocument);
 const rootAbsPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
 
-const stats = computed(() => getCachedStats(directory.id));
+const stats = computed(() => getCachedStats(props.directory.id));
 
-const selected = computed(() => selectedId.value === directory.id);
+const selected = computed(() => selectedId.value === props.directory.id);
 
+// 判定目录是否已达标，优先取明确传入的 isCompleted
 const isTargetMet = computed(() => {
-  const statsV = stats.value;
-  if (!statsV || !statsV.ratingCounts || statsV.imageCount === 0) {
-    return false;
+  if (props.isCompleted !== undefined) {
+    return props.isCompleted;
   }
-  const matchedCount = statsV.ratingCounts
-    .filter((rc: { rating: number; count: number }) => filterRating.includes(rc.rating))
-    .reduce((sum: number, rc: { rating: number; count: number }) => sum + rc.count, 0);
-  return matchedCount <= targetKeep;
+  return evaluateDirectoryCompletion(props.directory, stats.value).isCompleted;
 });
 
 function select() {
-  selectedId.value = directory.id;
+  selectedId.value = props.directory.id;
 }
 </script>

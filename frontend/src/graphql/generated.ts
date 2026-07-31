@@ -451,6 +451,33 @@ export type DirectoryFragment = {
   parentId: string | null;
   relPath: string;
   root: boolean;
+  lastSession: {
+    __typename: "Session";
+    id: string;
+    targetKeep: number;
+    filter: {
+      __typename: "ImageFilters";
+      id: Array<string> | null;
+      rating: Array<number> | null;
+      label: Array<string> | null;
+      query: string | null;
+    };
+  } | null;
+  state: {
+    __typename: "DirectoryState";
+    lastSession: {
+      __typename: "DirectoryStateLastSession";
+      id: string;
+      targetKeep: number;
+      filter: {
+        __typename: "ImageFilters";
+        id: Array<string> | null;
+        rating: Array<number> | null;
+        label: Array<string> | null;
+        query: string | null;
+      };
+    } | null;
+  } | null;
 };
 
 export type DirectoryStatsFragment = {
@@ -566,6 +593,33 @@ export type SessionFragment = {
     parentId: string | null;
     relPath: string;
     root: boolean;
+    lastSession: {
+      __typename: "Session";
+      id: string;
+      targetKeep: number;
+      filter: {
+        __typename: "ImageFilters";
+        id: Array<string> | null;
+        rating: Array<number> | null;
+        label: Array<string> | null;
+        query: string | null;
+      };
+    } | null;
+    state: {
+      __typename: "DirectoryState";
+      lastSession: {
+        __typename: "DirectoryStateLastSession";
+        id: string;
+        targetKeep: number;
+        filter: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        };
+      } | null;
+    } | null;
   };
   filter: {
     __typename: "ImageFilters";
@@ -781,6 +835,33 @@ export type CommitChangesMutation = {
         parentId: string | null;
         relPath: string;
         root: boolean;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       };
       filter: {
         __typename: "ImageFilters";
@@ -907,6 +988,33 @@ export type CreateSessionMutation = {
         parentId: string | null;
         relPath: string;
         root: boolean;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       };
       filter: {
         __typename: "ImageFilters";
@@ -1052,6 +1160,33 @@ export type MarkImageMutation = {
         parentId: string | null;
         relPath: string;
         root: boolean;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       };
       filter: {
         __typename: "ImageFilters";
@@ -1227,6 +1362,33 @@ export type UndoMutation = {
         parentId: string | null;
         relPath: string;
         root: boolean;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       };
       filter: {
         __typename: "ImageFilters";
@@ -1449,6 +1611,33 @@ export type UpdateSessionMutation = {
         parentId: string | null;
         relPath: string;
         root: boolean;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       };
       filter: {
         __typename: "ImageFilters";
@@ -1552,10 +1741,10 @@ export type BrowseDirectoriesQuery = {
   node:
     | {
         __typename: "Directory";
+        id: string;
         parentId: string | null;
         relPath: string;
         root: boolean;
-        id: string;
         directoriesV2: {
           __typename: "DirectoryConnection";
           edges: Array<{
@@ -1567,6 +1756,33 @@ export type BrowseDirectoriesQuery = {
               parentId: string | null;
               relPath: string;
               root: boolean;
+              lastSession: {
+                __typename: "Session";
+                id: string;
+                targetKeep: number;
+                filter: {
+                  __typename: "ImageFilters";
+                  id: Array<string> | null;
+                  rating: Array<number> | null;
+                  label: Array<string> | null;
+                  query: string | null;
+                };
+              } | null;
+              state: {
+                __typename: "DirectoryState";
+                lastSession: {
+                  __typename: "DirectoryStateLastSession";
+                  id: string;
+                  targetKeep: number;
+                  filter: {
+                    __typename: "ImageFilters";
+                    id: Array<string> | null;
+                    rating: Array<number> | null;
+                    label: Array<string> | null;
+                    query: string | null;
+                  };
+                } | null;
+              } | null;
             };
           }>;
           nodes: Array<{
@@ -1575,6 +1791,33 @@ export type BrowseDirectoriesQuery = {
             parentId: string | null;
             relPath: string;
             root: boolean;
+            lastSession: {
+              __typename: "Session";
+              id: string;
+              targetKeep: number;
+              filter: {
+                __typename: "ImageFilters";
+                id: Array<string> | null;
+                rating: Array<number> | null;
+                label: Array<string> | null;
+                query: string | null;
+              };
+            } | null;
+            state: {
+              __typename: "DirectoryState";
+              lastSession: {
+                __typename: "DirectoryStateLastSession";
+                id: string;
+                targetKeep: number;
+                filter: {
+                  __typename: "ImageFilters";
+                  id: Array<string> | null;
+                  rating: Array<number> | null;
+                  label: Array<string> | null;
+                  query: string | null;
+                };
+              } | null;
+            } | null;
           }>;
           pageInfo: {
             __typename: "PageInfo";
@@ -1584,6 +1827,33 @@ export type BrowseDirectoriesQuery = {
             endCursor: string | null;
           };
         };
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
+        } | null;
       }
     | { __typename: "Image"; id: string }
     | { __typename: "Note"; id: string }
@@ -1782,6 +2052,33 @@ export type DirectoryLastSessionQuery = {
             parentId: string | null;
             relPath: string;
             root: boolean;
+            lastSession: {
+              __typename: "Session";
+              id: string;
+              targetKeep: number;
+              filter: {
+                __typename: "ImageFilters";
+                id: Array<string> | null;
+                rating: Array<number> | null;
+                label: Array<string> | null;
+                query: string | null;
+              };
+            } | null;
+            state: {
+              __typename: "DirectoryState";
+              lastSession: {
+                __typename: "DirectoryStateLastSession";
+                id: string;
+                targetKeep: number;
+                filter: {
+                  __typename: "ImageFilters";
+                  id: Array<string> | null;
+                  rating: Array<number> | null;
+                  label: Array<string> | null;
+                  query: string | null;
+                };
+              } | null;
+            } | null;
           };
           filter: {
             __typename: "ImageFilters";
@@ -1968,6 +2265,33 @@ export type DirectoryStatsQuery = {
             };
           } | null;
           ratingCounts: Array<{ __typename: "RatingCount"; rating: number; count: number }>;
+        } | null;
+        lastSession: {
+          __typename: "Session";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        state: {
+          __typename: "DirectoryState";
+          lastSession: {
+            __typename: "DirectoryStateLastSession";
+            id: string;
+            targetKeep: number;
+            filter: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            };
+          } | null;
         } | null;
       }
     | { __typename: "Image" }
@@ -2193,6 +2517,33 @@ export type RootDirectoryQuery = {
     parentId: string | null;
     relPath: string;
     root: boolean;
+    lastSession: {
+      __typename: "Session";
+      id: string;
+      targetKeep: number;
+      filter: {
+        __typename: "ImageFilters";
+        id: Array<string> | null;
+        rating: Array<number> | null;
+        label: Array<string> | null;
+        query: string | null;
+      };
+    } | null;
+    state: {
+      __typename: "DirectoryState";
+      lastSession: {
+        __typename: "DirectoryStateLastSession";
+        id: string;
+        targetKeep: number;
+        filter: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        };
+      } | null;
+    } | null;
   };
 };
 
@@ -2220,6 +2571,33 @@ export type SessionQuery = {
       parentId: string | null;
       relPath: string;
       root: boolean;
+      lastSession: {
+        __typename: "Session";
+        id: string;
+        targetKeep: number;
+        filter: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        };
+      } | null;
+      state: {
+        __typename: "DirectoryState";
+        lastSession: {
+          __typename: "DirectoryStateLastSession";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+      } | null;
     };
     filter: {
       __typename: "ImageFilters";
@@ -2406,6 +2784,33 @@ export type DirectoryChangedSubscription = {
     parentId: string | null;
     relPath: string;
     root: boolean;
+    lastSession: {
+      __typename: "Session";
+      id: string;
+      targetKeep: number;
+      filter: {
+        __typename: "ImageFilters";
+        id: Array<string> | null;
+        rating: Array<number> | null;
+        label: Array<string> | null;
+        query: string | null;
+      };
+    } | null;
+    state: {
+      __typename: "DirectoryState";
+      lastSession: {
+        __typename: "DirectoryStateLastSession";
+        id: string;
+        targetKeep: number;
+        filter: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        };
+      } | null;
+    } | null;
   };
 };
 
@@ -2534,6 +2939,33 @@ export type SessionUpdatedSubscription = {
       parentId: string | null;
       relPath: string;
       root: boolean;
+      lastSession: {
+        __typename: "Session";
+        id: string;
+        targetKeep: number;
+        filter: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        };
+      } | null;
+      state: {
+        __typename: "DirectoryState";
+        lastSession: {
+          __typename: "DirectoryStateLastSession";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+      } | null;
     };
     filter: {
       __typename: "ImageFilters";
@@ -3029,6 +3461,63 @@ export const DirectoryFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -3160,6 +3649,63 @@ export const SessionFragmentDoc = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -3709,6 +4255,63 @@ export const CommitChangesDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -4062,6 +4665,63 @@ export const CreateSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -4512,6 +5172,63 @@ export const MarkImageDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -5021,6 +5738,63 @@ export const UndoDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -5719,6 +6493,63 @@ export const UpdateSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -6028,9 +6859,7 @@ export const BrowseDirectoriesDocument = {
                   selectionSet: {
                     kind: "SelectionSet",
                     selections: [
-                      { kind: "Field", name: { kind: "Name", value: "parentId" } },
-                      { kind: "Field", name: { kind: "Name", value: "relPath" } },
-                      { kind: "Field", name: { kind: "Name", value: "root" } },
+                      { kind: "FragmentSpread", name: { kind: "Name", value: "Directory" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "directoriesV2" },
@@ -6129,6 +6958,63 @@ export const BrowseDirectoriesDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -6710,6 +7596,63 @@ export const DirectoryLastSessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -7299,6 +8242,63 @@ export const DirectoryStatsDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -8008,6 +9008,63 @@ export const RootDirectoryDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -8062,6 +9119,63 @@ export const SessionDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -8646,6 +9760,63 @@ export const DirectoryChangedDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },
@@ -9058,6 +10229,63 @@ export const SessionUpdatedDocument = {
           { kind: "Field", name: { kind: "Name", value: "parentId" } },
           { kind: "Field", name: { kind: "Name", value: "relPath" } },
           { kind: "Field", name: { kind: "Name", value: "root" } },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "state" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastSession" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filter" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            { kind: "Field", name: { kind: "Name", value: "id" } },
+                            { kind: "Field", name: { kind: "Name", value: "rating" } },
+                            { kind: "Field", name: { kind: "Name", value: "label" } },
+                            { kind: "Field", name: { kind: "Name", value: "query" } },
+                          ],
+                        },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
         ],
       },
     },

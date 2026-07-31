@@ -23,12 +23,7 @@
 
       <!-- 目录选择与操作按钮区 -->
       <div class="bg-primary-800 rounded-lg p-6 flex flex-col gap-6">
-        <DirectorySelector
-          v-model="selectedDirectoryId"
-          :filter-rating="[]"
-          :target-keep="0"
-          :root-path="rootPath"
-        />
+        <DirectorySelector v-model="selectedDirectoryId" :root-path="rootPath" />
 
         <!-- 底部按钮区 -->
         <div v-if="selectedDirectoryId" class="flex flex-col sm:flex-row gap-4">

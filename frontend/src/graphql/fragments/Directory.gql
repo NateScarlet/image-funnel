@@ -3,4 +3,26 @@ fragment Directory on Directory {
   parentId
   relPath
   root
+  lastSession {
+    id
+    filter {
+      id
+      rating
+      label
+      query
+    }
+    targetKeep
+  }
+  state {
+    lastSession {
+      id
+      filter {
+        id
+        rating
+        label
+        query
+      }
+      targetKeep
+    }
+  }
 }

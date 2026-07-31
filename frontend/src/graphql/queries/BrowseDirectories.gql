@@ -2,9 +2,7 @@ query BrowseDirectories($id: ID!, $filterBy: DirectoryFilters, $first: Int, $aft
   node(id: $id) {
     id
     ... on Directory {
-      parentId
-      relPath
-      root
+      ...Directory
       directoriesV2(filterBy: $filterBy, first: $first, after: $after) {
         edges {
           cursor

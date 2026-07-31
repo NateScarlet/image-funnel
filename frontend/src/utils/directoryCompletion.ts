@@ -1,0 +1,90 @@
+import optionalArray from "./optionalArray";
+
+// #region 类型定义
+export interface DirectoryCompletionSessionInfo {
+  filter: {
+    rating?: readonly number[] | null;
+    label?: readonly string[] | null;
+    query?: string | null;
+  };
+  targetKeep: number;
+}
+
+export interface DirectoryLike {
+  lastSession?: DirectoryCompletionSessionInfo | null;
+  state?: {
+    lastSession?: DirectoryCompletionSessionInfo | null;
+  } | null;
+}
+
+export interface DirectoryStatsLike {
+  subdirectoryCount: number;
+  ratingCounts: readonly { rating: number; count: number }[];
+}
+
+export interface DirectoryCompletionResult {
+  lastSession?: {
+    filter: {
+      rating: number[];
+      label?: string[];
+      query?: string;
+    };
+    targetKeep: number;
+  };
+  filterRating: number[];
+  targetKeep: number;
+  keepCount: number;
+  isCompleted: boolean;
+}
+// #endregion
+
+// #region 核心计算导出
+/**
+ * 基于目录自身的默认设置（lastSession 配置）判定其是否达标。
+ * 若无默认设置，则判定为不达标 (isCompleted = false)。
+ */
+export function evaluateDirectoryCompletion(
+  dir: DirectoryLike,
+  stats?: DirectoryStatsLike | null,
+): DirectoryCompletionResult {
+  const session = dir.lastSession ?? dir.state?.lastSession ?? undefined;
+
+  // 如果没默认设置就认为不达标
+  if (!session) {
+    return {
+      lastSession: undefined,
+      filterRating: [],
+      targetKeep: 0,
+      keepCount: 0,
+      isCompleted: false,
+    };
+  }
+
+  const filterRating = optionalArray(session.filter?.rating?.slice()) ?? [];
+  const filterLabel = optionalArray(session.filter?.label?.slice());
+  const targetKeep = session.targetKeep;
+  const keepCount =
+    stats?.ratingCounts.reduce(
+      (sum, rc) => sum + (filterRating.includes(rc.rating) ? rc.count : 0),
+      0,
+    ) ?? 0;
+
+  // 判定为无子目录的叶子节点且保留图片数 <= 目标保留数
+  const isCompleted = (stats?.subdirectoryCount ?? 0) === 0 && keepCount <= targetKeep;
+
+  return {
+    lastSession: {
+      filter: {
+        rating: filterRating,
+        label: filterLabel,
+        query: session.filter?.query || undefined,
+      },
+      targetKeep,
+    },
+    filterRating,
+    targetKeep,
+    keepCount,
+    isCompleted,
+  };
+}
+// #endregion
