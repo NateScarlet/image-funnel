@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"main/internal/scalar"
@@ -41,6 +42,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 				pureCommitHooks = append(pureCommitHooks, h)
 			}
 		}
+		slices.SortStableFunc(pureCommitHooks, sortByOrderAndFilename)
 
 		pureErrB := util.NewErrorsBuilder(len(pureCommitHooks))
 		for _, h := range pureCommitHooks {
@@ -89,6 +91,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 					}
 				}
 			}
+			slices.SortStableFunc(noDirectiveNoteScanHooks, sortByOrderAndFilename)
 
 			if len(noDirectiveNoteScanHooks) > 0 {
 				evs, err := r.findAssociatedImageEvents(r.ctx, noteRelPath)

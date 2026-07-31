@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1230,4 +1231,217 @@ command = "echo stderr_err_msg >&2 && exit 1"
 	assert.Equal(t, ".", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityHigh, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "stderr_err_msg")
+}
+
+func TestRunner_Order_Parsing(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-parse-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 1. 有 order 字段的配置
+	withOrderToml := `
+id = "with-order"
+name = "有顺序测试"
+command = "echo 1"
+order = 5
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "with-order.toml"), []byte(withOrderToml), 0644)
+	assert.NoError(t, err)
+
+	// 2. 无 order 字段的配置（默认 0）
+	noOrderToml := `
+id = "no-order"
+name = "无顺序测试"
+command = "echo 2"
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "no-order.toml"), []byte(noOrderToml), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	defer runner.Close()
+
+	configs, err := runner.loadHooks()
+	assert.NoError(t, err)
+	assert.Len(t, configs, 2)
+
+	for _, c := range configs {
+		switch c.ID {
+		case "with-order":
+			assert.Equal(t, 5, c.Order, "显式声明的 order 应被正确解析")
+		case "no-order":
+			assert.Equal(t, 0, c.Order, "未声明的 order 应默认为 0")
+		}
+	}
+}
+
+func TestRunner_sortByOrderAndFilename(t *testing.T) {
+	hooks := []hookConfig{
+		{Filename: "02_foo.toml", ID: "a", Order: 1},
+		{Filename: "01_bar.toml", ID: "z", Order: 1},
+		{Filename: "03_baz.toml", ID: "m", Order: 2},
+	}
+
+	slices.SortStableFunc(hooks, sortByOrderAndFilename)
+
+	assert.Equal(t, "01_bar.toml", hooks[0].Filename, "order 相同（均为 1），按 Filename 升序应为 01_bar.toml")
+	assert.Equal(t, "02_foo.toml", hooks[1].Filename, "order 相同（均为 1），按 Filename 升序应为 02_foo.toml")
+	assert.Equal(t, "03_baz.toml", hooks[2].Filename, "order 较大（2），应排在最后")
+}
+
+func TestRunner_Order_PostCommitSession(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-commit-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 三个纯提交钩子，使用不同的 flag 文件避免 Windows shell 重定向问题
+	flagA := filepath.Join(tempDir, "order_flag_a")
+	flagB := filepath.Join(tempDir, "order_flag_b")
+	flagC := filepath.Join(tempDir, "order_flag_c")
+
+	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
+	writeOrder := func(id, content string) {
+		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
+		assert.NoError(t, err)
+	}
+
+	writeOrder("a", `
+id = "a"
+command = 'echo a > `+flagA+`'
+order = 2
+
+[on.post_commit_session]
+`)
+	writeOrder("b", `
+id = "b"
+command = 'echo b > `+flagB+`'
+order = 1
+
+[on.post_commit_session]
+`)
+	writeOrder("c", `
+id = "c"
+command = 'echo c > `+flagC+`'
+
+[on.post_commit_session]
+`)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	err = runner.OnCommitSession(context.Background(), ".")
+	assert.NoError(t, err)
+
+	assert.True(t, waitFlagFile(flagC, 1500*time.Millisecond), "order=0 的 c 应最先执行")
+	assert.True(t, waitFlagFile(flagB, 1500*time.Millisecond), "order=1 的 b 应第二个执行")
+	assert.True(t, waitFlagFile(flagA, 1500*time.Millisecond), "order=2 的 a 应最后执行")
+
+	// 验证文件创建时间顺序（c 最早，a 最晚）
+	infoC, _ := os.Stat(flagC)
+	infoB, _ := os.Stat(flagB)
+	infoA, _ := os.Stat(flagA)
+	assert.True(t, infoC.ModTime().Before(infoB.ModTime()) || infoC.ModTime().Equal(infoB.ModTime()), "c 应早于或等于 b 执行")
+	assert.True(t, infoB.ModTime().Before(infoA.ModTime()) || infoB.ModTime().Equal(infoA.ModTime()), "b 应早于或等于 a 执行")
+}
+
+func TestRunner_Order_PostUpdateNote(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-note-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	flagX := filepath.Join(tempDir, "order_flag_x")
+	flagY := filepath.Join(tempDir, "order_flag_y")
+	flagZ := filepath.Join(tempDir, "order_flag_z")
+
+	writeOrder := func(id, content string) {
+		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
+		assert.NoError(t, err)
+	}
+
+	// 三个无指令的 post_update_note 钩子
+	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
+	writeOrder("x", `
+id = "x"
+command = 'echo x > `+flagX+`'
+order = 3
+
+[on.post_update_note]
+`)
+	writeOrder("y", `
+id = "y"
+command = 'echo y > `+flagY+`'
+order = 1
+
+[on.post_update_note]
+`)
+	writeOrder("z", `
+id = "z"
+command = 'echo z > `+flagZ+`'
+order = 2
+
+[on.post_update_note]
+`)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+	imgRepo := &mockImageRepository{}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	noteRelPath := "test_note.md"
+	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	err = os.WriteFile(noteAbsPath, []byte("Normal note without directives"), 0644)
+	assert.NoError(t, err)
+
+	runner.handleFileChanged(&shared.FileChangedEvent{
+		DirectoryID: scalar.ToID("dir:1"),
+		RelPath:     noteRelPath,
+		Action:      shared.FileActionWrite,
+		OccurredAt:  time.Now(),
+	})
+
+	assert.True(t, waitFlagFile(flagY, 1500*time.Millisecond), "order=1 的 y 应最先执行")
+	assert.True(t, waitFlagFile(flagZ, 1500*time.Millisecond), "order=2 的 z 应第二个执行")
+	assert.True(t, waitFlagFile(flagX, 1500*time.Millisecond), "order=3 的 x 应最后执行")
+
+	// 验证文件创建时间顺序（y 最早，x 最晚）
+	infoY, _ := os.Stat(flagY)
+	infoZ, _ := os.Stat(flagZ)
+	infoX, _ := os.Stat(flagX)
+	assert.True(t, infoY.ModTime().Before(infoZ.ModTime()) || infoY.ModTime().Equal(infoZ.ModTime()), "y 应早于或等于 z 执行")
+	assert.True(t, infoZ.ModTime().Before(infoX.ModTime()) || infoZ.ModTime().Equal(infoX.ModTime()), "z 应早于或等于 x 执行")
 }

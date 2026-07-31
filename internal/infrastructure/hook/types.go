@@ -46,6 +46,7 @@ type debouncer struct {
 	mu       sync.Mutex
 	timer    *time.Timer
 	events   map[string][]hookEvent // key: hookID -> events
+	keys     []string               // 插入顺序，用于按序回调
 	duration time.Duration
 	callback func(hookID string, events []hookEvent)
 }
@@ -62,6 +63,9 @@ func (d *debouncer) Add(hookID string, ev hookEvent) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if _, exists := d.events[hookID]; !exists {
+		d.keys = append(d.keys, hookID)
+	}
 	d.events[hookID] = append(d.events[hookID], ev)
 
 	if d.timer != nil {
@@ -71,12 +75,14 @@ func (d *debouncer) Add(hookID string, ev hookEvent) {
 	d.timer = time.AfterFunc(d.duration, func() {
 		d.mu.Lock()
 		eventsCopy := d.events
+		keysCopy := d.keys
 		d.events = make(map[string][]hookEvent)
+		d.keys = nil
 		d.timer = nil
 		d.mu.Unlock()
 
-		for hID, evs := range eventsCopy {
-			if len(evs) > 0 {
+		for _, hID := range keysCopy {
+			if evs, ok := eventsCopy[hID]; ok && len(evs) > 0 {
 				d.callback(hID, evs)
 			}
 		}

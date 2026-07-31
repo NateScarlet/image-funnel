@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"main/internal/scalar"
@@ -64,6 +65,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 			noDirectiveHooks = append(noDirectiveHooks, h)
 		}
 	}
+	slices.SortStableFunc(noDirectiveHooks, sortByOrderAndFilename)
 
 	if len(noDirectiveHooks) > 0 {
 		evs, err := r.findAssociatedImageEvents(r.ctx, event.RelPath)
@@ -89,6 +91,9 @@ func (r *Runner) handleMetadataUpdated(event *shared.MetadataUpdatedEvent) {
 		r.logger.Error("failed to load hooks during metadata updated event", zap.Error(err))
 		return
 	}
+
+	// 按 (order, Filename) 排序，确保防抖回调按相同顺序投递任务
+	slices.SortStableFunc(hooks, sortByOrderAndFilename)
 
 	for _, h := range hooks {
 		trigger := h.On.PostUpdateImageMetadata

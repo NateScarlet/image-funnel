@@ -35,10 +35,12 @@ type directiveConfig struct {
 
 // hookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
 type hookConfig struct {
+	Filename    string           `toml:"-"`           // 配置文件名（如 foo.toml），不参与 TOML 解析
 	ID          string           `toml:"id"`
 	Name        string           `toml:"name"`
 	Description string           `toml:"description"`
 	Command     string           `toml:"command"`
+	Order       int              `toml:"order"`       // 执行顺序，默认 0，升序排列
 	Directive   *directiveConfig `toml:"directive"` // 笔记指令定义
 	On          struct {
 		PostUpdateImageMetadata *filters              `toml:"post_update_image_metadata"`
@@ -148,6 +150,7 @@ func (r *Runner) loadHooks() ([]hookConfig, error) {
 			}
 		}
 
+		cfg.Filename = entry.Name()
 		if cfg.ID == "" {
 			cfg.ID = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		}
@@ -174,4 +177,12 @@ func toDomainDirective(cfg *directiveConfig) *domhook.Directive {
 		OnFailAction:    cfg.OnFailAction,
 		Autocomplete:    autocomplete,
 	}
+}
+
+// sortByOrderAndFilename 按 (order, Filename) 升序排序的比较函数，用于 SortStableFunc
+func sortByOrderAndFilename(a, b hookConfig) int {
+	if a.Order != b.Order {
+		return a.Order - b.Order
+	}
+	return strings.Compare(a.Filename, b.Filename)
 }
