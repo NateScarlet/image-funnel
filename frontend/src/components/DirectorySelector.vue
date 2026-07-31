@@ -326,11 +326,12 @@ const smallUnratedCount = computed(() => {
   return items.value.filter((item) => item.isSmallUnrated).length;
 });
 
+// #region 目录访问顺序与导航控制
 watch(
   filteredItems,
   (newItems) => {
     const navigableDirectoryIds = newItems
-      .filter((item) => item.keepCount > item.targetKeep)
+      .filter((item) => !item.isCompleted)
       .map((item) => item.dir.id);
 
     if (currentDirectory.value) {
@@ -339,6 +340,7 @@ watch(
   },
   { immediate: true },
 );
+// #endregion
 
 function goToParent() {
   if (!currentDirectory.value || !currentDirectory.value.parentId) {
