@@ -104,5 +104,23 @@ describe("evaluateDirectoryCompletion", () => {
     expect(result.isCompleted).toBe(true);
     expect(result.filterRating).toEqual([3]);
   });
+
+  test("当 filterRating 为空数组时，即使 keepCount 计算为 0 且 0 <= targetKeep，也不应误判为已达标", () => {
+    const dir = {
+      lastSession: {
+        filter: { rating: [] },
+        targetKeep: 4,
+      },
+    };
+    const stats = {
+      subdirectoryCount: 0,
+      ratingCounts: [{ rating: 0, count: 500 }],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(false);
+    expect(result.keepCount).toBe(0);
+  });
 });
 // #endregion
