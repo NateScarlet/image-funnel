@@ -68,7 +68,7 @@
           :session-id="sessionId"
           :preload-images="session?.nextImages ?? []"
           :allow-pan="handleAllowPan"
-          @image-loaded="(e) => (lastImageLoadedEvent = e)"
+          @image-loaded="handleImageLoaded"
         >
           <template #control-bg>
             <div
@@ -299,8 +299,8 @@ import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/domain/useSession";
 import useMarkImage from "@/composables/useMarkImage";
-import Time from "@/utils/Time";
 import useNotification from "@/composables/useNotification";
+import useGestureTarget, { type ImageLoadedEvent } from "@/composables/useGestureTarget";
 
 const props = defineProps<{
   id: string;
@@ -328,6 +328,7 @@ const commitDialog = useModalDialog();
 const updateSessionDialog = useModalDialog();
 const undoing = ref(false);
 
+// #region 手势处理与滑动控制
 const touchStartX = ref(0);
 const touchStartY = ref(0);
 const touchEndX = ref(0);
@@ -431,6 +432,7 @@ useEventListeners(window, ({ on }) => {
         e.preventDefault();
       }
       swiping.value = true;
+      recordGestureStart();
       touchStartX.value = touch.clientX;
       touchStartY.value = touch.clientY;
       touchEndX.value = touchStartX.value;
@@ -509,7 +511,16 @@ useEventListeners(window, ({ on }) => {
   });
 });
 
-const lastImageLoadedEvent = shallowRef<{ id: string; time: Time }>();
+const lastImageLoadedEvent = shallowRef<ImageLoadedEvent>();
+const activeImageId = computed(() => currentImage.value?.id);
+const gestureTarget = useGestureTarget(activeImageId);
+const { gestureTargetId, recordGestureStart } = gestureTarget;
+
+function handleImageLoaded(e: ImageLoadedEvent) {
+  lastImageLoadedEvent.value = e;
+  gestureTarget.handleImageLoaded(e);
+}
+
 const imageLoadedAt = computed(() => {
   const event = lastImageLoadedEvent.value;
   if (event && event.id === currentImage.value?.id) {
@@ -612,7 +623,7 @@ function handleAllowPan(e: PointerEvent) {
 
 const didUseGesture = ref(false);
 function handleGesture() {
-  const imageId = currentImageId.value;
+  const imageId = gestureTargetId.value ?? currentImageId.value;
   if (!imageId) {
     return;
   }
@@ -634,6 +645,7 @@ function handleGesture() {
   }
   didUseGesture.value = true;
 }
+// #endregion
 
 // #region 自动排除相关逻辑
 const showAutoRejectControl = computed(() => {
