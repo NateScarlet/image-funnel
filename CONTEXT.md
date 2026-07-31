@@ -61,8 +61,16 @@ _避免_: Metadata file, XMP file（需明确它是"配套文件"而非"元数�
 _避免_: Comment, annotation（Note 是独立的 Markdown 文件，不是附属于 Image 的字段）
 
 **目录状态 / Directory State**
-持久化到目录下 JSON 文件的配置数据，包含：浏览过滤条件、最后活跃的筛选会话引用、以及默认的写入操作配置（各操作对应的 XMP 评分值）。
+持久化到目录下 JSON 文件的配置数据，包含：浏览过滤条件、最后活跃的筛选会话引用（lastSession 快照：filter + targetKeep）、以及默认的写入操作配置（各操作对应的 XMP 评分值）。
 _避免_: Directory config, directory settings
+
+**上次配置 / Last Configuration**
+目录状态中可用于自动创建新会话的配置并集：`DirectoryState.lastSession` 快照（筛选条件 filter + 保留目标 targetKeep）与 `DirectoryState.default.writeActions`（写操作默认值）。用于首页「开始新筛选」时无弹窗自动复用，以及已完成会话自动切换到下一目录时复用。
+_避免_: Last settings, previous config
+
+**继续筛选 / Resume**
+恢复目录的最后活跃会话（跳转到 `/session/{id}`），保留该会话进行中的队列、标记结果与撤销栈。
+_避免_: Continue, reopen
 
 **外部钩子 / Hook**
 通过外部脚本扩展的可配置触发点。可在会话提交后自动触发，或由用户手动按图片/笔记触发。笔记还支持通过钩子提供 slash command 指令。
