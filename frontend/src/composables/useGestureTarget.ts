@@ -5,7 +5,7 @@ import Time from "@/utils/Time";
  * 人类反应时间阈值（毫秒）。
  * 当新图片显示不足此时间时开始的手势，目标图修正为上一张图，避免误伤刚切换的新图。
  */
-export const GESTURE_REACTION_TIME_MS = 250;
+export const GESTURE_REACTION_TIME_MS = 100;
 
 export interface ImageLoadedEvent {
   id: string;
@@ -21,7 +21,7 @@ export interface GestureStartEvent {
  * 手势目标图选择 Composable
  *
  * @param currentImageIdGetter 当前会话中最新的图片 ID
- * @param reactionTimeMs 人类反应时间阈值（毫秒），默认 250ms
+ * @param reactionTimeMs 人类反应时间阈值（毫秒），默认 100ms
  */
 export default function useGestureTarget(
   currentImageIdGetter: MaybeRefOrGetter<string | null | undefined>,

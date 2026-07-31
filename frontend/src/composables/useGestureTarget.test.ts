@@ -8,8 +8,10 @@ describe("useGestureTarget", () => {
     const currentImageId = ref<string | null | undefined>("img-1");
     const loadedAt = Time.now();
 
-    const { gestureTargetId, handleImageLoaded, recordGestureStart } =
-      useGestureTarget(currentImageId);
+    const { gestureTargetId, handleImageLoaded, recordGestureStart } = useGestureTarget(
+      currentImageId,
+      250,
+    );
 
     handleImageLoaded({ id: "img-1", time: loadedAt });
 
@@ -24,8 +26,10 @@ describe("useGestureTarget", () => {
     const currentImageId = ref<string | null | undefined>("img-1");
     const img1LoadedAt = Time.now();
 
-    const { gestureTargetId, handleImageLoaded, recordGestureStart } =
-      useGestureTarget(currentImageId);
+    const { gestureTargetId, handleImageLoaded, recordGestureStart } = useGestureTarget(
+      currentImageId,
+      250,
+    );
 
     // img-1 加载
     handleImageLoaded({ id: "img-1", time: img1LoadedAt });
@@ -46,8 +50,10 @@ describe("useGestureTarget", () => {
     const currentImageId = ref<string | null | undefined>("img-1");
     const loadedAt = Time.now();
 
-    const { gestureTargetId, handleImageLoaded, recordGestureStart } =
-      useGestureTarget(currentImageId);
+    const { gestureTargetId, handleImageLoaded, recordGestureStart } = useGestureTarget(
+      currentImageId,
+      250,
+    );
 
     handleImageLoaded({ id: "img-1", time: loadedAt });
 
