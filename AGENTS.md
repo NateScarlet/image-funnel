@@ -11,6 +11,7 @@
 - **不修改生成的代码**: 使用对应脚本重新生成
 - **构建**: 优先使用 `scripts/build.ps1`，避免直接运行底层命令
 - **临时产物**: 临时产物放在 `.scratch`，不主动清理
+- **禁止防御性 `?? []` 兜底**: 读取 Filter 筛选字段（如 `filter.rating`）时，`null/undefined` 代表匹配全部，`[]` 代表 0 匹配，严禁擅加 `?? []` 或误用 `optionalArray` 抹平 `undefined` 语义。
 
 ## Example Hook 包开发
 
