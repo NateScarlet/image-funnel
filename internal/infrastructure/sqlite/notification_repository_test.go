@@ -63,8 +63,13 @@ func TestExplainQueryPlans(t *testing.T) {
 }
 
 func TestNotificationRepository(t *testing.T) {
+	testNow := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	// 使用共享内存数据库 DSN
-	repo, cleanup, err := NewNotificationRepository("file::memory:?mode=memory&cache=shared", notification.NewFilterBuilder())
+	repo, cleanup, err := NewNotificationRepository(
+		"file::memory:?mode=memory&cache=shared",
+		notification.NewFilterBuilder(),
+		WithNow(func() time.Time { return testNow }),
+	)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -83,10 +88,10 @@ func TestNotificationRepository(t *testing.T) {
 		shared.NotificationPriorityNormal,
 		time.Time{},
 		time.Time{},
-		time.Now().Add(24*365*10*time.Hour), // notAfter: 10 年后才过期
-		time.Now().Add(-1*time.Hour),         // notBefore: 1 小时前已可见
-		time.Now().Add(-10*time.Minute),
-		time.Now().Add(-10*time.Minute),
+		testNow.Add(24*365*10*time.Hour), // notAfter: 10 年后才过期
+		testNow.Add(-1*time.Hour),         // notBefore: 1 小时前已可见
+		testNow.Add(-10*time.Minute),
+		testNow.Add(-10*time.Minute),
 		testURI,
 	)
 	require.NoError(t, err)
@@ -120,10 +125,10 @@ func TestNotificationRepository(t *testing.T) {
 		shared.NotificationPriorityHigh,
 		time.Time{},
 		time.Time{},
-		time.Now().Add(24*365*10*time.Hour),
-		time.Now().Add(-1*time.Hour),
-		time.Now(),
-		time.Now(),
+		testNow.Add(24*365*10*time.Hour),
+		testNow.Add(-1*time.Hour),
+		testNow,
+		testNow,
 		testURI,
 	)
 	require.NoError(t, err)
@@ -150,10 +155,10 @@ func TestNotificationRepository(t *testing.T) {
 		shared.NotificationPriorityLow,
 		time.Time{},
 		time.Time{},
-		time.Now().Add(24*365*10*time.Hour),
-		time.Now().Add(-2*time.Hour),        // notBefore: 2 小时前
-		time.Now(),
-		time.Now(),
+		testNow.Add(24*365*10*time.Hour),
+		testNow.Add(-2*time.Hour),        // notBefore: 2 小时前
+		testNow,
+		testNow,
 		scalar.URI{},
 	)
 	require.NoError(t, err)
@@ -204,10 +209,10 @@ func TestNotificationRepository(t *testing.T) {
 		shared.NotificationPriorityNormal,
 		time.Time{},
 		time.Time{},
-		time.Now().Add(24*time.Hour),
-		time.Now().Add(10*time.Millisecond), // 10ms 后可见
-		time.Now(),
-		time.Now(),
+		testNow.Add(24*time.Hour),
+		testNow.Add(1*time.Hour), // 1 小时后可见
+		testNow,
+		testNow,
 		scalar.URI{},
 	)
 	require.NoError(t, err)
@@ -224,8 +229,8 @@ func TestNotificationRepository(t *testing.T) {
 	}
 	assert.Len(t, channels, 0)
 
-	// 等待 15ms 使 notBefore 到达，再次调用 Channels 触发被动增量刷新
-	time.Sleep(15 * time.Millisecond)
+	// 推进测试时间 2 小时使 notBefore 到达，再次调用 Channels 触发被动增量刷新
+	testNow = testNow.Add(2 * time.Hour)
 
 	channels = nil
 	for ch, err := range repo.Channels(ctx) {
@@ -247,10 +252,10 @@ func TestNotificationRepository(t *testing.T) {
 		shared.NotificationPriorityNormal,
 		time.Time{},
 		time.Time{},
-		time.Now().Add(-100*24*time.Hour), // notAfter: 100 天前已过期
-		time.Now().Add(-101*24*time.Hour),
-		time.Now().Add(-101*24*time.Hour),
-		time.Now().Add(-101*24*time.Hour),
+		testNow.Add(-100*24*time.Hour), // notAfter: 100 天前已过期
+		testNow.Add(-101*24*time.Hour),
+		testNow.Add(-101*24*time.Hour),
+		testNow.Add(-101*24*time.Hour),
 		scalar.URI{},
 	)
 	require.NoError(t, err)

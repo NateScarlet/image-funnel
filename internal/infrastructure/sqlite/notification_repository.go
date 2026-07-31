@@ -31,6 +31,7 @@ const zeroTimeMs int64 = -62135596800000
 type NotificationRepository struct {
 	db            *sql.DB
 	filterBuilder *notification.FilterBuilder
+	nowFunc       func() time.Time
 	sf            singleflight.Group
 	writeMu       sync.Mutex
 }
@@ -39,6 +40,7 @@ type NotificationRepository struct {
 type notificationRepositoryOptions struct {
 	reclaimGracePeriod  time.Duration
 	reclaimErrorHandler func(error)
+	now                 func() time.Time
 }
 
 // NotificationRepositoryOption 配置选项
@@ -55,6 +57,13 @@ func WithReclaimGracePeriod(d time.Duration) NotificationRepositoryOption {
 func WithReclaimErrorHandler(h func(error)) NotificationRepositoryOption {
 	return func(o *notificationRepositoryOptions) {
 		o.reclaimErrorHandler = h
+	}
+}
+
+// WithNow 设置获取当前时间的函数（默认为 time.Now），主要用于单元测试注入当前时间
+func WithNow(f func() time.Time) NotificationRepositoryOption {
+	return func(o *notificationRepositoryOptions) {
+		o.now = f
 	}
 }
 
@@ -121,17 +130,22 @@ func NewNotificationRepository(dsn string, filterBuilder *notification.FilterBui
 		}
 	}
 
-	repo := &NotificationRepository{
-		db:            db,
-		filterBuilder: filterBuilder,
-	}
-
 	// 应用选项（不可变模式：仅在初始化时读取一次）
 	o := &notificationRepositoryOptions{
 		reclaimGracePeriod: 30 * 24 * time.Hour,
+		now:                time.Now,
 	}
 	for _, opt := range opts {
 		opt(o)
+	}
+	if o.now == nil {
+		o.now = time.Now
+	}
+
+	repo := &NotificationRepository{
+		db:            db,
+		filterBuilder: filterBuilder,
+		nowFunc:       o.now,
 	}
 
 	// 创建者负责清理：通过 cancel 中止后台 goroutine
@@ -340,13 +354,20 @@ type refreshedChannelSummary struct {
 	latestNotBefore int64
 }
 
+func (r *NotificationRepository) now() time.Time {
+	if r.nowFunc != nil {
+		return r.nowFunc()
+	}
+	return time.Now()
+}
+
 // Channels 遍历获取所有频道统计信息（读物化视图，单查询无 N+1）
 // 通过 SQL 排序优先返回过期项（ORDER BY CASE WHEN expires_at <= :now THEN 0 ELSE 1 END ASC）：
 // 1. 无过期项时（绝大多数正常情况）：零内存分配，单循环纯流式直通输出；
 // 2. 有过期项时：扫描并收集过期频道后关闭 rows 释放锁，通过 singleflight 增量刷新并与新鲜项交替归并输出。
 func (r *NotificationRepository) Channels(ctx context.Context) iter.Seq2[*notification.ChannelStats, error] {
 	return func(yield func(*notification.ChannelStats, error) bool) {
-		now := time.Now().UnixMilli()
+		now := r.now().UnixMilli()
 
 		// EXPLAIN QUERY PLAN:
 		// SCAN channel_summary
@@ -592,7 +613,7 @@ func (r *NotificationRepository) refreshChannelSummary(ctx context.Context, chan
 // refreshChannelSummaryTx 在写事务内用纯 SQL 标量子查询与 CTE 更新特定频道的物化视图摘要
 // 如果刷新后该频道既无可见通知又无未来等待发送的事件，将其从 channel_summary 中彻底删除
 func (r *NotificationRepository) refreshChannelSummaryTx(ctx context.Context, tx *sql.Tx, channel string) error {
-	now := time.Now().UnixMilli()
+	now := r.now().UnixMilli()
 
 	// 1. 若频道既无可见通知又无 pending 通知，物理清理其在 channel_summary 中的摘要
 	// EXPLAIN QUERY PLAN:
@@ -689,7 +710,7 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 	defer r.writeMu.Unlock()
 
 	ctx := context.Background()
-	cutoff := time.Now().Add(-reclaimGracePeriod).UnixMilli()
+	cutoff := r.now().Add(-reclaimGracePeriod).UnixMilli()
 
 	// EXPLAIN QUERY PLAN:
 	// SEARCH notifications USING INDEX idx_notifications_not_after (not_after<?)
