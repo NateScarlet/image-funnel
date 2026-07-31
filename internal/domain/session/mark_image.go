@@ -5,6 +5,7 @@ import (
 	"main/internal/apperror"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"slices"
 	"time"
 )
 
@@ -19,16 +20,22 @@ import (
 func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, options ...shared.MarkImageOption) error {
 	opts := shared.NewMarkImageOptions(options...)
 
+	// 查找图片索引
+	targetImgIdx, ok := s.indexByID[imageID]
+	if !ok {
+		return apperror.NewErrDocumentNotFound(imageID)
+	}
+
 	// 判断要标记的是否是当前图片
 	isCurrentImage := s.currentIdx < len(s.queue) &&
-		s.images[s.queue[s.currentIdx]].ID() == imageID
+		s.queue[s.currentIdx] == targetImgIdx
 
-	// 乱序标记时，只需确认该图片存在于 images 中（不限于当前轮队列）
-	if !isCurrentImage {
-		if _, ok := s.indexByID[imageID]; !ok {
-			return apperror.NewErrDocumentNotFound(imageID)
-		}
-	}
+	// 检查图片是否在当前轮队列中
+	inQueue := slices.Contains(s.queue, targetImgIdx)
+
+	// 保存当前队列状态以备 Undo 恢复
+	prevQueue := make([]int, len(s.queue))
+	copy(prevQueue, s.queue)
 
 	// 记录撤销操作
 	prevAction, hasPrevAction := s.actions[imageID]
@@ -42,23 +49,23 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 		}
 		// 注意：不恢复耗时 (durations)，因为我们需要记录用户在图片上花费的总时长（包括撤销重做的过程）
 
-		// 非当前图片的乱序标记不会改变索引，所以 undo 也不需要恢复
+		// 恢复队列状态
+		s.queue = prevQueue
+
 		if isCurrentImage {
 			// 只有当图片依然在队列中时，才恢复 currentIdx。
 			// 如果图片已被物理删除并从队列中移出，恢复索引可能会导致指针错乱或越界。
-			inQueue := false
-			for _, imgIdx := range s.queue {
-				if s.images[imgIdx].ID() == imageID {
-					inQueue = true
-					break
-				}
-			}
-			if inQueue {
+			if slices.Contains(s.queue, targetImgIdx) {
 				s.currentIdx = previousIndex
 			}
 		}
 		s.updatedAt = time.Now()
 	})
+
+	// 乱序标记保留不在当前轮队列中的图片时，自动将其加入当前轮队列
+	if !inQueue && action == shared.ImageActionKeep {
+		s.queue = append(s.queue, targetImgIdx)
+	}
 
 	s.actions[imageID] = action
 	// 累加耗时

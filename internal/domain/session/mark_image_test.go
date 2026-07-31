@@ -223,3 +223,75 @@ func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) 
 	assert.False(t, sess.Stats().IsCompleted, "session should not be completed after NextRound triggered")
 	assert.Equal(t, 0, sess.currentIdx, "currentIdx should be reset to 0 by NextRound")
 }
+
+// 乱序标记保留不在当前轮队列中的前一轮图片，该图片应自动进入当前轮队列，并在后续轮中可被筛选
+func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_ShouldAddToCurrentQueue(t *testing.T) {
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img4 := image.New(scalar.ToID("img4"), "img4.jpg", "/path/img4.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img5 := image.New(scalar.ToID("img5"), "img5.jpg", "/path/img5.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	images := []*image.Image{img1, img2, img3, img4, img5}
+
+	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
+
+	// 第一轮：img1, img2 标记 Keep，img3, img4, img5 标记 Reject
+	require.NoError(t, sess.MarkImage(scalar.ToID("img1"), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img2"), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img3"), shared.ImageActionReject))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img4"), shared.ImageActionReject))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img5"), shared.ImageActionReject))
+
+	// 此时自动进入第二轮 (Round 1)，queue 只有 [img1, img2] 共 2 张图片
+	assert.Equal(t, 1, sess.CurrentRound())
+	assert.Equal(t, 2, sess.CurrentSize())
+
+	// 乱序标记 img3 为 Keep (img3 不在第二轮 queue 中)
+	require.NoError(t, sess.MarkImage(scalar.ToID("img3"), shared.ImageActionKeep))
+
+	// 验证 img3 自动进入第二轮队列，CurrentSize 变为 3，Stats 的 TotalCount 和 TotalKept 一致
+	assert.Equal(t, 3, sess.CurrentSize(), "img3 应被自动加入当前轮队列")
+	stats := sess.Stats()
+	assert.Equal(t, 3, stats.TotalCount, "TotalCount 应为 3")
+	assert.Equal(t, 3, stats.TotalKept, "TotalKept 应为 3")
+
+	// 处理完第二轮剩余图片
+	require.NoError(t, sess.MarkImage(scalar.ToID("img1"), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img2"), shared.ImageActionKeep))
+
+	// 乱序标记在末尾的 img3 也是 Keep
+	require.NoError(t, sess.MarkImage(scalar.ToID("img3"), shared.ImageActionKeep))
+
+	// 验证进入第三轮 (Round 2)，且第三轮队列包含所有 3 张保留图片 (img1, img2, img3)
+	assert.Equal(t, 2, sess.CurrentRound(), "应成功进入第三轮")
+	assert.Equal(t, 3, sess.CurrentSize(), "第三轮队列应包含 3 张图片")
+}
+
+func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_Undo_ShouldRemoveFromQueue(t *testing.T) {
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	images := []*image.Image{img1, img2, img3}
+
+	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
+
+	require.NoError(t, sess.MarkImage(scalar.ToID("img1"), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img2"), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(scalar.ToID("img3"), shared.ImageActionReject))
+
+	// 进入第二轮，queue 只有 img1, img2
+	assert.Equal(t, 1, sess.CurrentRound())
+	assert.Equal(t, 2, sess.CurrentSize())
+
+	// 乱序标记 img3 为 Keep
+	require.NoError(t, sess.MarkImage(scalar.ToID("img3"), shared.ImageActionKeep))
+	assert.Equal(t, 3, sess.CurrentSize())
+
+	// 撤销乱序标记
+	require.NoError(t, sess.Undo())
+
+	// 验证 img3 被从当前轮队列中移除，队列恢复为 2 张
+	assert.Equal(t, 2, sess.CurrentSize(), "撤销后队列应恢复为 2 张图片")
+	assert.Equal(t, shared.ImageActionReject, ActionOf(sess, scalar.ToID("img3")), "img3 操作应恢复为 Reject")
+}
+
