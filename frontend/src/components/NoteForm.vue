@@ -17,6 +17,28 @@
           编辑笔记 ({{ displayTitle }})
         </span>
       </h3>
+      <div class="flex items-center gap-2">
+        <!-- 打开关联图片 -->
+        <button
+          class="p-2 sm:p-3 short:p-1 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95 cursor-pointer"
+          title="打开关联图片"
+          @click="openImage"
+        >
+          <svg class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4" viewBox="0 0 24 24">
+            <path :d="mdiImage" fill="currentColor" />
+          </svg>
+        </button>
+        <!-- 隐藏/取消隐藏 -->
+        <button
+          class="p-2 sm:p-3 short:p-1 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95 cursor-pointer"
+          :title="props.note.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
+          @click="toggleHidden"
+        >
+          <svg class="w-5 sm:w-8 h-5 sm:h-8 short:w-4 short:h-4" viewBox="0 0 24 24">
+            <path :d="props.note.hidden ? mdiEyeOff : mdiEye" fill="currentColor" />
+          </svg>
+        </button>
+      </div>
       <button
         class="p-2 sm:p-3 short:p-1 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95 cursor-pointer"
         type="button"
@@ -85,8 +107,19 @@ import { ref, computed, onUnmounted, useTemplateRef } from "vue";
 import type { NoteFragment as Note } from "../graphql/generated";
 import useNote from "@/composables/domain/useNote";
 import NoteEditor from "./NoteEditor";
-import { mdiNoteTextOutline, mdiClose, mdiLoading, mdiCheck, mdiAlertCircleOutline } from "@mdi/js";
+import {
+  mdiNoteTextOutline,
+  mdiClose,
+  mdiLoading,
+  mdiCheck,
+  mdiAlertCircleOutline,
+  mdiImage,
+  mdiEye,
+  mdiEyeOff,
+} from "@mdi/js";
 import useCurrentTime from "@/composables/useCurrentTime";
+import { toggleFrontmatterHidden } from "@/composables/useBrowseNotes";
+import { openImageViewerByFilename } from "@/events";
 
 // #region 属性与事件定义
 const props = defineProps<{
@@ -105,6 +138,22 @@ const noteEditorRef = useTemplateRef("noteEditor");
 
 function focus() {
   noteEditorRef.value?.focus();
+}
+
+function toggleHidden() {
+  const newHidden = !props.note.hidden;
+  // 基于当前编辑器内容（含未保存修改）切换 hidden 状态，避免丢失编辑内容
+  const newContent = toggleFrontmatterHidden(content.value, newHidden);
+  contentBuffer.value = undefined;
+  updateNote(newContent);
+}
+
+function openImage() {
+  const basename = props.note.relPath.split("/").pop() ?? props.note.relPath;
+  const filename = basename.replace(/\.md$/, "");
+  openImageViewerByFilename.dispatch({
+    detail: { filename },
+  });
 }
 
 const { note: serverNote, updateNote } = useNote(() => props.note.id);

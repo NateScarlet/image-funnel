@@ -14,7 +14,7 @@ import {
 import { throttle } from "es-toolkit";
 import { useNoteBrowse } from "./domain/useNote";
 
-function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
+export function toggleFrontmatterHidden(raw: string, newHidden: boolean): string {
   const isCRLF = raw.includes("\r\n");
   const normalized = raw.replace(/\r\n/g, "\n");
 

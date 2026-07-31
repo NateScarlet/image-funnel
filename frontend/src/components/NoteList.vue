@@ -52,7 +52,7 @@
           </svg>
           <!-- 文件名按钮：移动端在第二行，桌面端紧随图标 -->
           <span
-            class="order-3 sm:order-2 text-xs text-primary-400 shrink-0 bg-primary-800/60 px-2 py-1 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
+            class="order-3 sm:order-2 hidden sm:inline text-xs text-primary-400 shrink-0 bg-primary-800/60 px-2 py-1 rounded border border-primary-700/50 font-mono select-none cursor-pointer hover:text-secondary-400 hover:border-secondary-500/50 transition-colors"
             title="打开关联图片"
             @click.stop="openImageViewerForNote(noteItem)"
           >
@@ -60,14 +60,14 @@
           </span>
           <!-- 正文内容：移动端独占第一行，桌面端在文件名之后 -->
           <span
-            class="order-2 sm:order-3 text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium min-w-0 flex-1"
+            class="order-2 sm:order-3 text-sm text-primary-200 group-hover:text-white transition-colors truncate font-medium min-w-0 basis-full sm:flex-1"
           >
             {{ noteItem.content || "（空白笔记内容，点击编辑）" }}
           </span>
           <!-- 如果是隐藏笔记，显示标记 -->
           <span
             v-if="noteItem.hidden"
-            class="order-4 px-2 py-1 text-xs bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 flex items-center gap-1"
+            class="order-4 hidden sm:flex px-2 py-1 text-xs bg-red-950/40 border border-red-900/50 text-red-400 rounded-md shrink-0 items-center gap-1"
             title="此笔记已通过 frontmatter 隐藏"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -75,9 +75,9 @@
             </svg>
             已隐藏
           </span>
-          <!-- 一键切换隐藏状态按钮：触屏设备始终可见，hover 设备悬停时显示 -->
+          <!-- 一键切换隐藏状态按钮：触屏设备始终可见，hover 设备悬停时显示；仅在大屏幕 (sm+) 显示 -->
           <button
-            class="order-5 ml-auto p-2 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 flex items-center justify-center [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+            class="order-5 ml-auto hidden sm:flex p-2 rounded-lg bg-primary-800/40 hover:bg-primary-700/60 border border-primary-700/50 text-primary-400 hover:text-white transition-all active:scale-95 items-center justify-center [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 cursor-pointer"
             :title="noteItem.hidden ? '取消隐藏此笔记' : '隐藏此笔记'"
             @click.stop="toggleNoteHidden(noteItem)"
           >
@@ -85,9 +85,9 @@
               <path :d="noteItem.hidden ? mdiEye : mdiEyeOff" fill="currentColor" />
             </svg>
           </button>
-          <!-- 编辑提示：触屏设备始终可见，hover 设备悬停时显示 -->
+          <!-- 编辑提示：仅在大屏幕 (sm+) 显示 -->
           <div
-            class="order-6 text-xs text-primary-500 transition-opacity duration-200 select-none flex items-center gap-1 cursor-pointer [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+            class="order-6 text-xs text-primary-500 transition-opacity duration-200 select-none hidden sm:flex items-center gap-1 cursor-pointer [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
           >
             <span>编辑</span>
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
