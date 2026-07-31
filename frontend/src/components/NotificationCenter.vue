@@ -88,13 +88,13 @@ function handleBack() {
         class="w-full flex items-start gap-3 px-4 py-3 hover:bg-primary-700/50 transition-colors text-left border-b border-primary-700/30 cursor-pointer"
         @click="handleSelectChannel(ch.channel)"
       >
-        <!-- Unread indicator -->
-        <div
-          :class="[
-            'mt-2 h-2 w-2 shrink-0 rounded-full',
-            ch.unreadCount > 0 ? 'bg-secondary-500' : 'bg-transparent',
-          ]"
-        />
+        <!-- Unread count badge on the left -->
+        <span
+          v-if="ch.unreadCount > 0"
+          class="shrink-0 flex items-center justify-center h-5 min-w-5 rounded-full bg-secondary-600 px-2 text-xs font-bold text-white mt-0.5"
+        >
+          {{ ch.unreadCount }}
+        </span>
 
         <!-- Content -->
         <div class="flex-1 min-w-0">
@@ -102,20 +102,11 @@ function handleBack() {
             <span class="font-medium text-primary-100 text-sm truncate">
               {{ ch.channel }}
             </span>
-            <span
-              v-if="ch.unreadCount > 0"
-              class="shrink-0 flex items-center justify-center h-5 min-w-5 rounded-full bg-secondary-600 px-2 text-xs font-bold text-white"
-            >
-              {{ ch.unreadCount }}
-            </span>
           </div>
           <p class="text-xs text-primary-500 mt-1">
             {{ ch.latestNotification?.title ?? "暂无通知" }}
           </p>
         </div>
-
-        <!-- Timestamp -->
-        <span class="shrink-0 text-xs text-primary-500 mt-1" />
       </button>
     </div>
 
