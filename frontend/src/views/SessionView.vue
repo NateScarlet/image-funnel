@@ -662,7 +662,13 @@ const isAutoRejectActive = computed(() => {
 watch(
   [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent, swiping, marking],
   ([active, timeout, loadedEvent, isSwiping], _, onCleanup) => {
-    if (!active || !loadedEvent || !currentImage.value || isSwiping) {
+    if (
+      !active ||
+      !loadedEvent ||
+      !currentImage.value ||
+      loadedEvent.id !== currentImage.value.id ||
+      isSwiping
+    ) {
       return;
     }
 

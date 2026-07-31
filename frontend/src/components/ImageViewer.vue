@@ -851,6 +851,9 @@ watch(
   () => image.id,
   () => {
     lastLoading.value = { image, startAt: Time.now() };
+    nextTick(() => {
+      updateLoaded();
+    });
   },
 );
 
