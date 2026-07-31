@@ -9,6 +9,7 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/shared"
 	"main/internal/util"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -74,6 +75,10 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 		// Session 中存储的是相对路径
 		currentImg, err := s.imageRepo.Get(ctx, img.RelPath())
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// 文件不存在，直接忽略
+				continue
+			}
 			errs = append(errs, err)
 			continue
 		}

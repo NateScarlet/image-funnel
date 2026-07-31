@@ -369,3 +369,55 @@ func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
 func ptr(i int) *int {
 	return &i
 }
+
+func TestService_Commit_DeletedFile_ShouldSkipWithoutError(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_test_deleted")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	file2 := filepath.Join(tempDir, "test2.jpg")
+	os.WriteFile(file1, []byte("fake"), 0644)
+	os.WriteFile(file2, []byte("fake"), 0644)
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeSessionRepo := NewFakeSessionRepo()
+	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
+	defer cleanup()
+
+	fakeScanner := &FakeImageRepo{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[string]*image.Image),
+	}
+
+	imageFb := image.NewFilterBuilder()
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	defer cleanupService()
+
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+
+	fakeScanner.Images[img1.RelPath()] = img1
+	// 不将 img2 加入 fakeScanner.Images，模拟文件已被删除
+
+	filter := &shared.ImageFilters{Rating: []int{0}}
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img2}, imageFb)
+
+	sess.MarkImage(img1.ID(), shared.ImageActionKeep)
+	sess.MarkImage(img2.ID(), shared.ImageActionKeep)
+
+	writeActions := &shared.WriteActions{
+		KeepRating:   ptr(5),
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
+	}
+
+	success, matched, errs := svc.Commit(context.Background(), sess, writeActions)
+
+	require.Empty(t, errs)
+	require.Equal(t, 1, success, "Only the existing image should be written")
+	require.Equal(t, 1, matched, "Deleted image should not be counted as matched")
+}
