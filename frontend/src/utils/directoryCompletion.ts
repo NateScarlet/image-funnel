@@ -60,47 +60,33 @@ export function evaluateDirectoryCompletion(
     };
   }
 
-  const filterRating = optionalArray(session.filter?.rating?.slice()) ?? [];
+  const rawRating = session.filter?.rating;
+  const filterRating = rawRating != null ? Array.from(rawRating) : undefined;
   const filterLabel = optionalArray(session.filter?.label?.slice());
   const targetKeep = session.targetKeep;
 
-  // 若 filterRating 为空，无法基于评分统计达标状态，判定为未达标
-  if (filterRating.length === 0) {
-    return {
-      lastSession: {
-        filter: {
-          rating: filterRating,
-          label: filterLabel,
-          query: session.filter?.query || undefined,
-        },
-        targetKeep,
-      },
-      filterRating,
-      targetKeep,
-      keepCount: 0,
-      isCompleted: false,
-    };
-  }
-
   const keepCount =
-    stats?.ratingCounts.reduce(
-      (sum, rc) => sum + (filterRating.includes(rc.rating) ? rc.count : 0),
-      0,
-    ) ?? 0;
+    stats?.ratingCounts.reduce((sum, rc) => {
+      // null 或 undefined 表示未指定 rating 筛选，即匹配所有评级的图片
+      if (filterRating == null) {
+        return sum + rc.count;
+      }
+      return sum + (filterRating.includes(rc.rating) ? rc.count : 0);
+    }, 0) ?? 0;
 
-  // 判定为无子目录的叶子节点且保留图片数 <= 目标保留数
+  // 判定为无子目录的叶子节点且符合条件的图片数 <= 目标保留数
   const isCompleted = (stats?.subdirectoryCount ?? 0) === 0 && keepCount <= targetKeep;
 
   return {
     lastSession: {
       filter: {
-        rating: filterRating,
+        rating: filterRating ?? [],
         label: filterLabel,
         query: session.filter?.query || undefined,
       },
       targetKeep,
     },
-    filterRating,
+    filterRating: filterRating ?? [],
     targetKeep,
     keepCount,
     isCompleted,

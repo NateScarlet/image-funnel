@@ -105,7 +105,28 @@ describe("evaluateDirectoryCompletion", () => {
     expect(result.filterRating).toEqual([3]);
   });
 
-  test("当 filterRating 为空数组时，即使 keepCount 计算为 0 且 0 <= targetKeep，也不应误判为已达标", () => {
+  test("当 rating 为 null 或 undefined 时代表不过滤评级（匹配所有文件），若总数 > targetKeep 应判定为未达标", () => {
+    const dir = {
+      lastSession: {
+        filter: { rating: null },
+        targetKeep: 4,
+      },
+    };
+    const stats = {
+      subdirectoryCount: 0,
+      ratingCounts: [
+        { rating: 0, count: 500 },
+        { rating: 1, count: 2 },
+      ],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(false);
+    expect(result.keepCount).toBe(502);
+  });
+
+  test("当 rating 为 [] 时代表匹配 0 文件，keepCount 为 0，若 0 <= targetKeep 则判定为已达标", () => {
     const dir = {
       lastSession: {
         filter: { rating: [] },
@@ -119,7 +140,7 @@ describe("evaluateDirectoryCompletion", () => {
 
     const result = evaluateDirectoryCompletion(dir, stats);
 
-    expect(result.isCompleted).toBe(false);
+    expect(result.isCompleted).toBe(true);
     expect(result.keepCount).toBe(0);
   });
 });
