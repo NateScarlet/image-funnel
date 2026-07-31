@@ -117,16 +117,16 @@ class AddHandler:
             nodes=ctx.args.node, regions=ctx.args.region, is_neg=ctx.args.neg
         )
 
-        prompt_str_arg = " ".join(ctx.args.prompt)
         fragment = next(fragments, None)
         if fragment:
-            fragment.add(prompt_str_arg, raw=ctx.args.raw, no_skip=ctx.args.no_skip)
+            for prompt_item in ctx.args.prompt:
+                fragment.add(prompt_item, raw=ctx.args.raw, no_skip=ctx.args.no_skip)
 
-            # 默认从非目标区域移除重复提示词，--keep 保留现有行为
-            if not getattr(ctx.args, "keep", False):
-                _remove_from_other_regions(
-                    pair, prompt_str_arg, fragment.node_id, fragment.region, ctx.args
-                )
+                # 默认从非目标区域移除重复提示词，--keep 保留现有行为
+                if not getattr(ctx.args, "keep", False):
+                    _remove_from_other_regions(
+                        pair, prompt_item, fragment.node_id, fragment.region, ctx.args
+                    )
 
         _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
         ctx.update_label()
