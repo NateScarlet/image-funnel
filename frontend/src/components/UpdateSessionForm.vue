@@ -65,7 +65,7 @@
       </button>
       <button
         class="rounded-lg bg-secondary-600 px-4 py-2 text-sm transition-colors hover:bg-secondary-700 disabled:cursor-not-allowed disabled:bg-primary-600"
-        :disabled="updating"
+        :disabled="updating || !canUpdate"
         type="button"
         @click="update"
       >
@@ -76,13 +76,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import type { SessionFragment } from "../graphql/generated";
 import mutate from "../graphql/utils/mutate";
 import { UpdateSessionDocument, SetDirectoryStateDocument } from "../graphql/generated";
 import { useSessionConfig } from "../composables/useSessionConfig";
 import RatingSelector from "./RatingSelector.vue";
 import NumberInput from "./NumberInput.vue";
+import optionalArray from "../utils/optionalArray";
 
 interface Props {
   session: SessionFragment;
@@ -96,22 +97,27 @@ const { presets, selectedPresetId, selectedPreset, targetKeep, rating } = useSes
   () => props.session,
 );
 
+const canUpdate = computed(() => {
+  return (rating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;
+});
+
 const updating = ref<boolean>(false);
 
 async function update() {
-  if (updating.value) {
+  if (updating.value || !canUpdate.value) {
     return;
   }
   updating.value = true;
 
   try {
+    const filterRating = optionalArray(rating.value);
     await mutate(UpdateSessionDocument, {
       variables: {
         input: {
           sessionId: props.session.id,
           targetKeep: targetKeep.value,
           filter: {
-            rating: rating.value,
+            rating: filterRating,
           },
         },
       },

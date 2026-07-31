@@ -121,8 +121,7 @@ import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
-import { useDirectoryState } from "../composables/useDirectoryState";
-import useSession from "../composables/domain/useSession";
+import { useAutoCreateSession } from "../composables/useAutoCreateSession";
 const { session } = defineProps<{
   session: SessionFragment;
 }>();
@@ -136,13 +135,16 @@ const nextDirectoryId = computed(() => {
   return getNextDirectory(session.directory.parentId ?? "", session.directory.id);
 });
 
-const { lastSession: nextDirLastSession, defaultState: nextDirDefaultState } = useDirectoryState(
+// 使用共享 composable 自动推导下一目录的配置并创建会话
+// CompletedView 仅合并 rating，不合并 label/query（保持原有行为）
+const { autoCreateSession } = useAutoCreateSession(
   () => nextDirectoryId.value ?? "",
+  () => session.filter,
+  () => session.targetKeep,
+  { mergeAllFilterFields: false },
 );
 
 const commitForm = useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
-
-const { createSession } = useSession("");
 
 const showConfirm = ref(false);
 let pendingCommit: (() => void) | null = null;
@@ -173,21 +175,10 @@ defineExpose({
 });
 
 async function handleCommitted() {
-  const { filter, targetKeep } = session;
   const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
-    const nextRating = nextDirLastSession.value?.filter?.rating ?? filter.rating ?? [];
-    const nextTargetKeep = nextDirLastSession.value?.targetKeep ?? targetKeep;
-
-    const nextSession = await createSession({
-      directoryId: nextDirectoryIdValue,
-      filter: {
-        rating: nextRating,
-      },
-      targetKeep: nextTargetKeep,
-      createActions: nextDirDefaultState.value?.writeActions ?? undefined,
-    });
+    const nextSession = await autoCreateSession();
 
     if (nextSession) {
       await router.push({

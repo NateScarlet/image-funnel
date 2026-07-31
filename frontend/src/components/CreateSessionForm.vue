@@ -38,61 +38,14 @@
         class="w-full px-4 py-2 bg-primary-700 border border-primary-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-secondary-500 text-white"
       />
     </div>
-
-    <DirectorySelector
-      v-model="selectedDirectoryId"
-      :filter-rating="filterRating"
-      :target-keep="targetKeep"
-      :root-path="rootPath"
-    />
-
-    <div class="flex gap-4">
-      <RouterLink
-        :to="{
-          path: '/browse',
-          query: { dir: selectedDirectoryId },
-        }"
-        title="浏览该目录下的图片"
-        class="py-3 px-5 bg-primary-700 hover:bg-primary-600 rounded-lg transition-colors flex items-center justify-center gap-2 border border-primary-600 text-primary-300 hover:text-white no-underline"
-      >
-        <svg class="w-5 h-5" viewBox="0 0 24 24">
-          <path :d="mdiFolder" fill="currentColor" />
-        </svg>
-        <span>浏览</span>
-      </RouterLink>
-
-      <button
-        :disabled="!canCreate || creatingSession"
-        class="flex-1 py-3 px-6 bg-secondary-600 hover:bg-secondary-700 disabled:bg-primary-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-        @click="handleCreate"
-      >
-        <svg v-if="creatingSession" class="w-5 h-5 animate-spin" viewBox="0 0 24 24">
-          <path :d="mdiLoading" fill="currentColor" />
-        </svg>
-        <span>{{ creatingSession ? "创建中…" : "开始筛选" }}</span>
-      </button>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { mdiLoading, mdiFolder } from "@mdi/js";
-import { useRouter } from "vue-router";
-import useQuery from "../graphql/utils/useQuery";
-import { MetaDocument, RootDirectoryDocument } from "../graphql/generated";
+import { computed } from "vue";
 import NumberInput from "./NumberInput.vue";
 import RatingSelector from "./RatingSelector.vue";
-import DirectorySelector from "./DirectorySelector.vue";
 import { useSessionConfig } from "../composables/useSessionConfig";
-import useRouteQuery from "../composables/useRouteQuery";
-import useSession from "../composables/domain/useSession";
-
-type Emits = (e: "created") => void;
-
-const emit = defineEmits<Emits>();
-
-const router = useRouter();
 
 const {
   presets,
@@ -102,55 +55,16 @@ const {
   rating: filterRating,
 } = useSessionConfig();
 
-const creatingSession = ref(false);
-const { createSession } = useSession("");
-
-const loadingCount = ref(0);
-
-const { data: metaData } = useQuery(MetaDocument, {
-  loadingCount,
-});
-
-const { data: rootData } = useQuery(RootDirectoryDocument, {
-  loadingCount,
-});
-
-const dirQuery = useRouteQuery("dir");
-
-const selectedDirectoryId = computed({
-  get() {
-    return dirQuery.value[0] ?? rootData.value?.rootDirectory.id ?? "";
-  },
-  set(v) {
-    if (v === selectedDirectoryId.value) return;
-    dirQuery.value = v ? [v] : [];
-  },
-});
-
-const rootPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
-
+// 验证是否可以创建会话
 const canCreate = computed(() => {
   return (filterRating.value?.length || 0) > 0 && (targetKeep.value || 0) > 0;
 });
 
-async function handleCreate() {
-  creatingSession.value = true;
-  try {
-    const session = await createSession({
-      directoryId: selectedDirectoryId.value,
-      filter: {
-        rating: filterRating.value.slice(),
-      },
-      targetKeep: targetKeep.value,
-      createActions: selectedPreset.value?.writeActions,
-    });
-
-    if (session) {
-      router.push(`/session/${session.id}`);
-      emit("created");
-    }
-  } finally {
-    creatingSession.value = false;
-  }
-}
+// 暴露配置值供父组件（HomeView 模态框）读取
+defineExpose({
+  filterRating,
+  targetKeep,
+  selectedPreset,
+  canCreate,
+});
 </script>
