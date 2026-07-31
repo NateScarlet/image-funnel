@@ -1,7 +1,5 @@
 # AGENTS.md
 
-修改代码前**必须**查看 `CODING_STANDARDS.md` 中的通用原则和相关语言的要求，严格遵守其中的编码规范。
-
 了解项目背景和上下文请查看 `CONTEXT.md`（以及 `CONTEXT-MAP.md`）；用户澄清后**必须**更新对应的 `CONTEXT.md` 以持久化上下文。
 
 - **立即实现：**　立即实现所有用户要求的功能，不能偷懒用注释标记为以后实现
@@ -11,7 +9,10 @@
 - **不修改生成的代码**: 使用对应脚本重新生成
 - **构建**: 优先使用 `scripts/build.ps1`，避免直接运行底层命令
 - **临时产物**: 临时产物放在 `.scratch`，不主动清理
-- **禁止防御性 `?? []` 兜底**: 读取 Filter 筛选字段（如 `filter.rating`）时，`null/undefined` 代表匹配全部，`[]` 代表 0 匹配，严禁擅加 `?? []` 或误用 `optionalArray` 抹平 `undefined` 语义。
+
+## 修改或提交代码
+
+在执行任何代码修改前，第一个 tool call 必须是阅读 [CODING_STANDARDS](CODING_STANDARDS.md)。
 
 ## Example Hook 包开发
 
