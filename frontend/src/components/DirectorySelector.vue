@@ -289,8 +289,8 @@ const displayedFilteredItems = computed(() => {
       if (isSearching) {
         return true;
       }
-      // 非搜索时，隐藏真正需要隐藏的项目（!isVisible 成立的项）
-      return isVisible(item);
+      // 非搜索时，隐藏真正需要隐藏的项目（!isVisible 成立且非有子目录强制显示项）
+      return isVisible(item) || item.isFilteredOutButShown;
     });
 });
 

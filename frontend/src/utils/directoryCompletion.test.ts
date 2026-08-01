@@ -23,6 +23,21 @@ describe("evaluateDirectoryCompletion", () => {
     expect(result.lastSession).toBeUndefined();
   });
 
+  test("当 stats 为 undefined 或 null（无数据）时，即使有默认设置也应判定为不达标 (isCompleted = false)", () => {
+    const dir = {
+      lastSession: {
+        filter: { rating: [1] },
+        targetKeep: 5,
+      },
+    };
+
+    const resultUndefined = evaluateDirectoryCompletion(dir, undefined);
+    expect(resultUndefined.isCompleted).toBe(false);
+
+    const resultNull = evaluateDirectoryCompletion(dir, null);
+    expect(resultNull.isCompleted).toBe(false);
+  });
+
   test("当目录有默认设置且 keepCount <= targetKeep 时，应判定为已达标 (isCompleted = true)", () => {
     const dir = {
       lastSession: {
@@ -67,7 +82,7 @@ describe("evaluateDirectoryCompletion", () => {
     expect(result.keepCount).toBe(3);
   });
 
-  test("当目录有子目录 (subdirectoryCount > 0) 时，即使 keepCount <= targetKeep 也不应直接判定为叶子节点达标", () => {
+  test("当目录有子目录 (subdirectoryCount > 0) 且 keepCount <= targetKeep 时，应判定为达标 (isCompleted = true)", () => {
     const dir = {
       lastSession: {
         filter: { rating: [1] },
@@ -81,7 +96,7 @@ describe("evaluateDirectoryCompletion", () => {
 
     const result = evaluateDirectoryCompletion(dir, stats);
 
-    expect(result.isCompleted).toBe(false);
+    expect(result.isCompleted).toBe(true);
   });
 
   test("当 dir.lastSession 为空但 dir.state.lastSession 存在时，应正确取 state.lastSession", () => {

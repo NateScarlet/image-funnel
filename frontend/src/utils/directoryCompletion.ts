@@ -41,7 +41,7 @@ export interface DirectoryCompletionResult {
 // #region 核心计算导出
 /**
  * 基于目录自身的默认设置（lastSession 配置）判定其是否达标。
- * 若无默认设置，则判定为不达标 (isCompleted = false)。
+ * 若无默认设置或无统计数据 (stats 为空)，则判定为不达标 (isCompleted = false)。
  */
 export function evaluateDirectoryCompletion(
   dir: DirectoryLike,
@@ -74,8 +74,8 @@ export function evaluateDirectoryCompletion(
       return sum + (filterRating.includes(rc.rating) ? rc.count : 0);
     }, 0) ?? 0;
 
-  // 判定为无子目录的叶子节点且符合条件的图片数 <= 目标保留数
-  const isCompleted = (stats?.subdirectoryCount ?? 0) === 0 && keepCount <= targetKeep;
+  // 判定为有统计数据且符合条件的图片数 <= 目标保留数
+  const isCompleted = stats != null && keepCount <= targetKeep;
 
   return {
     lastSession: {
