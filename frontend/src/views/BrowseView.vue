@@ -430,10 +430,7 @@ const processedSiblings = computed(() => {
     const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
 
     // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
-    const isFilteredOutButShown =
-      stats &&
-      stats.subdirectoryCount > 0 &&
-      isFilteredOut;
+    const isFilteredOutButShown = stats && stats.subdirectoryCount > 0 && isFilteredOut;
 
     return {
       dir,
@@ -445,7 +442,9 @@ const processedSiblings = computed(() => {
   const visibleItems = items.filter((item) => !item.isFilteredOut || item.isFilteredOutButShown);
 
   // 把 isFilteredOutButShown 的排在最后，以保持与 SubdirectoryGrid 一致
-  return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map((item) => item.dir);
+  return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map(
+    (item) => item.dir,
+  );
 });
 
 // 当前目录在排序后同级目录中的索引位置

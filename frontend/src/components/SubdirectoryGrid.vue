@@ -236,10 +236,7 @@ const processedSubdirectories = computed(() => {
     const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
 
     // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
-    const isFilteredOutButShown =
-      stats &&
-      stats.subdirectoryCount > 0 &&
-      isFilteredOut;
+    const isFilteredOutButShown = stats && stats.subdirectoryCount > 0 && isFilteredOut;
 
     return {
       dir,

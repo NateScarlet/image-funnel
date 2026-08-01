@@ -432,7 +432,6 @@ useEventListeners(window, ({ on }) => {
         e.preventDefault();
       }
       swiping.value = true;
-      recordGestureStart();
       touchStartX.value = touch.clientX;
       touchStartY.value = touch.clientY;
       touchEndX.value = touchStartX.value;
@@ -484,6 +483,7 @@ useEventListeners(window, ({ on }) => {
 
       touchEndX.value = e.changedTouches[0].clientX;
       touchEndY.value = e.changedTouches[0].clientY;
+      recordGestureEnd();
       handleGesture();
       swiping.value = false;
     },
@@ -514,7 +514,7 @@ useEventListeners(window, ({ on }) => {
 const lastImageLoadedEvent = shallowRef<ImageLoadedEvent>();
 const activeImageId = computed(() => currentImage.value?.id);
 const gestureTarget = useGestureTarget(activeImageId);
-const { gestureTargetId, recordGestureStart } = gestureTarget;
+const { gestureTargetId, recordGestureEnd } = gestureTarget;
 
 function handleImageLoaded(e: ImageLoadedEvent) {
   lastImageLoadedEvent.value = e;

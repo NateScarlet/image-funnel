@@ -3,7 +3,7 @@ import Time from "@/utils/Time";
 
 /**
  * 人类反应时间阈值（毫秒）。
- * 当新图片显示不足此时间时开始的手势，目标图修正为上一张图，避免误伤刚切换的新图。
+ * 当新图片显示不足此时间时完成的手势，目标图修正为上一张图，避免误伤刚切换的新图。
  */
 export const GESTURE_REACTION_TIME_MS = 100;
 
@@ -12,7 +12,7 @@ export interface ImageLoadedEvent {
   time: Time;
 }
 
-export interface GestureStartEvent {
+export interface GestureEndEvent {
   time: Time;
   imageId: string;
 }
@@ -29,9 +29,9 @@ export default function useGestureTarget(
 ) {
   const currentLoaded = ref<ImageLoadedEvent>();
   const previousLoaded = ref<ImageLoadedEvent>();
-  const gestureStartEvent = ref<GestureStartEvent>();
+  const gestureEndEvent = ref<GestureEndEvent>();
 
-  // #region 记录图片加载事件
+  // #region 记录图片加载与手势完成事件
   function handleImageLoaded(event: ImageLoadedEvent | null | undefined) {
     if (!event) return;
 
@@ -53,49 +53,50 @@ export default function useGestureTarget(
     currentLoaded.value = event;
   }
 
-  function recordGestureStart() {
+  function recordGestureEnd() {
     const currentId = toValue(currentImageIdGetter);
     if (!currentId) {
-      gestureStartEvent.value = undefined;
+      gestureEndEvent.value = undefined;
       return;
     }
-    gestureStartEvent.value = {
+    gestureEndEvent.value = {
       time: Time.now(),
       imageId: currentId,
     };
   }
 
   const gestureTargetId = computed(() => {
-    const startEvent = gestureStartEvent.value;
-    if (!startEvent) {
+    const endEvent = gestureEndEvent.value;
+    if (!endEvent) {
       return undefined;
     }
 
     const loaded = currentLoaded.value;
     if (!loaded) {
-      return startEvent.imageId;
+      return endEvent.imageId;
     }
 
-    if (loaded.id === startEvent.imageId) {
-      // 手势开始时，加载完成的图与当时的会话当前图一致
-      const displayDurationMs = startEvent.time.sub(loaded.time);
+    if (loaded.id === endEvent.imageId) {
+      // 手势完成时（touchend），加载完成的图与当时的会话当前图一致
+      const displayDurationMs = endEvent.time.sub(loaded.time);
       if (displayDurationMs < reactionTimeMs && previousLoaded.value?.id) {
         return previousLoaded.value.id;
       }
-      return startEvent.imageId;
+      return endEvent.imageId;
     }
 
-    // 手势开始时，会话已切换到新图但新图尚未完成加载：
+    // 手势完成时（touchend），会话已切换到新图但新图尚未完成加载：
     // 用户视角依然在刚完成加载的上一张图（loaded.id）上
     return loaded.id;
   });
+  // #endregion
 
   return {
     currentLoaded,
     previousLoaded,
-    gestureStartEvent,
+    gestureEndEvent,
     gestureTargetId,
     handleImageLoaded,
-    recordGestureStart,
+    recordGestureEnd,
   };
 }
