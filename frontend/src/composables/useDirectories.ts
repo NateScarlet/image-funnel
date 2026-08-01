@@ -5,6 +5,7 @@ import useStorage from "@/composables/useStorage";
 import { sortBy } from "es-toolkit";
 import type { BrowseDirectoriesQueryVariables } from "@/graphql/generated";
 
+// #region 筛选开关全局响应式状态
 export const { model: maxUnratedCount } = useStorage<number>(
   localStorage,
   "max_unrated_count_sub_dir_bf16419b",
@@ -16,6 +17,13 @@ export const { model: showLargeUnrated } = useStorage<boolean>(
   "show_large_unrated_sub_dir_3dfc6a37",
   () => false,
 );
+
+export const { model: showUncompletedDirectories } = useStorage<boolean>(
+  localStorage,
+  "show_uncompleted_directories_sub_dir_a72c49b1",
+  () => false,
+);
+// #endregion
 
 export default function useDirectories(
   variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables>,

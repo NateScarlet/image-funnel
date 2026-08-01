@@ -54,6 +54,13 @@
             的目录（{{ largeUnratedCount }}）
           </span>
         </ToggleSwitch>
+        <!-- 筛选未达标目录开关 -->
+        <template v-if="uncompletedCount">
+          <ToggleSwitch
+            v-model="showUncompletedDirectories"
+            :label="`显示未达标目录（${uncompletedCount}）`"
+          />
+        </template>
       </div>
     </div>
     <div ref="containerRef" class="max-h-[40vh] overflow-y-auto pr-1">
@@ -153,9 +160,14 @@ import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
-import useDirectories, { maxUnratedCount, showLargeUnrated } from "@/composables/useDirectories";
+import useDirectories, {
+  maxUnratedCount,
+  showLargeUnrated,
+  showUncompletedDirectories,
+} from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
+import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{
@@ -198,34 +210,48 @@ const loading = computed(() => subdirectoryLoadingCount.value > 0);
 
 const { getCachedStats } = useDirectoryStats();
 
+const uncompletedCount = computed(() => {
+  return sortedDirectories.value.filter((dir) => {
+    const stats = getCachedStats(dir.id);
+    const completion = evaluateDirectoryCompletion(dir, stats);
+    return !completion.isCompleted;
+  }).length;
+});
+
 const processedSubdirectories = computed(() => {
   const dirs = sortedDirectories.value;
   const limit = maxUnratedCount.value;
   const showLarge = showLargeUnrated.value;
+  const showUncompleted = showUncompletedDirectories.value;
 
   const items = dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
+    const completion = evaluateDirectoryCompletion(dir, stats);
     const unratedCount =
       stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)?.count ??
       0;
 
-    // 当有未评级限制且它包含子目录时，如果它自身的未评级图片数量 > limit，
-    // 说明它本来该被过滤掉，但因为有子目录而被保留显示。
+    const isFilteredOutByCompletion = !showUncompleted && !completion.isCompleted;
+    const isFilteredOutByUnrated = !showLarge && limit !== undefined && unratedCount > limit;
+    const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
+
+    // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
     const isFilteredOutButShown =
-      !showLarge &&
-      limit !== undefined &&
       stats &&
       stats.subdirectoryCount > 0 &&
-      unratedCount > limit;
+      isFilteredOut;
 
     return {
       dir,
+      isFilteredOut,
       isFilteredOutButShown,
     };
   });
 
+  const visibleItems = items.filter((item) => !item.isFilteredOut || item.isFilteredOutButShown);
+
   // 把 isFilteredOutButShown 的排在最后
-  return sortBy(items, [(item) => (item.isFilteredOutButShown ? 1 : 0)]);
+  return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]);
 });
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
