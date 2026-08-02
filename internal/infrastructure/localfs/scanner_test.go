@@ -298,8 +298,19 @@ func TestEmptyTrash(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, cleared)
 
-	// 验证暂存区已清空
-	assert.NoFileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId))
+	// 验证 FindTrashHistory 无法再次查到该已标记删除的记录
+	var historyList []*shared.TrashHistoryItemDTO
+	for h, err := range ctx.imageMover.FindTrashHistory(context.Background()) {
+		require.NoError(t, err)
+		historyList = append(historyList, h)
+	}
+	assert.Empty(t, historyList)
+
+	// 验证暂存区已清空（由于后台异步物理清理，使用 Eventually 等待磁盘擦除完成）
+	assert.Eventually(t, func() bool {
+		_, err := os.Stat(filepath.Join(ctx.rootDir, trashDirName, historyId))
+		return os.IsNotExist(err)
+	}, 2*time.Second, 20*time.Millisecond)
 }
 
 func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {

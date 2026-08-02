@@ -461,11 +461,14 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.U
 	}, nil
 }
 
-// EmptyTrash 清空早于指定存留期的暂存记录。先放回原位，然后系统级回收站删除，若冲突则报错
+// #region 清空回收站
+// EmptyTrash 清空早于指定存留期的暂存记录。通过快速重命名标记删除，并在后台 Goroutine 中进行异步磁盘物理擦除
 func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error) {
 	trashRoot := filepath.Join(s.rootDir, trashDirName)
 
 	errB := util.NewErrorsBuilder(16)
+	var dirsToSweep []string
+
 	// 使用 dirEntries 进行流式分批遍历目录项，避免一次性读入全部条目到内存中
 	for entry, scanErr := range dirEntries(ctx, trashRoot) {
 		if scanErr != nil {
@@ -475,32 +478,65 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 			continue
 		}
 
-		historyId := entry.Name()
-		historyDir := filepath.Join(trashRoot, historyId)
+		name := entry.Name()
+		historyDir := filepath.Join(trashRoot, name)
+
+		// 若发现先前未完成的标记删除目录，一并放入后台物理清理队列中
+		if strings.HasPrefix(name, "deleting_") {
+			dirsToSweep = append(dirsToSweep, historyDir)
+			continue
+		}
+
+		// 仅处理标准的回收站历史目录
+		if !strings.HasPrefix(name, "trash_") {
+			continue
+		}
 
 		metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
 		if err != nil {
-			errB.Add(fmt.Errorf("failed to read meta.json for trash history %s: %w", historyId, err))
+			errB.Add(fmt.Errorf("failed to read meta.json for trash history %s: %w", name, err))
 			continue
 		}
 		var meta trashMeta
 		if err := json.Unmarshal(metaBytes, &meta); err != nil {
-			errB.Add(fmt.Errorf("failed to parse meta.json for trash history %s: %w", historyId, err))
+			errB.Add(fmt.Errorf("failed to parse meta.json for trash history %s: %w", name, err))
 			continue
 		}
 
-		// 如果存留时间超过设定时长，立即流式删除，不进行在内存中的全量收集
+		// 如果存留时间超过设定时长，将其瞬间重命名为 deleting_<historyId> 进行标记删除
 		if time.Since(meta.TrashedAt) >= minAge {
-			if err := trashOrDelete([]string{historyDir}, s.useSystemRecycleBin); err != nil {
-				errB.Add(fmt.Errorf("failed to delete history directory %s: %w", historyId, err))
+			deletingDir := filepath.Join(trashRoot, "deleting_"+name)
+			if err := os.Rename(historyDir, deletingDir); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				errB.Add(fmt.Errorf("failed to mark trash history %s for deletion: %w", name, err))
 				continue
 			}
+			dirsToSweep = append(dirsToSweep, deletingDir)
 			clearedCount++
 		}
 	}
 
+	// 若存在待擦除目录，启动后台 Goroutine 进行异步物理清理，避免阻塞 HTTP/GraphQL 请求
+	if len(dirsToSweep) > 0 {
+		useSystemRecycleBin := s.useSystemRecycleBin
+		go func(paths []string) {
+			const batchSize = 64
+			for i := 0; i < len(paths); i += batchSize {
+				end := i + batchSize
+				if end > len(paths) {
+					end = len(paths)
+				}
+				batch := paths[i:end]
+				_ = trashOrDelete(batch, useSystemRecycleBin)
+			}
+		}(dirsToSweep)
+	}
+
 	return clearedCount, errB.Build()
 }
+// #endregion
 
 // FindTrashHistory 获取历史记录列表迭代器
 func (s *ImageMover) FindTrashHistory(ctx context.Context) iter.Seq2[*shared.TrashHistoryItemDTO, error] {
