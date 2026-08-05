@@ -29,10 +29,49 @@ class FilenameManager:
         self._date_filename_nodes = date_filename_nodes
         self._title_to_node = title_to_node
 
+    def _evaluate_template_for_prompt(
+        self,
+        wf_template: str,
+        prompt: Dict[str, Any],
+        original_val: Optional[str] = None,
+    ) -> str:
+        """
+        根据 workflow 中的模板 wf_template 和 prompt 中各源变量节点的当前输入值，
+        将模板展开求值为发给 API 的静态 filename_prefix 字符串（prompt 不保留 % 模板语法）。
+        """
+        result = wf_template
+        now = datetime.datetime.now()
+
+        # 1. 替换非日期变量 %NodeTitle.input_key% 或 %NodeTitle%
+        for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
+            var_name = m.group(1)
+            placeholder = m.group(0)
+            if var_name.startswith("date:"):
+                continue
+
+            node_title = var_name.rsplit(".", 1)[0]
+            pid = self._title_to_node.get(node_title)
+            if pid and pid in prompt:
+                input_key = var_name.rsplit(".", 1)[1] if "." in var_name else "value"
+                val = prompt[pid].get("inputs", {}).get(input_key)
+                if isinstance(val, str):
+                    result = result.replace(placeholder, val)
+
+        # 2. 替换日期变量 %date:format%
+        for m in re.finditer(r"%date:([^%]+)%", result):
+            comfy_fmt = m.group(1)
+            py_fmt, _ = self.convert_comfy_date_format_to_python(comfy_fmt)
+            placeholder = m.group(0)
+            new_date_str = now.strftime(py_fmt)
+            result = result.replace(placeholder, new_date_str, 1)
+
+        return result
+
     def update_output_filenames(self) -> None:
         """
-        扫描 workflow 和 prompt 中的输出节点，如果发现使用了 %date:...% 占位符且在 prompt 中被写死为旧日期，
-        将其更新为当前系统时间的日期静态值。
+        扫描 workflow 和 prompt 中的输出节点：
+        - 在 workflow 中保留模版变量语法（如 %Project.value%）。
+        - 在 prompt API 结构中，根据 workflow 模板和 prompt 里源变量的当前值展开为求值后的快照，使修改源变量生效。
         """
         if not self._date_filename_nodes:
             return
@@ -67,25 +106,35 @@ class FilenameManager:
             return
 
         now = datetime.datetime.now()
-
         prompt = self._accessor.prompt
-        for node_id_str, (
-            py_fmt,
-            regex_pattern,
-            is_subgraph,
-            subgraph_id,
-        ) in date_patterns.items():
+
+        for node_info in self._date_filename_nodes:
+            if node_info.is_disabled:
+                continue
+
+            widgets_values = node_info.widgets_values
+            if not widgets_values:
+                continue
+
+            wf_template: Optional[str] = None
+            for val in widgets_values:
+                if isinstance(val, str) and "%" in val:
+                    wf_template = val
+                    break
+
             api_node_ids: List[str] = []
-            if not is_subgraph:
-                api_node_ids = [node_id_str]
+            if not node_info.is_subgraph:
+                api_node_ids = [node_info.node_id]
             else:
                 for cached_info in self._accessor.nodes_cache.values():
                     if (
                         not cached_info.is_subgraph
-                        and cached_info.node_type == subgraph_id
+                        and cached_info.node_type == node_info.subgraph_id
                     ):
                         if not cached_info.is_disabled:
-                            api_node_ids.append(f"{cached_info.node_id}:{node_id_str}")
+                            api_node_ids.append(
+                                f"{cached_info.node_id}:{node_info.node_id}"
+                            )
 
             for api_node_id in api_node_ids:
                 if api_node_id not in prompt:
@@ -109,7 +158,22 @@ class FilenameManager:
 
                     src_inputs = prompt[src_node_id].setdefault("inputs", {})
                     prefix_val: Any = src_inputs.get(src_key)
-                    if isinstance(prefix_val, str):
+
+                    if wf_template:
+                        # workflow 中保留模板变量，prompt 中展开求值
+                        eval_val = self._evaluate_template_for_prompt(
+                            wf_template,
+                            prompt,
+                            original_val=(
+                                prefix_val if isinstance(prefix_val, str) else None
+                            ),
+                        )
+                        src_inputs[src_key] = eval_val
+                    elif (
+                        isinstance(prefix_val, str)
+                        and node_info.node_id in date_patterns
+                    ):
+                        py_fmt, regex_pattern, _, _ = date_patterns[node_info.node_id]
                         new_date_str: str = now.strftime(py_fmt)
                         if re.search(regex_pattern, prefix_val):
                             new_prefix: str = re.sub(
@@ -120,6 +184,7 @@ class FilenameManager:
     def adjust_output_directory(self, rel_dir: str) -> None:
         """
         根据相对路径 rel_dir 调整所有输出节点的 filename_prefix。
+        在 workflow 中保留模版变量语法，在 prompt 中求值展开为静态快照字符串。
         """
         prompt = self._accessor.prompt
         for node_id, node in prompt.items():
@@ -177,42 +242,46 @@ class FilenameManager:
                         if updates:
                             for pid, input_key, val in updates:
                                 prompt[pid].setdefault("inputs", {})[input_key] = val
-                            new_prefix = wf_template
-                            for m in re.finditer(r"%date:([^%]+)%", new_prefix):
-                                comfy_fmt = m.group(1)
-                                _, date_regex = (
-                                    self.convert_comfy_date_format_to_python(comfy_fmt)
-                                )
-                                date_m = re.search(date_regex, original_val)
-                                if date_m:
-                                    new_prefix = new_prefix.replace(
-                                        m.group(0), date_m.group(0), 1
-                                    )
-                            for i, placeholder in enumerate(var_placeholders):
-                                if i < len(rel_parts):
-                                    new_prefix = new_prefix.replace(
-                                        placeholder, rel_parts[i], 1
-                                    )
-                            src_inputs[src_key] = new_prefix
+                                src_wf_info = self._accessor.nodes_cache.get(pid)
+                                if src_wf_info and src_wf_info.widgets_values:
+                                    src_wf_info.widgets_values[0] = val
+                            # workflow 保留模板语法，prompt 中求值展开
+                            eval_val = self._evaluate_template_for_prompt(
+                                wf_template, prompt, original_val
+                            )
+                            src_inputs[src_key] = eval_val
                             continue
 
-                    flat_val = original_val.replace("/", "__").replace("\\", "__")
-                    new_val = (
-                        f"{rel_dir}/{flat_val}"
+                    new_template = (
+                        f"{rel_dir}/{wf_template}"
                         if rel_dir and rel_dir != "."
-                        else flat_val
+                        else wf_template
                     )
-                    src_inputs[src_key] = new_val
-
                     if terminal_info and terminal_info.widgets_values:
                         for idx, val in enumerate(terminal_info.widgets_values):
-                            if isinstance(val, str):
-                                flat_wf = val.replace("/", "__").replace("\\", "__")
-                                terminal_info.widgets_values[idx] = (
-                                    f"{rel_dir}/{flat_wf}"
-                                    if rel_dir and rel_dir != "."
-                                    else flat_wf
-                                )
+                            if isinstance(val, str) and "%" in val:
+                                terminal_info.widgets_values[idx] = new_template
+
+                    eval_val = self._evaluate_template_for_prompt(
+                        new_template, prompt, original_val
+                    )
+                    src_inputs[src_key] = eval_val
+                    continue
+                else:
+                    new_template = (
+                        f"{rel_dir}/{wf_template}"
+                        if rel_dir and rel_dir != "."
+                        else wf_template
+                    )
+                    if terminal_info and terminal_info.widgets_values:
+                        for idx, val in enumerate(terminal_info.widgets_values):
+                            if isinstance(val, str) and "%" in val:
+                                terminal_info.widgets_values[idx] = new_template
+
+                    eval_val = self._evaluate_template_for_prompt(
+                        new_template, prompt, original_val
+                    )
+                    src_inputs[src_key] = eval_val
                     continue
 
             original_basename = os.path.basename(original_val)
