@@ -44,10 +44,10 @@
 
           <!-- 继续筛选：仅当目录存在服务端仍在的会话时显示 -->
           <RouterLink
-            v-if="serverSession"
+            v-if="lastSession"
             :to="{
               name: 'session',
-              params: { id: serverSession.id },
+              params: { id: lastSession.id },
             }"
             title="恢复上一次筛选会话"
             class="flex-1 py-3 px-6 bg-secondary-600 hover:bg-secondary-700 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 no-underline text-white"
@@ -103,11 +103,7 @@ import { computed, ref, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import { mdiLoading, mdiFolder } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
-import {
-  MetaDocument,
-  RootDirectoryDocument,
-  DirectoryLastSessionDocument,
-} from "../graphql/generated";
+import { MetaDocument, RootDirectoryDocument } from "../graphql/generated";
 import CreateSessionForm from "../components/CreateSessionForm.vue";
 import DirectorySelector from "../components/DirectorySelector.vue";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
@@ -147,18 +143,7 @@ const selectedDirectoryId = computed({
 });
 
 // 查询当前所选目录的会话状态
-const { lastSession } = useDirectoryState(() => selectedDirectoryId.value);
-
-// 查询服务端仍在的会话（用于判断"继续筛选"按钮是否显示）
-const { data: lastSessionData } = useQuery(DirectoryLastSessionDocument, {
-  variables: () => (selectedDirectoryId.value ? { id: selectedDirectoryId.value } : undefined),
-  loadingCount,
-});
-
-const serverSession = computed(() => {
-  const node = lastSessionData.value?.node;
-  return node?.__typename === "Directory" ? node.lastSession : undefined;
-});
+const { lastSession, lastSessionState } = useDirectoryState(() => selectedDirectoryId.value);
 
 // 自动创建会话（基于目录上次配置）
 const { autoCreateSession } = useAutoCreateSession(
@@ -178,8 +163,8 @@ const creatingSession = ref(false);
 
 // 处理"开始新筛选"按钮点击
 async function handleStartNew() {
-  // 目录有上次配置：不弹窗，自动用上次配置创建会话
-  if (lastSession.value) {
+  // 目录有活跃会话或上次配置快照：不弹窗，自动用上次配置创建会话
+  if (lastSession.value || lastSessionState.value) {
     creatingSession.value = true;
     try {
       const session = await autoCreateSession();

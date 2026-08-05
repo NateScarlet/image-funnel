@@ -92,26 +92,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
   const lastSession = computed(() => {
     const node = lastSessionData.value?.node;
-    const activeSession = node?.__typename === "Directory" ? node.lastSession : undefined;
-    if (activeSession) {
-      return activeSession;
-    }
-    const stateSession = serverState.value?.lastSession;
-    if (stateSession) {
-      return {
-        id: stateSession.id,
-        filter: {
-          id: "",
-          directoryId: dirIdRef.value,
-          rating: stateSession.filter.rating,
-          label: stateSession.filter.label,
-          query: stateSession.filter.query || undefined,
-        },
-        targetKeep: stateSession.targetKeep,
-        updatedAt: serverState.value?.updatedAt || "",
-      };
-    }
-    return undefined;
+    return node?.__typename === "Directory" ? node.lastSession ?? undefined : undefined;
   });
 
   /**

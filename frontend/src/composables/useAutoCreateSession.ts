@@ -19,7 +19,9 @@ export function useAutoCreateSession(
   fallbackTargetKeep: MaybeRefOrGetter<number>,
   options?: { mergeAllFilterFields?: boolean },
 ) {
-  const { lastSession, defaultState } = useDirectoryState(() => toValue(directoryId));
+  const { lastSession, lastSessionState, defaultState } = useDirectoryState(() =>
+    toValue(directoryId),
+  );
   const { createSession } = useSession("");
 
   /**
@@ -33,8 +35,8 @@ export function useAutoCreateSession(
     const targetKeep = toValue(fallbackTargetKeep);
     const mergeAll = options?.mergeAllFilterFields !== false;
 
-    // 以目录 lastSession 快照为准，缺失项回退到传入的 fallback，应用最小参数原则（不透传空切片）
-    const lastFilter = lastSession.value?.filter;
+    // 以目录 active lastSession 或 state 中的 lastSession 快照为准，缺失项回退到传入的 fallback，应用最小参数原则（不透传空切片）
+    const lastFilter = lastSession.value?.filter ?? lastSessionState.value?.filter;
     const finalFilter: ImageFiltersInput = {
       rating: optionalArray(lastFilter?.rating)?.slice() ?? optionalArray(filter.rating)?.slice(),
     };
@@ -45,7 +47,8 @@ export function useAutoCreateSession(
         optionalArray(lastFilter?.label)?.slice() ?? optionalArray(filter.label)?.slice();
       finalFilter.query = lastFilter?.query || filter.query || undefined;
     }
-    const finalTargetKeep = lastSession.value?.targetKeep ?? targetKeep;
+    const finalTargetKeep =
+      lastSession.value?.targetKeep ?? lastSessionState.value?.targetKeep ?? targetKeep;
 
     return await createSession({
       directoryId: dirId,
