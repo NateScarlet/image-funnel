@@ -87,7 +87,7 @@
     <!-- 文本编辑区 -->
     <div class="relative w-full group">
       <!-- 自动完成浮层 -->
-      <Teleport to="body">
+      <Teleport :to="rendererEl">
         <div
           ref="floatingEl"
           :style="floatingStyles"
@@ -202,6 +202,7 @@ import useQuery from "@/graphql/utils/useQuery";
 import mutate from "@/graphql/utils/mutate";
 import { HooksDocument, DispatchNoteHookDocument } from "@/graphql/generated";
 import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
+import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
 import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
@@ -229,6 +230,8 @@ const emit = defineEmits<(e: "input") => void>();
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const floatingEl = ref<HTMLElement | null>(null);
+
+const rendererEl = useFullscreenRendererElement();
 
 const { floatingStyles } = useFloating(textareaRef, floatingEl, {
   placement: "top-start",
