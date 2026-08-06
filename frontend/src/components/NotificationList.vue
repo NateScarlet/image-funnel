@@ -37,10 +37,18 @@
           <div class="text-sm font-medium">{{ notification.message }}</div>
           <div
             v-if="notification.body"
-            class="mt-1 text-xs opacity-90 break-words whitespace-pre-wrap"
+            :ref="(el) => registerBodyEl(notification.id, el)"
+            class="mt-1 text-xs opacity-90 break-words whitespace-pre-wrap max-h-24 overflow-hidden"
           >
             {{ notification.body }}
           </div>
+          <button
+            v-if="notification.body && overflowMap.get(notification.id)"
+            class="text-xs text-secondary-400 hover:text-secondary-300 transition-colors cursor-pointer mt-1"
+            @click.stop="openBodyDialog(notification)"
+          >
+            查看全文
+          </button>
           <div
             v-if="notification.actions && notification.actions.length > 0"
             class="mt-2 flex gap-2"
@@ -65,13 +73,25 @@
         </button>
       </div>
     </TransitionGroup>
+
+    <!-- 通知正文全文弹窗 -->
+    <bodyDialog.component container-class="sm:max-w-lg">
+      <NotificationBodyDialog
+        v-if="bodyDialogNotification"
+        :title="bodyDialogNotification.title"
+        :body="bodyDialogNotification.body"
+        @close="bodyDialog.close()"
+      />
+    </bodyDialog.component>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, reactive, nextTick, onUpdated } from "vue";
 import useNotification from "../composables/useNotification";
 import type { Notification, NotificationAction } from "../composables/useNotification";
+import useModalDialog from "../composables/useModalDialog";
+import NotificationBodyDialog from "./NotificationBodyDialog.vue";
 import {
   mdiClose,
   mdiAlertCircleOutline,
@@ -83,6 +103,54 @@ import {
 
 const { notifications, remove, clear } = useNotification();
 const MAX_NOTIFICATIONS = 5;
+
+// #region 正文溢出检测与全文弹窗
+const overflowMap = reactive(new Map<number, boolean>());
+const bodyRefs = new Map<number, HTMLDivElement>();
+
+function registerBodyEl(id: number, el: unknown) {
+  if (el === null) {
+    // 元素已从 DOM 中移除，清理状态
+    bodyRefs.delete(id);
+    overflowMap.delete(id);
+    return;
+  }
+  if (!(el instanceof HTMLDivElement)) {
+    console.error("NotificationList: 正文元素类型异常", el);
+    return;
+  }
+  bodyRefs.set(id, el);
+  nextTick(() => {
+    overflowMap.set(id, el.scrollHeight > el.clientHeight);
+  });
+}
+
+onUpdated(() => {
+  for (const [id, el] of bodyRefs) {
+    overflowMap.set(id, el.scrollHeight > el.clientHeight);
+  }
+});
+
+const bodyDialogNotification = ref<{ id: number; title: string; body: string }>();
+
+const bodyDialog = useModalDialog({
+  onDidOpen() {
+    document.body.style.overflow = "hidden";
+  },
+  onWillClose() {
+    document.body.style.overflow = "";
+  },
+});
+
+function openBodyDialog(notification: Notification) {
+  bodyDialogNotification.value = {
+    id: notification.id,
+    title: notification.message,
+    body: notification.body ?? "",
+  };
+  bodyDialog.open();
+}
+// #endregion
 
 const visibleNotifications = computed(() => {
   return notifications.value.slice(-MAX_NOTIFICATIONS);
