@@ -26,7 +26,7 @@
           'p-4 rounded-lg shadow-lg flex items-start gap-3 cursor-pointer',
           typeClasses[notification.type],
         ]"
-        @click="remove(notification.id)"
+        @click="notification.persistent ? undefined : remove(notification.id)"
       >
         <div class="shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-6 h-6">
@@ -64,6 +64,7 @@
           </div>
         </div>
         <button
+          v-if="!notification.persistent"
           class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
           @click.stop="remove(notification.id)"
         >

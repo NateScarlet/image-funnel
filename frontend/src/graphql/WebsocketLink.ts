@@ -3,6 +3,7 @@ import type { Client, ClientOptions } from "graphql-ws";
 import { createClient } from "graphql-ws";
 import type { GraphQLError } from "graphql";
 import { print } from "graphql";
+import useNotification from "@/composables/useNotification";
 import type OperationContext from "./OperationContext";
 
 export default class WebSocketLink extends ApolloLink {
@@ -19,6 +20,10 @@ export default class WebSocketLink extends ApolloLink {
   constructor(options: ClientOptions) {
     super();
     this.restartRequested = false;
+
+    const { show, remove } = useNotification();
+    let reconnectingNotifId: number | undefined;
+
     this.restartFn = async () => {
       this.restartRequested = true;
       return new Promise((resolve) => {
@@ -30,6 +35,11 @@ export default class WebSocketLink extends ApolloLink {
       on: {
         ...options.on,
         opened: (socket) => {
+          // 重连成功后清除重连通知
+          if (reconnectingNotifId !== undefined) {
+            remove(reconnectingNotifId);
+            reconnectingNotifId = undefined;
+          }
           while (this.onOpenedOnce.length) {
             this.onOpenedOnce.pop()?.();
           }
@@ -49,6 +59,16 @@ export default class WebSocketLink extends ApolloLink {
             void this.restartFn();
           }
           options.on?.opened?.(socket);
+        },
+        closed: () => {
+          if (reconnectingNotifId === undefined) {
+            reconnectingNotifId = show("正在重连…", "info", 0, undefined, undefined, true);
+          }
+        },
+        error: () => {
+          if (reconnectingNotifId === undefined) {
+            reconnectingNotifId = show("正在重连…", "info", 0, undefined, undefined, true);
+          }
         },
       },
     });

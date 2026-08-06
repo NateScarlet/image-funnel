@@ -14,6 +14,7 @@ export interface Notification {
   body?: string;
   duration?: number;
   actions?: NotificationAction[];
+  persistent?: boolean;
 }
 
 // #region 全局状态
@@ -30,6 +31,7 @@ export default function useNotification() {
     duration = 3000,
     actions?: NotificationAction[],
     body?: string,
+    persistent?: boolean,
   ) {
     const id = nextId;
     nextId++;
@@ -40,6 +42,7 @@ export default function useNotification() {
       body,
       duration,
       actions,
+      persistent,
     };
 
     notifications.value.push(notification);
@@ -79,7 +82,7 @@ export default function useNotification() {
   }
 
   function clear() {
-    notifications.value = [];
+    notifications.value = notifications.value.filter((n) => n.persistent);
   }
   // #endregion
 
