@@ -176,12 +176,27 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         if not root_dir:
             raise ValueError("Environment variable IMAGE_FUNNEL_ROOT_DIR is missing.")
         targets = client.fetch_images(directory_id, root_dir, config.required_rating)
-    else:
-        # queue 场景
-        if config.image_paths:
-            for idx, path in enumerate(config.image_paths):
-                img_id = config.image_ids[idx] if idx < len(config.image_ids) else ""
-                targets.append((img_id, path))
+    elif args.command == "queue" and config.trigger == "post_commit_session":
+        # queue 场景（会话提交触发）：拉取目录内匹配评分且未打标的图片
+        _LOGGER.debug("Command is queue, fetching images via GraphQL...")
+
+        directory_id = os.getenv("IMAGE_FUNNEL_DIRECTORY_ID")
+        if not directory_id:
+            raise ValueError(
+                "Environment variable IMAGE_FUNNEL_DIRECTORY_ID is missing."
+            )
+        root_dir = os.getenv("IMAGE_FUNNEL_ROOT_DIR")
+        if not root_dir:
+            raise ValueError("Environment variable IMAGE_FUNNEL_ROOT_DIR is missing.")
+        # 仅入列未打标的图片：已打标（如入列成功后设置的标签）视为已入列过，避免重复提交
+        targets = client.fetch_images(
+            directory_id, root_dir, config.required_rating, filter_label=[""]
+        )
+    elif config.image_paths:
+        # queue 场景（手动派发或笔记触发）：使用传入的图片
+        for idx, path in enumerate(config.image_paths):
+            img_id = config.image_ids[idx] if idx < len(config.image_ids) else ""
+            targets.append((img_id, path))
 
     if max_match > 0 and len(targets) > max_match:
         _LOGGER.warning(

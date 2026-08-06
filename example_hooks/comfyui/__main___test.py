@@ -236,7 +236,7 @@ class TestComfyUIHook(unittest.TestCase):
         def exit_side_effect(code: Any = 0) -> None:
             raise SystemExit(code)
 
-        # 1. queue command, no images, auto trigger → exit 0, write KEEP
+        # 1. queue command, post_commit_session trigger, no images → exit 0, write KEEP
         config = ComfyUIConfig(
             image_paths=[],
             image_ids=[],
@@ -244,9 +244,18 @@ class TestComfyUIHook(unittest.TestCase):
             trigger="post_commit_session",
         )
         mock_client = _make_mock_client()
+        mock_client.fetch_images.return_value = []
         with patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
             "sys.exit", side_effect=exit_side_effect
-        ), patch("comfyui.__main__._write_action_override") as mock_override:
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
+        ):
             with self.assertRaises(SystemExit) as cm:
                 run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 0)
@@ -325,6 +334,47 @@ class TestComfyUIHook(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 1)
+            mock_override.assert_called_once_with("KEEP", "dummy_action_path")
+
+    def test_queue_post_commit_session_fetches_unlabeled_images(self):
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+        from typing import Any
+
+        # queue 命令 + post_commit_session 触发：应从 GraphQL 拉取目录内匹配评分且未打标的图片
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+            required_rating=4,
+        )
+        mock_client = MagicMock(spec=GraphQLClient)
+        mock_client.fetch_images.return_value = []
+
+        def exit_side_effect(code: Any = 0) -> None:
+            raise SystemExit(code)
+
+        with patch("sys.argv", ["comfyui/__main__.py", "queue"]), patch(
+            "sys.exit", side_effect=exit_side_effect
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                run_comfyui(mock_client, config)
+            self.assertEqual(cm.exception.code, 0)
+            # 以空标签过滤拉取，避免已入列（已打标）图片被重复提交
+            mock_client.fetch_images.assert_called_once_with(
+                "dir:test", "/mock/root", 4, filter_label=[""]
+            )
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
 

@@ -121,9 +121,13 @@ class GraphQLClient:
         self.execute(query, variables)
 
     def fetch_images(
-        self, directory_id: str, root_dir: str, filter_rating: Optional[int]
+        self,
+        directory_id: str,
+        root_dir: str,
+        filter_rating: Optional[int],
+        filter_label: Optional[List[str]] = None,
     ) -> List[Tuple[str, str]]:
-        """通过 GraphQL 查询指定目录下的图片，并可选按评分过滤。"""
+        """通过 GraphQL 查询指定目录下的图片，并可选按评分或标签过滤。"""
         query = """
         query GetDirectoryImages($dirID: ID!, $filter: ImageFiltersInput) {
           node(id: $dirID) {
@@ -141,6 +145,8 @@ class GraphQLClient:
         filter_input: Dict[str, Any] = {}
         if filter_rating is not None:
             filter_input["rating"] = [filter_rating]
+        if filter_label is not None:
+            filter_input["label"] = filter_label
 
         variables = {
             "dirID": directory_id,
