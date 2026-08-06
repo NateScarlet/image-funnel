@@ -210,3 +210,29 @@ class TestOperationHistory(unittest.TestCase):
                 history = OperationHistory(db_ctx)
                 res = history.get_added_prompts(["1girl"])
                 self.assertEqual(res, set())
+
+    def test_get_all_added_prompts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, ".io.github.natescarlet.hook.db")
+            with SQLiteContext(db_path) as db_ctx:
+                history = OperationHistory(db_ctx)
+                history.record("add", {"prompt": "solo"})
+                history.record("add", {"prompt": "1girl"})
+                history.record("add", {"prompt": "solo"})  # 重复添加
+                history.record("remove", {"prompt": "bad hands"})
+
+                res = history.get_all_added_prompts()
+                # 按最近添加时间倒序，solo 最后添加应排最前
+                self.assertEqual(len(res), 2)
+                self.assertEqual(res[0][0], "solo")
+                self.assertEqual(res[1][0], "1girl")
+
+    def test_get_all_added_prompts_db_not_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(
+                tmp, "non_exist_dir", ".io.github.natescarlet.hook.db"
+            )
+            with SQLiteContext(db_path) as db_ctx:
+                history = OperationHistory(db_ctx)
+                res = history.get_all_added_prompts()
+                self.assertEqual(res, [])

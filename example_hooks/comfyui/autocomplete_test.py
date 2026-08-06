@@ -394,6 +394,144 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self.assertEqual(suggestions2[1].text, "solo")
             self.assertEqual(suggestions2[1].style, "")
 
+    def test_autocomplete_danbooru_history_fallback(self) -> None:
+        """空 query 且无关联标签时，应回退到历史添加的标签"""
+        # 模拟历史数据
+        mock_history = [
+            ("1girl", "2026-08-07T10:00:00"),
+            ("solo", "2026-08-06T10:00:00"),
+        ]
+
+        with patch(
+            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
+            },
+        ):
+            # 空 query，无 cwords，无 workflow
+            context = self._make_context(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+                seen_prompts={},
+                workflow=None,
+                prompt_meta=None,
+            )
+            provider = DanbooruProvider(MagicMock())
+            suggestions = list(provider.provide(context))
+
+            # 应返回所有历史标签，按时间倒序
+            self.assertEqual(len(suggestions), 2)
+            self.assertEqual(suggestions[0].text, "1girl")
+            self.assertEqual(suggestions[0].style, "muted")
+            self.assertIn("历史添加", suggestions[0].description)
+            self.assertEqual(suggestions[1].text, "solo")
+            self.assertEqual(suggestions[1].style, "muted")
+
+    def test_autocomplete_danbooru_history_fallback_filter_seen(self) -> None:
+        """历史回退时，应过滤掉当前提示词中已存在的标签"""
+        mock_history = [
+            ("1girl", "2026-08-07T10:00:00"),
+            ("solo", "2026-08-06T10:00:00"),
+        ]
+
+        with patch(
+            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
+            },
+        ):
+            # seen_prompts 中包含 "1girl"
+            context = self._make_context(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+                seen_prompts={"1girl": "区域: positive"},
+                workflow=None,
+                prompt_meta=None,
+            )
+            provider = DanbooruProvider(MagicMock())
+            suggestions = list(provider.provide(context))
+
+            # 应只返回 "solo"（"1girl" 已在提示词中）
+            self.assertEqual(len(suggestions), 1)
+            self.assertEqual(suggestions[0].text, "solo")
+
+    def test_autocomplete_danbooru_history_fallback_no_env(self) -> None:
+        """没有环境变量时，历史回退不应生效"""
+        with patch.dict(os.environ, clear=True):
+            context = self._make_context(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+                seen_prompts={},
+                workflow=None,
+                prompt_meta=None,
+            )
+            provider = DanbooruProvider(MagicMock())
+            suggestions = list(provider.provide(context))
+
+            # 无历史环境变量，应返回空
+            self.assertEqual(len(suggestions), 0)
+
+    def test_autocomplete_danbooru_history_supplement_related(self) -> None:
+        """有关联标签时，历史标签应作为补充追加"""
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("1girl", "女孩", "A female character.", "General"),
+            DanbooruTag("solo", "单人", "Solo image.", "General"),
+        ]
+
+        mock_history = [
+            ("1girl", "2026-08-07T10:00:00"),
+            ("solo", "2026-08-06T10:00:00"),
+            ("masterpiece", "2026-08-05T10:00:00"),
+        ]
+
+        with patch(
+            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
+        ), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
+            },
+        ):
+            context = self._make_context(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                parsed_args=self._make_parsed_args(command="add"),
+                seen_prompts={"portrait": "区域: positive"},
+                workflow={"nodes": []},
+                prompt_meta={},
+            )
+            provider = DanbooruProvider(mock_provider)
+            suggestions = list(provider.provide(context))
+
+            # 应包含关联联想结果（2个）
+            # 加上历史补充中不重复的（只有 masterpiece 不重复）
+            self.assertEqual(len(suggestions), 3)
+            # 关联联想在前
+            self.assertEqual(suggestions[0].text, "1girl")
+            self.assertEqual(suggestions[1].text, "solo")
+            # 历史补充在后，且不应重复关联联想已有的标签
+            self.assertEqual(suggestions[2].text, "masterpiece")
+            self.assertEqual(suggestions[2].style, "muted")
+
     def test_autocomplete_add_prompt_with_neg_flag(self) -> None:
         mock_provider = MagicMock()
         mock_provider.search.return_value = [

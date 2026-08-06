@@ -29,7 +29,11 @@ from .__main__ import (
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
-from .operation_history import get_added_prompts, get_added_prompt_times
+from .operation_history import (
+    get_added_prompts,
+    get_added_prompt_times,
+    get_all_added_prompts,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -596,6 +600,16 @@ def _format_relative_time(created_at: str) -> str:
     return f"{days}天前"
 
 
+def _build_seen_lower(seen_prompts: dict[str, str]) -> set[str]:
+    """从 seen_prompts 提取所有提示词的小写集合，用于过滤。"""
+    return {
+        s.strip('"').strip("'").lower()
+        for p in seen_prompts
+        for s in p.split(",")
+        if s.strip()
+    }
+
+
 class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
 
@@ -656,6 +670,43 @@ class DanbooruProvider(AutocompleteProvider):
                 else {}
             )
             yield from apply_styles(suggestions, added, added_times)
+
+        def _yield_history_suggestions(
+            seen_lower: set[str],
+            *,
+            exclude_lower: set[str] = set(),
+        ) -> Iterator[AutocompleteSuggestion]:
+            """从操作历史生成标签建议，过滤掉已存在的标签和排除列表中的标签。"""
+            try:
+                history_prompts = get_all_added_prompts()
+                if not history_prompts:
+                    return
+                count = 0
+                for prompt, created_at in history_prompts:
+                    if prompt.lower() in seen_lower or prompt.lower() in exclude_lower:
+                        continue
+                    relative = (
+                        _format_relative_time(created_at) if created_at else "之前"
+                    )
+                    yield AutocompleteSuggestion(
+                        text=quote_if_needed(prompt),
+                        displayText=prompt,
+                        description=f"({relative}历史添加) {prompt}",
+                        type="danbooru",
+                        style="muted",
+                    )
+                    count += 1
+                    if count >= 20:
+                        break
+            except Exception as e:
+                _LOGGER.warning("Failed to get history prompts: %s", e, exc_info=True)
+                yield AutocompleteSuggestion(
+                    text="",
+                    displayText="⚠ 历史标签获取失败",
+                    description=f"{e}",
+                    type="error",
+                    style="",
+                )
 
         has_history = (
             "IMAGE_FUNNEL_ROOT_DIR" in os.environ
@@ -762,6 +813,21 @@ class DanbooruProvider(AutocompleteProvider):
                     return
 
                 yield from _yield_styled(suggestions)
+
+                # 作为关联联想的补充：产出历史标签建议，过滤掉关联联想已显示的标签
+                if has_history:
+                    related_lower = {
+                        s.text.strip('"').strip("'").lower() for s in suggestions
+                    }
+                    yield from _yield_history_suggestions(
+                        _build_seen_lower(context.seen_prompts),
+                        exclude_lower=related_lower,
+                    )
+            elif has_history:
+                # 没有关联查询标签时，从操作历史中获取之前添加过的标签
+                yield from _yield_history_suggestions(
+                    _build_seen_lower(context.seen_prompts)
+                )
 
 
 def autocomplete(

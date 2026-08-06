@@ -140,6 +140,22 @@ class OperationHistory:
         ).fetchall()
         return {row[0]: row[1] for row in rows}
 
+    def get_all_added_prompts(self) -> list[tuple[str, str]]:
+        """返回所有历史 add 操作的去重提示词列表，按最近添加时间倒序排列。
+
+        返回 (prompt, created_at) 元组列表。
+        """
+        if self.db_path != ":memory:" and not os.path.isfile(self.db_path):
+            return []
+
+        rows = self.db_ctx.connection.execute(
+            "SELECT json_extract(data, '$.prompt'), MAX(created_at) FROM history "
+            "WHERE command = 'add' AND json_extract(data, '$.prompt') IS NOT NULL "
+            "GROUP BY json_extract(data, '$.prompt') "
+            "ORDER BY MAX(created_at) DESC"
+        ).fetchall()
+        return [(row[0], row[1]) for row in rows]
+
 
 def get_added_prompts(candidates: list[str]) -> set[str]:
     """返回 candidates 中已在历史记录中存在的提示词集合。"""
@@ -149,3 +165,8 @@ def get_added_prompts(candidates: list[str]) -> set[str]:
 def get_added_prompt_times(candidates: list[str]) -> dict[str, str]:
     """返回 candidates 中各提示词最近一次添加的 created_at 时间戳字典。"""
     return OperationHistory.from_env().get_added_prompt_times(candidates)
+
+
+def get_all_added_prompts() -> list[tuple[str, str]]:
+    """返回所有历史 add 操作的去重提示词列表，按最近添加时间倒序排列。"""
+    return OperationHistory.from_env().get_all_added_prompts()
