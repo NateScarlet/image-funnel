@@ -1010,6 +1010,131 @@ Other text.`
 	assert.NotContains(t, content, "hook-run-id")
 }
 
+func TestIsFileNotFoundError(t *testing.T) {
+	// 直接包装 os.ErrNotExist 应被检测到
+	assert.True(t, isFileNotFoundError(os.ErrNotExist))
+	assert.True(t, isFileNotFoundError(fmt.Errorf("wrapped: %w", os.ErrNotExist)))
+	assert.True(t, isFileNotFoundError(fmt.Errorf("nested: %w", fmt.Errorf("inner: %w", os.ErrNotExist))))
+
+	// 非文件系统错误不应被检测到
+	assert.False(t, isFileNotFoundError(fmt.Errorf("some other error")))
+	assert.False(t, isFileNotFoundError(fmt.Errorf("exit status 1")))
+
+	// exec.ExitError 不应被检测到（脚本内部错误，非 cmd.Start() 失败）
+	assert.False(t, isFileNotFoundError(&exec.ExitError{ProcessState: &os.ProcessState{}}))
+}
+
+func TestRunner_ExecuteNoteDirectives_NoteFileDeleted(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-note-deleted-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	hookToml := `
+id = "deleted-note-test"
+name = "deleted-note-test"
+command = "echo success"
+
+[directive]
+name = "del-note"
+on_success_action = "REMOVE"
+on_fail_action = "KEEP"
+
+[on.post_update_note]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "deleted-note.toml"), []byte(hookToml), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	noteRelPath := "test_note.md"
+	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	initialContent := `Some text.
+/del-note a
+Other text.`
+
+	// 模拟 retention 删除笔记文件：先写入再删除
+	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
+	assert.NoError(t, err)
+	err = os.Remove(noteAbsPath)
+	assert.NoError(t, err)
+
+	// 笔记文件已被删除，应静默返回 (false, nil)
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	assert.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestRunner_ExecuteNoteDirectives_OnFailRemove_OtherError_Propagates(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-remove-other-err-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 钩子因非文件系统错误失败，on_fail_action = "REMOVE"
+	removeToml := `
+id = "remove-other-fail-test"
+name = "remove-other-fail-test"
+command = "exit 1"
+
+[directive]
+name = "remove-other-fail"
+on_success_action = "KEEP"
+on_fail_action = "REMOVE"
+
+[on.post_update_note]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "remove-other-fail.toml"), []byte(removeToml), 0644)
+	assert.NoError(t, err)
+
+	ebus := &mockMetadataUpdatedSub{}
+	fileChangedSub := &mockFileChangedSub{}
+	logger := zap.NewNop()
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+
+	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	noteRelPath := "test_note.md"
+	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	initialContent := `Some text.
+/remove-other-fail a
+Other text.`
+	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
+	assert.NoError(t, err)
+
+	// 非文件系统错误应传播
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	assert.Error(t, err)
+	assert.True(t, ok)
+
+	// 指令行仍被移除
+	contentBytes, err := os.ReadFile(noteAbsPath)
+	assert.NoError(t, err)
+	content := string(contentBytes)
+	assert.NotContains(t, content, "/remove-other-fail")
+}
+
 func TestRunner_loadHooks_StrictParsing(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "image-funnel-hook-strict-test")
 	assert.NoError(t, err)

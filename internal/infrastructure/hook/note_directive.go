@@ -2,6 +2,7 @@ package hook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math/rand"
@@ -22,6 +23,12 @@ import (
 var fastCheckReg = regexp.MustCompile(`(?m)^[ \t]*/[a-zA-Z0-9_-]+`)
 
 var directiveReg = regexp.MustCompile(`(?m)^[ \t]*/([a-zA-Z0-9_-]+)(?:\s+([^\r\n]*))?\r?\n?`)
+
+// isFileNotFoundError 检查错误是否与文件不存在相关。
+// 通过 errors.Is 检查底层的文件系统错误（如 cmd.exe 启动时的路径解析失败）。
+func isFileNotFoundError(err error) bool {
+	return errors.Is(err, os.ErrNotExist)
+}
 
 func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Directory, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
 	fastCheck := fastCheckReg.MatchString(content)
@@ -73,6 +80,11 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 	}
 
 	noteAbsPath := filepath.Join(r.rootDir, relPath)
+
+	// 1a. 检查笔记文件是否存在，如果已被 retention 删除则静默跳过
+	if _, err := os.Stat(noteAbsPath); os.IsNotExist(err) {
+		return false, nil
+	}
 
 	// 1b. 若是有已知且正在运行的 ID，则进行快速返回或执行后置迟到擦除
 	if runID != "" && isKnown {
@@ -270,7 +282,12 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 	for i, p := range pending {
 		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID, p.directiveText)
 		if err != nil {
-			errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, err))
+			// 仅当 on_fail_action 为 REMOVE 且错误与文件不存在相关时，不传播错误
+			if p.config.Directive != nil && p.config.Directive.OnFailAction == "REMOVE" && isFileNotFoundError(err) {
+				// 文件已被删除导致的钩子失败，移除指令行是预期行为
+			} else {
+				errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, err))
+			}
 		}
 		pending[i].action = action
 		pending[i].stdout = stdout
