@@ -92,7 +92,7 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
 
   const lastSession = computed(() => {
     const node = lastSessionData.value?.node;
-    return node?.__typename === "Directory" ? node.lastSession ?? undefined : undefined;
+    return node?.__typename === "Directory" ? (node.lastSession ?? undefined) : undefined;
   });
 
   /**
