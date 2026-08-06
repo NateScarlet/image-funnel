@@ -37,8 +37,9 @@ type hookExecutionTask struct {
 	Env         map[string]string // 传递给外部脚本的自定义环境变量集合
 	NotePath    string            // 笔记文件的相对路径
 	dir         *directory.Directory
-	resultChan  chan hookExecutionResult // 用于接收外部脚本执行结果的通道
-	RunID       string                   // 指令运行 ID 注入环境变量
+	resultChan    chan hookExecutionResult // 用于接收外部脚本执行结果的通道
+	RunID         string                   // 指令运行 ID 注入环境变量
+	DirectiveText string                   // 笔记指令的完整文本（如 "/fork --option value"），用于通知标题
 }
 
 // debouncer 针对批量 XMP 写入的多 Hook 独立防抖合批组件

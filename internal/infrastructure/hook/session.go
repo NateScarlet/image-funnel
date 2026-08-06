@@ -46,7 +46,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 
 		pureErrB := util.NewErrorsBuilder(len(pureCommitHooks))
 		for _, h := range pureCommitHooks {
-			if _, _, _, err := r.executeHookSync(h, "post_commit_session", nil, nil, "", dir, ""); err != nil {
+			if _, _, _, err := r.executeHookSync(h, "post_commit_session", nil, nil, "", dir, "", ""); err != nil {
 				pureErrB.Add(fmt.Errorf("hook %s: %w", h.ID, err))
 			}
 		}
@@ -100,7 +100,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 				} else {
 					scanErrB := util.NewErrorsBuilder(len(noDirectiveNoteScanHooks))
 					for _, h := range noDirectiveNoteScanHooks {
-						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dir, ""); hookErr != nil {
+						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dir, "", ""); hookErr != nil {
 							scanErrB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 						}
 					}

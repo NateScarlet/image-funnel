@@ -106,16 +106,17 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 
 	// 2. 对于新启动的指令流程，我们先匹配提取 pending 任务
 	type pendingHook struct {
-		config      hookConfig
-		triggerType string
-		events      []hookEvent
-		args        []string
-		relPath     string
-		dir         *directory.Directory
-		action      string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
-		stdout      string    // 脚本标准输出
-		stderr      string    // 脚本标准错误输出
-		executedAt  time.Time // 脚本执行时间
+		config        hookConfig
+		triggerType   string
+		events        []hookEvent
+		args          []string
+		relPath       string
+		dir           *directory.Directory
+		directiveText string // 完整指令文本（如 "/fork --option value"）
+		action        string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
+		stdout        string    // 脚本标准输出
+		stderr        string    // 脚本标准错误输出
+		executedAt    time.Time // 脚本执行时间
 	}
 
 	var pending []pendingHook
@@ -216,12 +217,13 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 
 		// 将此任务入队暂存，暂不执行
 		pending = append(pending, pendingHook{
-			config:      hookConfig,
-			triggerType: triggerType,
-			events:      evs,
-			args:        args,
-			relPath:     relPath,
-			dir:         dir,
+			config:        hookConfig,
+			triggerType:   triggerType,
+			events:        evs,
+			args:          args,
+			relPath:       relPath,
+			dir:           dir,
+			directiveText: strings.TrimSpace(matchedLine),
 		})
 	}
 
@@ -266,7 +268,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
 	errB := util.NewErrorsBuilder(len(pending))
 	for i, p := range pending {
-		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID)
+		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID, p.directiveText)
 		if err != nil {
 			errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, err))
 		}

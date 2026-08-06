@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"main/internal/domain/directory"
+	"main/internal/scalar"
 	"main/internal/shared"
 
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ import (
 
 // executeHookSync 同步执行钩子并返回解析后的操作、stdout 和 stderr
 // 返回的操作已解析：成功时优先使用脚本覆盖值，否则使用 on_success_action；失败时使用 on_fail_action
-func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dir *directory.Directory, runID string) (action string, stdout string, stderr string, err error) {
+func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []hookEvent, extraArgs []string, notePath string, dir *directory.Directory, runID string, directiveText string) (action string, stdout string, stderr string, err error) {
 	if runID == "" {
 		runID = fmt.Sprintf("run_%019d_%06d", time.Now().UnixNano(), rand.Intn(1000000))
 	}
@@ -38,17 +39,18 @@ func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []h
 	fullCommand := strings.Join(cmdParts, " ")
 
 	r.ch <- hookExecutionTask{
-		HookID:      hook.ID,
-		HookName:    hook.Name,
-		Command:     fullCommand,
-		ExtraArgs:   extraArgs,
-		TriggerName: triggerName,
-		Events:      events,
-		Env:         hook.Env,
-		NotePath:    notePath,
-		dir:         dir,
-		resultChan:  resChan,
-		RunID:       runID,
+		HookID:        hook.ID,
+		HookName:      hook.Name,
+		Command:       fullCommand,
+		ExtraArgs:     extraArgs,
+		TriggerName:   triggerName,
+		Events:        events,
+		Env:           hook.Env,
+		NotePath:      notePath,
+		dir:           dir,
+		resultChan:    resChan,
+		RunID:         runID,
+		DirectiveText: directiveText,
 	}
 
 	select {
@@ -226,11 +228,13 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	var priority shared.NotificationPriority
 	var body string
 
-	title = task.NotePath
-	if title == "" {
+	if task.DirectiveText != "" {
+		title = task.DirectiveText
+	} else if task.NotePath != "" {
+		title = task.NotePath
+	} else if task.dir != nil {
 		title = task.dir.RelPath()
-	}
-	if title == "" {
+	} else {
 		title = task.Command + strings.Join(task.ExtraArgs, " ")
 	}
 
@@ -251,6 +255,9 @@ func (r *Runner) sendHookNotification(ctx context.Context, task hookExecutionTas
 	opts = append(opts, shared.WithPriority(priority))
 	if body != "" {
 		opts = append(opts, shared.WithBody(body))
+	}
+	if task.DirectiveText != "" && task.dir != nil {
+		opts = append(opts, shared.WithDetailsURL(scalar.MustParseURI("/browse?dir="+task.dir.ID().String())))
 	}
 
 	if _, err := r.notifSender.SendNotification(ctx, hookName, title, opts...); err != nil {

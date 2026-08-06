@@ -74,7 +74,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 		}
 		errB := util.NewErrorsBuilder(len(noDirectiveHooks))
 		for _, h := range noDirectiveHooks {
-			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, dir, ""); hookErr != nil {
+			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, dir, "", ""); hookErr != nil {
 				errB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 			}
 		}

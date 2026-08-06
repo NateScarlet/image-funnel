@@ -183,7 +183,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 		return fmt.Errorf("failed to resolve directory for trigger %q: %w", triggerName, err)
 	}
 
-	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", dir, "")
+	_, _, _, err = r.executeHookSync(*targetHook, triggerName, events, nil, "", dir, "", "")
 	return err
 }
 
@@ -247,14 +247,14 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 
 		if !executed {
 			r.logger.Debug("TriggerForNote not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "")
+			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "", "")
 			return err
 		}
 		return nil
 	}
 
 	r.logger.Debug("TriggerForNote no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "")
+	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "", "")
 	return err
 }
 
