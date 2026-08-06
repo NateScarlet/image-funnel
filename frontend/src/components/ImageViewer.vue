@@ -525,7 +525,13 @@
 
     <!-- 笔记编辑对话框 -->
     <noteDialog.component container-class="sm:max-w-3xl short:max-w-none">
-      <NoteForm v-if="image" ref="noteDialogRef" :note="image.note" @close="noteDialog.close" />
+      <NoteForm
+        v-if="image"
+        ref="noteDialogRef"
+        :note="image.note"
+        :hide-image-button="hideImageButton"
+        @close="noteDialog.close"
+      />
     </noteDialog.component>
   </div>
 </template>
@@ -589,6 +595,7 @@ const {
   sessionId?: string;
   preloadImages: ImageFragment[];
   allowPan?: (e: PointerEvent) => boolean;
+  hideImageButton?: boolean;
 }>();
 
 const metaLoadingCount = ref(0);

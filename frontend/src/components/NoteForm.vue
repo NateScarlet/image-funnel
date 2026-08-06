@@ -20,6 +20,7 @@
       <div class="flex items-center gap-2">
         <!-- 打开关联图片 -->
         <button
+          v-if="!hideImageButton"
           class="p-2 sm:p-3 short:p-1 hover:bg-primary-700 rounded-lg text-primary-400 transition-colors active:scale-95 cursor-pointer"
           title="打开关联图片"
           @click="openImage"
@@ -124,6 +125,7 @@ import { openImageViewerByFilename } from "@/events";
 // #region 属性与事件定义
 const props = defineProps<{
   note: Note;
+  hideImageButton?: boolean;
 }>();
 
 const emit = defineEmits<(e: "close" | "saved") => void>();

@@ -68,6 +68,7 @@
           :session-id="sessionId"
           :preload-images="session?.nextImages ?? []"
           :allow-pan="handleAllowPan"
+          :hide-image-button="true"
           @image-loaded="handleImageLoaded"
         >
           <template #control-bg>
