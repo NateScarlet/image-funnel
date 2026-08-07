@@ -71,6 +71,15 @@
           :hide-image-button="true"
           @image-loaded="handleImageLoaded"
         >
+          <template #viewport>
+            <div
+              v-if="ratedRejectSignal"
+              :key="`rated-reject-${ratedRejectSignal.seq}`"
+              class="absolute inset-0 pointer-events-none rated-reject-flash"
+              :style="{ '--flash-color': getStarColorVar(ratedRejectSignal.rating) }"
+              @animationend="ratedRejectSignal = undefined"
+            ></div>
+          </template>
           <template #control-bg>
             <div
               v-if="isAutoRejectActive && currentImage && !swiping"
@@ -79,13 +88,6 @@
               :style="{
                 animationDuration: `${autoRejectTimeoutSeconds}s`,
               }"
-            ></div>
-            <div
-              v-if="ratedRejectSignal"
-              :key="`rated-reject-${ratedRejectSignal.seq}`"
-              class="absolute inset-0 pointer-events-none rated-reject-flash"
-              :style="{ '--flash-color': getStarColorVar(ratedRejectSignal.rating) }"
-              @animationend="ratedRejectSignal = undefined"
             ></div>
           </template>
           <template #progress>

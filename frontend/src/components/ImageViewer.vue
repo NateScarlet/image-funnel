@@ -33,6 +33,10 @@
           />
         </div>
       </div>
+      <!-- 视口叠加图层（图片上层） -->
+      <div class="absolute inset-0 pointer-events-none overflow-hidden z-10">
+        <slot name="viewport"></slot>
+      </div>
       <!-- 加载提示 -->
       <Transition
         enter-active-class="transition duration-100 ease-out"
