@@ -80,6 +80,13 @@
                 animationDuration: `${autoRejectTimeoutSeconds}s`,
               }"
             ></div>
+            <div
+              v-if="ratedRejectSignal"
+              :key="`rated-reject-${ratedRejectSignal.seq}`"
+              class="absolute inset-0 pointer-events-none rated-reject-flash"
+              :style="{ '--flash-color': getStarColorVar(ratedRejectSignal.rating) }"
+              @animationend="ratedRejectSignal = undefined"
+            ></div>
           </template>
           <template #progress>
             <SessionProgressBar v-if="session" :session class="pointer-events-none" />
@@ -302,6 +309,8 @@ import useSession from "../composables/domain/useSession";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
 import useGestureTarget, { type ImageLoadedEvent } from "@/composables/useGestureTarget";
+import useRatedRejectFlash from "@/composables/useRatedRejectFlash";
+import { getStarColorVar } from "@/utils/starConfig";
 
 const props = defineProps<{
   id: string;
@@ -530,10 +539,13 @@ const imageLoadedAt = computed(() => {
   return undefined;
 });
 const { marking, mark: originalMarkImage } = useMarkImage(sessionId, imageLoadedAt);
+const { signal: ratedRejectSignal, flash: ratedRejectFlash } = useRatedRejectFlash();
 async function markImage(id: string, action: ImageAction) {
   if (autoRejectEnabled.value) {
     autoRejectRunning.value = true;
   }
+  // 在标记调用前从当前图片同步读取评分，触发已评分图片的排除星级扫过动画
+  ratedRejectFlash(action, currentImage.value?.currentRating ?? 0);
   await originalMarkImage(id, action);
 }
 
@@ -706,6 +718,22 @@ watch(
   }
   to {
     width: 0;
+  }
+}
+
+.rated-reject-flash {
+  background: linear-gradient(to right, transparent, var(--flash-color) 30%, transparent);
+  animation: sweepRightToLeft 300ms linear forwards;
+}
+
+@keyframes sweepRightToLeft {
+  from {
+    transform: translateX(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
   }
 }
 </style>
