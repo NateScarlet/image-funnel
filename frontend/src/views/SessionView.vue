@@ -666,6 +666,8 @@ function handleGesture() {
 const showAutoRejectControl = computed(() => {
   const s = session.value;
   if (!s || !currentImage.value) return false;
+  // 已评级（评级 > 0）的图片不自动排除，且不显示自动排除开关
+  if (currentImage.value.currentRating > 0) return false;
   return currentRoundKept.value + s.stats.currentRoundRemaining > s.targetKeep * 2;
 });
 
