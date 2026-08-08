@@ -6,11 +6,123 @@ import sys
 import json
 import logging
 import argparse
+from dataclasses import dataclass
 from typing import List, Optional
 
 from graphql_utils import GraphQLClient
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# #region 自动完成数据结构与逻辑
+
+
+@dataclass
+class AutocompleteSuggestion:
+    text: str
+    displayText: str
+    description: str
+    type: str = "directory"
+    style: str = ""
+
+    def to_jsonl(self) -> str:
+        return json.dumps(
+            {
+                "text": self.text,
+                "displayText": self.displayText,
+                "description": self.description,
+                "type": self.type,
+                "style": self.style,
+            },
+            ensure_ascii=False,
+        )
+
+
+def get_fork_autocomplete_suggestions(
+    root_dir: str, dir_rel_path: str, query: str = ""
+) -> List[AutocompleteSuggestion]:
+    """根据根目录路径、当前目录相对路径和用户查询生成 /fork 指令的后缀补全建议。"""
+    if not root_dir or not os.path.exists(root_dir):
+        return []
+
+    suggestions: List[AutocompleteSuggestion] = []
+    q = query.strip().strip("\"'").lower()
+
+    norm_rel = os.path.normpath(dir_rel_path.strip()) if dir_rel_path.strip() else ""
+    if norm_rel == ".":
+        norm_rel = ""
+
+    if not norm_rel:
+        # 根目录下触发：目标目录即为 suffix，建议根目录下的已有直接子目录
+        try:
+            entries = sorted(os.listdir(root_dir))
+        except OSError as e:
+            _LOGGER.error("Failed to list root directory %s: %s", root_dir, e)
+            return []
+
+        for entry in entries:
+            abs_item = os.path.join(root_dir, entry)
+            if os.path.isdir(abs_item):
+                if q and not entry.lower().startswith(q):
+                    continue
+                suggestions.append(
+                    AutocompleteSuggestion(
+                        text=entry,
+                        displayText=entry,
+                        description=f"已存在目录：{entry}",
+                        type="directory",
+                    )
+                )
+    else:
+        # 子目录下触发：同级目录规则为 当前目录名,<suffix>
+        dir_name = os.path.basename(norm_rel)
+        parent_rel = os.path.dirname(norm_rel)
+        parent_abs = os.path.normpath(os.path.join(root_dir, parent_rel))
+
+        if not os.path.exists(parent_abs):
+            return []
+
+        try:
+            entries = sorted(os.listdir(parent_abs))
+        except OSError as e:
+            _LOGGER.error("Failed to list parent directory %s: %s", parent_abs, e)
+            return []
+
+        prefix = f"{dir_name},"
+        prefix_len = len(prefix)
+
+        for entry in entries:
+            abs_item = os.path.join(parent_abs, entry)
+            if os.path.isdir(abs_item) and entry.startswith(prefix):
+                suffix = entry[prefix_len:]
+                if not suffix:
+                    continue
+                if q and not suffix.lower().startswith(q):
+                    continue
+                suggestions.append(
+                    AutocompleteSuggestion(
+                        text=suffix,
+                        displayText=suffix,
+                        description=f"已存在同级目录：{entry}",
+                        type="directory",
+                    )
+                )
+
+    return suggestions
+
+
+def run_autocomplete() -> None:
+    """自动完成执行入口，从环境变量读取上下文参数并输出 JSONL 建议项目。"""
+    root_dir = os.getenv("IMAGE_FUNNEL_ROOT_DIR", "")
+    dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
+    query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+
+    suggestions = get_fork_autocomplete_suggestions(root_dir, dir_rel_path, query)
+    for item in suggestions:
+        print(item.to_jsonl())
+
+
+# #endregion
 
 
 def parse_args():
@@ -76,5 +188,9 @@ def run_fork(client: GraphQLClient) -> None:
 
 
 if __name__ == "__main__":
-    client = GraphQLClient.from_env()
-    run_fork(client)
+    if len(sys.argv) > 1 and sys.argv[1] == "autocomplete":
+        run_autocomplete()
+        sys.exit(0)
+    else:
+        client = GraphQLClient.from_env()
+        run_fork(client)
