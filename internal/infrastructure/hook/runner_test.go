@@ -852,53 +852,61 @@ command = '` + cmdStr + `'
 }
 
 func TestSplitArgs_Simple(t *testing.T) {
-	assert.Equal(t, []string{"arg1", "arg2", "arg3"}, splitArgs("arg1 arg2 arg3"))
+	assert.Equal(t, []string{"arg1", "arg2", "arg3"}, mustSplitArgs(t, "arg1 arg2 arg3"))
 }
 
 func TestSplitArgs_SingleArg(t *testing.T) {
-	assert.Equal(t, []string{"hello"}, splitArgs("hello"))
+	assert.Equal(t, []string{"hello"}, mustSplitArgs(t, "hello"))
 }
 
 func TestSplitArgs_Empty(t *testing.T) {
-	assert.Empty(t, splitArgs(""))
+	assert.Empty(t, mustSplitArgs(t, ""))
 }
 
 func TestSplitArgs_OnlyWhitespace(t *testing.T) {
-	assert.Empty(t, splitArgs("   \t  "))
+	assert.Empty(t, mustSplitArgs(t, "   \t  "))
 }
 
 func TestSplitArgs_QuotedSimple(t *testing.T) {
-	assert.Equal(t, []string{"hello world"}, splitArgs(`"hello world"`))
+	assert.Equal(t, []string{"hello world"}, mustSplitArgs(t, `"hello world"`))
 }
 
 func TestSplitArgs_QuotedMixed(t *testing.T) {
-	assert.Equal(t, []string{"arg1", "hello world", "arg3"}, splitArgs(`arg1 "hello world" arg3`))
+	assert.Equal(t, []string{"arg1", "hello world", "arg3"}, mustSplitArgs(t, `arg1 "hello world" arg3`))
 }
 
 func TestSplitArgs_MultipleQuoted(t *testing.T) {
-	assert.Equal(t, []string{"first", "second"}, splitArgs(`"first" "second"`))
+	assert.Equal(t, []string{"first", "second"}, mustSplitArgs(t, `"first" "second"`))
 }
 
 func TestSplitArgs_QuotedAtStart(t *testing.T) {
-	assert.Equal(t, []string{"hello world", "arg2"}, splitArgs(`"hello world" arg2`))
+	assert.Equal(t, []string{"hello world", "arg2"}, mustSplitArgs(t, `"hello world" arg2`))
 }
 
 func TestSplitArgs_QuotedAtEnd(t *testing.T) {
-	assert.Equal(t, []string{"arg1", "hello world"}, splitArgs(`arg1 "hello world"`))
+	assert.Equal(t, []string{"arg1", "hello world"}, mustSplitArgs(t, `arg1 "hello world"`))
 }
 
 func TestSplitArgs_NestedQuotes(t *testing.T) {
 	// 引号内的内容原样保留，不支持转义
-	assert.Equal(t, []string{`it's`}, splitArgs(`"it's"`))
+	assert.Equal(t, []string{`it's`}, mustSplitArgs(t, `"it's"`))
 }
 
 func TestSplitArgs_TabSeparated(t *testing.T) {
-	assert.Equal(t, []string{"a", "b", "c"}, splitArgs("a\tb\tc"))
+	assert.Equal(t, []string{"a", "b", "c"}, mustSplitArgs(t, "a\tb\tc"))
 }
 
 func TestSplitArgs_QuotedWithTabInside(t *testing.T) {
 	// 引号内的制表符原样保留
-	assert.Equal(t, []string{"a\tb"}, splitArgs("\"a\tb\""))
+	assert.Equal(t, []string{"a\tb"}, mustSplitArgs(t, "\"a\tb\""))
+}
+
+// mustSplitArgs 断言 splitArgs 成功并返回结果
+func mustSplitArgs(t *testing.T, s string) []string {
+	t.Helper()
+	args, err := splitArgs(s)
+	assert.NoError(t, err)
+	return args
 }
 
 func TestRunner_ExecuteNoteDirectives_PartialFailures(t *testing.T) {

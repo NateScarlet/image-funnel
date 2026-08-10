@@ -67,9 +67,9 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 		}
 	}
 
-	argv := splitArgs(targetHook.Directive.Autocomplete.Command)
-	if len(argv) == 0 {
-		return nil, fmt.Errorf("autocomplete command is empty: %q", targetHook.Directive.Autocomplete.Command)
+	argv, err := parseCommandArgs(targetHook.Directive.Autocomplete.Command)
+	if err != nil {
+		return nil, fmt.Errorf("invalid autocomplete command: %w", err)
 	}
 	cmd := newHookCmd(ctx, argv)
 	cmd.Dir = r.hooksDir

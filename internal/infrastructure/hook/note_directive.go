@@ -129,6 +129,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		stdout        string    // 脚本标准输出
 		stderr        string    // 脚本标准错误输出
 		executedAt    time.Time // 脚本执行时间
+		syntaxErr     error     // 指令参数引号未闭合等语法错误，非 nil 时不执行钩子而按失败处理
 	}
 
 	var pending []pendingHook
@@ -218,13 +219,15 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		}
 
 		var args []string
+		var syntaxErr error
 		if cmdArgs != "" {
-			args = splitArgs(cmdArgs)
+			args, syntaxErr = splitArgs(cmdArgs)
 		}
 
 		r.logger.Debug("executeNoteDirectives appending pending directive",
 			zap.String("hookID", hookConfig.ID),
 			zap.Strings("args", args),
+			zap.Error(syntaxErr),
 		)
 
 		// 将此任务入队暂存，暂不执行
@@ -236,6 +239,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 			relPath:       relPath,
 			dir:           dir,
 			directiveText: strings.TrimSpace(matchedLine),
+			syntaxErr:     syntaxErr,
 		})
 	}
 
@@ -280,6 +284,22 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 	// 4. 执行斜杠指令 (注入唯一的 hook-run-id)
 	errB := util.NewErrorsBuilder(len(pending))
 	for i, p := range pending {
+		if p.syntaxErr != nil {
+			// 指令参数引号未闭合等语法错误：不执行钩子，按指令执行失败处理（应用 on_fail_action），
+			// 并向用户报告语法错误，避免静默吞字
+			r.sendHookNotification(ctx, hookExecutionTask{
+				HookID:        p.config.ID,
+				HookName:      p.config.Name,
+				TriggerName:   p.triggerType,
+				DirectiveText: p.directiveText,
+				dir:           p.dir,
+			}, p.syntaxErr, "", p.syntaxErr.Error())
+			errB.Add(fmt.Errorf("hook %s: invalid directive args: %w", p.config.ID, p.syntaxErr))
+			pending[i].action = p.config.Directive.OnFailAction
+			pending[i].executedAt = time.Now()
+			continue
+		}
+
 		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID, p.directiveText)
 		if err != nil {
 			// 仅当 on_fail_action 为 REMOVE 且错误与文件不存在相关时，不传播错误

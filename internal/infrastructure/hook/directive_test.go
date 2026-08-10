@@ -58,20 +58,58 @@ func TestApplyDirectiveAction_Remove(t *testing.T) {
 
 // TestSplitArgs_SingleQuoted 单引号包裹的参数作为一个整体
 func TestSplitArgs_SingleQuoted(t *testing.T) {
-	assert.Equal(t, []string{"hello world"}, splitArgs(`'hello world'`))
+	args, err := splitArgs(`'hello world'`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"hello world"}, args)
 }
 
 // TestSplitArgs_CommandTokenizer 用于将 command 字段分词为 argv（shell 作为程序被调用）
 func TestSplitArgs_CommandTokenizer(t *testing.T) {
+	args, err := splitArgs(`cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > flag"`)
+	assert.NoError(t, err)
 	assert.Equal(t,
 		[]string{"cmd", "/c", `echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > flag`},
-		splitArgs(`cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > flag"`))
+		args)
+
+	args, err = splitArgs(`sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > flag'`)
+	assert.NoError(t, err)
 	assert.Equal(t,
 		[]string{"sh", "-c", `echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > flag`},
-		splitArgs(`sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > flag'`))
-	assert.Equal(t,
-		[]string{"uv", "run", "runner.py", "comfyui", "add"},
-		splitArgs("uv run runner.py comfyui add"))
+		args)
+
+	args, err = splitArgs("uv run runner.py comfyui add")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"uv", "run", "runner.py", "comfyui", "add"}, args)
+}
+
+// TestSplitArgs_DoubleQuotedApostrophe 双引号内的撇号按字面保留
+func TestSplitArgs_DoubleQuotedApostrophe(t *testing.T) {
+	args, err := splitArgs(`"it's a masterpiece"`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"it's a masterpiece"}, args)
+}
+
+// TestSplitArgs_UnterminatedQuote 未闭合的引号按 shell 语法报错，而不是静默吞字
+func TestSplitArgs_UnterminatedQuote(t *testing.T) {
+	_, err := splitArgs(`it's a`)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unterminated single quote")
+
+	_, err = splitArgs(`ab"cd`)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unterminated double quote")
+}
+
+// TestParseCommandArgs_EmptyOrInvalid parseCommandArgs 对空命令与语法错误都返回错误
+func TestParseCommandArgs_EmptyOrInvalid(t *testing.T) {
+	_, err := parseCommandArgs("")
+	assert.Error(t, err)
+	_, err = parseCommandArgs(`sh -c 'echo hi`)
+	assert.Error(t, err)
+
+	argv, err := parseCommandArgs("uv run runner.py comfyui add")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"uv", "run", "runner.py", "comfyui", "add"}, argv)
 }
 
 // TestRunner_ExecuteNoteDirectives_LiteralArgChars 验证指令参数中的 shell 元字符（如 >）
@@ -142,4 +180,83 @@ on_fail_action = "KEEP"
 	// 指令执行成功后 on_success_action=REMOVE 将指令行移除，笔记内容为空时文件被删除
 	_, err = os.Stat(noteAbsPath)
 	assert.True(t, os.IsNotExist(err), "指令成功后笔记应为空并被删除")
+}
+
+// TestRunner_ExecuteNoteDirectives_SyntaxError_OnFailAction 指令参数引号未闭合等语法错误时，
+// 不执行钩子、向用户报告语法错误，并按 on_fail_action 处理指令行（而不是静默吞字）
+func TestRunner_ExecuteNoteDirectives_SyntaxError_OnFailAction(t *testing.T) {
+	tests := []struct {
+		name     string
+		onFail   string
+		wantLine bool // 指令行是否应保留
+	}{
+		{name: "KEEP 保留指令行", onFail: "KEEP", wantLine: true},
+		{name: "REMOVE 删除指令行", onFail: "REMOVE", wantLine: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir, err := os.MkdirTemp("", "image-funnel-hook-syntax-err-test")
+			assert.NoError(t, err)
+			defer os.RemoveAll(tempDir)
+
+			hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+			err = os.MkdirAll(hooksDir, 0755)
+			assert.NoError(t, err)
+
+			hookToml := fmt.Sprintf(`
+id = "syntax-err-test"
+name = "syntax-err-test"
+command = "python test.py"
+
+[directive]
+name = "t"
+on_success_action = "KEEP"
+on_fail_action = "%s"
+
+[on.post_update_note]
+`, tt.onFail)
+			err = os.WriteFile(filepath.Join(hooksDir, "syntax-err.toml"), []byte(hookToml), 0644)
+			assert.NoError(t, err)
+
+			ebus := &mockMetadataUpdatedSub{}
+			fileChangedSub := &mockFileChangedSub{}
+			logger := zap.NewNop()
+			mockDirRepo := &mockDirectoryRepository{
+				dirs: map[string]*directory.Directory{
+					".": directory.FromRepository("."),
+				},
+			}
+			notifSender := &mockNotificationSender{}
+			runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, notifSender)
+			defer runner.Close()
+
+			noteRelPath := "test_note.md"
+			noteAbsPath := filepath.Join(tempDir, noteRelPath)
+			directiveLine := "/t it's a"
+			initialContent := directiveLine + "\n"
+			err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
+			assert.NoError(t, err)
+
+			// 未闭合单引号 → 语法错误：不执行钩子，返回错误并通知用户
+			ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+			assert.Error(t, err)
+			assert.True(t, ok)
+			assert.Contains(t, err.Error(), "unterminated single quote")
+
+			// 通知应报告该指令行的语法错误
+			notifs := notifSender.Notifications()
+			assert.Len(t, notifs, 1)
+			assert.Equal(t, directiveLine, notifs[0].Title)
+			assert.Contains(t, notifs[0].Opts.Body(), "unterminated single quote")
+
+			// 按 on_fail_action 处理指令行
+			contentBytes, err := os.ReadFile(noteAbsPath)
+			if tt.wantLine {
+				assert.NoError(t, err)
+				assert.Contains(t, string(contentBytes), "/t it's a")
+			} else {
+				assert.True(t, os.IsNotExist(err), "REMOVE 后笔记应为空并被删除")
+			}
+		})
+	}
 }

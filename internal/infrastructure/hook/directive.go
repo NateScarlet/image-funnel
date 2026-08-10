@@ -68,9 +68,9 @@ func applyDirectiveAction(action string, matchedLine string, stdout string, stde
 	}
 }
 
-// splitArgs 按空白分割参数字符串，支持单引号或双引号包裹含空格的参数，
-// 引号内的内容原样保留，不支持转义。也用于将 hook 的 command 字段分词为 argv
-func splitArgs(s string) []string {
+// splitArgs 按 shell 语法将字符串分割为参数：空白为分隔符，单引号或双引号包裹含空格的参数，
+// 引号内内容原样保留，不支持转义。若引号未闭合则返回语法错误（快速失败，不静默吞字）。
+func splitArgs(s string) ([]string, error) {
 	var args []string
 	var current strings.Builder
 	inSingleQuotes := false
@@ -92,8 +92,26 @@ func splitArgs(s string) []string {
 			current.WriteByte(ch)
 		}
 	}
+	if inSingleQuotes {
+		return nil, fmt.Errorf("unterminated single quote in %q", s)
+	}
+	if inDoubleQuotes {
+		return nil, fmt.Errorf("unterminated double quote in %q", s)
+	}
 	if current.Len() > 0 {
 		args = append(args, current.String())
 	}
-	return args
+	return args, nil
+}
+
+// parseCommandArgs 将 hook 的 command 字段分词为 argv，空命令或引号未闭合返回错误
+func parseCommandArgs(command string) ([]string, error) {
+	argv, err := splitArgs(command)
+	if err != nil {
+		return nil, err
+	}
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("command is empty: %q", command)
+	}
+	return argv, nil
 }

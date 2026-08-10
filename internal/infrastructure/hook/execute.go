@@ -84,9 +84,9 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	}
 
 	// 将 command 分词为 argv 并追加指令参数，直接启动进程（不经 shell）
-	argv := splitArgs(task.Command)
-	if len(argv) == 0 {
-		execErr := fmt.Errorf("hook command is empty: %q", task.Command)
+	argv, err := parseCommandArgs(task.Command)
+	if err != nil {
+		execErr := fmt.Errorf("invalid hook command: %w", err)
 		r.sendHookNotification(ctx, task, execErr, "", "")
 		task.resultChan <- hookExecutionResult{Error: execErr}
 		return
@@ -137,7 +137,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	)
 
 	start := time.Now()
-	err := cmd.Run()
+	err = cmd.Run()
 	duration := time.Since(start)
 
 	// 清理临时文件
