@@ -49,6 +49,11 @@ func applyDirectiveAction(action string, matchedLine string, stdout string, stde
 		panic("should returned early")
 	case "KEEP":
 		if alertBlock != "" {
+			// 指令行若无尾换行（如位于笔记最后一行），需补换行再拼接 alert 块，
+			// 否则 ">[!stdout]..." 会被粘到指令行末尾，下一次扫描时被误识别为指令参数
+			if !strings.HasSuffix(matchedLine, "\n") {
+				return matchedLine + newline + alertBlock
+			}
 			return matchedLine + alertBlock
 		}
 		return matchedLine
