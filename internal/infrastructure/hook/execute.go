@@ -25,23 +25,10 @@ func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []h
 	}
 	resChan := make(chan hookExecutionResult, 1)
 
-	// 构建完整命令行，对含空格/引号的参数用引号包裹
-	var cmdParts []string
-	cmdParts = append(cmdParts, hook.Command)
-	for _, arg := range extraArgs {
-		if strings.Contains(arg, " ") || strings.Contains(arg, "\"") {
-			escaped := strings.ReplaceAll(arg, "\"", "\\\"")
-			cmdParts = append(cmdParts, fmt.Sprintf("\"%s\"", escaped))
-		} else {
-			cmdParts = append(cmdParts, arg)
-		}
-	}
-	fullCommand := strings.Join(cmdParts, " ")
-
 	r.ch <- hookExecutionTask{
 		HookID:        hook.ID,
 		HookName:      hook.Name,
-		Command:       fullCommand,
+		Command:       hook.Command,
 		ExtraArgs:     extraArgs,
 		TriggerName:   triggerName,
 		Events:        events,
@@ -96,7 +83,16 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		oldAction = task.Events[0].OldAction
 	}
 
-	cmd := newHookCmd(ctx, task.Command)
+	// 将 command 分词为 argv 并追加指令参数，直接启动进程（不经 shell）
+	argv := splitArgs(task.Command)
+	if len(argv) == 0 {
+		execErr := fmt.Errorf("hook command is empty: %q", task.Command)
+		r.sendHookNotification(ctx, task, execErr, "", "")
+		task.resultChan <- hookExecutionResult{Error: execErr}
+		return
+	}
+	argv = append(argv, task.ExtraArgs...)
+	cmd := newHookCmd(ctx, argv)
 
 	cmd.Dir = r.hooksDir // 将脚本的工作目录设置为 Hook 配置文件所在的目录
 

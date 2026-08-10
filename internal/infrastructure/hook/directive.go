@@ -68,22 +68,27 @@ func applyDirectiveAction(action string, matchedLine string, stdout string, stde
 	}
 }
 
-// splitArgs 按空白分割参数字符串，支持双引号包裹含空格的参数
+// splitArgs 按空白分割参数字符串，支持单引号或双引号包裹含空格的参数，
+// 引号内的内容原样保留，不支持转义。也用于将 hook 的 command 字段分词为 argv
 func splitArgs(s string) []string {
 	var args []string
 	var current strings.Builder
-	inQuotes := false
+	inSingleQuotes := false
+	inDoubleQuotes := false
 
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
-		if ch == '"' {
-			inQuotes = !inQuotes
-		} else if (ch == ' ' || ch == '\t') && !inQuotes {
+		switch {
+		case ch == '"' && !inSingleQuotes:
+			inDoubleQuotes = !inDoubleQuotes
+		case ch == '\'' && !inDoubleQuotes:
+			inSingleQuotes = !inSingleQuotes
+		case (ch == ' ' || ch == '\t') && !inSingleQuotes && !inDoubleQuotes:
 			if current.Len() > 0 {
 				args = append(args, current.String())
 				current.Reset()
 			}
-		} else {
+		default:
 			current.WriteByte(ch)
 		}
 	}

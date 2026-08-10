@@ -238,7 +238,13 @@ func TestRunner_FilteringAndDebounce(t *testing.T) {
 	assert.NoError(t, err)
 
 	flagFile := filepath.Join(tempDir, "flag_dir")
-	cmdStr := "echo 1 > " + flagFile
+	// command 不再经 runner 的 shell 解析，需要 shell 重定向时显式调用 cmd/sh 作为程序
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `sh -c 'echo 1 > ` + flagFile + `'`
+	} else {
+		cmdStr = `cmd /c "echo 1 > ` + flagFile + `"`
+	}
 
 	tomlContent := `
 id = "exec-test"
@@ -404,25 +410,35 @@ func TestRunner_Trigger_SyncAndError(t *testing.T) {
 	err = os.MkdirAll(hooksDir, 0755)
 	assert.NoError(t, err)
 
+	// command 不再经 runner 的 shell 解析，需要 shell 行为时显式调用 cmd/sh 作为程序
+	var shellSuccess, shellFail string
+	if filepath.Separator == '/' {
+		shellSuccess = `sh -c 'echo hello'`
+		shellFail = `sh -c 'echo test_error_out >&2 && exit 42'`
+	} else {
+		shellSuccess = `cmd /c "echo hello"`
+		shellFail = `cmd /c "echo test_error_out >&2 && exit 42"`
+	}
+
 	// 1. 测试成功的外部钩子命令
-	successToml := `
+	successToml := fmt.Sprintf(`
 id = "success-test"
 name = "成功测试"
-command = "echo hello"
+command = '%s'
 
 [on.image_dispatch]
-`
+`, shellSuccess)
 	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(successToml), 0644)
 	assert.NoError(t, err)
 
 	// 2. 测试失败的外部钩子命令（会返回错误，并且 stderr 中有报错）
-	failToml := `
+	failToml := fmt.Sprintf(`
 id = "fail-test"
 name = "失败测试"
-command = "echo test_error_out >&2 && exit 42"
+command = '%s'
 
 [on.image_dispatch]
-`
+`, shellFail)
 	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(failToml), 0644)
 	assert.NoError(t, err)
 
@@ -466,11 +482,12 @@ func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
 	flagFile := filepath.Join(tempDir, "dir_env_flag")
 
 	// 使用 shell 命令输出目录环境变量到文件，使用 | 作为分隔符避免与目录 ID 中的 : 冲突
+	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
 	var cmdStr string
 	if filepath.Separator == '/' {
-		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile
+		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile + `'`
 	} else {
-		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile
+		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile + `"`
 	}
 
 	tomlContent := `
@@ -541,9 +558,9 @@ func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
 
 	var cmdStr string
 	if filepath.Separator == '/' {
-		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile
+		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile + `'`
 	} else {
-		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile
+		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile + `"`
 	}
 
 	tomlContent := `
@@ -643,9 +660,9 @@ func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {
 	flagFile := filepath.Join(tempDir, "update_flag")
 	var cmdStr string
 	if filepath.Separator == '/' {
-		cmdStr = `echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagFile
+		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagFile + `'`
 	} else {
-		cmdStr = `echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagFile
+		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagFile + `"`
 	}
 
 	tomlContent := `
@@ -712,11 +729,11 @@ func TestRunner_NoDirective_PostCommitSession(t *testing.T) {
 
 	var cmdPure, cmdScan string
 	if filepath.Separator == '/' {
-		cmdPure = `echo "pure" > ` + flagPure
-		cmdScan = `echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagScan
+		cmdPure = `sh -c 'echo "pure" > ` + flagPure + `'`
+		cmdScan = `sh -c 'echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagScan + `'`
 	} else {
-		cmdPure = `echo pure > ` + flagPure
-		cmdScan = `echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagScan
+		cmdPure = `cmd /c "echo pure > ` + flagPure + `"`
+		cmdScan = `cmd /c "echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagScan + `"`
 	}
 
 	tomlPure := `
@@ -791,9 +808,9 @@ func TestRunner_PostCommitSession_DirectoryID(t *testing.T) {
 
 	var cmdStr string
 	if filepath.Separator == '/' {
-		cmdStr = `echo "$IMAGE_FUNNEL_DIRECTORY_ID" > ` + flagFile
+		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID" > ` + flagFile + `'`
 	} else {
-		cmdStr = `echo %IMAGE_FUNNEL_DIRECTORY_ID% > ` + flagFile
+		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID% > ` + flagFile + `"`
 	}
 
 	tomlContent := `
@@ -894,10 +911,19 @@ func TestRunner_ExecuteNoteDirectives_PartialFailures(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 1. 成功钩子定义，指令为 "fork"
-	forkToml := `
+	var shellFork, shellFail string
+	if filepath.Separator == '/' {
+		shellFork = `sh -c 'echo fork success'`
+		shellFail = `sh -c 'echo fail_output >&2 && exit 1'`
+	} else {
+		shellFork = `cmd /c "echo fork success"`
+		shellFail = `cmd /c "echo fail_output >&2 && exit 1"`
+	}
+
+	forkToml := fmt.Sprintf(`
 id = "fork-test"
 name = "fork-test"
-command = "echo fork success"
+command = '%s'
 
 [directive]
 name = "fork"
@@ -905,15 +931,15 @@ on_success_action = "REMOVE"
 on_fail_action = "KEEP"
 
 [on.post_update_note]
-`
+`, shellFork)
 	err = os.WriteFile(filepath.Join(hooksDir, "fork.toml"), []byte(forkToml), 0644)
 	assert.NoError(t, err)
 
 	// 2. 失败钩子定义，指令为 "comfyui"
-	comfyuiToml := `
+	comfyuiToml := fmt.Sprintf(`
 id = "comfyui-test"
 name = "comfyui-test"
-command = "echo fail_output >&2 && exit 1"
+command = '%s'
 
 [directive]
 name = "comfyui"
@@ -921,7 +947,7 @@ on_success_action = "REMOVE"
 on_fail_action = "KEEP"
 
 [on.post_update_note]
-`
+`, shellFail)
 	err = os.WriteFile(filepath.Join(hooksDir, "comfyui.toml"), []byte(comfyuiToml), 0644)
 	assert.NoError(t, err)
 
@@ -1088,10 +1114,17 @@ func TestRunner_ExecuteNoteDirectives_OnFailRemove_OtherError_Propagates(t *test
 	assert.NoError(t, err)
 
 	// 钩子因非文件系统错误失败，on_fail_action = "REMOVE"
-	removeToml := `
+	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序以真正退出码 1 失败
+	var exitCmd string
+	if filepath.Separator == '/' {
+		exitCmd = `sh -c 'exit 1'`
+	} else {
+		exitCmd = `cmd /c "exit 1"`
+	}
+	removeToml := fmt.Sprintf(`
 id = "remove-other-fail-test"
 name = "remove-other-fail-test"
-command = "exit 1"
+command = '%s'
 
 [directive]
 name = "remove-other-fail"
@@ -1099,7 +1132,7 @@ on_success_action = "KEEP"
 on_fail_action = "REMOVE"
 
 [on.post_update_note]
-`
+`, exitCmd)
 	err = os.WriteFile(filepath.Join(hooksDir, "remove-other-fail.toml"), []byte(removeToml), 0644)
 	assert.NoError(t, err)
 
@@ -1186,8 +1219,8 @@ func TestRunner_Autocomplete_Cancel(t *testing.T) {
 	// 根据操作系统，指定一个能将 PID 写入文件并延迟退出的命令
 	var cmdStr string
 	if filepath.Separator == '\\' {
-		// Windows: 使用 powershell 写入当前 PID 并休眠 5 秒
-		cmdStr = fmt.Sprintf(`powershell -Command "$PID | Out-File -FilePath '%s' -Encoding utf8; Start-Sleep -Seconds 5"`, strings.ReplaceAll(pidFile, "\\", "\\\\"))
+		// Windows: 使用 powershell 写入当前 PID 并休眠 5 秒（-NoProfile 加快冷启动）
+		cmdStr = fmt.Sprintf(`powershell -NoProfile -Command "$PID | Out-File -FilePath '%s' -Encoding utf8; Start-Sleep -Seconds 5"`, strings.ReplaceAll(pidFile, "\\", "\\\\"))
 	} else {
 		// Unix: 写入当前 PID 到文件并休眠 5 秒
 		cmdStr = fmt.Sprintf(`sh -c "echo $$ > '%s' && sleep 5"`, pidFile)
@@ -1219,8 +1252,9 @@ command = '''%s'''
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// 模拟在运行一小段时间后 cancel 掉（等子进程起来并把 PID 写入文件）
+	// 不采用固定延时：Windows PowerShell 5.1 冷启动较慢，改为等待 PID 文件写入完成再触发取消
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		waitFlagFile(pidFile, 10*time.Second)
 		cancel()
 	}()
 
@@ -1234,7 +1268,7 @@ command = '''%s'''
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Nil(t, suggestions)
 
-	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时大约在 300ms + 几毫秒内，低性能环境下也应在 15 秒内完成
+	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时应在 15 秒内完成
 	assert.Less(t, duration, 15*time.Second, "cancellation should stop execution within graceful period")
 
 	// 3. 验证进程是否已经被真的关闭了
@@ -1323,13 +1357,20 @@ func TestRunner_NotificationOnFailure(t *testing.T) {
 	err = os.MkdirAll(hooksDir, 0755)
 	assert.NoError(t, err)
 
-	tomlContent := `
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `sh -c 'echo stderr_err_msg >&2 && exit 1'`
+	} else {
+		cmdStr = `cmd /c "echo stderr_err_msg >&2 && exit 1"`
+	}
+
+	tomlContent := fmt.Sprintf(`
 id = "notif-fail-test"
 name = "通知失败测试"
-command = "echo stderr_err_msg >&2 && exit 1"
+command = '%s'
 
 [on.image_dispatch]
-`
+`, cmdStr)
 	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
@@ -1443,24 +1484,31 @@ func TestRunner_Order_PostCommitSession(t *testing.T) {
 		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
 		assert.NoError(t, err)
 	}
+	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
+	shellWrite := func(content, flag string) string {
+		if filepath.Separator == '/' {
+			return `sh -c 'echo ` + content + ` > ` + flag + `'`
+		}
+		return `cmd /c "echo ` + content + ` > ` + flag + `"`
+	}
 
 	writeOrder("a", `
 id = "a"
-command = 'echo a > `+flagA+`'
+command = '`+shellWrite("a", flagA)+`'
 order = 2
 
 [on.post_commit_session]
 `)
 	writeOrder("b", `
 id = "b"
-command = 'echo b > `+flagB+`'
+command = '`+shellWrite("b", flagB)+`'
 order = 1
 
 [on.post_commit_session]
 `)
 	writeOrder("c", `
 id = "c"
-command = 'echo c > `+flagC+`'
+command = '`+shellWrite("c", flagC)+`'
 
 [on.post_commit_session]
 `)
@@ -1509,26 +1557,33 @@ func TestRunner_Order_PostUpdateNote(t *testing.T) {
 		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
 		assert.NoError(t, err)
 	}
+	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
+	shellWrite := func(content, flag string) string {
+		if filepath.Separator == '/' {
+			return `sh -c 'echo ` + content + ` > ` + flag + `'`
+		}
+		return `cmd /c "echo ` + content + ` > ` + flag + `"`
+	}
 
 	// 三个无指令的 post_update_note 钩子
 	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
 	writeOrder("x", `
 id = "x"
-command = 'echo x > `+flagX+`'
+command = '`+shellWrite("x", flagX)+`'
 order = 3
 
 [on.post_update_note]
 `)
 	writeOrder("y", `
 id = "y"
-command = 'echo y > `+flagY+`'
+command = '`+shellWrite("y", flagY)+`'
 order = 1
 
 [on.post_update_note]
 `)
 	writeOrder("z", `
 id = "z"
-command = 'echo z > `+flagZ+`'
+command = '`+shellWrite("z", flagZ)+`'
 order = 2
 
 [on.post_update_note]

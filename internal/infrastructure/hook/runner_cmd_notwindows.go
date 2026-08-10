@@ -9,8 +9,10 @@ import (
 	"time"
 )
 
-func newHookCmd(ctx context.Context, command string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+func newHookCmd(ctx context.Context, argv []string) *exec.Cmd {
+	// 不经过 shell（sh -c）直接以 argv 启动，避免指令参数中的 >、|、& 等
+	// 元字符被 shell 解释。
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
