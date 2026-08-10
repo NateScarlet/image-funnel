@@ -26,7 +26,7 @@ ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/Suzum
 根据指令参数将筛选保留的图片及配套的 XMP 文件，移动到同级按规则命名的子目录（例如 `原目录名,suffix`，未指定 suffix 时默认为 `TODO`）中，以实现图片的物理归类。
 
 **输出目录调整 / Output Directory Adjustment**
-ComfyUI 钩子在提交前将工作流输出节点的 `filename_prefix` 自动调整为图片当前所在目录（相对 ComfyUI 输出目录的 rel_dir）的过程。期望行为是输出文件**总是直接落在图片当前目录下，不创建任何子目录**：若 `filename_prefix` 中带有无法通过变量修改的目录层级（如 `C/D/image_`），应拍平为 `__` 连接的文件名前缀（`C__D__image_`）拼到 rel_dir 之后。约束：**不得静默丢弃原有路径数据**（直接取 basename 是错误做法）；workflow 模板与 prompt 求值结果必须保持一致（prompt 不能持有 workflow 无法复现的值）。
+ComfyUI 钩子在提交前将工作流输出节点的 `filename_prefix` 自动调整为图片当前所在目录（相对 ComfyUI 输出目录的 rel_dir）的过程。期望行为是输出文件**总是直接落在图片当前目录下，不创建任何子目录**：rel_dir 之外的所有目录层级一律拍平为 `__` 连接的文件名前缀，包括纯字符串前缀中的字面目录（`C/D/image_` → `C__D__image_`）、日期模板前的字面目录（`C/D/%date:...%` → `C__D__%date:...%`）以及无法映射 rel_dir 时模板变量之间的分隔符（`%Project.value%/%Title.value%/...` → `%Project.value%__%Title.value%__...`）。唯一的例外是模板非日期变量与 rel_dir 分段匹配成功时：变量值本身充当 rel_dir 路径（如 `%Project.value%/%Title.value%` 对应 `NewProject/NewTitle`），此时分隔符保留。拍平时先按标准路径清理合并连续分隔符（ComfyUI 对连续分隔符本就是合并处理的，如字面 `TODO//x` → `TODO__x`），再逐分隔符替换；段名中字面的 `__` 不被改动（`a/__b` → `a____b`）。prompt 严格由 workflow 模板简单求值（变量替换 + 日期替换）得到，不做任何额外清理，因此模板变量求值为空时会残留连续 `__`（如 `%Title.value%` 为空时 `%Project.value%__%Title.value%__%date:...%` 求值为 `TODO____<date>`）。约束：**不得静默丢弃原有路径数据**（直接取 basename 是错误做法）；workflow 模板与 prompt 求值结果必须保持一致（prompt 不能持有 workflow 无法复现的值）。
 
 **运行器 / Runner**
 外部 Python 脚本的统一调度入口 `runner.py`，负责解析命令行参数并分发给具体子命令模块。

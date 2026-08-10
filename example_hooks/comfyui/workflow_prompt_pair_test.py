@@ -2390,6 +2390,184 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub/ComfyUI")
 
+    def test_adjust_output_directory_partial_rel_dir_match(self):
+        """前缀以 rel_dir 开头但 rel_dir 之外仍有未拍平目录层级时仍拍平"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["A/B/C/image_"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "A/B/C/image_"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("A/B")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__image_")
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__image_")
+
+    def test_adjust_output_directory_flatten_literal_dirs(self):
+        """纯字符串前缀中的字面目录层级拍平为 __，输出总是直接落在 rel_dir 下"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["C/D/image_"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "C/D/image_"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("A/B")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__D__image_")
+
+    def test_adjust_output_directory_flatten_backslash(self):
+        """反斜杠分隔的目录层级同样拍平为 __"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": [r"C\D\image_"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": r"C\D\image_"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("A/B")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
+
+    def test_adjust_output_directory_preserves_literal_double_underscore(self):
+        """段名中字面的 __ 不被破坏：a/__b 拍平为 a____b 而非 a__b"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["a/__b"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "a/__b"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("X")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "X/a____b")
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "X/a____b")
+
+    def test_adjust_output_directory_flatten_multi_level(self):
+        """多层级字面目录同样拍平为 __ 连接"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["C/D/E/image_"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "C/D/E/image_"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("A/B")
+        self.assertEqual(
+            prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__E__image_"
+        )
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0], "A/B/C__D__E__image_"
+        )
+
+    def test_adjust_output_directory_flatten_date_template(self):
+        """含日期模板的前缀：字面目录拍平，workflow 保留模板语法，prompt 求值展开"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["C/D/%date:yyyyMMdd_hhmmss%"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "C/D/20260601_120000"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("A/B")
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "A/B/C__D__%date:yyyyMMdd_hhmmss%",
+        )
+        self.assertRegex(
+            prompt["9"]["inputs"]["filename_prefix"],
+            r"A/B/C__D__\d{8}_\d{6}",
+        )
+
+    def test_adjust_output_directory_idempotent(self):
+        """同一 rel_dir 重复执行结果不变，不再嵌套加深"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["C/D/image_"],
+                }
+            ]
+        }
+        prompt = {
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "C/D/image_"},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
+        mgr.adjust_output_directory("A/B")
+        first = prompt["9"]["inputs"]["filename_prefix"]
+        mgr.adjust_output_directory("A/B")
+        self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], first)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], first)
+
     def test_adjust_output_directory_primitive_connection(self):
         workflow = {
             "nodes": [
@@ -2554,15 +2732,15 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node
         ).adjust_output_directory("SingleDir")
-        # prompt 中展开求值
+        # prompt 中简单模板求值，空变量（Title 为空）残留连续 __
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
-            r"SingleDir/TODO//\d{8}_\d{6}",
+            r"SingleDir/TODO____\d{8}_\d{6}",
         )
-        # workflow widget 保留模板并拼入 rel_dir 前缀
+        # workflow widget 保留模板，变量间分隔符拍平并拼入 rel_dir 前缀
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
-            "SingleDir/%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
+            "SingleDir/%Project.value%__%Title.value%__%date:yyyyMMdd_hhmmss%",
         )
         # 源节点值不被更新
         self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
@@ -2592,15 +2770,15 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         ).adjust_output_directory("NewProj")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
-            r"NewProj/%Project\.value%/\d{8}_\d{6}",
+            r"NewProj/%Project\.value%__\d{8}_\d{6}",
         )
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
-            "NewProj/%Project.value%/%date:yyyyMMdd_hhmmss%",
+            "NewProj/%Project.value%__%date:yyyyMMdd_hhmmss%",
         )
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
-            "NewProj/%Project.value%/%date:yyyyMMdd_hhmmss%",
+            "NewProj/%Project.value%__%date:yyyyMMdd_hhmmss%",
         )
 
     def test_adjust_output_directory_template_vars_partial_not_found(self):
@@ -2635,14 +2813,14 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         ).adjust_output_directory("NewProj/NewTitle")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
-            r"NewProj/NewTitle/TODO/%Title\.value%/\d{8}_\d{6}",
+            r"NewProj/NewTitle/TODO__%Title\.value%__\d{8}_\d{6}",
         )
         # Project.value 不应被修改
         self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
-        # workflow widget 也拼入 rel_dir
+        # workflow widget 也拼入 rel_dir，变量间分隔符拍平
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
-            "NewProj/NewTitle/%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
+            "NewProj/NewTitle/%Project.value%__%Title.value%__%date:yyyyMMdd_hhmmss%",
         )
 
     def test_adjust_output_directory_template_vars_through_primitive(self):
@@ -2689,16 +2867,17 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node
         ).adjust_output_directory("NewProj/NewTitle")
-        # 源节点得到 rel_dir + basename（无模板可用，走简单回退）
+        # 源节点得到 rel_dir + 拍平后的静态前缀（无模板可用，走简单回退）
         self.assertEqual(
-            prompt["5"]["inputs"]["value"], "NewProj/NewTitle/20260601_120000"
+            prompt["5"]["inputs"]["value"],
+            "NewProj/NewTitle/TODO__20260601_120000",
         )
         # 模板变量节点不被修改
         self.assertEqual(prompt["6"]["inputs"]["value"], "")
         # 终端节点的 workflow widget 同步更新
         self.assertEqual(
             workflow["nodes"][1]["widgets_values"][0],
-            "NewProj/NewTitle/20260601_120000",
+            "NewProj/NewTitle/TODO__20260601_120000",
         )
 
     def test_adjust_output_directory_template_vars_in_terminal(self):

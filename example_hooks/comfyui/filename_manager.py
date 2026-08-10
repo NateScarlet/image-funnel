@@ -5,7 +5,6 @@ FilenameManager：管理 ComfyUI 工作流中的输出文件名更新和目录�
 """
 
 import datetime
-import os
 import re
 from typing import Dict, List, Any, Optional, Tuple
 
@@ -183,7 +182,9 @@ class FilenameManager:
 
     def adjust_output_directory(self, rel_dir: str) -> None:
         """
-        根据相对路径 rel_dir 调整所有输出节点的 filename_prefix。
+        根据相对路径 rel_dir 调整所有输出节点的 filename_prefix，使输出文件总是
+        直接落在 rel_dir 下，不创建任何子目录：rel_dir 之外的目录层级（字面目录、
+        模板变量之间的分隔符）统一拍平为 __ 连接的文件名前缀。
         在 workflow 中保留模版变量语法，在 prompt 中求值展开为静态快照字符串。
         """
         prompt = self._accessor.prompt
@@ -204,6 +205,13 @@ class FilenameManager:
             if not isinstance(original_val, str):
                 continue
 
+            # 前缀已直接落在 rel_dir 下（rel_dir 之外无剩余目录层级）时无需调整，
+            # 幂等避免重复执行嵌套加深；rel_dir 之外仍有未拍平层级则继续拍平
+            if rel_dir and rel_dir != "." and original_val.startswith(f"{rel_dir}/"):
+                rest = original_val[len(rel_dir) + 1 :]
+                if "/" not in rest and "\\" not in rest:
+                    continue
+
             terminal_info = self._accessor.nodes_cache.get(src_node_id)
             wf_template: Optional[str] = None
             if terminal_info and terminal_info.widgets_values:
@@ -214,12 +222,10 @@ class FilenameManager:
 
             if wf_template:
                 non_date_vars: List[str] = []
-                var_placeholders: List[str] = []
                 for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
                     var_name = m.group(1)
                     if not var_name.startswith("date:"):
                         non_date_vars.append(var_name)
-                        var_placeholders.append(m.group(0))
 
                 if non_date_vars:
                     rel_parts = [p for p in rel_dir.split("/") if p]
@@ -252,58 +258,53 @@ class FilenameManager:
                             src_inputs[src_key] = eval_val
                             continue
 
-                    new_template = (
-                        f"{rel_dir}/{wf_template}"
-                        if rel_dir and rel_dir != "."
-                        else wf_template
-                    )
-                    if terminal_info and terminal_info.widgets_values:
-                        for idx, val in enumerate(terminal_info.widgets_values):
-                            if isinstance(val, str) and "%" in val:
-                                terminal_info.widgets_values[idx] = new_template
+                # 无法通过变量映射 rel_dir：调整模板使其直接落在 rel_dir 下
+                new_template = self._adjust_with_rel_dir(rel_dir, wf_template)
+                if terminal_info and terminal_info.widgets_values:
+                    for idx, val in enumerate(terminal_info.widgets_values):
+                        if isinstance(val, str) and "%" in val:
+                            terminal_info.widgets_values[idx] = new_template
 
-                    eval_val = self._evaluate_template_for_prompt(
-                        new_template, prompt, original_val
-                    )
-                    src_inputs[src_key] = eval_val
-                    continue
-                else:
-                    new_template = (
-                        f"{rel_dir}/{wf_template}"
-                        if rel_dir and rel_dir != "."
-                        else wf_template
-                    )
-                    if terminal_info and terminal_info.widgets_values:
-                        for idx, val in enumerate(terminal_info.widgets_values):
-                            if isinstance(val, str) and "%" in val:
-                                terminal_info.widgets_values[idx] = new_template
+                eval_val = self._evaluate_template_for_prompt(
+                    new_template, prompt, original_val
+                )
+                src_inputs[src_key] = eval_val
+                continue
 
-                    eval_val = self._evaluate_template_for_prompt(
-                        new_template, prompt, original_val
-                    )
-                    src_inputs[src_key] = eval_val
-                    continue
-
-            original_basename = os.path.basename(original_val)
-            new_val = (
-                f"{rel_dir}/{original_basename}"
-                if rel_dir and rel_dir != "."
-                else original_basename
-            )
+            # 无模板：整个前缀视为静态路径，调整使其直接落在 rel_dir 下
+            new_val = self._adjust_with_rel_dir(rel_dir, original_val)
             src_inputs[src_key] = new_val
 
             wf_src_info = self._accessor.nodes_cache.get(src_node_id)
             if wf_src_info and wf_src_info.widgets_values:
                 for idx, val in enumerate(wf_src_info.widgets_values):
                     if isinstance(val, str):
-                        parts = re.split(r"[\\/]", val)
-                        basename = parts[-1] if parts else val
-                        new_wf_val = (
-                            f"{rel_dir}/{basename}"
-                            if rel_dir and rel_dir != "."
-                            else basename
-                        )
-                        wf_src_info.widgets_values[idx] = new_wf_val
+                        wf_src_info.widgets_values[idx] = new_val
+
+    @staticmethod
+    def _adjust_with_rel_dir(rel_dir: str, value: str) -> str:
+        """
+        调整 value 使其直接落在 rel_dir 下：rel_dir 前缀保留为真实目录，
+        rel_dir 之外的所有目录层级拍平为 __ 连接。
+        rel_dir 为 . 或空时只拍平不拼前缀。
+        """
+        if not rel_dir or rel_dir == ".":
+            return FilenameManager._flatten_path_segments(value)
+        prefix = f"{rel_dir}/"
+        if value.startswith(prefix):
+            return prefix + FilenameManager._flatten_path_segments(value[len(prefix) :])
+        return prefix + FilenameManager._flatten_path_segments(value)
+
+    @staticmethod
+    def _flatten_path_segments(value: str) -> str:
+        """
+        将路径字符串中的目录分隔符（/ 或 \\）拍平为 __ 连接。
+        先按标准路径清理合并连续分隔符（ComfyUI 对连续分隔符本就是合并处理的），
+        再逐分隔符替换为 __；段名中字面的 __ 不会被改动。
+        %...% 模板变量占位符内部不含分隔符，原样保留。
+        """
+        cleaned = re.sub(r"[\\/]+", "/", value)
+        return cleaned.replace("/", "__")
 
     @staticmethod
     def convert_comfy_date_format_to_python(comfy_fmt: str) -> Tuple[str, str]:
