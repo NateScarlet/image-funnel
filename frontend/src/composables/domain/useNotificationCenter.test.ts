@@ -431,4 +431,98 @@ describe("useNotificationCenter", () => {
     });
   });
   // #endregion
+
+  // #region 全部标记已读
+  describe("markAllNotificationsAsRead", () => {
+    test("查询全部未读通知并逐个标记已读", async () => {
+      const { markAllNotificationsAsRead } = useNotificationCenter();
+
+      const unread1 = mockNotification({ id: "notif-1", readAt: null });
+      const unread2 = mockNotification({ id: "notif-2", readAt: null });
+      mockQuery.mockResolvedValueOnce({
+        data: {
+          notifications: {
+            edges: [{ node: unread1 }, { node: unread2 }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+
+      await markAllNotificationsAsRead();
+
+      expect(mockMutate).toHaveBeenCalledTimes(2);
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: { input: expect.objectContaining({ id: "notif-1" }) },
+        }),
+      );
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: { input: expect.objectContaining({ id: "notif-2" }) },
+        }),
+      );
+    });
+
+    test("分页拉取所有未读通知后再统一标记", async () => {
+      const { markAllNotificationsAsRead } = useNotificationCenter();
+
+      const unread1 = mockNotification({ id: "notif-1", readAt: null });
+      const unread2 = mockNotification({ id: "notif-2", readAt: null });
+      mockQuery
+        .mockResolvedValueOnce({
+          data: {
+            notifications: {
+              edges: [{ node: unread1 }],
+              pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            notifications: {
+              edges: [{ node: unread2 }],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        });
+
+      await markAllNotificationsAsRead();
+
+      // 第二页携带 after 游标继续翻页
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: expect.objectContaining({ after: "cursor-1" }),
+        }),
+      );
+
+      expect(mockMutate).toHaveBeenCalledTimes(2);
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: { input: expect.objectContaining({ id: "notif-2" }) },
+        }),
+      );
+    });
+
+    test("没有未读通知时不发起变更", async () => {
+      const { markAllNotificationsAsRead } = useNotificationCenter();
+
+      mockQuery.mockResolvedValueOnce({
+        data: {
+          notifications: {
+            edges: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+
+      await markAllNotificationsAsRead();
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+  });
+  // #endregion
 });

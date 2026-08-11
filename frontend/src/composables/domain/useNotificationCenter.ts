@@ -306,6 +306,34 @@ const init = once(() => {
     }
     await refreshChannels();
   }
+
+  // 标记所有频道的全部未读通知为已读（分页拉取，避免超过单页上限导致遗漏）
+  async function markAllNotificationsAsRead() {
+    const unreadIds: string[] = [];
+    let after: string | undefined;
+    do {
+      const { data } = await query(NotificationsDocument, {
+        variables: {
+          filterBy: { read: false },
+          first: 100,
+          ...(after ? { after } : {}),
+        },
+        fetchPolicy: "network-only",
+      });
+      const conn = data?.notifications;
+      const edges = conn?.edges ?? [];
+      for (const e of edges) {
+        unreadIds.push(e.node.id);
+      }
+      after = conn?.pageInfo?.hasNextPage ? (conn.pageInfo.endCursor ?? undefined) : undefined;
+    } while (after);
+
+    if (unreadIds.length > 0) {
+      await Promise.all(unreadIds.map((id) => markAsRead(id)));
+    }
+    await refreshChannels();
+    await refreshNotifications();
+  }
   // #endregion
 
   async function markAsDismissed(id: string) {
@@ -336,6 +364,7 @@ const init = once(() => {
     selectChannel,
     markAsRead,
     markAllAsRead,
+    markAllNotificationsAsRead,
     markAsDismissed,
     refreshChannels,
     currentTime,

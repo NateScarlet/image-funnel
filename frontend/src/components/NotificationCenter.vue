@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { mdiChevronLeft, mdiBellOutline, mdiOpenInNew } from "@mdi/js";
+import { mdiChevronLeft, mdiBellOutline, mdiOpenInNew, mdiCheckAll } from "@mdi/js";
 import useNotificationCenter from "@/composables/domain/useNotificationCenter";
 import NotificationBodyDialog from "@/components/NotificationBodyDialog.vue";
 import { formatDate } from "@/utils/date";
@@ -16,10 +16,24 @@ const {
   bodyDialogTitle,
   bodyDialogBody,
   selectChannel,
+  markAllNotificationsAsRead,
 } = useNotificationCenter();
 
 // 跟踪已展开的通知 ID，支持点击正文或按钮切换展开/折叠
 const expandedIds = ref(new Set<string>());
+
+// 防止全部已读按钮被重复点击触发重复请求
+const markingAllRead = ref(false);
+
+async function handleMarkAllRead() {
+  if (markingAllRead.value) return;
+  markingAllRead.value = true;
+  try {
+    await markAllNotificationsAsRead();
+  } finally {
+    markingAllRead.value = false;
+  }
+}
 
 function toggleExpand(id: string) {
   const next = new Set(expandedIds.value);
@@ -63,6 +77,17 @@ function handleBack() {
           </h2>
         </div>
         <div class="flex items-center gap-2">
+          <button
+            v-if="selectedChannel ? selectedChannelUnreadCount > 0 : unreadCount > 0"
+            class="flex items-center gap-1 text-xs text-secondary-400 hover:text-secondary-300 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="markingAllRead"
+            @click="handleMarkAllRead"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path :d="mdiCheckAll" fill="currentColor" />
+            </svg>
+            {{ markingAllRead ? "处理中…" : "全部已读" }}
+          </button>
           <span class="text-xs text-primary-500">
             {{ selectedChannel ? `${selectedChannelUnreadCount} 条未读` : `${unreadCount} 条未读` }}
           </span>

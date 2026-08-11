@@ -12,6 +12,7 @@ const mockUnreadCount = ref(0);
 const mockSelectedChannelUnreadCount = ref(0);
 const mockChannelNotifications = ref<unknown[]>([]);
 const mockSelectChannel = vi.fn();
+const mockMarkAllNotificationsAsRead = vi.fn();
 
 const mockDrawerComponent = {
   template: '<div class="mock-drawer"><slot /></div>',
@@ -43,6 +44,7 @@ vi.mock("@/composables/domain/useNotificationCenter", () => ({
     bodyDialogTitle: ref(""),
     bodyDialogBody: ref(""),
     selectChannel: mockSelectChannel,
+    markAllNotificationsAsRead: mockMarkAllNotificationsAsRead,
   }),
 }));
 
@@ -50,6 +52,7 @@ vi.mock("@mdi/js", () => ({
   mdiChevronLeft: "",
   mdiBellOutline: "",
   mdiOpenInNew: "",
+  mdiCheckAll: "",
   mdiClose: "",
 }));
 // #endregion
