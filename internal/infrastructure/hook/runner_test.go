@@ -249,7 +249,7 @@ func TestRunner_FilteringAndDebounce(t *testing.T) {
 	tomlContent := `
 id = "exec-test"
 name = "执行测试"
-command = '` + cmdStr + `'
+command = '''` + cmdStr + `'''
 
 [on.post_update_image_metadata]
 rating = [4]
@@ -424,7 +424,7 @@ func TestRunner_Trigger_SyncAndError(t *testing.T) {
 	successToml := fmt.Sprintf(`
 id = "success-test"
 name = "成功测试"
-command = '%s'
+command = '''%s'''
 
 [on.image_dispatch]
 `, shellSuccess)
@@ -435,7 +435,7 @@ command = '%s'
 	failToml := fmt.Sprintf(`
 id = "fail-test"
 name = "失败测试"
-command = '%s'
+command = '''%s'''
 
 [on.image_dispatch]
 `, shellFail)
@@ -493,7 +493,7 @@ func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
 	tomlContent := `
 id = "direnv-test"
 name = "目录环境变量测试"
-command = '` + cmdStr + `'
+command = '''` + cmdStr + `'''
 
 [on.post_update_image_metadata]
 rating = [4]
@@ -566,7 +566,7 @@ func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
 	tomlContent := `
 id = "trigger-direnv-test"
 name = "触发目录环境变量测试"
-command = '` + cmdStr + `'
+command = '''` + cmdStr + `'''
 
 [on.image_dispatch]
 `
@@ -668,7 +668,7 @@ func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {
 	tomlContent := `
 id = "no-dir-update"
 name = "无指令更新测试"
-command = '` + cmdStr + `'
+command = '''` + cmdStr + `'''
 
 [on.post_update_note]
 `
@@ -739,7 +739,7 @@ func TestRunner_NoDirective_PostCommitSession(t *testing.T) {
 	tomlPure := `
 id = "pure-commit"
 name = "纯会话提交测试"
-command = '` + cmdPure + `'
+command = '''` + cmdPure + `'''
 
 [on.post_commit_session]
 `
@@ -749,7 +749,7 @@ command = '` + cmdPure + `'
 	tomlScan := `
 id = "scan-commit"
 name = "笔记扫描提交测试"
-command = '` + cmdScan + `'
+command = '''` + cmdScan + `'''
 
 [on.post_commit_session.note_scan]
 `
@@ -816,7 +816,7 @@ func TestRunner_PostCommitSession_DirectoryID(t *testing.T) {
 	tomlContent := `
 id = "post-commit-dir-id"
 name = "提交时目录ID注入测试"
-command = '` + cmdStr + `'
+command = '''` + cmdStr + `'''
 
 [on.post_commit_session]
 `
@@ -931,7 +931,7 @@ func TestRunner_ExecuteNoteDirectives_PartialFailures(t *testing.T) {
 	forkToml := fmt.Sprintf(`
 id = "fork-test"
 name = "fork-test"
-command = '%s'
+command = '''%s'''
 
 [directive]
 name = "fork"
@@ -947,7 +947,7 @@ on_fail_action = "KEEP"
 	comfyuiToml := fmt.Sprintf(`
 id = "comfyui-test"
 name = "comfyui-test"
-command = '%s'
+command = '''%s'''
 
 [directive]
 name = "comfyui"
@@ -1132,7 +1132,7 @@ func TestRunner_ExecuteNoteDirectives_OnFailRemove_OtherError_Propagates(t *test
 	removeToml := fmt.Sprintf(`
 id = "remove-other-fail-test"
 name = "remove-other-fail-test"
-command = '%s'
+command = '''%s'''
 
 [directive]
 name = "remove-other-fail"
@@ -1375,7 +1375,7 @@ func TestRunner_NotificationOnFailure(t *testing.T) {
 	tomlContent := fmt.Sprintf(`
 id = "notif-fail-test"
 name = "通知失败测试"
-command = '%s'
+command = '''%s'''
 
 [on.image_dispatch]
 `, cmdStr)
@@ -1502,21 +1502,21 @@ func TestRunner_Order_PostCommitSession(t *testing.T) {
 
 	writeOrder("a", `
 id = "a"
-command = '`+shellWrite("a", flagA)+`'
+command = '''`+shellWrite("a", flagA)+`'''
 order = 2
 
 [on.post_commit_session]
 `)
 	writeOrder("b", `
 id = "b"
-command = '`+shellWrite("b", flagB)+`'
+command = '''`+shellWrite("b", flagB)+`'''
 order = 1
 
 [on.post_commit_session]
 `)
 	writeOrder("c", `
 id = "c"
-command = '`+shellWrite("c", flagC)+`'
+command = '''`+shellWrite("c", flagC)+`'''
 
 [on.post_commit_session]
 `)
@@ -1577,21 +1577,21 @@ func TestRunner_Order_PostUpdateNote(t *testing.T) {
 	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
 	writeOrder("x", `
 id = "x"
-command = '`+shellWrite("x", flagX)+`'
+command = '''`+shellWrite("x", flagX)+`'''
 order = 3
 
 [on.post_update_note]
 `)
 	writeOrder("y", `
 id = "y"
-command = '`+shellWrite("y", flagY)+`'
+command = '''`+shellWrite("y", flagY)+`'''
 order = 1
 
 [on.post_update_note]
 `)
 	writeOrder("z", `
 id = "z"
-command = '`+shellWrite("z", flagZ)+`'
+command = '''`+shellWrite("z", flagZ)+`'''
 order = 2
 
 [on.post_update_note]
