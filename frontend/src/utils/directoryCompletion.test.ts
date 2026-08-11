@@ -3,7 +3,7 @@ import { evaluateDirectoryCompletion } from "./directoryCompletion";
 
 // #region 目录达标判定测试
 describe("evaluateDirectoryCompletion", () => {
-  test("当目录无默认设置 (lastSession 和 state.lastSession 皆为空) 时，应判定为不达标 (isCompleted = false)", () => {
+  test("当目录无默认设置且有多张图片（无子目录）时，应判定为不达标 (isCompleted = false)", () => {
     const dir = {
       lastSession: undefined,
       state: undefined,
@@ -21,6 +21,70 @@ describe("evaluateDirectoryCompletion", () => {
     expect(result.isCompleted).toBe(false);
     expect(result.keepCount).toBe(0);
     expect(result.lastSession).toBeUndefined();
+  });
+
+  test("当目录无默认设置但恰好有 1 张图片且无子目录时，应判定为已达标 (isCompleted = true)", () => {
+    const dir = {
+      lastSession: undefined,
+      state: undefined,
+    };
+    const stats = {
+      subdirectoryCount: 0,
+      ratingCounts: [{ rating: 0, count: 1 }],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(true);
+    expect(result.lastSession).toBeUndefined();
+  });
+
+  test("当目录无默认设置、恰好有 1 张图片但有子目录时，应判定为不达标 (isCompleted = false)", () => {
+    const dir = {
+      lastSession: undefined,
+      state: undefined,
+    };
+    const stats = {
+      subdirectoryCount: 1,
+      ratingCounts: [{ rating: 0, count: 1 }],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(false);
+  });
+
+  test("当目录无默认设置且没有图片时，应判定为不达标 (isCompleted = false)", () => {
+    const dir = {
+      lastSession: undefined,
+      state: undefined,
+    };
+    const stats = {
+      subdirectoryCount: 0,
+      ratingCounts: [{ rating: 0, count: 0 }],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(false);
+  });
+
+  test("当目录无默认设置且有多张图片（≥2）时，应判定为不达标 (isCompleted = false)", () => {
+    const dir = {
+      lastSession: undefined,
+      state: undefined,
+    };
+    const stats = {
+      subdirectoryCount: 0,
+      ratingCounts: [
+        { rating: 0, count: 1 },
+        { rating: 1, count: 1 },
+      ],
+    };
+
+    const result = evaluateDirectoryCompletion(dir, stats);
+
+    expect(result.isCompleted).toBe(false);
   });
 
   test("当 stats 为 undefined 或 null（无数据）时，即使有默认设置也应判定为不达标 (isCompleted = false)", () => {

@@ -41,7 +41,8 @@ export interface DirectoryCompletionResult {
 // #region 核心计算导出
 /**
  * 基于目录自身的默认设置（lastSession 配置）判定其是否达标。
- * 若无默认设置或无统计数据 (stats 为空)，则判定为不达标 (isCompleted = false)。
+ * 有默认设置时，统计数据存在且符合条件的图片数 <= 目标保留数即视为达标；
+ * 无默认设置时，仅当恰好有 1 张图片且无子目录（单图无需筛选）视为达标。
  */
 export function evaluateDirectoryCompletion(
   dir: DirectoryLike,
@@ -49,14 +50,16 @@ export function evaluateDirectoryCompletion(
 ): DirectoryCompletionResult {
   const session = dir.lastSession ?? dir.state?.lastSession ?? undefined;
 
-  // 如果没默认设置就认为不达标
+  // 如果没默认设置，则只在恰好有 1 张图片且无子目录时视为已达标（单图无需筛选）
   if (!session) {
+    const totalCount = stats?.ratingCounts.reduce((sum, rc) => sum + rc.count, 0) ?? 0;
+    const isCompleted = stats != null && stats.subdirectoryCount === 0 && totalCount === 1;
     return {
       lastSession: undefined,
       filterRating: [],
       targetKeep: 0,
       keepCount: 0,
-      isCompleted: false,
+      isCompleted,
     };
   }
 
