@@ -202,8 +202,9 @@ describe("useNotificationCenter", () => {
         "测试通知",
         "info",
         0,
-        expect.arrayContaining([expect.objectContaining({ text: "关闭" })]),
         "",
+        undefined,
+        expect.objectContaining({ dismiss: expect.any(Function) }),
       );
     });
 
@@ -217,8 +218,9 @@ describe("useNotificationCenter", () => {
         "测试通知",
         "info",
         expect.any(Number),
-        undefined,
         "",
+        undefined,
+        expect.objectContaining({ dismiss: expect.any(Function) }),
       );
       expect(mockShowToast).toHaveBeenCalledTimes(1);
     });
@@ -233,8 +235,9 @@ describe("useNotificationCenter", () => {
         "带正文通知",
         "info",
         expect.any(Number),
-        undefined,
         "这是通知正文",
+        undefined,
+        expect.objectContaining({ dismiss: expect.any(Function) }),
       );
     });
 
@@ -248,12 +251,13 @@ describe("useNotificationCenter", () => {
         "无正文通知",
         "info",
         expect.any(Number),
-        undefined,
         "",
+        undefined,
+        expect.objectContaining({ dismiss: expect.any(Function) }),
       );
     });
 
-    test("非 hooks 频道带 detailsURL 的通知生成查看详情按钮且点击在 window.open 中打开", () => {
+    test("带 detailsURL 的通知注入 openDetails 控制器且点击在 window.open 中打开", () => {
       const windowOpenSpy = vi.spyOn(window, "open").mockImplementation(() => null);
       const { spawnToast } = useNotificationCenter();
 
@@ -265,70 +269,24 @@ describe("useNotificationCenter", () => {
       spawnToast(n);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const actions = (mockShowToast.mock.calls[0] as any[])[3];
-      expect(actions).toEqual(
-        expect.arrayContaining([expect.objectContaining({ text: "查看详情" })]),
-      );
+      const controller = (mockShowToast.mock.calls[0] as any[])[5];
+      expect(controller.openDetails).toBeInstanceOf(Function);
 
-      const detailAction = actions.find((a: { text: string }) => a.text === "查看详情");
-      const closeFn = vi.fn();
-      detailAction.onClick(closeFn);
+      controller.openDetails();
 
       expect(windowOpenSpy).toHaveBeenCalledWith("https://example.com/details", "_blank");
-      expect(closeFn).toHaveBeenCalled();
 
       windowOpenSpy.mockRestore();
     });
 
-    test("body 长度超过 150 字符时显示查看正文按钮", () => {
+    test("不带 detailsURL 的通知不注入 openDetails 控制器", () => {
       const { spawnToast } = useNotificationCenter();
 
-      const longBody = "x".repeat(151);
-      const n = mockNotification({
-        priority: "HIGH",
-        body: longBody,
-        detailsURL: "https://example.com/hook-details",
-      });
-      spawnToast(n);
+      spawnToast(mockNotification());
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const actions = (mockShowToast.mock.calls[0] as any[])[3];
-      const texts = actions.map((a: { text: string }) => a.text);
-      expect(texts).toEqual(["查看正文", "查看详情", "关闭"]);
-    });
-
-    test("body 长度不超过 150 字符时不显示查看正文按钮", () => {
-      const { spawnToast } = useNotificationCenter();
-
-      const shortBody = "x".repeat(150);
-      const n = mockNotification({
-        priority: "HIGH",
-        body: shortBody,
-        detailsURL: "https://example.com/details",
-      });
-      spawnToast(n);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const actions = (mockShowToast.mock.calls[0] as any[])[3];
-      const texts = actions.map((a: { text: string }) => a.text);
-      expect(texts).toEqual(["查看详情", "关闭"]);
-    });
-
-    test("非 hooks 频道 body 较长时也显示查看正文按钮", () => {
-      const { spawnToast } = useNotificationCenter();
-
-      const longBody = "x".repeat(151);
-      const n = mockNotification({
-        priority: "HIGH",
-        channel: "system",
-        body: longBody,
-      });
-      spawnToast(n);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const actions = (mockShowToast.mock.calls[0] as any[])[3];
-      const texts = actions.map((a: { text: string }) => a.text);
-      expect(texts).toEqual(["查看正文", "关闭"]);
+      const controller = (mockShowToast.mock.calls[0] as any[])[5];
+      expect(controller.openDetails).toBeUndefined();
     });
   });
   // #endregion
@@ -352,6 +310,36 @@ describe("useNotificationCenter", () => {
 
       expect(() => hideToast("nonexistent")).not.toThrow();
       expect(mockRemoveToast).not.toHaveBeenCalled();
+    });
+  });
+  // #endregion
+
+  // #region dismissToast
+  describe("dismissToast", () => {
+    test("持久化 dismissedAt 并清理调度列表与 toastIdMap", () => {
+      const { spawnToast, dismissToast, scheduledNotifications } = useNotificationCenter();
+
+      const n = mockNotification();
+      spawnToast(n);
+      expect(scheduledNotifications.value.has("notif-1")).toBe(true);
+
+      dismissToast("notif-1");
+
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: {
+            input: expect.objectContaining({ id: "notif-1", dismissedAt: expect.any(String) }),
+          },
+        }),
+      );
+      expect(scheduledNotifications.value.has("notif-1")).toBe(false);
+    });
+
+    test("dismissToast 对不存在的通知不报错", () => {
+      const { dismissToast } = useNotificationCenter();
+
+      expect(() => dismissToast("nonexistent")).not.toThrow();
     });
   });
   // #endregion

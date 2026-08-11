@@ -165,6 +165,7 @@ import mutate from "@/graphql/utils/mutate";
 import { MoveImagesDocument, type ImageFiltersInput, type PathInput } from "@/graphql/generated";
 import { useOpenDir } from "@/composables/useOpenDir";
 import useNotification from "@/composables/useNotification";
+import type { NotificationController } from "@/composables/useNotification";
 import useTrash from "@/composables/domain/useTrash";
 import PathSelector from "./PathSelector.vue";
 
@@ -222,22 +223,21 @@ async function handleMoveImages() {
 
       emit("close");
 
-      // 弹出成功通知，带有触发用户手势的打开资源管理器按钮
+      // 弹出成功通知，通过 controller 注入触发用户手势的打开资源管理器操作
+      const controller: NotificationController | undefined = targetAbsoluteDirectory
+        ? {
+            openDetails: () => {
+              revealInExplorer(targetAbsoluteDirectory);
+            },
+          }
+        : undefined;
       showNotification(
         `成功移动了 ${movedCount} 张图片及其配套文件`,
         "success",
         8000,
-        targetAbsoluteDirectory
-          ? [
-              {
-                text: "在资源管理器中打开",
-                onClick: (closeNotification) => {
-                  revealInExplorer(targetAbsoluteDirectory);
-                  closeNotification();
-                },
-              },
-            ]
-          : undefined,
+        undefined,
+        undefined,
+        controller,
       );
     }
   } catch (err: unknown) {

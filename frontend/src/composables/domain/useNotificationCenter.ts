@@ -7,7 +7,7 @@ import mutate from "@/graphql/utils/mutate";
 import useModalDrawer from "@/composables/useModalDrawer";
 import useModalDialog from "@/composables/useModalDialog";
 import useNotification from "@/composables/useNotification";
-import type { NotificationAction } from "@/composables/useNotification";
+import type { NotificationController } from "@/composables/useNotification";
 import useCurrentTime from "@/composables/useCurrentTime";
 import {
   NotificationChannelsDocument,
@@ -55,12 +55,6 @@ const init = once(() => {
   const bodyDialogTitle = ref("");
   const bodyDialogBody = ref("");
   const bodyDialog = useModalDialog();
-
-  function openBodyDialog(title: string, body: string) {
-    bodyDialogTitle.value = title;
-    bodyDialogBody.value = body;
-    void bodyDialog.open();
-  }
 
   const { currentTime, refreshOn, isPast, isFuture } = useCurrentTime();
 
@@ -144,53 +138,25 @@ const init = once(() => {
     if (shownToastIds.has(n.id)) return;
     shownToastIds.add(n.id);
     const duration = toastDuration(n.title, n.body);
-    const actions = buildActions(n);
-    const toastId =
-      n.priority === NotificationPriority.HIGH
-        ? showToast(n.title, "info", 0, actions, n.body)
-        : showToast(n.title, "info", duration, actions.length > 0 ? actions : undefined, n.body);
+    const controller = buildController(n);
+    const toastId = showToast(
+      n.title,
+      "info",
+      n.priority === NotificationPriority.HIGH ? 0 : duration,
+      n.body,
+      undefined,
+      controller,
+    );
     toastIdMap.set(n.id, toastId);
   }
 
-  // 为通知构建操作按钮数组
-  function buildActions(n: Notification): NotificationAction[] {
-    const actions: NotificationAction[] = [];
-
-    // body 较长（可能被截断）时显示"查看正文"按钮，打开对话框展示完整内容
-    if (n.body.length > 150) {
-      actions.push({
-        text: "查看正文",
-        onClick: (close) => {
-          openBodyDialog(n.title, n.body);
-          close();
-        },
-      });
-    }
-
-    // 如果有 detailsURL，显示"查看详情"按钮打开详情链接
-    if (n.detailsURL) {
-      const url = n.detailsURL;
-      actions.push({
-        text: "查看详情",
-        onClick: (close) => {
-          window.open(url, "_blank");
-          close();
-        },
-      });
-    }
-
-    // HIGH 优先级通知不可自动关闭，提供关闭按钮
-    if (n.priority === NotificationPriority.HIGH) {
-      actions.push({
-        text: "关闭",
-        onClick: (close) => {
-          void markAsDismissed(n.id);
-          close();
-        },
-      });
-    }
-
-    return actions;
+  // 为 toast 注入抽象行为：UI 只负责渲染并触发 controller，不感知通知 ID、URL 等后端数据
+  function buildController(n: Notification): NotificationController {
+    const detailsURL = n.detailsURL;
+    return {
+      dismiss: () => dismissToast(n.id),
+      openDetails: detailsURL ? () => window.open(detailsURL, "_blank") : undefined,
+    };
   }
 
   // 隐藏 Toast（notAfter 到达时调用）
@@ -349,6 +315,14 @@ const init = once(() => {
     await refreshNotifications();
   }
 
+  // 用户主动关闭 toast：持久化服务端关闭状态并清理内存调度，刷新页面后不再弹出
+  function dismissToast(id: string) {
+    scheduledNotifications.value.delete(id);
+    shownToastIds.delete(id);
+    toastIdMap.delete(id);
+    void markAsDismissed(id);
+  }
+
   return {
     channels,
     unreadCount,
@@ -368,6 +342,7 @@ const init = once(() => {
     // 导出供测试使用
     spawnToast,
     hideToast,
+    dismissToast,
     scheduledNotifications,
   };
 });

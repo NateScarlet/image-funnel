@@ -26,7 +26,7 @@
           'p-4 rounded-lg shadow-lg flex items-start gap-3 cursor-pointer',
           typeClasses[notification.type],
         ]"
-        @click="notification.persistent ? undefined : remove(notification.id)"
+        @click="notification.persistent ? undefined : dismiss(notification)"
       >
         <div class="shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-6 h-6">
@@ -49,24 +49,18 @@
           >
             查看全文
           </button>
-          <div
-            v-if="notification.actions && notification.actions.length > 0"
-            class="mt-2 flex gap-2"
+          <button
+            v-if="notification.controller?.openDetails"
+            class="px-2 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer mt-1"
+            @click.stop="openDetails(notification)"
           >
-            <button
-              v-for="(action, idx) in notification.actions"
-              :key="idx"
-              class="px-2 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer"
-              @click.stop="triggerAction(action, notification)"
-            >
-              {{ action.text }}
-            </button>
-          </div>
+            查看详情
+          </button>
         </div>
         <button
           v-if="!notification.persistent"
           class="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
-          @click.stop="remove(notification.id)"
+          @click.stop="dismiss(notification)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5">
             <path :d="mdiClose" fill="currentColor" />
@@ -90,7 +84,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, nextTick, onUpdated } from "vue";
 import useNotification from "../composables/useNotification";
-import type { Notification, NotificationAction } from "../composables/useNotification";
+import type { Notification } from "../composables/useNotification";
 import useModalDialog from "../composables/useModalDialog";
 import NotificationBodyDialog from "./NotificationBodyDialog.vue";
 import {
@@ -175,10 +169,15 @@ const typeClasses: Record<string, string> = {
   info: "bg-blue-900/90 text-blue-100 border border-blue-700",
 };
 
-function triggerAction(action: NotificationAction, notification: Notification) {
-  if (action.onClick) {
-    action.onClick(() => remove(notification.id));
-  }
+// 用户主动关闭：先触发 controller 的业务操作（如持久化服务端关闭状态），再移除 toast
+function dismiss(notification: Notification) {
+  notification.controller?.dismiss?.();
+  remove(notification.id);
+}
+
+function openDetails(notification: Notification) {
+  notification.controller?.openDetails?.();
+  remove(notification.id);
 }
 </script>
 

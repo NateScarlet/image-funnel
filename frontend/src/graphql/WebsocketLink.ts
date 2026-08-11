@@ -62,12 +62,12 @@ export default class WebSocketLink extends ApolloLink {
         },
         closed: () => {
           if (reconnectingNotifId === undefined) {
-            reconnectingNotifId = show("正在重连…", "info", 0, undefined, undefined, true);
+            reconnectingNotifId = show("正在重连…", "info", 0, undefined, true);
           }
         },
         error: () => {
           if (reconnectingNotifId === undefined) {
-            reconnectingNotifId = show("正在重连…", "info", 0, undefined, undefined, true);
+            reconnectingNotifId = show("正在重连…", "info", 0, undefined, true);
           }
         },
       },

@@ -2,9 +2,13 @@ import { ref } from "vue";
 
 export type NotificationType = "error" | "success" | "info" | "warning";
 
-export interface NotificationAction {
-  text: string;
-  onClick: (close: () => void) => void;
+// 前端 toast 与后端通知解耦：由注入方（如 useNotificationCenter）提供抽象行为，
+// UI 只负责渲染并触发 controller，不感知通知 ID、URL 等后端数据
+export interface NotificationController {
+  /** 用户主动关闭 toast 时的业务操作（如持久化服务端关闭状态） */
+  dismiss?: () => void;
+  /** 打开详情（如 window.open），存在则 UI 渲染"查看详情"按钮 */
+  openDetails?: () => void;
 }
 
 export interface Notification {
@@ -13,8 +17,8 @@ export interface Notification {
   message: string;
   body?: string;
   duration?: number;
-  actions?: NotificationAction[];
   persistent?: boolean;
+  controller?: NotificationController;
 }
 
 // #region 全局状态
@@ -29,9 +33,9 @@ export default function useNotification() {
     message: string,
     type: NotificationType = "info",
     duration = 3000,
-    actions?: NotificationAction[],
     body?: string,
     persistent?: boolean,
+    controller?: NotificationController,
   ) {
     const id = nextId;
     nextId++;
@@ -41,8 +45,8 @@ export default function useNotification() {
       message,
       body,
       duration,
-      actions,
       persistent,
+      controller,
     };
 
     notifications.value.push(notification);
@@ -57,19 +61,19 @@ export default function useNotification() {
   }
 
   function showError(message: string, duration = 5000, body?: string) {
-    return show(message, "error", duration, undefined, body);
+    return show(message, "error", duration, body);
   }
 
   function showSuccess(message: string, duration = 3000, body?: string) {
-    return show(message, "success", duration, undefined, body);
+    return show(message, "success", duration, body);
   }
 
   function showInfo(message: string, duration = 3000, body?: string) {
-    return show(message, "info", duration, undefined, body);
+    return show(message, "info", duration, body);
   }
 
   function showWarning(message: string, duration = 3000, body?: string) {
-    return show(message, "warning", duration, undefined, body);
+    return show(message, "warning", duration, body);
   }
   // #endregion
 

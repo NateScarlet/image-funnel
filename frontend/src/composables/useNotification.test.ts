@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "vitest";
+import { describe, test, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import useNotification from "./useNotification";
 import NotificationList from "@/components/NotificationList.vue";
@@ -14,7 +14,7 @@ describe("useNotification", () => {
     test("show 函数能够包含 message 和可选的 body 字段", () => {
       const { notifications, show } = useNotification();
 
-      show("标题", "info", 3000, undefined, "正文内容");
+      show("标题", "info", 3000, "正文内容");
 
       expect(notifications.value).toHaveLength(1);
       expect(notifications.value[0]).toEqual(
@@ -63,7 +63,7 @@ describe("useNotification", () => {
   describe("NotificationList.vue 渲染断言", () => {
     test("收到带 body 的通知时，正确渲染标题与正文", () => {
       const { show } = useNotification();
-      show("测试标题", "info", 0, undefined, "测试正文内容");
+      show("测试标题", "info", 0, "测试正文内容");
 
       const wrapper = mount(NotificationList);
 
@@ -79,6 +79,43 @@ describe("useNotification", () => {
 
       expect(wrapper.text()).toContain("仅标题通知");
       expect(wrapper.find(".whitespace-pre-wrap").exists()).toBe(false);
+    });
+
+    test("点击右上角关闭按钮时触发 controller.dismiss 并移除通知", async () => {
+      const { show } = useNotification();
+      const dismiss = vi.fn();
+      show("可关闭通知", "info", 0, undefined, undefined, { dismiss });
+
+      const wrapper = mount(NotificationList);
+      await wrapper.find("button").trigger("click");
+
+      expect(dismiss).toHaveBeenCalled();
+      expect(wrapper.text()).not.toContain("可关闭通知");
+    });
+
+    test("不带 controller 的通知点击关闭按钮仅移除，不调用 dismiss", async () => {
+      const { show } = useNotification();
+      show("普通通知", "info", 0);
+
+      const wrapper = mount(NotificationList);
+      await wrapper.find("button").trigger("click");
+
+      expect(wrapper.text()).not.toContain("普通通知");
+    });
+
+    test("带 openDetails 控制器的通知渲染查看详情按钮且点击触发", async () => {
+      const { show } = useNotification();
+      const openDetails = vi.fn();
+      show("带详情通知", "info", 0, undefined, undefined, { openDetails });
+
+      const wrapper = mount(NotificationList);
+
+      const btn = wrapper.findAll("button").find((b) => b.text() === "查看详情");
+      expect(btn).toBeTruthy();
+      await btn?.trigger("click");
+
+      expect(openDetails).toHaveBeenCalled();
+      expect(wrapper.text()).not.toContain("带详情通知");
     });
   });
   // #endregion
