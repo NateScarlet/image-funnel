@@ -30,3 +30,6 @@ ComfyUI 钩子在提交前将工作流输出节点的 `filename_prefix` 自动�
 
 **运行器 / Runner**
 外部 Python 脚本的统一调度入口 `runner.py`，负责解析命令行参数并分发给具体子命令模块。
+
+**常驻补全服务 / Autocomplete Serve**
+`comfyui.autocomplete serve` 子命令将补全脚本作为 **JSON-RPC 常驻服务**运行：stdin 读请求、stdout 写响应、stderr 记录日志，stdin 关闭即退出。请求参数沿用自动补全上下文（`cwords`/`cwordIdx`/`prevWord`/`linePrefix`/`query` + `imagePaths`/`imageIDs`/`notePath` + `rootDir`/`directoryRelPath`），响应复用现有 JSONL 建议结构，目标指令名从 `cwords[0]` 推导。**依赖由 serve 入口构建并注入**：解析器构建一次复用；Danbooru 提供者与操作历史按请求的目录上下文（`rootDir`/`directoryRelPath`）逐请求构建，初始化失败直接抛出（快速失败，不降级）。每个请求在独立线程处理，收到 `$/cancelRequest` 后标记取消（尽力而为中断，线程不可强杀），已取消的请求不再返回结果；请求执行失败以 JSON-RPC error 上报。配合 TOML 配置 `[directive.autocomplete]` 设置 `protocol = "json-rpc"` 启用。

@@ -26,7 +26,8 @@ on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remove ... %
 on_fail_action = "REMOVE"
 
 [directive.autocomplete]
-command = "uv run runner.py comfyui.autocomplete remove"
+command = "uv run runner.py comfyui.autocomplete serve"
+protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输入触发脚本冷启动
 
 [on.post_commit_session.note_scan] # 会话提交后，扫描目录内笔记，对每一个笔记触发钩子逻辑
 ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）

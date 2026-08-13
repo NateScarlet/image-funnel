@@ -40,7 +40,8 @@ usage = """
 """
 
 [directive.autocomplete]
-command = "uv run runner.py comfyui.autocomplete adjust"
+command = "uv run runner.py comfyui.autocomplete serve"
+protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输入触发脚本冷启动
 
 [on.post_commit_session.note_scan]
 ignore_directive = false

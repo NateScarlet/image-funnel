@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
@@ -29,11 +30,7 @@ from .__main__ import (
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
-from .operation_history import (
-    get_added_prompts,
-    get_added_prompt_times,
-    get_all_added_prompts,
-)
+from .operation_history import OperationHistory
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,7 +113,8 @@ def _extract_prompt_tags(cwords: List[str], option_with_args: Set[str]) -> List[
 
 
 def _parse_args_for_autocomplete(
-    target_command: Optional[str],
+    parser: argparse.ArgumentParser,
+    target_command: str,
     cleaned_cwords: List[str],
     is_adjust_prompt_cmd: bool,
     query: str,
@@ -127,7 +125,6 @@ def _parse_args_for_autocomplete(
         else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
     )
     try:
-        parser = get_parser()
         parsed_args, _ = parser.parse_known_args(args_to_parse)
     except SystemExit:
         parsed_args = None
@@ -243,7 +240,7 @@ class AutocompleteContext:
 
     def __init__(
         self,
-        target_command: Optional[str],
+        target_command: str,
         *,
         query: str = "",
         prev_word: str = "",
@@ -253,8 +250,9 @@ class AutocompleteContext:
         seen_prompts: Optional[Dict[str, str]] = None,
         workflow: Optional[Dict[str, Any]] = None,
         prompt_meta: Optional[Dict[str, Any]] = None,
+        parser: argparse.ArgumentParser,
     ):
-        self.target_command: Optional[str] = target_command
+        self.target_command: str = target_command
         self.query: str = query
         self.prev_word: str = prev_word
         self.cwords: List[str] = cwords or []
@@ -269,8 +267,7 @@ class AutocompleteContext:
             target_command == "adjust" and "prompt" in self.cleaned_cwords
         )
 
-        # 动态解析选项参数
-        parser = get_parser()
+        # 动态解析选项参数（解析器由入口注入）
         active_parsers = _collect_active_parsers(parser, self.cwords)
         self.option_with_args: Set[str] = set()
         self.option_without_args: Set[str] = set()
@@ -558,25 +555,6 @@ class WorkflowPromptProvider(AutocompleteProvider):
                 )
 
 
-class FailedDanbooruProvider(AutocompleteProvider):
-    """用于承载 Danbooru 初始化失败时友好提示的 Provider 占位符。"""
-
-    def __init__(self, error: Exception) -> None:
-        self.error = error
-
-    def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.is_add_cmd
-
-    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        yield AutocompleteSuggestion(
-            text="",
-            displayText="⚠ Danbooru 初始化失败",
-            description=f"{self.error}",
-            type="error",
-            style="",
-        )
-
-
 def _format_relative_time(created_at: str) -> str:
     """将 ISO 时间戳转为人类可读的相对时间描述"""
     try:
@@ -613,8 +591,11 @@ def _build_seen_lower(seen_prompts: dict[str, str]) -> set[str]:
 class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
 
-    def __init__(self, provider: DanbooruTagProvider) -> None:
+    def __init__(
+        self, provider: DanbooruTagProvider, history: OperationHistory
+    ) -> None:
         self.provider = provider
+        self.history = history
 
     def can_provide(self, context: AutocompleteContext) -> bool:
         if not context.is_add_cmd:
@@ -659,15 +640,11 @@ class DanbooruProvider(AutocompleteProvider):
         def _yield_styled(
             suggestions: List[AutocompleteSuggestion],
         ) -> Iterator[AutocompleteSuggestion]:
-            added: Set[str] = (
-                get_added_prompts([s.text for s in suggestions])
-                if has_history
-                else set()
+            added: Set[str] = self.history.get_added_prompts(
+                [s.text for s in suggestions]
             )
-            added_times = (
-                get_added_prompt_times([s.text for s in suggestions])
-                if has_history
-                else {}
+            added_times = self.history.get_added_prompt_times(
+                [s.text for s in suggestions]
             )
             yield from apply_styles(suggestions, added, added_times)
 
@@ -678,7 +655,7 @@ class DanbooruProvider(AutocompleteProvider):
         ) -> Iterator[AutocompleteSuggestion]:
             """从操作历史生成标签建议，过滤掉已存在的标签和排除列表中的标签。"""
             try:
-                history_prompts = get_all_added_prompts()
+                history_prompts = self.history.get_all_added_prompts()
                 if not history_prompts:
                     return
                 count = 0
@@ -707,11 +684,6 @@ class DanbooruProvider(AutocompleteProvider):
                     type="error",
                     style="",
                 )
-
-        has_history = (
-            "IMAGE_FUNNEL_ROOT_DIR" in os.environ
-            and "IMAGE_FUNNEL_DIRECTORY_REL_PATH" in os.environ
-        )
 
         if context.query.strip():
             # 用户正在打字，执行前缀语义搜索
@@ -815,100 +787,154 @@ class DanbooruProvider(AutocompleteProvider):
                 yield from _yield_styled(suggestions)
 
                 # 作为关联联想的补充：产出历史标签建议，过滤掉关联联想已显示的标签
-                if has_history:
-                    related_lower = {
-                        s.text.strip('"').strip("'").lower() for s in suggestions
-                    }
-                    yield from _yield_history_suggestions(
-                        _build_seen_lower(context.seen_prompts),
-                        exclude_lower=related_lower,
-                    )
-            elif has_history:
+                related_lower = {
+                    s.text.strip('"').strip("'").lower() for s in suggestions
+                }
+                yield from _yield_history_suggestions(
+                    _build_seen_lower(context.seen_prompts),
+                    exclude_lower=related_lower,
+                )
+            else:
                 # 没有关联查询标签时，从操作历史中获取之前添加过的标签
                 yield from _yield_history_suggestions(
                     _build_seen_lower(context.seen_prompts)
                 )
 
 
-def autocomplete(
-    target_command: Optional[str] = None,
-    *,
-    query: str = "",
-    prev_word: str = "",
-    cwords: Optional[List[str]] = None,
-    image_paths: Optional[List[str]] = None,
-) -> Iterator[AutocompleteSuggestion]:
-    """
-    autocomplete 子命令：读取环境变量，生成自动完成建议。
-    调用方（main）负责输出 JSONL。
-    """
-    if not query:
-        query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+@dataclass(frozen=True)
+class AutocompleteRequest:
+    """一次自动补全请求的完整上下文（由入口构造并注入，不读环境变量）。"""
 
-    if not prev_word:
-        prev_word = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD", "")
+    target_command: str
+    query: str
+    prev_word: str
+    cwords: List[str]
+    image_paths: List[str]
+    root_dir: str
+    directory_rel_path: str
 
-    if cwords is None:
-        cwords_str = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS", "[]")
-        try:
-            cwords = cast(List[str], json.loads(cwords_str))
-        except json.JSONDecodeError as e:
-            _LOGGER.error("Failed to parse IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS: %s", e)
-            raise
 
-    if image_paths is None:
-        image_paths_str = os.getenv("IMAGE_FUNNEL_IMAGE_PATHS", "[]")
-        try:
-            image_paths = cast(List[str], json.loads(image_paths_str))
-        except json.JSONDecodeError as e:
-            _LOGGER.error("Failed to parse IMAGE_FUNNEL_IMAGE_PATHS: %s", e)
-            raise
+@dataclass(frozen=True)
+class AutocompleteServices:
+    """自动补全依赖（由最外层入口构建并注入）：解析器与补全 provider 列表。"""
 
-    cleaned_cwords = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
-    is_adjust_prompt_cmd = target_command == "adjust" and "prompt" in cleaned_cwords
+    parser: argparse.ArgumentParser
+    providers: List[AutocompleteProvider]
 
-    parsed_args = _parse_args_for_autocomplete(
-        target_command, cleaned_cwords, is_adjust_prompt_cmd, query
+
+def _db_path(root_dir: str, directory_rel_path: str) -> str:
+    """目录级 SQLite 数据库文件路径（与 SQLiteContext.from_env 的推导一致）。"""
+    return os.path.join(root_dir, directory_rel_path, ".io.github.natescarlet.hook.db")
+
+
+def _show_nsfw_from_env() -> bool:
+    """从 spawn 注入的环境变量读取 Danbooru 是否包含 NSFW 的静态配置（入口职责）。"""
+    return os.environ.get("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
     )
 
-    seen_prompts, workflow, prompt_meta = _load_workflow_data(image_paths, parsed_args)
 
-    context = AutocompleteContext(
+def build_request_from_env(target_command: str) -> AutocompleteRequest:
+    """单次模式：入口从环境变量构造请求上下文（缺失环境变量即报错中止，快速失败）。"""
+    return AutocompleteRequest(
         target_command=target_command,
-        query=query,
-        prev_word=prev_word,
-        cwords=cwords,
-        image_paths=image_paths,
-        parsed_args=parsed_args,
-        seen_prompts=seen_prompts,
-        workflow=workflow,
-        prompt_meta=prompt_meta,
+        query=os.environ["IMAGE_FUNNEL_AUTOCOMPLETE_QUERY"],
+        prev_word=os.environ["IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD"],
+        cwords=cast(
+            List[str], json.loads(os.environ["IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS"])
+        ),
+        image_paths=cast(List[str], json.loads(os.environ["IMAGE_FUNNEL_IMAGE_PATHS"])),
+        root_dir=os.environ["IMAGE_FUNNEL_ROOT_DIR"],
+        directory_rel_path=os.environ["IMAGE_FUNNEL_DIRECTORY_REL_PATH"],
     )
+
+
+def build_request_from_params(params: Dict[str, Any]) -> AutocompleteRequest:
+    """serve 模式：入口从 JSON-RPC 请求参数构造请求上下文。"""
+    cwords = cast(List[str], params.get("cwords", []) or [])
+    target_command = ""
+    if cwords:
+        first = cwords[0].lstrip("/").strip()
+        if first:
+            target_command = first
+    return AutocompleteRequest(
+        target_command=target_command,
+        query=cast(str, params.get("query", "") or ""),
+        prev_word=cast(str, params.get("prevWord", "") or ""),
+        cwords=cwords,
+        image_paths=cast(List[str], params.get("imagePaths", []) or []),
+        root_dir=cast(str, params.get("rootDir", "") or ""),
+        directory_rel_path=cast(str, params.get("directoryRelPath", "") or ""),
+    )
+
+
+def build_providers(
+    root_dir: str,
+    directory_rel_path: str,
+    danbooru_url: str,
+    show_nsfw: bool,
+) -> List[AutocompleteProvider]:
+    """由入口构建补全 provider 列表；Danbooru 依赖初始化失败直接抛出（快速失败，不降级）。"""
     providers: List[AutocompleteProvider] = [
         RegionProvider(),
         LoraProvider(),
         NodeProvider(),
         WorkflowPromptProvider(),
     ]
-
-    danbooru_url = os.getenv("DANBOORU_SEARCH_URL", "").strip()
     if danbooru_url:
-        try:
-            db_ctx = SQLiteContext.from_env()
-            raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
-            cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
-            akizuki = AkizukiDanbooruTagProvider.from_env(
-                danbooru_url, loader=cache_loader
-            )
-            danbooru_tag_provider = SQLiteDanbooruTagProvider(
-                akizuki, db_ctx, danbooru_url
-            )
-            providers.append(DanbooruProvider(danbooru_tag_provider))
-        except Exception as e:
-            _LOGGER.error("Failed to initialize Danbooru provider: %s", e)
-            providers.append(FailedDanbooruProvider(e))
+        db_ctx = SQLiteContext(_db_path(root_dir, directory_rel_path))
+        history = OperationHistory(db_ctx)
+        raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
+        cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
+        akizuki = AkizukiDanbooruTagProvider(
+            danbooru_url, loader=cache_loader, show_nsfw=show_nsfw
+        )
+        danbooru_tag_provider = SQLiteDanbooruTagProvider(akizuki, db_ctx, danbooru_url)
+        providers.append(DanbooruProvider(danbooru_tag_provider, history))
+    return providers
 
-    for provider in providers:
+
+def autocomplete(
+    request: AutocompleteRequest,
+    services: AutocompleteServices,
+) -> Iterator[AutocompleteSuggestion]:
+    """生成自动完成建议：上下文与依赖全部由调用方（入口）注入，自身不读取任何环境变量。"""
+    cleaned_cwords = [
+        w for w in request.cwords if not (w.startswith("<") and w.endswith(">"))
+    ]
+    is_adjust_prompt_cmd = (
+        request.target_command == "adjust" and "prompt" in cleaned_cwords
+    )
+
+    parsed_args = _parse_args_for_autocomplete(
+        services.parser,
+        request.target_command,
+        cleaned_cwords,
+        is_adjust_prompt_cmd,
+        request.query,
+    )
+
+    seen_prompts, workflow, prompt_meta = _load_workflow_data(
+        request.image_paths, parsed_args
+    )
+
+    context = AutocompleteContext(
+        target_command=request.target_command,
+        query=request.query,
+        prev_word=request.prev_word,
+        cwords=request.cwords,
+        image_paths=request.image_paths,
+        parsed_args=parsed_args,
+        seen_prompts=seen_prompts,
+        workflow=workflow,
+        prompt_meta=prompt_meta,
+        parser=services.parser,
+    )
+
+    for provider in services.providers:
         if provider.can_provide(context):
             has_suggestions = False
             for suggestion in provider.provide(context):
@@ -918,23 +944,185 @@ def autocomplete(
                 break
 
 
+# JSON-RPC 常驻补全协议方法名
+JSON_RPC_METHOD = "autocomplete"
+JSON_RPC_CANCEL_METHOD = "$/cancelRequest"
+# stdin 关闭后等待进行中任务收尾的时长
+_SERVE_SHUTDOWN_TIMEOUT = 2.0
+# 常驻模式下多个请求线程并发写 stdout，需要串行化保证响应行不交错
+_SERVE_WRITE_LOCK = threading.Lock()
+
+
+def _suggestion_to_dict(s: AutocompleteSuggestion) -> Dict[str, str]:
+    """将建议项序列化为前端建议结构（JSONL 与 JSON-RPC result 共用）。"""
+    return {
+        "text": s.text,
+        "displayText": s.displayText,
+        "description": s.description,
+        "type": s.type,
+        "style": s.style,
+    }
+
+
+def _write_response(
+    writer: Any, req_id: Any, suggestions: List[AutocompleteSuggestion]
+) -> None:
+    """将建议序列化为 JSON-RPC 响应写入 stdout（多线程下串行写，避免行交错）。"""
+    result = [_suggestion_to_dict(s) for s in suggestions]
+    with _SERVE_WRITE_LOCK:
+        writer.write(
+            json.dumps(
+                {"jsonrpc": "2.0", "id": req_id, "result": result}, ensure_ascii=False
+            )
+            + "\n"
+        )
+        writer.flush()
+
+
+def _write_error_response(writer: Any, req_id: Any, message: str) -> None:
+    """将请求失败以 JSON-RPC 错误响应上报给调用方（快速失败，不静默返回空建议）。"""
+    with _SERVE_WRITE_LOCK:
+        writer.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32000, "message": message},
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        writer.flush()
+
+
+class _AutocompleteTask:
+    """单个自动补全请求的任务：独立线程运行，支持取消标记（尽力而为中断）。"""
+
+    def __init__(
+        self,
+        req_id: Any,
+        request: AutocompleteRequest,
+        services: AutocompleteServices,
+        writer: Any,
+        active: Dict[Any, "_AutocompleteTask"],
+        active_lock: threading.Lock,
+    ) -> None:
+        self.req_id = req_id
+        self.request = request
+        self.services = services
+        self.writer = writer
+        self.active = active
+        self.active_lock = active_lock
+        self._canceled = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name=f"autocomplete-{req_id}", daemon=True
+        )
+
+    def cancel(self) -> None:
+        """标记取消：响应写入前检查，取消后的请求不再返回结果。"""
+        self._canceled.set()
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self) -> None:
+        self._thread.join(timeout=_SERVE_SHUTDOWN_TIMEOUT)
+
+    def _run(self) -> None:
+        suggestions: List[AutocompleteSuggestion] = []
+        failed = False
+        try:
+            suggestions = list(autocomplete(self.request, self.services))
+        except Exception:
+            _LOGGER.error("Autocomplete request %s failed", self.req_id, exc_info=True)
+            failed = True
+        finally:
+            with self.active_lock:
+                self.active.pop(self.req_id, None)
+        if self._canceled.is_set():
+            return
+        if failed:
+            _write_error_response(
+                self.writer, self.req_id, "autocomplete request failed"
+            )
+            return
+        _write_response(self.writer, self.req_id, suggestions)
+
+
+def serve() -> None:
+    """JSON-RPC 常驻补全服务：stdin 读请求，stdout 写响应，直到 stdin 关闭。"""
+    active: Dict[Any, _AutocompleteTask] = {}
+    active_lock = threading.Lock()
+
+    # 进程级静态配置：从 spawn 注入的环境变量读取一次（最外层入口的职责）
+    parser = get_parser()
+    danbooru_url = os.environ.get("DANBOORU_SEARCH_URL", "").strip()
+    show_nsfw = _show_nsfw_from_env()
+
+    for raw_line in sys.stdin:
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            msg = cast(Dict[str, Any], json.loads(line))
+        except json.JSONDecodeError:
+            _LOGGER.warning("Ignoring invalid JSON-RPC line: %s", line)
+            continue
+
+        if msg.get("method") == JSON_RPC_CANCEL_METHOD:
+            cancel_id = msg.get("params", {}).get("id")
+            with active_lock:
+                task = active.pop(cancel_id, None)
+            if task is not None:
+                task.cancel()
+            continue
+
+        if msg.get("method") != JSON_RPC_METHOD or "id" not in msg:
+            continue
+
+        req_id = msg["id"]
+        params = cast(Dict[str, Any], msg.get("params", {}) or {})
+        request = build_request_from_params(params)
+        # 依赖随请求的目录上下文构建；初始化失败在此抛出，进程退出由应用重启（快速失败）
+        providers = build_providers(
+            request.root_dir, request.directory_rel_path, danbooru_url, show_nsfw
+        )
+        services = AutocompleteServices(parser=parser, providers=providers)
+        task = _AutocompleteTask(
+            req_id, request, services, sys.stdout, active, active_lock
+        )
+        with active_lock:
+            active[req_id] = task
+        task.start()
+
+    # stdin 关闭：等待进行中的任务收尾，避免响应未写完进程就退出
+    with active_lock:
+        tasks = list(active.values())
+    for task in tasks:
+        task.join()
+
+
 def main() -> None:
     if len(sys.argv) > 1:
+        if sys.argv[1] == "serve":
+            serve()
+            sys.exit(0)
+
         target_cmd = sys.argv[1]
 
-        for s in autocomplete(target_cmd):
-            print(
-                json.dumps(
-                    {
-                        "text": s.text,
-                        "displayText": s.displayText,
-                        "description": s.description,
-                        "type": s.type,
-                        "style": s.style,
-                    },
-                    ensure_ascii=False,
-                )
-            )
+        # 单次模式：入口从环境变量构造请求上下文与依赖（快速失败：缺失配置即报错退出）
+        request = build_request_from_env(target_cmd)
+        providers = build_providers(
+            request.root_dir,
+            request.directory_rel_path,
+            os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
+            _show_nsfw_from_env(),
+        )
+        services = AutocompleteServices(parser=get_parser(), providers=providers)
+
+        for s in autocomplete(request, services):
+            print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))
         sys.exit(0)
     else:
         _LOGGER.error("Missing target command for autocomplete.")

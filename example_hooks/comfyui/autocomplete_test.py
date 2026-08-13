@@ -2,7 +2,7 @@ import logging
 import unittest
 import os
 import argparse
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List, Set, Tuple
 from unittest.mock import patch, MagicMock
 
 logging.disable(logging.CRITICAL)
@@ -13,6 +13,7 @@ from .autocomplete import (
     NodeProvider,
     LoraProvider,
 )
+from .__main__ import get_parser
 from .danbooru import DanbooruTag
 
 
@@ -21,7 +22,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def _make_context(self, **kwargs: Any) -> AutocompleteContext:
         """Helper to build AutocompleteContext with sane defaults."""
         defaults: Dict[str, Any] = dict(
-            target_command=None,
+            target_command="",
             query="",
             prev_word="",
             cwords=[],
@@ -30,6 +31,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             seen_prompts={},
             workflow=None,
             prompt_meta=None,
+            parser=get_parser(),
         )
         defaults.update(kwargs)
         return AutocompleteContext(**defaults)
@@ -48,6 +50,19 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         base.update(kwargs)
         return argparse.Namespace(**base)
+
+    def _make_history(
+        self,
+        added: Optional[Set[str]] = None,
+        added_times: Optional[Dict[str, str]] = None,
+        all_added: Optional[List[Tuple[str, str]]] = None,
+    ) -> MagicMock:
+        """构造注入 DanbooruProvider 的历史依赖 mock。"""
+        history = MagicMock()
+        history.get_added_prompts.return_value = set(added or [])
+        history.get_added_prompt_times.return_value = dict(added_times or {})
+        history.get_all_added_prompts.return_value = list(all_added or [])
+        return history
 
     # ---- WorkflowPromptProvider tests ----
 
@@ -164,7 +179,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertFalse(provider.can_provide(context))
         provider2 = WorkflowPromptProvider()
         self.assertFalse(provider2.can_provide(context))
-        provider3 = DanbooruProvider(MagicMock())
+        provider3 = DanbooruProvider(MagicMock(), self._make_history())
         self.assertFalse(provider3.can_provide(context))
 
     def test_autocomplete_adjust_prompt_normal(self):
@@ -252,7 +267,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -295,7 +310,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "masterpiece,", "1girl,"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -326,7 +341,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -348,51 +363,43 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             DanbooruTag("1girl", "女孩", "A female character.", "General"),
             DanbooruTag("solo", "单人", "Solo image.", "General"),
         ]
+        history = self._make_history(added={"1girl"})
+        provider = DanbooruProvider(mock_provider, history)
 
-        with patch(
-            "comfyui.autocomplete.get_added_prompts", return_value={"1girl"}
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
-                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
-            },
-        ):
-            # 场景 1：有 query，执行前缀语义搜索
-            context1 = self._make_context(
-                target_command="add",
-                query="girl",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-            )
-            provider = DanbooruProvider(mock_provider)
-            suggestions1 = list(provider.provide(context1))
+        # 场景 1：有 query，执行前缀语义搜索
+        context1 = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        suggestions1 = list(provider.provide(context1))
 
-            self.assertEqual(len(suggestions1), 2)
-            self.assertEqual(suggestions1[0].text, "1girl")
-            self.assertEqual(suggestions1[0].style, "muted")
-            self.assertEqual(suggestions1[1].text, "solo")
-            self.assertEqual(suggestions1[1].style, "")
+        self.assertEqual(len(suggestions1), 2)
+        self.assertEqual(suggestions1[0].text, "1girl")
+        self.assertEqual(suggestions1[0].style, "muted")
+        self.assertEqual(suggestions1[1].text, "solo")
+        self.assertEqual(suggestions1[1].style, "")
 
-            # 场景 2：空 query，执行关联联想
-            context2 = self._make_context(
-                target_command="add",
-                query="",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-                seen_prompts={"portrait": "区域: positive"},
-                workflow={"nodes": []},
-                prompt_meta={},
-            )
-            suggestions2 = list(provider.provide(context2))
+        # 场景 2：空 query，执行关联联想
+        context2 = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={"portrait": "区域: positive"},
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        suggestions2 = list(provider.provide(context2))
 
-            self.assertEqual(len(suggestions2), 2)
-            self.assertEqual(suggestions2[0].text, "1girl")
-            self.assertEqual(suggestions2[0].style, "muted")
-            self.assertEqual(suggestions2[1].text, "solo")
-            self.assertEqual(suggestions2[1].style, "")
+        self.assertEqual(len(suggestions2), 2)
+        self.assertEqual(suggestions2[0].text, "1girl")
+        self.assertEqual(suggestions2[0].style, "muted")
+        self.assertEqual(suggestions2[1].text, "solo")
+        self.assertEqual(suggestions2[1].style, "")
 
     def test_autocomplete_danbooru_history_fallback(self) -> None:
         """空 query 且无关联标签时，应回退到历史添加的标签"""
@@ -401,37 +408,30 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("1girl", "2026-08-07T10:00:00"),
             ("solo", "2026-08-06T10:00:00"),
         ]
+        provider = DanbooruProvider(
+            MagicMock(), self._make_history(all_added=mock_history)
+        )
 
-        with patch(
-            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
-                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
-            },
-        ):
-            # 空 query，无 cwords，无 workflow
-            context = self._make_context(
-                target_command="add",
-                query="",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-                seen_prompts={},
-                workflow=None,
-                prompt_meta=None,
-            )
-            provider = DanbooruProvider(MagicMock())
-            suggestions = list(provider.provide(context))
+        # 空 query，无 cwords，无 workflow
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+        )
+        suggestions = list(provider.provide(context))
 
-            # 应返回所有历史标签，按时间倒序
-            self.assertEqual(len(suggestions), 2)
-            self.assertEqual(suggestions[0].text, "1girl")
-            self.assertEqual(suggestions[0].style, "muted")
-            self.assertIn("历史添加", suggestions[0].description)
-            self.assertEqual(suggestions[1].text, "solo")
-            self.assertEqual(suggestions[1].style, "muted")
+        # 应返回所有历史标签，按时间倒序
+        self.assertEqual(len(suggestions), 2)
+        self.assertEqual(suggestions[0].text, "1girl")
+        self.assertEqual(suggestions[0].style, "muted")
+        self.assertIn("历史添加", suggestions[0].description)
+        self.assertEqual(suggestions[1].text, "solo")
+        self.assertEqual(suggestions[1].style, "muted")
 
     def test_autocomplete_danbooru_history_fallback_filter_seen(self) -> None:
         """历史回退时，应过滤掉当前提示词中已存在的标签"""
@@ -439,52 +439,42 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("1girl", "2026-08-07T10:00:00"),
             ("solo", "2026-08-06T10:00:00"),
         ]
+        provider = DanbooruProvider(
+            MagicMock(), self._make_history(all_added=mock_history)
+        )
 
-        with patch(
-            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
-                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
-            },
-        ):
-            # seen_prompts 中包含 "1girl"
-            context = self._make_context(
-                target_command="add",
-                query="",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-                seen_prompts={"1girl": "区域: positive"},
-                workflow=None,
-                prompt_meta=None,
-            )
-            provider = DanbooruProvider(MagicMock())
-            suggestions = list(provider.provide(context))
+        # seen_prompts 中包含 "1girl"
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={"1girl": "区域: positive"},
+            workflow=None,
+            prompt_meta=None,
+        )
+        suggestions = list(provider.provide(context))
 
-            # 应只返回 "solo"（"1girl" 已在提示词中）
-            self.assertEqual(len(suggestions), 1)
-            self.assertEqual(suggestions[0].text, "solo")
+        # 应只返回 "solo"（"1girl" 已在提示词中）
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].text, "solo")
 
-    def test_autocomplete_danbooru_history_fallback_no_env(self) -> None:
-        """没有环境变量时，历史回退不应生效"""
-        with patch.dict(os.environ, clear=True):
-            context = self._make_context(
-                target_command="add",
-                query="",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-                seen_prompts={},
-                workflow=None,
-                prompt_meta=None,
-            )
-            provider = DanbooruProvider(MagicMock())
-            suggestions = list(provider.provide(context))
-
-            # 无历史环境变量，应返回空
-            self.assertEqual(len(suggestions), 0)
+    def test_autocomplete_danbooru_history_empty(self) -> None:
+        """历史为空时，历史回退不产生建议"""
+        provider = DanbooruProvider(MagicMock(), self._make_history())
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+        )
+        suggestions = list(provider.provide(context))
+        self.assertEqual(len(suggestions), 0)
 
     def test_autocomplete_danbooru_history_supplement_related(self) -> None:
         """有关联标签时，历史标签应作为补充追加"""
@@ -499,38 +489,31 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("solo", "2026-08-06T10:00:00"),
             ("masterpiece", "2026-08-05T10:00:00"),
         ]
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(all_added=mock_history)
+        )
 
-        with patch(
-            "comfyui.autocomplete.get_all_added_prompts", return_value=mock_history
-        ), patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
-                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
-            },
-        ):
-            context = self._make_context(
-                target_command="add",
-                query="",
-                prev_word="",
-                cwords=["/add"],
-                parsed_args=self._make_parsed_args(command="add"),
-                seen_prompts={"portrait": "区域: positive"},
-                workflow={"nodes": []},
-                prompt_meta={},
-            )
-            provider = DanbooruProvider(mock_provider)
-            suggestions = list(provider.provide(context))
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={"portrait": "区域: positive"},
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        suggestions = list(provider.provide(context))
 
-            # 应包含关联联想结果（2个）
-            # 加上历史补充中不重复的（只有 masterpiece 不重复）
-            self.assertEqual(len(suggestions), 3)
-            # 关联联想在前
-            self.assertEqual(suggestions[0].text, "1girl")
-            self.assertEqual(suggestions[1].text, "solo")
-            # 历史补充在后，且不应重复关联联想已有的标签
-            self.assertEqual(suggestions[2].text, "masterpiece")
-            self.assertEqual(suggestions[2].style, "muted")
+        # 应包含关联联想结果（2个）
+        # 加上历史补充中不重复的（只有 masterpiece 不重复）
+        self.assertEqual(len(suggestions), 3)
+        # 关联联想在前
+        self.assertEqual(suggestions[0].text, "1girl")
+        self.assertEqual(suggestions[1].text, "solo")
+        # 历史补充在后，且不应重复关联联想已有的标签
+        self.assertEqual(suggestions[2].text, "masterpiece")
+        self.assertEqual(suggestions[2].style, "muted")
 
     def test_autocomplete_add_prompt_with_neg_flag(self) -> None:
         mock_provider = MagicMock()
@@ -545,7 +528,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--neg"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -566,7 +549,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -592,7 +575,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -613,7 +596,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -641,7 +624,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider)
+        provider = DanbooruProvider(mock_provider, self._make_history())
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
