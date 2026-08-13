@@ -2,9 +2,11 @@
 import json
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, patch, PropertyMock
 import requests
 import time
 
@@ -237,6 +239,86 @@ class TestSQLiteDanbooruTagProvider(unittest.TestCase):
         self.mock_inner.search.assert_not_called()
         mock_trigger.assert_called_once_with("search", "solo")
 
+    def test_search_cache_read_error_falls_back_to_upstream(self) -> None:
+        """缓存读取失败（sqlite3.Error）回退上游（SWR 语义），写缓存不受影响。"""
+        tags = [
+            DanbooruTag("1girl", "女孩", "wiki", "General"),
+        ]
+        self.mock_inner.search.return_value = tags
+        real_conn = self.db_ctx.connection
+
+        class _FlakyReadConn:
+            """仅对 search 缓存读取失败，其余语句转发真实连接。"""
+
+            def execute(self, sql: str, *args: Any, **kwargs: Any) -> Any:
+                if sql.startswith("SELECT") and "danbooru_search_cache" in sql:
+                    raise sqlite3.OperationalError("database is locked")
+                return real_conn.execute(sql, *args, **kwargs)
+
+            def commit(self) -> Any:
+                return real_conn.commit()
+
+            def rollback(self) -> Any:
+                return real_conn.rollback()
+
+        with patch.object(
+            SQLiteContext,
+            "connection",
+            new_callable=PropertyMock,
+            return_value=_FlakyReadConn(),
+        ):
+            results = self.provider.search("girl")
+
+        self.assertEqual(results, tags)
+        self.mock_inner.search.assert_called_once_with("girl")
+
+    def test_search_cache_corrupt_json_falls_back_to_upstream(self) -> None:
+        """缓存数据损坏（JSONDecodeError）回退上游（SWR 语义）。"""
+        now = int(time.time())
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
+                ("solo", "not-json{{{", now),
+            )
+        tags = [
+            DanbooruTag("solo", "单人", "wiki", "General"),
+        ]
+        self.mock_inner.search.return_value = tags
+
+        results = self.provider.search("solo")
+        self.assertEqual(results, tags)
+        self.mock_inner.search.assert_called_once_with("solo")
+
+    def test_search_cache_wrong_shape_propagates(self) -> None:
+        """缓存数据形状错误（TypeError）不再被吞掉：直接抛出。"""
+        now = int(time.time())
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
+                ("solo", json.dumps([{"unexpected": "field"}]), now),
+            )
+
+        with self.assertRaises(TypeError):
+            self.provider.search("solo")
+
+    def test_related_cache_corrupt_json_falls_back_to_upstream(self) -> None:
+        """related 缓存数据损坏（JSONDecodeError）回退上游（SWR 语义）。"""
+        now = int(time.time())
+        tags_key = json.dumps(["1girl"])
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_related_cache (tags, results, updated_at) VALUES (?, ?, ?)",
+                (tags_key, "not-json{{{", now),
+            )
+        mock_res = [DanbooruTag("solo", "单人", "Solo.", "General")]
+        self.mock_inner.related.return_value = mock_res
+
+        results = self.provider.related(["1girl"])
+        self.assertEqual(results, mock_res)
+        self.mock_inner.related.assert_called_once_with(
+            ["1girl"], target_categories=None
+        )
+
     def test_related_preserves_order(self) -> None:
         tags1 = ["1girl", "solo"]
         tags2 = ["solo", "1girl"]
@@ -306,6 +388,15 @@ class TestSQLiteDanbooruTagProvider(unittest.TestCase):
             self.assertIsNotNone(row)
             data = json.loads(row[0])
             self.assertEqual(data[0]["tag"], "solo")
+
+    def test_update_cache_related_invalid_json_propagates(self) -> None:
+        """related 缓存 key 解析失败不再回退为空数据：JSONDecodeError 直接抛出。"""
+        from comfyui.danbooru import update_cache
+
+        with self.assertRaises(json.JSONDecodeError):
+            update_cache(
+                "related", "{not-json", "https://mock-api.com", db_ctx=self.db_ctx
+            )
 
     @patch("sys.argv", ["comfyui.danbooru", "search", "girl", "https://mock-api.com"])
     @patch("comfyui.danbooru.update_cache")
@@ -377,6 +468,51 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.assertEqual(res, mock_tag)
         self.mock_inner.load.assert_called_once_with("1girl")
 
+    def test_load_cache_read_error_falls_back_to_inner(self) -> None:
+        """缓存读取失败（sqlite3.Error）回退到 inner loader（SWR 语义）。"""
+        broken_conn = MagicMock()
+        broken_conn.execute.side_effect = sqlite3.OperationalError("database is locked")
+        self.mock_inner.load.return_value = None
+
+        with patch.object(
+            SQLiteContext,
+            "connection",
+            new_callable=PropertyMock,
+            return_value=broken_conn,
+        ):
+            res = self.loader.load("solo")
+
+        self.assertIsNone(res)
+        self.mock_inner.load.assert_called_once_with("solo")
+
+    def test_load_cache_read_unexpected_error_propagates(self) -> None:
+        """缓存读取的意外错误（非 sqlite3.Error）不再被吞掉：直接抛出。"""
+        broken_conn = MagicMock()
+        broken_conn.execute.side_effect = KeyError("boom")
+
+        with patch.object(
+            SQLiteContext,
+            "connection",
+            new_callable=PropertyMock,
+            return_value=broken_conn,
+        ):
+            with self.assertRaises(KeyError):
+                self.loader.load("solo")
+
+    def test_write_cache_error_propagates(self) -> None:
+        """缓存写入失败不再静默吞掉：直接抛出（快速失败）。"""
+        broken_conn = MagicMock()
+        broken_conn.execute.side_effect = sqlite3.OperationalError("disk I/O error")
+
+        with patch.object(
+            SQLiteContext,
+            "connection",
+            new_callable=PropertyMock,
+            return_value=broken_conn,
+        ):
+            with self.assertRaises(sqlite3.Error):
+                self.loader.write_cache(DanbooruTag("solo", "单人", "Solo.", "General"))
+
     @patch("requests.post")
     def test_akizuki_loader_load_success(self, mock_post: MagicMock) -> None:
         mock_response = MagicMock()
@@ -405,6 +541,70 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.assertEqual(res.tag, "solo")
         self.assertEqual(res.cn_name, "单人")
         self.assertEqual(res.category, "General")
+
+    @patch("requests.post")
+    def test_akizuki_loader_network_failure_propagates(
+        self, mock_post: MagicMock
+    ) -> None:
+        """上游网络失败不再被吞掉并返回 None：直接抛出（快速失败）。"""
+        mock_post.side_effect = requests.RequestException("Network Error")
+
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        with self.assertRaises(requests.RequestException):
+            raw_loader.load("solo")
+
+    @patch("requests.post")
+    def test_akizuki_loader_http_error_propagates(self, mock_post: MagicMock) -> None:
+        """HTTP 非 2xx 不再被吞掉：直接抛出。"""
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.HTTPError(
+            "500 Server Error"
+        )
+        mock_post.return_value = mock_response
+
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        with self.assertRaises(requests.HTTPError):
+            raw_loader.load("solo")
+
+    @patch("requests.post")
+    def test_akizuki_loader_missing_field_propagates(
+        self, mock_post: MagicMock
+    ) -> None:
+        """结果项缺字段（编程错误）不再被吞掉：直接抛出。"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [{"cn_name": "缺 tag 字段", "category": "General"}]
+        }
+        mock_post.return_value = mock_response
+
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        with self.assertRaises(KeyError):
+            raw_loader.load("solo")
+
+    @patch("requests.post")
+    def test_akizuki_loader_not_found_returns_none(self, mock_post: MagicMock) -> None:
+        """无精确匹配视为「未找到」返回 None，而非错误。"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "tag": "solo_focus",
+                    "cn_name": "单人焦点",
+                    "wiki": "",
+                    "category": "General",
+                },
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        self.assertIsNone(raw_loader.load("solo"))
+
+    def test_akizuki_loader_blank_tag_returns_none(self) -> None:
+        """空白 tag 视为「未找到」返回 None，不发起请求。"""
+        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        self.assertIsNone(raw_loader.load("   "))
+        self.assertIsNone(raw_loader.load(""))
 
     @patch("requests.post")
     def test_provider_related_consumes_loader(self, mock_post: MagicMock) -> None:

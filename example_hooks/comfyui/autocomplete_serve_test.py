@@ -148,6 +148,19 @@ class TestServe(unittest.TestCase):
         self.assertEqual(resp["id"], 7)
         self.assertEqual(resp["result"], [])
 
+    def test_serve_reports_error_response(self) -> None:
+        """请求执行失败以 JSON-RPC error 上报，而非静默返回空建议。"""
+        with patch(
+            "comfyui.autocomplete.autocomplete", side_effect=RuntimeError("boom")
+        ):
+            out = _run_serve([_autocomplete_request(1, cwords=["/add"])])
+        resp = json.loads(out.strip())
+        self.assertEqual(resp["jsonrpc"], "2.0")
+        self.assertEqual(resp["id"], 1)
+        self.assertEqual(resp["error"]["code"], -32000)
+        self.assertIn("failed", resp["error"]["message"])
+        self.assertNotIn("result", resp)
+
     def test_autocomplete_explicit_context_used_for_node_completion(self) -> None:
         """逐请求显式传入的上下文驱动补全：空 query + prev_word=--node 应完成节点补全。"""
         fake_prompt_meta: Dict[str, Any] = {

@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import sqlite3
 import subprocess
 import sys
 import time
@@ -63,27 +64,22 @@ class AkizukiDanbooruTagLoader:
             "use_segmentation": False,
         }
 
-        try:
-            response = requests.post(api_url, json=payload, timeout=5.0)
-            response.raise_for_status()
-            res_json = response.json()
-            results = res_json.get("results", [])
+        # 快速失败：网络/HTTP/响应解析错误一律抛出，只有「未找到」返回 None
+        response = requests.post(api_url, json=payload, timeout=5.0)
+        response.raise_for_status()
+        res_json = response.json()
+        results = res_json.get("results", [])
 
-            for item in results:
-                name = item["tag"]
-                if name == tag:
-                    return DanbooruTag(
-                        tag=name,
-                        cn_name=item["cn_name"],
-                        wiki=item.get("wiki", ""),
-                        category=item["category"],
-                    )
-            return None
-        except Exception as e:
-            _LOGGER.error(
-                "Failed to load Danbooru tag %r details: %s", tag, e, exc_info=True
-            )
-            return None
+        for item in results:
+            name = item["tag"]
+            if name == tag:
+                return DanbooruTag(
+                    tag=name,
+                    cn_name=item["cn_name"],
+                    wiki=item.get("wiki", ""),
+                    category=item["category"],
+                )
+        return None
 
 
 class SQLiteDanbooruTagLoader:
@@ -105,7 +101,7 @@ class SQLiteDanbooruTagLoader:
             return None
 
         now = int(time.time())
-        # 1. 尝试从 SQLite 中读取精确匹配的缓存
+        # 1. 尝试从 SQLite 中读取精确匹配的缓存；读取失败（sqlite3.Error）回退上游（SWR 语义）
         try:
             with self._lock:
                 row = self.db_ctx.connection.execute(
@@ -118,7 +114,7 @@ class SQLiteDanbooruTagLoader:
                     return DanbooruTag(
                         tag=tag, cn_name=cn_name, wiki=wiki, category=category
                     )
-        except Exception as e:
+        except sqlite3.Error as e:
             _LOGGER.warning("SQLite tag cache read error: %s", e)
 
         # 2. 缓存未命中或已过期，同步调用底层 loader 获取最新信息
@@ -128,21 +124,18 @@ class SQLiteDanbooruTagLoader:
         return result
 
     def write_cache(self, item: DanbooruTag) -> None:
-        """保存/更新单个 Tag 的详情至缓存。"""
+        """保存/更新单个 Tag 的详情至缓存。缓存写入失败直接抛出（快速失败）。"""
         now = int(time.time())
-        try:
-            with self._lock:
-                with self.db_ctx.transaction() as conn:
-                    conn.execute(
-                        "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
-                        (now - self.ttl,),
-                    )
-                    conn.execute(
-                        "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
-                        (item.tag, item.cn_name, item.wiki, item.category, now),
-                    )
-        except Exception as e:
-            _LOGGER.warning("SQLite tag cache write error: %s", e)
+        with self._lock:
+            with self.db_ctx.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
+                    (now - self.ttl,),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (item.tag, item.cn_name, item.wiki, item.category, now),
+                )
 
 
 class DanbooruTagProvider(Protocol):
@@ -294,7 +287,10 @@ class SQLiteDanbooruTagProvider:
         self.ttl = ttl
 
     def _trigger_async_update(self, method: str, key_arg: str) -> None:
-        """异步拉起子进程更新本地缓存，保证 CLI 的快速响应。"""
+        """异步拉起子进程更新本地缓存，保证 CLI 的快速响应。
+
+        spawn 失败即记录日志（fire-and-forget：本进程明确不等待其结果）。
+        """
         cmd = [
             sys.executable,
             "-m",
@@ -317,27 +313,25 @@ class SQLiteDanbooruTagProvider:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-        except Exception as e:
+        except OSError as e:
             _LOGGER.warning("Failed to spawn async cache updater process: %s", e)
 
     def write_search_cache(self, query: str, results: List[DanbooruTag]) -> None:
-        """持久化写入前缀搜索结果至 SQLite 缓存中，并执行过期数据清理。"""
+        """持久化写入前缀搜索结果至 SQLite 缓存中，并执行过期数据清理。
+
+        缓存写入失败直接抛出（快速失败），调用方可见失败状态。
+        """
         now = int(time.time())
-        try:
-            data_str = json.dumps(
-                [item.__dict__ for item in results], ensure_ascii=False
+        data_str = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "DELETE FROM danbooru_search_cache WHERE updated_at < ?",
+                (now - self.ttl,),
             )
-            with self.db_ctx.transaction() as conn:
-                conn.execute(
-                    "DELETE FROM danbooru_search_cache WHERE updated_at < ?",
-                    (now - self.ttl,),
-                )
-                conn.execute(
-                    "INSERT OR REPLACE INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
-                    (query, data_str, now),
-                )
-        except Exception as e:
-            _LOGGER.warning("SQLite search cache write error: %s", e)
+            conn.execute(
+                "INSERT OR REPLACE INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
+                (query, data_str, now),
+            )
 
     def _make_related_cache_key(
         self, tags: List[str], target_categories: Optional[List[str]] = None
@@ -352,31 +346,29 @@ class SQLiteDanbooruTagProvider:
         results: List[DanbooruTag],
         target_categories: Optional[List[str]] = None,
     ) -> None:
-        """持久化写入联想词结果至 SQLite 缓存中，并执行过期数据清理。"""
+        """持久化写入联想词结果至 SQLite 缓存中，并执行过期数据清理。
+
+        缓存写入失败直接抛出（快速失败），调用方可见失败状态。
+        """
         now = int(time.time())
         tags_key = self._make_related_cache_key(tags, target_categories)
-        try:
-            data_str = json.dumps(
-                [item.__dict__ for item in results], ensure_ascii=False
+        data_str = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "DELETE FROM danbooru_related_cache WHERE updated_at < ?",
+                (now - self.ttl,),
             )
-            with self.db_ctx.transaction() as conn:
-                conn.execute(
-                    "DELETE FROM danbooru_related_cache WHERE updated_at < ?",
-                    (now - self.ttl,),
-                )
-                conn.execute(
-                    "INSERT OR REPLACE INTO danbooru_related_cache (tags, results, updated_at) VALUES (?, ?, ?)",
-                    (tags_key, data_str, now),
-                )
-        except Exception as e:
-            _LOGGER.warning("SQLite related cache write error: %s", e)
+            conn.execute(
+                "INSERT OR REPLACE INTO danbooru_related_cache (tags, results, updated_at) VALUES (?, ?, ?)",
+                (tags_key, data_str, now),
+            )
 
     def search(self, query: str) -> List[DanbooruTag]:
         now = int(time.time())
         cached_results = None
         is_stale = False
 
-        # 1. 尝试从 SQLite 读取缓存
+        # 1. 尝试从 SQLite 读取缓存；读取失败（sqlite3/JSON 损坏）回退上游（SWR 语义）
         try:
             row = self.db_ctx.connection.execute(
                 "SELECT results, updated_at FROM danbooru_search_cache WHERE query = ?",
@@ -388,7 +380,7 @@ class SQLiteDanbooruTagProvider:
                 cached_results = [DanbooruTag(**item) for item in data]
                 if now - updated_at >= self.ttl:
                     is_stale = True
-        except Exception as e:
+        except (sqlite3.Error, json.JSONDecodeError) as e:
             _LOGGER.warning("SQLite search cache read error: %s", e)
 
         # 2. 如果缓存新鲜，直接返回
@@ -400,10 +392,10 @@ class SQLiteDanbooruTagProvider:
             self._trigger_async_update("search", query)
             return cached_results
 
-        # 4. 如果没有缓存，则同步请求上游（主线程阻塞）
+        # 4. 如果没有缓存，则同步请求上游（主线程阻塞）；上游错误直接抛出
         try:
             results = self.provider.search(query)
-        except Exception as e:
+        except requests.RequestException as e:
             _LOGGER.error("Danbooru search upstream error: %s", e, exc_info=True)
             raise
 
@@ -424,7 +416,7 @@ class SQLiteDanbooruTagProvider:
         cached_results = None
         is_stale = False
 
-        # 1. 尝试从 SQLite 读取缓存
+        # 1. 尝试从 SQLite 读取缓存；读取失败（sqlite3/JSON 损坏）回退上游（SWR 语义）
         try:
             row = self.db_ctx.connection.execute(
                 "SELECT results, updated_at FROM danbooru_related_cache WHERE tags = ?",
@@ -436,7 +428,7 @@ class SQLiteDanbooruTagProvider:
                 cached_results = [DanbooruTag(**item) for item in data]
                 if now - updated_at >= self.ttl:
                     is_stale = True
-        except Exception as e:
+        except (sqlite3.Error, json.JSONDecodeError) as e:
             _LOGGER.warning("SQLite related cache read error: %s", e)
 
         # 2. 如果缓存新鲜，直接返回
@@ -448,10 +440,10 @@ class SQLiteDanbooruTagProvider:
             self._trigger_async_update("related", tags_key)
             return cached_results
 
-        # 4. 如果没有缓存，则同步请求上游
+        # 4. 如果没有缓存，则同步请求上游；上游错误直接抛出
         try:
             results = self.provider.related(tags, target_categories=target_categories)
-        except Exception as e:
+        except requests.RequestException as e:
             _LOGGER.error("Danbooru related upstream error: %s", e, exc_info=True)
             raise
 
@@ -480,19 +472,16 @@ def update_cache(
             results = akizuki.search(key_arg)
             provider.write_search_cache(key_arg, results)
         elif method == "related":
-            try:
-                parsed = json.loads(key_arg)
-                if isinstance(parsed, dict):
-                    parsed_dict = cast(Dict[str, Any], parsed)
-                    tags = cast(List[str], parsed_dict.get("tags", []))
-                    target_categories = cast(
-                        Optional[List[str]], parsed_dict.get("target_categories")
-                    )
-                else:
-                    tags = cast(List[str], parsed)
-                    target_categories = None
-            except Exception:
-                tags = []
+            # 缓存 key 解析失败不再回退为空数据：JSONDecodeError 直接抛出（快速失败）
+            parsed = json.loads(key_arg)
+            if isinstance(parsed, dict):
+                parsed_dict = cast(Dict[str, Any], parsed)
+                tags = cast(List[str], parsed_dict.get("tags", []))
+                target_categories = cast(
+                    Optional[List[str]], parsed_dict.get("target_categories")
+                )
+            else:
+                tags = cast(List[str], parsed)
                 target_categories = None
 
             results = akizuki.related(tags, target_categories=target_categories)

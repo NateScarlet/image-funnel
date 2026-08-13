@@ -5,11 +5,13 @@ import os
 import sys
 import json
 import logging
+import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
 from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, cast
+import requests
 from PIL import Image
 
 from .db import SQLiteContext
@@ -675,7 +677,7 @@ class DanbooruProvider(AutocompleteProvider):
                     count += 1
                     if count >= 20:
                         break
-            except Exception as e:
+            except sqlite3.Error as e:
                 _LOGGER.warning("Failed to get history prompts: %s", e, exc_info=True)
                 yield AutocompleteSuggestion(
                     text="",
@@ -704,7 +706,7 @@ class DanbooruProvider(AutocompleteProvider):
                             type="danbooru",
                         )
                     )
-            except Exception as e:
+            except requests.RequestException as e:
                 _LOGGER.warning(
                     "Failed to provide Danbooru suggestions: %s", e, exc_info=True
                 )
@@ -769,7 +771,7 @@ class DanbooruProvider(AutocompleteProvider):
                         )
                         if len(suggestions) >= 20:
                             break
-                except Exception as e:
+                except requests.RequestException as e:
                     _LOGGER.warning(
                         "Failed to provide Danbooru related suggestions: %s",
                         e,
@@ -777,7 +779,7 @@ class DanbooruProvider(AutocompleteProvider):
                     )
                     yield AutocompleteSuggestion(
                         text="",
-                        displayText="⚠ Danbooru 搜索失败",
+                        displayText="⚠ Danbooru 关联搜索失败",
                         description=f"{e}",
                         type="error",
                         style="",

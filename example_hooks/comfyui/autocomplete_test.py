@@ -2,6 +2,8 @@ import logging
 import unittest
 import os
 import argparse
+import requests
+import sqlite3
 from typing import Dict, Any, Optional, List, Set, Tuple
 from unittest.mock import patch, MagicMock
 
@@ -632,6 +634,140 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "cute")
 
+    # ---- Danbooru 失败处理：预期错误显示 ⚠，编程错误传播 ----
+
+    def test_autocomplete_danbooru_search_upstream_error_yields_error_item(
+        self,
+    ) -> None:
+        """上游搜索网络失败（requests.RequestException）以 ⚠ 建议项呈现给用户。"""
+        mock_provider = MagicMock()
+        mock_provider.search.side_effect = requests.RequestException("timeout")
+
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider(mock_provider, self._make_history())
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].type, "error")
+        self.assertIn("搜索失败", suggestions[0].displayText)
+        self.assertEqual(suggestions[0].text, "")
+
+    def test_autocomplete_danbooru_search_programming_error_propagates(
+        self,
+    ) -> None:
+        """上游搜索的编程错误（非 requests.RequestException）不再被吞掉：直接抛出。"""
+        mock_provider = MagicMock()
+        mock_provider.search.side_effect = KeyError("tag")
+
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider(mock_provider, self._make_history())
+
+        with self.assertRaises(KeyError):
+            list(provider.provide(context))
+
+    def test_autocomplete_danbooru_related_upstream_error_yields_error_item(
+        self,
+    ) -> None:
+        """上游关联联想网络失败（requests.RequestException）以 ⚠ 建议项呈现给用户。"""
+        mock_provider = MagicMock()
+        mock_provider.related.side_effect = requests.RequestException(
+            "connection refused"
+        )
+
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="1girl,",
+            cwords=["/add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider(mock_provider, self._make_history())
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].type, "error")
+        self.assertIn("搜索失败", suggestions[0].displayText)
+
+    def test_autocomplete_danbooru_related_internal_error_propagates(
+        self,
+    ) -> None:
+        """上游关联联想的内部错误（sqlite3.Error，非 requests.RequestException）不再被吞掉。"""
+        mock_provider = MagicMock()
+        mock_provider.related.side_effect = sqlite3.OperationalError(
+            "database is locked"
+        )
+
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="1girl,",
+            cwords=["/add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider(mock_provider, self._make_history())
+
+        with self.assertRaises(sqlite3.Error):
+            list(provider.provide(context))
+
+    def test_autocomplete_danbooru_history_error_yields_error_item(self) -> None:
+        """历史读取失败（sqlite3.Error）以 ⚠ 建议项呈现给用户。"""
+        history = self._make_history()
+        history.get_all_added_prompts.side_effect = sqlite3.OperationalError(
+            "database is locked"
+        )
+        provider = DanbooruProvider(MagicMock(), history)
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+        )
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0].type, "error")
+        self.assertIn("历史标签", suggestions[0].displayText)
+
+    def test_autocomplete_danbooru_history_programming_error_propagates(
+        self,
+    ) -> None:
+        """历史读取的编程错误（非 sqlite3.Error）不再被吞掉。"""
+        history = self._make_history()
+        history.get_all_added_prompts.side_effect = KeyError("boom")
+        provider = DanbooruProvider(MagicMock(), history)
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+        )
+
+        with self.assertRaises(KeyError):
+            list(provider.provide(context))
+
     # ---- NodeProvider tests ----
 
     def _get_mock_node_prompt_meta(self) -> Dict[str, Any]:
@@ -926,6 +1062,34 @@ class TestAutocompleteIntegration(unittest.TestCase):
 
         self.assertEqual(len(lines), 20)
         self.assertEqual(lines[0]["text"], "1girl")
+
+    @patch("comfyui.autocomplete.SQLiteDanbooruTagProvider")
+    def test_single_shot_programming_error_propagates(
+        self, mock_sqlite_provider_class: MagicMock
+    ) -> None:
+        """单次模式下编程错误不再被吞掉：异常直接传播（进程以非零退出）。"""
+        import io
+        from comfyui.autocomplete import main as autocomplete_main
+
+        mock_provider = MagicMock()
+        mock_provider.search.side_effect = KeyError("boom")
+        mock_sqlite_provider_class.return_value = mock_provider
+
+        env_vars = {
+            "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
+            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/add"]',
+            "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
+            "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
+            "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
+        }
+
+        with patch.dict(os.environ, env_vars), patch(
+            "sys.argv", ["comfyui.autocomplete", "add"]
+        ), patch("sys.stdout", io.StringIO()):
+            with self.assertRaises(KeyError):
+                autocomplete_main()
 
 
 if __name__ == "__main__":
