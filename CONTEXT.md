@@ -91,6 +91,10 @@ _避免_: Auth request, device request（Pairing 特指设备授权，不是用�
 **筛选条件 / Filter**
 控制哪些图片进入筛选会话的条件集合。支持按目录、评分、标签、文件名查询筛选。所有条件间为 AND 关系。
 
+**常驻补全 / Resident Autocomplete**
+`[directive.autocomplete]` 配置中声明 `protocol = "json-rpc"` 后，应用按 command 维度维护常驻的 JSON-RPC 自动补全脚本进程：首次请求 spawn、后续请求复用、崩溃/不响应时自动重启、空闲回收并随应用退出统一回收。请求参数沿用现有自动补全上下文（`IMAGE_FUNNEL_AUTOCOMPLETE_*` + 图片/笔记上下文 + `rootDir`/`directoryRelPath`），响应复用现有 JSONL 建议结构。依赖由脚本最外层入口（serve 进程 / 单次 main）构建并注入，脚本核心不读取环境变量；依赖初始化失败快速失败（不降级）。取消通过 `$/cancelRequest` 通知（尽力而为），正确性由「丢弃过期响应 + 请求超时」兜底。未设置 `protocol` 的脚本保持单次执行行为（向后兼容，现有脚本零改动）。
+_避免_: persistent process, daemon
+
 **统计信息 / Stats**
 会话粒度的统计（总数、保留数、搁置数、排除数、当前轮剩余数）和目录粒度的统计（图片数、子目录数、评分分布）。
 

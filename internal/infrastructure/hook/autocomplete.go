@@ -16,13 +16,28 @@ import (
 	"go.uber.org/zap"
 )
 
-// autocompleteSuggestionRaw JSONL 行解析结构
+// autocompleteSuggestionRaw JSONL / JSON-RPC result 建议项解析结构
 type autocompleteSuggestionRaw struct {
 	Text        string `json:"text"`
 	DisplayText string `json:"displayText"`
 	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"`
 	Style       string `json:"style,omitempty"`
+}
+
+// convertSuggestion 将建议项原始结构转换为领域值对象
+func convertSuggestion(raw autocompleteSuggestionRaw) *hook.AutocompleteSuggestion {
+	displayText := raw.DisplayText
+	if displayText == "" {
+		displayText = raw.Text
+	}
+	return &hook.AutocompleteSuggestion{
+		Text:        raw.Text,
+		DisplayText: displayText,
+		Description: raw.Description,
+		Type:        raw.Type,
+		Style:       raw.Style,
+	}
 }
 
 // Autocomplete 通过钩子脚本获取指令参数自动完成建议
@@ -67,6 +82,15 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 		}
 	}
 
+	// 按 protocol 分流：json-rpc 走常驻复用通道；缺省保持单次执行（向后兼容，现有脚本零改动）
+	if targetHook.Directive.Autocomplete.Protocol == "json-rpc" {
+		return r.autocompleteJSONRPC(ctx, targetHook, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
+	}
+	return r.autocompleteOnce(ctx, targetHook, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
+}
+
+// autocompleteOnce 单次执行自动补全脚本：每次请求 spawn 新进程（默认行为）
+func (r *Runner) autocompleteOnce(ctx context.Context, targetHook *hookConfig, linePrefix, query string, imageIDs, imagePaths []string, noteAbsPath string) ([]*hook.AutocompleteSuggestion, error) {
 	argv, err := parseCommandArgs(targetHook.Directive.Autocomplete.Command)
 	if err != nil {
 		return nil, fmt.Errorf("invalid autocomplete command: %w", err)
@@ -174,17 +198,7 @@ func parseAutocompleteJSONL(data []byte) ([]*hook.AutocompleteSuggestion, error)
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			return nil, fmt.Errorf("failed to parse autocomplete suggestion line: %w, line: %s", err, line)
 		}
-		displayText := raw.DisplayText
-		if displayText == "" {
-			displayText = raw.Text
-		}
-		suggestions = append(suggestions, &hook.AutocompleteSuggestion{
-			Text:        raw.Text,
-			DisplayText: displayText,
-			Description: raw.Description,
-			Type:        raw.Type,
-			Style:       raw.Style,
-		})
+		suggestions = append(suggestions, convertSuggestion(raw))
 	}
 	return suggestions, scanner.Err()
 }

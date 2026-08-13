@@ -21,7 +21,8 @@ type imageDispatchTrigger struct {
 
 // autocompleteConfig 自动完成脚本配置
 type autocompleteConfig struct {
-	Command string `toml:"command"`
+	Command  string `toml:"command"`
+	Protocol string `toml:"protocol"` // "json-rpc" 启用常驻复用；缺省（空）为单次执行
 }
 
 // directiveConfig 钩子提供的笔记指令配置

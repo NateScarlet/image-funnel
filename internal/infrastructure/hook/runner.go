@@ -49,6 +49,10 @@ type Runner struct {
 	writeIgnore        map[string]writeIgnoreItem
 	muTasks            sync.Mutex
 	activeTasks        map[string]*activeTask
+	jsonrpcPool             *jsonrpcPool
+	autocompleteTimeout     time.Duration
+	autocompleteIdleTimeout time.Duration
+	closeOnce               sync.Once
 }
 
 func NewRunner(
@@ -86,9 +90,13 @@ func NewRunner(
 		cancel:             cancel,
 		writeIgnore:        make(map[string]writeIgnoreItem),
 		activeTasks:        make(map[string]*activeTask),
+		autocompleteTimeout:      autocompleteDefaultTimeout,
+		autocompleteIdleTimeout:  autocompleteDefaultIdleTimeout,
 	}
 
 	r.debouncer = newDebouncer(100*time.Millisecond, r.onDebounceTrigger)
+
+	r.jsonrpcPool = newJSONRPCPool(r.logger, r.autocompleteIdleTimeout, r.spawnJSONRPCProcess)
 
 	r.wg.Add(2)
 	go func() {
@@ -104,9 +112,12 @@ func NewRunner(
 }
 
 func (r *Runner) Close() {
-	r.cancel()
-	close(r.ch)
-	r.wg.Wait()
+	r.closeOnce.Do(func() {
+		r.cancel()
+		r.jsonrpcPool.Close()
+		close(r.ch)
+		r.wg.Wait()
+	})
 }
 
 func (r *Runner) List(ctx context.Context) ([]*hook.Hook, error) {

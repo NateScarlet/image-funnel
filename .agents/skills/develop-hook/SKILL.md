@@ -440,3 +440,29 @@ except requests.RequestException as e:
 ```
 
 错误建议项与其他正常建议项可以共存（如本地补全仍正常提供），不会互相影响。
+
+### 6.8 常驻复用：JSON-RPC 协议（可选）
+
+频繁输入指令参数时，每次补全请求 spawn 新进程的启动开销可能造成卡顿。可在 `[directive.autocomplete]` 中声明 `protocol = "json-rpc"` 将补全脚本作为**常驻进程**复用：
+
+```toml
+[directive.autocomplete]
+command = "uv run runner.py comfyui.autocomplete serve"  # 完整启动命令由配置管理，应用只负责执行
+protocol = "json-rpc"                                    # 启用常驻复用；缺省保持单次执行（向后兼容）
+```
+
+启用后，应用首次请求时启动脚本并保持进程常驻，后续补全请求经该进程的 **JSON-RPC 2.0 over stdio** 往返，不再每次重启进程。应用的职责仅有两件：执行配置的 `command` 与按 `protocol` 声明的协议交互；脚本如何实现常驻（子命令、参数、语言）由脚本开发者决定。
+
+**协议契约**：
+
+- **请求**（stdin 每行一个 JSON）：`{"jsonrpc":"2.0", id, method:"autocomplete", params:{cwords, cwordIdx, prevWord, linePrefix, query}}`，入参沿用现有自动补全上下文（另含 `imageIDs`/`imagePaths`/`notePath`/`rootDir`/`directoryRelPath`）。目标指令名可从 `cwords[0]`（如 `/add`）推导。
+- **响应**（stdout 每行一个 JSON）：`{"jsonrpc":"2.0", id, result:[{text, displayText, description, type, style}, ...]}`——复用现有 JSONL 建议结构，`id` 必须回显请求 id。
+- **取消通知**：`{"jsonrpc":"2.0", method:"$/cancelRequest", params:{id}}`（notification，无 id、无响应）。进程收到后应**中断对应 id 的处理**（如正在进行的读文件/网络请求）；对已完成的请求取消是 no-op。
+- **进程行为**：维护 `id → 进行中任务` 映射，stdin 关闭时退出。业务日志输出到 **stderr**，不污染协议 stdout。
+
+> [!IMPORTANT]
+> **依赖注入**：常驻脚本的核心补全逻辑**不得自行读取环境变量或构建依赖**（解析器、Danbooru provider、数据库连接等），应由最外层入口（`serve()` / 单次 `main()`）构建并注入；按请求变化的目录上下文（`rootDir`/`directoryRelPath`）随请求参数传递。依赖**初始化失败应直接抛出**（快速失败，进程退出由应用重启），不要捕获降级。参考 `example_hooks/comfyui/autocomplete.py`：`build_request_from_params` 构造请求、`build_providers` 构建 provider、`autocomplete(request, services)` 为纯执行。
+
+**应用侧兜底（三层）**：发新请求前先对进行中旧请求发 `$/cancelRequest`；按 id 匹配响应、过期响应丢弃；请求级超时未响应则丢弃该请求并重启进程。因此取消是**尽力而为**——脚本即使不实现可取消性，结果正确性也不受影响。
+
+**参考实现**：`example_hooks/comfyui/autocomplete.py` 的 `serve()` 使用线程包装每个请求并支持取消标记，可参考。
