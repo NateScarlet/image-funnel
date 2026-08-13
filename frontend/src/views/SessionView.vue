@@ -77,7 +77,7 @@
               :key="`rated-reject-${ratedRejectSignal.seq}`"
               class="absolute inset-0 pointer-events-none rated-reject-flash"
               :style="{ '--flash-color': getStarColorVar(ratedRejectSignal.rating) }"
-              @animationend="ratedRejectSignal = undefined"
+              @animationend="clearRatedRejectFlash()"
             ></div>
           </template>
           <template #control-bg>
@@ -541,7 +541,12 @@ const imageLoadedAt = computed(() => {
   return undefined;
 });
 const { marking, mark: originalMarkImage } = useMarkImage(sessionId, imageLoadedAt);
-const { signal: ratedRejectSignal, flash: ratedRejectFlash } = useRatedRejectFlash();
+// flash 信号按会话作用域隔离，防止提交后切换到下一目录会话时重放残留动画
+const {
+  signal: ratedRejectSignal,
+  flash: ratedRejectFlash,
+  clear: clearRatedRejectFlash,
+} = useRatedRejectFlash(sessionId);
 async function markImage(id: string, action: ImageAction) {
   if (autoRejectEnabled.value) {
     autoRejectRunning.value = true;
