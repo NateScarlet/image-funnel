@@ -125,8 +125,13 @@ func (d *DirectoryRepository) readStateV1(data []byte) (*shared.DirectoryStateDT
 
 	var lastSessionV3 *shared.DirectoryStateLastSessionDTO
 	if stateV1.LastSession != nil {
+		// id 可能是早期版本写入的 {}（scalar.ID 当时无 JSON 序列化），非字符串降级为空 ID
+		var idStr string
+		if stateV1.LastSession.ID != nil {
+			idStr, _ = stateV1.LastSession.ID.(string)
+		}
 		lastSessionV3 = &shared.DirectoryStateLastSessionDTO{
-			ID:         scalar.ToID(stateV1.LastSession.ID),
+			ID:         scalar.ToID(idStr),
 			TargetKeep: stateV1.LastSession.TargetKeep,
 		}
 		if stateV1.LastSession.Filter != nil {

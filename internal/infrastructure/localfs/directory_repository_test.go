@@ -6,6 +6,7 @@ import (
 	"main/internal/shared"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -179,5 +180,52 @@ func TestDirectoryRepository_MigrateStateFromV1WithLastSession(t *testing.T) {
 	}
 	if loadedState.LastSession.TargetKeep != 5 {
 		t.Errorf("expected LastSession.TargetKeep to be 5, got %d", loadedState.LastSession.TargetKeep)
+	}
+}
+
+func TestDirectoryRepository_MigrateStateFromV1WithEmptyObjectID(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	repo := NewDirectoryRepository(tmpDir)
+
+	// 模拟旧版本生成的 v1 state 文件：lastSession.id 为 {}（当时 scalar.ID 未实现 JSON 序列化，写入时空对象）
+	v1Content := map[string]any{
+		"version": 1,
+		"lastSession": map[string]any{
+			"id":         map[string]any{},
+			"filter":     map[string]any{"rating": []int{0, 3, 4}},
+			"targetKeep": 4,
+		},
+		"updatedAt": time.Now().Format(time.RFC3339),
+	}
+	v1JSON, _ := json.Marshal(v1Content)
+	v1FilePath := filepath.Join(tmpDir, ".io.github.natescarlet.image-funnel.state.json")
+	if err := os.WriteFile(v1FilePath, v1JSON, 0644); err != nil {
+		t.Fatalf("failed to write v1 state file: %v", err)
+	}
+
+	loadedState, err := repo.ReadState(ctx, "")
+	if err != nil {
+		t.Fatalf("ReadState failed: %v", err)
+	}
+	if loadedState == nil {
+		t.Fatal("expected state to be loaded, got nil")
+	}
+	if loadedState.Version != 3 {
+		t.Errorf("expected Version to be 3, got %d", loadedState.Version)
+	}
+
+	// id 丢失的脏数据应降级为空 ID，其余字段保留
+	if loadedState.LastSession == nil {
+		t.Fatal("lastSession is missing after migration")
+	}
+	if !loadedState.LastSession.ID.IsZero() {
+		t.Errorf("expected LastSession.ID to be empty, got %v", loadedState.LastSession.ID)
+	}
+	if loadedState.LastSession.TargetKeep != 4 {
+		t.Errorf("expected LastSession.TargetKeep to be 4, got %d", loadedState.LastSession.TargetKeep)
+	}
+	if !slices.Equal(loadedState.LastSession.Filter.Rating, []int{0, 3, 4}) {
+		t.Errorf("expected filter rating to be [0 3 4], got %v", loadedState.LastSession.Filter.Rating)
 	}
 }

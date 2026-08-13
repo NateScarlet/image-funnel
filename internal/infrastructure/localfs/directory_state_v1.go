@@ -23,9 +23,10 @@ type DirectoryStateBrowseDTOV1 struct {
 	FilterMemoBy *shared.NoteFilters  `json:"filterMemoBy,omitempty"` // NoteFilters v1（已重命名为 filterNoteBy）
 }
 
-// DirectoryStateLastSessionDTOAlias v1版本的 LastSession（与 v2 结构相同）
+// DirectoryStateLastSessionDTOAlias v1版本的 LastSession
+// ID 使用 any：早期版本 scalar.ID 未实现 JSON 序列化，写入的 id 可能是 {}，需像 v2 一样容错迁移
 type DirectoryStateLastSessionDTOAlias struct {
-	ID         string `json:"id"`
+	ID         any    `json:"id"`
 	Filter     any    `json:"filter"`
 	TargetKeep int    `json:"targetKeep"`
 }
