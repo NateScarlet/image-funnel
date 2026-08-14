@@ -516,6 +516,10 @@ func TestAutocomplete_JSONRPC_TimeoutRestartsProcess(t *testing.T) {
 	// 超时后应杀死不响应的进程并移出进程池
 	assert.Eventually(t, func() bool { return env.poolSize() == 0 }, 5*time.Second, 20*time.Millisecond)
 
+	// 恢复默认超时：新 spawn 的进程在慢速环境（如 CI 模拟架构）下启动可能超过 300ms，
+	// 避免新进程的首次请求因启动过慢被误判为超时
+	env.runner.autocompleteTimeout = autocompleteDefaultTimeout
+
 	// 下一次请求应重新 spawn 新进程正常工作
 	sug2, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "b")
 	require.NoError(t, err)
