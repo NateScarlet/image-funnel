@@ -23,8 +23,8 @@
           </span>
         </div>
 
-        <!-- 历史条目列表 -->
-        <div class="max-h-64 overflow-y-auto space-y-2.5 pr-1 text-xs">
+        <!-- 历史条目列表（滚动到底部自动加载下一页） -->
+        <div ref="listContainerRef" class="max-h-64 overflow-y-auto space-y-2.5 pr-1 text-xs">
           <div
             v-for="item in trashHistoryNodes"
             :key="item.id"
@@ -82,6 +82,19 @@
           </div>
         </div>
 
+        <!-- 加载更多时底部提示 -->
+        <div v-if="loading" class="flex justify-center pt-1">
+          <svg class="w-4 h-4 animate-spin text-secondary-500" viewBox="0 0 24 24" fill="none">
+            <path
+              :d="mdiLoading"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+
         <!-- 清空与期限配置区 -->
         <div class="pt-2 border-t border-primary-800/50 space-y-2">
           <div class="flex items-center justify-between gap-2">
@@ -101,7 +114,7 @@
 
           <button
             class="w-full py-1.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/40 border border-red-900/50 text-red-300 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1"
-            :class="{ 'pointer-events-none opacity-40 cursor-not-allowed': expiredSize === 0 }"
+            :class="{ 'pointer-events-none opacity-40 cursor-not-allowed': !canClean }"
             @click="emptyTrashHistory"
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24">
@@ -116,10 +129,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { mdiDelete, mdiDeleteSweep, mdiFileImage } from "@mdi/js";
+import { computed, ref, useTemplateRef } from "vue";
+import { mdiDelete, mdiDeleteSweep, mdiFileImage, mdiLoading } from "@mdi/js";
 import AppDropdown from "./AppDropdown.vue";
 import useTrash from "@/composables/domain/useTrash";
+import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import useNotification from "@/composables/useNotification";
 import useStorage from "@/composables/useStorage";
 import useCurrentTime from "@/composables/useCurrentTime";
@@ -137,7 +151,15 @@ const { model: trashMinAge, flush: saveMinAge } = useStorage<string>(
 );
 
 const { showSuccess } = useNotification();
-const { data: trashHistoryData, undo: domainUndo, empty: domainEmpty } = useTrash();
+const loadingCount = ref(0);
+const loading = computed(() => loadingCount.value > 0);
+const {
+  nodes: trashHistoryNodes,
+  pageInfo,
+  fetchMore,
+  undo: domainUndo,
+  empty: domainEmpty,
+} = useTrash({ loadingCount });
 
 async function undoTrashHistory(historyId: string) {
   const result = await domainUndo(historyId);
@@ -160,10 +182,6 @@ async function emptyTrashHistory() {
     showSuccess(`已成功清理 ${clearedCount} 项历史图片及其伴随文件`);
   }
 }
-
-const trashHistoryNodes = computed(() => {
-  return trashHistoryData.value?.trashHistory?.nodes || [];
-});
 
 const totalTrashSize = computed(() => {
   return trashHistoryNodes.value.reduce(
@@ -198,9 +216,10 @@ const expiredSize = computed(() => {
 });
 
 // 是否还有下一页数据
-const hasNextPage = computed(() => {
-  return trashHistoryData.value?.trashHistory?.pageInfo?.hasNextPage ?? false;
-});
+const hasNextPage = computed(() => pageInfo.value.hasNextPage);
+
+// 有下一页时后续分页可能存在已过期项，不应仅凭当前已加载部分禁用清理按钮
+const canClean = computed(() => expiredSize.value > 0 || hasNextPage.value);
 
 // 清理按钮文本
 const cleanupButtonText = computed(() => {
@@ -209,6 +228,15 @@ const cleanupButtonText = computed(() => {
     return `清理 ≥${size}`;
   }
   return `清理 ${size}`;
+});
+
+const listContainerRef = useTemplateRef<HTMLElement>("listContainerRef");
+
+// 列表滚动到底部时自动加载下一页
+useInfiniteScroll(listContainerRef, async () => {
+  if (hasNextPage.value && !loading.value) {
+    await fetchMore();
+  }
 });
 
 // 监听下一个条目超过保留期的时间点，到达时自动刷新按钮文本

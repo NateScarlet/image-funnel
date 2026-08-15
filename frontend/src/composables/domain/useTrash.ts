@@ -1,5 +1,6 @@
 import useQuery from "@/graphql/utils/useQuery";
 import mutate from "@/graphql/utils/mutate";
+import useRelayConnection from "../useRelayConnection";
 import {
   TrashImagesDocument,
   TrashHistoryDocument,
@@ -7,12 +8,20 @@ import {
   EmptyTrashDocument,
   type ImageFiltersInput,
 } from "@/graphql/generated";
+import type { Ref } from "vue";
 
-export default function useTrash() {
-  const { data, refresh } = useQuery(TrashHistoryDocument, {
+export default function useTrash(options?: { loadingCount?: Ref<number> }) {
+  const { data, query, refresh } = useQuery(TrashHistoryDocument, {
     variables: () => ({ first: 100 }),
     fetchPolicy: "cache-and-network",
+    loadingCount: options?.loadingCount,
   });
+
+  // 基于 Relay 连接派生节点列表、分页信息与加载更多能力
+  const connection = useRelayConnection(
+    () => data.value?.trashHistory,
+    () => query,
+  );
 
   async function trashImages(directoryId: string, filterBy: ImageFiltersInput, message?: string) {
     const result = await mutate(TrashImagesDocument, {
@@ -59,5 +68,13 @@ export default function useTrash() {
     return undefined;
   }
 
-  return { data, refresh, undo, empty, trashImages };
+  return {
+    nodes: connection.nodes,
+    pageInfo: connection.pageInfo,
+    fetchMore: connection.fetchMore,
+    refresh,
+    undo,
+    empty,
+    trashImages,
+  };
 }
