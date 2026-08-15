@@ -230,6 +230,28 @@ describe("useNoteAutocomplete composable", () => {
     expect(activeIndex.value).toBe(0);
   });
 
+  test("handleKeyEsc returns true and dismisses when autocomplete is showing", () => {
+    model.value = "/a";
+    cursorStart.value = 2;
+    cursorEnd.value = 2;
+
+    const { state, handleKeyEsc } = createAutocomplete();
+    expect(state.value?.show).toBe(true);
+
+    const handled = handleKeyEsc();
+    expect(handled).toBe(true);
+    expect(state.value).toBeNull();
+  });
+
+  test("handleKeyEsc returns false when autocomplete is not showing", () => {
+    model.value = "plain text";
+    cursorStart.value = 5;
+    cursorEnd.value = 5;
+
+    const { handleKeyEsc } = createAutocomplete();
+    expect(handleKeyEsc()).toBe(false);
+  });
+
   test("isSearching is false when query completes with empty results", () => {
     vi.useFakeTimers();
     model.value = "/add p";

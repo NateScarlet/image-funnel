@@ -261,10 +261,18 @@ export function useNoteAutocomplete(options: Options) {
     activeIndex.value = 0;
   }
 
-  function handleKeyEsc() {
+  /** 关闭当前自动补全（保持 dismissed 直到用户重新触发） */
+  function dismiss() {
+    dismissed.value = true;
+  }
+
+  /** 处理 Esc：若补全正在显示则关闭并返回 true（调用方应阻断事件冒泡），否则返回 false */
+  function handleKeyEsc(): boolean {
     if (state.value?.show) {
-      dismissed.value = true;
+      dismiss();
+      return true;
     }
+    return false;
   }
 
   // #endregion
@@ -319,6 +327,7 @@ export function useNoteAutocomplete(options: Options) {
     state,
     dismissed,
     resetDismissed,
+    dismiss,
     onFocus,
     onBlur,
     handleSelectSuggestion,

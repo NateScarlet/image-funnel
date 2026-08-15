@@ -136,7 +136,12 @@ vi.mock("@/composables/useNotification", () => ({
     remove: vi.fn(),
   })),
 }));
-vi.mock("@/composables/useClickOutside", () => ({ default: vi.fn() }));
+const clickOutsideHandlers: Array<{ cb: (e: Event) => void }> = [];
+vi.mock("@/composables/useClickOutside", () => ({
+  default: vi.fn((_el: unknown, cb: (e: Event) => void) => {
+    clickOutsideHandlers.push({ cb });
+  }),
+}));
 vi.mock("@/composables/useCurrentTime", () => {
   return {
     default: vi.fn(() => {
@@ -202,6 +207,7 @@ describe("NoteEditor", () => {
     mockQuery.mockResolvedValue({ data: { hookAutocomplete: [] } });
     refreshOn.mockClear();
     timeNow.value = 1000000;
+    clickOutsideHandlers.length = 0;
   });
 
   afterEach(() => {
@@ -265,6 +271,100 @@ describe("NoteEditor", () => {
       .element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await nextTick();
     expect(getSuggestionMenu()).toBeNull();
+  });
+
+  test("escape dismisses autocomplete and it stays dismissed after keyup", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    expect(getSuggestionMenu()).not.toBeNull();
+
+    const textarea = wrapper.find("textarea");
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await nextTick();
+    expect(getSuggestionMenu()).toBeNull();
+
+    // 真实按键后 keyup 会触发 onCursorChange，菜单不应因此重新出现
+    textarea.element.dispatchEvent(new KeyboardEvent("keyup", { key: "Escape", bubbles: true }));
+    await nextTick();
+    expect(getSuggestionMenu()).toBeNull();
+  });
+
+  function mountAttached(initialValue = "") {
+    wrapper = mount(NoteEditor, {
+      attachTo: document.body,
+      props: {
+        modelValue: initialValue,
+        "onUpdate:modelValue": (val: string) => wrapper.setProps({ modelValue: val }),
+      },
+    });
+    return wrapper;
+  }
+
+  test("escape stops propagation so enclosing dialog does not close when dismissing autocomplete", async () => {
+    // attachTo 使事件能冒泡到 window，从而验证 stopPropagation 生效
+    await typeInTextarea(mountAttached(), "/add ");
+    expect(getSuggestionMenu()).not.toBeNull();
+
+    let windowKeydownFired = 0;
+    const listener = () => {
+      windowKeydownFired++;
+    };
+    window.addEventListener("keydown", listener);
+    try {
+      const ev = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+      wrapper.find("textarea").element.dispatchEvent(ev);
+      await nextTick();
+
+      // 补全被关闭
+      expect(getSuggestionMenu()).toBeNull();
+      // 事件未冒泡到 window，外层对话框的 Esc 快捷键不会触发关闭
+      expect(windowKeydownFired).toBe(0);
+    } finally {
+      window.removeEventListener("keydown", listener);
+    }
+  });
+
+  test("escape does not stop propagation when autocomplete is not showing", async () => {
+    await typeInTextarea(mountAttached(), "plain text");
+    expect(getSuggestionMenu()).toBeNull();
+
+    let windowKeydownFired = 0;
+    const listener = () => {
+      windowKeydownFired++;
+    };
+    window.addEventListener("keydown", listener);
+    try {
+      const ev = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+      wrapper.find("textarea").element.dispatchEvent(ev);
+      await nextTick();
+      // 补全未显示时不阻断冒泡，外层对话框的 Esc 快捷键可以正常关闭
+      expect(windowKeydownFired).toBe(1);
+    } finally {
+      window.removeEventListener("keydown", listener);
+    }
+  });
+
+  test("closes autocomplete when clicking outside the menu and textarea", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    expect(getSuggestionMenu()).not.toBeNull();
+
+    // 模拟点击菜单与文本框之外的区域
+    const ev = new MouseEvent("click", { bubbles: true });
+    document.body.dispatchEvent(ev);
+    clickOutsideHandlers.forEach((h) => h.cb(ev));
+    await nextTick();
+    expect(getSuggestionMenu()).toBeNull();
+  });
+
+  test("clicking inside the textarea does not dismiss autocomplete", async () => {
+    await typeInTextarea(createWrapper(), "/add ");
+    expect(getSuggestionMenu()).not.toBeNull();
+
+    // 模拟点击文本框内部（target 落在 textarea 上）
+    const ev = new MouseEvent("click", { bubbles: true });
+    wrapper.find("textarea").element.dispatchEvent(ev);
+    clickOutsideHandlers.forEach((h) => h.cb(ev));
+    await nextTick();
+    expect(getSuggestionMenu()).not.toBeNull();
   });
 
   test("menu visible after blur (within 200ms)", async () => {

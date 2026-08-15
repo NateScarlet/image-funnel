@@ -185,7 +185,7 @@
         @keydown.up="handleKeyUp"
         @keydown.down="handleKeyDown"
         @keydown.enter="onKeyEnter"
-        @keydown.esc.prevent="handleKeyEsc"
+        @keydown.esc.prevent="onKeyEsc"
         @keydown.space="handleKeySpace"
         @blur="handleBlur"
         @focus="handleFocus"
@@ -276,6 +276,16 @@ useClickOutside(dispatchMenuRef, () => {
   showDispatchMenu.value = false;
 });
 
+// 点击补全浮层与文本框之外的区域时关闭补全，避免浮层遮挡上层内容
+useClickOutside(
+  () => floatingEl.value,
+  (e) => {
+    const ta = textareaRef.value;
+    if (ta && e.target instanceof Node && ta.contains(e.target)) return;
+    dismiss();
+  },
+);
+
 async function triggerDispatch(hookId: string, hookName: string) {
   if (!props.noteId || isDispatching.value) return;
   isDispatching.value = true;
@@ -321,6 +331,7 @@ const {
   isSearching,
   state: autocompleteState,
   resetDismissed,
+  dismiss,
   onFocus: onAutocompleteFocus,
   onBlur: onAutocompleteBlur,
   handleSelectSuggestion,
@@ -387,6 +398,13 @@ function onOptionPointerEnter(idx: number, e: PointerEvent) {
   }
 }
 
+/** Esc 键：先关闭补全；若补全未显示则让事件冒泡，由外层对话框/抽屉的 Esc 快捷键处理关闭 */
+function onKeyEsc(e: KeyboardEvent) {
+  if (handleKeyEsc()) {
+    e.stopPropagation();
+  }
+}
+
 /** Enter 键确认 */
 function onKeyEnter(e: KeyboardEvent) {
   const p = handleKeyEnter(e, textareaRef.value?.selectionEnd ?? 0);
@@ -407,9 +425,15 @@ function onInsertDirective(dirName: string) {
 function onCursorChange() {
   const el = textareaRef.value;
   if (!el) return;
-  cursorStart.value = el.selectionStart;
-  cursorEnd.value = el.selectionEnd;
-  resetDismissed();
+  const newStart = el.selectionStart;
+  const newEnd = el.selectionEnd;
+  const moved = newStart !== cursorStart.value || newEnd !== cursorEnd.value;
+  cursorStart.value = newStart;
+  cursorEnd.value = newEnd;
+  // 仅在光标真正移动时重置 dismissed（例如按 Esc 后的 keyup 不应让菜单重现）
+  if (moved) {
+    resetDismissed();
+  }
 }
 
 function handleInput() {
