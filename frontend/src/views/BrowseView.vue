@@ -10,7 +10,7 @@
         <div class="flex items-center gap-3 flex-1 min-w-0">
           <!-- 返回主页 -->
           <RouterLink
-            to="/"
+            :to="homeTo"
             class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex-none flex items-center justify-center cursor-pointer no-underline"
             title="返回主页"
           >
@@ -131,7 +131,7 @@
           <div class="flex items-center gap-2">
             <!-- 返回主页 -->
             <RouterLink
-              to="/"
+              :to="homeTo"
               class="p-2 bg-primary-800 hover:bg-primary-700 rounded-lg border border-primary-700 hover:border-primary-600 transition-all text-primary-300 hover:text-white flex items-center justify-center cursor-pointer no-underline"
               title="返回主页"
             >
@@ -329,6 +329,12 @@ const router = useRouter();
 
 // 目录ID，默认从路由 query 中获取，否则为空字符串（即代表根目录）
 const currentDirectoryId = computed(() => (route.query.dir as string) || "");
+
+// 返回主页时携带当前目录，使主页自动选中来源目录
+const homeTo = computed(() => ({
+  path: "/",
+  query: currentDirectoryId.value ? { dir: currentDirectoryId.value } : {},
+}));
 
 const parentTo = computed(() => {
   if (currentDirectory.value?.parentId) {
