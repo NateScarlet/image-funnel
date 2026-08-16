@@ -18,6 +18,7 @@ from .weight_manager import WeightManager
 from .prompt_locator import REGION_START_RE
 from .command_handlers import COMMAND_HANDLERS, CommandContext
 from .config import ComfyUIConfig
+from .db import SQLiteContext
 from . import operation_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     )
 
     # 在执行前记录操作历史，失败的操作也需要被追溯和重放
-    op_history = operation_history.OperationHistory.from_env()
+    op_history = operation_history.OperationHistory(SQLiteContext.from_env())
     op_history.extract_params(args)
 
     # 构建进度通知 tag

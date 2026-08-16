@@ -38,10 +38,6 @@ class OperationHistory:
         """返回底层数据库路径以保证对现有测试的向后兼容。"""
         return self.db_ctx.db_path
 
-    @staticmethod
-    def from_env() -> "OperationHistory":
-        return OperationHistory(SQLiteContext.from_env())
-
     def record(self, command: str, data: dict[str, Any]) -> None:
         with self.db_ctx.transaction() as conn:
             conn.execute(
@@ -155,18 +151,3 @@ class OperationHistory:
             "ORDER BY MAX(created_at) DESC"
         ).fetchall()
         return [(row[0], row[1]) for row in rows]
-
-
-def get_added_prompts(candidates: list[str]) -> set[str]:
-    """返回 candidates 中已在历史记录中存在的提示词集合。"""
-    return OperationHistory.from_env().get_added_prompts(candidates)
-
-
-def get_added_prompt_times(candidates: list[str]) -> dict[str, str]:
-    """返回 candidates 中各提示词最近一次添加的 created_at 时间戳字典。"""
-    return OperationHistory.from_env().get_added_prompt_times(candidates)
-
-
-def get_all_added_prompts() -> list[tuple[str, str]]:
-    """返回所有历史 add 操作的去重提示词列表，按最近添加时间倒序排列。"""
-    return OperationHistory.from_env().get_all_added_prompts()

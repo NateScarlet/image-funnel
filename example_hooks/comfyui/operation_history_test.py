@@ -5,7 +5,6 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from .db import SQLiteContext
 from .operation_history import OperationHistory
@@ -170,18 +169,6 @@ class TestOperationHistory(unittest.TestCase):
             self.assertEqual(
                 json.loads(rows[0][1]), {"adjust_type": "aspect", "ratio": "16:9"}
             )
-
-    def test_from_env(self):
-        with patch.dict(
-            os.environ,
-            {
-                "IMAGE_FUNNEL_ROOT_DIR": "/tmp",
-                "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "test_dir",
-            },
-        ):
-            history = OperationHistory.from_env()
-        expected = os.path.join("/tmp", "test_dir", ".io.github.natescarlet.hook.db")
-        self.assertEqual(history.db_path, expected)
 
     def test_get_added_prompts(self):
         with tempfile.TemporaryDirectory() as tmp:
