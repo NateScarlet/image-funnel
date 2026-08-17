@@ -97,7 +97,7 @@ class QueueHandler:
             for q_idx in range(ctx.jobs):
                 if ctx.jobs > 1:
                     _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, ctx.jobs)
-                update(f"提交第 {q_idx + 1} 次任务 ({q_idx + 1}/{ctx.jobs})")
+                update(f"第 {q_idx + 1}/{ctx.jobs} 次提交")
                 if seed_mgr.update_seeds() == 0:
                     raise ValueError(
                         f"Failed to update any seeds for image: {ctx.path}."

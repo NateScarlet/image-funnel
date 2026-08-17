@@ -407,32 +407,32 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
             preview = " ".join(args.prompt)
             if len(preview) > 40:
                 preview = preview[:40] + "…"
-            print(f"添加了提示词「{preview}」到 {success_count} 张图片{skip_msg}")
+            print(f"向 {success_count} 张图片添加提示词「{preview}」{skip_msg}")
         elif args.command == "remove":
             preview = " ".join(args.prompt)
             if len(preview) > 40:
                 preview = preview[:40] + "…"
-            print(f"移除了提示词「{preview}」从 {success_count} 张图片{skip_msg}")
+            print(f"从 {success_count} 张图片移除提示词「{preview}」{skip_msg}")
         elif args.command == "remove-again":
-            print(f"重放了历史移除操作到 {success_count} 张图片{skip_msg}")
+            print(f"向 {success_count} 张图片重放历史移除操作{skip_msg}")
         elif args.command == "queue":
-            print(f"重新入列了 {success_count} 张图片{skip_msg}")
+            print(f"将 {success_count} 张图片重新入列{skip_msg}")
         elif args.command == "adjust":
             if args.adjust_type == "lora":
                 print(
-                    f"{success_count} 张图片的 Lora「{args.name}」权重调整为 {args.weight}{skip_msg}"
+                    f"将 {success_count} 张图片的 Lora「{args.name}」权重调整为 {args.weight}{skip_msg}"
                 )
             elif args.adjust_type == "prompt":
                 preview = args.text
                 if len(preview) > 40:
                     preview = preview[:40] + "…"
                 print(
-                    f"{success_count} 张图片的提示词「{preview}」权重调整为 {args.weight}{skip_msg}"
+                    f"将 {success_count} 张图片的提示词「{preview}」权重调整为 {args.weight}{skip_msg}"
                 )
             elif args.adjust_type == "cfg":
-                print(f"{success_count} 张图片的 CFG 调整为 {args.weight}{skip_msg}")
+                print(f"将 {success_count} 张图片的 CFG 调整为 {args.weight}{skip_msg}")
             elif args.adjust_type == "aspect":
-                print(f"{success_count} 张图片的宽高比调整为 {args.ratio}{skip_msg}")
+                print(f"将 {success_count} 张图片的宽高比调整为 {args.ratio}{skip_msg}")
     else:
         if skip_reasons:
             summary = dict(Counter(skip_reasons))
