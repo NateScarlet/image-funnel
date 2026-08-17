@@ -104,7 +104,11 @@
 import { ref, computed } from "vue";
 import mutate from "../graphql/utils/mutate";
 import useFormState from "../utils/useFormState";
-import { CommitChangesDocument, type SessionFragment } from "../graphql/generated";
+import {
+  CommitChangesDocument,
+  SetDirectoryStateDocument,
+  type SessionFragment,
+} from "../graphql/generated";
 import { usePresets } from "../composables/usePresets";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import RatingSelector from "./RatingSelector.vue";
@@ -185,16 +189,24 @@ async function commit() {
   if (committing.value) return;
   committing.value = true;
 
+  // 提交前捕获本次实际使用的写入操作，提交与持久化共用同一份值，
+  // 避免在 reset() 清空表单缓冲后读取到旧的默认配置
+  const committedWriteActions: {
+    keepRating: number | null;
+    shelveRating: number | null;
+    rejectRating: number | null;
+  } = {
+    keepRating: keepRating.value,
+    shelveRating: shelveRating.value,
+    rejectRating: rejectRating.value,
+  };
+
   try {
     const { data, error } = await mutate(CommitChangesDocument, {
       variables: {
         input: {
           sessionId: session.id,
-          writeActions: {
-            keepRating: keepRating.value,
-            shelveRating: shelveRating.value,
-            rejectRating: rejectRating.value,
-          },
+          writeActions: committedWriteActions,
         },
       },
       errorPolicy: "all",
@@ -217,6 +229,8 @@ async function commit() {
       };
 
       if (commitResult.value.success) {
+        // 会话历史优先：把本次实际使用的写入操作持久化为目录默认配置，供下次会话复用
+        persistDefaultWriteActions(committedWriteActions);
         setTimeout(() => {
           emit("committed");
         }, 500);
@@ -232,6 +246,27 @@ async function commit() {
   } finally {
     committing.value = false;
   }
+}
+
+/**
+ * fire-and-forget 持久化本次写入操作为目录默认配置。
+ * 提交本身已成功，失败不阻断跳转；错误统一由 Apollo 全局 ErrorLink 提示。
+ */
+function persistDefaultWriteActions(writeActions: {
+  keepRating: number | null;
+  shelveRating: number | null;
+  rejectRating: number | null;
+}) {
+  void mutate(SetDirectoryStateDocument, {
+    variables: {
+      input: {
+        id: session.directory.id,
+        state: {
+          default: { writeActions },
+        },
+      },
+    },
+  });
 }
 
 defineExpose({
