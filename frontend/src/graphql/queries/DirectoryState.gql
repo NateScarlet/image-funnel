@@ -3,36 +3,7 @@ query DirectoryState($id: ID!) {
     ... on Directory {
       id
       state {
-        browse {
-          filterBy {
-            id
-            rating
-            label
-            query
-          }
-          filterNoteBy {
-            id
-            hidden
-          }
-        }
-        lastSession {
-          id
-          filter {
-            id
-            rating
-            label
-            query
-          }
-          targetKeep
-        }
-        default {
-          writeActions {
-            keepRating
-            shelveRating
-            rejectRating
-          }
-        }
-        updatedAt
+        ...DirectoryState
       }
     }
   }

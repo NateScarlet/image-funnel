@@ -229,11 +229,10 @@ async function commit() {
       };
 
       if (commitResult.value.success) {
+        // 提交成功即通知调用方；展示时长由调用方自行掌控
         // 会话历史优先：把本次实际使用的写入操作持久化为目录默认配置，供下次会话复用
         persistDefaultWriteActions(committedWriteActions);
-        setTimeout(() => {
-          emit("committed");
-        }, 500);
+        emit("committed");
       }
     }
   } catch (err: unknown) {

@@ -3,19 +3,7 @@ mutation SetDirectoryState($input: SetDirectoryStateInput!) {
     directory {
       id
       state {
-        browse {
-          filterBy {
-            id
-            rating
-            label
-            query
-          }
-          filterNoteBy {
-            id
-            hidden
-          }
-        }
-        updatedAt
+        ...DirectoryState
       }
     }
     clientMutationId

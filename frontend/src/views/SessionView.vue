@@ -225,7 +225,7 @@
     </footer>
 
     <commitDialog.component v-if="session" container-class="sm:max-w-md p-6">
-      <CommitForm :session="session" title="提交更改" @committed="commitDialog.close">
+      <CommitForm :session="session" title="提交更改" @committed="handleCommitCommitted">
         <template #actions="{ committing, commitResult }">
           <button
             v-if="!commitResult"
@@ -339,6 +339,11 @@ const loading = computed(() => loadingCount.value > 0);
 const commitDialog = useModalDialog();
 const updateSessionDialog = useModalDialog();
 const undoing = ref(false);
+
+// 提交成功结果需在弹窗中短暂展示后关闭，关闭时机由本视图掌控
+function handleCommitCommitted() {
+  setTimeout(() => commitDialog.close(), 500);
+}
 
 // #region 手势处理与滑动控制
 const touchStartX = ref(0);

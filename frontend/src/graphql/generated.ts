@@ -465,6 +465,22 @@ export type DirectoryFragment = {
   } | null;
   state: {
     __typename: "DirectoryState";
+    updatedAt: string;
+    browse: {
+      __typename: "DirectoryStateBrowse";
+      filterBy: {
+        __typename: "ImageFilters";
+        id: Array<string> | null;
+        rating: Array<number> | null;
+        label: Array<string> | null;
+        query: string | null;
+      } | null;
+      filterNoteBy: {
+        __typename: "NoteFilters";
+        id: Array<string> | null;
+        hidden: boolean | null;
+      } | null;
+    } | null;
     lastSession: {
       __typename: "DirectoryStateLastSession";
       id: string;
@@ -476,6 +492,56 @@ export type DirectoryFragment = {
         label: Array<string> | null;
         query: string | null;
       };
+    } | null;
+    default: {
+      __typename: "DirectoryStateDefault";
+      writeActions: {
+        __typename: "WriteActions";
+        keepRating: number | null;
+        shelveRating: number | null;
+        rejectRating: number | null;
+      } | null;
+    } | null;
+  } | null;
+};
+
+export type DirectoryStateFragment = {
+  __typename: "DirectoryState";
+  updatedAt: string;
+  browse: {
+    __typename: "DirectoryStateBrowse";
+    filterBy: {
+      __typename: "ImageFilters";
+      id: Array<string> | null;
+      rating: Array<number> | null;
+      label: Array<string> | null;
+      query: string | null;
+    } | null;
+    filterNoteBy: {
+      __typename: "NoteFilters";
+      id: Array<string> | null;
+      hidden: boolean | null;
+    } | null;
+  } | null;
+  lastSession: {
+    __typename: "DirectoryStateLastSession";
+    id: string;
+    targetKeep: number;
+    filter: {
+      __typename: "ImageFilters";
+      id: Array<string> | null;
+      rating: Array<number> | null;
+      label: Array<string> | null;
+      query: string | null;
+    };
+  } | null;
+  default: {
+    __typename: "DirectoryStateDefault";
+    writeActions: {
+      __typename: "WriteActions";
+      keepRating: number | null;
+      shelveRating: number | null;
+      rejectRating: number | null;
     } | null;
   } | null;
 };
@@ -607,6 +673,22 @@ export type SessionFragment = {
     } | null;
     state: {
       __typename: "DirectoryState";
+      updatedAt: string;
+      browse: {
+        __typename: "DirectoryStateBrowse";
+        filterBy: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        } | null;
+        filterNoteBy: {
+          __typename: "NoteFilters";
+          id: Array<string> | null;
+          hidden: boolean | null;
+        } | null;
+      } | null;
       lastSession: {
         __typename: "DirectoryStateLastSession";
         id: string;
@@ -618,6 +700,15 @@ export type SessionFragment = {
           label: Array<string> | null;
           query: string | null;
         };
+      } | null;
+      default: {
+        __typename: "DirectoryStateDefault";
+        writeActions: {
+          __typename: "WriteActions";
+          keepRating: number | null;
+          shelveRating: number | null;
+          rejectRating: number | null;
+        } | null;
       } | null;
     } | null;
   };
@@ -849,6 +940,22 @@ export type CommitChangesMutation = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -860,6 +967,15 @@ export type CommitChangesMutation = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       };
@@ -1002,6 +1118,22 @@ export type CreateSessionMutation = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -1013,6 +1145,15 @@ export type CreateSessionMutation = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       };
@@ -1174,6 +1315,22 @@ export type MarkImageMutation = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -1185,6 +1342,15 @@ export type MarkImageMutation = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       };
@@ -1321,6 +1487,27 @@ export type SetDirectoryStateMutation = {
             hidden: boolean | null;
           } | null;
         } | null;
+        lastSession: {
+          __typename: "DirectoryStateLastSession";
+          id: string;
+          targetKeep: number;
+          filter: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          };
+        } | null;
+        default: {
+          __typename: "DirectoryStateDefault";
+          writeActions: {
+            __typename: "WriteActions";
+            keepRating: number | null;
+            shelveRating: number | null;
+            rejectRating: number | null;
+          } | null;
+        } | null;
       } | null;
     };
   };
@@ -1376,6 +1563,22 @@ export type UndoMutation = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -1387,6 +1590,15 @@ export type UndoMutation = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       };
@@ -1625,6 +1837,22 @@ export type UpdateSessionMutation = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -1636,6 +1864,15 @@ export type UpdateSessionMutation = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       };
@@ -1770,6 +2007,22 @@ export type BrowseDirectoriesQuery = {
               } | null;
               state: {
                 __typename: "DirectoryState";
+                updatedAt: string;
+                browse: {
+                  __typename: "DirectoryStateBrowse";
+                  filterBy: {
+                    __typename: "ImageFilters";
+                    id: Array<string> | null;
+                    rating: Array<number> | null;
+                    label: Array<string> | null;
+                    query: string | null;
+                  } | null;
+                  filterNoteBy: {
+                    __typename: "NoteFilters";
+                    id: Array<string> | null;
+                    hidden: boolean | null;
+                  } | null;
+                } | null;
                 lastSession: {
                   __typename: "DirectoryStateLastSession";
                   id: string;
@@ -1781,6 +2034,15 @@ export type BrowseDirectoriesQuery = {
                     label: Array<string> | null;
                     query: string | null;
                   };
+                } | null;
+                default: {
+                  __typename: "DirectoryStateDefault";
+                  writeActions: {
+                    __typename: "WriteActions";
+                    keepRating: number | null;
+                    shelveRating: number | null;
+                    rejectRating: number | null;
+                  } | null;
                 } | null;
               } | null;
             };
@@ -1805,6 +2067,22 @@ export type BrowseDirectoriesQuery = {
             } | null;
             state: {
               __typename: "DirectoryState";
+              updatedAt: string;
+              browse: {
+                __typename: "DirectoryStateBrowse";
+                filterBy: {
+                  __typename: "ImageFilters";
+                  id: Array<string> | null;
+                  rating: Array<number> | null;
+                  label: Array<string> | null;
+                  query: string | null;
+                } | null;
+                filterNoteBy: {
+                  __typename: "NoteFilters";
+                  id: Array<string> | null;
+                  hidden: boolean | null;
+                } | null;
+              } | null;
               lastSession: {
                 __typename: "DirectoryStateLastSession";
                 id: string;
@@ -1816,6 +2094,15 @@ export type BrowseDirectoriesQuery = {
                   label: Array<string> | null;
                   query: string | null;
                 };
+              } | null;
+              default: {
+                __typename: "DirectoryStateDefault";
+                writeActions: {
+                  __typename: "WriteActions";
+                  keepRating: number | null;
+                  shelveRating: number | null;
+                  rejectRating: number | null;
+                } | null;
               } | null;
             } | null;
           }>;
@@ -1841,6 +2128,22 @@ export type BrowseDirectoriesQuery = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -1852,6 +2155,15 @@ export type BrowseDirectoriesQuery = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       }
@@ -2066,6 +2378,22 @@ export type DirectoryLastSessionQuery = {
             } | null;
             state: {
               __typename: "DirectoryState";
+              updatedAt: string;
+              browse: {
+                __typename: "DirectoryStateBrowse";
+                filterBy: {
+                  __typename: "ImageFilters";
+                  id: Array<string> | null;
+                  rating: Array<number> | null;
+                  label: Array<string> | null;
+                  query: string | null;
+                } | null;
+                filterNoteBy: {
+                  __typename: "NoteFilters";
+                  id: Array<string> | null;
+                  hidden: boolean | null;
+                } | null;
+              } | null;
               lastSession: {
                 __typename: "DirectoryStateLastSession";
                 id: string;
@@ -2077,6 +2405,15 @@ export type DirectoryLastSessionQuery = {
                   label: Array<string> | null;
                   query: string | null;
                 };
+              } | null;
+              default: {
+                __typename: "DirectoryStateDefault";
+                writeActions: {
+                  __typename: "WriteActions";
+                  keepRating: number | null;
+                  shelveRating: number | null;
+                  rejectRating: number | null;
+                } | null;
               } | null;
             } | null;
           };
@@ -2280,6 +2617,22 @@ export type DirectoryStatsQuery = {
         } | null;
         state: {
           __typename: "DirectoryState";
+          updatedAt: string;
+          browse: {
+            __typename: "DirectoryStateBrowse";
+            filterBy: {
+              __typename: "ImageFilters";
+              id: Array<string> | null;
+              rating: Array<number> | null;
+              label: Array<string> | null;
+              query: string | null;
+            } | null;
+            filterNoteBy: {
+              __typename: "NoteFilters";
+              id: Array<string> | null;
+              hidden: boolean | null;
+            } | null;
+          } | null;
           lastSession: {
             __typename: "DirectoryStateLastSession";
             id: string;
@@ -2291,6 +2644,15 @@ export type DirectoryStatsQuery = {
               label: Array<string> | null;
               query: string | null;
             };
+          } | null;
+          default: {
+            __typename: "DirectoryStateDefault";
+            writeActions: {
+              __typename: "WriteActions";
+              keepRating: number | null;
+              shelveRating: number | null;
+              rejectRating: number | null;
+            } | null;
           } | null;
         } | null;
       }
@@ -2531,6 +2893,22 @@ export type RootDirectoryQuery = {
     } | null;
     state: {
       __typename: "DirectoryState";
+      updatedAt: string;
+      browse: {
+        __typename: "DirectoryStateBrowse";
+        filterBy: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        } | null;
+        filterNoteBy: {
+          __typename: "NoteFilters";
+          id: Array<string> | null;
+          hidden: boolean | null;
+        } | null;
+      } | null;
       lastSession: {
         __typename: "DirectoryStateLastSession";
         id: string;
@@ -2542,6 +2920,15 @@ export type RootDirectoryQuery = {
           label: Array<string> | null;
           query: string | null;
         };
+      } | null;
+      default: {
+        __typename: "DirectoryStateDefault";
+        writeActions: {
+          __typename: "WriteActions";
+          keepRating: number | null;
+          shelveRating: number | null;
+          rejectRating: number | null;
+        } | null;
       } | null;
     } | null;
   };
@@ -2585,6 +2972,22 @@ export type SessionQuery = {
       } | null;
       state: {
         __typename: "DirectoryState";
+        updatedAt: string;
+        browse: {
+          __typename: "DirectoryStateBrowse";
+          filterBy: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          } | null;
+          filterNoteBy: {
+            __typename: "NoteFilters";
+            id: Array<string> | null;
+            hidden: boolean | null;
+          } | null;
+        } | null;
         lastSession: {
           __typename: "DirectoryStateLastSession";
           id: string;
@@ -2596,6 +2999,15 @@ export type SessionQuery = {
             label: Array<string> | null;
             query: string | null;
           };
+        } | null;
+        default: {
+          __typename: "DirectoryStateDefault";
+          writeActions: {
+            __typename: "WriteActions";
+            keepRating: number | null;
+            shelveRating: number | null;
+            rejectRating: number | null;
+          } | null;
         } | null;
       } | null;
     };
@@ -2798,6 +3210,22 @@ export type DirectoryChangedSubscription = {
     } | null;
     state: {
       __typename: "DirectoryState";
+      updatedAt: string;
+      browse: {
+        __typename: "DirectoryStateBrowse";
+        filterBy: {
+          __typename: "ImageFilters";
+          id: Array<string> | null;
+          rating: Array<number> | null;
+          label: Array<string> | null;
+          query: string | null;
+        } | null;
+        filterNoteBy: {
+          __typename: "NoteFilters";
+          id: Array<string> | null;
+          hidden: boolean | null;
+        } | null;
+      } | null;
       lastSession: {
         __typename: "DirectoryStateLastSession";
         id: string;
@@ -2809,6 +3237,15 @@ export type DirectoryChangedSubscription = {
           label: Array<string> | null;
           query: string | null;
         };
+      } | null;
+      default: {
+        __typename: "DirectoryStateDefault";
+        writeActions: {
+          __typename: "WriteActions";
+          keepRating: number | null;
+          shelveRating: number | null;
+          rejectRating: number | null;
+        } | null;
       } | null;
     } | null;
   };
@@ -2953,6 +3390,22 @@ export type SessionUpdatedSubscription = {
       } | null;
       state: {
         __typename: "DirectoryState";
+        updatedAt: string;
+        browse: {
+          __typename: "DirectoryStateBrowse";
+          filterBy: {
+            __typename: "ImageFilters";
+            id: Array<string> | null;
+            rating: Array<number> | null;
+            label: Array<string> | null;
+            query: string | null;
+          } | null;
+          filterNoteBy: {
+            __typename: "NoteFilters";
+            id: Array<string> | null;
+            hidden: boolean | null;
+          } | null;
+        } | null;
         lastSession: {
           __typename: "DirectoryStateLastSession";
           id: string;
@@ -2964,6 +3417,15 @@ export type SessionUpdatedSubscription = {
             label: Array<string> | null;
             query: string | null;
           };
+        } | null;
+        default: {
+          __typename: "DirectoryStateDefault";
+          writeActions: {
+            __typename: "WriteActions";
+            keepRating: number | null;
+            shelveRating: number | null;
+            rejectRating: number | null;
+          } | null;
         } | null;
       } | null;
     };
@@ -3447,6 +3909,100 @@ export const NotificationFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<NotificationFragment, unknown>;
+export const DirectoryStateFragmentDoc = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<DirectoryStateFragment, unknown>;
 export const DirectoryFragmentDoc = {
   kind: "Document",
   definitions: [
@@ -3491,33 +4047,99 @@ export const DirectoryFragmentDoc = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
                 {
                   kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
+                  name: { kind: "Name", value: "filterBy" },
                   selectionSet: {
                     kind: "SelectionSet",
                     selections: [
                       { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
                     ],
                   },
                 },
               ],
             },
           },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
         ],
       },
     },
@@ -3624,6 +4246,95 @@ export const SessionFragmentDoc = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Note" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Note" } },
       selectionSet: {
@@ -3679,30 +4390,7 @@ export const SessionFragmentDoc = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -4246,6 +4934,95 @@ export const CommitChangesDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -4285,30 +5062,7 @@ export const CommitChangesDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -4656,6 +5410,95 @@ export const CreateSessionDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -4695,30 +5538,7 @@ export const CreateSessionDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -5163,6 +5983,95 @@ export const MarkImageDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -5202,30 +6111,7 @@ export const MarkImageDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -5586,39 +6472,9 @@ export const SetDirectoryStateDocument = {
                           kind: "SelectionSet",
                           selections: [
                             {
-                              kind: "Field",
-                              name: { kind: "Name", value: "browse" },
-                              selectionSet: {
-                                kind: "SelectionSet",
-                                selections: [
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "filterBy" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        { kind: "Field", name: { kind: "Name", value: "id" } },
-                                        { kind: "Field", name: { kind: "Name", value: "rating" } },
-                                        { kind: "Field", name: { kind: "Name", value: "label" } },
-                                        { kind: "Field", name: { kind: "Name", value: "query" } },
-                                      ],
-                                    },
-                                  },
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "filterNoteBy" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        { kind: "Field", name: { kind: "Name", value: "id" } },
-                                        { kind: "Field", name: { kind: "Name", value: "hidden" } },
-                                      ],
-                                    },
-                                  },
-                                ],
-                              },
+                              kind: "FragmentSpread",
+                              name: { kind: "Name", value: "DirectoryState" },
                             },
-                            { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
                           ],
                         },
                       },
@@ -5629,6 +6485,95 @@ export const SetDirectoryStateDocument = {
               ],
             },
           },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
         ],
       },
     },
@@ -5729,6 +6674,95 @@ export const UndoDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -5768,30 +6802,7 @@ export const UndoDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -6484,6 +7495,95 @@ export const UpdateSessionDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -6523,30 +7623,7 @@ export const UpdateSessionDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -6949,6 +8026,95 @@ export const BrowseDirectoriesDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -6988,30 +8154,7 @@ export const BrowseDirectoriesDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -7587,6 +8730,95 @@ export const DirectoryLastSessionDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -7626,30 +8858,7 @@ export const DirectoryLastSessionDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -7926,93 +9135,9 @@ export const DirectoryStateDocument = {
                           kind: "SelectionSet",
                           selections: [
                             {
-                              kind: "Field",
-                              name: { kind: "Name", value: "browse" },
-                              selectionSet: {
-                                kind: "SelectionSet",
-                                selections: [
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "filterBy" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        { kind: "Field", name: { kind: "Name", value: "id" } },
-                                        { kind: "Field", name: { kind: "Name", value: "rating" } },
-                                        { kind: "Field", name: { kind: "Name", value: "label" } },
-                                        { kind: "Field", name: { kind: "Name", value: "query" } },
-                                      ],
-                                    },
-                                  },
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "filterNoteBy" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        { kind: "Field", name: { kind: "Name", value: "id" } },
-                                        { kind: "Field", name: { kind: "Name", value: "hidden" } },
-                                      ],
-                                    },
-                                  },
-                                ],
-                              },
+                              kind: "FragmentSpread",
+                              name: { kind: "Name", value: "DirectoryState" },
                             },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "lastSession" },
-                              selectionSet: {
-                                kind: "SelectionSet",
-                                selections: [
-                                  { kind: "Field", name: { kind: "Name", value: "id" } },
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "filter" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        { kind: "Field", name: { kind: "Name", value: "id" } },
-                                        { kind: "Field", name: { kind: "Name", value: "rating" } },
-                                        { kind: "Field", name: { kind: "Name", value: "label" } },
-                                        { kind: "Field", name: { kind: "Name", value: "query" } },
-                                      ],
-                                    },
-                                  },
-                                  { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                                ],
-                              },
-                            },
-                            {
-                              kind: "Field",
-                              name: { kind: "Name", value: "default" },
-                              selectionSet: {
-                                kind: "SelectionSet",
-                                selections: [
-                                  {
-                                    kind: "Field",
-                                    name: { kind: "Name", value: "writeActions" },
-                                    selectionSet: {
-                                      kind: "SelectionSet",
-                                      selections: [
-                                        {
-                                          kind: "Field",
-                                          name: { kind: "Name", value: "keepRating" },
-                                        },
-                                        {
-                                          kind: "Field",
-                                          name: { kind: "Name", value: "shelveRating" },
-                                        },
-                                        {
-                                          kind: "Field",
-                                          name: { kind: "Name", value: "rejectRating" },
-                                        },
-                                      ],
-                                    },
-                                  },
-                                ],
-                              },
-                            },
-                            { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
                           ],
                         },
                       },
@@ -8022,6 +9147,95 @@ export const DirectoryStateDocument = {
               ],
             },
           },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
         ],
       },
     },
@@ -8086,6 +9300,95 @@ export const DirectoryStatsDocument = {
               ],
             },
           },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
         ],
       },
     },
@@ -8272,30 +9575,7 @@ export const DirectoryStatsDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -8999,6 +10279,95 @@ export const RootDirectoryDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -9038,30 +10407,7 @@ export const RootDirectoryDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -9110,6 +10456,95 @@ export const SessionDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -9149,30 +10584,7 @@ export const SessionDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -9751,6 +11163,95 @@ export const DirectoryChangedDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -9790,30 +11291,7 @@ export const DirectoryChangedDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },
@@ -10220,6 +11698,95 @@ export const SessionUpdatedDocument = {
     },
     {
       kind: "FragmentDefinition",
+      name: { kind: "Name", value: "DirectoryState" },
+      typeCondition: { kind: "NamedType", name: { kind: "Name", value: "DirectoryState" } },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "browse" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterNoteBy" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "hidden" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "lastSession" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filter" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "rating" } },
+                      { kind: "Field", name: { kind: "Name", value: "label" } },
+                      { kind: "Field", name: { kind: "Name", value: "query" } },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
+              ],
+            },
+          },
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "default" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "writeActions" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "keepRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "shelveRating" } },
+                      { kind: "Field", name: { kind: "Name", value: "rejectRating" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+          { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+        ],
+      },
+    },
+    {
+      kind: "FragmentDefinition",
       name: { kind: "Name", value: "Directory" },
       typeCondition: { kind: "NamedType", name: { kind: "Name", value: "Directory" } },
       selectionSet: {
@@ -10259,30 +11826,7 @@ export const SessionUpdatedDocument = {
             selectionSet: {
               kind: "SelectionSet",
               selections: [
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "lastSession" },
-                  selectionSet: {
-                    kind: "SelectionSet",
-                    selections: [
-                      { kind: "Field", name: { kind: "Name", value: "id" } },
-                      {
-                        kind: "Field",
-                        name: { kind: "Name", value: "filter" },
-                        selectionSet: {
-                          kind: "SelectionSet",
-                          selections: [
-                            { kind: "Field", name: { kind: "Name", value: "id" } },
-                            { kind: "Field", name: { kind: "Name", value: "rating" } },
-                            { kind: "Field", name: { kind: "Name", value: "label" } },
-                            { kind: "Field", name: { kind: "Name", value: "query" } },
-                          ],
-                        },
-                      },
-                      { kind: "Field", name: { kind: "Name", value: "targetKeep" } },
-                    ],
-                  },
-                },
+                { kind: "FragmentSpread", name: { kind: "Name", value: "DirectoryState" } },
               ],
             },
           },

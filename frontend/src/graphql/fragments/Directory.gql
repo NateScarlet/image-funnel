@@ -14,15 +14,6 @@ fragment Directory on Directory {
     targetKeep
   }
   state {
-    lastSession {
-      id
-      filter {
-        id
-        rating
-        label
-        query
-      }
-      targetKeep
-    }
+    ...DirectoryState
   }
 }

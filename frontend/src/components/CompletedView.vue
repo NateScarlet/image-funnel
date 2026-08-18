@@ -20,7 +20,7 @@
       <div
         class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
       >
-        <CommitForm ref="commitForm" :session title="" @committed="handleCommitted">
+        <CommitForm ref="commitForm" :session title="" @committed="scheduleAutoNavigate">
           <template #actions="{ committing, commitResult, commit }">
             <button
               v-if="!commitResult"
@@ -174,19 +174,39 @@ defineExpose({
   submit,
 });
 
+// 提交成功后的自动跳转：提交结果需先展示，跳转时机由本视图掌控
+function scheduleAutoNavigate() {
+  setTimeout(() => {
+    handleCommitted();
+  }, 500);
+}
+
+let navigating = false;
+
 async function handleCommitted() {
+  if (navigating) return;
+  navigating = true;
+
   const nextDirectoryIdValue = nextDirectoryId.value;
 
   if (nextDirectoryIdValue) {
-    const nextSession = await autoCreateSession();
+    try {
+      const nextSession = await autoCreateSession();
 
-    if (nextSession) {
-      await router.push({
-        name: "session",
-        params: {
-          id: nextSession.id,
-        },
-      });
+      if (nextSession) {
+        await router.push({
+          name: "session",
+          params: {
+            id: nextSession.id,
+          },
+        });
+      } else {
+        // 下一会话创建失败时允许用户重试
+        navigating = false;
+      }
+    } catch {
+      // 创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
+      navigating = false;
     }
   } else {
     await router.push("/");
