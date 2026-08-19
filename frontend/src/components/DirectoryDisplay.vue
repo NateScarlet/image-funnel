@@ -3,7 +3,7 @@
     <div class="shrink-0 rounded overflow-hidden relative">
       <img
         v-if="stats?.latestImage"
-        :src="stats.latestImage.url256"
+        :src="getCoverImageUrl(stats.latestImage, 80, 80)"
         :width="stats.latestImage.width"
         :height="stats.latestImage.height"
         :alt="directoryPath"
@@ -88,6 +88,7 @@ import { computed, ref } from "vue";
 import { sortBy } from "es-toolkit";
 import RatingIcon from "./RatingIcon.vue";
 import { formatDate } from "../utils/date";
+import { getCoverImageUrl } from "../utils/image";
 import type { RatingCountFragment } from "../graphql/generated";
 import { useDirectoryStats } from "../composables/domain/useDirectoryBrowse";
 

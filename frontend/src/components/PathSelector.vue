@@ -81,7 +81,7 @@
             >
               <template v-if="getCachedStats(item.id)?.latestImage">
                 <img
-                  :src="getCachedStats(item.id)!.latestImage!.url256"
+                  :src="getCoverImageUrl(getCachedStats(item.id)!.latestImage!, 40, 40)"
                   :width="getCachedStats(item.id)!.latestImage!.width"
                   :height="getCachedStats(item.id)!.latestImage!.height"
                   class="w-full h-full object-cover"
@@ -150,6 +150,7 @@ import { useFloating, offset, flip, shift, autoUpdate, size } from "@floating-ui
 import useQuery from "@/graphql/utils/useQuery";
 import { SuggestDirectoriesDocument, type PathInput } from "@/graphql/generated";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
+import { getCoverImageUrl } from "@/utils/image";
 
 // #region 属性与事件定义
 const props = defineProps<{

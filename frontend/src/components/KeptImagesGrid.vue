@@ -31,7 +31,7 @@
         class="group relative bg-primary-800 rounded-lg overflow-hidden border border-primary-700/50 hover:border-primary-500 transition-colors [@media(hover:hover)]:aspect-square"
       >
         <img
-          :src="image.url256"
+          :src="getCoverImageUrl(image)"
           :width="image.width"
           :height="image.height"
           :alt="image.filename"
@@ -110,6 +110,7 @@ import { computed, ref } from "vue";
 import { KeptImagesDocument, type ImageFragment } from "../graphql/generated";
 import useQuery from "../graphql/utils/useQuery";
 import { formatSize } from "../utils/formatSize";
+import { getCoverImageUrl } from "../utils/image";
 import { mdiDownload, mdiChevronDown } from "@mdi/js";
 
 const props = defineProps<{

@@ -34,7 +34,7 @@
       </div>
 
       <img
-        :src="img.url256 || img.url"
+        :src="getCoverImageUrl(img)"
         :width="img.width"
         :height="img.height"
         :alt="img.filename"
@@ -77,6 +77,7 @@ import { mdiCheck } from "@mdi/js";
 import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingIcon from "./RatingIcon.vue";
 import type { ImageFragment } from "@/graphql/generated";
+import { getCoverImageUrl } from "@/utils/image";
 
 defineProps<{
   img: ImageFragment;
