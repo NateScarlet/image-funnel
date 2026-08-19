@@ -7,10 +7,11 @@ import json
 import logging
 import sqlite3
 import threading
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
-from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, cast
+from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, Generator, cast
 import requests
 from PIL import Image
 
@@ -873,30 +874,36 @@ def build_request_from_params(params: Dict[str, Any]) -> AutocompleteRequest:
     )
 
 
+@contextmanager
 def build_providers(
     root_dir: str,
     directory_rel_path: str,
     danbooru_url: str,
     show_nsfw: bool,
-) -> List[AutocompleteProvider]:
-    """由入口构建补全 provider 列表；Danbooru 依赖初始化失败直接抛出（快速失败，不降级）。"""
-    providers: List[AutocompleteProvider] = [
-        RegionProvider(),
-        LoraProvider(),
-        NodeProvider(),
-        WorkflowPromptProvider(),
-    ]
-    if danbooru_url:
-        db_ctx = SQLiteContext(_db_path(root_dir, directory_rel_path))
-        history = OperationHistory(db_ctx)
-        raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
-        cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
-        akizuki = AkizukiDanbooruTagProvider(
-            danbooru_url, loader=cache_loader, show_nsfw=show_nsfw
-        )
-        danbooru_tag_provider = SQLiteDanbooruTagProvider(akizuki, db_ctx, danbooru_url)
-        providers.append(DanbooruProvider(danbooru_tag_provider, history))
-    return providers
+) -> Generator[List[AutocompleteProvider], None, None]:
+    """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。"""
+    with ExitStack() as stack:
+        providers: List[AutocompleteProvider] = [
+            RegionProvider(),
+            LoraProvider(),
+            NodeProvider(),
+            WorkflowPromptProvider(),
+        ]
+        if danbooru_url:
+            db_ctx = stack.enter_context(
+                SQLiteContext(_db_path(root_dir, directory_rel_path))
+            )
+            history = OperationHistory(db_ctx)
+            raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
+            cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
+            akizuki = AkizukiDanbooruTagProvider(
+                danbooru_url, loader=cache_loader, show_nsfw=show_nsfw
+            )
+            danbooru_tag_provider = SQLiteDanbooruTagProvider(
+                akizuki, db_ctx, danbooru_url
+            )
+            providers.append(DanbooruProvider(danbooru_tag_provider, history))
+        yield providers
 
 
 def autocomplete(
@@ -1005,14 +1012,18 @@ class _AutocompleteTask:
         self,
         req_id: Any,
         request: AutocompleteRequest,
-        services: AutocompleteServices,
+        parser: argparse.ArgumentParser,
+        danbooru_url: str,
+        show_nsfw: bool,
         writer: Any,
         active: Dict[Any, "_AutocompleteTask"],
         active_lock: threading.Lock,
     ) -> None:
         self.req_id = req_id
         self.request = request
-        self.services = services
+        self.parser = parser
+        self.danbooru_url = danbooru_url
+        self.show_nsfw = show_nsfw
         self.writer = writer
         self.active = active
         self.active_lock = active_lock
@@ -1035,7 +1046,14 @@ class _AutocompleteTask:
         suggestions: List[AutocompleteSuggestion] = []
         failed = False
         try:
-            suggestions = list(autocomplete(self.request, self.services))
+            with build_providers(
+                self.request.root_dir,
+                self.request.directory_rel_path,
+                self.danbooru_url,
+                self.show_nsfw,
+            ) as providers:
+                services = AutocompleteServices(parser=self.parser, providers=providers)
+                suggestions = list(autocomplete(self.request, services))
         except Exception:
             _LOGGER.error("Autocomplete request %s failed", self.req_id, exc_info=True)
             failed = True
@@ -1087,12 +1105,15 @@ def serve() -> None:
         params = cast(Dict[str, Any], msg.get("params", {}) or {})
         request = build_request_from_params(params)
         # 依赖随请求的目录上下文构建；初始化失败在此抛出，进程退出由应用重启（快速失败）
-        providers = build_providers(
-            request.root_dir, request.directory_rel_path, danbooru_url, show_nsfw
-        )
-        services = AutocompleteServices(parser=parser, providers=providers)
         task = _AutocompleteTask(
-            req_id, request, services, sys.stdout, active, active_lock
+            req_id,
+            request,
+            parser,
+            danbooru_url,
+            show_nsfw,
+            sys.stdout,
+            active,
+            active_lock,
         )
         with active_lock:
             active[req_id] = task
@@ -1115,16 +1136,15 @@ def main() -> None:
 
         # 单次模式：入口从环境变量构造请求上下文与依赖（快速失败：缺失配置即报错退出）
         request = build_request_from_env(target_cmd)
-        providers = build_providers(
+        with build_providers(
             request.root_dir,
             request.directory_rel_path,
             os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
             _show_nsfw_from_env(),
-        )
-        services = AutocompleteServices(parser=get_parser(), providers=providers)
-
-        for s in autocomplete(request, services):
-            print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))
+        ) as providers:
+            services = AutocompleteServices(parser=get_parser(), providers=providers)
+            for s in autocomplete(request, services):
+                print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))
         sys.exit(0)
     else:
         _LOGGER.error("Missing target command for autocomplete.")

@@ -1,11 +1,12 @@
 import io
 import json
 import logging
+import os
 import sys
 import time
 import unittest
 from typing import Any, Dict, List
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 logging.disable(logging.CRITICAL)
 from .autocomplete import (
@@ -176,19 +177,45 @@ class TestServe(unittest.TestCase):
             root_dir="",
             directory_rel_path="",
         )
-        services = AutocompleteServices(
-            parser=get_parser(), providers=build_providers("", "", "", False)
-        )
-        with patch(
-            "comfyui.autocomplete._load_workflow_data",
-            return_value=({}, {"nodes": []}, fake_prompt_meta),
-        ):
-            suggestions = list(autocomplete(request, services))
+        with build_providers("", "", "", False) as providers:
+            services = AutocompleteServices(parser=get_parser(), providers=providers)
+            with patch(
+                "comfyui.autocomplete._load_workflow_data",
+                return_value=({}, {"nodes": []}, fake_prompt_meta),
+            ):
+                suggestions = list(autocomplete(request, services))
 
         # 应返回 CLIPTextEncode 节点，过滤 KSampler（不受任何环境变量影响）
         texts = [s.text for s in suggestions]
         self.assertIn("node_1", texts)
         self.assertNotIn("node_2", texts)
+
+    def test_build_providers_context_manager_enters_and_exits_sqlite_context(
+        self,
+    ) -> None:
+        """验证 build_providers 作为 contextmanager，会在退出时通过 ExitStack 退出 SQLiteContext。"""
+        fake_ctx = MagicMock()
+        with patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
+            with build_providers("root", "dir", "http://localhost", False) as providers:
+                self.assertEqual(len(providers), 5)
+                fake_ctx.__enter__.assert_called_once()
+            fake_ctx.__exit__.assert_called_once()
+
+    def test_serve_closes_db_contexts_after_request(self) -> None:
+        fake_ctx = MagicMock()
+        with patch.dict(os.environ, {"DANBOORU_SEARCH_URL": "http://localhost"}), patch(
+            "comfyui.autocomplete.SQLiteContext", return_value=fake_ctx
+        ), patch("comfyui.autocomplete.autocomplete", return_value=iter([])):
+            _run_serve(
+                [
+                    _autocomplete_request(
+                        1, cwords=["/add"], rootDir="root", directoryRelPath="dir"
+                    )
+                ]
+            )
+
+        fake_ctx.__enter__.assert_called_once()
+        fake_ctx.__exit__.assert_called_once()
 
 
 if __name__ == "__main__":
