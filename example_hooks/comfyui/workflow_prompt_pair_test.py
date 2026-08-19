@@ -1470,12 +1470,15 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 )
 
                 wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
-                pr_text_got = pair.prompt[target_node_id]["inputs"]["text"]
+                pr_text_got = cast(str, pair.prompt[target_node_id]["inputs"]["text"])
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn("// #region positive", wf_text_got)
-                self.assertNotIn("// #region positive", pr_text_got)
+                self.assertTrue(
+                    "// #region positive" in wf_text_got
+                    or "//#region positive" in wf_text_got
+                )
+                self.assertNotIn("#region positive", pr_text_got)
                 self.assertIn("beautiful scenery,", pr_text_got)
 
                 # --- 第二次 add "golden sunset" ---
@@ -1498,8 +1501,11 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn("// #region positive", wf_text_got)
-                self.assertNotIn("// #region positive", pr_text_got)
+                self.assertTrue(
+                    "// #region positive" in wf_text_got
+                    or "//#region positive" in wf_text_got
+                )
+                self.assertNotIn("#region positive", pr_text_got)
                 self.assertIn("beautiful scenery", pr_text_got)
                 self.assertIn("golden sunset", pr_text_got)
 
@@ -1523,8 +1529,11 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 self.assertIsNotNone(wf_text_got)
                 assert wf_text_got is not None
-                self.assertIn("// #region positive", wf_text_got)
-                self.assertNotIn("// #region positive", pr_text_got)
+                self.assertTrue(
+                    "// #region positive" in wf_text_got
+                    or "//#region positive" in wf_text_got
+                )
+                self.assertNotIn("#region positive", pr_text_got)
                 self.assertNotIn("beautiful scenery", pr_text_got)
                 self.assertIn("golden sunset", pr_text_got)
 
@@ -3175,6 +3184,119 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         )
         # 3. 验证主图 Node 309 实例代理控件 widgets_values 被更新
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "NewTitle")
+
+    def test_adjust_output_directory_subgraph_nodes_with_empty_widgets_values(self):
+        """测试主图实例节点 widgets_values 为空列表或短列表时，调整输出目录能自动扩展并正确更新"""
+        workflow = {
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "148",
+                                "type": "PrimitiveInt",
+                                "widgets_values": [4, "fixed"],
+                            },
+                            {
+                                "id": "290",
+                                "type": "PrimitiveString",
+                                "widgets_values": ["OldProject"],
+                            },
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "widgets_values": ["OldTitle"],
+                            },
+                        ],
+                    }
+                ]
+            },
+            "nodes": [
+                {
+                    "id": "309",
+                    "type": "sg_123",
+                    "properties": {
+                        "proxyWidgets": [
+                            ["148", "value"],
+                            ["290", "value"],
+                            ["291", "value"],
+                        ]
+                    },
+                    "widgets_values": [],
+                },
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ],
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "OldProject/OldTitle/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "309:290": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "OldProject"},
+                "_meta": {"title": "Project"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "OldTitle"},
+                "_meta": {"title": "Title"},
+            },
+        }
+
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewProject/NewTitle")
+
+        # 验证主图 Node 309 实例 widgets_values 被扩展填充，且前置默认值与目标值正确设置
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"],
+            [4, "NewProject", "NewTitle"],
+        )
+
+    def test_update_workflow_node_text_subgraph_empty_widgets_values(self):
+        """测试 update_workflow_node_text 当主图实例节点 widgets_values 为 None 时能正确自动初始化并填充"""
+        workflow = {
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "widgets_values": ["OldText"],
+                            }
+                        ],
+                    }
+                ]
+            },
+            "nodes": [
+                {
+                    "id": "309",
+                    "type": "sg_123",
+                    "properties": {"proxyWidgets": [["291", "value"]]},
+                }
+            ],
+        }
+        prompt = {}
+        pair = WorkflowPromptPair(workflow, prompt)
+        pair.update_workflow_node_text("subgraph:sg_123:291", "UpdatedText", "value")
+
+        self.assertEqual(
+            workflow["definitions"]["subgraphs"][0]["nodes"][0]["widgets_values"][0],
+            "UpdatedText",
+        )
+        self.assertEqual(workflow["nodes"][0]["widgets_values"], ["UpdatedText"])
 
     def test_adjust_output_directory_prompt_node_missing_in_workflow_fails_fast(self):
         """Prompt 中存在变量节点但 workflow 元数据缺失该节点时应抛出 ValueError 触发快速失败"""

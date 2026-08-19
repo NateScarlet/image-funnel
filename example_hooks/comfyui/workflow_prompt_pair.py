@@ -83,7 +83,7 @@ class WorkflowPromptPair:
         wv[0] = text
 
         # 查找并在所有挂载此代理控件的主图实例节点上同步更新 widgets_values
-        child_id = node_id.split(":", 1)[1] if ":" in node_id else node_id
+        child_id = node_id.rsplit(":", 1)[1] if ":" in node_id else node_id
         sg_id = node_info.subgraph_id
         if sg_id:
             for info in self._nodes_cache.values():
@@ -97,13 +97,28 @@ class WorkflowPromptPair:
                                 and str(item[0]) == child_id
                                 and str(item[1]) == input_key
                             ):
-                                if (
-                                    not info.widgets_values
-                                    or len(info.widgets_values) <= idx
-                                ):
-                                    raise ValueError(
-                                        f"Proxy widget index {idx} out of bounds for node '{info.node_id}'"
+                                if info.widgets_values is None:
+                                    info.widgets_values = []
+                                    info.node_data["widgets_values"] = (
+                                        info.widgets_values
                                     )
+
+                                while len(info.widgets_values) <= idx:
+                                    j = len(info.widgets_values)
+                                    default_val: Any = None
+                                    if j < len(pw_list):
+                                        target_item = pw_list[j]
+                                        if len(target_item) >= 1:
+                                            target_child_id = str(target_item[0])
+                                            child_info = self.get_node_by_id(
+                                                f"subgraph:{sg_id}:{target_child_id}"
+                                            )
+                                            if child_info and child_info.widgets_values:
+                                                default_val = child_info.widgets_values[
+                                                    0
+                                                ]
+                                    info.widgets_values.append(default_val)
+
                                 info.widgets_values[idx] = text
                                 break
 
