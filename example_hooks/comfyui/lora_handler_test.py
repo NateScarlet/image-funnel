@@ -205,6 +205,62 @@ class TestLoraWeight(unittest.TestCase):
         self.assertEqual(prompt["1"]["inputs"]["lora_1"]["strength"], 0.5)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0]["strength"], 0.5)
 
+    def test_modify_lora_weights_native_lora_missing_widgets_throws(self):
+        prompt = {
+            "1": {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "lora_name": "my_style.safetensors",
+                    "strength_model": 0.8,
+                    "strength_clip": 0.8,
+                },
+            }
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "LoraLoader",
+                    "widgets_values": [
+                        "my_style.safetensors"
+                    ],  # Missing indices 1 and 2
+                },
+            ]
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        with self.assertRaises(ValueError):
+            WeightManager(pair).modify_lora_weights("my_style", 0.5)
+
+    def test_modify_lora_weights_native_lora_primitive_invalid_widgets_throws(self):
+        prompt = {
+            "1": {
+                "class_type": "LoraLoader",
+                "inputs": {
+                    "lora_name": "my_style.safetensors",
+                    "strength_model": ["2", 0],
+                    "strength_clip": 0.8,
+                },
+            },
+            "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 0.8}},
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "LoraLoader",
+                    "widgets_values": ["my_style.safetensors", 0.8, 0.8],
+                },
+                {
+                    "id": "2",
+                    "type": "PrimitiveFloat",
+                    "widgets_values": [],
+                },  # Empty widgets
+            ]
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        with self.assertRaises(ValueError):
+            WeightManager(pair).modify_lora_weights("my_style", 0.5)
+
     def test_generate_lora_variants_relative_no_current(self):
         """相对权重但无法获取当前值时不生成变体"""
         prompt = {}

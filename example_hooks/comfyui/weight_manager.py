@@ -10,7 +10,6 @@ from typing import Dict, List, Any, Optional, Set, cast
 
 from .node_accessor import NodeAccessor
 from .prompt_locator import (
-    KNOWN_PRIMITIVE_TYPES,
     find_terminal_input,
 )
 from .lora_handler import LORA_HANDLERS
@@ -156,33 +155,49 @@ class WeightManager:
 
         modified = 0
         for src in sources:
+            node_info = self._accessor.nodes_cache.get(src.node_id)
+            if node_info and node_info.is_disabled:
+                continue
+
             if src.src_node_id in prompt:
                 prompt[src.src_node_id]["inputs"][src.src_key] = weight
                 modified += 1
 
-        # Update workflow widgets
-        for node_info in self._accessor.nodes_cache.values():
-            if node_ids is not None and node_info.node_id not in node_ids:
-                continue
-            if node_info.is_disabled:
-                continue
+            if not node_info:
+                raise ValueError(
+                    f"Workflow data is out of sync with prompt for KSampler node {src.node_id}"
+                )
 
-            if "KSampler" in node_info.node_type:
+            if src.src_node_id == src.node_id:
                 wv = node_info.widgets_values
-                if wv:
-                    if node_info.node_type == "KSampler" and len(wv) >= 4:
-                        if isinstance(wv[3], (int, float)):
-                            wv[3] = weight
-                    elif node_info.node_type == "KSamplerAdvanced" and len(wv) >= 5:
-                        if isinstance(wv[4], (int, float)):
-                            wv[4] = weight
-
-            elif node_info.class_type in KNOWN_PRIMITIVE_TYPES:
-                for src in sources:
-                    if src.src_node_id == node_info.node_id:
-                        wv = node_info.widgets_values
-                        if wv and isinstance(wv[0], (int, float)):
-                            wv[0] = weight
+                if node_info.node_type == "KSampler":
+                    if not wv or len(wv) < 4 or not isinstance(wv[3], (int, float)):
+                        raise ValueError(
+                            f"Workflow data is out of sync with prompt for KSampler node {src.node_id}"
+                        )
+                    wv[3] = weight
+                elif node_info.node_type == "KSamplerAdvanced":
+                    if not wv or len(wv) < 5 or not isinstance(wv[4], (int, float)):
+                        raise ValueError(
+                            f"Workflow data is out of sync with prompt for KSamplerAdvanced node {src.node_id}"
+                        )
+                    wv[4] = weight
+                else:
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for KSampler node {src.node_id}"
+                    )
+            else:
+                src_node_info = self._accessor.nodes_cache.get(src.src_node_id)
+                if not src_node_info or src_node_info.is_disabled:
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.src_node_id}"
+                    )
+                wv = src_node_info.widgets_values
+                if not wv or len(wv) < 1 or not isinstance(wv[0], (int, float)):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.src_node_id}"
+                    )
+                wv[0] = weight
 
         return modified
 
@@ -262,6 +277,10 @@ class WeightManager:
 
         modified = 0
         for src in sources:
+            node_info = self._accessor.nodes_cache.get(src.node_id)
+            if node_info and node_info.is_disabled:
+                continue
+
             if src.width_src_node_id in prompt:
                 prompt[src.width_src_node_id]["inputs"][
                     src.width_src_key
@@ -273,30 +292,52 @@ class WeightManager:
                 ] = target_height
                 modified += 1
 
-        # Update workflow widgets
-        for nid, node_info in self._accessor.nodes_cache.items():
-            if node_ids is not None and nid not in node_ids:
-                continue
-            if not node_info.is_disabled:
-                wv = node_info.widgets_values
-                if wv and len(wv) >= 2:
-                    is_source_node = any(src.node_id == nid for src in sources)
-                    if is_source_node and isinstance(wv[0], (int, float)):
-                        wv[0] = target_width
-                    if is_source_node and isinstance(wv[1], (int, float)):
-                        wv[1] = target_height
+            if not node_info:
+                raise ValueError(
+                    f"Workflow data is out of sync with prompt for node {src.node_id}"
+                )
 
-            for cached_info in self._accessor.nodes_cache.values():
-                if cached_info.is_disabled:
-                    continue
-                if cached_info.class_type in KNOWN_PRIMITIVE_TYPES:
-                    wv = cached_info.widgets_values
-                    if wv and isinstance(wv[0], (int, float)):
-                        for src in sources:
-                            if cached_info.node_id == src.width_src_node_id:
-                                wv[0] = target_width
-                            elif cached_info.node_id == src.height_src_node_id:
-                                wv[0] = target_height
+            # Update width workflow widget
+            if src.width_src_node_id == src.node_id:
+                wv = node_info.widgets_values
+                if not wv or len(wv) < 1 or not isinstance(wv[0], (int, float)):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for node {src.node_id}"
+                    )
+                wv[0] = target_width
+            else:
+                w_info = self._accessor.nodes_cache.get(src.width_src_node_id)
+                if not w_info or w_info.is_disabled:
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.width_src_node_id}"
+                    )
+                w_wv = w_info.widgets_values
+                if not w_wv or len(w_wv) < 1 or not isinstance(w_wv[0], (int, float)):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.width_src_node_id}"
+                    )
+                w_wv[0] = target_width
+
+            # Update height workflow widget
+            if src.height_src_node_id == src.node_id:
+                wv = node_info.widgets_values
+                if not wv or len(wv) < 2 or not isinstance(wv[1], (int, float)):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for node {src.node_id}"
+                    )
+                wv[1] = target_height
+            else:
+                h_info = self._accessor.nodes_cache.get(src.height_src_node_id)
+                if not h_info or h_info.is_disabled:
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.height_src_node_id}"
+                    )
+                h_wv = h_info.widgets_values
+                if not h_wv or len(h_wv) < 1 or not isinstance(h_wv[0], (int, float)):
+                    raise ValueError(
+                        f"Workflow data is out of sync with prompt for primitive node {src.height_src_node_id}"
+                    )
+                h_wv[0] = target_height
 
         return modified
 

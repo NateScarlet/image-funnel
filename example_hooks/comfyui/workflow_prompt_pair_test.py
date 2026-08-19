@@ -844,6 +844,44 @@ class TestCfgWeight(unittest.TestCase):
         self.assertEqual(prompt["1"]["inputs"]["cfg"], 9.0)
         self.assertEqual(prompt["2"]["inputs"]["cfg"], 5.0)
 
+    def test_modify_cfg_weights_missing_widgets_throws(self):
+        prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "KSampler",
+                    "widgets_values": [123, "fixed", 20],  # missing index 3
+                }
+            ],
+        }
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        with self.assertRaises(ValueError):
+            mgr.modify_cfg_weights(9.0)
+
+    def test_modify_cfg_weights_primitive_missing_widgets_throws(self):
+        prompt = {
+            "1": {"class_type": "KSampler", "inputs": {"cfg": ["2", 0]}},
+            "2": {"class_type": "PrimitiveFloat", "inputs": {"value": 7.0}},
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "KSampler",
+                    "widgets_values": [123, "fixed", 20, 7.0],
+                },
+                {
+                    "id": "2",
+                    "type": "PrimitiveFloat",
+                    "widgets_values": None,
+                },  # missing widgets_values
+            ],
+        }
+        mgr, _ = self._weight_mgr(workflow, prompt)
+        with self.assertRaises(ValueError):
+            mgr.modify_cfg_weights(9.0)
+
     def test_generate_cfg_variants_absolute(self):
         prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
         workflow = {
@@ -947,7 +985,20 @@ class TestCfgWeight(unittest.TestCase):
             "1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}},
             "2": {"class_type": "KSampler", "inputs": {"cfg": 5.0}},
         }
-        workflow = {"nodes": []}
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "KSampler",
+                    "widgets_values": [123, "fixed", 20, 7.0],
+                },
+                {
+                    "id": "2",
+                    "type": "KSampler",
+                    "widgets_values": [456, "fixed", 20, 5.0],
+                },
+            ]
+        }
         mgr, _ = self._weight_mgr(workflow, prompt)
         count = mgr.modify_cfg_weights(9.0)
         self.assertEqual(count, 2)
@@ -2344,6 +2395,54 @@ class TestAspectAdjustment(unittest.TestCase):
         mgr = WeightManager(pair)
         count = mgr.modify_aspect_ratio(680, 384)
         self.assertEqual(count, 0)
+
+    def test_modify_aspect_ratio_missing_widgets_throws(self):
+        """latent 节点 widgets_values 缺失或不足 2 位时抛出 ValueError"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [512],  # len < 2
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": 512, "height": 512, "batch_size": 1},
+            }
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        mgr = WeightManager(pair)
+        with self.assertRaises(ValueError):
+            mgr.modify_aspect_ratio(680, 384)
+
+    def test_modify_aspect_ratio_primitive_missing_widgets_throws(self):
+        """primitive 节点 widgets_values 缺失时抛出 ValueError"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "EmptyLatentImage",
+                    "widgets_values": [512, 512, 1],
+                },
+                {"id": "2", "type": "PrimitiveInt", "widgets_values": None},
+                {"id": "3", "type": "PrimitiveInt", "widgets_values": [512]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"width": ["2", 0], "height": ["3", 0], "batch_size": 1},
+            },
+            "2": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
+            "3": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        mgr = WeightManager(pair)
+        with self.assertRaises(ValueError):
+            mgr.modify_aspect_ratio(680, 384)
 
 
 # #endregion

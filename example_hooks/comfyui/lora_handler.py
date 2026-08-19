@@ -106,8 +106,15 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
                     accessor.set_prompt_input(src_nid, src_key, weight)
                     if src_nid != node_info.node_id:
                         wf_node = accessor.get_node_by_id(src_nid)
-                        if wf_node and wf_node.widgets_values:
-                            wf_node.widgets_values[0] = weight
+                        if (
+                            not wf_node
+                            or not wf_node.widgets_values
+                            or not isinstance(wf_node.widgets_values[0], (int, float))
+                        ):
+                            raise ValueError(
+                                f"Workflow data is out of sync with prompt for primitive node {src_nid}"
+                            )
+                        wf_node.widgets_values[0] = weight
                     modified = True
 
             # 只有在修改 prompt 成功后，才同步修改该节点在 workflow 中的 widgets_values
@@ -120,13 +127,21 @@ class NativeLoraLoaderHandler(LoraLoaderHandler):
                     raise ValueError(
                         f"Workflow data is out of sync with prompt for LoraLoader node {node_info.node_id}"
                     )
-                if len(node_info.widgets_values) > 1 and isinstance(
-                    node_info.widgets_values[1], (int, float)
-                ):
+                if "strength_model" in inputs:
+                    if len(node_info.widgets_values) <= 1 or not isinstance(
+                        node_info.widgets_values[1], (int, float)
+                    ):
+                        raise ValueError(
+                            f"Workflow data is out of sync with prompt for LoraLoader node {node_info.node_id}"
+                        )
                     node_info.widgets_values[1] = weight
-                if len(node_info.widgets_values) > 2 and isinstance(
-                    node_info.widgets_values[2], (int, float)
-                ):
+                if "strength_clip" in inputs:
+                    if len(node_info.widgets_values) <= 2 or not isinstance(
+                        node_info.widgets_values[2], (int, float)
+                    ):
+                        raise ValueError(
+                            f"Workflow data is out of sync with prompt for LoraLoader node {node_info.node_id}"
+                        )
                     node_info.widgets_values[2] = weight
 
         return modified
