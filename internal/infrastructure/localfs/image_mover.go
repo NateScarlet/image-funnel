@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"main/internal/domain/image"
@@ -90,6 +91,7 @@ type ImageMover struct {
 	repo                image.Repository
 	filterBuilder       *image.FilterBuilder
 	useSystemRecycleBin bool
+	emptyTrashMu        sync.Mutex
 }
 
 // NewImageMover 创建图片移动实现实例
@@ -464,6 +466,9 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.U
 // #region 清空回收站
 // EmptyTrash 清空早于指定存留期的暂存记录。通过快速重命名标记删除，并在后台 Goroutine 中进行异步磁盘物理擦除
 func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error) {
+	s.emptyTrashMu.Lock()
+	defer s.emptyTrashMu.Unlock()
+
 	trashRoot := filepath.Join(s.rootDir, trashDirName)
 
 	errB := util.NewErrorsBuilder(16)
@@ -494,6 +499,9 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 
 		metaBytes, err := os.ReadFile(filepath.Join(historyDir, "meta.json"))
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			errB.Add(fmt.Errorf("failed to read meta.json for trash history %s: %w", name, err))
 			continue
 		}

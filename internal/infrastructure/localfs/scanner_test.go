@@ -3,6 +3,7 @@ package localfs
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -529,6 +531,42 @@ func TestUndoTrashConflict(t *testing.T) {
 
 	// 验证暂存历史目录被彻底清理
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId))
+}
+
+func TestEmptyTrash_Concurrent(t *testing.T) {
+	ctx := newTestContext(t)
+
+	// 创建 20 个回收站目录
+	for i := 0; i < 20; i++ {
+		srcDir := fmt.Sprintf("source-dir-%d", i)
+		err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+		require.NoError(t, err)
+
+		imgFile := filepath.Join(ctx.rootDir, srcDir, fmt.Sprintf("img%d.jpg", i))
+		err = os.WriteFile(imgFile, []byte("test content"), 0644)
+		require.NoError(t, err)
+
+		_, _, err = ctx.imageMover.Trash(context.Background(), srcDir, shared.ImageFilters{}, "")
+		require.NoError(t, err)
+	}
+
+	const workerCount = 10
+	var wg sync.WaitGroup
+	errs := make([]error, workerCount)
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, errs[idx] = ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, err := range errs {
+		assert.NoError(t, err, "worker %d returned error", i)
+	}
 }
 
 
