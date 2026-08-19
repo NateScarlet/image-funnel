@@ -212,7 +212,7 @@ class FilenameManager:
                 if "/" not in rest and "\\" not in rest:
                     continue
 
-            terminal_info = self._accessor.nodes_cache.get(src_node_id)
+            terminal_info = self._accessor.get_node_by_id(src_node_id)
             wf_template: Optional[str] = None
             if terminal_info and terminal_info.widgets_values:
                 for val in terminal_info.widgets_values:
@@ -247,10 +247,15 @@ class FilenameManager:
 
                         if updates:
                             for pid, input_key, val in updates:
-                                prompt[pid].setdefault("inputs", {})[input_key] = val
-                                src_wf_info = self._accessor.nodes_cache.get(pid)
-                                if src_wf_info and src_wf_info.widgets_values:
-                                    src_wf_info.widgets_values[0] = val
+                                if not self._accessor.get_node_by_id(pid):
+                                    raise ValueError(
+                                        f"Workflow node '{pid}' is missing in metadata"
+                                    )
+                            for pid, input_key, val in updates:
+                                self._accessor.set_prompt_input(pid, input_key, val)
+                                self._accessor.update_workflow_node_text(
+                                    pid, val, input_key
+                                )
                             # workflow 保留模板语法，prompt 中求值展开
                             eval_val = self._evaluate_template_for_prompt(
                                 wf_template, prompt, original_val
@@ -275,7 +280,7 @@ class FilenameManager:
             new_val = self._adjust_with_rel_dir(rel_dir, original_val)
             src_inputs[src_key] = new_val
 
-            wf_src_info = self._accessor.nodes_cache.get(src_node_id)
+            wf_src_info = self._accessor.get_node_by_id(src_node_id)
             if wf_src_info and wf_src_info.widgets_values:
                 for idx, val in enumerate(wf_src_info.widgets_values):
                     if isinstance(val, str):

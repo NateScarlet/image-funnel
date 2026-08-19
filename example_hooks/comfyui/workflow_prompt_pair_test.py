@@ -1927,9 +1927,17 @@ class TestCoverageGaps(unittest.TestCase):
         self.assertIn("(nonexistent:1.5)", prompt["1"]["inputs"]["text"])
 
     def test_update_workflow_node_text_no_node(self):
-        """节点不存在时不报错"""
+        """节点不存在时抛出 ValueError 触发快速失败"""
         pair = WorkflowPromptPair({"nodes": []}, {})
-        pair.update_workflow_node_text("999", "new text")
+        with self.assertRaises(ValueError):
+            pair.update_workflow_node_text("999", "new text")
+
+    def test_update_workflow_node_text_no_widgets(self):
+        """节点缺乏 editable widgets_values 时抛出 ValueError 触发快速失败"""
+        workflow = {"nodes": [{"id": "1", "type": "SaveImage"}]}
+        pair = WorkflowPromptPair(workflow, {})
+        with self.assertRaises(ValueError):
+            pair.update_workflow_node_text("1", "new text")
 
     def test_generate_cfg_variants_inconsistent_lengths(self):
         """不同 KSampler 节点产生不同数量的变体时抛出异常"""
@@ -3009,6 +3017,94 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             prompt["1"]["inputs"]["filename_prefix"],
             r"NewBrandProj/OldTitle/\d{8}_\d{6}",
         )
+
+    def test_adjust_output_directory_subgraph_nodes(self):
+        """测试子图节点及主图代理控件在调整输出目录时被正确更新"""
+        workflow = {
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "widgets_values": ["OldTitle"],
+                            }
+                        ],
+                    }
+                ]
+            },
+            "nodes": [
+                {
+                    "id": "309",
+                    "type": "sg_123",
+                    "properties": {"proxyWidgets": [["291", "value"]]},
+                    "widgets_values": ["OldTitle"],
+                },
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Title.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+            ],
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "OldTitle/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "OldTitle"},
+                "_meta": {"title": "Title"},
+            },
+        }
+
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("NewTitle")
+
+        # 1. 验证 prompt 被更新
+        self.assertEqual(prompt["309:291"]["inputs"]["value"], "NewTitle")
+        # 2. 验证 definitions.subgraphs 内部节点 widgets_values 被更新
+        self.assertEqual(
+            workflow["definitions"]["subgraphs"][0]["nodes"][0]["widgets_values"][0],
+            "NewTitle",
+        )
+        # 3. 验证主图 Node 309 实例代理控件 widgets_values 被更新
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "NewTitle")
+
+    def test_adjust_output_directory_prompt_node_missing_in_workflow_fails_fast(self):
+        """Prompt 中存在变量节点但 workflow 元数据缺失该节点时应抛出 ValueError 触发快速失败"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Title.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+            ],
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "OldTitle/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "OldTitle"},
+                "_meta": {"title": "Title"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        with self.assertRaises(ValueError):
+            FilenameManager(
+                pair, pair.date_filename_nodes, pair.title_to_node
+            ).adjust_output_directory("NewTitle")
 
 
 # #endregion

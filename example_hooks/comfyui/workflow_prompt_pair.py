@@ -69,13 +69,43 @@ class WorkflowPromptPair:
             return wv[0]
         return None
 
-    def update_workflow_node_text(self, node_id: str, text: str) -> None:
+    def update_workflow_node_text(
+        self, node_id: str, text: str, input_key: str = "value"
+    ) -> None:
         node_info = self.get_node_by_id(node_id)
         if node_info is None:
-            return
+            raise ValueError(f"Workflow node '{node_id}' is missing in metadata")
         wv = node_info.widgets_values
-        if wv and len(wv) > 0:
-            wv[0] = text
+        if not wv or len(wv) == 0:
+            raise ValueError(
+                f"Workflow node '{node_id}' of type '{node_info.node_type}' does not contain editable text widgets"
+            )
+        wv[0] = text
+
+        # 查找并在所有挂载此代理控件的主图实例节点上同步更新 widgets_values
+        child_id = node_id.split(":", 1)[1] if ":" in node_id else node_id
+        sg_id = node_info.subgraph_id
+        if sg_id:
+            for info in self._nodes_cache.values():
+                if not info.is_subgraph and info.node_type == sg_id and info.node_data:
+                    props = cast(Dict[str, Any], info.node_data.get("properties") or {})
+                    pw_list = cast(Optional[List[List[str]]], props.get("proxyWidgets"))
+                    if pw_list:
+                        for idx, item in enumerate(pw_list):
+                            if (
+                                len(item) >= 2
+                                and str(item[0]) == child_id
+                                and str(item[1]) == input_key
+                            ):
+                                if (
+                                    not info.widgets_values
+                                    or len(info.widgets_values) <= idx
+                                ):
+                                    raise ValueError(
+                                        f"Proxy widget index {idx} out of bounds for node '{info.node_id}'"
+                                    )
+                                info.widgets_values[idx] = text
+                                break
 
     def get_prompt_input(self, node_id: str, input_key: str) -> Any:
         return self._prompt.get(node_id, {}).get("inputs", {}).get(input_key, "")

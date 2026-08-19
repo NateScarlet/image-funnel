@@ -17,7 +17,9 @@ class NodeAccessor(Protocol):
         """获取 workflow 节点文本 widget 值"""
         ...
 
-    def update_workflow_node_text(self, node_id: str, text: str) -> None:
+    def update_workflow_node_text(
+        self, node_id: str, text: str, input_key: str = "value"
+    ) -> None:
         """更新 workflow 节点文本 widget 值"""
         ...
 
