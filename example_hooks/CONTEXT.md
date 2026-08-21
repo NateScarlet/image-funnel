@@ -33,3 +33,6 @@ ComfyUI 钩子在提交前将工作流输出节点的 `filename_prefix` 自动�
 
 **常驻补全服务 / Autocomplete Serve**
 `comfyui.autocomplete serve` 子命令将补全脚本作为 **JSON-RPC 常驻服务**运行：stdin 读请求、stdout 写响应、stderr 记录日志，stdin 关闭即退出。请求参数沿用自动补全上下文（`cwords`/`cwordIdx`/`prevWord`/`linePrefix`/`query` + `imagePaths`/`imageIDs`/`notePath` + `rootDir`/`directoryRelPath`），响应复用现有 JSONL 建议结构，目标指令名从 `cwords[0]` 推导。**依赖由 serve 入口构建并注入**：解析器构建一次复用；Danbooru 提供者与操作历史按请求的目录上下文（`rootDir`/`directoryRelPath`）逐请求构建，初始化失败直接抛出（快速失败，不降级）。每个请求在独立线程处理，收到 `$/cancelRequest` 后标记取消（尽力而为中断，线程不可强杀），已取消的请求不再返回结果；请求执行失败以 JSON-RPC error 上报。配合 TOML 配置 `[directive.autocomplete]` 设置 `protocol = "json-rpc"` 启用。
+
+**复制工作流导出 / Copy Workflow Export**
+`comfyui.copy_workflow` 子命令在用户复制图片时被应用同步调用（配合 TOML 配置 `[copy]` 能力标记），读取 PNG 内嵌的 prompt/workflow 元数据，执行与入列一致的输出目录调整后，以单行 JSON 信封 `{"content", "description"}` 输出到 stdout 供写入剪贴板。无 ComfyUI 元数据的图片输出空内容即表示不适用（前端降级复制文件本体）；`HOOK_OUTPUT_DIR=:inherit:` 时复制原始未调整的工作流。核心逻辑依赖注入（请求上下文由入口从环境变量构造、元数据加载器以参数传入），共用 `png_metadata.py` 与 `output_directory.py` 模块。

@@ -8,7 +8,7 @@ from PIL import Image
 
 logging.disable(logging.CRITICAL)
 
-from .__main__ import get_relative_output_dir
+from .output_directory import get_relative_output_dir
 from .prompt_fragment import strip_comments_for_prompt
 from .prompt_locator import (
     get_workflow_node_text,

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import json
 import os
 import sys
 import uuid
@@ -12,6 +11,8 @@ import logging
 import argparse
 
 from graphql_utils import GraphQLClient, progress_notification
+from .output_directory import get_relative_output_dir
+from .png_metadata import load_prompt_and_workflow
 from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
@@ -30,90 +31,6 @@ def _write_action_override(action: str, action_path: str) -> None:
         raise ValueError("action_path is empty")
     with open(action_path, "w", encoding="utf-8") as f:
         f.write(action)
-
-
-# 捕获 PIL 导入错误并给出清晰提示
-try:
-    from PIL import Image
-except ImportError:
-    print(
-        "Error: Missing Pillow library. Please install it in your Python environment to handle image metadata:",
-        file=sys.stderr,
-    )
-    print("      pip install Pillow", file=sys.stderr)
-    sys.exit(1)
-
-
-def is_under_directory(child_path: str, parent_path: str) -> bool:
-    """
-    判断 child_path 是否在 parent_path 内部（或为同一路径）。
-    支持 Windows 下不区分大小写的包含关系判断。
-    """
-    child_norm = os.path.normcase(os.path.abspath(child_path))
-    parent_norm = os.path.normcase(os.path.abspath(parent_path))
-    try:
-        common = os.path.normcase(os.path.commonpath([parent_norm, child_norm]))
-        return common == parent_norm
-    except ValueError:
-        return False
-
-
-def get_relative_output_dir(
-    image_path: str, comfyui_output_dir_env: str, hook_output_dir: str
-) -> str:
-    """
-    计算并返回目标输出目录相对于 ComfyUI 输出根目录的相对路径（使用正斜杠）。
-    如果路径校验失败，或者找不到根目录，则抛出 ValueError。
-    """
-    image_path_abs = os.path.abspath(image_path)
-
-    # 1. 寻找 comfyui_output_dir (输出根目录)
-    if comfyui_output_dir_env:
-        comfyui_output_dir = os.path.abspath(comfyui_output_dir_env)
-        # 验证图片是否在 comfyui_output_dir 下
-        if not is_under_directory(image_path_abs, comfyui_output_dir):
-            raise ValueError(
-                f"Image '{image_path}' is not under COMFYUI_OUTPUT_DIR '{comfyui_output_dir}'"
-            )
-    else:
-        # 从右向左寻找最后一个名为 "output" 的目录
-        curr = os.path.dirname(image_path_abs)
-        comfyui_output_dir = None
-        while True:
-            parent, name = os.path.split(curr)
-            if not name:  # 到了根目录
-                break
-            if name.lower() == "output":
-                comfyui_output_dir = curr
-                break
-            curr = parent
-
-        if not comfyui_output_dir:
-            raise ValueError(
-                f"Could not find any directory named 'output' in the path of image '{image_path}'"
-            )
-
-    # 2. 决定目标目录 target_dir
-    if hook_output_dir:
-        if os.path.isabs(hook_output_dir):
-            # 如果是绝对目录，必须在 comfyui_output_dir 内，否则报错
-            target_dir = os.path.abspath(hook_output_dir)
-            if not is_under_directory(target_dir, comfyui_output_dir):
-                raise ValueError(
-                    f"HOOK_OUTPUT_DIR '{hook_output_dir}' is an absolute path but not under COMFYUI_OUTPUT_DIR '{comfyui_output_dir}'"
-                )
-        else:
-            # 默认相对于输出目录
-            target_dir = os.path.abspath(
-                os.path.join(comfyui_output_dir, hook_output_dir)
-            )
-    else:
-        target_dir = os.path.dirname(image_path_abs)
-
-    # 3. 计算相对路径
-    rel_dir = os.path.relpath(target_dir, comfyui_output_dir)
-    rel_dir = rel_dir.replace("\\", "/")
-    return rel_dir
 
 
 def extract_region_names(
@@ -284,45 +201,32 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
             # 更新进度通知
             update(f"处理图片 {os.path.basename(path)} ({idx + 1}/{len(targets)})")
 
-            prompt: Dict[str, Any]
-            workflow: Dict[str, Any]
-
             try:
-                with Image.open(path) as img:
-                    info: Any = img.info
-                    prompt_str: Optional[str] = info.get("prompt")
-                    workflow_str: Optional[str] = info.get("workflow")
-
-                    if not prompt_str:
-                        _LOGGER.error(
-                            f"This PNG image does not contain prompt metadata from ComfyUI: {path}"
-                        )
-                        has_errors = True
-                        continue
-
-                    # 必须同时包含 prompt 且 workflow 有效，否则由于无法更新种子会导致重复生成
-                    if not workflow_str:
-                        _LOGGER.error(
-                            f"This PNG image does not contain workflow metadata from ComfyUI: {path}"
-                        )
-                        has_errors = True
-                        continue
-
-                    prompt = json.loads(prompt_str)
-                    workflow_data: Any = json.loads(workflow_str)
-
-                    if (
-                        not isinstance(workflow_data, dict)
-                        or "nodes" not in workflow_data
-                    ):
-                        _LOGGER.error(
-                            f"This PNG image contains an invalid ComfyUI workflow (missing 'nodes'): {path}"
-                        )
-                        has_errors = True
-                        continue
-                    workflow = cast(Dict[str, Any], workflow_data)
+                prompt, workflow = load_prompt_and_workflow(path)
             except (OSError, ValueError) as e:
                 _LOGGER.error(f"Failed to read PNG properties: {e}")
+                has_errors = True
+                continue
+
+            if not prompt:
+                _LOGGER.error(
+                    f"This PNG image does not contain prompt metadata from ComfyUI: {path}"
+                )
+                has_errors = True
+                continue
+
+            # 必须同时包含 prompt 且 workflow 有效，否则由于无法更新种子会导致重复生成
+            if not workflow:
+                _LOGGER.error(
+                    f"This PNG image does not contain workflow metadata from ComfyUI: {path}"
+                )
+                has_errors = True
+                continue
+
+            if "nodes" not in workflow:
+                _LOGGER.error(
+                    f"This PNG image contains an invalid ComfyUI workflow (missing 'nodes'): {path}"
+                )
                 has_errors = True
                 continue
 
