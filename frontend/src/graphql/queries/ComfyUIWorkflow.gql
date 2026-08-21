@@ -1,3 +1,0 @@
-query ComfyUIWorkflow($id: ID!) {
-  comfyUIWorkflow(id: $id)
-}

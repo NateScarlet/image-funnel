@@ -466,3 +466,55 @@ protocol = "json-rpc"                                    # 启用常驻复用；
 **应用侧兜底（三层）**：发新请求前先对进行中旧请求发 `$/cancelRequest`；按 id 匹配响应、过期响应丢弃；请求级超时未响应则丢弃该请求并重启进程。因此取消是**尽力而为**——脚本即使不实现可取消性，结果正确性也不受影响。
 
 **参考实现**：`example_hooks/comfyui/autocomplete.py` 的 `serve()` 使用线程包装每个请求并支持取消标记，可参考。
+
+---
+
+## 7. 复制增强（[copy]）
+
+用户复制图片时，应用会同步调用声明了 `[copy]` 能力的钩子脚本，由脚本自行读取图片元数据并返回应写入剪贴板的内容。典型用途是把图片内嵌的生成配方（如 ComfyUI 工作流）连同输出目录调整一起写入剪贴板，粘贴回生成工具即可直接复用。与 autocomplete 家族一样，它是「请求期同步内容提供者」而非事件触发器。
+
+### 7.1 启用复制增强
+
+在 TOML 配置文件中声明 `[copy]` 节即可（无任何字段），执行命令复用钩子顶层 `command` 字段：
+
+```toml
+id = "your-copy-hook"
+name = "复制增强"
+description = "复制图片时由本脚本提供剪贴板内容"
+command = "python your_script.py"
+
+[copy] # 声明复制增强能力：复制图片时同步调用顶层 command
+
+[env]
+YOUR_CUSTOM_VAR = "value"
+```
+
+> [!IMPORTANT]
+> **全局唯一约束**：所有已加载的钩子中，匹配 `[copy]` 的数量必须 ≤ 1。配置 0 个 → 复制行为保持原样（复制文件/路径）；配置多于 1 个 → 服务端报错并列出冲突的 hook id，不会隐式按顺序决定谁生效。多来源内容的组合逻辑应由你自己的单个脚本负责。
+
+### 7.2 脚本契约（stdout / 退出码）
+
+服务端对 stdout 做**唯一一次边界校验**，格式违约会显式报错给用户，脚本无需做协议容错：
+
+| 场景 | 行为 |
+|---|---|
+| 退出码 0 且 stdout 非空 | stdout 必须是**单行 JSON 信封**：`{"content": "<写入剪贴板的文本>", "description": "<成功通知文案，可选>"}`。`content` 必须为非空字符串 |
+| 退出码 0 且 stdout 为空 | 表示「对当前图片不适用」，前端降级为复制文件本体（例如图片不含你的脚本认识的元数据时，静默放弃是预期行为） |
+| 退出码非 0 | 视为脚本失败：向用户显示错误（附 stderr 内容），同时降级复制文件。绝不静默返回未增强内容 |
+
+- `description` 用于成功通知文案（如「已复制 ComfyUI 工作流（输出目录已调整）」），未提供时前端使用默认文案。
+- 调试与过程日志输出到 **stderr**，不污染协议 stdout。
+- 本期仅支持最普通的单次命令行调用（每次复制 spawn 一个进程）；json-rpc 常驻模式留待有实测延迟需求后比照 autocomplete 演进。
+
+### 7.3 注入的环境变量
+
+沿用基础环境变量（见第 3 节），其中触发器名为 `IMAGE_FUNNEL_TRIGGER=image_copy`，并注入：
+
+- `IMAGE_FUNNEL_IMAGE_IDS`: 单元素数组，当前复制图片的 ID。
+- `IMAGE_FUNNEL_IMAGE_PATHS`: 单元素数组，当前复制图片的绝对路径——脚本可据此读取图片文件、推算目标输出目录等。
+- `IMAGE_FUNNEL_DIRECTORY_REL_PATH`: 图片所在目录相对根目录的路径。
+- 其余（`IMAGE_FUNNEL_ROOT_DIR`、`IMAGE_FUNNEL_GRAPHQL_URL`、`IMAGE_FUNNEL_TOKEN` 及 `[env]` 自定义变量）与其他触发器一致。
+
+### 7.4 参考实现
+
+`example_hooks/comfyui/copy_workflow.py`：经统一 runner 以「模块名回退直跑」方式启动（`uv run runner.py comfyui.copy_workflow`，与 autocomplete 同模式），完成「读 PNG 元数据 → 推算 rel_dir（含 `COMFYUI_OUTPUT_DIR`/`HOOK_OUTPUT_DIR`/`:inherit:` 语义，与入列流程一致）→ 调整输出目录 → 输出信封」全链路。核心逻辑不读取环境变量，请求上下文由入口从环境变量构造、元数据加载器以参数注入，便于测试。

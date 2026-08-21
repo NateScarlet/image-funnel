@@ -7,7 +7,7 @@ import mutate from "@/graphql/utils/mutate";
 import randomUUID from "@/utils/randomUUID";
 import {
   MetaDocument,
-  ComfyUiWorkflowDocument,
+  ImageCopyContentDocument,
   AttachFileToClipboardDocument,
 } from "@/graphql/generated";
 
@@ -60,8 +60,8 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
     }
   }
 
-  // 处理单张图片的复制操作（优先尝试只复制 ComfyUI 工作流，如果不存在或失败再复制文件）
-  async function copyWorkflowOrFile(filePath: string, imageId: string) {
+  // 处理单张图片的复制操作（优先尝试复制增强内容，未配置钩子或不适用时降级复制文件）
+  async function copyEnhancedOrFile(filePath: string, imageId: string) {
     if (!filePath || !imageId) return;
 
     // 防止并发重复操作
@@ -71,28 +71,31 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
     }
 
     try {
-      let workflow: string | null | undefined = undefined;
+      let enhancedContent: string | null | undefined = undefined;
+      let enhancedDescription: string | null | undefined = undefined;
       try {
-        // 优先获取图片的 ComfyUI 工作流数据
-        const result = await query(ComfyUiWorkflowDocument, {
+        // 优先获取复制增强钩子提供的内容（cache-first：命中缓存不重复 spawn 脚本）
+        const result = await query(ImageCopyContentDocument, {
           variables: { id: imageId },
           fetchPolicy: "cache-first",
         });
-        workflow = result.data?.comfyUIWorkflow;
+        enhancedContent = result.data?.imageCopyContent?.content ?? null;
+        enhancedDescription = result.data?.imageCopyContent?.description;
       } catch {
-        // 获取失败则降级复制图片文件/路径
+        // 获取失败则降级复制图片文件/路径；
+        // 错误通知由全局 ErrorLink（graphql/client.ts）负责弹出，此处不重复提示
       }
 
-      if (workflow) {
-        const ok = await writeToClipboard(workflow);
+      if (enhancedContent) {
+        const ok = await writeToClipboard(enhancedContent);
         if (ok) {
-          showSuccess("已复制 ComfyUI 工作流数据!");
+          showSuccess(enhancedDescription ?? "已复制增强内容!");
           addCopiedImageId(imageId);
           return;
         }
       }
 
-      // 无法获取或复制工作流时，降级为复制图片文件/路径
+      // 无法获取或复制增强内容时，降级为复制图片文件/路径
       const supported = await tryAttachFiles([filePath]);
       if (supported) {
         showSuccess("已复制图片文件!");
@@ -196,7 +199,7 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   }
 
   return {
-    copyWorkflowOrFile,
+    copyEnhancedOrFile,
     copyFiles,
     copiedImageIds,
   };

@@ -1,0 +1,8 @@
+extend type Query {
+  """
+  通过图片 ID 获取复制增强内容。
+  配置了声明 [copy] 能力的外部钩子时同步执行脚本，由其读取图片元数据并返回应写入剪贴板的内容；
+  未配置钩子或脚本对当前图片不适用时返回 null，客户端降级为复制文件本身。
+  """
+  imageCopyContent(id: ID!): CopyContent
+}

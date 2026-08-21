@@ -19,6 +19,11 @@ import (
 type imageDispatchTrigger struct {
 }
 
+// copyTrigger 复制增强能力标记：声明 [copy] 即让脚本在用户复制图片时被同步调用，
+// 由脚本自行读取图片元数据并返回应写入剪贴板的内容（请求期同步内容提供者，非事件触发器）
+type copyTrigger struct {
+}
+
 // autocompleteConfig 自动完成脚本配置
 type autocompleteConfig struct {
 	Command  string `toml:"command"`
@@ -41,8 +46,9 @@ type hookConfig struct {
 	Name        string           `toml:"name"`
 	Description string           `toml:"description"`
 	Command     string           `toml:"command"`
-	Order       int              `toml:"order"`       // 执行顺序，默认 0，升序排列
-	Directive   *directiveConfig `toml:"directive"` // 笔记指令定义
+	Order       int              `toml:"order"` // 执行顺序，默认 0，升序排列
+	Directive   *directiveConfig `toml:"directive"`
+	Copy        *copyTrigger     `toml:"copy"` // 复制增强能力标记
 	On          struct {
 		PostUpdateImageMetadata *filters              `toml:"post_update_image_metadata"`
 		ImageDispatch           *imageDispatchTrigger `toml:"image_dispatch"`

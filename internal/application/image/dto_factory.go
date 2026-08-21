@@ -3,6 +3,7 @@ package image
 import (
 	"path/filepath"
 
+	"main/internal/domain/hook"
 	"main/internal/domain/image"
 	"main/internal/shared"
 )
@@ -35,4 +36,16 @@ func (f *DTOFactory) New(img *image.Image) (*shared.ImageDTO, error) {
 		XMPExists:     img.XMPExists(),
 		Label:         img.Label(),
 	}, nil
+}
+
+// NewCopyContent 将复制增强内容转换为 DTO，脚本未提供通知文案时保持 nil
+func (f *DTOFactory) NewCopyContent(content *hook.CopyContent) *shared.CopyContentDTO {
+	var description *string
+	if content.Description != "" {
+		description = &content.Description
+	}
+	return &shared.CopyContentDTO{
+		Content:     content.Content,
+		Description: description,
+	}
 }

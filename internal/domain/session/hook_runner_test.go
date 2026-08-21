@@ -25,3 +25,7 @@ func (r *FakeHookRunner) TriggerForNote(ctx context.Context, noteRelPath string,
 func (r *FakeHookRunner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*hook.AutocompleteSuggestion, error) {
 	return nil, nil
 }
+
+func (r *FakeHookRunner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath string) (*hook.CopyContent, error) {
+	return nil, nil
+}

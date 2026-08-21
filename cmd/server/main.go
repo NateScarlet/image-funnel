@@ -228,7 +228,7 @@ func main() {
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
 	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
-	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard)
+	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {

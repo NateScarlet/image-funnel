@@ -16,6 +16,12 @@ type AutocompleteSuggestion struct {
 	Style       string
 }
 
+// CopyContent 复制增强内容值对象：外部钩子脚本提供的应写入剪贴板的内容
+type CopyContent struct {
+	Content     string // 写入剪贴板的文本内容
+	Description string // 成功通知文案，空表示脚本未提供
+}
+
 // Directive 钩子提供的笔记指令值对象
 type Directive struct {
 	Name            string // 指令名称，用于 slash command 匹配
@@ -90,4 +96,5 @@ type Runner interface {
 	OnCommitSession(ctx context.Context, dirRelPath string) error
 	TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error
 	Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*AutocompleteSuggestion, error)
+	CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath string) (*CopyContent, error)
 }

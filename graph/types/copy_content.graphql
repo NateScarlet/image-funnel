@@ -1,0 +1,7 @@
+"复制增强钩子提供的剪贴板内容"
+type CopyContent @goModel(model: "main/internal/shared.CopyContentDTO") {
+  "写入剪贴板的文本内容"
+  content: String!
+  "成功通知文案，脚本未提供时为 null，客户端使用默认文案"
+  description: String
+}

@@ -2,6 +2,7 @@ package image
 
 import (
 	"main/internal/domain/directory"
+	"main/internal/domain/hook"
 	"main/internal/domain/image"
 	"main/internal/pubsub"
 	"main/internal/shared"
@@ -30,6 +31,7 @@ type Handler struct {
 	rootDir            string
 	imgFactory         *image.Factory
 	clipboard          ClipboardProvider
+	hookRunner         hook.Runner // 复制增强端口：执行声明 [copy] 能力的外部钩子脚本
 }
 
 func NewHandler(
@@ -45,6 +47,7 @@ func NewHandler(
 	rootDir string,
 	imgFactory *image.Factory,
 	clipboard ClipboardProvider,
+	hookRunner hook.Runner,
 ) *Handler {
 	return &Handler{
 		imageService:       imageService,
@@ -59,5 +62,6 @@ func NewHandler(
 		rootDir:            rootDir,
 		imgFactory:         imgFactory,
 		clipboard:          clipboard,
+		hookRunner:         hookRunner,
 	}
 }

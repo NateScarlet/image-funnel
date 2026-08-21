@@ -627,7 +627,7 @@ useClickOutside(overflowMenuRef, () => {
 });
 
 const copyLoadingCount = ref(0);
-const { copyWorkflowOrFile, copyFiles, copiedImageIds } = useClipboard({
+const { copyEnhancedOrFile, copyFiles, copiedImageIds } = useClipboard({
   loadingCount: copyLoadingCount,
 });
 
@@ -636,7 +636,7 @@ const isCopied = computed(() => copiedImageIds.value.includes(image.id));
 
 async function handleCopy() {
   if (isCopying.value) return;
-  await copyWorkflowOrFile(fullFilePath.value, image.id);
+  await copyEnhancedOrFile(fullFilePath.value, image.id);
   showOverflowMenu.value = false;
 }
 
@@ -652,7 +652,7 @@ function handleOpen() {
 
 // #region 快捷键复制
 
-// 绑定快捷键 Ctrl+C 改为与界面复制相同的逻辑（优先复制工作流，没有则复制绝对路径）
+// 绑定快捷键 Ctrl+C 改为与界面复制相同的逻辑（优先复制增强内容，没有则复制绝对路径）
 useHotkeys(
   {
     "ctrl+c": async (e) => {
@@ -670,7 +670,7 @@ useHotkeys(
   {
     preventDefault: false,
     stopPropagation: false,
-    description: "复制工作流或路径",
+    description: "复制增强内容或路径",
     category: "图片操作",
   },
 );

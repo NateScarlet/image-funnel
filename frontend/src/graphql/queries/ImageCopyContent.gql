@@ -1,0 +1,6 @@
+query ImageCopyContent($id: ID!) {
+  imageCopyContent(id: $id) {
+    content
+    description
+  }
+}

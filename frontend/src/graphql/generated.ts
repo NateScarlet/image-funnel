@@ -2315,12 +2315,6 @@ export type BrowseNotesQuery = {
     | null;
 };
 
-export type ComfyUiWorkflowQueryVariables = Exact<{
-  id: Scalars["ID"]["input"];
-}>;
-
-export type ComfyUiWorkflowQuery = { __typename: "Query"; comfyUIWorkflow: string | null };
-
 export type DevicesQueryVariables = Exact<{ [key: string]: never }>;
 
 export type DevicesQuery = {
@@ -2696,6 +2690,19 @@ export type HooksQuery = {
       autocomplete: boolean;
     } | null;
   }>;
+};
+
+export type ImageCopyContentQueryVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type ImageCopyContentQuery = {
+  __typename: "Query";
+  imageCopyContent: {
+    __typename: "CopyContent";
+    content: string;
+    description: string | null;
+  } | null;
 };
 
 export type KeptImagesQueryVariables = Exact<{
@@ -8594,42 +8601,6 @@ export const BrowseNotesDocument = {
     },
   ],
 } as unknown as DocumentNode<BrowseNotesQuery, BrowseNotesQueryVariables>;
-export const ComfyUiWorkflowDocument = {
-  kind: "Document",
-  definitions: [
-    {
-      kind: "OperationDefinition",
-      operation: "query",
-      name: { kind: "Name", value: "ComfyUIWorkflow" },
-      variableDefinitions: [
-        {
-          kind: "VariableDefinition",
-          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
-          type: {
-            kind: "NonNullType",
-            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
-          },
-        },
-      ],
-      selectionSet: {
-        kind: "SelectionSet",
-        selections: [
-          {
-            kind: "Field",
-            name: { kind: "Name", value: "comfyUIWorkflow" },
-            arguments: [
-              {
-                kind: "Argument",
-                name: { kind: "Name", value: "id" },
-                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<ComfyUiWorkflowQuery, ComfyUiWorkflowQueryVariables>;
 export const DevicesDocument = {
   kind: "Document",
   definitions: [
@@ -9705,6 +9676,49 @@ export const HooksDocument = {
     },
   ],
 } as unknown as DocumentNode<HooksQuery, HooksQueryVariables>;
+export const ImageCopyContentDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "ImageCopyContent" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "imageCopyContent" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: { kind: "Variable", name: { kind: "Name", value: "id" } },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "content" } },
+                { kind: "Field", name: { kind: "Name", value: "description" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<ImageCopyContentQuery, ImageCopyContentQueryVariables>;
 export const KeptImagesDocument = {
   kind: "Document",
   definitions: [

@@ -8,9 +8,10 @@ package graphql
 import (
 	"context"
 	"main/internal/scalar"
+	"main/internal/shared"
 )
 
-// ComfyUIWorkflow is the resolver for the comfyUIWorkflow field.
-func (r *queryResolver) ComfyUIWorkflow(ctx context.Context, id scalar.ID) (*string, error) {
-	return r.app.ComfyUIWorkflow(ctx, id)
+// ImageCopyContent is the resolver for the imageCopyContent field.
+func (r *queryResolver) ImageCopyContent(ctx context.Context, id scalar.ID) (*shared.CopyContentDTO, error) {
+	return r.app.CopyContent(ctx, id)
 }

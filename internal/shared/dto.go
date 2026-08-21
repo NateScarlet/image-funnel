@@ -249,6 +249,12 @@ type AutocompleteSuggestionDTO struct {
 	Style       string
 }
 
+// CopyContentDTO 复制增强内容数据传输对象：应写入剪贴板的文本
+type CopyContentDTO struct {
+	Content     string
+	Description *string // 成功通知文案，nil 表示脚本未提供
+}
+
 // HookDirectiveDTO 外部钩子提供的笔记指令数据传输对象
 type HookDirectiveDTO struct {
 	Name         string

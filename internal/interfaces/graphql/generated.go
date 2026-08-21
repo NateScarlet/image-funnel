@@ -105,6 +105,11 @@ type ComplexityRoot struct {
 		Written          func(childComplexity int) int
 	}
 
+	CopyContent struct {
+		Content     func(childComplexity int) int
+		Description func(childComplexity int) int
+	}
+
 	CreateNotePayload struct {
 		ClientMutationID func(childComplexity int) int
 		Note             func(childComplexity int) int
@@ -416,10 +421,10 @@ type ComplexityRoot struct {
 
 	Query struct {
 		AuthStatus           func(childComplexity int) int
-		ComfyUIWorkflow      func(childComplexity int, id scalar.ID) int
 		Devices              func(childComplexity int) int
 		HookAutocomplete     func(childComplexity int, input HookAutocompleteInput) int
 		Hooks                func(childComplexity int) int
+		ImageCopyContent     func(childComplexity int, id scalar.ID) int
 		Meta                 func(childComplexity int) int
 		Node                 func(childComplexity int, id scalar.ID) int
 		NotificationChannels func(childComplexity int, first *int, after *string) int
@@ -647,10 +652,10 @@ type NotificationChannelResolver interface {
 type QueryResolver interface {
 	Node(ctx context.Context, id scalar.ID) (Node, error)
 	AuthStatus(ctx context.Context) (*AuthStatus, error)
-	ComfyUIWorkflow(ctx context.Context, id scalar.ID) (*string, error)
 	Devices(ctx context.Context) ([]*shared.DeviceDTO, error)
 	HookAutocomplete(ctx context.Context, input HookAutocompleteInput) ([]*shared.AutocompleteSuggestionDTO, error)
 	Hooks(ctx context.Context) ([]*shared.HookDTO, error)
+	ImageCopyContent(ctx context.Context, id scalar.ID) (*shared.CopyContentDTO, error)
 	Meta(ctx context.Context) (*Meta, error)
 	NotificationChannels(ctx context.Context, first *int, after *string) (*shared.NotificationChannelConnectionDTO, error)
 	Notifications(ctx context.Context, filterBy *shared.NotificationFilters, first *int, after *string) (*shared.NotificationConnectionDTO, error)
@@ -849,6 +854,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CommitChangesPayload.Written(childComplexity), true
+
+	case "CopyContent.content":
+		if e.complexity.CopyContent.Content == nil {
+			break
+		}
+
+		return e.complexity.CopyContent.Content(childComplexity), true
+	case "CopyContent.description":
+		if e.complexity.CopyContent.Description == nil {
+			break
+		}
+
+		return e.complexity.CopyContent.Description(childComplexity), true
 
 	case "CreateNotePayload.clientMutationId":
 		if e.complexity.CreateNotePayload.ClientMutationID == nil {
@@ -2156,17 +2174,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.AuthStatus(childComplexity), true
-	case "Query.comfyUIWorkflow":
-		if e.complexity.Query.ComfyUIWorkflow == nil {
-			break
-		}
-
-		args, err := ec.field_Query_comfyUIWorkflow_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Query.ComfyUIWorkflow(childComplexity, args["id"].(scalar.ID)), true
 	case "Query.devices":
 		if e.complexity.Query.Devices == nil {
 			break
@@ -2190,6 +2197,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Hooks(childComplexity), true
+	case "Query.imageCopyContent":
+		if e.complexity.Query.ImageCopyContent == nil {
+			break
+		}
+
+		args, err := ec.field_Query_imageCopyContent_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ImageCopyContent(childComplexity, args["id"].(scalar.ID)), true
 	case "Query.meta":
 		if e.complexity.Query.Meta == nil {
 			break
@@ -3080,6 +3098,14 @@ type AutocompleteSuggestion @goModel(model: "main/internal/shared.AutocompleteSu
   style: String
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/types/copy_content.graphql", Input: `"复制增强钩子提供的剪贴板内容"
+type CopyContent @goModel(model: "main/internal/shared.CopyContentDTO") {
+  "写入剪贴板的文本内容"
+  content: String!
+  "成功通知文案，脚本未提供时为 null，客户端使用默认文案"
+  description: String
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/types/device.graphql", Input: `type Device @goModel(model: "main/internal/shared.DeviceDTO") {
   """
   设备的唯一标识符
@@ -3729,13 +3755,6 @@ enum NotificationStatus @goModel(model: "main/internal/shared.NotificationStatus
   authStatus: AuthStatus! @public
 }
 `, BuiltIn: false},
-	{Name: "../../../graph/queries/comfy_ui_workflow.graphql", Input: `extend type Query {
-  """
-  通过图片 ID 获取嵌入在 PNG 文件 tEXt 块中的 ComfyUI 工作流 JSON。
-  仅 PNG 文件支持此查询，非 PNG 文件或未包含工作流的图片返回 null。
-  """
-  comfyUIWorkflow(id: ID!): String
-}`, BuiltIn: false},
 	{Name: "../../../graph/queries/devices.graphql", Input: `extend type Query {
   devices: [Device!]!
 }
@@ -3761,6 +3780,15 @@ extend type Query {
 	{Name: "../../../graph/queries/hooks.graphql", Input: `extend type Query {
   "查询所有可用的外部钩子"
   hooks: [Hook!]!
+}
+`, BuiltIn: false},
+	{Name: "../../../graph/queries/image_copy_content.graphql", Input: `extend type Query {
+  """
+  通过图片 ID 获取复制增强内容。
+  配置了声明 [copy] 能力的外部钩子时同步执行脚本，由其读取图片元数据并返回应写入剪贴板的内容；
+  未配置钩子或脚本对当前图片不适用时返回 null，客户端降级为复制文件本身。
+  """
+  imageCopyContent(id: ID!): CopyContent
 }
 `, BuiltIn: false},
 	{Name: "../../../graph/queries/meta.graphql", Input: `extend type Query {
@@ -4940,17 +4968,6 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_comfyUIWorkflow_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_Query_hookAutocomplete_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4959,6 +4976,17 @@ func (ec *executionContext) field_Query_hookAutocomplete_args(ctx context.Contex
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_imageCopyContent_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2mainᚋinternalᚋscalarᚐID)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -5884,6 +5912,64 @@ func (ec *executionContext) _CommitChangesPayload_clientMutationId(ctx context.C
 func (ec *executionContext) fieldContext_CommitChangesPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "CommitChangesPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CopyContent_content(ctx context.Context, field graphql.CollectedField, obj *shared.CopyContentDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyContent_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyContent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CopyContent_description(ctx context.Context, field graphql.CollectedField, obj *shared.CopyContentDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyContent_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyContent_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyContent",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -12694,47 +12780,6 @@ func (ec *executionContext) fieldContext_Query_authStatus(_ context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_comfyUIWorkflow(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_comfyUIWorkflow,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Query().ComfyUIWorkflow(ctx, fc.Args["id"].(scalar.ID))
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_comfyUIWorkflow(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_comfyUIWorkflow_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_devices(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12870,6 +12915,53 @@ func (ec *executionContext) fieldContext_Query_hooks(_ context.Context, field gr
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Hook", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_imageCopyContent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_imageCopyContent,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ImageCopyContent(ctx, fc.Args["id"].(scalar.ID))
+		},
+		nil,
+		ec.marshalOCopyContent2ᚖmainᚋinternalᚋsharedᚐCopyContentDTO,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_imageCopyContent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "content":
+				return ec.fieldContext_CopyContent_content(ctx, field)
+			case "description":
+				return ec.fieldContext_CopyContent_description(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CopyContent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_imageCopyContent_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -20279,6 +20371,47 @@ func (ec *executionContext) _CommitChangesPayload(ctx context.Context, sel ast.S
 	return out
 }
 
+var copyContentImplementors = []string{"CopyContent"}
+
+func (ec *executionContext) _CopyContent(ctx context.Context, sel ast.SelectionSet, obj *shared.CopyContentDTO) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, copyContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CopyContent")
+		case "content":
+			out.Values[i] = ec._CopyContent_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._CopyContent_description(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var createNotePayloadImplementors = []string{"CreateNotePayload"}
 
 func (ec *executionContext) _CreateNotePayload(ctx context.Context, sel ast.SelectionSet, obj *CreateNotePayload) graphql.Marshaler {
@@ -23143,25 +23276,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "comfyUIWorkflow":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_comfyUIWorkflow(ctx, field)
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "devices":
 			field := field
 
@@ -23219,6 +23333,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "imageCopyContent":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_imageCopyContent(ctx, field)
 				return res
 			}
 
@@ -25798,13 +25931,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -27351,6 +27484,13 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOCopyContent2ᚖmainᚋinternalᚋsharedᚐCopyContentDTO(ctx context.Context, sel ast.SelectionSet, v *shared.CopyContentDTO) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CopyContent(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalODevice2ᚖmainᚋinternalᚋsharedᚐDeviceDTO(ctx context.Context, sel ast.SelectionSet, v *shared.DeviceDTO) graphql.Marshaler {
