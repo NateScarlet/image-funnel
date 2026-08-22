@@ -1,8 +1,11 @@
 # 只允许使用项目测试脚本运行测试
 
+import contextlib
+import io
 import logging
 import os
 import unittest
+import uuid
 from unittest.mock import MagicMock, patch
 from typing import Any, Dict, Optional
 
@@ -24,15 +27,27 @@ def _make_client() -> MagicMock:
     return MagicMock(spec=GraphQLClient)
 
 
+# 测试临时产物统一放在项目 .scratch 目录，不使用系统临时目录
+_SCRATCH_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".scratch"
+)
+
+
 class TestRetentionMain(unittest.TestCase):
 
     def setUp(self):
+        # 操作覆盖文件直接落在项目 .scratch 目录下（沙箱环境对临时子目录支持不佳），
+        # 测试结束后删除该文件
+        self.action_path = os.path.join(
+            _SCRATCH_DIR, f"retention_action_{uuid.uuid4().hex}.txt"
+        )
         self.env_patcher = patch.dict(
             os.environ,
             {
                 "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
                 "IMAGE_FUNNEL_GRAPHQL_URL": "http://localhost:8000/graphql",
                 "IMAGE_FUNNEL_TOKEN": "test-token",
+                "IMAGE_FUNNEL_ACTION": self.action_path,
                 "HOOK_IMAGE_RATING": "2",
                 "HOOK_MAX_RETAIN": "3",
                 "HOOK_LOGGING_LEVEL": "WARNING",
@@ -43,6 +58,24 @@ class TestRetentionMain(unittest.TestCase):
 
     def tearDown(self):
         self.env_patcher.stop()
+        if os.path.exists(self.action_path):
+            os.remove(self.action_path)
+
+    def _run_retention_captured(self, client: GraphQLClient) -> str:
+        """运行 run_retention 并捕获 stdout，断言以退出码 0 结束"""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as cm:
+                run_retention(client)
+        self.assertEqual(cm.exception.code, 0)
+        return buf.getvalue()
+
+    def _read_action_override(self) -> Optional[str]:
+        """读取操作覆盖文件内容，文件不存在时返回 None"""
+        if not os.path.exists(self.action_path):
+            return None
+        with open(self.action_path, encoding="utf-8") as f:
+            return f.read()
 
     def test_no_excess_images(self):
         mock_client = _make_client()
@@ -65,9 +98,10 @@ class TestRetentionMain(unittest.TestCase):
             }
         }
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        # 未移除任何图片：应静默（无 stdout）并写入 KEEP 操作覆盖供 Runner 跳过通知
+        output = self._run_retention_captured(mock_client)
+        self.assertEqual(output, "")
+        self.assertEqual(self._read_action_override(), "KEEP")
         mock_client.execute.assert_called_once()
 
     def test_exactly_max_retain(self):
@@ -96,9 +130,10 @@ class TestRetentionMain(unittest.TestCase):
             }
         }
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        # 未移除任何图片：应静默并写入 KEEP
+        output = self._run_retention_captured(mock_client)
+        self.assertEqual(output, "")
+        self.assertEqual(self._read_action_override(), "KEEP")
         mock_client.execute.assert_called_once()
 
     def test_excess_images_trashed(self):
@@ -190,14 +225,17 @@ class TestRetentionMain(unittest.TestCase):
                 run_retention(mock_client)
             self.assertEqual(cm.exception.code, 0)
             mock_client.execute.assert_called()
+            # 实际执行了移除：不应写入操作覆盖
+            self.assertIsNone(self._read_action_override())
 
     def test_no_matching_images(self):
         mock_client = _make_client()
         mock_client.execute.return_value = {"node": {"images": _page([])}}
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        # 未移除任何图片：应静默并写入 KEEP
+        output = self._run_retention_captured(mock_client)
+        self.assertEqual(output, "")
+        self.assertEqual(self._read_action_override(), "KEEP")
         mock_client.execute.assert_called_once()
 
     def test_missing_env_hook_image_rating(self):
@@ -493,9 +531,10 @@ class TestRetentionMain(unittest.TestCase):
             }
         }
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        # 未移除任何图片：应静默并写入 KEEP
+        output = self._run_retention_captured(mock_client)
+        self.assertEqual(output, "")
+        self.assertEqual(self._read_action_override(), "KEEP")
         # 只应有一次查询调用，没有 trash 调用
         mock_client.execute.assert_called_once()
 
@@ -555,11 +594,30 @@ class TestRetentionMain(unittest.TestCase):
 
         mock_client.execute.side_effect = side_effect
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        # 实际执行了移除：stdout 输出结果摘要，不写操作覆盖
+        output = self._run_retention_captured(mock_client)
+        self.assertIn("已清理", output)
+        self.assertIsNone(self._read_action_override())
         # 有笔记保护的 img:1 不应出现在 trash 列表中
         self.assertEqual(len(call_log), 2)
+
+    def test_missing_env_action_override(self):
+        """跳过场景需要写入操作覆盖文件，缺失 IMAGE_FUNNEL_ACTION 应快速失败"""
+        with patch.dict(os.environ, {}, clear=True):
+            with patch.dict(
+                os.environ,
+                {
+                    "HOOK_IMAGE_RATING": "2",
+                    "HOOK_MAX_RETAIN": "3",
+                    "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                },
+                clear=False,
+            ):
+                mock_client = _make_client()
+                mock_client.execute.return_value = {"node": {"images": _page([])}}
+                with self.assertRaises(ValueError) as cm:
+                    run_retention(mock_client)
+                self.assertIn("IMAGE_FUNNEL_ACTION", str(cm.exception))
 
 
 if __name__ == "__main__":

@@ -12,6 +12,15 @@ from graphql_utils import GraphQLClient
 _LOGGER = logging.getLogger(__name__)
 
 
+def _write_action_override(action: str) -> None:
+    """向 IMAGE_FUNNEL_ACTION 指向的临时文件写入操作覆盖，供服务端 Runner 读取"""
+    action_path = os.getenv("IMAGE_FUNNEL_ACTION")
+    if not action_path:
+        raise ValueError("Environment variable IMAGE_FUNNEL_ACTION is missing.")
+    with open(action_path, "w", encoding="utf-8") as f:
+        f.write(action)
+
+
 def run_retention(client: GraphQLClient) -> None:
     # 快速失败：校验必需的环境变量
     rating_str = os.getenv("HOOK_IMAGE_RATING")
@@ -100,7 +109,8 @@ def run_retention(client: GraphQLClient) -> None:
             count,
             max_retain,
         )
-        print(f"共 {count} 张 {rating} 星图片，未超过保留上限 {max_retain} 张")
+        # 本次未移除任何图片：写入 KEEP 并保持静默（无 stdout），Runner 据此跳过成功通知
+        _write_action_override("KEEP")
         sys.exit(0)
 
     # 按 modTime 升序排列（最旧的在前），超出部分移到回收站
@@ -111,7 +121,8 @@ def run_retention(client: GraphQLClient) -> None:
     excess = [img for img in excess if not img["note"]["content"]]
     if not excess:
         _LOGGER.debug("All excess images have non-empty notes, skipping trash.")
-        print(f"共 {count} 张 {rating} 星图片，超过保留上限但待移除图片均有笔记")
+        # 本次未移除任何图片：写入 KEEP 并保持静默（无 stdout），Runner 据此跳过成功通知
+        _write_action_override("KEEP")
         sys.exit(0)
 
     excess_ids: List[str] = [img["id"] for img in excess]
