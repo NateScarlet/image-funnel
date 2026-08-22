@@ -1321,13 +1321,21 @@ func TestRunner_NotificationOnSuccess(t *testing.T) {
 	err = os.MkdirAll(hooksDir, 0755)
 	assert.NoError(t, err)
 
-	tomlContent := `
+	// 不使用裸 echo：Windows 上会从 PATH 解析到第三方 echo 实现（如 msys），在受限环境中可能无法启动
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `sh -c 'echo hello_success'`
+	} else {
+		cmdStr = `cmd /c "echo hello_success"`
+	}
+
+	tomlContent := fmt.Sprintf(`
 id = "notif-success-test"
 name = "通知成功测试"
-command = "echo hello_success"
+command = '''%s'''
 
 [on.image_dispatch]
-`
+`, cmdStr)
 	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(tomlContent), 0644)
 	assert.NoError(t, err)
 
@@ -1405,6 +1413,92 @@ command = '''%s'''
 	assert.Equal(t, ".", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityHigh, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "stderr_err_msg")
+}
+
+// keepWriterCmd 返回向 IMAGE_FUNNEL_ACTION 文件写入指定内容的命令（不产生 stdout 输出）
+func keepWriterCmd(content string) string {
+	if filepath.Separator == '/' {
+		return `sh -c 'echo ` + content + ` > "$IMAGE_FUNNEL_ACTION"'`
+	}
+	return `cmd /c "echo ` + content + ` > %IMAGE_FUNNEL_ACTION%"`
+}
+
+func newNotificationTestRunner(t *testing.T, hookID string, command string) (*Runner, *mockNotificationSender, string) {
+	t.Helper()
+
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-notif-test")
+	assert.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tempDir) })
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
+	tomlContent := `
+id = "` + hookID + `"
+name = "通知测试"
+command = '''` + command + `'''
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, hookID+".toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[string]*directory.Directory{
+			".": directory.FromRepository("."),
+		},
+	}
+	notifSender := &mockNotificationSender{}
+	runner := NewRunner(tempDir, hooksDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
+	t.Cleanup(runner.Close)
+	return runner, notifSender, tempDir
+}
+
+func TestRunner_SilentKeepRun_ShouldNotNotify(t *testing.T) {
+	runner, notifSender, tempDir := newNotificationTestRunner(t, "silent-keep-test", keepWriterCmd("KEEP"))
+
+	absPath := filepath.Join(tempDir, "a.png")
+	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-keep-test"), "image_dispatch")
+	assert.NoError(t, err)
+
+	assert.Empty(t, notifSender.Notifications(), "脚本覆盖 KEEP 且无输出时应跳过成功通知")
+}
+
+func TestRunner_KeepRunWithOutput_ShouldNotify(t *testing.T) {
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `sh -c 'echo KEEP > "$IMAGE_FUNNEL_ACTION" && echo kept_result_msg'`
+	} else {
+		cmdStr = `cmd /c "echo KEEP > %IMAGE_FUNNEL_ACTION% && echo kept_result_msg"`
+	}
+	runner, notifSender, tempDir := newNotificationTestRunner(t, "keep-output-test", cmdStr)
+
+	absPath := filepath.Join(tempDir, "a.png")
+	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:keep-output-test"), "image_dispatch")
+	assert.NoError(t, err)
+
+	notifs := notifSender.Notifications()
+	assert.Len(t, notifs, 1, "KEEP 但有输出时仍应照常通知")
+	assert.Equal(t, shared.NotificationPriorityLow, notifs[0].Opts.Priority())
+	assert.Contains(t, notifs[0].Opts.Body(), "kept_result_msg")
+}
+
+func TestRunner_SilentSuccessWithoutKeep_ShouldNotify(t *testing.T) {
+	var cmdStr string
+	if filepath.Separator == '/' {
+		cmdStr = `sh -c 'exit 0'`
+	} else {
+		cmdStr = `cmd /c "exit 0"`
+	}
+	runner, notifSender, tempDir := newNotificationTestRunner(t, "silent-no-keep-test", cmdStr)
+
+	absPath := filepath.Join(tempDir, "a.png")
+	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-no-keep-test"), "image_dispatch")
+	assert.NoError(t, err)
+
+	assert.Len(t, notifSender.Notifications(), 1, "未写 KEEP 的静默成功不属于跳过，仍应照常通知")
 }
 
 func TestRunner_Order_Parsing(t *testing.T) {

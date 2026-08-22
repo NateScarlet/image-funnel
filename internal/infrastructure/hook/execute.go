@@ -209,7 +209,17 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		}
 	}
 
-	r.sendHookNotification(ctx, task, nil, stdoutStr, stderrStr)
+	// 脚本通过 IMAGE_FUNNEL_ACTION 覆盖为 KEEP 表示保持现状、本次未产生实际变更；
+	// 此时若 stdout 也为空，说明这是一次没有任何可见结果的空跑，跳过成功通知以避免噪音。
+	// stderr 是调试通道且成功通知本就不携带 stderr，故不参与判定；有输出或失败时仍照常通知。
+	if overrideAction == "KEEP" && strings.TrimSpace(stdoutStr) == "" {
+		r.logger.Debug("skipping notification for silent skipped hook run",
+			zap.String("hook_id", task.HookID),
+			zap.String("trigger", task.TriggerName),
+		)
+	} else {
+		r.sendHookNotification(ctx, task, nil, stdoutStr, stderrStr)
+	}
 	task.resultChan <- hookExecutionResult{Action: overrideAction, Stdout: stdoutStr, Stderr: stderrStr}
 }
 
