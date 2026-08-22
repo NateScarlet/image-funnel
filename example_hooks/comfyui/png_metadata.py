@@ -8,7 +8,7 @@ PNG 内嵌 ComfyUI 元数据读取的共用模块。
 """
 
 import json
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, cast
 
 from PIL import Image
 
@@ -20,7 +20,8 @@ def _parse_json_object(raw: Optional[str]) -> Optional[Dict[str, Any]]:
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
         return None
-    return parsed
+    # JSON 规范保证对象的键均为字符串，此处仅做显式类型收窄
+    return cast(Dict[str, Any], parsed)
 
 
 def load_prompt_and_workflow(
