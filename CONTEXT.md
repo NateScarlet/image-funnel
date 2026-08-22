@@ -170,8 +170,12 @@ pnpm lint:fix            # oxlint auto-fix
 pnpm fmt                 # 使用 oxfmt 格式化代码
 
 # 后端
-go test --timeout 30s ./...      # 运行所有 Go 测试 (修改后端后必须运行)
-go test --timeout 30s ./internal/domain/session  # 运行特定包的测试
+pwsh scripts/test.ps1            # 运行全部测试 (Go + Python + 前端，已适配受限沙箱)
+go test --timeout 120s ./...     # 仅运行 Go 测试；受限沙箱内需先设置 GOCACHE=.scratch\go-build
+go test --timeout 120s ./internal/domain/session  # 运行特定包的测试
+
+# 前端
+pnpm -C frontend exec vitest run # 仅运行前端测试（net use 沙箱兼容内置于 vite.config.mts，scripts 均已带 --configLoader native）
 
 # 构建与生成
 pwsh scripts/build.ps1            # 完整构建 (前端 + Go，输出到 build/latest/)

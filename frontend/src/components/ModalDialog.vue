@@ -63,12 +63,10 @@ const emit = defineEmits<(e: "afterLeave") => void>();
 const visibleModel = defineModel<boolean>("visible", { required: true });
 
 const close = () => {
-  console.log("[ModalDialog] close() function called");
   visibleModel.value = false;
 };
 
 const onMaskClick = () => {
-  console.log("[ModalDialog] mask click event triggered");
   close();
 };
 // #endregion

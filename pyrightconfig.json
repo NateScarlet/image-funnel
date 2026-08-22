@@ -1,3 +1,5 @@
 {
-  "typeCheckingMode": "strict"
+  "typeCheckingMode": "strict",
+  "venvPath": "example_hooks",
+  "venv": ".venv"
 }

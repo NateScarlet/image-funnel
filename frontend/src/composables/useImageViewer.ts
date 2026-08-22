@@ -128,7 +128,6 @@ export default function useImageViewer(input: UseImageViewerInput) {
 
   // #region 通过文件名搜索并打开查看器
   function tryOpenViewerByFilename(filename: string): boolean {
-    console.log("try open", filename);
     const image = images.value.find((img: ImageFragment) => img.filename === filename);
     if (image) {
       openViewer(image);
