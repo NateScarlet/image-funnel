@@ -21,6 +21,8 @@ DSH 沙箱施加两类约束，其余异常都是它们的组合：
 | Python `PermissionError: [WinError 5]` 于 mkdtemp 目录内，sqlite 报 `unable to open database file` | `tempfile.mkdtemp` 固定以 0o700 建目录，沙箱内该权限的新建子目录内部不可访问；0o777 正常 | `TMPDIR` 指向 `.scratch\tmp`，并以 PYTHONPATH 注入 sitecustomize 将 mkdtemp 放宽为默认权限（参考 `scripts/python-sitecustomize/`） |
 | pnpm install 卡在 resolve/reconcile：进程活着、零 TCP 连接、fetch-timeout 不触发、无重试日志 | 文件过滤层导致的无声死锁（silent deadlock），11.1.1 与 11.22.0 均复现；沙箱外同样命令十几秒完成 | **立即提权** danger-full-access 重跑同一命令，不做第三次绕行尝试 |
 | registry 请求成批 `error (23)` 超时重试 | HTTPS_PROXY 指向半死代理，或镜像对新增包同步滞后 | 先清 `HTTP_PROXY`/`HTTPS_PROXY` 直连对照；仍慢则按 scope 在 `.npmrc` 把该 scope 指向官方源 |
+| go 工具链不报权限错误，而是报语义级假错误（如 gqlgen `modelgen: unable to find type`，而所找符号实际存在于源码中） | 子进程链读取 workspace 外的 go-build 缓存被拒，go/packages 类型信息加载残缺，拒绝被上游工具转译成无关的业务报错 | 按「提权对照」确认假阳性后，在项目脚本内重定向缓存目录（参考 `scripts/generate-graphql.ps1`）；禁止依据受限环境下的报错去修改业务配置 |
+| `git checkout` / `add` / `commit` 报 `Unable to create '<E盘主仓库>/index.lock': Permission denied` | 本仓库是 worktree 结构，index 与对象库位于 E 盘主仓库（workspace 外），git 写操作天然跨界 | 对该 git 写操作提权 danger-full-access；只读命令（status/log/diff/show）不受影响 |
 
 ## stdio 管道受限的替代方案
 
@@ -36,6 +38,7 @@ DSH 沙箱施加两类约束，其余异常都是它们的组合：
 - **网络假设**：用 `node -e "fetch(url)"` 直连测同一 URL 作为对照组。pwsh 的 `Invoke-WebRequest` 受系统代理与 TLS 栈影响，其失败不能证明网络不可达；Node fetch 与 pnpm 自身请求的速度差则是代理变量的证据（pnpm 读取 `HTTPS_PROXY`，Node fetch 不读）。
 - **卡死类型判定**：`Get-NetTCPConnection -OwningProcess <pid>` ——有 ESTABLISHED 连接是网络等待，调大 timeout/重试有效；零连接且进程存活是无声死锁，重试参数无效，直接提权。
 - **安装逐包定位**：`--reporter=ndjson` 输出逐包 fetch 事件，diff `started` 与 `completed` 得到精确卡点包列表。
+- **提权对照（假阳性判定）**：同一命令在完全权限下成功、受限模式下失败 ⇒ 根因是沙箱而非代码/配置。此时受限环境下的报错内容不可采信——哪怕是具体、看似合理的业务错误文本（如类型不存在、找不到符号），正确动作是让脚本自带缓存重定向或提权重跑，而不是"修复"业务配置。
 
 ## 红线
 
@@ -52,6 +55,7 @@ DSH 沙箱施加两类约束，其余异常都是它们的组合：
 新会话遇同类问题时优先复用既有设施，避免重复发明：
 
 - `scripts/test.ps1` — Go/Python/前端三件套统一入口（GOCACHE 重定向）
+- `scripts/generate-graphql.ps1` — 后端 GraphQL 代码生成阶段将 GOCACHE 固定到 `.scratch\go-build`，规避 gqlgen 假性 `unable to find type`
 - `scripts/check-python.ps1` + `scripts/python-sitecustomize/` — Python 临时目录与 mkdtemp 权限适配
 - `frontend/vite.config.mts` — net use 兼容层内联 + threads pool；前端 scripts 已带 `--configLoader native`
 - `.npmrc` — `verify-store-integrity=false`（规避 store 校验死锁）与 scope registry
