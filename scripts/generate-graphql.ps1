@@ -17,6 +17,13 @@ Write-Host "项目根目录: $ProjectRoot" -ForegroundColor Gray
 Write-Host "1. 更新后端 GraphQL 代码..." -ForegroundColor Cyan
 Push-Location $ProjectRoot
 try {
+    # 将 Go 构建缓存（GOCACHE）固定到项目 .scratch 下：
+    # 默认的用户级缓存目录在某些受限运行环境（如沙箱）中不可访问，会导致 go/packages
+    # 类型信息加载残缺，进而让 gqlgen 误报 modelgen: unable to find type
+    $restoreGoCache = $env:GOCACHE
+    $env:GOCACHE = Join-Path $ProjectRoot ".scratch\go-build"
+    New-Item -ItemType Directory -Force -Path $env:GOCACHE | Out-Null
+
     go generate ./internal/interfaces/graphql
 
     if ($LASTEXITCODE -ne 0) {
@@ -43,6 +50,7 @@ try {
     }
 }
 finally {
+    $env:GOCACHE = $restoreGoCache
     Pop-Location
 }
 
