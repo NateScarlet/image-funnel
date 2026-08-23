@@ -205,13 +205,6 @@ class FilenameManager:
             if not isinstance(original_val, str):
                 continue
 
-            # 前缀已直接落在 rel_dir 下（rel_dir 之外无剩余目录层级）时无需调整，
-            # 幂等避免重复执行嵌套加深；rel_dir 之外仍有未拍平层级则继续拍平
-            if rel_dir and rel_dir != "." and original_val.startswith(f"{rel_dir}/"):
-                rest = original_val[len(rel_dir) + 1 :]
-                if "/" not in rest and "\\" not in rest:
-                    continue
-
             terminal_info = self._accessor.get_node_by_id(src_node_id)
             wf_template: Optional[str] = None
             if terminal_info and terminal_info.widgets_values:
@@ -219,6 +212,22 @@ class FilenameManager:
                     if isinstance(val, str) and "%" in val:
                         wf_template = val
                         break
+
+            # 已直接落在目标目录时不修改：prompt 侧是已求值的静态快照，
+            # 空值占位符会残留连续分隔符（如 Title 为空使快照为 TODO//日期），
+            # 直接用原始字符串会误判出剩余层级；先归一化分隔符得到实际落点，
+            # 再与 rel_dir 比较
+            normalized = re.sub(r"[\\/]+", "/", original_val).strip("/")
+            if rel_dir and rel_dir != ".":
+                if normalized == rel_dir:
+                    continue
+                if normalized.startswith(f"{rel_dir}/"):
+                    rest = normalized[len(rel_dir) + 1 :]
+                    if "/" not in rest:
+                        continue
+            elif "/" not in normalized:
+                # 目标为输出根目录且表达式已无任何目录层级时同样无需调整
+                continue
 
             if wf_template:
                 non_date_vars: List[str] = []

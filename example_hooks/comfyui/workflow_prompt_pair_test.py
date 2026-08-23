@@ -2862,6 +2862,53 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
         self.assertEqual(prompt["3"]["inputs"]["value"], "")
 
+    def test_adjust_output_directory_empty_var_already_direct_in_target(self):
+        """空值变量求值产生的连续分隔符不算剩余层级：已直接落在目标目录时不修改"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                # Title 为空使求值结果出现连续分隔符，但实际落点就是 TODO 目录
+                "inputs": {"filename_prefix": "TODO//20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": ""},
+                "_meta": {"title": "Title"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory("TODO")
+
+        # 已直接落在目标目录：prompt、workflow、源节点值均不修改
+        self.assertEqual(
+            prompt["1"]["inputs"]["filename_prefix"], "TODO//20260601_120000"
+        )
+        self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "")
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%",
+        )
+
     def test_adjust_output_directory_template_vars_node_not_found(self):
         """模板变量引用的节点在 prompt 中不存在时在 workflow 拼入 rel_dir 模板并在 prompt 中展开求值"""
         workflow = {
@@ -2997,7 +3044,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         )
 
     def test_adjust_output_directory_template_vars_in_terminal(self):
-        """终端节点（PrimitiveString）自身含模板语法时在 workflow 保留模板，prompt 展开"""
+        """模板语法在终端节点（PrimitiveString）的 workflow widget 上时保留模板并更新源变量"""
         workflow = {
             "nodes": [
                 {
@@ -3030,11 +3077,10 @@ class TestAdjustOutputDirectory(unittest.TestCase):
                 "inputs": {"filename_prefix": ["5", 0]},
                 "_meta": {"title": "Save Image"},
             },
+            # prompt 一侧恒为按当前变量值求值的静态快照，模板只在 workflow 一侧
             "5": {
                 "class_type": "PrimitiveString",
-                "inputs": {
-                    "value": "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
-                },
+                "inputs": {"value": "DefaultProj/DefaultTitle/20260601_120000"},
             },
             "6": {
                 "class_type": "PrimitiveString",
