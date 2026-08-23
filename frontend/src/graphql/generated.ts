@@ -3649,7 +3649,7 @@ export const ImageFragmentDoc = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -3851,7 +3851,7 @@ export const DirectoryStatsFragmentDoc = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -4512,7 +4512,7 @@ export const SessionFragmentDoc = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -5200,7 +5200,7 @@ export const CommitChangesDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -5676,7 +5676,7 @@ export const CreateSessionDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -6249,7 +6249,7 @@ export const MarkImageDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -6940,7 +6940,7 @@ export const UndoDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -7241,7 +7241,7 @@ export const UpdateImageMetadataDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -7761,7 +7761,7 @@ export const UpdateSessionDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -8420,7 +8420,7 @@ export const BrowseImagesDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -8960,7 +8960,7 @@ export const DirectoryLastSessionDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -9471,7 +9471,7 @@ export const DirectoryStatsDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -9899,7 +9899,7 @@ export const KeptImagesDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -10729,7 +10729,7 @@ export const SessionDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -11457,7 +11457,7 @@ export const ImageSavedDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
@@ -11971,7 +11971,7 @@ export const SessionUpdatedDocument = {
               {
                 kind: "Argument",
                 name: { kind: "Name", value: "quality" },
-                value: { kind: "IntValue", value: "100" },
+                value: { kind: "IntValue", value: "95" },
               },
             ],
           },
