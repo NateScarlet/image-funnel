@@ -174,6 +174,11 @@ pwsh scripts/test.ps1            # 运行全部测试 (Go + Python + 前端，�
 go test --timeout 120s ./...     # 仅运行 Go 测试；受限沙箱内需先设置 GOCACHE=.scratch\go-build
 go test --timeout 120s ./internal/domain/session  # 运行特定包的测试
 
+# Python（example_hooks）
+pwsh scripts/check-python.ps1    # unittest + pyright + black，统一使用根目录 .venv 开发环境
+uv run example_hooks/runner.py   # hook 部署运行方式：依赖由各脚本头部 PEP 723 inline metadata 声明，
+                                 # 经 uv run 提供；开发环境（根 .venv）与部署运行互不影响
+
 # 前端
 pnpm -C frontend exec vitest run # 仅运行前端测试（net use 沙箱兼容内置于 vite.config.mts，scripts 均已带 --configLoader native）
 

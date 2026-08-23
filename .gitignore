@@ -31,4 +31,5 @@ frontend/public/static/open-dir/
 .pnpm-store/
 
 __pycache__
+.venv
 .scratch
