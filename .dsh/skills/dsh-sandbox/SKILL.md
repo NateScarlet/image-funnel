@@ -22,6 +22,7 @@ DSH 沙箱施加两类约束，其余异常都是它们的组合：
 | pnpm install 卡在 resolve/reconcile：进程活着、零 TCP 连接、fetch-timeout 不触发、无重试日志 | 文件过滤层导致的无声死锁（silent deadlock），11.1.1 与 11.22.0 均复现；沙箱外同样命令十几秒完成 | **立即提权** danger-full-access 重跑同一命令，不做第三次绕行尝试 |
 | registry 请求成批 `error (23)` 超时重试 | HTTPS_PROXY 指向半死代理，或镜像对新增包同步滞后 | 先清 `HTTP_PROXY`/`HTTPS_PROXY` 直连对照；仍慢则按 scope 在 `.npmrc` 把该 scope 指向官方源 |
 | go 工具链不报权限错误，而是报语义级假错误（如 gqlgen `modelgen: unable to find type`，而所找符号实际存在于源码中） | 子进程链读取 workspace 外的 go-build 缓存被拒，go/packages 类型信息加载残缺，拒绝被上游工具转译成无关的业务报错 | 按「提权对照」确认假阳性后，在项目脚本内重定向缓存目录（参考 `scripts/generate-graphql.ps1`）；禁止依据受限环境下的报错去修改业务配置 |
+| pip 版 pyright 报成批 `reportMissingImports` / `reportUnknown*`，而依赖实际已安装且日常终端全绿 | pyright 靠 spawn python 内省获取 site-packages 位置；管道被禁后**静默降级**为无第三方类型继续分析，strict 下同一根因长出多种错误码。`--pythonpath` 无效（内省仍发生），`--pythonversion` 无效（只选 stdlib stubs 语义，不提供库搜索路径），`VIRTUAL_ENV` 环境变量同样走内省 | 唯一免疫方式是 `venvPath`/`venv` **静态配置**（纯文件系统拼接读取，零 spawn）——本项目由根目录 `.venv` 开发环境承担；无此配置时以「提权对照」确认假阳性后提权重跑 |
 | `git checkout` / `add` / `commit` 报 `Unable to create '<E盘主仓库>/index.lock': Permission denied` | 本仓库是 worktree 结构，index 与对象库位于 E 盘主仓库（workspace 外），git 写操作天然跨界 | 对该 git 写操作提权 danger-full-access；只读命令（status/log/diff/show）不受影响 |
 
 ## stdio 管道受限的替代方案
@@ -56,6 +57,6 @@ DSH 沙箱施加两类约束，其余异常都是它们的组合：
 
 - `scripts/test.ps1` — Go/Python/前端三件套统一入口（GOCACHE 重定向）
 - `scripts/generate-graphql.ps1` — 后端 GraphQL 代码生成阶段将 GOCACHE 固定到 `.scratch\go-build`，规避 gqlgen 假性 `unable to find type`
-- `scripts/check-python.ps1` + `scripts/python-sitecustomize/` — Python 临时目录与 mkdtemp 权限适配
+- `scripts/check-python.ps1` + `scripts/python-sitecustomize/` — Python 临时目录与 mkdtemp 权限适配；检查链统一走根目录 `.venv`（也是 pyright venvPath 静态类型解析的锚点），hook 部署运行则由脚本头部 `uv run` 提供
 - `frontend/vite.config.mts` — net use 兼容层内联 + threads pool；前端 scripts 已带 `--configLoader native`
 - `.npmrc` — `verify-store-integrity=false`（规避 store 校验死锁）与 scope registry
