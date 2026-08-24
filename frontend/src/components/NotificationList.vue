@@ -54,7 +54,7 @@
             class="px-2 py-1 bg-white/25 hover:bg-white/35 text-white font-semibold rounded text-xs transition-colors cursor-pointer mt-1"
             @click.stop="openDetails(notification)"
           >
-            查看详情
+            {{ notification.controller.openDetailsText ?? "查看详情" }}
           </button>
         </div>
         <button

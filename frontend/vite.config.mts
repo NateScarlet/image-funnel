@@ -74,6 +74,11 @@ function injectLoadingSvg(): Plugin {
 
 export default defineConfig(() => ({
   plugins: [vue(), tailwindcss(), injectLoadingSvg()],
+  define: {
+    // 与后端同源的版本号由构建脚本经 IMAGE_FUNNEL_VERSION 注入；本地开发无值时为 dev，
+    // 前端运行时以该值与服务端 meta.version 比对来发现版本失配
+    __APP_VERSION__: JSON.stringify(process.env.IMAGE_FUNNEL_VERSION ?? "dev"),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

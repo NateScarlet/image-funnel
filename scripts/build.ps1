@@ -39,6 +39,17 @@ if ($Frontend) {
 
 Write-Host "构建目录: $BUILD_DIR"
 
+# 计算版本号（前后端同源）：前端经环境变量注入 define，后端经 ldflags 注入。
+# 显式锚定仓库根目录执行，避免读到调用者当前目录所属其他仓库的版本
+$gitVersion = git -C $ROOT_DIR describe --tags --always --dirty 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
+    $gitVersion = "dev"
+    Write-Host "无法获取 git 版本号，使用默认值: dev"
+}
+else {
+    Write-Host "获取到 git 版本号: $gitVersion"
+}
+
 if ($Frontend) {
 
 
@@ -47,6 +58,7 @@ if ($Frontend) {
     Push-Location $FRONTEND_DIR
     try {
         $env:CI = "true"
+        $env:IMAGE_FUNNEL_VERSION = $gitVersion
         pnpm install
         Write-Host ""
 
@@ -82,14 +94,6 @@ if ($Backend) {
     Write-Host "构建后端项目..."
     Push-Location $ROOT_DIR
     try {
-        $gitVersion = git describe --tags --always --dirty 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrEmpty($gitVersion)) {
-            $gitVersion = "dev"
-            Write-Host "无法获取 git 版本号，使用默认值: dev"
-        }
-        else {
-            Write-Host "获取到 git 版本号: $gitVersion"
-        }
         $ldflags = "-X main.version=$gitVersion"
         # 直接使用重定向，不捕获到变量
         go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server 2>&1

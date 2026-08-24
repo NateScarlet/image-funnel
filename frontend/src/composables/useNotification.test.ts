@@ -117,6 +117,24 @@ describe("useNotification", () => {
       expect(openDetails).toHaveBeenCalled();
       expect(wrapper.text()).not.toContain("带详情通知");
     });
+
+    test("openDetailsText 覆盖动作按钮文案且点击触发 openDetails", async () => {
+      const { show } = useNotification();
+      const openDetails = vi.fn();
+      show("自定义文案通知", "warning", 0, undefined, undefined, {
+        openDetails,
+        openDetailsText: "立即刷新",
+      });
+
+      const wrapper = mount(NotificationList);
+
+      const btn = wrapper.findAll("button").find((b) => b.text() === "立即刷新");
+      expect(btn).toBeTruthy();
+      expect(wrapper.text()).not.toContain("查看详情");
+      await btn?.trigger("click");
+
+      expect(openDetails).toHaveBeenCalled();
+    });
   });
   // #endregion
 });
