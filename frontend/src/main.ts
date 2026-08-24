@@ -72,7 +72,7 @@ const versionCheck = createVersionCheck({
       serverVersion === undefined ? "页面资源已过期" : `发现新版本 ${serverVersion}`,
       "warning",
       0,
-      "服务端已更新，刷新页面以恢复一致行为。筛选进度保存在服务端，刷新不会丢失。",
+      "服务端已更新，刷新页面以恢复一致行为。",
       false,
       {
         openDetails: () => window.location.reload(),

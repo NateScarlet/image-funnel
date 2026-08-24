@@ -6,6 +6,7 @@ import { PersistedQueryLink } from "@apollo/client/link/persisted-queries";
 import type { GraphQLFormattedError } from "graphql";
 import { Kind, OperationTypeNode } from "graphql";
 import { getMainDefinition } from "@apollo/client/utilities";
+import type { ClientOptions } from "graphql-ws";
 
 import { PersistentCache } from "./cache-persistence";
 import useNotification from "../composables/useNotification";
@@ -55,17 +56,27 @@ const persistedQueryLink = new PersistedQueryLink({
 const wsUrl = new URL("graphql", document.baseURI);
 wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-export const wsLink = new WebSocketLink({
-  url: wsUrl.toString(),
+// #region 常驻连接重试策略（导出供测试锁定行为契约）
+export const wsClientOptions = {
   // 常驻连接：无订阅的视图也维持连接，使版本失配检测不依赖当前视图是否活跃
   lazy: false,
   // 无限重试：默认重试 5 次后彻底放弃，服务器停机稍长旧页面将永远不再重连，
   // "正在重连…"通知永久挂起且版本检测失效。指数退避封顶 30 秒保证恢复后及时重连
   retryAttempts: Number.MAX_SAFE_INTEGER,
-  retryWait: async (retries) => {
+  // 握手失败（如停机期间网关 502）以裸 error 事件形态到达、不带 close code，
+  // 库默认只放行 close 事件形态的失败，会导致常驻循环首次握手失败即永久放弃；
+  // 显式放行一切失败，节奏由 retryAttempts/retryWait 全权控制
+  shouldRetry: () => true,
+  retryWait: async (retries: number) => {
     const ms = Math.min(1000 * 2 ** retries, 30_000);
     await new Promise((resolve) => setTimeout(resolve, ms));
   },
+} satisfies Partial<ClientOptions>;
+// #endregion
+
+export const wsLink = new WebSocketLink({
+  url: wsUrl.toString(),
+  ...wsClientOptions,
   connectionParams: async () => {
     const token = await getValidToken();
     if (token) {
