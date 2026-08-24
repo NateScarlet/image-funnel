@@ -49,8 +49,9 @@ try {
         Write-Host "运行前端测试..."
         Push-Location (Join-Path $ROOT_DIR "frontend")
         try {
-            # net use 沙箱兼容由 vite.config.mts 导入的 sandbox-netuse-compat.cjs 自动生效
-            pnpm exec vitest run
+            # 经 package.json 的 test script 运行（自带 --configLoader native）：
+            # bundle 模式打包 config 时会先于内置兼容层触发 net use 子进程，沙箱内必炸
+            pnpm test
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "❌ 前端测试失败"
                 exit 1
