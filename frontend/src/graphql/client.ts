@@ -55,8 +55,17 @@ const persistedQueryLink = new PersistedQueryLink({
 const wsUrl = new URL("graphql", document.baseURI);
 wsUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-const wsLink = new WebSocketLink({
+export const wsLink = new WebSocketLink({
   url: wsUrl.toString(),
+  // 常驻连接：无订阅的视图也维持连接，使版本失配检测不依赖当前视图是否活跃
+  lazy: false,
+  // 无限重试：默认重试 5 次后彻底放弃，服务器停机稍长旧页面将永远不再重连，
+  // "正在重连…"通知永久挂起且版本检测失效。指数退避封顶 30 秒保证恢复后及时重连
+  retryAttempts: Number.MAX_SAFE_INTEGER,
+  retryWait: async (retries) => {
+    const ms = Math.min(1000 * 2 ** retries, 30_000);
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  },
   connectionParams: async () => {
     const token = await getValidToken();
     if (token) {

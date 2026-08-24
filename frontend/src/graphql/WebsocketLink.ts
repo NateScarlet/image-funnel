@@ -4,6 +4,7 @@ import { createClient } from "graphql-ws";
 import type { GraphQLError } from "graphql";
 import { print } from "graphql";
 import useNotification from "@/composables/useNotification";
+import { websocketConnected } from "@/events";
 import type OperationContext from "./OperationContext";
 
 export default class WebSocketLink extends ApolloLink {
@@ -34,6 +35,11 @@ export default class WebSocketLink extends ApolloLink {
       ...options,
       on: {
         ...options.on,
+        connected: (socket, payload, wasRetry) => {
+          // 广播连接建立事件（含重连），供版本失配检测等逻辑通过全局事件表订阅
+          websocketConnected.dispatch();
+          options.on?.connected?.(socket, payload, wasRetry);
+        },
         opened: (socket) => {
           // 重连成功后清除重连通知
           if (reconnectingNotifId !== undefined) {

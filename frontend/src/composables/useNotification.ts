@@ -9,6 +9,8 @@ export interface NotificationController {
   dismiss?: () => void;
   /** 打开详情（如 window.open），存在则 UI 渲染"查看详情"按钮 */
   openDetails?: () => void;
+  /** 覆盖 openDetails 动作按钮的文案（默认"查看详情"），用于语义不同的动作（如"立即刷新"） */
+  openDetailsText?: string;
 }
 
 export interface Notification {
