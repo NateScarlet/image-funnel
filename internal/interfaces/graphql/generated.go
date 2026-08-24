@@ -207,6 +207,7 @@ type ComplexityRoot struct {
 
 	EmptyTrashPayload struct {
 		ClearedCount     func(childComplexity int) int
+		ClearedSize      func(childComplexity int) int
 		ClientMutationID func(childComplexity int) int
 	}
 
@@ -621,7 +622,7 @@ type MutationResolver interface {
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) (*DeleteDevicePayload, error)
 	DispatchImageHook(ctx context.Context, input DispatchImageHookInput) (*DispatchImageHookPayload, error)
 	DispatchNoteHook(ctx context.Context, input DispatchNoteHookInput) (*DispatchNoteHookPayload, error)
-	EmptyTrash(ctx context.Context, input EmptyTrashInput) (*EmptyTrashPayload, error)
+	EmptyTrash(ctx context.Context, input EmptyTrashInput) (*shared.EmptyTrashResultDTO, error)
 	FinishWebAuthnLogin(ctx context.Context, input FinishWebAuthnLoginInput) (*FinishWebAuthnLoginPayload, error)
 	FinishWebAuthnRegistration(ctx context.Context, input FinishWebAuthnRegistrationInput) (*FinishWebAuthnRegistrationPayload, error)
 	MarkImage(ctx context.Context, input MarkImageInput) (*MarkImagePayload, error)
@@ -1187,6 +1188,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.EmptyTrashPayload.ClearedCount(childComplexity), true
+	case "EmptyTrashPayload.clearedSize":
+		if e.complexity.EmptyTrashPayload.ClearedSize == nil {
+			break
+		}
+
+		return e.complexity.EmptyTrashPayload.ClearedSize(childComplexity), true
 	case "EmptyTrashPayload.clientMutationId":
 		if e.complexity.EmptyTrashPayload.ClientMutationID == nil {
 			break
@@ -4133,9 +4140,11 @@ type DispatchNoteHookPayload {
   clientMutationId: String
 }`, BuiltIn: false},
 	{Name: "../../../graph/mutations/empty_trash.graphql", Input: `"手动清空回收站"
-type EmptyTrashPayload {
+type EmptyTrashPayload @goModel(model: "main/internal/shared.EmptyTrashResultDTO") {
   "此次被真正清理的历史数量"
   clearedCount: Int!
+  "此次被真正清理的历史所释放的空间大小（字节数）。对每条被清理历史的元数据记录总大小求和（含图片本体与伴随文件），在异步物理擦除前读取"
+  clearedSize: Int!
   clientMutationId: String
 }
 
@@ -7746,7 +7755,7 @@ func (ec *executionContext) fieldContext_DispatchNoteHookPayload_clientMutationI
 	return fc, nil
 }
 
-func (ec *executionContext) _EmptyTrashPayload_clearedCount(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _EmptyTrashPayload_clearedCount(ctx context.Context, field graphql.CollectedField, obj *shared.EmptyTrashResultDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -7775,7 +7784,36 @@ func (ec *executionContext) fieldContext_EmptyTrashPayload_clearedCount(_ contex
 	return fc, nil
 }
 
-func (ec *executionContext) _EmptyTrashPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *EmptyTrashPayload) (ret graphql.Marshaler) {
+func (ec *executionContext) _EmptyTrashPayload_clearedSize(ctx context.Context, field graphql.CollectedField, obj *shared.EmptyTrashResultDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EmptyTrashPayload_clearedSize,
+		func(ctx context.Context) (any, error) {
+			return obj.ClearedSize, nil
+		},
+		nil,
+		ec.marshalNInt2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EmptyTrashPayload_clearedSize(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EmptyTrashPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EmptyTrashPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *shared.EmptyTrashResultDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
@@ -10086,7 +10124,7 @@ func (ec *executionContext) _Mutation_emptyTrash(ctx context.Context, field grap
 			return ec.resolvers.Mutation().EmptyTrash(ctx, fc.Args["input"].(EmptyTrashInput))
 		},
 		nil,
-		ec.marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload,
+		ec.marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋsharedᚐEmptyTrashResultDTO,
 		true,
 		true,
 	)
@@ -10102,6 +10140,8 @@ func (ec *executionContext) fieldContext_Mutation_emptyTrash(ctx context.Context
 			switch field.Name {
 			case "clearedCount":
 				return ec.fieldContext_EmptyTrashPayload_clearedCount(ctx, field)
+			case "clearedSize":
+				return ec.fieldContext_EmptyTrashPayload_clearedSize(ctx, field)
 			case "clientMutationId":
 				return ec.fieldContext_EmptyTrashPayload_clientMutationId(ctx, field)
 			}
@@ -21485,7 +21525,7 @@ func (ec *executionContext) _DispatchNoteHookPayload(ctx context.Context, sel as
 
 var emptyTrashPayloadImplementors = []string{"EmptyTrashPayload"}
 
-func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *EmptyTrashPayload) graphql.Marshaler {
+func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, obj *shared.EmptyTrashResultDTO) graphql.Marshaler {
 	fields := graphql.CollectFields(ec.OperationContext, sel, emptyTrashPayloadImplementors)
 
 	out := graphql.NewFieldSet(fields)
@@ -21496,6 +21536,11 @@ func (ec *executionContext) _EmptyTrashPayload(ctx context.Context, sel ast.Sele
 			out.Values[i] = graphql.MarshalString("EmptyTrashPayload")
 		case "clearedCount":
 			out.Values[i] = ec._EmptyTrashPayload_clearedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clearedSize":
+			out.Values[i] = ec._EmptyTrashPayload_clearedSize(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -25736,11 +25781,11 @@ func (ec *executionContext) unmarshalNEmptyTrashInput2mainᚋinternalᚋinterfac
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNEmptyTrashPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, v EmptyTrashPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNEmptyTrashPayload2mainᚋinternalᚋsharedᚐEmptyTrashResultDTO(ctx context.Context, sel ast.SelectionSet, v shared.EmptyTrashResultDTO) graphql.Marshaler {
 	return ec._EmptyTrashPayload(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐEmptyTrashPayload(ctx context.Context, sel ast.SelectionSet, v *EmptyTrashPayload) graphql.Marshaler {
+func (ec *executionContext) marshalNEmptyTrashPayload2ᚖmainᚋinternalᚋsharedᚐEmptyTrashResultDTO(ctx context.Context, sel ast.SelectionSet, v *shared.EmptyTrashResultDTO) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -25931,13 +25976,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -26569,23 +26614,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 

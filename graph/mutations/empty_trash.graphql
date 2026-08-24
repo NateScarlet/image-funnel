@@ -1,7 +1,9 @@
 "手动清空回收站"
-type EmptyTrashPayload {
+type EmptyTrashPayload @goModel(model: "main/internal/shared.EmptyTrashResultDTO") {
   "此次被真正清理的历史数量"
   clearedCount: Int!
+  "此次被真正清理的历史所释放的空间大小（字节数）。对每条被清理历史的元数据记录总大小求和（含图片本体与伴随文件），在异步物理擦除前读取"
+  clearedSize: Int!
   clientMutationId: String
 }
 

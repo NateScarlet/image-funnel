@@ -280,6 +280,9 @@ func TestEmptyTrash(t *testing.T) {
 
 	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1"), 0644)
 	require.NoError(t, err)
+	// 伴随文件一并写入，验证统计口径含图片本体与伴随文件
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg.txt"), []byte("sidecar"), 0644)
+	require.NoError(t, err)
 
 	filter := shared.ImageFilters{
 		Rating: []int{0},
@@ -287,18 +290,21 @@ func TestEmptyTrash(t *testing.T) {
 
 	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
 	require.NoError(t, err)
-	assert.Equal(t, 1, fileCount)
+	assert.Equal(t, 2, fileCount)
 
 	// 1. 测试 EmptyTrash，设置保留期为 10 分钟，此时刚删的文件不应该被清理
-	cleared, err := ctx.imageMover.EmptyTrash(context.Background(), 10*time.Minute)
+	res, err := ctx.imageMover.EmptyTrash(context.Background(), 10*time.Minute)
 	require.NoError(t, err)
-	assert.Equal(t, 0, cleared)
+	assert.Equal(t, 0, res.ClearedCount)
+	assert.Equal(t, int64(0), res.ClearedSize)
 	assert.FileExists(t, filepath.Join(ctx.rootDir, trashDirName, historyId, "meta.json"))
 
 	// 2. 测试 EmptyTrash，设置保留期为 0 秒（或负值，强制清空）
-	cleared, err = ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+	res, err = ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
 	require.NoError(t, err)
-	assert.Equal(t, 1, cleared)
+	assert.Equal(t, 1, res.ClearedCount)
+	// 释放大小应等于写入测试文件的字节总和（图片本体 4 字节 + 伴随文件 7 字节）
+	assert.Equal(t, int64(len("img1")+len("sidecar")), res.ClearedSize)
 
 	// 验证 FindTrashHistory 无法再次查到该已标记删除的记录
 	var historyList []*shared.TrashHistoryItemDTO
@@ -313,6 +319,52 @@ func TestEmptyTrash(t *testing.T) {
 		_, err := os.Stat(filepath.Join(ctx.rootDir, trashDirName, historyId))
 		return os.IsNotExist(err)
 	}, 2*time.Second, 20*time.Millisecond)
+}
+
+// 占位 meta（历史正在写入时的过渡态，TotalFileSize 为 -1）应按 0 字节计入统计，
+// 且不影响同批正常历史的字节数累计
+func TestEmptyTrash_PlaceholderMetaCountsAsZero(t *testing.T) {
+	ctx := newTestContext(t)
+
+	srcDir := "source-dir"
+	err := os.Mkdir(filepath.Join(ctx.rootDir, srcDir), 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(ctx.rootDir, srcDir, "img1.jpg"), []byte("img1"), 0644)
+	require.NoError(t, err)
+
+	filter := shared.ImageFilters{
+		Rating: []int{0},
+	}
+
+	// 正常历史：完整写入 meta，总大小为 img1 的 4 字节
+	_, _, err = ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	require.NoError(t, err)
+
+	// 占位历史：模拟断电残留的占位 meta（大小 -1），保留期设为过去以强制清空
+	placeholderId := "trash_placeholder"
+	placeholderDir := filepath.Join(ctx.rootDir, trashDirName, placeholderId)
+	err = os.MkdirAll(placeholderDir, 0755)
+	require.NoError(t, err)
+
+	placeholderMeta := trashMeta{
+		ID:             placeholderId,
+		TrashedAt:      time.Now().Add(-1 * time.Hour),
+		TotalFileCount: -1,
+		TotalFileSize:  -1,
+		SrcRelPath:     srcDir,
+	}
+	metaBytes, err := json.Marshal(placeholderMeta)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(placeholderDir, "meta.json"), metaBytes, 0644)
+	require.NoError(t, err)
+
+	res, err := ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+	require.NoError(t, err)
+
+	// 两条历史均被清理，但释放大小只包含正常历史的 4 字节，占位的 -1 不污染统计
+	assert.Equal(t, 2, res.ClearedCount)
+	assert.Equal(t, int64(len("img1")), res.ClearedSize)
 }
 
 func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {
@@ -468,9 +520,11 @@ func TestIncompleteTrashRecovery(t *testing.T) {
 	require.NoError(t, err)
 
 	// 尝试 EmptyTrash
-	cleared, err := ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
+	res, err := ctx.imageMover.EmptyTrash(context.Background(), -1*time.Second)
 	require.NoError(t, err)
-	assert.Equal(t, 1, cleared)
+	// 该历史的占位 meta 大小为 -1（过渡态），应按 0 字节计入
+	assert.Equal(t, 1, res.ClearedCount)
+	assert.Equal(t, int64(0), res.ClearedSize)
 	assert.NoFileExists(t, historyDir3)
 
 	// 验证被移入 filesDir 的文件被清理了，而之前留在源目录的文件依然完好
@@ -568,5 +622,3 @@ func TestEmptyTrash_Concurrent(t *testing.T) {
 		assert.NoError(t, err, "worker %d returned error", i)
 	}
 }
-
-

@@ -24,8 +24,9 @@ type Trasher interface {
 	Trash(ctx context.Context, relPath string, filterBy shared.ImageFilters, message string) (historyId string, totalFileCount int, err error)
 	// UndoTrash 撤销指定的回收站移动操作，将文件还原回原位
 	UndoTrash(ctx context.Context, historyId string) (*shared.UndoTrashResultDTO, error)
-	// EmptyTrash 手动清空回收站中早于指定保留期限的记录，投递到操作系统物理回收站
-	EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error)
+	// EmptyTrash 手动清空回收站中早于指定保留期限的记录，投递到操作系统物理回收站，
+	// 返回清理数量与基于元数据统计的释放空间大小
+	EmptyTrash(ctx context.Context, minAge time.Duration) (*shared.EmptyTrashResultDTO, error)
 	// FindTrashHistory 遍历并返回当前已暂存的回收站历史列表
 	FindTrashHistory(ctx context.Context) iter.Seq2[*shared.TrashHistoryItemDTO, error]
 }

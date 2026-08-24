@@ -1,7 +1,7 @@
 // #region 导入与 Mock
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { ref, nextTick } from "vue";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import TrashHistoryButton from "./TrashHistoryButton.vue";
 import type { TrashHistoryQuery } from "@/graphql/generated";
 
@@ -99,6 +99,8 @@ beforeEach(() => {
   mockNodes.value = [];
   mockPageInfo.value.hasNextPage = false;
   mockFetchMore.mockClear();
+  mockEmpty.mockReset();
+  mockShowSuccess.mockClear();
 });
 
 // #region 清理按钮状态与文案
@@ -136,6 +138,39 @@ describe("TrashHistoryButton", () => {
     expect(btn.text()).toContain("清理 1 KB");
     expect(btn.text()).not.toContain("≥");
     expect(btn.classes()).not.toContain("pointer-events-none");
+  });
+});
+// #endregion
+
+// #region 清空结果通知
+describe("TrashHistoryButton 清空通知", () => {
+  test("清空成功后通知同时包含清理数量与格式化后的释放空间", async () => {
+    mockNodes.value = [makeItem({ trashedAt: "2026-08-01T00:00:00.000Z" })];
+    mockEmpty.mockResolvedValue({ clearedCount: 3, clearedSize: 1536 });
+
+    const wrapper = mount(TrashHistoryButton);
+    await findCleanupButton(wrapper).trigger("click");
+    await flushPromises();
+
+    expect(mockShowSuccess).toHaveBeenCalledTimes(1);
+    expect(mockShowSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("已成功清理 3 条历史记录"),
+    );
+    // 1536 字节应格式化为 1.5 KB 而非原始字节数
+    expect(mockShowSuccess).toHaveBeenCalledWith(expect.stringContaining("释放了 1.5 KB 空间"));
+  });
+
+  test("无可清理内容时通知展示 0 条与 0 B", async () => {
+    // 面板仅在有历史条目时渲染；用未过期历史 + 下一页使清理按钮可点击
+    mockNodes.value = [makeItem({ trashedAt: "2026-08-10T00:00:00.000Z" })];
+    mockPageInfo.value.hasNextPage = true;
+    mockEmpty.mockResolvedValue({ clearedCount: 0, clearedSize: 0 });
+
+    const wrapper = mount(TrashHistoryButton);
+    await findCleanupButton(wrapper).trigger("click");
+    await flushPromises();
+
+    expect(mockShowSuccess).toHaveBeenCalledWith("已成功清理 0 条历史记录，释放了 0 B 空间");
   });
 });
 // #endregion

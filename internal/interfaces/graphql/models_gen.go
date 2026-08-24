@@ -181,13 +181,6 @@ type EmptyTrashInput struct {
 	ClientMutationID *string         `json:"clientMutationId,omitempty"`
 }
 
-// 手动清空回收站
-type EmptyTrashPayload struct {
-	// 此次被真正清理的历史数量
-	ClearedCount     int     `json:"clearedCount"`
-	ClientMutationID *string `json:"clientMutationId,omitempty"`
-}
-
 type FinishWebAuthnLoginInput struct {
 	SessionKey       string  `json:"sessionKey"`
 	Response         string  `json:"response"`

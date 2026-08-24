@@ -464,10 +464,14 @@ func (s *ImageMover) UndoTrash(ctx context.Context, historyId string) (*shared.U
 }
 
 // #region 清空回收站
-// EmptyTrash 清空早于指定存留期的暂存记录。通过快速重命名标记删除，并在后台 Goroutine 中进行异步磁盘物理擦除
-func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clearedCount int, err error) {
+// EmptyTrash 清空早于指定存留期的暂存记录。通过快速重命名标记删除，并在后台 Goroutine 中进行异步磁盘物理擦除。
+// 释放空间大小基于各历史 meta 中已持久化的总文件大小求和（物理擦除异步执行，标记删除后无法再实测）
+func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (*shared.EmptyTrashResultDTO, error) {
 	s.emptyTrashMu.Lock()
 	defer s.emptyTrashMu.Unlock()
+
+	var clearedCount int
+	var clearedSize int64
 
 	trashRoot := filepath.Join(s.rootDir, trashDirName)
 
@@ -477,7 +481,7 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 	// 使用 dirEntries 进行流式分批遍历目录项，避免一次性读入全部条目到内存中
 	for entry, scanErr := range dirEntries(ctx, trashRoot) {
 		if scanErr != nil {
-			return clearedCount, errors.Join(errB.Build(), scanErr)
+			return nil, errors.Join(errB.Build(), scanErr)
 		}
 		if !entry.IsDir() {
 			continue
@@ -523,6 +527,10 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 			}
 			dirsToSweep = append(dirsToSweep, deletingDir)
 			clearedCount++
+			// 历史正在写入时的占位 meta 大小为 -1（过渡态），按 0 字节计入以保证统计非负
+			if meta.TotalFileSize > 0 {
+				clearedSize += meta.TotalFileSize
+			}
 		}
 	}
 
@@ -542,8 +550,12 @@ func (s *ImageMover) EmptyTrash(ctx context.Context, minAge time.Duration) (clea
 		}(dirsToSweep)
 	}
 
-	return clearedCount, errB.Build()
+	return &shared.EmptyTrashResultDTO{
+		ClearedCount: clearedCount,
+		ClearedSize:  clearedSize,
+	}, errB.Build()
 }
+
 // #endregion
 
 // FindTrashHistory 获取历史记录列表迭代器

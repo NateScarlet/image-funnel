@@ -178,8 +178,9 @@ async function undoTrashHistory(historyId: string) {
 async function emptyTrashHistory() {
   const result = await domainEmpty(trashMinAge.value);
   if (result) {
-    const clearedCount = result.clearedCount;
-    showSuccess(`已成功清理 ${clearedCount} 项历史图片及其伴随文件`);
+    showSuccess(
+      `已成功清理 ${result.clearedCount} 条历史记录，释放了 ${formatSize(result.clearedSize)} 空间`,
+    );
   }
 }
 

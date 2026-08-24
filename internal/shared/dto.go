@@ -240,6 +240,17 @@ type UndoTrashResultDTO struct {
 	ClientMutationID *string
 }
 
+// EmptyTrashResultDTO 清空回收站的结果数据传输对象
+type EmptyTrashResultDTO struct {
+	// ClearedCount 此次被真正清理的历史数量
+	ClearedCount int
+	// ClearedSize 此次被真正清理的历史所释放的空间大小（字节数），
+	// 基于各历史元数据中已持久化的总文件大小求和，在异步物理擦除前读取
+	ClearedSize int64
+	// ClientMutationID 客户端关联请求与响应的标识
+	ClientMutationID *string
+}
+
 // AutocompleteSuggestionDTO 自动完成建议数据传输对象
 type AutocompleteSuggestionDTO struct {
 	Text        string

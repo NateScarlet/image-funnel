@@ -1,6 +1,7 @@
 mutation EmptyTrash($input: EmptyTrashInput!) {
   emptyTrash(input: $input) {
     clearedCount
+    clearedSize
     clientMutationId
   }
 }
