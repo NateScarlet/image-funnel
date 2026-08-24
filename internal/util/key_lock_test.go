@@ -102,7 +102,7 @@ func TestKeyLock_Concurrency(t *testing.T) {
 	}
 
 	wg.Wait()
-	
+
 	var total int
 	for _, c := range counters {
 		total += c
@@ -163,5 +163,3 @@ func itoa(i int) string {
 	}
 	return string(buf[pos:])
 }
-
-

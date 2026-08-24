@@ -203,4 +203,3 @@ func TestRemoveImageByPath_ForceRemoveShouldUpdateStats(t *testing.T) {
 	// 3. 验证：强制移除后，被移除的 img0 应当不被计入 TotalKept
 	assert.Equal(t, 0, session.Stats().TotalKept, "被删除图片的 Keep 操作不应影响统计的 TotalKept")
 }
-

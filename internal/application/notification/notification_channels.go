@@ -22,11 +22,11 @@ func (h *Handler) NotificationChannels(
 			}, nil
 		},
 		func(edges []*shared.NotificationChannelEdgeDTO, pageInfo pagination.PageInfo) (*shared.NotificationChannelConnectionDTO, error) {
-				return &shared.NotificationChannelConnectionDTO{
-					Edges:    edges,
-					PageInfo: &pageInfo,
-				}, nil
-			},
+			return &shared.NotificationChannelConnectionDTO{
+				Edges:    edges,
+				PageInfo: &pageInfo,
+			}, nil
+		},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)

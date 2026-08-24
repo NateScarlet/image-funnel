@@ -29,26 +29,26 @@ var _ hook.Runner = (*Runner)(nil)
 
 // Runner 外部钩子管理器（应用/基础设施适配器服务）
 type Runner struct {
-	rootDir            string
-	hooksDir           string
-	logger             *zap.Logger
-	metadataUpdatedSub pubsub.Topic[*shared.MetadataUpdatedEvent]
-	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
-	graphqlURL         string
-	tokenSource        device.TokenSource
-	imgRepo            image.Repository
-	dirSvc             directoryService
-	dirRepo            directory.Repository
-	notifSender        shared.NotificationSender
-	ch                 chan hookExecutionTask
-	debouncer          *debouncer
-	ctx                context.Context
-	cancel             context.CancelFunc
-	wg                 sync.WaitGroup
-	muIgnore           sync.Mutex
-	writeIgnore        map[string]writeIgnoreItem
-	muTasks            sync.Mutex
-	activeTasks        map[string]*activeTask
+	rootDir                 string
+	hooksDir                string
+	logger                  *zap.Logger
+	metadataUpdatedSub      pubsub.Topic[*shared.MetadataUpdatedEvent]
+	fileChangedSub          pubsub.Topic[*shared.FileChangedEvent]
+	graphqlURL              string
+	tokenSource             device.TokenSource
+	imgRepo                 image.Repository
+	dirSvc                  directoryService
+	dirRepo                 directory.Repository
+	notifSender             shared.NotificationSender
+	ch                      chan hookExecutionTask
+	debouncer               *debouncer
+	ctx                     context.Context
+	cancel                  context.CancelFunc
+	wg                      sync.WaitGroup
+	muIgnore                sync.Mutex
+	writeIgnore             map[string]writeIgnoreItem
+	muTasks                 sync.Mutex
+	activeTasks             map[string]*activeTask
 	jsonrpcPool             *jsonrpcPool
 	autocompleteTimeout     time.Duration
 	autocompleteIdleTimeout time.Duration
@@ -74,24 +74,24 @@ func NewRunner(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &Runner{
-		rootDir:            rootDir,
-		hooksDir:           hooksDir,
-		logger:             logger,
-		metadataUpdatedSub: metadataUpdatedSub,
-		fileChangedSub:     fileChangedSub,
-		graphqlURL:         graphqlURL,
-		tokenSource:        tokenSource,
-		imgRepo:            imgRepo,
-		dirSvc:             dirSvc,
-		dirRepo:            dirRepo,
-		notifSender:        notifSender,
-		ch:                 make(chan hookExecutionTask, 1024),
-		ctx:                ctx,
-		cancel:             cancel,
-		writeIgnore:        make(map[string]writeIgnoreItem),
-		activeTasks:        make(map[string]*activeTask),
-		autocompleteTimeout:      autocompleteDefaultTimeout,
-		autocompleteIdleTimeout:  autocompleteDefaultIdleTimeout,
+		rootDir:                 rootDir,
+		hooksDir:                hooksDir,
+		logger:                  logger,
+		metadataUpdatedSub:      metadataUpdatedSub,
+		fileChangedSub:          fileChangedSub,
+		graphqlURL:              graphqlURL,
+		tokenSource:             tokenSource,
+		imgRepo:                 imgRepo,
+		dirSvc:                  dirSvc,
+		dirRepo:                 dirRepo,
+		notifSender:             notifSender,
+		ch:                      make(chan hookExecutionTask, 1024),
+		ctx:                     ctx,
+		cancel:                  cancel,
+		writeIgnore:             make(map[string]writeIgnoreItem),
+		activeTasks:             make(map[string]*activeTask),
+		autocompleteTimeout:     autocompleteDefaultTimeout,
+		autocompleteIdleTimeout: autocompleteDefaultIdleTimeout,
 	}
 
 	r.debouncer = newDebouncer(100*time.Millisecond, r.onDebounceTrigger)

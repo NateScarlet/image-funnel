@@ -21,16 +21,16 @@ func (h *Handler) TrashHistory(
 			}, nil
 		},
 		func(edges []*shared.TrashHistoryEdgeDTO, pageInfo pagination.PageInfo) (*shared.TrashHistoryConnectionDTO, error) {
-				var nodes = make([]*shared.TrashHistoryItemDTO, len(edges))
-				for i, edge := range edges {
-					nodes[i] = edge.Node
-				}
-				return &shared.TrashHistoryConnectionDTO{
-					Edges:    edges,
-					Nodes:    nodes,
-					PageInfo: &pageInfo,
-				}, nil
-			},
+			var nodes = make([]*shared.TrashHistoryItemDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			return &shared.TrashHistoryConnectionDTO{
+				Edges:    edges,
+				Nodes:    nodes,
+				PageInfo: &pageInfo,
+			}, nil
+		},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)

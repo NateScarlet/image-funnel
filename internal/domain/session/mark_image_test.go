@@ -294,4 +294,3 @@ func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_Undo_ShouldRemoveFromQueue(
 	assert.Equal(t, 2, sess.CurrentSize(), "撤销后队列应恢复为 2 张图片")
 	assert.Equal(t, shared.ImageActionReject, ActionOf(sess, scalar.ToID("img3")), "img3 操作应恢复为 Reject")
 }
-

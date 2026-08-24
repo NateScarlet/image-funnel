@@ -18,10 +18,10 @@ type RequestResolvedEvent struct {
 
 // Service 负责控制设备配对请求（Request）的完整业务生命周期。
 type Service struct {
-	repo         Repository
-	prCreatedPub pubsub.Topic[*Request]
+	repo          Repository
+	prCreatedPub  pubsub.Topic[*Request]
 	prResolvedPub pubsub.Topic[*RequestResolvedEvent]
-	prCreatedSub pubsub.Topic[*Request]
+	prCreatedSub  pubsub.Topic[*Request]
 	prResolvedSub pubsub.Topic[*RequestResolvedEvent]
 }
 
@@ -34,10 +34,10 @@ func NewService(
 	prResolvedSub pubsub.Topic[*RequestResolvedEvent],
 ) *Service {
 	return &Service{
-		repo:         repo,
-		prCreatedPub: prCreatedPub,
+		repo:          repo,
+		prCreatedPub:  prCreatedPub,
 		prResolvedPub: prResolvedPub,
-		prCreatedSub: prCreatedSub,
+		prCreatedSub:  prCreatedSub,
 		prResolvedSub: prResolvedSub,
 	}
 }

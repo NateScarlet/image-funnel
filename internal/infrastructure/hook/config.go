@@ -41,7 +41,7 @@ type directiveConfig struct {
 
 // hookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
 type hookConfig struct {
-	Filename    string           `toml:"-"`           // 配置文件名（如 foo.toml），不参与 TOML 解析
+	Filename    string           `toml:"-"` // 配置文件名（如 foo.toml），不参与 TOML 解析
 	ID          string           `toml:"id"`
 	Name        string           `toml:"name"`
 	Description string           `toml:"description"`

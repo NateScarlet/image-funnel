@@ -321,15 +321,15 @@ type NotificationDTO struct {
 }
 
 type NotificationFilters struct {
-	Channel     []string
-	Status      []NotificationStatus
-	Priority    []NotificationPriority
-	Read        *bool
-	VisibleAt   time.Time
+	Channel   []string
+	Status    []NotificationStatus
+	Priority  []NotificationPriority
+	Read      *bool
+	VisibleAt time.Time
 	// 在指定时间是否未来才可见（notBefore > PendingAt）
-	PendingAt   time.Time
+	PendingAt time.Time
 	// 在指定时间是否已过期（notAfter < ExpiredAt）
-	ExpiredAt   time.Time
+	ExpiredAt time.Time
 }
 
 type NotificationConnectionDTO struct {
@@ -399,4 +399,3 @@ func (r *SendNotificationResult) ID() scalar.ID { return r.id }
 func (r *SendNotificationResult) DidCreate() bool { return r.didCreate }
 
 // #endregion
-

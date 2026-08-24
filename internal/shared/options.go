@@ -107,13 +107,13 @@ func (o *SendNotificationOptions) Priority() NotificationPriority {
 
 // UpdateNotificationOptions 更新通知内容的可选参数，不可变
 type UpdateNotificationOptions struct {
-	title      string
-	body       string
-	priority   NotificationPriority
-	notAfter   time.Time
-	notBefore  time.Time
-	detailsURL scalar.URI
-	updatedAt  time.Time
+	title       string
+	body        string
+	priority    NotificationPriority
+	notAfter    time.Time
+	notBefore   time.Time
+	detailsURL  scalar.URI
+	updatedAt   time.Time
 	readAt      *time.Time // nil = 不修改
 	dismissedAt *time.Time // nil = 不修改
 }
@@ -176,14 +176,14 @@ func WithUpdateDismissedAt(t time.Time) UpdateNotificationOption {
 }
 
 // Getters
-func (o *UpdateNotificationOptions) Title() string                     { return o.title }
-func (o *UpdateNotificationOptions) Body() string                      { return o.body }
-func (o *UpdateNotificationOptions) Priority() NotificationPriority    { return o.priority }
-func (o *UpdateNotificationOptions) NotAfter() time.Time               { return o.notAfter }
-func (o *UpdateNotificationOptions) NotBefore() time.Time              { return o.notBefore }
-func (o *UpdateNotificationOptions) DetailsURL() scalar.URI            { return o.detailsURL }
-func (o *UpdateNotificationOptions) UpdatedAt() time.Time              { return o.updatedAt }
-func (o *UpdateNotificationOptions) ReadAt() *time.Time                { return o.readAt }
-func (o *UpdateNotificationOptions) DismissedAt() *time.Time           { return o.dismissedAt }
+func (o *UpdateNotificationOptions) Title() string                  { return o.title }
+func (o *UpdateNotificationOptions) Body() string                   { return o.body }
+func (o *UpdateNotificationOptions) Priority() NotificationPriority { return o.priority }
+func (o *UpdateNotificationOptions) NotAfter() time.Time            { return o.notAfter }
+func (o *UpdateNotificationOptions) NotBefore() time.Time           { return o.notBefore }
+func (o *UpdateNotificationOptions) DetailsURL() scalar.URI         { return o.detailsURL }
+func (o *UpdateNotificationOptions) UpdatedAt() time.Time           { return o.updatedAt }
+func (o *UpdateNotificationOptions) ReadAt() *time.Time             { return o.readAt }
+func (o *UpdateNotificationOptions) DismissedAt() *time.Time        { return o.dismissedAt }
 
 // #endregion

@@ -8,15 +8,15 @@ import (
 
 // Device 表示一个受信任的 WebAuthn 设备
 type Device struct {
-	id                   scalar.ID
-	credentialID         []byte
-	publicKey            []byte
-	signCount            uint32
-	createdAt            time.Time
-	lastLoginAt          time.Time
-	lastLoginIP          string
-	userAgent            string
-	refreshTokenID       string    // 当前刷新令牌的 JTI
+	id                    scalar.ID
+	credentialID          []byte
+	publicKey             []byte
+	signCount             uint32
+	createdAt             time.Time
+	lastLoginAt           time.Time
+	lastLoginIP           string
+	userAgent             string
+	refreshTokenID        string    // 当前刷新令牌的 JTI
 	refreshTokenExpiresAt time.Time // 当前刷新令牌的过期时间
 }
 
@@ -95,15 +95,15 @@ func FromRepository(
 	refreshTokenExpiresAt time.Time,
 ) *Device {
 	return &Device{
-		id:                   id,
-		credentialID:         credentialID,
-		publicKey:            publicKey,
-		signCount:            signCount,
-		createdAt:            createdAt,
-		lastLoginAt:          lastLoginAt,
-		lastLoginIP:          lastLoginIP,
-		userAgent:            userAgent,
-		refreshTokenID:       refreshTokenID,
+		id:                    id,
+		credentialID:          credentialID,
+		publicKey:             publicKey,
+		signCount:             signCount,
+		createdAt:             createdAt,
+		lastLoginAt:           lastLoginAt,
+		lastLoginIP:           lastLoginIP,
+		userAgent:             userAgent,
+		refreshTokenID:        refreshTokenID,
 		refreshTokenExpiresAt: refreshTokenExpiresAt,
 	}
 }

@@ -205,14 +205,14 @@ func main() {
 	filterBuilder := domdirectory.NewFilterBuilder()
 
 	directoryHandler := appdirectory.NewHandler(
-			logger,
-			dirAnalyzer,
-			directoryDTOFactory,
-			filterBuilder,
-			dirRepo,
-			dirSvc,
-			fileChangedTopic,
-		)
+		logger,
+		dirAnalyzer,
+		directoryDTOFactory,
+		filterBuilder,
+		dirRepo,
+		dirSvc,
+		fileChangedTopic,
+	)
 
 	sessionHandler := appsession.NewHandler(
 		sessionService,

@@ -27,16 +27,16 @@ func ByText(options ...Option) (
 		limit = *opts.first
 	}
 	newInfo = func(
-			start, end string,
-			hasPreviousPage, hasNextPage bool,
-		) *PageInfo {
-			return &PageInfo{
-				HasPreviousPage: hasPreviousPage,
-				HasNextPage:     hasNextPage,
-				StartCursor:     start,
-				EndCursor:       end,
-			}
+		start, end string,
+		hasPreviousPage, hasNextPage bool,
+	) *PageInfo {
+		return &PageInfo{
+			HasPreviousPage: hasPreviousPage,
+			HasNextPage:     hasNextPage,
+			StartCursor:     start,
+			EndCursor:       end,
 		}
+	}
 	return
 }
 

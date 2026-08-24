@@ -29,9 +29,9 @@ if (!globalScope.__IMAGE_FUNNEL_NETUSE_PATCHED__) {
   const originalExec = cp.exec;
   cp.exec = ((command: string, optionsOrCallback?: unknown, maybeCallback?: ExecCallback) => {
     if (command === "net use") {
-      const callback = (typeof optionsOrCallback === "function"
-        ? optionsOrCallback
-        : maybeCallback) as ExecCallback;
+      const callback = (
+        typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback
+      ) as ExecCallback;
       process.nextTick(() => callback(null, "", ""));
       return {
         on() {},
@@ -43,7 +43,11 @@ if (!globalScope.__IMAGE_FUNNEL_NETUSE_PATCHED__) {
         pid: 0,
       };
     }
-    return (originalExec as (...args: unknown[]) => unknown)(command, optionsOrCallback, maybeCallback);
+    return (originalExec as (...args: unknown[]) => unknown)(
+      command,
+      optionsOrCallback,
+      maybeCallback,
+    );
   }) as typeof cp.exec;
 }
 // #endregion

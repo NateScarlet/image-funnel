@@ -33,16 +33,16 @@ func (h *Handler) Images(
 			}, nil
 		},
 		func(edges []*shared.ImageEdgeDTO, pageInfo pagination.PageInfo) (*shared.ImageConnectionDTO, error) {
-				var nodes = make([]*shared.ImageDTO, len(edges))
-				for i, edge := range edges {
-					nodes[i] = edge.Node
-				}
-				return &shared.ImageConnectionDTO{
-					Edges:    edges,
-					Nodes:    nodes,
-					PageInfo: &pageInfo,
-				}, nil
-			},
+			var nodes = make([]*shared.ImageDTO, len(edges))
+			for i, edge := range edges {
+				nodes[i] = edge.Node
+			}
+			return &shared.ImageConnectionDTO{
+				Edges:    edges,
+				Nodes:    nodes,
+				PageInfo: &pageInfo,
+			}, nil
+		},
 	)
 
 	options := pagination.OptionFromInput(after, nil, first, nil)

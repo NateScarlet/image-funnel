@@ -79,4 +79,3 @@ func (d *Directory) IsRoot() bool {
 func (d *Directory) RelPath() string {
 	return d.relPath
 }
-

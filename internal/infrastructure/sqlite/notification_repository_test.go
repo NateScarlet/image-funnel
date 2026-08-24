@@ -89,7 +89,7 @@ func TestNotificationRepository(t *testing.T) {
 		time.Time{},
 		time.Time{},
 		testNow.Add(24*365*10*time.Hour), // notAfter: 10 年后才过期
-		testNow.Add(-1*time.Hour),         // notBefore: 1 小时前已可见
+		testNow.Add(-1*time.Hour),        // notBefore: 1 小时前已可见
 		testNow.Add(-10*time.Minute),
 		testNow.Add(-10*time.Minute),
 		testURI,
@@ -156,7 +156,7 @@ func TestNotificationRepository(t *testing.T) {
 		time.Time{},
 		time.Time{},
 		testNow.Add(24*365*10*time.Hour),
-		testNow.Add(-2*time.Hour),        // notBefore: 2 小时前
+		testNow.Add(-2*time.Hour), // notBefore: 2 小时前
 		testNow,
 		testNow,
 		scalar.URI{},

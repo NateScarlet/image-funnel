@@ -55,7 +55,6 @@ func (s *Service) ImageByRelPath(ctx context.Context, relPath string) (*Image, e
 	return s.imageRepo.Get(ctx, relPath)
 }
 
-
 // UpdateImageMetadata 更新单个图片的元数据（评星和颜色标签），操作即时写入 XMP 伴随文件
 func (s *Service) UpdateImageMetadata(
 	ctx context.Context,

@@ -124,7 +124,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		args          []string
 		relPath       string
 		dir           *directory.Directory
-		directiveText string // 完整指令文本（如 "/fork --option value"）
+		directiveText string    // 完整指令文本（如 "/fork --option value"）
 		action        string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
 		stdout        string    // 脚本标准输出
 		stderr        string    // 脚本标准错误输出

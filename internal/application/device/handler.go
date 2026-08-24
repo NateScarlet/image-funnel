@@ -15,11 +15,11 @@ import (
 )
 
 type Handler struct {
-	service         *device.Service
-	tokenSource     device.TokenSource
-	dtoFactory      *DTOFactory
-	logger          *zap.Logger
-	deviceSavedSub  pubsub.Topic[*device.Device]
+	service          *device.Service
+	tokenSource      device.TokenSource
+	dtoFactory       *DTOFactory
+	logger           *zap.Logger
+	deviceSavedSub   pubsub.Topic[*device.Device]
 	deviceDeletedSub pubsub.Topic[scalar.ID]
 }
 
@@ -32,11 +32,11 @@ func NewHandler(
 	deviceDeletedSub pubsub.Topic[scalar.ID],
 ) *Handler {
 	return &Handler{
-		service:         service,
-		tokenSource:     tokenSource,
-		dtoFactory:      dtoFactory,
-		logger:          logger,
-		deviceSavedSub:  deviceSavedSub,
+		service:          service,
+		tokenSource:      tokenSource,
+		dtoFactory:       dtoFactory,
+		logger:           logger,
+		deviceSavedSub:   deviceSavedSub,
 		deviceDeletedSub: deviceDeletedSub,
 	}
 }

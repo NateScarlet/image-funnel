@@ -54,7 +54,5 @@ func (h *Handler) Commit(
 		return 0, 0, err
 	}
 
-
-
 	return written, matched, nil
 }

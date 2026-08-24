@@ -73,4 +73,3 @@ var (
 type NotificationEventType = enum.Enum[NotificationEventTypeMeta]
 
 // #endregion
-

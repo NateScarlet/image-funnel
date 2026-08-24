@@ -19,16 +19,16 @@ type DirectoryStateDTOV1 struct {
 
 // DirectoryStateBrowseDTOV1 v1版本的状态中的过滤条件配置（包含已废弃的 filterMemoBy）
 type DirectoryStateBrowseDTOV1 struct {
-	FilterBy     *shared.ImageFilters `json:"filterBy,omitempty"`    // ImageFilters v1
+	FilterBy     *shared.ImageFilters `json:"filterBy,omitempty"`     // ImageFilters v1
 	FilterMemoBy *shared.NoteFilters  `json:"filterMemoBy,omitempty"` // NoteFilters v1（已重命名为 filterNoteBy）
 }
 
 // DirectoryStateLastSessionDTOAlias v1版本的 LastSession
 // ID 使用 any：早期版本 scalar.ID 未实现 JSON 序列化，写入的 id 可能是 {}，需像 v2 一样容错迁移
 type DirectoryStateLastSessionDTOAlias struct {
-	ID         any    `json:"id"`
-	Filter     any    `json:"filter"`
-	TargetKeep int    `json:"targetKeep"`
+	ID         any `json:"id"`
+	Filter     any `json:"filter"`
+	TargetKeep int `json:"targetKeep"`
 }
 
 // #endregion

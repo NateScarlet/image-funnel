@@ -28,15 +28,15 @@ type hookExecutionResult struct {
 
 // hookExecutionTask 发送给后台串行 Worker 消费的具体进程执行任务
 type hookExecutionTask struct {
-	HookID      string
-	HookName    string
-	Command     string   // 基础命令（如 "uv run comfyui.py remove"）
-	ExtraArgs   []string // 额外参数，原样传递给命令
-	TriggerName string
-	Events      []hookEvent
-	Env         map[string]string // 传递给外部脚本的自定义环境变量集合
-	NotePath    string            // 笔记文件的相对路径
-	dir         *directory.Directory
+	HookID        string
+	HookName      string
+	Command       string   // 基础命令（如 "uv run comfyui.py remove"）
+	ExtraArgs     []string // 额外参数，原样传递给命令
+	TriggerName   string
+	Events        []hookEvent
+	Env           map[string]string // 传递给外部脚本的自定义环境变量集合
+	NotePath      string            // 笔记文件的相对路径
+	dir           *directory.Directory
 	resultChan    chan hookExecutionResult // 用于接收外部脚本执行结果的通道
 	RunID         string                   // 指令运行 ID 注入环境变量
 	DirectiveText string                   // 笔记指令的完整文本（如 "/fork --option value"），用于通知标题

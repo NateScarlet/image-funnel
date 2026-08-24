@@ -49,9 +49,9 @@ func (n *Notification) NotBefore() time.Time {
 	}
 	return n.notBefore
 }
-func (n *Notification) CreatedAt() time.Time                  { return n.createdAt }
-func (n *Notification) UpdatedAt() time.Time                  { return n.updatedAt }
-func (n *Notification) DetailsURL() scalar.URI                { return n.detailsURL }
+func (n *Notification) CreatedAt() time.Time   { return n.createdAt }
+func (n *Notification) UpdatedAt() time.Time   { return n.updatedAt }
+func (n *Notification) DetailsURL() scalar.URI { return n.detailsURL }
 
 // VisibleAt 判断通知在给定时间点是否可见
 // 使用 !t.Before/!t.After 确保边界相等时与字段字面一致

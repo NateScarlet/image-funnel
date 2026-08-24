@@ -400,7 +400,6 @@ func TestRunner_GraphqlURLEnv_Injection(t *testing.T) {
 	assert.Equal(t, "http://127.0.0.1:8000/graphql", graphqlURL)
 }
 
-
 func TestRunner_Trigger_SyncAndError(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-test")
 	assert.NoError(t, err)

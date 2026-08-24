@@ -24,12 +24,12 @@ type LastSessionSaver interface {
 }
 
 type Handler struct {
-	sessionService     *session.Service
-	dtoFactory         *DTOFactory
-	imageDTOFactory    *appimage.DTOFactory
-	logger             *zap.Logger
-	lastSessionSaver   LastSessionSaver
-	sessionSavedSub    pubsub.Topic[scalar.ID]
+	sessionService      *session.Service
+	dtoFactory          *DTOFactory
+	imageDTOFactory     *appimage.DTOFactory
+	logger              *zap.Logger
+	lastSessionSaver    LastSessionSaver
+	sessionSavedSub     pubsub.Topic[scalar.ID]
 	sessionCommittedSub pubsub.Topic[*shared.SessionCommittedEvent]
 }
 
@@ -43,12 +43,12 @@ func NewHandler(
 	sessionCommittedSub pubsub.Topic[*shared.SessionCommittedEvent],
 ) *Handler {
 	return &Handler{
-		sessionService:     sessionService,
-		dtoFactory:         dtoFactory,
-		imageDTOFactory:    imageDTOFactory,
-		logger:             logger,
-		lastSessionSaver:   lastSessionSaver,
-		sessionSavedSub:    sessionSavedSub,
+		sessionService:      sessionService,
+		dtoFactory:          dtoFactory,
+		imageDTOFactory:     imageDTOFactory,
+		logger:              logger,
+		lastSessionSaver:    lastSessionSaver,
+		sessionSavedSub:     sessionSavedSub,
 		sessionCommittedSub: sessionCommittedSub,
 	}
 }

@@ -113,7 +113,7 @@ func (s *Session) NextRound(filter *shared.ImageFilters, filteredImages []*image
 	}
 	s.queue = newQueue
 
-        s.currentIdx = 0
+	s.currentIdx = 0
 	s.updatedAt = time.Now()
 
 	return nil

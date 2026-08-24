@@ -39,7 +39,6 @@ func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*shared.FileChanged
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.watchAndTransform(ctx)
 
-
 	cleanup := func() {
 		cancel()
 	}
@@ -86,7 +85,6 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 		s.fileChangedPub.Publish(ctx, event)
 	}
 }
-
 
 // GetDirectory 根据目录 ID 获取目录实体，由领域层内部解码 ID
 func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, error) {
@@ -306,5 +304,3 @@ func (s *Service) SaveLastSession(
 	state.UpdatedAt = time.Now()
 	return s.repo.WriteState(ctx, dir.RelPath(), state)
 }
-
-

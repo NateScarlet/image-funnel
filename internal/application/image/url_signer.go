@@ -2,8 +2,8 @@ package image
 
 import (
 	"fmt"
-	"net/url"
 	"main/internal/scalar"
+	"net/url"
 )
 
 type SignOption func(url.Values)

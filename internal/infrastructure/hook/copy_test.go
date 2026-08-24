@@ -150,7 +150,7 @@ func TestCopyContent_EmptyStdoutNotApplicable(t *testing.T) {
 
 func TestCopyContent_NonZeroExitReturnsErrorWithStderr(t *testing.T) {
 	env := newCopyTestRunner(t, 1, map[string]string{
-		"IF_COPY_HELPER_STDERR":   "boom",
+		"IF_COPY_HELPER_STDERR":    "boom",
 		"IF_COPY_HELPER_EXIT_CODE": "3",
 	})
 

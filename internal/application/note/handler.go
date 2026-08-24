@@ -10,13 +10,13 @@ import (
 )
 
 type Handler struct {
-	repo             note.Repository
-	service          *note.Service
-	dirSvc           *directory.Service
-	fileChangedSub   pubsub.Topic[*shared.FileChangedEvent]
-	dtoFactory       *DTOFactory
-	filterBuilder    *note.FilterBuilder
-	logger           *zap.Logger
+	repo           note.Repository
+	service        *note.Service
+	dirSvc         *directory.Service
+	fileChangedSub pubsub.Topic[*shared.FileChangedEvent]
+	dtoFactory     *DTOFactory
+	filterBuilder  *note.FilterBuilder
+	logger         *zap.Logger
 }
 
 func NewHandler(
