@@ -1,11 +1,16 @@
 import logging
 import unittest
 import os
+import json
 import argparse
+import tempfile
 import requests
 import sqlite3
 from typing import Dict, Any, Optional, List, Set, Tuple
 from unittest.mock import patch, MagicMock
+
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 logging.disable(logging.CRITICAL)
 from .autocomplete import (
@@ -14,6 +19,11 @@ from .autocomplete import (
     DanbooruProvider,
     NodeProvider,
     LoraProvider,
+    RegionOptionProvider,
+    AutocompleteRequest,
+    AutocompleteServices,
+    autocomplete,
+    build_providers,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag
@@ -767,6 +777,322 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             list(provider.provide(context))
+
+    # ---- RegionOptionProvider tests ----
+
+    def _get_mock_region_workflow(self) -> Dict[str, Any]:
+        """含 positive/negative 两个区域标记的工作流夹具"""
+        return {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "title": "Prompt",
+                    "widgets_values": [
+                        "// #region positive\n1girl, masterpiece,\n// #endregion\n"
+                        "// #region negative\nworst quality\n// #endregion\n"
+                    ],
+                }
+            ]
+        }
+
+    def _get_mock_region_prompt_meta(self) -> Dict[str, Any]:
+        return {"node_1": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl"}}}
+
+    def _write_workflow_sample(self, workflow: Dict[str, Any], tmp_dir: str) -> str:
+        """生成带 ComfyUI prompt/workflow 元数据的临时 PNG 样本，返回文件路径"""
+        img = Image.new("RGB", (1, 1), "white")
+        meta = PngInfo()
+        meta.add_text(
+            "prompt",
+            json.dumps(
+                {
+                    "node_1": {
+                        "class_type": "CLIPTextEncode",
+                        "inputs": {"text": ""},
+                    }
+                }
+            ),
+        )
+        meta.add_text("workflow", json.dumps(workflow))
+        path = os.path.join(tmp_dir, "sample.png")
+        img.save(path, pnginfo=meta)
+        return path
+
+    def test_region_option_provider_suggests_all_regions_on_empty_input(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(
+            [s.text for s in suggestions],
+            ["--region positive", "--region negative"],
+        )
+        self.assertEqual([s.displayText for s in suggestions], ["positive", "negative"])
+        self.assertEqual(suggestions[0].type, "region")
+        self.assertEqual(suggestions[0].description, "区域: positive")
+
+    def test_region_option_provider_skips_when_query_typed(self):
+        context = self._make_context(
+            target_command="add",
+            query="g",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_skips_when_prompt_words_typed(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="1girl,",
+            cwords=["/add", "1girl,"],
+            parsed_args=self._make_parsed_args(command="add"),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_skips_when_region_specified(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_skips_when_node_specified(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="5",
+            cwords=["/add", "--node", "5"],
+            parsed_args=self._make_parsed_args(command="add", node=["5"]),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_skips_without_workflow(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_skips_without_region_markers(self):
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+            workflow={"nodes": []},
+            prompt_meta={},
+        )
+        provider = RegionOptionProvider()
+        self.assertFalse(provider.can_provide(context))
+
+    def test_region_option_provider_suggests_regions_with_neg_flag(self):
+        """--neg 只改变默认区域，不应阻止显式选择区域的建议。"""
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="--neg",
+            cwords=["/add", "--neg"],
+            parsed_args=self._make_parsed_args(command="add", neg=True),
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertTrue(provider.can_provide(context))
+
+    def test_region_option_provider_target_scan_fallback(self):
+        """解析失败（parsed_args=None）时回退扫描已完成词列表中的目标选项。"""
+        provider = RegionOptionProvider()
+
+        # 无任何目标选项时正常建议区域
+        context_plain = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=None,
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        self.assertTrue(provider.can_provide(context_plain))
+
+        # 扫描到 --region 视为已指定目标
+        context_targeted = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="positive",
+            cwords=["/add", "--region", "positive"],
+            parsed_args=None,
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        self.assertFalse(provider.can_provide(context_targeted))
+
+    def test_region_option_provider_target_scan_respects_end_of_options(self):
+        """结束标记 -- 之后的 --region 属于提示词文本，不算指定目标。"""
+        context = self._make_context(
+            target_command="add",
+            query="",
+            prev_word="--region",
+            cwords=["/add", "--", "--region"],
+            parsed_args=None,
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        provider = RegionOptionProvider()
+        self.assertTrue(provider.can_provide(context))
+
+    def test_autocomplete_prefers_region_options_over_danbooru_related(self) -> None:
+        """空输入且有可用区域时，区域选项独占建议，关联联想与历史回退均不执行。"""
+        mock_danbooru = MagicMock()
+        history = self._make_history(all_added=[("history_tag", "2026-08-07T10:00:00")])
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                DanbooruProvider(mock_danbooru, history),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample(
+                self._get_mock_region_workflow(), tmp_dir
+            )
+            request = AutocompleteRequest(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertEqual(
+            [s.text for s in suggestions],
+            ["--region positive", "--region negative"],
+        )
+        mock_danbooru.search.assert_not_called()
+        mock_danbooru.related.assert_not_called()
+        history.get_all_added_prompts.assert_not_called()
+
+    def test_autocomplete_falls_back_to_danbooru_related_without_regions(self) -> None:
+        """无区域标记时回落到 Danbooru 提供者（历史回退路径照常执行）。"""
+        mock_danbooru = MagicMock()
+        history = self._make_history(all_added=[("history_tag", "2026-08-07T10:00:00")])
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                DanbooruProvider(mock_danbooru, history),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample({"nodes": []}, tmp_dir)
+            request = AutocompleteRequest(
+                target_command="add",
+                query="",
+                prev_word="",
+                cwords=["/add"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+            )
+            suggestions = list(autocomplete(request, services))
+
+        texts = [s.text for s in suggestions]
+        self.assertEqual(texts, ["history_tag"])
+        mock_danbooru.search.assert_not_called()
+        mock_danbooru.related.assert_not_called()
+        history.get_all_added_prompts.assert_called_once()
+
+    def test_build_providers_registers_region_option_before_danbooru(self) -> None:
+        """真实 provider 链中区域选项提供者必须注册在 Danbooru 提供者之前。"""
+        with patch("comfyui.autocomplete.SQLiteContext"):
+            with build_providers("root", "dir", "http://localhost", False) as providers:
+                names = [type(p).__name__ for p in providers]
+        self.assertLess(
+            names.index("RegionOptionProvider"), names.index("DanbooruProvider")
+        )
+
+    def test_autocomplete_after_region_selection_shows_related_tags(self) -> None:
+        """闭环：选定区域后，下一次空输入补全应进入该区域的关联标签模式。"""
+        mock_danbooru = MagicMock()
+        mock_danbooru.related.return_value = [
+            DanbooruTag("cute", "可爱", "Cute character.", "General")
+        ]
+        history = self._make_history()
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                DanbooruProvider(mock_danbooru, history),
+            ],
+        )
+        # 区域标记写在节点文本中：既能被 extract_region_names 识别，
+        # 也能被 locate_prompts 定位到该区域已有提示词
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "title": "Prompt",
+                    "widgets_values": ["// #region positive\n1girl\n// #endregion"],
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample(workflow, tmp_dir)
+            request = AutocompleteRequest(
+                target_command="add",
+                query="",
+                prev_word="positive",
+                cwords=["/add", "--region", "positive"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+            )
+            suggestions = list(autocomplete(request, services))
+
+        mock_danbooru.related.assert_called_once_with(
+            ["1girl"], target_categories=["General", "Artist", "Meta"]
+        )
+        self.assertEqual([s.text for s in suggestions], ["cute"])
 
     # ---- NodeProvider tests ----
 
