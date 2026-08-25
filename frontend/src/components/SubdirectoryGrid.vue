@@ -114,6 +114,29 @@
           </svg>
           <span class="text-sm">正在加载子目录…</span>
         </template>
+        <template v-else-if="hiddenSubdirectoryCount > 0">
+          <!-- 有子目录被客户端筛选隐藏时，提示数量并允许一键关闭对应筛选 -->
+          <svg class="w-8 h-8 text-primary-500" viewBox="0 0 24 24">
+            <path :d="mdiEyeOff" fill="currentColor" />
+          </svg>
+          <span class="text-sm">{{ hiddenSubdirectoryCount }} 个子目录被当前筛选隐藏</span>
+          <div class="flex flex-wrap justify-center gap-2">
+            <button
+              v-if="largeUnratedHiddenCount > 0"
+              class="px-3 h-8 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-secondary-500/50 rounded-lg text-xs text-primary-300 hover:text-white transition-colors cursor-pointer flex items-center select-none"
+              @click="showLargeUnrated = true"
+            >
+              显示未评级图片较多的目录（{{ largeUnratedHiddenCount }}）
+            </button>
+            <button
+              v-if="uncompletedHiddenCount > 0"
+              class="px-3 h-8 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-secondary-500/50 rounded-lg text-xs text-primary-300 hover:text-white transition-colors cursor-pointer flex items-center select-none"
+              @click="showUncompletedDirectories = true"
+            >
+              显示未达标目录（{{ uncompletedHiddenCount }}）
+            </button>
+          </div>
+        </template>
         <template v-else>
           <svg class="w-8 h-8 text-primary-500" viewBox="0 0 24 24">
             <path :d="mdiFolder" fill="currentColor" />
@@ -155,7 +178,7 @@
 
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from "vue";
-import { mdiFolder, mdiMagnify, mdiClose, mdiLoading } from "@mdi/js";
+import { mdiFolder, mdiMagnify, mdiClose, mdiLoading, mdiEyeOff } from "@mdi/js";
 import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
@@ -192,19 +215,20 @@ const searchQuery = computed({
 const subdirectoryLoadingCount = ref(0);
 
 // 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
-const { largeUnratedCount, sortedDirectories, hasNextPage, fetchMore } = useDirectories(
-  () => ({
-    id: directoryId,
-    filterBy: {
-      query: searchQuery.value || undefined,
+const { largeUnratedCount, largeUnratedHiddenCount, sortedDirectories, hasNextPage, fetchMore } =
+  useDirectories(
+    () => ({
+      id: directoryId,
+      filterBy: {
+        query: searchQuery.value || undefined,
+      },
+    }),
+    {
+      loadingCount: subdirectoryLoadingCount,
+      maxUnratedCount: maxUnratedCount,
+      showLargeUnrated,
     },
-  }),
-  {
-    loadingCount: subdirectoryLoadingCount,
-    maxUnratedCount: maxUnratedCount,
-    showLargeUnrated,
-  },
-);
+  );
 
 const loading = computed(() => subdirectoryLoadingCount.value > 0);
 
@@ -218,13 +242,24 @@ const uncompletedCount = computed(() => {
   }).length;
 });
 
-const processedSubdirectories = computed(() => {
+// 因「显示未达标目录」开关关闭而真正被隐藏的目录数（排除因含有子目录而强制显示的项）
+const uncompletedHiddenCount = computed(
+  () => subdirectoryFilterItems.value.filter((item) => item.isHiddenByUncompleted).length,
+);
+
+// 被客户端筛选隐藏的子目录总数（两个维度的隐藏集合互斥，可直接相加）
+const hiddenSubdirectoryCount = computed(
+  () => largeUnratedHiddenCount.value + uncompletedHiddenCount.value,
+);
+
+// 每个子目录相对当前客户端筛选的隐藏判定，供列表渲染与隐藏计数共同消费
+const subdirectoryFilterItems = computed(() => {
   const dirs = sortedDirectories.value;
   const limit = maxUnratedCount.value;
   const showLarge = showLargeUnrated.value;
   const showUncompleted = showUncompletedDirectories.value;
 
-  const items = dirs.map((dir) => {
+  return dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
     const completion = evaluateDirectoryCompletion(dir, stats);
     const unratedCount =
@@ -236,16 +271,23 @@ const processedSubdirectories = computed(() => {
     const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
 
     // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
-    const isFilteredOutButShown = stats && stats.subdirectoryCount > 0 && isFilteredOut;
+    const isFilteredOutButShown =
+      stats !== undefined && stats.subdirectoryCount > 0 && isFilteredOut;
 
     return {
       dir,
       isFilteredOut,
       isFilteredOutButShown,
+      // 因「显示未达标目录」开关被真正隐藏（排除因有子目录而强制显示的项）
+      isHiddenByUncompleted: isFilteredOutByCompletion && !isFilteredOutButShown,
     };
   });
+});
 
-  const visibleItems = items.filter((item) => !item.isFilteredOut || item.isFilteredOutButShown);
+const processedSubdirectories = computed(() => {
+  const visibleItems = subdirectoryFilterItems.value.filter(
+    (item) => !item.isFilteredOut || item.isFilteredOutButShown,
+  );
 
   // 把 isFilteredOutButShown 的排在最后
   return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]);

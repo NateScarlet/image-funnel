@@ -39,11 +39,13 @@ export default function useBrowseImages(
     const visibleImages: ImageFragment[] = [];
     const mismatchedIds = new Set<string>();
     const nextExcludedIds = new Set<string>();
+    let hiddenCount = 0;
 
     images.value.forEach((img) => {
       const isMatched = matchesFilters(img);
       const isExcluded = excludedImageIds.value.has(img.id);
 
+      // 已被本地筛选排除且当前仍不匹配的图片不再显示
       const shouldHide = isExcluded && !isMatched;
 
       if (!shouldHide) {
@@ -51,6 +53,8 @@ export default function useBrowseImages(
         if (!isMatched) {
           mismatchedIds.add(img.id);
         }
+      } else {
+        hiddenCount += 1;
       }
 
       if (!isMatched) {
@@ -58,17 +62,24 @@ export default function useBrowseImages(
       }
     });
 
-    return { visibleImages, mismatchedIds, nextExcludedIds };
+    return { visibleImages, mismatchedIds, nextExcludedIds, hiddenCount };
   });
 
   function applyLocalFilter() {
     excludedImageIds.value = filterStates.value.nextExcludedIds;
   }
 
+  // 清空本地排除集，恢复显示所有已加载图片
+  function clearLocalFilter() {
+    excludedImageIds.value = new Set();
+  }
+
   return {
     images: computed(() => filterStates.value.visibleImages),
     outOfFilterImageIds: computed(() => filterStates.value.mismatchedIds),
+    hiddenImageCount: computed(() => filterStates.value.hiddenCount),
     applyLocalFilter,
+    clearLocalFilter,
     hasNextPage,
     fetchMore,
   };

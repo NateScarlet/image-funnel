@@ -30,16 +30,33 @@
         <!-- 无图片空状态 -->
         <div
           v-else-if="images.length === 0"
-          class="flex flex-col items-center justify-center py-20 text-primary-500 gap-2"
+          class="flex flex-col items-center justify-center py-20 gap-2 select-none"
         >
-          <svg class="w-12 h-12 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 00-1.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-            />
-          </svg>
-          <span class="text-sm">该目录或过滤条件下未找到任何图片</span>
+          <!-- 有图片被本地筛选隐藏时，提示数量并允许一键恢复 -->
+          <template v-if="hiddenImageCount > 0">
+            <svg class="w-12 h-12 text-primary-500" viewBox="0 0 24 24">
+              <path :d="mdiEyeOff" fill="currentColor" />
+            </svg>
+            <span class="text-sm text-primary-400">
+              {{ hiddenImageCount }} 张不符合当前筛选的图片已被隐藏
+            </span>
+            <button
+              class="mt-2 px-4 py-2 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-secondary-500/50 rounded-lg text-xs text-primary-200 hover:text-white transition-colors cursor-pointer"
+              @click="clearLocalFilter"
+            >
+              显示这些图片
+            </button>
+          </template>
+          <template v-else>
+            <svg class="w-12 h-12 stroke-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 00-1.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+              />
+            </svg>
+            <span class="text-sm text-primary-500">该目录或过滤条件下未找到任何图片</span>
+          </template>
         </div>
 
         <!-- 网格列表 -->
@@ -184,7 +201,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick, useTemplateRef } from "vue";
-import { mdiLoading, mdiChevronLeft, mdiChevronRight, mdiClose } from "@mdi/js";
+import { mdiLoading, mdiChevronLeft, mdiChevronRight, mdiClose, mdiEyeOff } from "@mdi/js";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import useBulkOperations from "@/composables/useBulkOperations";
 import ImageViewer from "./ImageViewer.vue";
@@ -236,12 +253,17 @@ const imagesVariables = computed<BrowseImagesQueryVariables>(() => {
 
 const loading = computed(() => loadingCount.value > 0);
 
-const { images, hasNextPage, fetchMore, outOfFilterImageIds, applyLocalFilter } = useBrowseImages(
-  imagesVariables,
-  {
-    loadingCount,
-  },
-);
+const {
+  images,
+  hasNextPage,
+  fetchMore,
+  outOfFilterImageIds,
+  hiddenImageCount,
+  applyLocalFilter,
+  clearLocalFilter,
+} = useBrowseImages(imagesVariables, {
+  loadingCount,
+});
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
 

@@ -64,25 +64,30 @@ export default function useDirectories(
     },
   });
 
-  const sortedDirectories = computed(() => {
+  // 每个目录与其"大未评级"判定结果，供隐藏计数与排序共同消费
+  const directoryStates = computed(() => {
     const dirs = liveDirectories.value;
     const limit = maxUnratedCountVal.value;
     const showLarge = toValue(options?.showLargeUnrated) ?? false;
 
-    const items = dirs.map((dir) => {
+    return dirs.map((dir) => {
       const stats = getCachedStats(dir.id);
       const unratedCount = stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       const isLargeUnrated =
         !showLarge && limit !== undefined && stats?.subdirectoryCount === 0 && unratedCount > limit;
       return { dir, stats, isLargeUnrated };
     });
+  });
 
-    const filteredItems = items.filter((item) => {
-      if (item.isLargeUnrated) return false;
-      return true;
-    });
+  // 因「显示未评级图片较多的目录」开关关闭而被隐藏的叶子目录数
+  const largeUnratedHiddenCount = computed(() => {
+    return directoryStates.value.filter((item) => item.isLargeUnrated).length;
+  });
 
-    return sortBy(filteredItems, [
+  const sortedDirectories = computed(() => {
+    const visibleItems = directoryStates.value.filter((item) => !item.isLargeUnrated);
+
+    return sortBy(visibleItems, [
       (item) => !item.stats,
       (item) => item.stats?.imageCount === 0,
       (item) => {
@@ -95,6 +100,7 @@ export default function useDirectories(
   return {
     currentDirectory,
     largeUnratedCount,
+    largeUnratedHiddenCount,
     sortedDirectories,
     hasNextPage,
     fetchMore,

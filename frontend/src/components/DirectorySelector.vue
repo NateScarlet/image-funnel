@@ -78,6 +78,33 @@
           </template>
         </div>
 
+        <!-- 全部条目被客户端筛选隐藏时的提示（搜索模式下筛选不生效，不提示） -->
+        <div
+          v-if="searchQuery.trim() === '' && displayedFilteredItems.length === 0 && !loading"
+          class="py-8 flex flex-col items-center justify-center text-primary-400 gap-2 select-none"
+        >
+          <svg class="w-8 h-8 text-primary-500" viewBox="0 0 24 24">
+            <path :d="mdiEyeOff" fill="currentColor" />
+          </svg>
+          <span class="text-sm">{{ hiddenDirectoryCount }} 个子目录被当前筛选隐藏</span>
+          <div class="flex flex-wrap justify-center gap-2">
+            <button
+              v-if="completedHiddenCount > 0"
+              class="px-3 h-8 bg-primary-800 hover:bg-primary-600 border border-primary-600 rounded-lg text-xs text-primary-300 hover:text-white transition-colors cursor-pointer flex items-center select-none"
+              @click="showCompletedDirectories = true"
+            >
+              显示已达标目录（{{ completedHiddenCount }}）
+            </button>
+            <button
+              v-if="smallUnratedHiddenCount > 0"
+              class="px-3 h-8 bg-primary-800 hover:bg-primary-600 border border-primary-600 rounded-lg text-xs text-primary-300 hover:text-white transition-colors cursor-pointer flex items-center select-none"
+              @click="showSmallUnrated = true"
+            >
+              显示未评级图片较少的目录（{{ smallUnratedHiddenCount }}）
+            </button>
+          </div>
+        </div>
+
         <!-- 加载更多分页控制 -->
         <div
           v-if="hasNextPage"
@@ -136,6 +163,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, useTemplateRef } from "vue";
 import { sortBy } from "es-toolkit";
+import { mdiEyeOff } from "@mdi/js";
 import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
@@ -325,6 +353,36 @@ const completedCount = computed(() => {
 const smallUnratedCount = computed(() => {
   return items.value.filter((item) => item.isSmallUnrated).length;
 });
+
+// #region 客户端筛选隐藏计数
+// 每个条目相对当前两个筛选开关的真实隐藏判定，供总数与分维度计数共同消费；
+// 含有子目录的条目会被强制显示，不计入隐藏
+const hiddenStates = computed(() => {
+  return items.value.map((item) => {
+    const isShownByChildren = item.stats !== undefined && item.stats.subdirectoryCount > 0;
+    return {
+      key: item.key,
+      isCompletedHidden: !isShownByChildren && !showCompletedDirectories.value && item.isCompleted,
+      isSmallUnratedHidden: !isShownByChildren && !showSmallUnrated.value && item.isSmallUnrated,
+    };
+  });
+});
+
+// 因「显示已达标目录」开关关闭而真正被隐藏的目录数
+const completedHiddenCount = computed(
+  () => hiddenStates.value.filter((s) => s.isCompletedHidden).length,
+);
+
+// 因「显示未评级图片较少的目录」开关关闭而真正被隐藏的目录数
+const smallUnratedHiddenCount = computed(
+  () => hiddenStates.value.filter((s) => s.isSmallUnratedHidden).length,
+);
+
+// 被客户端筛选隐藏的子目录总数（去重并集，与列表实际隐藏数量一致）
+const hiddenDirectoryCount = computed(
+  () => hiddenStates.value.filter((s) => s.isCompletedHidden || s.isSmallUnratedHidden).length,
+);
+// #endregion
 
 // #region 目录访问顺序与导航控制
 watch(
