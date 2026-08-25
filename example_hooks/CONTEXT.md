@@ -18,7 +18,7 @@
 - **移除提示词 / Remove Prompt**: 自动剔除工作流中的某些标签或节点。
 
 **Danbooru 标签自动补全 / Danbooru Autocomplete**
-ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/SuzumiyaAkizuki/DanbooruSearchOnline) 的输入联想。支持根据关键字进行语义搜索（Suggestions）或根据已有标签推荐关联标签（Related Tags）。
+ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/SuzumiyaAkizuki/DanbooruSearchOnline) 的输入联想。支持根据关键字进行语义搜索（Suggestions）或根据已有标签推荐关联标签（Related Tags）。`/add` 指令在无输入且工作流含区域标记、且尚未指定 `--region`/`--node` 目标时，优先以 `--region <name>` 选项形式直接建议全部可用区域；选定目标或工作流无区域后才进入关联标签推荐。
 
 [接口文档](https://sakizuki-danboorusearch.hf.space/api/openapi.json)
 

@@ -558,6 +558,64 @@ class WorkflowPromptProvider(AutocompleteProvider):
                 )
 
 
+def _has_explicit_target(context: AutocompleteContext) -> bool:
+    """判断命令行是否已显式指定插入目标（--region 或 --node）。"""
+    parsed = context.parsed_args
+    if parsed is not None:
+        return bool(getattr(parsed, "region", None)) or bool(
+            getattr(parsed, "node", None)
+        )
+    # 解析失败时回退扫描结束标记 -- 之前的选项 token
+    for w in context.cleaned_cwords[1:]:
+        if w == "--":
+            break
+        if w in ("--region", "--node"):
+            return True
+    return False
+
+
+class RegionOptionProvider(AutocompleteProvider):
+    """目标区域选项建议提供者：未指定插入目标时优先建议可用的 --region 选项"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        if not context.is_add_cmd:
+            return False
+
+        # 正在输入查询词时交给语义搜索补全
+        if context.query.strip():
+            return False
+
+        # 已键入提示词时不建议区域，保持基于已输入标签的关联联想
+        if _extract_prompt_tags(context.cleaned_cwords, context.option_with_args):
+            return False
+
+        # 目标已确定（--region/--node）或工作流无可用区域时，直接进入关联联想
+        if _has_explicit_target(context):
+            return False
+
+        workflow = context.workflow
+        if not context.workflow_loaded or workflow is None:
+            return False
+
+        regions = list(extract_region_names([workflow]))
+        return len(regions) > 0
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        # can_provide 已保证工作流加载且存在可用区域
+        assert context.workflow is not None
+        for r in extract_region_names([context.workflow]):
+            yield AutocompleteSuggestion(
+                text=f"--region {r}",
+                displayText=r,
+                description=f"区域: {r}",
+                type="region",
+            )
+
+
 def _format_relative_time(created_at: str) -> str:
     """将 ISO 时间戳转为人类可读的相对时间描述"""
     try:
@@ -888,6 +946,7 @@ def build_providers(
             LoraProvider(),
             NodeProvider(),
             WorkflowPromptProvider(),
+            RegionOptionProvider(),
         ]
         if danbooru_url:
             db_ctx = stack.enter_context(
