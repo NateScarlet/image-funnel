@@ -6,16 +6,16 @@
       <stop offset="100%" stop-color="#fba23c" />
     </linearGradient>
 
-    <!-- ADF: 左侧面，渐变方向 245° -->
-    <linearGradient id="g-adf" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(245)">
-      <stop offset="0%" stop-color="#fb6c0e" />
-      <stop offset="100%" stop-color="#f77719" />
+    <!-- ADF: 左侧面，渐变方向 285° -->
+    <linearGradient id="g-adf" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(285)">
+      <stop offset="0%" stop-color="#f76e14" />
+      <stop offset="100%" stop-color="#f97715" />
     </linearGradient>
 
-    <!-- FDC: 底部左侧，渐变方向 120° -->
-    <linearGradient id="g-fdc" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(120)">
-      <stop offset="0%" stop-color="#f9831a" />
-      <stop offset="100%" stop-color="#f9881f" />
+    <!-- FDC: 底部左侧，渐变方向 175° -->
+    <linearGradient id="g-fdc" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(175)">
+      <stop offset="0%" stop-color="#f8841a" />
+      <stop offset="100%" stop-color="#f9841d" />
     </linearGradient>
 
     <!-- EBCD: 右侧阴影面，基于边ED/DC的阴影，渐变方向 10° -->
@@ -32,10 +32,10 @@
   <polygon points="4.7,18 69.9,39.1 48.8,18" fill="url(#g-ade)" />
 
   <!-- ADF: 左侧面 -->
-  <polygon points="4.7,18 69.9,39.1 15.6,35.5" fill="url(#g-adf)" />
+  <polygon points="4.7,18 69.9,39.1 18.2,39.1" fill="url(#g-adf)" />
 
   <!-- FDC: 底部左侧 -->
-  <polygon points="15.6,35.5 69.9,39.1 49.2,87.9" fill="url(#g-fdc)" />
+  <polygon points="18.2,39.1 69.9,39.1 49.2,87.9" fill="url(#g-fdc)" />
 
   <!-- EBCD: 右侧阴影面 -->
   <polygon points="48.8,18 95.3,18 49.2,87.9 69.9,39.1" fill="url(#g-ebcd)" />

@@ -214,24 +214,10 @@ async function analyzeImage() {
     console.log(`E 通过折痕线回归计算: (${E_x},${E_y})`);
   }
 
-  // F = 沿 AC 边搜索亮度跳变最大的点（D→F 为阴影分界线）
-  // 沿 AC 边采样，找亮度差异最大的位置
-  let F_x = Math.round((A_x + C_x) / 2), F_y = Math.round((A_y + C_y) / 2);
-  let bestFDiff = 0;
-  for (let t = 0.05; t <= 0.95; t += 0.02) {
-    const fx = Math.round(A_x + t * (C_x - A_x));
-    const fy = Math.round(A_y + t * (C_y - A_y));
-    const cx = clamp(fx, 3, w - 4);
-    const cy = clamp(fy, 3, h - 4);
-    const leftAvg = (pixels[cy * w + (cx - 3)] + pixels[cy * w + (cx - 2)] + pixels[cy * w + (cx - 1)]) / 3;
-    const rightAvg = (pixels[cy * w + (cx + 1)] + pixels[cy * w + (cx + 2)] + pixels[cy * w + (cx + 3)]) / 3;
-    const diff = Math.abs(rightAvg - leftAvg);
-    if (diff > bestFDiff) {
-      bestFDiff = diff;
-      F_x = fx; F_y = fy;
-    }
-  }
-  console.log(`F 沿 AC 搜索: (${F_x},${F_y}) diff=${bestFDiff.toFixed(1)}`);
+  // F = 用户测量值：pwa-192x192 上 (35, 75) → 分析图 256x256 → (46.67, 100)
+  const F_x = (35 / 192) * 256;
+  const F_y = (75 / 192) * 256;
+  console.log(`F 固定为用户测量值: (${F_x.toFixed(2)},${F_y.toFixed(2)})`);
 
   // 验证点在三角形内
   function pointInTriangle(px, py, ax, ay, bx, by, cx, cy) {
@@ -246,24 +232,10 @@ async function analyzeImage() {
   console.log(`D在三角形内: ${pointInTriangle(D_x, D_y, A_x, A_y, B_x, B_y, C_x, C_y)}`);
   console.log(`F在三角形内: ${pointInTriangle(F_x, F_y, A_x, A_y, B_x, B_y, C_x, C_y)}`);
 
-  // 如果 F 不在三角形内，沿 AC 边搜索
+  // F 为用户硬编码测量值，不在三角形内说明测量或形状理解有误，直接中止
   if (!pointInTriangle(F_x, F_y, A_x, A_y, B_x, B_y, C_x, C_y)) {
-    let bestDiff = 0, bestX = F_x, bestY = F_y;
-    for (let t = 0.05; t <= 0.95; t += 0.02) {
-      const fx = Math.round(A_x + t * (C_x - A_x));
-      const fy = Math.round(A_y + t * (C_y - A_y));
-      const cx = clamp(fx, 3, w - 4);
-      const cy = clamp(fy, 3, h - 4);
-      const leftAvg = (pixels[cy * w + (cx - 3)] + pixels[cy * w + (cx - 2)] + pixels[cy * w + (cx - 1)]) / 3;
-      const rightAvg = (pixels[cy * w + (cx + 1)] + pixels[cy * w + (cx + 2)] + pixels[cy * w + (cx + 3)]) / 3;
-      const diff = Math.abs(rightAvg - leftAvg);
-      if (diff > bestDiff) {
-        bestDiff = diff;
-        bestX = fx; bestY = fy;
-      }
-    }
-    F_x = bestX; F_y = bestY;
-    console.log(`F调整到: (${F_x},${F_y})`);
+    console.error(`F 不在三角形内: (${F_x.toFixed(2)},${F_y.toFixed(2)})，请检查 pwa-192 上的测量值`);
+    process.exit(1);
   }
 
   // 7. 区域分析
