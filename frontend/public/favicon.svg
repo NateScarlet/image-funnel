@@ -18,12 +18,15 @@
       <stop offset="100%" stop-color="#fc8920" />
     </linearGradient>
 
-    <!-- EBCD: 右侧阴影面，渐变方向 205° -->
-    <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(205)">
-      <stop offset="0%" stop-color="#f98d32" />
-      <stop offset="100%" stop-color="#f08020" />
+    <!-- EBCD: 右侧阴影面，基于边ED/DC的阴影，渐变方向 118° -->
+    <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(118)">
+      <stop offset="0%" stop-color="#f1801f" />
+      <stop offset="100%" stop-color="#f88b32" />
     </linearGradient>
   </defs>
+
+  <!-- 先画整个三角形背景，消除区域间白边 -->
+  <polygon points="4.7,18 95.3,18 49.2,87.9" fill="#fc881f" />
 
   <!-- ADE: 顶部受光面 -->
   <polygon points="4.7,18 60.2,46.5 50,18" fill="url(#g-ade)" />

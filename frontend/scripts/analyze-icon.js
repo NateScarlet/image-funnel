@@ -375,7 +375,70 @@ async function analyzeImage() {
   const regionResults = {};
   for (const r of regions) {
     console.log(`  ${r.key} (${r.desc}):`);
-    regionResults[r.key] = analyzeRegionGradient(r.points);
+    if (r.key === 'EBCD') {
+      // EBCD: 基于边 ED 和 DC 的阴影
+      // 阴影方向：从折痕顶点 D 朝向 BC 边（最暗在折痕处，最亮在外侧）
+      const bcMidX = (B_x + C_x) / 2;
+      const bcMidY = (B_y + C_y) / 2;
+      const shadowDx = bcMidX - D_x;
+      const shadowDy = bcMidY - D_y;
+      const shadowAngle = (Math.atan2(shadowDy, shadowDx) * 180 / Math.PI + 360) % 360;
+      console.log(`  阴影方向: ${shadowAngle.toFixed(1)}° (D → BC中点)`);
+
+      // 沿阴影方向采样颜色
+      const rad = (shadowAngle * Math.PI) / 180;
+      const dirX = Math.cos(rad), dirY = Math.sin(rad);
+      const samples = [];
+      const bbox = r.points.reduce((bb, [x, y]) => ({
+        minX: Math.min(bb.minX, x), maxX: Math.max(bb.maxX, x),
+        minY: Math.min(bb.minY, y), maxY: Math.max(bb.maxY, y),
+      }), { minX: w, maxX: 0, minY: h, maxY: 0 });
+
+      for (let y = Math.max(0, Math.floor(bbox.minY)); y <= Math.min(h - 1, Math.ceil(bbox.maxY)); y += 2) {
+        for (let x = Math.max(0, Math.floor(bbox.minX)); x <= Math.min(w - 1, Math.ceil(bbox.maxX)); x += 2) {
+          const alpha = alphaPixels[(y * w + x) * 4 + 3];
+          if (alpha > 128 && pointInPolygon(x, y, r.points)) {
+            samples.push({
+              x, y,
+              r: flatPixels[(y * w + x) * 3],
+              g: flatPixels[(y * w + x) * 3 + 1],
+              b: flatPixels[(y * w + x) * 3 + 2],
+              proj: x * dirX + y * dirY,
+            });
+          }
+        }
+      }
+
+      if (samples.length >= 10) {
+        samples.sort((a, b) => a.proj - b.proj);
+        const n = samples.length;
+        const nStart = Math.max(3, Math.floor(n * 0.15));
+        const nEnd = Math.max(3, Math.floor(n * 0.15));
+        const startSamples = samples.slice(0, nStart);
+        const endSamples = samples.slice(n - nEnd);
+
+        const avgColor = (arr) => {
+          const r = arr.reduce((s, p) => s + p.r, 0) / arr.length;
+          const g = arr.reduce((s, p) => s + p.g, 0) / arr.length;
+          const b = arr.reduce((s, p) => s + p.b, 0) / arr.length;
+          const toHex = (v) => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0');
+          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        };
+
+        const startColor = avgColor(startSamples);
+        const endColor = avgColor(endSamples);
+        // SVG 旋转角度：从默认上→下（0°）旋转到阴影方向
+        // 默认渐变: 0°=上→下, 90°=左→右
+        // 阴影方向是投影方向，需要顺时针旋转 90° 得到 SVG 旋转角
+        const svgAngle = ((shadowAngle + 90) % 360 + 360) % 360;
+        regionResults.EBCD = { angle: Math.round(svgAngle), startColor, endColor };
+        console.log(`  ${svgAngle.toFixed(0)}° 阴影: ${startColor} -> ${endColor}`);
+      } else {
+        regionResults.EBCD = analyzeRegionGradient(r.points);
+      }
+    } else {
+      regionResults[r.key] = analyzeRegionGradient(r.points);
+    }
   }
 
   // 8. 映射到 SVG 坐标
@@ -448,12 +511,15 @@ async function analyzeImage() {
       <stop offset="100%" stop-color="${regionResults.FDC.endColor}" />
     </linearGradient>
 
-    <!-- EBCD: ${regions[3].desc}，渐变方向 ${regionResults.EBCD.angle}° -->
+    <!-- EBCD: ${regions[3].desc}，基于边ED/DC的阴影，渐变方向 ${regionResults.EBCD.angle}° -->
     <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(${regionResults.EBCD.angle})">
       <stop offset="0%" stop-color="${regionResults.EBCD.startColor}" />
       <stop offset="100%" stop-color="${regionResults.EBCD.endColor}" />
     </linearGradient>
   </defs>
+
+  <!-- 先画整个三角形背景，消除区域间白边 -->
+  <polygon points="${pA.x},${pA.y} ${pB.x},${pB.y} ${pC.x},${pC.y}" fill="#fc881f" />
 
   <!-- ADE: ${regions[0].desc} -->
   <polygon points="${pA.x},${pA.y} ${pD.x},${pD.y} ${pE.x},${pE.y}" fill="url(#g-ade)" />
