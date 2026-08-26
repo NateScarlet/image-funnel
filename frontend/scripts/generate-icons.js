@@ -97,18 +97,8 @@ async function generateIcons() {
     console.log(`✓ Generated ${name} (${size}x${size})`);
   }
 
-  // 小尺寸 favicon：直接用 SVG（矢量，小尺寸更清晰）
-  // favicon-16x16.png 和 favicon-32x32.png 从 SVG 渲染
+  // favicon.ico 从 SVG 渲染（兼容旧浏览器）
   const svg = readFileSync(svgPath, 'utf-8');
-  for (const size of [16, 32]) {
-    await sharp(Buffer.from(svg))
-      .resize(size, size)
-      .png()
-      .toFile(`./public/favicon-${size}x${size}.png`);
-    console.log(`✓ Generated favicon-${size}x${size}.png (from SVG)`);
-  }
-
-  // favicon.ico 从 SVG 渲染
   await sharp(Buffer.from(svg))
     .resize(32, 32)
     .png()
