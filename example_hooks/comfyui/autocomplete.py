@@ -506,6 +506,69 @@ class RegionProvider(AutocompleteProvider):
                 )
 
 
+class ModelFormatProvider(AutocompleteProvider):
+    """/set-model-format 指令参数智能补全：参数 1 推荐 Checkpoint 模型，参数 2 推荐 format 类型。"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return "set-model-format" in context.cleaned_cwords
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        cmd_idx = (
+            context.cleaned_cwords.index("set-model-format")
+            if "set-model-format" in context.cleaned_cwords
+            else -1
+        )
+        if cmd_idx == -1:
+            return
+
+        arg_tokens = context.cleaned_cwords[cmd_idx + 1 :]
+        if len(arg_tokens) == 0 or (
+            len(arg_tokens) == 1
+            and not context.prev_word.endswith("set-model-format")
+            and context.query
+        ):
+            seen_models: Set[str] = set()
+            if context.prompt_meta:
+                for node_raw in context.prompt_meta.values():
+                    if isinstance(node_raw, dict):
+                        node = cast(Dict[str, Any], node_raw)
+                        inputs_raw = node.get("inputs")
+                        if isinstance(inputs_raw, dict):
+                            inputs = cast(Dict[str, Any], inputs_raw)
+                            for k in ("ckpt_name", "model_name", "unet_name"):
+                                v = inputs.get(k)
+                                if isinstance(v, str) and v.strip():
+                                    seen_models.add(v.strip())
+
+            for model_name in sorted(seen_models):
+                if not context.query or context.query.lower() in model_name.lower():
+                    yield AutocompleteSuggestion(
+                        text=quote_if_needed(model_name),
+                        displayText=model_name,
+                        description="Workflow 中的 Checkpoint 模型",
+                        type="model",
+                    )
+        else:
+            for fmt_option in ("anima", "sdxl", "disabled"):
+                if not context.query or context.query.lower() in fmt_option.lower():
+                    if fmt_option == "anima":
+                        desc = "Danbooru 空格/保留 score_*"
+                    elif fmt_option == "sdxl":
+                        desc = "SDXL 下划线格式"
+                    else:
+                        desc = "跳过格式化，保留原始文本"
+                    yield AutocompleteSuggestion(
+                        text=fmt_option,
+                        displayText=fmt_option,
+                        description=f"提示词格式: {desc}",
+                        type="format",
+                    )
+
+
 class LoraProvider(AutocompleteProvider):
     """Lora 建议提供者"""
 
@@ -942,6 +1005,7 @@ def build_providers(
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。"""
     with ExitStack() as stack:
         providers: List[AutocompleteProvider] = [
+            ModelFormatProvider(),
             RegionProvider(),
             LoraProvider(),
             NodeProvider(),

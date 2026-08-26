@@ -379,6 +379,31 @@ def _submit_simple(
         _submit_fn(prompt, workflow, comfyui_url)
 
 
+def handle_set_model_format_cmd(args: Any) -> None:
+    """处理 /set-model-format <model> <format> 命令，保存映射配置到 $IMAGE_FUNNEL_DATA_DIR/comfyui_model_formats.toml"""
+    model_name = cast(Optional[str], getattr(args, "model", None))
+    format_val = cast(Optional[str], getattr(args, "format", None))
+    if not model_name or not format_val:
+        raise ValueError(
+            "Both model and format arguments are required for set-model-format command."
+        )
+
+    from .model_format import ModelFormatConfig
+
+    config = ModelFormatConfig.load()
+    config.models[model_name] = format_val
+    saved_path = config.save()
+    _LOGGER.info(
+        "Updated model format for %r to %r. Config saved at: %s",
+        model_name,
+        format_val,
+        saved_path,
+    )
+    print(
+        f"Updated model format for '{model_name}' to '{format_val}'. Saved at: {saved_path}"
+    )
+
+
 # #region 命令注册表
 
 COMMAND_HANDLERS: Dict[str, CommandHandler] = {

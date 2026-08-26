@@ -197,7 +197,7 @@ class TestServe(unittest.TestCase):
         fake_ctx = MagicMock()
         with patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
             with build_providers("root", "dir", "http://localhost", False) as providers:
-                self.assertEqual(len(providers), 6)
+                self.assertEqual(len(providers), 7)
                 fake_ctx.__enter__.assert_called_once()
             fake_ctx.__exit__.assert_called_once()
 

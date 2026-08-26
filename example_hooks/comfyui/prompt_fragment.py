@@ -9,8 +9,10 @@ prompt_fragment 模块：封装提示词片段的增删改查操作。
 """
 
 import logging
+import os
 import re
 from typing import List, Optional, Tuple
+
 
 from .node_accessor import NodeAccessor
 from .prompt_locator import get_region_content, find_region_boundaries
@@ -233,6 +235,20 @@ class PromptFragment:
         prompt_text = self.accessor.get_prompt_input(node_id, "text")
         if not isinstance(prompt_text, str):
             prompt_text = ""
+
+        # 如果定义了 IMAGE_FUNNEL_DATA_DIR，根据节点连接模型的提示词推理自动格式化
+        if command in ("add", "remove") and os.getenv("IMAGE_FUNNEL_DATA_DIR"):
+            from .model_format import (
+                ModelFormatConfig,
+                trace_model_name_for_node,
+                format_prompt_text,
+            )
+
+            ckpt_name = trace_model_name_for_node(self.accessor.prompt, node_id)
+            if ckpt_name:
+                config = ModelFormatConfig.load()
+                fmt = config.resolve_format(ckpt_name, prompt_text)
+                prompt_str_arg = format_prompt_text(prompt_str_arg, fmt)
 
         stripped_workflow = strip_comments_for_prompt(workflow_text)
         workflow_cleaned = "\n".join(

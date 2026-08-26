@@ -20,6 +20,7 @@ from .autocomplete import (
     NodeProvider,
     LoraProvider,
     RegionOptionProvider,
+    ModelFormatProvider,
     AutocompleteRequest,
     AutocompleteServices,
     autocomplete,
@@ -1416,6 +1417,66 @@ class TestAutocompleteIntegration(unittest.TestCase):
         ), patch("sys.stdout", io.StringIO()):
             with self.assertRaises(KeyError):
                 autocomplete_main()
+
+
+class TestModelFormatAutocomplete(unittest.TestCase):
+    def _make_context(self, **kwargs: Any) -> AutocompleteContext:
+        """Helper to build AutocompleteContext with sane defaults."""
+        defaults: Dict[str, Any] = dict(
+            target_command="",
+            query="",
+            prev_word="",
+            cwords=[],
+            image_paths=[],
+            parsed_args=None,
+            seen_prompts={},
+            workflow=None,
+            prompt_meta=None,
+            parser=get_parser(),
+        )
+        defaults.update(kwargs)
+        return AutocompleteContext(**defaults)
+
+    def _suggest(self, context: AutocompleteContext) -> List[Any]:
+        provider = ModelFormatProvider()
+        self.assertTrue(provider.can_provide(context))
+        return list(provider.provide(context))
+
+    def test_suggests_checkpoint_names_on_model_position(self) -> None:
+        ctx = self._make_context(
+            cwords=["set-model-format"],
+            prev_word="set-model-format",
+            prompt_meta={
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+                }
+            },
+        )
+        texts = [s.text for s in self._suggest(ctx)]
+        self.assertIn("animaPencilXL_v10.safetensors", texts)
+
+    def test_suggests_format_options_including_disabled(self) -> None:
+        ctx = self._make_context(
+            cwords=["set-model-format", "animaModel.safetensors"],
+            prev_word="animaModel.safetensors",
+            query="",
+            prompt_meta={},
+        )
+        suggestions = self._suggest(ctx)
+        self.assertEqual([s.text for s in suggestions], ["anima", "sdxl", "disabled"])
+        self.assertEqual(suggestions[0].type, "format")
+
+    def test_format_options_filtered_by_query(self) -> None:
+        ctx = self._make_context(
+            cwords=["set-model-format", "animaModel.safetensors", "dis"],
+            prev_word="dis",
+            query="dis",
+            prompt_meta={},
+        )
+        texts = [s.text for s in self._suggest(ctx)]
+        self.assertIn("disabled", texts)
+        self.assertNotIn("anima", texts)
 
 
 if __name__ == "__main__":
