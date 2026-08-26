@@ -8,20 +8,16 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const sourceImage = join(__dirname, '../assets/icon-design-4.jpg');
+// 直接读取已处理好的 PNG（已去背景、裁剪、居中）
+const pngSource = join(__dirname, '../public/pwa-512x512.png');
 const publicDir = join(__dirname, '../public');
 
-// 分析尺寸
-const ANALYZE_SIZE = 240;
-// 高斯模糊半径：抑制JPEG噪点
+const ANALYZE_SIZE = 256;
 const BLUR_RADIUS = 3;
-// 背景阈值
-const BG_THRESHOLD = 230;
 
 // #region 工具函数
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-/** 线性回归：从点集拟合直线 y = slope * x + intercept */
 function linearRegression(points) {
   const n = points.length;
   if (n < 2) return null;
@@ -35,7 +31,6 @@ function linearRegression(points) {
   return { slope, intercept };
 }
 
-/** 计算直线与线段 AB 的交点 */
 function lineSegmentIntersect(ax, ay, bx, by, slope, intercept) {
   const denom = (by - ay) - slope * (bx - ax);
   if (Math.abs(denom) < 1e-10) return null;
@@ -45,152 +40,46 @@ function lineSegmentIntersect(ax, ay, bx, by, slope, intercept) {
 }
 // #endregion
 
-// #region 图像预处理：去背景、裁剪、居中（与 generate-icons.js 一致）
-async function preprocessImage(inputBuffer, padding = 0.05) {
-  const withAlpha = await sharp(inputBuffer).ensureAlpha().toBuffer();
-  const { data, info } = await sharp(withAlpha).raw().toBuffer({ resolveWithObject: true });
-  const w = info.width, h = info.height, ch = info.channels;
-
-  // 标记透明/不透明
-  const edgeMargin = 20;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * ch;
-      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      data[i + 3] = brightness <= BG_THRESHOLD ? 255 : 0;
-    }
-  }
-
-  // 找边界框
-  let minX = w, minY = h, maxX = 0, maxY = 0;
-  for (let y = edgeMargin; y < h - edgeMargin; y++) {
-    for (let x = edgeMargin; x < w - edgeMargin; x++) {
-      const i = (y * w + x) * ch;
-      if (data[i + 3] === 255) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  const cropW = maxX - minX + 1;
-  const cropH = maxY - minY + 1;
-
-  const croppedBuf = await sharp(data, {
-    raw: { width: w, height: h, channels: ch },
-  })
-    .extract({ left: minX, top: minY, width: cropW, height: cropH })
-    .png()
-    .toBuffer();
-
-  // 居中到正方形
-  const pad = Math.round(Math.max(cropW, cropH) * padding);
-  const squareSize = Math.max(cropW, cropH) + pad * 2;
-  const offsetX = Math.round((squareSize - cropW) / 2);
-  const offsetY = Math.round((squareSize - cropH) * 0.6); // 视觉补偿
-
-  const centered = await sharp({
-    create: {
-      width: squareSize,
-      height: squareSize,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([{ input: croppedBuf, left: offsetX, top: offsetY }])
-    .png()
-    .toBuffer();
-
-  return { buffer: centered, size: squareSize };
-}
-// #endregion
-
-// #region 图像分析
-// 模拟预处理过程：计算裁剪边界和居中后的坐标映射
-async function computePreprocessMapping() {
-  // 用原始图像计算裁剪边界
-  const rawBuf = await sharp(sourceImage).resize(1024, 1024).png().toBuffer();
-  const withAlpha = await sharp(rawBuf).ensureAlpha().toBuffer();
-  const { data, info } = await sharp(withAlpha).raw().toBuffer({ resolveWithObject: true });
-  const w = info.width, h = info.height, ch = info.channels;
-
-  let minX = w, minY = h, maxX = 0, maxY = 0;
-  const edgeMargin = 20;
-  for (let y = edgeMargin; y < h - edgeMargin; y++) {
-    for (let x = edgeMargin; x < w - edgeMargin; x++) {
-      const i = (y * w + x) * ch;
-      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      if (brightness <= BG_THRESHOLD) {
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  const cropW = maxX - minX + 1;
-  const cropH = maxY - minY + 1;
-  const padding = 0.05;
-  const pad = Math.round(Math.max(cropW, cropH) * padding);
-  const squareSize = Math.max(cropW, cropH) + pad * 2;
-  const offsetX = Math.round((squareSize - cropW) / 2);
-  const offsetY = Math.round((squareSize - cropH) * 0.6);
-
-  return {
-    cropX: minX, cropY: minY, cropW, cropH,
-    squareSize, offsetX, offsetY, pad,
-  };
-}
-
-/** 将原始图像坐标映射到预处理后的居中图像坐标 */
-function mapToCentered(px, py, mapping) {
-  const { cropX, cropY, cropW, cropH, squareSize, offsetX, offsetY } = mapping;
-  // 原始坐标相对于裁剪区域
-  const relX = px - cropX;
-  const relY = py - cropY;
-  // 居中后的坐标
-  const cx = offsetX + relX;
-  const cy = offsetY + relY;
-  // 归一化到 [0, 1]
-  return { x: cx / squareSize, y: cy / squareSize };
-}
-
 async function analyzeImage() {
-  // 1. 预处理映射：计算裁剪和居中参数
-  const mapping = await computePreprocessMapping();
-  console.log(`预处理映射: crop=(${mapping.cropX},${mapping.cropY}) ${mapping.cropW}x${mapping.cropH}, ` +
-    `square=${mapping.squareSize}, offset=(${mapping.offsetX},${mapping.offsetY})`);
+  // 1. 加载已处理的 PNG
+  // 为了正确获取颜色，先 flatten 到白色背景（避免预乘 alpha 导致的颜色失真）
+  const { data: flatData, info: flatInfo } = await sharp(pngSource)
+    .resize(ANALYZE_SIZE, ANALYZE_SIZE, { fit: 'fill' })
+    .blur(BLUR_RADIUS)
+    .flatten({ background: { r: 255, g: 255, b: 255, alpha: 1 } }) // 透明→白色
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = flatInfo.width, h = flatInfo.height;
+  const flatPixels = new Uint8Array(flatData);
 
-  // 2. 直接在原始图像上分析（缩放到分析尺寸并降噪）
-  const { data, info } = await sharp(sourceImage)
+  // 灰度图用于亮度分析（不 flatten，用 alpha 通道过滤背景）
+  const { data: grayData } = await sharp(pngSource)
     .resize(ANALYZE_SIZE, ANALYZE_SIZE, { fit: 'fill' })
     .blur(BLUR_RADIUS)
     .grayscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
+  const pixels = new Uint8Array(grayData);
 
-  const w = info.width, h = info.height;
-  const pixels = new Uint8Array(data);
-
-  // 彩色版本
-  const { data: colorData } = await sharp(sourceImage)
+  // 单独获取 alpha 通道（不 flatten，保留原始透明信息）
+  const { data: rgbaData } = await sharp(pngSource)
     .resize(ANALYZE_SIZE, ANALYZE_SIZE, { fit: 'fill' })
     .blur(BLUR_RADIUS)
+    .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  const colorPixels = new Uint8Array(colorData);
+  const alphaPixels = new Uint8Array(rgbaData);
 
-  console.log(`分析图像: ${w}x${h}`);
+  console.log(`分析图像: ${w}x${h}，来源: pwa-512x512.png`);
 
-  // 3. 找到三角形边界
+  // 2. 找到三角形边界（非透明像素）
   let minX = w, minY = h, maxX = 0, maxY = 0;
   const edgeMargin = 2;
   for (let y = edgeMargin; y < h - edgeMargin; y++) {
     for (let x = edgeMargin; x < w - edgeMargin; x++) {
-      if (pixels[y * w + x] < BG_THRESHOLD) {
+      const alpha = alphaPixels[(y * w + x) * 4 + 3]; // alpha 通道
+      // 有像素且不是纯白背景
+      if (alpha > 128) {
         if (x < minX) minX = x;
         if (y < minY) minY = y;
         if (x > maxX) maxX = x;
@@ -200,12 +89,13 @@ async function analyzeImage() {
   }
   console.log(`三角形边界框: (${minX},${minY}) - (${maxX},${maxY})`);
 
-  // 4. 找到三角形三个角点
-  // 上边缘扫描
+  // 3. 找到三角形三个角点
+  // 上边缘：找最左和最右的非透明像素
   let topLeftX = w, topRightX = 0;
   const topScanY = Math.min(minY + 4, h - 1);
   for (let x = minX; x <= maxX; x++) {
-    if (pixels[topScanY * w + x] < BG_THRESHOLD) {
+    const alpha = alphaPixels[(topScanY * w + x) * 4 + 3];
+    if (alpha > 128) {
       if (x < topLeftX) topLeftX = x;
       if (x > topRightX) topRightX = x;
     }
@@ -216,13 +106,15 @@ async function analyzeImage() {
   const rightEdgePoints = [];
   for (let y = minY + 2; y <= maxY - 2; y++) {
     for (let x = minX; x <= maxX; x++) {
-      if (pixels[y * w + x] < BG_THRESHOLD) {
+      const alpha = alphaPixels[(y * w + x) * 4 + 3];
+      if (alpha > 128) {
         leftEdgePoints.push([x, y]);
         break;
       }
     }
     for (let x = maxX; x >= minX; x--) {
-      if (pixels[y * w + x] < BG_THRESHOLD) {
+      const alpha = alphaPixels[(y * w + x) * 4 + 3];
+      if (alpha > 128) {
         rightEdgePoints.push([x, y]);
         break;
       }
@@ -232,7 +124,6 @@ async function analyzeImage() {
   const leftLine = linearRegression(leftEdgePoints);
   const rightLine = linearRegression(rightEdgePoints);
 
-  // 角点 A, B, C
   const A_y = minY;
   const A_x = leftLine ? Math.round((A_y - leftLine.intercept) / leftLine.slope) : topLeftX;
   const B_y = minY;
@@ -249,22 +140,27 @@ async function analyzeImage() {
 
   console.log(`三角形角点: A(${A_x},${A_y}) B(${B_x},${B_y}) C(${C_x},${C_y})`);
 
-  // 5. 检测折痕线
+  // 4. 检测折痕线（在三角形内部找亮度跳变最大的位置，排除边缘像素）
   const foldCandidates = [];
-  for (let y = Math.max(A_y + 5, minY + 5); y < Math.min(C_y, maxY - 2); y += 2) {
-    // 当前行三角形内左右边界
+  for (let y = Math.max(A_y + 8, minY + 8); y < Math.min(C_y, maxY - 4); y += 2) {
     let rowLeft = w, rowRight = 0;
     for (let x = Math.max(A_x, minX); x <= Math.min(B_x, maxX); x++) {
-      if (pixels[y * w + x] < BG_THRESHOLD) {
+      const alpha = alphaPixels[(y * w + x) * 4 + 3];
+      if (alpha > 128) {
         if (x < rowLeft) rowLeft = x;
         if (x > rowRight) rowRight = x;
       }
     }
     if (rowLeft >= rowRight) continue;
 
-    // 亮度二阶差分找折痕
-    let maxDiff = 0, maxDiffX = rowLeft;
-    for (let x = rowLeft + 4; x < rowRight - 4; x++) {
+    // 排除边缘 15% 的像素，只分析内部区域
+    const margin = Math.round((rowRight - rowLeft) * 0.15);
+    const searchLeft = rowLeft + margin;
+    const searchRight = rowRight - margin;
+    if (searchLeft >= searchRight) continue;
+
+    let maxDiff = 0, maxDiffX = searchLeft;
+    for (let x = searchLeft + 4; x < searchRight - 4; x++) {
       const leftAvg = (pixels[y * w + (x - 4)] + pixels[y * w + (x - 3)] + pixels[y * w + (x - 2)]) / 3;
       const rightAvg = (pixels[y * w + (x + 2)] + pixels[y * w + (x + 3)] + pixels[y * w + (x + 4)]) / 3;
       const diff = Math.abs(rightAvg - leftAvg);
@@ -274,17 +170,16 @@ async function analyzeImage() {
       }
     }
 
-    if (maxDiff > 12) {
+    if (maxDiff > 10) {
       foldCandidates.push([maxDiffX, y, maxDiff]);
     }
   }
 
   console.log(`折痕候选点: ${foldCandidates.length} 个`);
 
-  // 6. 拟合折痕线
+  // 5. 拟合折痕线
   foldCandidates.sort((a, b) => b[2] - a[2]);
   const topCandidates = foldCandidates.slice(0, Math.min(40, foldCandidates.length));
-  // 打印前 5 个候选点用于调试
   topCandidates.slice(0, 5).forEach(([x, y, d], i) => {
     console.log(`  候选 #${i + 1}: (${x},${y}) diff=${d.toFixed(1)}`);
   });
@@ -292,25 +187,33 @@ async function analyzeImage() {
   const foldLine = linearRegression(topCandidates.map(p => [p[0], p[1]]));
   console.log(`折痕线: y = ${foldLine.slope.toFixed(4)}x + ${foldLine.intercept.toFixed(4)}`);
 
-  // 7. 计算关键点 E, D, F
-  // E = 折痕线与 AB 的交点
+  // 6. 计算关键点 E, D, F
+  // E = 折痕线与 AB 边（上边缘）的交点
   const E_intersect = lineSegmentIntersect(A_x, A_y, B_x, B_y, foldLine.slope, foldLine.intercept);
-  let E_x = E_intersect ? Math.round(E_intersect.x) : Math.round((A_x + B_x) / 2);
-  let E_y = E_intersect ? Math.round(E_intersect.y) : A_y;
+  const E_x = E_intersect ? Math.round(E_intersect.x) : Math.round((A_x + B_x) / 2);
+  const E_y = E_intersect ? Math.round(E_intersect.y) : A_y;
 
-  // D = 折痕候选点中亮度差异最大的点（折痕顶点，在三角形内部）
-  // 但不是太靠近边缘的点，取差异最大的候选点
-  let D_x = 0, D_y = 0, bestDiff = 0;
-  for (const [x, y, diff] of topCandidates) {
-    if (diff > bestDiff) {
-      bestDiff = diff;
-      D_x = x;
-      D_y = y;
-    }
+  // D = 折痕顶点（在三角形内部中间偏右位置）
+  // D 在折痕线上，但不在任何边上。用折痕线与三角形中线（A 到 BC 中点）的交点
+  const bcMidX = (B_x + C_x) / 2;
+  const bcMidY = (B_y + C_y) / 2;
+  const medianSlope = (bcMidY - A_y) / (bcMidX - A_x);
+  const medianIntercept = A_y - medianSlope * A_x;
+  // 折痕线与中线的交点
+  const D_intersect = lineSegmentIntersect(A_x, A_y, bcMidX, bcMidY, foldLine.slope, foldLine.intercept);
+  let D_x, D_y;
+  if (D_intersect) {
+    D_x = Math.round(D_intersect.x);
+    D_y = Math.round(D_intersect.y);
+  } else {
+    // 容错：取折痕线在三角形中心附近的值
+    const triCenterX = (A_x + B_x + C_x) / 3;
+    D_x = Math.round(triCenterX);
+    D_y = Math.round(foldLine.slope * triCenterX + foldLine.intercept);
   }
-  console.log(`D 选为差异最大的候选点: (${D_x},${D_y}) diff=${bestDiff.toFixed(1)}`);
+  console.log(`D 选为折痕线与中线交点: (${D_x},${D_y})`);
 
-  // F = 折痕线与 AC 的交点，如果不在三角形内则沿 AC 搜索
+  // F = 折痕线与 AC 边（左边缘）的交点
   const F_intersect = lineSegmentIntersect(A_x, A_y, C_x, C_y, foldLine.slope, foldLine.intercept);
   let F_x = F_intersect ? Math.round(F_intersect.x) : Math.round((A_x + C_x) / 2);
   let F_y = F_intersect ? Math.round(F_intersect.y) : Math.round((A_y + C_y) / 2);
@@ -350,7 +253,7 @@ async function analyzeImage() {
     console.log(`F调整到: (${F_x},${F_y})`);
   }
 
-  // 8. 区域分析
+  // 7. 区域分析
   const regions = [
     { key: 'ADE', points: [[A_x, A_y], [D_x, D_y], [E_x, E_y]], desc: '顶部受光面' },
     { key: 'ADF', points: [[A_x, A_y], [D_x, D_y], [F_x, F_y]], desc: '左侧面' },
@@ -372,7 +275,6 @@ async function analyzeImage() {
   }
 
   function analyzeRegionGradient(polygon) {
-    // 采样区域内像素
     const samples = [];
     const bbox = polygon.reduce((bb, [x, y]) => ({
       minX: Math.min(bb.minX, x), maxX: Math.max(bb.maxX, x),
@@ -382,13 +284,14 @@ async function analyzeImage() {
     const step = 2;
     for (let y = Math.max(0, Math.floor(bbox.minY)); y <= Math.min(h - 1, Math.ceil(bbox.maxY)); y += step) {
       for (let x = Math.max(0, Math.floor(bbox.minX)); x <= Math.min(w - 1, Math.ceil(bbox.maxX)); x += step) {
-        if (pointInPolygon(x, y, polygon)) {
+        const alpha = alphaPixels[(y * w + x) * 4 + 3];
+        if (alpha > 128 && pointInPolygon(x, y, polygon)) {
           samples.push({
             x, y,
             brightness: pixels[y * w + x],
-            r: colorPixels[(y * w + x) * 3],
-            g: colorPixels[(y * w + x) * 3 + 1],
-            b: colorPixels[(y * w + x) * 3 + 2],
+            r: flatPixels[(y * w + x) * 3],
+            g: flatPixels[(y * w + x) * 3 + 1],
+            b: flatPixels[(y * w + x) * 3 + 2],
           });
         }
       }
@@ -398,7 +301,6 @@ async function analyzeImage() {
       return { angle: 0, startColor: '#888888', endColor: '#888888' };
     }
 
-    // 网格化计算亮度梯度方向
     const gridSize = Math.max(3, Math.floor(Math.sqrt(samples.length) / 4));
     const gridMap = new Map();
     for (const s of samples) {
@@ -426,33 +328,24 @@ async function analyzeImage() {
       return { angle: 0, startColor: `#${toHex(avgR)}${toHex(avgG)}${toHex(avgB)}`, endColor: `#${toHex(avgR)}${toHex(avgG)}${toHex(avgB)}` };
     }
 
-    // 扫描 36 个方向找亮度变化最大的方向
     let bestAngle = 0, bestGradient = 0;
     for (let deg = 0; deg < 180; deg += 5) {
       const rad = (deg * Math.PI) / 180;
       const dirX = Math.cos(rad), dirY = Math.sin(rad);
-
-      const projections = cells.map(c => ({
-        proj: c.cx * dirX + c.cy * dirY,
-        avg: c.avg,
-      }));
+      const projections = cells.map(c => ({ proj: c.cx * dirX + c.cy * dirY, avg: c.avg }));
       projections.sort((a, b) => a.proj - b.proj);
-
       const mid = Math.floor(projections.length / 2);
       const frontAvg = projections.slice(0, mid).reduce((s, p) => s + p.avg, 0) / mid;
       const backAvg = projections.slice(mid).reduce((s, p) => s + p.avg, 0) / (projections.length - mid);
       const gradient = Math.abs(frontAvg - backAvg);
-
       if (gradient > bestGradient) {
         bestGradient = gradient;
         bestAngle = frontAvg > backAvg ? (deg + 180) % 360 : deg;
       }
     }
 
-    // 沿梯度方向采样两端颜色
     const rad = (bestAngle * Math.PI) / 180;
     const dirX = Math.cos(rad), dirY = Math.sin(rad);
-
     const projs = samples.map(s => ({ ...s, proj: s.x * dirX + s.y * dirY }));
     projs.sort((a, b) => a.proj - b.proj);
 
@@ -473,7 +366,7 @@ async function analyzeImage() {
     const startColor = avgColor(startSamples);
     const endColor = avgColor(endSamples);
 
-    console.log(`  ${deg}° 梯度=${bestGradient.toFixed(1)} 颜色: ${startColor} -> ${endColor}`);
+    console.log(`  ${bestAngle}° 梯度=${bestGradient.toFixed(1)} 颜色: ${startColor} -> ${endColor}`);
 
     return { angle: Math.round(bestAngle), startColor, endColor };
   }
@@ -485,32 +378,37 @@ async function analyzeImage() {
     regionResults[r.key] = analyzeRegionGradient(r.points);
   }
 
-  // 9. 生成 SVG
-  // 预处理后的图像已经是居中到正方形的，所以 SVG 边距就是 padding
-  // 预处理时 padding=0.05 (5%)，再加上垂直偏移
-  // 三角形在预处理图像中的位置映射到 SVG 0-100 坐标
-  const svgMargin = 5; // 5% padding
-  const svgW = 100 - svgMargin * 2;
-  const svgH = 100 - svgMargin * 2;
+  // 8. 映射到 SVG 坐标
+  // 处理后的 PNG 是居中到正方形的，三角形在图像中的位置就是 SVG 中的位置
+  // 但需要留出 padding（generate-icons.js 中用了 5% padding + 垂直偏移 0.6）
+  //
+  // 简化方法：直接用三角形边界框计算 SVG 中的边距
+  // 但为了与 generate-icons.js 输出的 PNG 一致，需要模拟相同的 padding 和偏移
 
-  // 垂直偏移：预处理使用 0.6 偏移，对应垂直方向上的额外偏移
-  // 三角形的垂直位置在预处理图像中会偏下
-  // 在 SVG 中不需要额外垂直偏移，因为三角形自身就应该居中
-  
-  // 但对于视觉重心补偿，SVG 中也需要微调
-  // 计算三角形在预处理图像中的垂直位置
-  const triCenterY = (A_y + B_y + C_y) / 3;
-  const triCenterX = (A_x + B_x + C_x) / 3;
-  const imageCenterY = h / 2;
-  const vertOffset = (imageCenterY - triCenterY) / h; // 负值表示三角形偏上
+  // 先计算三角形在图像中的逻辑位置
+  // 用边界框反推 padding 和偏移
+  const triW = maxX - minX + 1;
+  const triH = maxY - minY + 1;
+  const triCenterXImg = (minX + maxX) / 2;
+  const triCenterYImg = (minY + maxY) / 2;
 
-  function toSvg(x, y) {
-    const sx = svgMargin + (x / w) * svgW;
-    // 应用垂直偏移补偿
-    const sy = svgMargin + (y / h) * svgH;
+  // 由于图像是 256x256 且三角形居中，SVG 坐标直接按比例映射
+  // 但在 generate-icons.js 中，图像生成时加了 padding 和垂直偏移
+  // 所以 SVG 中也要有对应的边距
+
+  // 计算三角形在图像中的相对位置
+  const leftMargin = minX / w;
+  const rightMargin = (w - maxX) / w;
+  const topMargin = minY / h;
+  const bottomMargin = (h - maxY) / h;
+
+  console.log(`\n图像边距: L=${(leftMargin*100).toFixed(1)}% R=${(rightMargin*100).toFixed(1)}% T=${(topMargin*100).toFixed(1)}% B=${(bottomMargin*100).toFixed(1)}%`);
+
+  // 直接按比例映射到 SVG 0-100 坐标
+  function toSvg(px, py) {
     return {
-      x: Math.round(sx * 10) / 10,
-      y: Math.round(sy * 10) / 10,
+      x: Math.round((px / w) * 100 * 10) / 10,
+      y: Math.round((py / h) * 100 * 10) / 10,
     };
   }
 
@@ -529,6 +427,7 @@ async function analyzeImage() {
   console.log(`  E: (${pE.x}, ${pE.y})`);
   console.log(`  F: (${pF.x}, ${pF.y})`);
 
+  // 9. 生成 SVG
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
     <!-- ADE: ${regions[0].desc}，渐变方向 ${regionResults.ADE.angle}° -->
