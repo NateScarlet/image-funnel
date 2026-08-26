@@ -1,34 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 17 72 72" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
-    <!-- 漏斗渐变：使用亮丽的橙红到浅橙，突出科技与专业感 -->
-    <linearGradient id="funnel-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ea580c" />
-      <stop offset="60%" stop-color="#f97316" />
-      <stop offset="100%" stop-color="#fdba74" />
-    </linearGradient>
-    
-    <!-- 星星渐变：耀眼的金色 -->
-    <linearGradient id="star-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fde047" />
-      <stop offset="100%" stop-color="#eab308" />
+    <!-- ADE: 顶部受光面，渐变方向 275° -->
+    <linearGradient id="g-ade" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(275)">
+      <stop offset="0%" stop-color="#fb951a" />
+      <stop offset="100%" stop-color="#fba23c" />
     </linearGradient>
 
-    <!-- 微光投影滤镜，增加立体感 -->
-    <filter id="glow-effect" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#ea580c" flood-opacity="0.35"/>
-    </filter>
+    <!-- ADF: 左侧面，渐变方向 285° -->
+    <linearGradient id="g-adf" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(285)">
+      <stop offset="0%" stop-color="#f76e14" />
+      <stop offset="100%" stop-color="#f97715" />
+    </linearGradient>
+
+    <!-- FDC: 底部左侧，渐变方向 175° -->
+    <linearGradient id="g-fdc" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(175)">
+      <stop offset="0%" stop-color="#f8841a" />
+      <stop offset="100%" stop-color="#f9841d" />
+    </linearGradient>
+
+    <!-- EBCD: 右侧阴影面，基于边ED/DC的阴影，渐变方向 10° -->
+    <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(10)">
+      <stop offset="0%" stop-color="#e67321" />
+      <stop offset="100%" stop-color="#e46618" />
+    </linearGradient>
   </defs>
 
-  <!-- 漏斗图标形状：居中偏下 -->
-  <path d="M30 32 C30 30, 70 30, 70 32 L58 54 C57 56, 56.5 58, 56.5 60 L56.5 70 C56.5 72, 54.5 74, 52.5 74 L47.5 74 C45.5 74, 43.5 72, 43.5 70 L43.5 60 C43.5 58, 43 56, 42 54 Z" 
-        fill="url(#funnel-grad)" filter="url(#glow-effect)" />
+  <!-- 先画整个三角形背景，消除区域间白边 -->
+  <polygon points="4.7,18 95.3,18 49.2,87.9" fill="#fc881f" />
 
-  <!-- 耀眼的评星：右上角的主星 -->
-  <path d="M74 18 Q74 24 80 24 Q74 24 74 30 Q74 24 68 24 Q74 24 74 18 Z" fill="url(#star-grad)" />
+  <!-- ADE: 顶部受光面 -->
+  <polygon points="4.7,18 69.9,39.1 48.8,18" fill="url(#g-ade)" />
 
-  <!-- 装饰星：左下角的次星 -->
-  <path d="M26 66 Q26 70 30 70 Q26 70 26 74 Q26 70 22 70 Q26 70 26 66 Z" fill="url(#star-grad)" opacity="0.7" />
+  <!-- ADF: 左侧面 -->
+  <polygon points="4.7,18 69.9,39.1 18.2,39.1" fill="url(#g-adf)" />
 
-  <!-- 筛选出的纯净数据微粒：下方掉落的圆形亮斑 -->
-  <circle cx="50" cy="85" r="3.5" fill="#fde047" opacity="0.9" />
+  <!-- FDC: 底部左侧 -->
+  <polygon points="18.2,39.1 69.9,39.1 49.2,87.9" fill="url(#g-fdc)" />
+
+  <!-- EBCD: 右侧阴影面 -->
+  <polygon points="48.8,18 95.3,18 49.2,87.9 69.9,39.1" fill="url(#g-ebcd)" />
 </svg>
