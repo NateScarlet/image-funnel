@@ -9,7 +9,7 @@
         <svg class="w-4 h-4 text-red-400 animate-pulse" viewBox="0 0 24 24">
           <path :d="mdiDelete" fill="currentColor" />
         </svg>
-        <span>回收站 ({{ formatTrashSize(totalTrashSize) }})</span>
+        <span>回收站 ({{ totalTrashSizeText }})</span>
       </button>
     </template>
 
@@ -19,7 +19,7 @@
         <div class="flex justify-between items-center border-b border-primary-800/50 pb-2">
           <h4 class="text-xs font-bold text-primary-200">回收站</h4>
           <span class="text-xs text-primary-500 font-mono">
-            {{ formatTrashSize(totalTrashSize) }}
+            {{ totalTrashSizeText }}
           </span>
         </div>
 
@@ -218,6 +218,12 @@ const expiredSize = computed(() => {
 
 // 是否还有下一页数据
 const hasNextPage = computed(() => pageInfo.value.hasNextPage);
+
+// 总大小仅基于已加载页求和，还有下一页时实际总量必然更大，加 > 前缀避免误导
+const totalTrashSizeText = computed(() => {
+  const size = formatTrashSize(totalTrashSize.value);
+  return hasNextPage.value ? `>${size}` : size;
+});
 
 // 有下一页时后续分页可能存在已过期项，不应仅凭当前已加载部分禁用清理按钮
 const canClean = computed(() => expiredSize.value > 0 || hasNextPage.value);

@@ -142,6 +142,46 @@ describe("TrashHistoryButton", () => {
 });
 // #endregion
 
+// #region 回收站总大小分页提示
+describe("TrashHistoryButton 总大小", () => {
+  function findTriggerButton(wrapper: VueWrapper) {
+    const btn = wrapper.findAll("button").find((b) => b.text().includes("回收站"));
+    if (!btn) {
+      throw new Error("回收站触发按钮未找到");
+    }
+    return btn;
+  }
+
+  function findHeaderSize(wrapper: VueWrapper) {
+    const el = wrapper.find(".mock-dropdown .font-mono");
+    if (!el.exists()) {
+      throw new Error("标题栏总大小未找到");
+    }
+    return el;
+  }
+
+  test("有下一页时总大小带 > 前缀，提示仅基于已加载数据", () => {
+    mockNodes.value = [makeItem({ totalFileSize: 1024 })];
+    mockPageInfo.value.hasNextPage = true;
+
+    const wrapper = mount(TrashHistoryButton);
+
+    expect(findTriggerButton(wrapper).text()).toContain("回收站 (>1 KB)");
+    expect(findHeaderSize(wrapper).text()).toBe(">1 KB");
+  });
+
+  test("无下一页时总大小不带 > 前缀", () => {
+    mockNodes.value = [makeItem({ totalFileSize: 1024 })];
+    mockPageInfo.value.hasNextPage = false;
+
+    const wrapper = mount(TrashHistoryButton);
+
+    expect(findTriggerButton(wrapper).text()).toContain("回收站 (1 KB)");
+    expect(findHeaderSize(wrapper).text()).toBe("1 KB");
+  });
+});
+// #endregion
+
 // #region 清空结果通知
 describe("TrashHistoryButton 清空通知", () => {
   test("清空成功后通知同时包含清理数量与格式化后的释放空间", async () => {
