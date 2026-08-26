@@ -13,7 +13,7 @@ const pngSource = join(__dirname, '../public/pwa-512x512.png');
 const publicDir = join(__dirname, '../public');
 
 const ANALYZE_SIZE = 256;
-const BLUR_RADIUS = 3;
+const BLUR_RADIUS = 1;
 
 // #region 工具函数
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
@@ -188,37 +188,50 @@ async function analyzeImage() {
   console.log(`折痕线: y = ${foldLine.slope.toFixed(4)}x + ${foldLine.intercept.toFixed(4)}`);
 
   // 6. 计算关键点 E, D, F
-  // E = 折痕线与 AB 边（上边缘）的交点
-  const E_intersect = lineSegmentIntersect(A_x, A_y, B_x, B_y, foldLine.slope, foldLine.intercept);
-  const E_x = E_intersect ? Math.round(E_intersect.x) : Math.round((A_x + B_x) / 2);
-  const E_y = E_intersect ? Math.round(E_intersect.y) : A_y;
+  // D = 用户测量值：pwa-192x192 上 (134, 75) → 分析图 256x256 → (179, 100)
+  const D_x = 179, D_y = 100;
+  console.log(`D 固定为用户测量值: (${D_x},${D_y})`);
 
-  // D = 折痕顶点（在三角形内部中间偏右位置）
-  // D 在折痕线上，但不在任何边上。用折痕线与三角形中线（A 到 BC 中点）的交点
-  const bcMidX = (B_x + C_x) / 2;
-  const bcMidY = (B_y + C_y) / 2;
-  const medianSlope = (bcMidY - A_y) / (bcMidX - A_x);
-  const medianIntercept = A_y - medianSlope * A_x;
-  // 折痕线与中线的交点
-  const D_intersect = lineSegmentIntersect(A_x, A_y, bcMidX, bcMidY, foldLine.slope, foldLine.intercept);
-  let D_x, D_y;
-  if (D_intersect) {
-    D_x = Math.round(D_intersect.x);
-    D_y = Math.round(D_intersect.y);
-  } else {
-    // 容错：取折痕线在三角形中心附近的值
-    const triCenterX = (A_x + B_x + C_x) / 3;
-    D_x = Math.round(triCenterX);
-    D_y = Math.round(foldLine.slope * triCenterX + foldLine.intercept);
+  // E = 折痕线（通过 D 和折痕候选点）与 AB 边（上边缘）的交点
+  let E_x = Math.round((A_x + B_x) / 2), E_y = A_y;
+  const upperCandidates = foldCandidates.filter(([cx, cy]) => cy < D_y);
+  if (upperCandidates.length > 0) {
+    // 计算从 D 到上方候选点的平均方向
+    const avgDx = upperCandidates.reduce((s, [cx]) => s + (cx - D_x), 0) / upperCandidates.length;
+    const avgDy = upperCandidates.reduce((s, [, cy]) => s + (cy - D_y), 0) / upperCandidates.length;
+    const foldSlope = avgDy / avgDx;
+    const eX = Math.round((A_y - D_y) / foldSlope + D_x);
+    if (eX >= A_x && eX <= B_x) {
+      E_x = eX; E_y = A_y;
+      console.log(`E 通过 D→候选点方向计算: (${E_x},${E_y})`);
+    }
   }
-  console.log(`D 选为折痕线与中线交点: (${D_x},${D_y})`);
+  if (E_x === Math.round((A_x + B_x) / 2) || E_x < A_x || E_x > B_x) {
+    // 容错：使用折痕线回归
+    const foldLine = linearRegression(foldCandidates.map(p => [p[0], p[1]]));
+    const E_intersect = lineSegmentIntersect(A_x, A_y, B_x, B_y, foldLine.slope, foldLine.intercept);
+    if (E_intersect) { E_x = Math.round(E_intersect.x); E_y = A_y; }
+    console.log(`E 通过折痕线回归计算: (${E_x},${E_y})`);
+  }
 
-  // F = 折痕线与 AC 边（左边缘）的交点
-  const F_intersect = lineSegmentIntersect(A_x, A_y, C_x, C_y, foldLine.slope, foldLine.intercept);
-  let F_x = F_intersect ? Math.round(F_intersect.x) : Math.round((A_x + C_x) / 2);
-  let F_y = F_intersect ? Math.round(F_intersect.y) : Math.round((A_y + C_y) / 2);
-
-  console.log(`关键点: E(${E_x},${E_y}) D(${D_x},${D_y}) F(${F_x},${F_y})`);
+  // F = 沿 AC 边搜索亮度跳变最大的点（D→F 为阴影分界线）
+  // 沿 AC 边采样，找亮度差异最大的位置
+  let F_x = Math.round((A_x + C_x) / 2), F_y = Math.round((A_y + C_y) / 2);
+  let bestFDiff = 0;
+  for (let t = 0.05; t <= 0.95; t += 0.02) {
+    const fx = Math.round(A_x + t * (C_x - A_x));
+    const fy = Math.round(A_y + t * (C_y - A_y));
+    const cx = clamp(fx, 3, w - 4);
+    const cy = clamp(fy, 3, h - 4);
+    const leftAvg = (pixels[cy * w + (cx - 3)] + pixels[cy * w + (cx - 2)] + pixels[cy * w + (cx - 1)]) / 3;
+    const rightAvg = (pixels[cy * w + (cx + 1)] + pixels[cy * w + (cx + 2)] + pixels[cy * w + (cx + 3)]) / 3;
+    const diff = Math.abs(rightAvg - leftAvg);
+    if (diff > bestFDiff) {
+      bestFDiff = diff;
+      F_x = fx; F_y = fy;
+    }
+  }
+  console.log(`F 沿 AC 搜索: (${F_x},${F_y}) diff=${bestFDiff.toFixed(1)}`);
 
   // 验证点在三角形内
   function pointInTriangle(px, py, ax, ay, bx, by, cx, cy) {
