@@ -341,7 +341,7 @@ async function copySelectedImages() {
 
   const paths = selectedImages.value.map((img) => img.relPath);
   if (paths.length === 0) return;
-  await copyFiles(...paths);
+  await copyFiles(paths);
 }
 // #endregion
 

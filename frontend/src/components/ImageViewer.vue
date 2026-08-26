@@ -108,12 +108,12 @@
         :class="[
           isCopying
             ? 'text-white/50 opacity-40 cursor-not-allowed'
-            : isCopied
+            : copiedLabel
               ? 'text-secondary-400 hover:text-secondary-300 cursor-pointer'
               : 'text-white/50 hover:text-white cursor-pointer',
         ]"
         :disabled="isCopying"
-        title="复制"
+        :title="copiedLabel ?? '复制'"
         @click="handleCopy"
       >
         <svg v-if="isCopying" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="currentColor">
@@ -122,7 +122,9 @@
         <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
           <path :d="mdiContentCopy" />
         </svg>
-        <span class="text-xs">{{ isCopying ? "正在复制…" : isCopied ? "已复制" : "复制" }}</span>
+        <span class="text-xs max-w-48 truncate">
+          {{ isCopying ? "正在复制…" : (copiedLabel ?? "复制") }}
+        </span>
       </button>
       <div class="hidden md:block w-px h-4 bg-white/30 mx-1"></div>
 
@@ -463,11 +465,12 @@
                 :class="[
                   isCopying
                     ? 'text-white/50 opacity-40 cursor-not-allowed'
-                    : isCopied
+                    : copiedLabel
                       ? 'text-secondary-400 hover:text-secondary-300 hover:bg-white/10 cursor-pointer'
                       : 'text-white/80 hover:text-white hover:bg-white/10 cursor-pointer',
                 ]"
                 :disabled="isCopying"
+                :title="copiedLabel ?? '复制'"
                 @click="handleCopy"
               >
                 <svg
@@ -481,9 +484,9 @@
                 <svg v-else class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                   <path :d="mdiContentCopy" />
                 </svg>
-                <span class="text-xs">{{
-                  isCopying ? "正在复制…" : isCopied ? "已复制" : "复制"
-                }}</span>
+                <span class="text-xs max-w-48 truncate">
+                  {{ isCopying ? "正在复制…" : (copiedLabel ?? "复制") }}
+                </span>
               </button>
 
               <!-- 打开按钮 -->
@@ -627,12 +630,13 @@ useClickOutside(overflowMenuRef, () => {
 });
 
 const copyLoadingCount = ref(0);
-const { copyEnhancedOrFile, copyFiles, copiedImageIds } = useClipboard({
+const { copyEnhancedOrFile, copyFiles, copiedImageLabels } = useClipboard({
   loadingCount: copyLoadingCount,
 });
 
 const isCopying = computed(() => copyLoadingCount.value > 0);
-const isCopied = computed(() => copiedImageIds.value.includes(image.id));
+// 当前图片最后一次复制的内容文案（如"已复制图片路径"），用于区分本次会话中复制到剪贴板的内容类型
+const copiedLabel = computed(() => copiedImageLabels.value[image.id]);
 
 async function handleCopy() {
   if (isCopying.value) return;
@@ -642,7 +646,8 @@ async function handleCopy() {
 
 async function copyAbsoluteFilePath() {
   if (isCopying.value) return;
-  await copyFiles(fullFilePath.value);
+  // 直接复制路径也要同步记录，避免按钮停留在上一次复制内容的状态造成误读
+  await copyFiles([fullFilePath.value], [image.id]);
 }
 
 function handleOpen() {

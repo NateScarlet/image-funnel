@@ -61,6 +61,12 @@ describe("useNotification", () => {
 
   // #region NotificationList.vue 渲染测试
   describe("NotificationList.vue 渲染断言", () => {
+    test("toast 容器层级必须高于模态框（z-50），避免被后打开的全屏查看器等模态遮挡", () => {
+      const wrapper = mount(NotificationList);
+
+      expect(wrapper.classes()).toContain("z-60");
+    });
+
     test("收到带 body 的通知时，正确渲染标题与正文", () => {
       const { show } = useNotification();
       show("测试标题", "info", 0, "测试正文内容");
