@@ -18,10 +18,50 @@ const pngSizes = [
   { name: 'icon-1024x1024.png', size: 1024 },
 ];
 
+/**
+ * 去除白色背景：将接近白色的像素设为透明
+ * 先在大图上处理，再缩小，避免抗锯齿边缘丢失
+ */
+async function removeWhiteBackground(inputBuffer) {
+  // 确保有 alpha 通道
+  const withAlpha = await sharp(inputBuffer).ensureAlpha().toBuffer();
+
+  // 使用 raw 像素数据进行颜色替换
+  const { data, info } = await sharp(withAlpha)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  // 遍历像素，将接近白色的设为透明
+  const threshold = 230;
+  for (let i = 0; i < data.length; i += info.channels) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const brightness = (r + g + b) / 3;
+    if (brightness > threshold) {
+      data[i + 3] = 0;
+    }
+  }
+
+  return sharp(data, {
+    raw: {
+      width: info.width,
+      height: info.height,
+      channels: info.channels,
+    },
+  });
+}
+
 async function generateIcons() {
-  // 从 AI 原图往下缩生成 PNG（保留渐变细节）
+  // 先在大图上处理背景，再缩小到目标尺寸
+  const largeProcessed = await removeWhiteBackground(
+    await sharp(sourceImage).resize(2048, 2048).png().toBuffer()
+  );
+
+  // 从处理后的透明大图往下缩生成 PNG
   for (const { name, size } of pngSizes) {
-    await sharp(sourceImage)
+    await largeProcessed
+      .clone()
       .resize(size, size)
       .png()
       .toFile(`./public/${name}`);
