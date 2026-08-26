@@ -2,11 +2,11 @@
   <!-- 几何折纸风格漏斗：三个三角面片构成立体感 -->
 
   <!-- 右侧深橙色面：底层大三角 -->
-  <polygon points="22,28 78,28 50,76" fill="#ea580c" />
+  <polygon points="3,14 96,14 50,84" fill="#ea580c" />
 
   <!-- 左侧中橙色面：覆盖左半部分 -->
-  <polygon points="22,28 50,28 50,76" fill="#f97316" />
+  <polygon points="3,14 50,14 50,84" fill="#f97316" />
 
   <!-- 顶部浅橙色面：折纸高光面 -->
-  <polygon points="22,28 50,28 62,46" fill="#fdba74" />
+  <polygon points="3,14 50,14 70,42" fill="#fdba74" />
 </svg>
