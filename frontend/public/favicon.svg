@@ -1,29 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
-    <!-- 左侧（受光面）渐变 -->
-    <linearGradient id="left-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ef9a30" />
-      <stop offset="10%" stop-color="#f89622" />
-      <stop offset="20%" stop-color="#f36b15" />
-      <stop offset="30%" stop-color="#f67215" />
-      <stop offset="45%" stop-color="#fa861f" />
-      <stop offset="100%" stop-color="#fa871d" />
-    </linearGradient>
-
-    <!-- 右侧（背光面）渐变 -->
-    <linearGradient id="right-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#e37b26" />
-      <stop offset="10%" stop-color="#f17515" />
-      <stop offset="20%" stop-color="#f07315" />
-      <stop offset="30%" stop-color="#ef7014" />
-      <stop offset="45%" stop-color="#f06f11" />
-      <stop offset="100%" stop-color="#f07a10" />
+    <!-- 5 色渐变：从原图 k-means 聚类提取 -->
+    <linearGradient id="funnel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e2ba96" />
+      <stop offset="5%" stop-color="#fb9825" />
+      <stop offset="15%" stop-color="#fa861d" />
+      <stop offset="40%" stop-color="#f47012" />
+      <stop offset="100%" stop-color="#e4620b" />
     </linearGradient>
   </defs>
-
-  <!-- 整体漏斗背景（左侧受光面） -->
-  <polygon points="4.4,17.8 95.6,17.8 48.8,88.3" fill="url(#left-grad)" />
-
-  <!-- 右侧阴影面 -->
-  <polygon points="50,17.8 95.6,17.8 48.8,88.3" fill="url(#right-grad)" />
+  <polygon points="4.4,17.8 95.6,17.8 48.8,88.3" fill="url(#funnel)" />
 </svg>
