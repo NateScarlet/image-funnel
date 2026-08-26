@@ -2,19 +2,26 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const sharp = require('/root/.nvm/versions/node/v24.1.0/lib/node_modules/sharp');
 import { readFileSync, writeFileSync, copyFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // PNG 源图：AI 生成的带渐变细节的原图
-const sourceImage = '../.scratch/icon-design-4.jpg';
+const sourceImage = join(__dirname, '../assets/icon-design-4.jpg');
 
 // SVG 源文件：简化几何版，用于小尺寸 favicon
-const svgPath = './public/favicon.svg';
+const svgPath = join(__dirname, '../public/favicon.svg');
+
+// 输出目录
+const publicDir = join(__dirname, '../public');
 
 // 大尺寸 PNG：从 AI 原图去背景往下缩
 const largePngSizes = [
   { name: 'apple-touch-icon.png', size: 180 },
   { name: 'pwa-192x192.png', size: 192 },
   { name: 'pwa-512x512.png', size: 512 },
-  { name: 'icon-1024x1024.png', size: 1024 },
 ];
 
 /**
@@ -93,7 +100,7 @@ async function generateIcons() {
     await sharp(processed)
       .resize(size, size)
       .png()
-      .toFile(`./public/${name}`);
+      .toFile(join(publicDir, name));
     console.log(`✓ Generated ${name} (${size}x${size})`);
   }
 
@@ -102,7 +109,7 @@ async function generateIcons() {
   await sharp(Buffer.from(svg))
     .resize(32, 32)
     .png()
-    .toFile('./public/favicon.ico');
+    .toFile(join(publicDir, 'favicon.ico'));
   console.log('✓ Generated favicon.ico (from SVG)');
 
   console.log('✓ favicon.svg (保持手动维护的简化几何版)');
