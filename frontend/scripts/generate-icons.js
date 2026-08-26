@@ -1,13 +1,9 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const sharp = require('/root/.nvm/versions/node/v24.1.0/lib/node_modules/sharp');
-import { readFileSync } from 'fs';
 
 // PNG 源图：AI 生成的带渐变细节的原图（1024x1024），往下缩到各尺寸
 const sourceImage = '../.scratch/icon-design-4.jpg';
-
-// SVG 源文件：简化版，用于 favicon.svg
-const svg = readFileSync('./public/favicon.svg', 'utf-8');
 
 const pngSizes = [
   { name: 'favicon-16x16.png', size: 16 },
@@ -19,48 +15,44 @@ const pngSizes = [
 ];
 
 /**
- * 去除白色背景：将接近白色的像素设为透明
- * 先在大图上处理，再缩小，避免抗锯齿边缘丢失
+ * 去除白色背景，裁剪到内容区域，居中到正方形透明画布
  */
-async function removeWhiteBackground(inputBuffer) {
-  // 确保有 alpha 通道
-  const withAlpha = await sharp(inputBuffer).ensureAlpha().toBuffer();
+async function removeWhiteBackgroundAndCrop(inputBuffer, padding = 0.1) {
+  // 使用 sharp 内置 trim 自动裁剪白色背景
+  let trimmed = await sharp(inputBuffer).trim(20).toBuffer();
+  const meta = await sharp(trimmed).metadata();
+  const cropW = meta.width;
+  const cropH = meta.height;
 
-  // 使用 raw 像素数据进行颜色替换
-  const { data, info } = await sharp(withAlpha)
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  // 居中到正方形透明画布，留出 padding
+  const pad = Math.round(Math.max(cropW, cropH) * padding);
+  const squareSize = Math.max(cropW, cropH) + pad * 2;
+  const offsetX = Math.round((squareSize - cropW) / 2);
+  const offsetY = Math.round((squareSize - cropH) / 2);
 
-  // 遍历像素，将接近白色的设为透明
-  const threshold = 230;
-  for (let i = 0; i < data.length; i += info.channels) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const brightness = (r + g + b) / 3;
-    if (brightness > threshold) {
-      data[i + 3] = 0;
-    }
-  }
-
-  return sharp(data, {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: info.channels,
+  return sharp({
+    create: {
+      width: squareSize,
+      height: squareSize,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
-  });
+  })
+    .composite([{ input: trimmed, left: offsetX, top: offsetY }])
+    .png()
+    .toBuffer();
 }
 
 async function generateIcons() {
-  // 先在大图上处理背景，再缩小到目标尺寸
-  const largeProcessed = await removeWhiteBackground(
-    await sharp(sourceImage).resize(2048, 2048).png().toBuffer()
+  // 先放大处理背景 + 裁剪 + 居中到正方形，再缩小到目标尺寸
+  const processed = await removeWhiteBackgroundAndCrop(
+    await sharp(sourceImage).resize(2048, 2048).png().toBuffer(),
+    0.05 // 5% 留白，让图标在小尺寸下更大
   );
 
-  // 从处理后的透明大图往下缩生成 PNG
+  // 从处理后的透明图往下缩生成 PNG
   for (const { name, size } of pngSizes) {
-    await largeProcessed
+    await processed
       .clone()
       .resize(size, size)
       .png()
