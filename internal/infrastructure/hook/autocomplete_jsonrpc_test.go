@@ -245,7 +245,7 @@ command = '''%s'''
 	if imgRepo == nil {
 		imgRepo = &mockImageRepository{}
 	}
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	t.Cleanup(runner.Close)
 	return &autocompleteTestEnv{tempDir: tempDir, hooksDir: hooksDir, runner: runner, hookID: scalar.ToID("hk:if-autocomplete-test")}
 }
@@ -292,7 +292,7 @@ protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输�
 
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
-	runner := NewRunner(tempDir, hooksDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()

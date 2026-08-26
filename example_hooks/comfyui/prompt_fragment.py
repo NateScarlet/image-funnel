@@ -12,6 +12,7 @@ import logging
 import re
 from typing import List, Optional, Tuple
 
+
 from .node_accessor import NodeAccessor
 from .prompt_locator import get_region_content, find_region_boundaries
 
@@ -233,6 +234,22 @@ class PromptFragment:
         prompt_text = self.accessor.get_prompt_input(node_id, "text")
         if not isinstance(prompt_text, str):
             prompt_text = ""
+
+        # add/remove 根据节点连接模型的格式重排新增/移除的标签及双轨道全文。
+        # 格式解析需要 IMAGE_FUNNEL_DATA_DIR，缺失时 format_text_for_node 内部触发
+        # MissingDataDirError 快速失败（不静默降级）；disabled 作为 opt-out 原样返回。
+        if command in ("add", "remove"):
+            from .model_format import format_text_for_node
+
+            prompt_str_arg = format_text_for_node(
+                self.accessor.prompt, node_id, prompt_str_arg, prompt_text
+            )
+            workflow_text = format_text_for_node(
+                self.accessor.prompt, node_id, workflow_text, prompt_text
+            )
+            prompt_text = format_text_for_node(
+                self.accessor.prompt, node_id, prompt_text, prompt_text
+            )
 
         stripped_workflow = strip_comments_for_prompt(workflow_text)
         workflow_cleaned = "\n".join(

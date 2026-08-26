@@ -17,7 +17,13 @@ from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
 from .prompt_locator import REGION_START_RE
-from .command_handlers import COMMAND_HANDLERS, CommandContext
+from .command_handlers import (
+    COMMAND_HANDLERS,
+    CommandContext,
+    handle_set_model_format_cmd,
+)
+from .model_format import format_workflow_prompt_pair
+
 from .config import ComfyUIConfig
 from .db import SQLiteContext
 from . import operation_history
@@ -71,6 +77,10 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     args = parse_args()
     _LOGGER.debug("args %s", (args,))
+
+    if args.command == "set-model-format":
+        handle_set_model_format_cmd(args)
+        return
 
     max_match = args.max_match if args.max_match is not None else config.max_match
     if max_match < 0:
@@ -231,6 +241,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 continue
 
             try:
+                pair = WorkflowPromptPair(workflow, prompt)
                 if config.hook_output_dir == ":inherit:":
                     _LOGGER.debug(
                         "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
@@ -239,12 +250,16 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                     rel_dir = get_relative_output_dir(
                         path, config.comfyui_output_dir, config.hook_output_dir
                     )
-                    pair = WorkflowPromptPair(workflow, prompt)
                     FilenameManager(
                         pair, pair.date_filename_nodes, pair.title_to_node
                     ).adjust_output_directory(rel_dir)
+
+                # 所有输出路径统一按节点模型格式重排提示词（与 adjust_output_dir 同位置、全命令覆盖）
+                format_workflow_prompt_pair(pair)
             except (ValueError, OSError) as e:
-                _LOGGER.error(f"Failed to adjust output directory: {e}")
+                _LOGGER.error(
+                    f"Failed to adjust output directory or format prompt text: {e}"
+                )
                 has_errors = True
                 continue
 
@@ -642,6 +657,19 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="node-id",
         help="Target latent node ID containing width and height inputs, can be specified multiple times; if omitted, adjusts all latent nodes",
+    )
+
+    # 5. set-model-format
+    set_fmt_parser = subparsers.add_parser(
+        "set-model-format", help="Set prompt tag format for a ComfyUI model"
+    )
+    set_fmt_parser.add_argument(
+        "model", help="Model Checkpoint filename (e.g. animaPencilXL_v10.safetensors)"
+    )
+    set_fmt_parser.add_argument(
+        "format",
+        choices=["anima", "sdxl", "disabled"],
+        help="Prompt tag format style (anima, sdxl or disabled)",
     )
 
     return parser

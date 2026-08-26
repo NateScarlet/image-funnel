@@ -157,7 +157,7 @@ on_fail_action = "KEEP"
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 复现用户上报的畸形指令：alert 块被粘到指令行末尾后，参数中出现 ">" 特殊字符
@@ -227,7 +227,7 @@ on_fail_action = "%s"
 				},
 			}
 			notifSender := &mockNotificationSender{}
-			runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, notifSender)
+			runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, notifSender)
 			defer runner.Close()
 
 			noteRelPath := "test_note.md"

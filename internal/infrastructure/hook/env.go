@@ -58,6 +58,7 @@ func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName
 		"IMAGE_FUNNEL_DIRECTORY_ID="+dirID,
 		"IMAGE_FUNNEL_DIRECTORY_REL_PATH="+dirRel,
 		"IMAGE_FUNNEL_GRAPHQL_URL="+r.graphqlURL,
+		"IMAGE_FUNNEL_DATA_DIR="+r.dataDir,
 		"IMAGE_FUNNEL_IMAGE_IDS="+imageIDsJSON,
 		"IMAGE_FUNNEL_IMAGE_PATHS="+imagePathsJSON,
 		"IMAGE_FUNNEL_NOTE_PATHS="+notePathsJSON,

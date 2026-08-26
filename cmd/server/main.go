@@ -166,7 +166,7 @@ func main() {
 
 	// 初始化外部钩子服务： Hook 脚本在本地执行，直接连接本机的监听端口
 	localGraphQLURL := fmt.Sprintf("http://127.0.0.1:%s/graphql", cfg.Port)
-	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, logger, metadataUpdatedTopic, fileChangedTopic, localGraphQLURL, tokenSource, imageRepo, dirSvc, dirRepo, notifHandler)
+	hookRunner := infrahook.NewRunner(cfg.AbsRootDir, cfg.HooksDir, cfg.DataDir, logger, metadataUpdatedTopic, fileChangedTopic, localGraphQLURL, tokenSource, imageRepo, dirSvc, dirRepo, notifHandler)
 	defer hookRunner.Close()
 
 	if cfg.EnableDirectoryStatsCache && statsCache != nil {

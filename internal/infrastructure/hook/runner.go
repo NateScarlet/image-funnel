@@ -31,6 +31,7 @@ var _ hook.Runner = (*Runner)(nil)
 type Runner struct {
 	rootDir                 string
 	hooksDir                string
+	dataDir                 string
 	logger                  *zap.Logger
 	metadataUpdatedSub      pubsub.Topic[*shared.MetadataUpdatedEvent]
 	fileChangedSub          pubsub.Topic[*shared.FileChangedEvent]
@@ -58,6 +59,7 @@ type Runner struct {
 func NewRunner(
 	rootDir string,
 	hooksDir string,
+	dataDir string,
 	logger *zap.Logger,
 	metadataUpdatedSub pubsub.Topic[*shared.MetadataUpdatedEvent],
 	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
@@ -76,6 +78,7 @@ func NewRunner(
 	r := &Runner{
 		rootDir:                 rootDir,
 		hooksDir:                hooksDir,
+		dataDir:                 dataDir,
 		logger:                  logger,
 		metadataUpdatedSub:      metadataUpdatedSub,
 		fileChangedSub:          fileChangedSub,

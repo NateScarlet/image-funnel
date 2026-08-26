@@ -1,0 +1,27 @@
+id = "comfyui-set-model-format"
+name = "设置 ComfyUI 模型提示词格式"
+description = "在会话提交时或手动触发运行 /set-model-format 指令，更新全局 ComfyUI 模型格式配置。"
+command = "uv run runner.py comfyui set-model-format"
+
+[directive]
+name = "set-model-format"
+usage = """
+/set-model-format <model> <format>
+设置特定 ComfyUI 模型的提示词格式，更新 $IMAGE_FUNNEL_DATA_DIR/comfyui_model_formats.toml。
+
+参数：
+<model> 模型 Checkpoint 文件名（如 animaPencilXL_v10.safetensors）
+<format> 支持的提示词格式类型：anima (转空格/保留 score_*)、sdxl (转下划线) 或 disabled (跳过格式化)
+"""
+on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /set-model-format ... %% 注释掉
+
+[directive.autocomplete]
+command = "uv run runner.py comfyui.autocomplete serve"
+protocol = "json-rpc"
+
+[on.post_commit_session.note_scan]
+ignore_directive = false
+
+[on.note_dispatch]
+
+[env]

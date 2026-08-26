@@ -102,7 +102,7 @@ command = '''%s'''
 			"sub": directory.FromRepository("sub"),
 		},
 	}
-	runner := NewRunner(tempDir, hooksDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	t.Cleanup(runner.Close)
 	env.runner = runner
 	return env

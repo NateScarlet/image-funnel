@@ -211,7 +211,7 @@ label = [""]
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	hooks, err := runner.List(context.Background())
@@ -269,7 +269,7 @@ label = [""]
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
 	defer runner.Close()
 
@@ -361,7 +361,7 @@ TEST_VAR_TWO = "val2"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()
@@ -383,7 +383,7 @@ func TestRunner_GraphqlURLEnv_Injection(t *testing.T) {
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "http://127.0.0.1:8000/graphql", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "http://127.0.0.1:8000/graphql", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	env, err := runner.buildBaseEnv(context.Background(), "test-id", "test-name", "test-trigger", nil, nil, "", nil, "", "")
@@ -398,6 +398,16 @@ func TestRunner_GraphqlURLEnv_Injection(t *testing.T) {
 	}
 
 	assert.Equal(t, "http://127.0.0.1:8000/graphql", graphqlURL)
+
+	// IMAGE_FUNNEL_DATA_DIR 应注入 Runner 持有的一致数据目录
+	var dataDir string
+	for _, e := range env {
+		if strings.HasPrefix(e, "IMAGE_FUNNEL_DATA_DIR=") {
+			dataDir = strings.TrimPrefix(e, "IMAGE_FUNNEL_DATA_DIR=")
+			break
+		}
+	}
+	assert.Equal(t, tempDir, dataDir)
 }
 
 func TestRunner_Trigger_SyncAndError(t *testing.T) {
@@ -452,7 +462,7 @@ command = '''%s'''
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 使用绝对路径，使得 dirRelFromAbsPath 能正确推导目录信息
@@ -512,7 +522,7 @@ label = [""]
 	}
 	expectedDir := mockDirRepo.dirs["."]
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	runner.debouncer.duration = 10 * time.Millisecond
 	defer runner.Close()
 
@@ -583,7 +593,7 @@ command = '''` + cmdStr + `'''
 	}
 	expectedDir := mockDirRepo.dirs["subdir"]
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 创建一个位于子目录中的文件，确保目录信息可推导
@@ -634,7 +644,7 @@ command = 'echo "should not run" > ` + flagFile + `'
 	// 目录仓库为空，任何路径都无法解析
 	mockDirRepo := &mockDirectoryRepository{dirs: map[string]*directory.Directory{}}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	absPath := filepath.Join(tempDir, "unknown_subdir", "a.png")
@@ -687,7 +697,7 @@ command = '''` + cmdStr + `'''
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	noteRelPath := "test.png.md"
@@ -768,7 +778,7 @@ command = '''` + cmdScan + `'''
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 等待...
@@ -833,7 +843,7 @@ command = '''` + cmdStr + `'''
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	err = runner.OnCommitSession(context.Background(), "subdir")
@@ -967,7 +977,7 @@ on_fail_action = "KEEP"
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 准备笔记文件
@@ -1090,7 +1100,7 @@ on_fail_action = "KEEP"
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	noteRelPath := "test_note.md"
@@ -1152,7 +1162,7 @@ on_fail_action = "REMOVE"
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	noteRelPath := "test_note.md"
@@ -1200,7 +1210,7 @@ name = "strict"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()
@@ -1252,7 +1262,7 @@ command = '''%s'''
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	// 启动一个会被取消的 context
@@ -1348,7 +1358,7 @@ command = '''%s'''
 	}
 	notifSender := &mockNotificationSender{}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
 	defer runner.Close()
 
 	absPath := filepath.Join(tempDir, "a.png")
@@ -1399,7 +1409,7 @@ command = '''%s'''
 	}
 	notifSender := &mockNotificationSender{}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
 	defer runner.Close()
 
 	absPath := filepath.Join(tempDir, "a.png")
@@ -1450,7 +1460,7 @@ command = '''` + command + `'''
 		},
 	}
 	notifSender := &mockNotificationSender{}
-	runner := NewRunner(tempDir, hooksDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
+	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
 	t.Cleanup(runner.Close)
 	return runner, notifSender, tempDir
 }
@@ -1535,7 +1545,7 @@ command = "echo 2"
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
 	defer runner.Close()
 
 	configs, err := runner.loadHooks()
@@ -1623,7 +1633,7 @@ command = '''`+shellWrite("c", flagC)+`'''
 		},
 	}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	err = runner.OnCommitSession(context.Background(), ".")
@@ -1700,7 +1710,7 @@ order = 2
 	}
 	imgRepo := &mockImageRepository{}
 
-	runner := NewRunner(tempDir, hooksDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
+	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
 	noteRelPath := "test_note.md"

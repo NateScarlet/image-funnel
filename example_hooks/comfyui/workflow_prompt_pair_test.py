@@ -12,9 +12,11 @@ import unittest
 import os
 import json
 import socket
+import tempfile
 import http.server
 import threading
 from typing import Any, Dict, List, cast, Type
+from unittest.mock import patch
 from PIL import Image
 
 
@@ -28,6 +30,7 @@ from .seed_manager import SeedManager
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
 from . import variant_engine
+from .model_format import ModelFormatConfig
 from .submission import submit as _submit_fn
 
 
@@ -1390,6 +1393,16 @@ class TestSubmit(unittest.TestCase):
 # #region 样本文件集成测试
 class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
+    # 模型加载类节点上的模型文件名输入键
+    MODEL_KEYS = (
+        "ckpt_name",
+        "model_name",
+        "unet_name",
+        "clip_name",
+        "clip_name1",
+        "clip_name2",
+    )
+
     def setUp(self):
         custom_dir = os.environ.get("HOOK_TEST_IMAGES_DIR")
         if custom_dir:
@@ -1412,6 +1425,45 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                     for f in os.listdir(self.samples_dir)
                     if f.lower().endswith(".png")
                 ]
+
+        # 格式化依赖 IMAGE_FUNNEL_DATA_DIR；本测试聚焦双轨道机制，把样本模型标记为
+        # disabled 使格式化为空操作，避免改写文本干扰断言。
+        self._data_dir = tempfile.mkdtemp()
+        self._env_patch = patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": self._data_dir}
+        )
+        self._env_patch.start()
+        self._disable_sample_models()
+
+    def tearDown(self):
+        self._env_patch.stop()
+
+    def _disable_sample_models(self) -> None:
+        """收集所有样本图片涉及的模型名并写入 disabled 映射。"""
+        config = ModelFormatConfig.load()
+        for png_path in self.png_files:
+            try:
+                with Image.open(png_path) as img:
+                    prompt_str = img.info.get("prompt")
+            except OSError:
+                continue
+            if not prompt_str:
+                continue
+            try:
+                prompt = json.loads(prompt_str)
+            except ValueError:
+                continue
+            for node in prompt.values():
+                if not isinstance(node, dict):
+                    continue
+                inputs = node.get("inputs")
+                if not isinstance(inputs, dict):
+                    continue
+                for key in self.MODEL_KEYS:
+                    value = inputs.get(key)
+                    if isinstance(value, str) and value.strip():
+                        config.models[value.strip()] = "disabled"
+        config.save()
 
     def test_double_track_modification_flow(self):
         if not self.png_files:

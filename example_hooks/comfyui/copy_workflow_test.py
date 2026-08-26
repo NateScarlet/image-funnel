@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from typing import Any, Dict, Optional, Tuple
@@ -17,6 +18,7 @@ from .copy_workflow import (
     build_request_from_env,
     main,
 )
+from .model_format import ModelFormatConfig
 
 
 def _make_loader(
@@ -102,6 +104,55 @@ class TestBuildCopyContent(unittest.TestCase):
         assert result is not None
         content = json.loads(result.content)
         self.assertEqual(content["nodes"][0]["widgets_values"][0], "ComfyUI")
+
+    def test_copy_applies_model_formatting(self):
+        """复制增强与入列一致：复制内容按节点模型格式重排提示词。"""
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "6",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": ["masterpiece, Blue_Hair"],
+                },
+                {
+                    "id": "9",
+                    "type": "SaveImage",
+                    "widgets_values": ["sub/ComfyUI"],
+                },
+            ]
+        }
+        prompt: Dict[str, Any] = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece, Blue_Hair", "clip": ["4", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+            },
+            "9": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "sub/ComfyUI"},
+            },
+        }
+        request = CopyRequest(
+            image_paths=[r"C:\output\sub\image.png"],
+            comfyui_output_dir="",
+            hook_output_dir="",
+        )
+
+        with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tempfile.mkdtemp()}):
+            config = ModelFormatConfig.load()
+            config.models["animaPencilXL_v10.safetensors"] = "anima"
+            config.save()
+            result = build_copy_content(request, _make_loader(prompt, workflow))
+
+        assert result is not None
+        content = json.loads(result.content)
+        self.assertEqual(
+            content["nodes"][0]["widgets_values"][0], "masterpiece, blue hair"
+        )
+        self.assertEqual(content["nodes"][1]["widgets_values"][0], "sub/ComfyUI")
 
     def test_missing_metadata_returns_none(self):
         """无 ComfyUI 元数据的图片不适用：返回 None 表示放弃"""

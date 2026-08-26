@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from .filename_manager import FilenameManager
+from .model_format import format_workflow_prompt_pair
 from .output_directory import get_relative_output_dir
 from .png_metadata import load_prompt_and_workflow
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -64,7 +65,7 @@ def build_copy_content(
 
     pair = WorkflowPromptPair(workflow, prompt)
     if request.hook_output_dir == ":inherit:":
-        # 与入列侧语义一致：完全关闭目录自动调整，复制原始未调整的工作流
+        # 与入列侧语义一致：完全关闭输出目录自动调整，复制原始（仅重排标签格式）的工作流
         description = "已复制原始 ComfyUI 工作流"
     else:
         rel_dir = get_relative_output_dir(
@@ -74,6 +75,9 @@ def build_copy_content(
             pair, pair.date_filename_nodes, pair.title_to_node
         ).adjust_output_directory(rel_dir)
         description = "已复制 ComfyUI 工作流（输出目录已调整）"
+
+    # 复制增强与入列一致：所有输出路径统一按节点模型格式重排提示词
+    format_workflow_prompt_pair(pair)
 
     return CopyResult(
         content=json.dumps(pair.workflow, ensure_ascii=False),

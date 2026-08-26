@@ -8,10 +8,14 @@ prompt_fragment.py 的单元测试。
 # 测试文件允许访问被测模块的私有成员
 # pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportCallIssue=false, reportMissingParameterType=false, reportUnknownParameterType=false
 
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment, strip_comments_for_prompt
+from .model_format import MissingDataDirError, ModelFormatConfig
 
 
 class TestStripCommentsForPrompt(unittest.TestCase):
@@ -589,6 +593,119 @@ class TestDoubleTrack(unittest.TestCase):
         )
         self.assertTrue(result)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
+
+
+class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
+    """自动格式化（总是重排已有提示词）：add/remove 时对整段已有提示词重排，disabled 作为 opt-out。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.mkdtemp()
+        self._env_patch = patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": self.tmp_dir}
+        )
+        self._env_patch.start()
+
+    def tearDown(self) -> None:
+        self._env_patch.stop()
+
+    def _set_model_format(self, ckpt_name: str, fmt: str) -> None:
+        config = ModelFormatConfig.load()
+        config.models[ckpt_name] = fmt
+        config.save()
+
+    def _make_pair(self, ckpt_name: str, node_text: str):
+        workflow = {
+            "nodes": [
+                {"id": "6", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ],
+        }
+        prompt = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": node_text, "clip": ["4", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": ckpt_name},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        return pair, workflow, prompt
+
+    def _process(
+        self,
+        pair,
+        node_id: str,
+        command: str,
+        arg: str,
+        region: str = "",
+        raw: bool = False,
+        no_skip: bool = False,
+        hard: bool = False,
+    ) -> bool:
+        fragment = PromptFragment(pair, node_id, region)
+        return fragment._process_double_track(
+            node_id, command, arg, region, raw, no_skip, hard
+        )
+
+    def test_add_reformats_existing_prompt_to_anima(self):
+        """add 时已有提示词被重排为 anima 格式（小写、下划线转空格），新增标签同样被格式化。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        pair, workflow, prompt = self._make_pair(
+            "animaPencilXL_v10.safetensors", "masterpiece, Blue_Hair"
+        )
+        result = self._process(pair, "6", "add", "Cat_Ears")
+        self.assertTrue(result)
+        workflow_text = workflow["nodes"][0]["widgets_values"][0]
+        prompt_text = prompt["6"]["inputs"]["text"]
+        # 已有提示词被重排
+        self.assertNotIn("Blue_Hair", workflow_text)
+        self.assertIn("blue hair", workflow_text)
+        self.assertNotIn("Blue_Hair", prompt_text)
+        self.assertIn("blue hair", prompt_text)
+        # 新增标签也被格式化
+        self.assertIn("cat ears,", workflow_text)
+        self.assertIn("cat ears,", prompt_text)
+
+    def test_add_disabled_keeps_existing_prompt(self):
+        """disabled（opt-out）时已有提示词与新增标签均保持原样。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "disabled")
+        pair, workflow, prompt = self._make_pair(
+            "animaPencilXL_v10.safetensors", "masterpiece, Blue_Hair"
+        )
+        result = self._process(pair, "6", "add", "Cat_Ears")
+        self.assertTrue(result)
+        workflow_text = workflow["nodes"][0]["widgets_values"][0]
+        prompt_text = prompt["6"]["inputs"]["text"]
+        self.assertIn("Blue_Hair", workflow_text)
+        self.assertIn("Cat_Ears,", workflow_text)
+        self.assertIn("Blue_Hair", prompt_text)
+        self.assertIn("Cat_Ears,", prompt_text)
+
+    def test_remove_reformats_existing_prompt_to_sdxl(self):
+        """remove 时已有提示词被重排为 sdxl 格式（空格转下划线），目标标签被注释。"""
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        node_text = "blue hair\ncat ears\nmasterpiece"
+        pair, workflow, prompt = self._make_pair("sdxlModel.safetensors", node_text)
+        result = self._process(pair, "6", "remove", "cat ears")
+        self.assertTrue(result)
+        workflow_text = workflow["nodes"][0]["widgets_values"][0]
+        self.assertIn("blue_hair", workflow_text)
+        self.assertNotIn("blue hair", workflow_text)
+        self.assertIn("// cat_ears", workflow_text)
+        self.assertIn("masterpiece", workflow_text)
+        # prompt 轨道同样被重排，且注释行被剥离
+        prompt_text = prompt["6"]["inputs"]["text"]
+        self.assertIn("blue_hair", prompt_text)
+        self.assertNotIn("cat_ears", prompt_text)
+        self.assertNotIn("//", prompt_text)
+
+    def test_add_missing_data_dir_raises(self) -> None:
+        """add 且有可追溯模型但缺 IMAGE_FUNNEL_DATA_DIR 时快速失败（不静默降级）。"""
+        pair, _, _ = self._make_pair("animaPencilXL_v10.safetensors", "masterpiece")
+        with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
+            with self.assertRaises(MissingDataDirError):
+                self._process(pair, "6", "add", "Cat_Ears")
 
 
 if __name__ == "__main__":
