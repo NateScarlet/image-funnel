@@ -1,39 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
-    <!-- ADE: 顶部受光面，渐变方向 130° -->
-    <linearGradient id="g-ade" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(130)">
-      <stop offset="0%" stop-color="#f58d22" />
-      <stop offset="100%" stop-color="#fa881f" />
+    <!-- ADE: 顶部受光面，渐变方向 285° -->
+    <linearGradient id="g-ade" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(285)">
+      <stop offset="0%" stop-color="#fa841c" />
+      <stop offset="100%" stop-color="#fdc07d" />
     </linearGradient>
 
-    <!-- ADF: 左侧面，渐变方向 40° -->
-    <linearGradient id="g-adf" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(40)">
-      <stop offset="0%" stop-color="#fa861e" />
-      <stop offset="100%" stop-color="#f66f14" />
+    <!-- ADF: 左侧面，渐变方向 135° -->
+    <linearGradient id="g-adf" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(135)">
+      <stop offset="0%" stop-color="#fa8720" />
+      <stop offset="100%" stop-color="#fba25b" />
     </linearGradient>
 
-    <!-- FDC: 底部左侧，渐变方向 150° -->
-    <linearGradient id="g-fdc" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(150)">
-      <stop offset="0%" stop-color="#fa841b" />
-      <stop offset="100%" stop-color="#fa871e" />
+    <!-- FDC: 底部左侧，渐变方向 135° -->
+    <linearGradient id="g-fdc" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(135)">
+      <stop offset="0%" stop-color="#f4862b" />
+      <stop offset="100%" stop-color="#fbb575" />
     </linearGradient>
 
-    <!-- EBCD: 右侧阴影面，渐变方向 35°（沿折痕的阴影） -->
-    <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(35)">
-      <stop offset="0%" stop-color="#ea6005" />
-      <stop offset="100%" stop-color="#f17614" />
+    <!-- EBCD: 右侧阴影面，沿折痕的阴影 -->
+    <linearGradient id="g-ebcd" x1="0" y1="0" x2="0" y2="1" gradientTransform="rotate(300)">
+      <stop offset="0%" stop-color="#f58935" />
+      <stop offset="100%" stop-color="#fbba81" />
     </linearGradient>
   </defs>
 
   <!-- ADE: 顶部受光面 -->
-  <polygon points="4.4,17.8 64.5,17.8 58.9,56.0" fill="url(#g-ade)" />
+  <polygon points="32.6,39.6 56.6,51.5 49.8,39.6" fill="url(#g-ade)" />
 
   <!-- ADF: 左侧面 -->
-  <polygon points="4.4,17.8 58.9,56.0 15.6,35.0" fill="url(#g-adf)" />
+  <polygon points="32.6,39.6 56.6,51.5 39.1,47.5" fill="url(#g-adf)" />
 
   <!-- FDC: 底部左侧 -->
-  <polygon points="15.6,35.0 58.9,56.0 48.9,87.2" fill="url(#g-fdc)" />
+  <polygon points="39.1,47.5 56.6,51.5 49.4,60.4" fill="url(#g-fdc)" />
 
   <!-- EBCD: 右侧阴影面 -->
-  <polygon points="64.5,17.8 95.0,17.8 48.9,87.2 58.9,56.0" fill="url(#g-ebcd)" />
+  <polygon points="49.8,39.6 66.6,39.6 49.4,60.4 56.6,51.5" fill="url(#g-ebcd)" />
 </svg>
