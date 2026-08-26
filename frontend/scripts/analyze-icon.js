@@ -363,8 +363,8 @@ async function analyzeImage() {
     projs.sort((a, b) => a.proj - b.proj);
 
     const n = projs.length;
-    const nStart = Math.max(3, Math.floor(n * 0.12));
-    const nEnd = Math.max(3, Math.floor(n * 0.12));
+    const nStart = Math.max(3, Math.floor(n * 0.05));
+    const nEnd = Math.max(3, Math.floor(n * 0.05));
     const startSamples = projs.slice(0, nStart);
     const endSamples = projs.slice(n - nEnd);
 
@@ -425,8 +425,8 @@ async function analyzeImage() {
       if (samples.length >= 10) {
         samples.sort((a, b) => a.proj - b.proj);
         const n = samples.length;
-        const nStart = Math.max(3, Math.floor(n * 0.15));
-        const nEnd = Math.max(3, Math.floor(n * 0.15));
+        const nStart = Math.max(3, Math.floor(n * 0.05));
+        const nEnd = Math.max(3, Math.floor(n * 0.05));
         const startSamples = samples.slice(0, nStart);
         const endSamples = samples.slice(n - nEnd);
 
@@ -440,10 +440,9 @@ async function analyzeImage() {
 
         const startColor = avgColor(startSamples);
         const endColor = avgColor(endSamples);
-        // SVG 旋转角度：从默认上→下（0°）旋转到阴影方向
-        // 默认渐变: 0°=上→下, 90°=左→右
-        // 阴影方向是投影方向，需要顺时针旋转 90° 得到 SVG 旋转角
-        const svgAngle = ((shadowAngle + 90) % 360 + 360) % 360;
+        // SVG 旋转角度：默认上→下(0°)，阴影方向从 x 轴逆时针测量
+        // 投影方向 (cos(θ), sin(θ)) 对应 SVG rotate(90-θ)
+        const svgAngle = ((90 - shadowAngle) % 360 + 360) % 360;
         regionResults.EBCD = { angle: Math.round(svgAngle), startColor, endColor };
         console.log(`  ${svgAngle.toFixed(0)}° 阴影: ${startColor} -> ${endColor}`);
       } else {
@@ -454,31 +453,7 @@ async function analyzeImage() {
     }
   }
 
-  // 8. 映射到 SVG 坐标
-  // 处理后的 PNG 是居中到正方形的，三角形在图像中的位置就是 SVG 中的位置
-  // 但需要留出 padding（generate-icons.js 中用了 5% padding + 垂直偏移 0.6）
-  //
-  // 简化方法：直接用三角形边界框计算 SVG 中的边距
-  // 但为了与 generate-icons.js 输出的 PNG 一致，需要模拟相同的 padding 和偏移
-
-  // 先计算三角形在图像中的逻辑位置
-  // 用边界框反推 padding 和偏移
-  const triW = maxX - minX + 1;
-  const triH = maxY - minY + 1;
-  const triCenterXImg = (minX + maxX) / 2;
-  const triCenterYImg = (minY + maxY) / 2;
-
-  // 由于图像是 256x256 且三角形居中，SVG 坐标直接按比例映射
-  // 但在 generate-icons.js 中，图像生成时加了 padding 和垂直偏移
-  // 所以 SVG 中也要有对应的边距
-
-  // 计算三角形在图像中的相对位置
-  const leftMargin = minX / w;
-  const rightMargin = (w - maxX) / w;
-  const topMargin = minY / h;
-  const bottomMargin = (h - maxY) / h;
-
-  console.log(`\n图像边距: L=${(leftMargin*100).toFixed(1)}% R=${(rightMargin*100).toFixed(1)}% T=${(topMargin*100).toFixed(1)}% B=${(bottomMargin*100).toFixed(1)}%`);
+  // 8. 映射到 SVG 坐标（处理后的 PNG 坐标直接线性映射到 SVG 0-100）
 
   // 直接按比例映射到 SVG 0-100 坐标
   function toSvg(px, py) {
