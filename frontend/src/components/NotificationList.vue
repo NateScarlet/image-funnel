@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md w-full">
+  <div class="fixed top-4 right-4 z-60 flex flex-col gap-2 max-w-md w-full">
     <div v-if="notifications.length > 1" class="flex justify-end items-center gap-2 px-2">
       <span
         v-if="hiddenCount > 0"
@@ -97,6 +97,8 @@ import {
 } from "@mdi/js";
 
 const { notifications, remove, clear } = useNotification();
+// 容器 z-60 必须高于模态框外壳的 z-50（useModal 默认值）：全屏查看器等模态打开时后挂载到 body，
+// 同层级会按 DOM 顺序覆盖先挂载的 toast，导致复制等操作的反馈被查看器挡住
 const MAX_NOTIFICATIONS = 5;
 
 // #region 正文溢出检测与全文弹窗

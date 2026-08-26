@@ -18,12 +18,11 @@ const { model: lastUnsupportedServerStartTime } = useStorage<string | undefined>
   () => undefined,
 );
 
-// 模块级保存当前会话曾复制过的图片 ID 列表，以实现跨组件、跨查看周期的共享状态
-const { model: copiedImageIds, flush: flushCopiedImageIds } = useStorage<string[]>(
-  sessionStorage,
-  "copied_image_ids_s7f8g9",
-  () => [],
-);
+// 模块级保存当前会话每张图片最后一次复制的内容文案（imageId → 按钮展示文案），
+// 以实现跨组件、跨查看周期的共享状态，让用户能区分复制的是路径、文件还是增强内容
+const { model: copiedImageLabels, flush: flushCopiedImageLabels } = useStorage<
+  Record<string, string>
+>(sessionStorage, "copied_image_labels_tjt0r9", () => ({}));
 
 // 将文本（和可选的 HTML）写入剪贴板
 async function writeToClipboard(text: string, html?: string) {
@@ -52,12 +51,10 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   const { showSuccess } = useNotification();
   const { data: metaData } = useQuery(MetaDocument);
 
-  function addCopiedImageId(id: string) {
-    if (!id) return;
-    if (!copiedImageIds.value.includes(id)) {
-      copiedImageIds.value.push(id);
-      flushCopiedImageIds();
-    }
+  function setCopiedImageLabel(imageId: string, label: string) {
+    if (!imageId || !label) return;
+    copiedImageLabels.value[imageId] = label;
+    flushCopiedImageLabels();
   }
 
   // 处理单张图片的复制操作（优先尝试复制增强内容，未配置钩子或不适用时降级复制文件）
@@ -89,8 +86,9 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
       if (enhancedContent) {
         const ok = await writeToClipboard(enhancedContent);
         if (ok) {
+          // 通知沿用钩子提供的原始文案；按钮标签使用同一语义的默认短文案
           showSuccess(enhancedDescription ?? "已复制增强内容!");
-          addCopiedImageId(imageId);
+          setCopiedImageLabel(imageId, enhancedDescription ?? "已复制增强内容");
           return;
         }
       }
@@ -99,10 +97,11 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
       const supported = await tryAttachFiles([filePath]);
       if (supported) {
         showSuccess("已复制图片文件!");
+        setCopiedImageLabel(imageId, "已复制图片文件");
       } else {
         showSuccess("已复制图片路径!");
+        setCopiedImageLabel(imageId, "已复制图片路径");
       }
-      addCopiedImageId(imageId);
     } finally {
       if (options?.loadingCount) {
         options.loadingCount.value--;
@@ -172,8 +171,9 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
     }
   }
 
-  // 复制多个文件：如果支持复制文件就复制文件，否则复制绝对路径每行一个
-  async function copyFiles(...filePaths: string[]) {
+  // 复制多个文件：如果支持复制文件就复制文件，否则复制绝对路径每行一个；
+  // imageIds 用于把本次复制的内容文案记录到对应图片上（批量场景无单一图片语义，可不传）
+  async function copyFiles(filePaths: string[], imageIds?: string[]) {
     const validPaths = filePaths.filter((p) => !!p);
     if (validPaths.length === 0) return;
 
@@ -188,8 +188,14 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
       const supported = await tryAttachFiles(validPaths);
       if (supported) {
         showSuccess("已复制图片文件!");
+        for (const id of imageIds ?? []) {
+          setCopiedImageLabel(id, "已复制图片文件");
+        }
       } else {
         showSuccess("已复制绝对路径!");
+        for (const id of imageIds ?? []) {
+          setCopiedImageLabel(id, "已复制绝对路径");
+        }
       }
     } finally {
       if (options?.loadingCount) {
@@ -201,6 +207,6 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
   return {
     copyEnhancedOrFile,
     copyFiles,
-    copiedImageIds,
+    copiedImageLabels,
   };
 }
