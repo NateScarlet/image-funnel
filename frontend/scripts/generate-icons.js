@@ -63,11 +63,11 @@ async function removeWhiteBackgroundAndCrop(inputBuffer, padding = 0.1) {
     .png()
     .toBuffer();
 
-  // 居中到正方形透明画布
+  // 居中到正方形透明画布，垂直向下偏移底边距的 20% 以补偿三角形视觉重心偏上
   const pad = Math.round(Math.max(cropW, cropH) * padding);
   const squareSize = Math.max(cropW, cropH) + pad * 2;
   const offsetX = Math.round((squareSize - cropW) / 2);
-  const offsetY = Math.round((squareSize - cropH) / 2);
+  const offsetY = Math.round((squareSize - cropH) * 0.6);
 
   return sharp({
     create: {
