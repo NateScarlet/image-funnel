@@ -108,14 +108,64 @@ async function preprocessImage(inputBuffer, padding = 0.05) {
 // #endregion
 
 // #region 图像分析
-async function analyzeImage() {
-  // 1. 预处理（去背景、裁剪、居中）
+// 模拟预处理过程：计算裁剪边界和居中后的坐标映射
+async function computePreprocessMapping() {
+  // 用原始图像计算裁剪边界
   const rawBuf = await sharp(sourceImage).resize(1024, 1024).png().toBuffer();
-  const processed = await preprocessImage(rawBuf, 0.05);
-  const processedSize = processed.size;
+  const withAlpha = await sharp(rawBuf).ensureAlpha().toBuffer();
+  const { data, info } = await sharp(withAlpha).raw().toBuffer({ resolveWithObject: true });
+  const w = info.width, h = info.height, ch = info.channels;
 
-  // 2. 缩放到分析尺寸并降噪
-  const { data, info } = await sharp(processed.buffer)
+  let minX = w, minY = h, maxX = 0, maxY = 0;
+  const edgeMargin = 20;
+  for (let y = edgeMargin; y < h - edgeMargin; y++) {
+    for (let x = edgeMargin; x < w - edgeMargin; x++) {
+      const i = (y * w + x) * ch;
+      const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      if (brightness <= BG_THRESHOLD) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  const cropW = maxX - minX + 1;
+  const cropH = maxY - minY + 1;
+  const padding = 0.05;
+  const pad = Math.round(Math.max(cropW, cropH) * padding);
+  const squareSize = Math.max(cropW, cropH) + pad * 2;
+  const offsetX = Math.round((squareSize - cropW) / 2);
+  const offsetY = Math.round((squareSize - cropH) * 0.6);
+
+  return {
+    cropX: minX, cropY: minY, cropW, cropH,
+    squareSize, offsetX, offsetY, pad,
+  };
+}
+
+/** 将原始图像坐标映射到预处理后的居中图像坐标 */
+function mapToCentered(px, py, mapping) {
+  const { cropX, cropY, cropW, cropH, squareSize, offsetX, offsetY } = mapping;
+  // 原始坐标相对于裁剪区域
+  const relX = px - cropX;
+  const relY = py - cropY;
+  // 居中后的坐标
+  const cx = offsetX + relX;
+  const cy = offsetY + relY;
+  // 归一化到 [0, 1]
+  return { x: cx / squareSize, y: cy / squareSize };
+}
+
+async function analyzeImage() {
+  // 1. 预处理映射：计算裁剪和居中参数
+  const mapping = await computePreprocessMapping();
+  console.log(`预处理映射: crop=(${mapping.cropX},${mapping.cropY}) ${mapping.cropW}x${mapping.cropH}, ` +
+    `square=${mapping.squareSize}, offset=(${mapping.offsetX},${mapping.offsetY})`);
+
+  // 2. 直接在原始图像上分析（缩放到分析尺寸并降噪）
+  const { data, info } = await sharp(sourceImage)
     .resize(ANALYZE_SIZE, ANALYZE_SIZE, { fit: 'fill' })
     .blur(BLUR_RADIUS)
     .grayscale()
@@ -126,14 +176,14 @@ async function analyzeImage() {
   const pixels = new Uint8Array(data);
 
   // 彩色版本
-  const { data: colorData } = await sharp(processed.buffer)
+  const { data: colorData } = await sharp(sourceImage)
     .resize(ANALYZE_SIZE, ANALYZE_SIZE, { fit: 'fill' })
     .blur(BLUR_RADIUS)
     .raw()
     .toBuffer({ resolveWithObject: true });
   const colorPixels = new Uint8Array(colorData);
 
-  console.log(`分析图像: ${w}x${h}, 预处理尺寸=${processedSize}`);
+  console.log(`分析图像: ${w}x${h}`);
 
   // 3. 找到三角形边界
   let minX = w, minY = h, maxX = 0, maxY = 0;
@@ -234,6 +284,11 @@ async function analyzeImage() {
   // 6. 拟合折痕线
   foldCandidates.sort((a, b) => b[2] - a[2]);
   const topCandidates = foldCandidates.slice(0, Math.min(40, foldCandidates.length));
+  // 打印前 5 个候选点用于调试
+  topCandidates.slice(0, 5).forEach(([x, y, d], i) => {
+    console.log(`  候选 #${i + 1}: (${x},${y}) diff=${d.toFixed(1)}`);
+  });
+
   const foldLine = linearRegression(topCandidates.map(p => [p[0], p[1]]));
   console.log(`折痕线: y = ${foldLine.slope.toFixed(4)}x + ${foldLine.intercept.toFixed(4)}`);
 
@@ -243,31 +298,22 @@ async function analyzeImage() {
   let E_x = E_intersect ? Math.round(E_intersect.x) : Math.round((A_x + B_x) / 2);
   let E_y = E_intersect ? Math.round(E_intersect.y) : A_y;
 
-  // F = 折痕线与 AC 的交点
+  // D = 折痕候选点中亮度差异最大的点（折痕顶点，在三角形内部）
+  // 但不是太靠近边缘的点，取差异最大的候选点
+  let D_x = 0, D_y = 0, bestDiff = 0;
+  for (const [x, y, diff] of topCandidates) {
+    if (diff > bestDiff) {
+      bestDiff = diff;
+      D_x = x;
+      D_y = y;
+    }
+  }
+  console.log(`D 选为差异最大的候选点: (${D_x},${D_y}) diff=${bestDiff.toFixed(1)}`);
+
+  // F = 折痕线与 AC 的交点，如果不在三角形内则沿 AC 搜索
   const F_intersect = lineSegmentIntersect(A_x, A_y, C_x, C_y, foldLine.slope, foldLine.intercept);
   let F_x = F_intersect ? Math.round(F_intersect.x) : Math.round((A_x + C_x) / 2);
   let F_y = F_intersect ? Math.round(F_intersect.y) : Math.round((A_y + C_y) / 2);
-
-  // D = 折痕线与 BC 的交点
-  const D_intersect = lineSegmentIntersect(B_x, B_y, C_x, C_y, foldLine.slope, foldLine.intercept);
-  let D_x, D_y;
-  if (D_intersect) {
-    D_x = Math.round(D_intersect.x);
-    D_y = Math.round(D_intersect.y);
-  } else {
-    const valid = topCandidates.filter(([x, y]) => {
-      const inLeft = x >= (leftLine ? (y - leftLine.intercept) / leftLine.slope : A_x);
-      const inRight = x <= (rightLine ? (y - rightLine.intercept) / rightLine.slope : B_x);
-      return inLeft && inRight && y >= A_y;
-    });
-    if (valid.length > 0) {
-      const last = valid[valid.length - 1];
-      D_x = last[0]; D_y = last[1];
-    } else {
-      D_x = Math.round((B_x + C_x) / 2);
-      D_y = Math.round((B_y + C_y) / 2);
-    }
-  }
 
   console.log(`关键点: E(${E_x},${E_y}) D(${D_x},${D_y}) F(${F_x},${F_y})`);
 
