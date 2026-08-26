@@ -1,12 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <!-- 几何折纸风格漏斗：三个三角面片构成立体感 -->
+  <defs>
+    <!-- 左侧（受光面）渐变：稍亮 -->
+    <linearGradient id="left-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fe9a20" />
+      <stop offset="20%" stop-color="#fc7d14" />
+      <stop offset="45%" stop-color="#fa8720" />
+      <stop offset="100%" stop-color="#fe8915" />
+    </linearGradient>
 
-  <!-- 底层：深橙色面（右侧） -->
-  <polygon points="3,17 96,17 49,87" fill="#ea580c" />
+    <!-- 右侧（背光面）渐变：稍暗 -->
+    <linearGradient id="right-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f07d14" />
+      <stop offset="20%" stop-color="#e8660c" />
+      <stop offset="45%" stop-color="#e87a18" />
+      <stop offset="100%" stop-color="#f07a10" />
+    </linearGradient>
+  </defs>
 
-  <!-- 中层：中橙色面（左侧） -->
-  <polygon points="3,17 63,35 49,87" fill="#f97316" />
+  <!-- 整体漏斗背景 -->
+  <polygon points="3,17 96,17 49,87" fill="url(#left-grad)" />
 
-  <!-- 顶层：浅橙色面（折纸高光三角） -->
-  <polygon points="3,17 96,17 63,35" fill="#fdba74" />
+  <!-- 右侧阴影面 -->
+  <polygon points="59,17 96,17 49,87" fill="url(#right-grad)" />
 </svg>
