@@ -3,11 +3,12 @@
 
 import os
 import sys
+import io
 import json
 import logging
 import sqlite3
 import threading
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, redirect_stderr
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
@@ -127,8 +128,11 @@ def _parse_args_for_autocomplete(
         if target_command
         else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
     )
+    # 部分子命令的位置参数带 choices（如 set-model-format 的 format 只能是 anima/sdxl/disabled），
+    # 追加的 dummy_prompt/dummy_weight 会触发 argparse 校验失败并打印 usage，这里静默捕获。
     try:
-        parsed_args, _ = parser.parse_known_args(args_to_parse)
+        with redirect_stderr(io.StringIO()):
+            parsed_args, _ = parser.parse_known_args(args_to_parse)
     except SystemExit:
         parsed_args = None
 
@@ -514,23 +518,15 @@ class ModelFormatProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return "set-model-format" in context.cleaned_cwords
+        # 生产环境 cwords[0] 为 "/set-model-format"（带前导斜杠），当前输入词在 query 中，
+        # 因此以去斜杠的 target_command 判定命令，而非直接比对 cleaned_cwords。
+        return context.target_command == "set-model-format"
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        cmd_idx = (
-            context.cleaned_cwords.index("set-model-format")
-            if "set-model-format" in context.cleaned_cwords
-            else -1
-        )
-        if cmd_idx == -1:
-            return
-
-        arg_tokens = context.cleaned_cwords[cmd_idx + 1 :]
-        if len(arg_tokens) == 0 or (
-            len(arg_tokens) == 1
-            and not context.prev_word.endswith("set-model-format")
-            and context.query
-        ):
+        # 已完成的参数（正在输入的词在 query 中，不在 cwords 里）
+        arg_tokens = context.cleaned_cwords[1:]
+        if len(arg_tokens) == 0:
+            # 参数 1：Checkpoint 模型名
             seen_models: Set[str] = set()
             if context.prompt_meta:
                 for node_raw in context.prompt_meta.values():
@@ -552,7 +548,10 @@ class ModelFormatProvider(AutocompleteProvider):
                         description="Workflow 中的 Checkpoint 模型",
                         type="model",
                     )
-        else:
+            return
+
+        if len(arg_tokens) == 1:
+            # 参数 2：格式类型
             for fmt_option in ("anima", "sdxl", "disabled"):
                 if not context.query or context.query.lower() in fmt_option.lower():
                     if fmt_option == "anima":

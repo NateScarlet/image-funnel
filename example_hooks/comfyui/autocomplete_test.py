@@ -25,6 +25,7 @@ from .autocomplete import (
     AutocompleteServices,
     autocomplete,
     build_providers,
+    build_request_from_params,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag
@@ -1443,9 +1444,12 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         return list(provider.provide(context))
 
     def test_suggests_checkpoint_names_on_model_position(self) -> None:
+        """生产 cwords（首词带斜杠、当前词在 query 中）：第一个参数位置应推荐 Checkpoint 模型名。"""
         ctx = self._make_context(
-            cwords=["set-model-format"],
-            prev_word="set-model-format",
+            target_command="set-model-format",
+            cwords=["/set-model-format"],
+            prev_word="/set-model-format",
+            query="",
             prompt_meta={
                 "4": {
                     "class_type": "CheckpointLoaderSimple",
@@ -1456,9 +1460,33 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         texts = [s.text for s in self._suggest(ctx)]
         self.assertIn("animaPencilXL_v10.safetensors", texts)
 
-    def test_suggests_format_options_including_disabled(self) -> None:
+    def test_model_suggestions_filtered_by_query(self) -> None:
+        """输入模型名片段时按 query 过滤模型候选。"""
         ctx = self._make_context(
-            cwords=["set-model-format", "animaModel.safetensors"],
+            target_command="set-model-format",
+            cwords=["/set-model-format"],
+            prev_word="/set-model-format",
+            query="anima",
+            prompt_meta={
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+                },
+                "5": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "otherModel.safetensors"},
+                },
+            },
+        )
+        texts = [s.text for s in self._suggest(ctx)]
+        self.assertIn("animaPencilXL_v10.safetensors", texts)
+        self.assertNotIn("otherModel.safetensors", texts)
+
+    def test_suggests_format_options_on_format_position(self) -> None:
+        """第二个参数位置应推荐格式类型 anima/sdxl/disabled。"""
+        ctx = self._make_context(
+            target_command="set-model-format",
+            cwords=["/set-model-format", "animaModel.safetensors"],
             prev_word="animaModel.safetensors",
             query="",
             prompt_meta={},
@@ -1468,15 +1496,66 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         self.assertEqual(suggestions[0].type, "format")
 
     def test_format_options_filtered_by_query(self) -> None:
+        """输入格式片段时按 query 过滤格式候选。"""
         ctx = self._make_context(
-            cwords=["set-model-format", "animaModel.safetensors", "dis"],
-            prev_word="dis",
+            target_command="set-model-format",
+            cwords=["/set-model-format", "animaModel.safetensors"],
+            prev_word="animaModel.safetensors",
             query="dis",
             prompt_meta={},
         )
         texts = [s.text for s in self._suggest(ctx)]
         self.assertIn("disabled", texts)
         self.assertNotIn("anima", texts)
+
+    def test_full_flow_suggests_model_name(self) -> None:
+        """端到端：后端产出的请求参数经 autocomplete() 后应给出 Checkpoint 模型名。"""
+        tmp_dir = tempfile.mkdtemp()
+        workflow = {
+            "nodes": [
+                {
+                    "id": "6",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\nmasterpiece,\n// #endregion"
+                    ],
+                }
+            ]
+        }
+        prompt_meta = {
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+            },
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece", "clip": ["4", 0]},
+            },
+        }
+        path = os.path.join(tmp_dir, "sample.png")
+        img = Image.new("RGB", (1, 1), "white")
+        meta = PngInfo()
+        meta.add_text("prompt", json.dumps(prompt_meta))
+        meta.add_text("workflow", json.dumps(workflow))
+        img.save(path, pnginfo=meta)
+
+        request = build_request_from_params(
+            {
+                "cwords": ["/set-model-format"],
+                "cwordIdx": 1,
+                "prevWord": "/set-model-format",
+                "linePrefix": "/set-model-format ",
+                "query": "",
+                "imagePaths": [path],
+                "rootDir": "/",
+                "directoryRelPath": "",
+            }
+        )
+        with build_providers("", "", "", False) as providers:
+            services = AutocompleteServices(parser=get_parser(), providers=providers)
+            suggestions = list(autocomplete(request, services))
+        texts = [s.text for s in suggestions]
+        self.assertIn("animaPencilXL_v10.safetensors", texts)
 
 
 if __name__ == "__main__":

@@ -686,7 +686,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
         """remove 时已有提示词被重排为 sdxl 格式（空格转下划线），目标标签被注释。"""
         self._set_model_format("sdxlModel.safetensors", "sdxl")
         node_text = "blue hair\ncat ears\nmasterpiece"
-        pair, workflow, prompt = self._make_pair("sdxlModel.safetensors", node_text)
+        pair, workflow, _ = self._make_pair("sdxlModel.safetensors", node_text)
         result = self._process(pair, "6", "remove", "cat ears")
         self.assertTrue(result)
         workflow_text = workflow["nodes"][0]["widgets_values"][0]
