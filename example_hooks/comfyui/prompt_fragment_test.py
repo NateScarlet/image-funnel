@@ -686,7 +686,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
         """remove 时已有提示词被重排为 sdxl 格式（空格转下划线），目标标签被注释。"""
         self._set_model_format("sdxlModel.safetensors", "sdxl")
         node_text = "blue hair\ncat ears\nmasterpiece"
-        pair, workflow, _ = self._make_pair("sdxlModel.safetensors", node_text)
+        pair, workflow, prompt = self._make_pair("sdxlModel.safetensors", node_text)
         result = self._process(pair, "6", "remove", "cat ears")
         self.assertTrue(result)
         workflow_text = workflow["nodes"][0]["widgets_values"][0]
@@ -694,6 +694,11 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
         self.assertNotIn("blue hair", workflow_text)
         self.assertIn("// cat_ears", workflow_text)
         self.assertIn("masterpiece", workflow_text)
+        # prompt 轨道同样被重排，且注释行被剥离
+        prompt_text = prompt["6"]["inputs"]["text"]
+        self.assertIn("blue_hair", prompt_text)
+        self.assertNotIn("cat_ears", prompt_text)
+        self.assertNotIn("//", prompt_text)
 
 
 if __name__ == "__main__":

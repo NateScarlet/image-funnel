@@ -3,12 +3,11 @@
 
 import os
 import sys
-import io
 import json
 import logging
 import sqlite3
 import threading
-from contextlib import contextmanager, ExitStack, redirect_stderr
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
@@ -123,16 +122,19 @@ def _parse_args_for_autocomplete(
     is_adjust_prompt_cmd: bool,
     query: str,
 ) -> Optional[argparse.Namespace]:
+    # set-model-format 的 format 位置参数带 choices（anima/sdxl/disabled），追加的 dummy 值
+    # 必然触发 argparse 校验失败（打印 usage 到 stderr 再 SystemExit）；该命令的补全
+    # （ModelFormatProvider）不依赖 parsed_args，直接跳过解析避免 stderr 噪音。
+    if target_command == "set-model-format":
+        return None
+
     args_to_parse = (
         [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
         if target_command
         else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
     )
-    # 部分子命令的位置参数带 choices（如 set-model-format 的 format 只能是 anima/sdxl/disabled），
-    # 追加的 dummy_prompt/dummy_weight 会触发 argparse 校验失败并打印 usage，这里静默捕获。
     try:
-        with redirect_stderr(io.StringIO()):
-            parsed_args, _ = parser.parse_known_args(args_to_parse)
+        parsed_args, _ = parser.parse_known_args(args_to_parse)
     except SystemExit:
         parsed_args = None
 
