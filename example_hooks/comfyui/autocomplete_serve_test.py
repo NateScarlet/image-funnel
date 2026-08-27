@@ -177,7 +177,7 @@ class TestServe(unittest.TestCase):
             root_dir="",
             directory_rel_path="",
         )
-        with build_providers("", "", "", False) as providers:
+        with build_providers("", "", "", False, "add") as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
@@ -196,8 +196,10 @@ class TestServe(unittest.TestCase):
         """验证 build_providers 作为 contextmanager，会在退出时通过 ExitStack 退出 SQLiteContext。"""
         fake_ctx = MagicMock()
         with patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
-            with build_providers("root", "dir", "http://localhost", False) as providers:
-                self.assertEqual(len(providers), 7)
+            with build_providers(
+                "root", "dir", "http://localhost", False, "add"
+            ) as providers:
+                self.assertEqual(len(providers), 6)
                 fake_ctx.__enter__.assert_called_once()
             fake_ctx.__exit__.assert_called_once()
 

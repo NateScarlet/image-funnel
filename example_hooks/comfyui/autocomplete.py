@@ -34,6 +34,7 @@ from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
 from .operation_history import OperationHistory
+from .model_format import ModelFormatConfig, collect_inference_texts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -515,6 +516,10 @@ class RegionProvider(AutocompleteProvider):
 class ModelFormatProvider(AutocompleteProvider):
     """/set-model-format 指令参数智能补全：参数 1 推荐 Checkpoint 模型，参数 2 推荐 format 类型。"""
 
+    def __init__(self, config: ModelFormatConfig) -> None:
+        # 模型格式配置（含显式映射与默认格式）由入口注入，用于展示各模型当前生效格式
+        self.config = config
+
     @property
     def is_exclusive(self) -> bool:
         return True
@@ -542,12 +547,21 @@ class ModelFormatProvider(AutocompleteProvider):
                                 if isinstance(v, str) and v.strip():
                                     seen_models.add(v.strip())
 
+            # 逐模型收集提示词文本，用于在无显式配置时推理生效格式
+            inference_texts = collect_inference_texts(context.prompt_meta)
+
             for model_name in sorted(seen_models):
                 if not context.query or context.query.lower() in model_name.lower():
+                    fmt, source = self.config.resolve_format_with_source(
+                        model_name, inference_texts.get(model_name, "")
+                    )
                     yield AutocompleteSuggestion(
                         text=quote_if_needed(model_name),
                         displayText=model_name,
-                        description="Workflow 中的 Checkpoint 模型",
+                        description=(
+                            f"Workflow 中的 Checkpoint 模型 · 当前格式: "
+                            f"{fmt} ({source.value})"
+                        ),
                         type="model",
                     )
             return
@@ -1002,17 +1016,26 @@ def build_providers(
     directory_rel_path: str,
     danbooru_url: str,
     show_nsfw: bool,
+    target_command: str,
 ) -> Generator[List[AutocompleteProvider], None, None]:
-    """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。"""
+    """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
+
+    target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
+    模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败。
+    """
     with ExitStack() as stack:
-        providers: List[AutocompleteProvider] = [
-            ModelFormatProvider(),
-            RegionProvider(),
-            LoraProvider(),
-            NodeProvider(),
-            WorkflowPromptProvider(),
-            RegionOptionProvider(),
-        ]
+        providers: List[AutocompleteProvider] = []
+        if target_command == "set-model-format":
+            providers.append(ModelFormatProvider(ModelFormatConfig.load()))
+        providers.extend(
+            [
+                RegionProvider(),
+                LoraProvider(),
+                NodeProvider(),
+                WorkflowPromptProvider(),
+                RegionOptionProvider(),
+            ]
+        )
         if danbooru_url:
             db_ctx = stack.enter_context(
                 SQLiteContext(_db_path(root_dir, directory_rel_path))
@@ -1175,6 +1198,7 @@ class _AutocompleteTask:
                 self.request.directory_rel_path,
                 self.danbooru_url,
                 self.show_nsfw,
+                self.request.target_command,
             ) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
@@ -1265,6 +1289,7 @@ def main() -> None:
             request.directory_rel_path,
             os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
             _show_nsfw_from_env(),
+            target_cmd,
         ) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             for s in autocomplete(request, services):

@@ -3,11 +3,20 @@ import os
 import re
 import tomllib
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from .node_accessor import NodeAccessor
 
 _SCORE_TAG_PATTERN = re.compile(r"\bscore_[0-9]+(?:_[a-z0-9]+)*\b", re.IGNORECASE)
+
+
+class ModelFormatSource(Enum):
+    """模型提示词格式的生效来源（值为中文展示标签）。"""
+
+    CONFIG = "配置"
+    INFERENCE = "推理"
+    DEFAULT = "默认"
 
 
 class MissingDataDirError(RuntimeError):
@@ -78,24 +87,34 @@ class ModelFormatConfig:
 
         return config_path
 
-    def resolve_format(self, ckpt_name: str, prompt_text: str) -> str:
-        """解析指定模型文件名的提示词格式。优先级：显式映射 > 提示词推理 > 默认格式。"""
-        if not ckpt_name:
-            return self.default_format
+    def resolve_format_with_source(
+        self, ckpt_name: str, prompt_text: str
+    ) -> Tuple[str, ModelFormatSource]:
+        """解析指定模型文件名的生效格式及其来源，不产生写文件副作用。
 
+        返回 (生效格式, 来源)。来源按优先级取 ModelFormatSource.CONFIG（显式映射）、
+        INFERENCE（提示词推理）或 DEFAULT（默认格式）。优先级与 resolve_format 一致，
+        但不自动持久化推理结果，供补全展示等只读场景使用。
+        """
+        if not ckpt_name:
+            return self.default_format, ModelFormatSource.DEFAULT
         # 1. 显式映射（含 disabled）
         if ckpt_name in self.models:
-            return self.models[ckpt_name]
-
+            return self.models[ckpt_name], ModelFormatSource.CONFIG
         # 2. 提示词推理
         inferred = infer_format_from_prompt(prompt_text)
         if inferred is None:
-            return self.default_format
+            return self.default_format, ModelFormatSource.DEFAULT
+        return inferred, ModelFormatSource.INFERENCE
 
-        # 自动记录推理结果供后续复用
-        self.models[ckpt_name] = inferred
-        self.save()
-        return inferred
+    def resolve_format(self, ckpt_name: str, prompt_text: str) -> str:
+        """解析指定模型文件名的提示词格式。优先级：显式映射 > 提示词推理 > 默认格式。"""
+        fmt, source = self.resolve_format_with_source(ckpt_name, prompt_text)
+        # 仅推理来源自动记录结果供后续复用（配置/默认无需改写文件）
+        if source == ModelFormatSource.INFERENCE:
+            self.models[ckpt_name] = fmt
+            self.save()
+        return fmt
 
 
 def _strip_comment_lines(text: str) -> str:
@@ -191,6 +210,28 @@ def clip_text_encode_node_ids(prompt_meta: Dict[str, Any]) -> List[str]:
         if isinstance(node, dict)
         and cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
     ]
+
+
+def collect_inference_texts(prompt_meta: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """对每个可追溯模型的 CLIPTextEncode 节点收集提示词文本，作为格式推理依据。"""
+    if not prompt_meta:
+        return {}
+    texts: Dict[str, str] = {}
+    for nid in clip_text_encode_node_ids(prompt_meta):
+        node_raw = prompt_meta.get(nid)
+        if not isinstance(node_raw, dict):
+            continue
+        node = cast(Dict[str, Any], node_raw)
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        text_val = cast(Dict[str, Any], inputs).get("text")
+        if not isinstance(text_val, str) or not text_val.strip():
+            continue
+        model = trace_model_name_for_node(prompt_meta, nid)
+        if model:
+            texts.setdefault(model, text_val.strip())
+    return texts
 
 
 def format_text_for_node(

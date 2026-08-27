@@ -29,6 +29,7 @@ from .autocomplete import (
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag
+from .model_format import ModelFormatConfig
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
@@ -1045,7 +1046,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_build_providers_registers_region_option_before_danbooru(self) -> None:
         """真实 provider 链中区域选项提供者必须注册在 Danbooru 提供者之前。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
-            with build_providers("root", "dir", "http://localhost", False) as providers:
+            with build_providers(
+                "root", "dir", "http://localhost", False, "add"
+            ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertLess(
             names.index("RegionOptionProvider"), names.index("DanbooruProvider")
@@ -1421,6 +1424,17 @@ class TestAutocompleteIntegration(unittest.TestCase):
 
 
 class TestModelFormatAutocomplete(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.mkdtemp()
+        self._env_patch = patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": self.tmp_dir}
+        )
+        self._env_patch.start()
+        self.config = ModelFormatConfig.load()
+
+    def tearDown(self) -> None:
+        self._env_patch.stop()
+
     def _make_context(self, **kwargs: Any) -> AutocompleteContext:
         """Helper to build AutocompleteContext with sane defaults."""
         defaults: Dict[str, Any] = dict(
@@ -1439,7 +1453,7 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         return AutocompleteContext(**defaults)
 
     def _suggest(self, context: AutocompleteContext) -> List[Any]:
-        provider = ModelFormatProvider()
+        provider = ModelFormatProvider(self.config)
         self.assertTrue(provider.can_provide(context))
         return list(provider.provide(context))
 
@@ -1551,11 +1565,76 @@ class TestModelFormatAutocomplete(unittest.TestCase):
                 "directoryRelPath": "",
             }
         )
-        with build_providers("", "", "", False) as providers:
+        with build_providers("", "", "", False, "set-model-format") as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             suggestions = list(autocomplete(request, services))
         texts = [s.text for s in suggestions]
         self.assertIn("animaPencilXL_v10.safetensors", texts)
+
+    def test_model_format_description_shows_config_source(self) -> None:
+        """显式映射的模型应展示配置来源的生效格式值。"""
+        self.config.models["xyModel.safetensors"] = "anima"
+        ctx = self._make_context(
+            target_command="set-model-format",
+            cwords=["/set-model-format"],
+            prev_word="/set-model-format",
+            query="",
+            prompt_meta={
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "xyModel.safetensors"},
+                }
+            },
+        )
+        suggestions = self._suggest(ctx)
+        self.assertEqual(len(suggestions), 1)
+        desc = suggestions[0].description
+        self.assertIn("当前格式: anima (配置)", desc)
+
+    def test_model_format_description_shows_inference_source(self) -> None:
+        """无显式映射、可从提示词推理的模型应展示推理来源的格式值，且不写回配置。"""
+        ctx = self._make_context(
+            target_command="set-model-format",
+            cwords=["/set-model-format"],
+            prev_word="/set-model-format",
+            query="",
+            prompt_meta={
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+                },
+                "6": {
+                    "class_type": "CLIPTextEncode",
+                    "inputs": {
+                        "text": "blue_hair, cat_ears, detailed_eyes",
+                        "clip": ["4", 0],
+                    },
+                },
+            },
+        )
+        suggestions = self._suggest(ctx)
+        self.assertEqual(len(suggestions), 1)
+        self.assertIn("当前格式: sdxl (推理)", suggestions[0].description)
+        # 展示阶段不应把推理结果持久化到配置（只读）
+        self.assertNotIn("animaPencilXL_v10.safetensors", self.config.models)
+
+    def test_model_format_description_falls_back_to_default_source(self) -> None:
+        """无显式映射且无法推理（无可追溯提示词文本）时展示默认格式来源。"""
+        ctx = self._make_context(
+            target_command="set-model-format",
+            cwords=["/set-model-format"],
+            prev_word="/set-model-format",
+            query="",
+            prompt_meta={
+                "4": {
+                    "class_type": "CheckpointLoaderSimple",
+                    "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+                }
+            },
+        )
+        suggestions = self._suggest(ctx)
+        self.assertEqual(len(suggestions), 1)
+        self.assertIn("当前格式: sdxl (默认)", suggestions[0].description)
 
 
 if __name__ == "__main__":
