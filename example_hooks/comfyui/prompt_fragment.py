@@ -236,7 +236,8 @@ class PromptFragment:
         if not isinstance(prompt_text, str):
             prompt_text = ""
 
-        # 如果定义了 IMAGE_FUNNEL_DATA_DIR，根据节点连接模型的提示词推理自动格式化
+        # 如果定义了 IMAGE_FUNNEL_DATA_DIR，根据节点连接模型的提示词推理自动格式化。
+        # 总是重排已有提示词（workflow + prompt 双轨道），disabled 作为 opt-out 完全跳过。
         if command in ("add", "remove") and os.getenv("IMAGE_FUNNEL_DATA_DIR"):
             from .model_format import (
                 ModelFormatConfig,
@@ -249,6 +250,8 @@ class PromptFragment:
                 config = ModelFormatConfig.load()
                 fmt = config.resolve_format(ckpt_name, prompt_text)
                 prompt_str_arg = format_prompt_text(prompt_str_arg, fmt)
+                workflow_text = format_prompt_text(workflow_text, fmt)
+                prompt_text = format_prompt_text(prompt_text, fmt)
 
         stripped_workflow = strip_comments_for_prompt(workflow_text)
         workflow_cleaned = "\n".join(
