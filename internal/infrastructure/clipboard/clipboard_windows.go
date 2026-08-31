@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -35,10 +36,18 @@ const (
 	cfUnicodeText = 13
 	gmemMoveable  = 0x0002
 	gmemZeroinit  = 0x0040
+
+	// clipboardWriteRetryTimes / clipboardWriteRetryDelayMs SetDataObject 四参重载的写入重试参数：
+	// 剪贴板是系统全局共享资源，可能被其他进程瞬时占用导致写入失败，按此参数重试后仍失败才报错
+	clipboardWriteRetryTimes   = 10
+	clipboardWriteRetryDelayMs = 100
 )
 
 // Clipboard Windows 剪贴板实现
-type Clipboard struct{}
+type Clipboard struct {
+	// mu 串行化本进程内的剪贴板写入，避免并发请求各自启动 PowerShell 进程互相抢占剪贴板
+	mu sync.Mutex
+}
 
 // NewClipboard 创建一个新的剪贴板实例
 func NewClipboard() *Clipboard {
@@ -189,27 +198,38 @@ func (c *Clipboard) AddFiles(filePaths []string) error {
 		return nil
 	}
 
-	// 转义路径中的单引号（PowerShell 单引号字符串中唯一需转义的字符）
-	escaped := make([]string, len(filePaths))
-	for i, p := range filePaths {
-		escaped[i] = strings.ReplaceAll(p, "'", "''")
-	}
+	// 串行化写入：剪贴板是全局共享资源，本进程内并发写入会互相抢占而导致偶发失败
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// 构建 PowerShell 脚本：
-	// 1. 获取当前剪贴板 DataObject，逐个格式复制到新 DataObject（保留所有已有格式）
-	// 2. 附加文件路径
-	// 3. 写回剪贴板
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", buildAddFilesScript(filePaths))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("剪贴板操作失败: %w\n%s", err, string(output))
+	}
+	return nil
+}
+
+// buildAddFilesScript 构建向剪贴板附加文件列表的 PowerShell 脚本：
+// 1. 获取当前剪贴板 DataObject，逐个格式复制到新 DataObject（保留所有已有格式）
+// 2. 附加文件路径
+// 3. 通过四参重载 SetDataObject 写回，剪贴板被其他进程瞬时占用时自动重试
+func buildAddFilesScript(filePaths []string) string {
+	// 转义路径中的单引号（PowerShell 单引号字符串中唯一需转义的字符）
 	var addCmds strings.Builder
-	for _, p := range escaped {
+	for _, p := range filePaths {
 		addCmds.WriteString("$files.Add('")
-		addCmds.WriteString(p)
+		addCmds.WriteString(strings.ReplaceAll(p, "'", "''"))
 		addCmds.WriteString("');")
 	}
 
 	// 注意：不能用 New-Object DataObject($orig) 复制格式——这会把原 DataObject 整体当作一个对象存储，
 	// 导致 CF_HDROP 等格式丢失。必须逐个格式取出数据再 SetData 到新 DataObject。
-	// SetDataObject 第二个参数 $true 表示复制数据（而非引用），确保剪贴板格式可被 Win32 API 枚举。
-	script := `$ErrorActionPreference = 'Stop';` +
+	// SetDataObject 第二个参数 $true 表示复制数据（而非引用），确保剪贴板格式可被 Win32 API 枚举；
+	// 第三个/第四个参数为重试次数与重试间隔（毫秒），应对剪贴板被其他进程瞬时占用，
+	// 重试耗尽后仍失败则由 catch 向上抛出错误
+	return `$ErrorActionPreference = 'Stop';` +
 		`try {` +
 		`Add-Type -AssemblyName System.Windows.Forms;` +
 		`try{$orig=[System.Windows.Forms.Clipboard]::GetDataObject()}catch{$orig=$null};` +
@@ -218,19 +238,12 @@ func (c *Clipboard) AddFiles(filePaths []string) error {
 		`$files=New-Object System.Collections.Specialized.StringCollection;` +
 		addCmds.String() +
 		`$new.SetFileDropList($files);` +
-		`[System.Windows.Forms.Clipboard]::SetDataObject($new,$true)` +
+		`[System.Windows.Forms.Clipboard]::SetDataObject($new,$true,` +
+		fmt.Sprintf("%d,%d", clipboardWriteRetryTimes, clipboardWriteRetryDelayMs) + `)` +
 		`} catch {` +
 		`Write-Error $_.Exception.Message;` +
 		`exit 1;` +
 		`}`
-
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("剪贴板操作失败: %w\n%s", err, string(output))
-	}
-	return nil
 }
 
 // registerClipboardFormatW 注册自定义剪贴板格式
