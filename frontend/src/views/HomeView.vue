@@ -13,7 +13,14 @@
 
       <header class="mb-8">
         <h1 class="text-3xl md:text-4xl font-bold text-center mb-2">
-          ImageFunnel
+          <!-- 点击应用名称回到首页并清除全部查询参数（如 ?dir=），目录选择随之回退到根目录 -->
+          <RouterLink
+            to="/"
+            title="回到首页（清除查询参数）"
+            class="cursor-pointer no-underline transition-colors hover:text-white"
+          >
+            ImageFunnel
+          </RouterLink>
           <span v-if="version" class="text-lg md:text-xl text-primary-400 font-normal ml-2">
             {{ version }}
           </span>
