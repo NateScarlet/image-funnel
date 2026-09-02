@@ -3,13 +3,13 @@
 package clipboard
 
 import (
+	"encoding/binary"
 	"fmt"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -20,32 +20,39 @@ var (
 	kernel32                = windows.NewLazySystemDLL("kernel32.dll")
 	openClipboard           = user32.NewProc("OpenClipboard")
 	closeClipboard          = user32.NewProc("CloseClipboard")
+	emptyClipboard          = user32.NewProc("EmptyClipboard")
 	getClipboardData        = user32.NewProc("GetClipboardData")
+	setClipboardData        = user32.NewProc("SetClipboardData")
 	registerClipboardFormat = user32.NewProc("RegisterClipboardFormatW")
 	enumClipboardFormats    = user32.NewProc("EnumClipboardFormats")
 	getClipboardFormatNameW = user32.NewProc("GetClipboardFormatNameW")
 	globalAlloc             = kernel32.NewProc("GlobalAlloc")
 	globalLock              = kernel32.NewProc("GlobalLock")
 	globalUnlock            = kernel32.NewProc("GlobalUnlock")
+	globalFree              = kernel32.NewProc("GlobalFree")
 	globalSize              = kernel32.NewProc("GlobalSize")
 )
 
 const (
-	cfDropFiles   = 15
-	cfText        = 1
-	cfUnicodeText = 13
-	gmemMoveable  = 0x0002
-	gmemZeroinit  = 0x0040
+	cfDropFiles      = 15
+	cfText           = 1
+	cfUnicodeText    = 13
+	gmemMoveable     = 0x0002
+	gmemZeroinit     = 0x0040
+	dropFilesHeadLen = 20 // DROPFILES 结构头长度：pFiles(4)+pt(8)+fNC(4)+fWide(4)
 
-	// clipboardWriteRetryTimes / clipboardWriteRetryDelayMs SetDataObject 四参重载的写入重试参数：
-	// 剪贴板是系统全局共享资源，可能被其他进程瞬时占用导致写入失败，按此参数重试后仍失败才报错
-	clipboardWriteRetryTimes   = 10
+	// clipboardWriteRetryTimes / clipboardWriteRetryDelayMs 写入重试参数：
+	// 剪贴板是系统全局共享资源，MuMu 等模拟器进程会高频抢占剪贴板（尤其是 OLE 路径，
+	// 表现为 .NET/WPF SetDataObject 频繁 CLIPBRD_E_CANT_OPEN）。本实现绕过 OLE，
+	// 直接使用 Win32 原始 API，并对 OpenClipboard 与 EmptyClipboard 两个可失败
+	// 步骤分别重试；实测竞争下平均 1 轮成功，30 轮上限留足余量。
+	clipboardWriteRetryTimes   = 30
 	clipboardWriteRetryDelayMs = 100
 )
 
 // Clipboard Windows 剪贴板实现
 type Clipboard struct {
-	// mu 串行化本进程内的剪贴板写入，避免并发请求各自启动 PowerShell 进程互相抢占剪贴板
+	// mu 串行化本进程内的剪贴板写入，避免并发请求各自抢占剪贴板
 	mu sync.Mutex
 }
 
@@ -192,8 +199,13 @@ func formatName(id uint32) string {
 	return fmt.Sprintf("CF_#%d", id)
 }
 
-// AddFiles 通过 PowerShell 调用 .NET Clipboard API 向剪贴板附加文件
-func (c *Clipboard) AddFiles(filePaths []string) error {
+// AddFiles 将文件列表以 CF_HDROP 写入剪贴板，同时写回纯文本与 HTML 格式。
+//
+// MuMu 等模拟器进程会高频抢占剪贴板，.NET/WPF 的 SetDataObject（OLE 路径）会因此
+// 频繁报 CLIPBRD_E_CANT_OPEN；本实现绕过 OLE，直接使用 Win32 原始 API
+// （OpenClipboard/EmptyClipboard/SetClipboardData），并对 OpenClipboard 与
+// EmptyClipboard 两个可失败步骤分别重试。所有调用必须在同一 OS 线程上执行。
+func (c *Clipboard) AddFiles(filePaths []string, html string) error {
 	if len(filePaths) == 0 {
 		return nil
 	}
@@ -202,48 +214,135 @@ func (c *Clipboard) AddFiles(filePaths []string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", buildAddFilesScript(filePaths))
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("剪贴板操作失败: %w\n%s", err, string(output))
+	// 剪贴板 API 要求 Open/Close 在同一 OS 线程上配对调用
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// 与前端 text/plain 内容保持一致：绝对路径每行一个
+	text := strings.Join(filePaths, "\r\n")
+
+	// 预构建各格式负载（含 App 写入时带 nonce 的 HTML；html 为空则不写 HTML 格式）
+	textBlob := utf16Bytes(text + "\x00") // CF_UNICODETEXT：UTF-16LE + 结尾 NULL
+	dropBlob := buildDropFiles(filePaths)
+
+	var htmlFormat uint32
+	var htmlBlob []byte
+	if html != "" {
+		format, err := registerClipboardFormatW("HTML Format")
+		if err != nil {
+			return err
+		}
+		htmlFormat = format
+		htmlBlob = buildCFHTML(html)
 	}
-	return nil
+
+	var lastErr error
+	for attempt := 0; attempt < clipboardWriteRetryTimes; attempt++ {
+		// 1. 打开剪贴板；失败说明被其他进程占用，等待后重试
+		ret, _, _ := openClipboard.Call(0)
+		if ret == 0 {
+			lastErr = fmt.Errorf("OpenClipboard failed")
+			time.Sleep(clipboardWriteRetryDelayMs * time.Millisecond)
+			continue
+		}
+
+		// 2. 清空旧数据；失败通常因前一个拥有者的延迟渲染未及时响应，
+		//    先关闭本次打开再等待后重试（否则自己占着锁永远重试不出去）
+		ret, _, _ = emptyClipboard.Call()
+		if ret == 0 {
+			closeClipboard.Call()
+			lastErr = fmt.Errorf("EmptyClipboard failed")
+			time.Sleep(clipboardWriteRetryDelayMs * time.Millisecond)
+			continue
+		}
+
+		// 3. 写入三种格式（SetClipboardData 成功后内存归系统所有，不可释放）。
+		//    EmptyClipboard 成功后旧数据已被清空，此处失败属于不可恢复错误，
+		//    直接快速失败返回，避免重试留下半空剪贴板
+		ok := setClipboardDataFormat(cfUnicodeText, textBlob)
+		if ok && html != "" {
+			ok = setClipboardDataFormat(htmlFormat, htmlBlob)
+		}
+		if ok {
+			ok = setClipboardDataFormat(cfDropFiles, dropBlob)
+		}
+		closeClipboard.Call()
+		if !ok {
+			return fmt.Errorf("SetClipboardData failed")
+		}
+		return nil
+	}
+	return lastErr
 }
 
-// buildAddFilesScript 构建向剪贴板附加文件列表的 PowerShell 脚本：
-// 1. 获取当前剪贴板 DataObject，逐个格式复制到新 DataObject（保留所有已有格式）
-// 2. 附加文件路径
-// 3. 通过四参重载 SetDataObject 写回，剪贴板被其他进程瞬时占用时自动重试
-func buildAddFilesScript(filePaths []string) string {
-	// 转义路径中的单引号（PowerShell 单引号字符串中唯一需转义的字符）
-	var addCmds strings.Builder
-	for _, p := range filePaths {
-		addCmds.WriteString("$files.Add('")
-		addCmds.WriteString(strings.ReplaceAll(p, "'", "''"))
-		addCmds.WriteString("');")
+// setClipboardDataFormat 分配全局内存并写入指定剪贴板格式。
+// 成功后 HGLOBAL 所有权移交系统，调用方不得释放；失败时负责释放并返回 false。
+func setClipboardDataFormat(format uint32, data []byte) bool {
+	h, _, _ := globalAlloc.Call(gmemMoveable|gmemZeroinit, uintptr(len(data)))
+	if h == 0 {
+		return false
 	}
+	p, _, _ := globalLock.Call(h)
+	if p == 0 {
+		globalFree.Call(h)
+		return false
+	}
+	copy(unsafe.Slice((*byte)(unsafe.Pointer(p)), len(data)), data)
+	globalUnlock.Call(h)
 
-	// 注意：不能用 New-Object DataObject($orig) 复制格式——这会把原 DataObject 整体当作一个对象存储，
-	// 导致 CF_HDROP 等格式丢失。必须逐个格式取出数据再 SetData 到新 DataObject。
-	// SetDataObject 第二个参数 $true 表示复制数据（而非引用），确保剪贴板格式可被 Win32 API 枚举；
-	// 第三个/第四个参数为重试次数与重试间隔（毫秒），应对剪贴板被其他进程瞬时占用，
-	// 重试耗尽后仍失败则由 catch 向上抛出错误
-	return `$ErrorActionPreference = 'Stop';` +
-		`try {` +
-		`Add-Type -AssemblyName System.Windows.Forms;` +
-		`try{$orig=[System.Windows.Forms.Clipboard]::GetDataObject()}catch{$orig=$null};` +
-		`$new=New-Object System.Windows.Forms.DataObject;` +
-		`if($orig){foreach($fmt in $orig.GetFormats()){$data=$orig.GetData($fmt);if($data){$new.SetData($fmt,$data)}}};` +
-		`$files=New-Object System.Collections.Specialized.StringCollection;` +
-		addCmds.String() +
-		`$new.SetFileDropList($files);` +
-		`[System.Windows.Forms.Clipboard]::SetDataObject($new,$true,` +
-		fmt.Sprintf("%d,%d", clipboardWriteRetryTimes, clipboardWriteRetryDelayMs) + `)` +
-		`} catch {` +
-		`Write-Error $_.Exception.Message;` +
-		`exit 1;` +
-		`}`
+	if ret, _, _ := setClipboardData.Call(uintptr(format), h); ret == 0 {
+		globalFree.Call(h)
+		return false
+	}
+	return true
+}
+
+// buildDropFiles 构造 CF_HDROP 剪贴板数据：
+// DROPFILES 头（pFiles=20 指向文件列表偏移，fWide=1 表示宽字符路径）+
+// UTF-16LE 空终止的文件路径列表，列表末尾再补一个 NULL 形成双 NULL 结尾。
+func buildDropFiles(filePaths []string) []byte {
+	buf := make([]byte, 0, 64)
+
+	// DROPFILES 头：pFiles=20（路径列表相对结构体起点的偏移），fWide=1
+	head := make([]byte, dropFilesHeadLen)
+	binary.LittleEndian.PutUint32(head[0:4], dropFilesHeadLen)
+	binary.LittleEndian.PutUint32(head[16:20], 1)
+	buf = append(buf, head...)
+
+	for _, p := range filePaths {
+		buf = append(buf, utf16Bytes(p)...)
+		buf = append(buf, 0, 0) // 每个路径 NULL 终止
+	}
+	buf = append(buf, 0, 0) // 列表结尾额外 NULL，双 NULL 结尾
+	return buf
+}
+
+// cfHTMLHeaderFmt CF_HTML 头部模板：
+// 偏移字段固定为 10 位十进制数字（%010d），保证头部长度恒定，便于计算字节偏移。
+const cfHTMLHeaderFmt = "Version:0.9\r\nStartHTML:%010d\r\nEndHTML:%010d\r\nStartFragment:%010d\r\nEndFragment:%010d\r\n"
+
+// buildCFHTML 构造 CF_HTML 剪贴板数据：头部 + HTML 内容。
+// StartHTML/EndHTML 指向 HTML 内容的起止字节偏移，使读取端可 round-trip 还原；
+// Start/EndFragment 与 Start/EndHTML 相同（内容整体即片段）。
+func buildCFHTML(html string) []byte {
+	headerLen := len(fmt.Sprintf(cfHTMLHeaderFmt, 0, 0, 0, 0))
+	startHTML := headerLen
+	endHTML := headerLen + len(html)
+	header := fmt.Sprintf(cfHTMLHeaderFmt, startHTML, endHTML, startHTML, endHTML)
+	blob := make([]byte, 0, headerLen+len(html))
+	blob = append(blob, header...)
+	blob = append(blob, html...)
+	return blob
+}
+
+// utf16Bytes 将字符串编码为 UTF-16LE 字节序列（不追加结尾 NULL）
+func utf16Bytes(s string) []byte {
+	units := utf16.Encode([]rune(s))
+	b := make([]byte, 0, len(units)*2)
+	for _, u := range units {
+		b = append(b, byte(u), byte(u>>8))
+	}
+	return b
 }
 
 // registerClipboardFormatW 注册自定义剪贴板格式

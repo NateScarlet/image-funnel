@@ -121,6 +121,13 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 - **API**: GraphQL (Apollo Client + WebSocket subscriptions)
 - **数据存储**: XMP sidecar 文件，无数据库
 
+### Windows 剪贴板（基础设施经验）
+
+- **OLE vs 原始 Win32 两套路径**：`.NET/WPF` 的 `Clipboard.SetDataObject` 走 OLE 剪贴板（`OleSetClipboard`/`OleFlushClipboard`），MuMu 等安卓模拟器的剪贴板桥会**高频抢占 OLE 层**（偶尔也会连带原始层），导致 .NET 路径频繁报 `CLIPBRD_E_CANT_OPEN`（0x800401D0）。`clip.exe`、`OpenClipboard/SetClipboardData` 走原始 Win32 路径，通常不受影响。
+- **写入实现**：`clipboard_windows.go` 的 `AddFiles` 直接调用 Win32 原始 API，并对 `OpenClipboard` 与 `EmptyClipboard` 两个可失败步骤分别重试（实测竞争下平均 1 轮成功）。`EmptyClipboard` 失败可能是前一个拥有者的延迟渲染未响应，**必须先 `CloseClipboard` 再重试**，否则自己占着锁永远重试不出去。`SetClipboardData` 成功后 HGLOBAL 所有权归系统、不可释放，仅失败路径需要 `GlobalFree`。全部调用必须 `runtime.LockOSThread` 保持同一 OS 线程。
+- **测试注意**：MuMu 等进程会读取并重写剪贴板，重写期间存在清空旧数据的空窗，测试读回格式时应有限时间内重试。
+- **`clip` 只能写纯文本**：`clip.exe` 只写 `CF_UNICODETEXT`，无法写 HTML Format（CF_HTML 需带 `StartHTML/EndHTML` 偏移头，见 `buildCFHTML`）。
+
 ## 项目结构
 
 ```

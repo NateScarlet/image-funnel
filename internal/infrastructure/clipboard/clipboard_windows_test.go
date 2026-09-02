@@ -3,11 +3,13 @@
 package clipboard
 
 import (
-	"fmt"
+	"encoding/binary"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+	"unicode/utf16"
 )
 
 func TestAddFiles_ThenReadBack(t *testing.T) {
@@ -18,61 +20,136 @@ func TestAddFiles_ThenReadBack(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
+	// 与前端写入的 HTML 结构一致，含 nonce meta（验证 round-trip 后 nonce 仍可读）
+	html := `<html><head><meta name="io.github.natescarlet.image-funnel.nonce" content="abc-123"/></head><body><pre>` + tmpFile + `</pre></body></html>`
+
 	c := NewClipboard()
 
-	// 调用 AddFiles 附加文件
-	err := c.AddFiles([]string{tmpFile})
+	// 调用 AddFiles 附加文件并写回 HTML
+	err := c.AddFiles([]string{tmpFile}, html)
 	if err != nil {
-		// 无 GUI 会话时剪贴板操作不可用，跳过测试
-		// PowerShell 报错可能包含 "Requested Clipboard" 或 "Clipboard" 等关键词
+		// 无 GUI 会话或剪贴板被外部进程持续占用时剪贴板操作不可用，跳过测试
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "Requested Clipboard") ||
-			strings.Contains(errMsg, "Clipboard operation did not succeed") ||
-			strings.Contains(errMsg, "CLIPBRD_E") {
-			t.Skip("clipboard unavailable in non-GUI environment")
+		if strings.Contains(errMsg, "OpenClipboard failed") ||
+			strings.Contains(errMsg, "EmptyClipboard failed") ||
+			strings.Contains(errMsg, "clipboard busy") {
+			t.Skip("clipboard unavailable in non-GUI environment: " + errMsg)
 		}
 		t.Fatalf("AddFiles failed: %v", err)
 	}
 
-	// 验证剪贴板格式列表中包含 CF_HDROP
-	formats := c.ListFormats()
-	found := false
-	for _, f := range formats {
-		if f == "CF_HDROP" {
-			found = true
+	// MuMu 等进程会读取并重写剪贴板，重写期间存在清空旧数据的空窗；
+	// 有限时间内重试读回，直到目标格式出现或超时
+	const readBackTimeout = 3 * time.Second
+	var formats []string
+	foundDrop, foundHTML := false, false
+	deadline := time.Now().Add(readBackTimeout)
+	for time.Now().Before(deadline) {
+		formats = c.ListFormats()
+		foundDrop, foundHTML = false, false
+		for _, f := range formats {
+			if f == "CF_HDROP" {
+				foundDrop = true
+			}
+			if f == "HTML Format" {
+				foundHTML = true
+			}
+		}
+		if foundDrop && foundHTML {
 			break
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	if !found {
+	if !foundDrop {
 		t.Errorf("CF_HDROP not found in clipboard formats after AddFiles. Formats: %v", formats)
 	}
-}
-
-func TestBuildAddFilesScript_UsesRetryingSetDataObject(t *testing.T) {
-	script := buildAddFilesScript([]string{`C:\tmp\test.png`})
-
-	// 写入必须使用 SetDataObject 四参重试重载，应对剪贴板被其他进程瞬时占用
-	wantSet := fmt.Sprintf(
-		`[System.Windows.Forms.Clipboard]::SetDataObject($new,$true,%d,%d)`,
-		clipboardWriteRetryTimes, clipboardWriteRetryDelayMs,
-	)
-	if !strings.Contains(script, wantSet) {
-		t.Errorf("script should use the retrying SetDataObject overload %q, got:\n%s", wantSet, script)
+	if !foundHTML {
+		t.Errorf("HTML Format not found in clipboard formats after AddFiles. Formats: %v", formats)
 	}
-	if !strings.Contains(script, `$files.Add('C:\tmp\test.png');`) {
-		t.Errorf("script should add the file path, got:\n%s", script)
+
+	// 读回 HTML，验证 nonce 内容仍在（写入-读取 round-trip）
+	gotHTML, err := c.ReadHTMLFormat()
+	if err != nil {
+		t.Fatalf("ReadHTMLFormat failed: %v", err)
 	}
-	// 重试耗尽后仍失败必须向上抛出，不能静默吞错
-	if !strings.Contains(script, `Write-Error $_.Exception.Message;exit 1;`) {
-		t.Errorf("script should keep fail-fast error report, got:\n%s", script)
+	if !strings.Contains(gotHTML, "abc-123") {
+		t.Errorf("nonce missing after round-trip. HTML: %s", gotHTML)
 	}
 }
 
-func TestBuildAddFilesScript_EscapesSingleQuotes(t *testing.T) {
-	script := buildAddFilesScript([]string{`C:\tmp\o'brien.png`})
-	// PowerShell 单引号字符串中单引号需翻倍转义
-	if !strings.Contains(script, `$files.Add('C:\tmp\o''brien.png');`) {
-		t.Errorf("single quotes should be doubled in PowerShell single-quoted string, got:\n%s", script)
+func TestBuildCFHTML_RoundTrip(t *testing.T) {
+	html := `<html><head><meta name="io.github.natescarlet.image-funnel.nonce" content="abc-123"/></head><body><pre>C:\test.png</pre></body></html>`
+
+	blob := buildCFHTML(html)
+	raw := string(blob)
+
+	// 头部必须以 Version:0.9 开头
+	if !strings.HasPrefix(raw, "Version:0.9\r\n") {
+		t.Fatalf("CF_HTML should start with Version:0.9, got: %q", raw[:min(len(raw), 32)])
+	}
+
+	// 偏移字段必须为 10 位定宽（读取端 findCFHTMLOffset 依赖此格式）
+	for _, key := range []string{"StartHTML:", "EndHTML:", "StartFragment:", "EndFragment:"} {
+		off := findCFHTMLOffset(raw, key)
+		if off < 0 {
+			t.Fatalf("missing %s in header: %q", key, raw)
+		}
+	}
+
+	// 读回内容必须与写入的 html 一致（round-trip）
+	startHTML := findCFHTMLOffset(raw, "StartHTML:")
+	endHTML := findCFHTMLOffset(raw, "EndHTML:")
+	if startHTML < 0 || endHTML < 0 || startHTML >= endHTML || endHTML > len(raw) {
+		t.Fatalf("invalid CF_HTML offsets: start=%d end=%d len=%d", startHTML, endHTML, len(raw))
+	}
+	if got := raw[startHTML:endHTML]; got != html {
+		t.Errorf("round-trip mismatch:\n want: %s\n  got: %s", html, got)
+	}
+}
+
+func TestBuildDropFiles_Layout(t *testing.T) {
+	paths := []string{`C:\tmp\a.png`, `C:\tmp\o'brien.png`}
+	data := buildDropFiles(paths)
+
+	// DROPFILES 头布局：pFiles=20（文件列表偏移），fNC=0，fWide=1
+	if got := binary.LittleEndian.Uint32(data[0:4]); got != 20 {
+		t.Errorf("pFiles=%d, want 20", got)
+	}
+	if got := binary.LittleEndian.Uint32(data[16:20]); got != 1 {
+		t.Errorf("fWide=%d, want 1", got)
+	}
+
+	// 从偏移 20 开始解析 UTF-16LE 路径列表，直到双 NULL 结尾
+	off := 20
+	var decoded []string
+	for off+1 < len(data) {
+		var u []uint16
+		for off+1 < len(data) {
+			c := binary.LittleEndian.Uint16(data[off:])
+			off += 2
+			if c == 0 {
+				break
+			}
+			u = append(u, c)
+		}
+		if len(u) == 0 {
+			break // 空路径表示列表结束（双 NULL 结尾）
+		}
+		decoded = append(decoded, string(utf16.Decode(u)))
+	}
+
+	if len(decoded) != len(paths) {
+		t.Fatalf("decoded %d paths, want %d: %v", len(decoded), len(paths), decoded)
+	}
+	for i, want := range paths {
+		if decoded[i] != want {
+			t.Errorf("path[%d]=%q, want %q", i, decoded[i], want)
+		}
+	}
+
+	// 列表必须以双 NULL 结尾
+	if data[len(data)-1] != 0 || data[len(data)-2] != 0 {
+		t.Error("file list should end with double NULL terminator")
 	}
 }
 
@@ -83,6 +160,8 @@ func TestAddFiles_Concurrent(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 
+	html := `<html><head><meta name="io.github.natescarlet.image-funnel.nonce" content="cc"/></head><body></body></html>`
+
 	c := NewClipboard()
 	const n = 4
 	var wg sync.WaitGroup
@@ -91,7 +170,7 @@ func TestAddFiles_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs[i] = c.AddFiles([]string{tmpFile})
+			errs[i] = c.AddFiles([]string{tmpFile}, html)
 		}(i)
 	}
 	wg.Wait()
@@ -102,9 +181,9 @@ func TestAddFiles_Concurrent(t *testing.T) {
 			continue
 		}
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "Requested Clipboard") ||
-			strings.Contains(errMsg, "Clipboard operation did not succeed") ||
-			strings.Contains(errMsg, "CLIPBRD_E") {
+		if strings.Contains(errMsg, "OpenClipboard failed") ||
+			strings.Contains(errMsg, "EmptyClipboard failed") ||
+			strings.Contains(errMsg, "clipboard busy") {
 			t.Skip("clipboard unavailable in non-GUI environment")
 			return
 		}

@@ -99,8 +99,8 @@ func (h *Handler) AttachFileToClipboard(
 		absPaths = append(absPaths, absPath)
 	}
 
-	// 添加文件到剪贴板，保留已有数据
-	err = h.clipboard.AddFiles(absPaths)
+	// 添加文件到剪贴板，并写回已校验的 HTML 内容（保留 nonce 数据）
+	err = h.clipboard.AddFiles(absPaths, htmlContent)
 	if err != nil {
 		h.logger.Error("Failed to add files to clipboard", zap.Error(err))
 		return nil, apperror.New("CLIPBOARD_WRITE_FAILED", "Failed to add files to clipboard", "无法添加文件到剪贴板")

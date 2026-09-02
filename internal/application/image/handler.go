@@ -10,11 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// ClipboardProvider 剪贴板操作接口，避免循环依赖
+// ClipboardProvider 剪贴板操作接口，避免循环依赖。
+// AddFiles 的 html 参数为已写入剪贴板的 HTML 内容，需要随文件一起写回，
+// 避免实现内部再次读取剪贴板（读回可能触发延迟渲染阻塞）。
 type ClipboardProvider interface {
 	ReadCustomFormat(formatName string) (string, error)
 	ReadHTMLFormat() (string, error)
-	AddFiles(filePaths []string) error
+	AddFiles(filePaths []string, html string) error
 	ListFormats() []string
 }
 

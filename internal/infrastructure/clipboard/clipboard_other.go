@@ -18,7 +18,7 @@ func (c *Clipboard) ReadCustomFormat(formatName string) (string, error) {
 }
 
 // AddFiles 向剪贴板附加文件（非 Windows 平台不支持）
-func (c *Clipboard) AddFiles(filePaths []string) error {
+func (c *Clipboard) AddFiles(filePaths []string, html string) error {
 	return errors.New("not supported on this platform")
 }
 
