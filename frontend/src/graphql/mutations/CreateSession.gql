@@ -1,4 +1,4 @@
-mutation CreateSession($input: CreateSessionInput!) {
+mutation CreateSession($input: CreateSessionInput!, $format: ImageFormat = WEBP) {
   createSession(input: $input) {
     session {
       ...Session

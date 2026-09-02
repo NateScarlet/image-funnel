@@ -1,4 +1,4 @@
-mutation UpdateSession($input: UpdateSessionInput!) {
+mutation UpdateSession($input: UpdateSessionInput!, $format: ImageFormat = WEBP) {
   updateSession(input: $input) {
     session {
       ...Session

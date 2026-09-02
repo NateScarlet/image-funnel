@@ -49,15 +49,15 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (sc
 	params.Set("t", fmt.Sprintf("%d", timestamp))
 	params.Set("s", fmt.Sprintf("%d", size))
 
-	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"))
+	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"), params.Get("fmt"))
 	params.Set("sig", base64.URLEncoding.EncodeToString(signatureBytes))
 
 	return scalar.ParseURI(fmt.Sprintf("image?%s", params.Encode()))
 }
 
-func (s *Signer) calculateSignature(relPath, timestamp, size, w, q string) []byte {
+func (s *Signer) calculateSignature(relPath, timestamp, size, w, q, format string) []byte {
 	mac := hmac.New(sha256.New, s.secretKey)
-	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", relPath, timestamp, size, w, q)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, format)
 	return mac.Sum(nil)
 }
 
@@ -100,12 +100,13 @@ func (s *Signer) ValidateRequestFromValues(params url.Values) error {
 	signature := params.Get("sig")
 	w := params.Get("w")
 	q := params.Get("q")
+	format := params.Get("fmt")
 
 	if path == "" || timestampStr == "" || sizeStr == "" || signature == "" {
 		return fmt.Errorf("missing required parameters")
 	}
 
-	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q)
+	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q, format)
 	gotSignature, err := base64.URLEncoding.DecodeString(signature)
 	if err != nil {
 		return fmt.Errorf("invalid signature encoding")

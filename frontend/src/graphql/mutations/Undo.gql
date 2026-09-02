@@ -1,4 +1,4 @@
-mutation Undo($input: UndoInput!) {
+mutation Undo($input: UndoInput!, $format: ImageFormat = WEBP) {
   undo(input: $input) {
     session {
       ...Session

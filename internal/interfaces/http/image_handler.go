@@ -34,11 +34,24 @@ func handleImage(
 		relativePath := query.Get("path")
 		widthStr := query.Get("w")
 		qualityStr := query.Get("q")
+		formatStr := query.Get("fmt")
 		raw := query.Has("raw")
 
 		err := signer.ValidateRequestFromValues(query)
 		if err != nil {
 			http.Error(w, "invalid signature: "+err.Error(), http.StatusForbidden)
+			return
+		}
+
+		// 解析格式参数，空值默认 WebP
+		format := appimage.ImageFormatWebP
+		switch formatStr {
+		case "avif":
+			format = appimage.ImageFormatAVIF
+		case "webp", "":
+			// 默认 WebP
+		default:
+			http.Error(w, "unsupported format: "+formatStr, http.StatusBadRequest)
 			return
 		}
 
@@ -64,7 +77,7 @@ func handleImage(
 			}
 
 			var file appimage.File
-			file, err = imageProcessor.Process(r.Context(), absPath, width, quality)
+			file, err = imageProcessor.Process(r.Context(), absPath, width, quality, format)
 			if err == nil {
 				reader, err = file.Open()
 			}
@@ -87,6 +100,14 @@ func handleImage(
 
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", etag)
+
+		// 根据请求格式显式设置 Content-Type，不依赖内容嗅探（嗅探无法识别 AVIF）
+		switch format {
+		case appimage.ImageFormatAVIF:
+			w.Header().Set("Content-Type", "image/avif")
+		default:
+			w.Header().Set("Content-Type", "image/webp")
+		}
 
 		// 使用 mime.FormatMediaType 安全格式化 Content-Disposition 响应头，防止头部注入并正确转义文件名
 		filename := filepath.Base(relativePath)

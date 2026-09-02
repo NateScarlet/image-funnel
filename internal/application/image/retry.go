@@ -33,9 +33,9 @@ func NewRetryProcessor(next Processor, logger *zap.Logger) *RetryProcessor {
 }
 
 // Process 尝试对图片进行转码，如果在处理中发生意外截止错误，在 context 允许的范围内进行指数退避重试
-func (p *RetryProcessor) Process(ctx context.Context, srcPath string, width, quality int) (File, error) {
+func (p *RetryProcessor) Process(ctx context.Context, srcPath string, width, quality int, format ImageFormat) (File, error) {
 	return retry(ctx, p, srcPath, "process", func() (File, error) {
-		return p.next.Process(ctx, srcPath, width, quality)
+		return p.next.Process(ctx, srcPath, width, quality, format)
 	})
 }
 

@@ -1,4 +1,4 @@
-query BrowseImages($id: ID!, $filterBy: ImageFiltersInput, $first: Int, $after: String) {
+query BrowseImages($id: ID!, $filterBy: ImageFiltersInput, $first: Int, $after: String, $format: ImageFormat = WEBP) {
   node(id: $id) {
     id
     ... on Directory {

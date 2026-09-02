@@ -13,13 +13,34 @@ import (
 )
 
 // URL is the resolver for the url field.
-func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error) {
+func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int, format *ImageFormat) (*scalar.URI, error) {
 	var opts []image.SignOption
 	if width != nil && *width < obj.Width {
 		opts = append(opts, image.WithWidth(*width))
 	}
 	if quality != nil {
-		opts = append(opts, image.WithQuality(*quality))
+		q := *quality
+		// 质量标定：AVIF ≈ WebP − 15（实测同数值 AVIF 体积更大、画质更高，重标定后体积减少且画质更好）
+		if format != nil && *format == ImageFormatAvif {
+			q -= 15
+			if q < 1 {
+				q = 1
+			}
+		}
+		// 任何格式质量硬性上限 95（q≥100 libwebp 触发无损慢编码 / libaom 参数冲突）
+		if q > 95 {
+			q = 95
+		}
+		opts = append(opts, image.WithQuality(q))
+	}
+	// 映射 GraphQL 枚举到应用层格式，默认 WEBP
+	if format != nil {
+		switch *format {
+		case ImageFormatAvif:
+			opts = append(opts, image.WithFormat(image.ImageFormatAVIF))
+		case ImageFormatWebp:
+			opts = append(opts, image.WithFormat(image.ImageFormatWebP))
+		}
 	}
 	uri, err := r.signer.GenerateSignedURL(obj.AbsPath, opts...)
 	if err != nil {

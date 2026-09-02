@@ -256,7 +256,7 @@ type ComplexityRoot struct {
 		RawURL        func(childComplexity int) int
 		RelPath       func(childComplexity int) int
 		Size          func(childComplexity int) int
-		URL           func(childComplexity int, width *int, quality *int) int
+		URL           func(childComplexity int, width *int, quality *int, format *ImageFormat) int
 		Width         func(childComplexity int) int
 		XMPExists     func(childComplexity int) int
 	}
@@ -606,7 +606,7 @@ type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
 }
 type ImageResolver interface {
-	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error)
+	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int, format *ImageFormat) (*scalar.URI, error)
 	RawURL(ctx context.Context, obj *shared.ImageDTO) (*scalar.URI, error)
 
 	Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error)
@@ -1407,7 +1407,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Image.URL(childComplexity, args["width"].(*int), args["quality"].(*int)), true
+		return e.complexity.Image.URL(childComplexity, args["width"].(*int), args["quality"].(*int), args["format"].(*ImageFormat)), true
 	case "Image.width":
 		if e.complexity.Image.Width == nil {
 			break
@@ -3339,8 +3339,8 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   filename: String!
   "文件大小（字节）"
   size: Int!
-  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）和 quality"
-  url(width: Int, quality: Int): URI!
+  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）、quality 和 format（默认 WEBP）"
+  url(width: Int, quality: Int, format: ImageFormat = WEBP): URI!
   "带签名的原始图片URL（无缩放）"
   rawURL: URI!
   "文件最后修改时间"
@@ -3702,6 +3702,18 @@ enum ImageAction @goModel(model: "main/internal/shared.ImageAction") {
   """
   REJECT
 }`, BuiltIn: false},
+	{Name: "../../../graph/enums/image_format.graphql", Input: `"""
+图片转码输出格式。
+前端通过能力探测选择格式，在 GraphQL 查询中显式指定；
+未传格式参数时默认 WEBP，保证向后兼容。
+"""
+enum ImageFormat {
+  "WebP 格式（默认，所有浏览器支持）"
+  WEBP
+  "AVIF 格式（更高效，Chrome 85+ / Firefox 93+ / Safari 16+ 支持）"
+  AVIF
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/enums/notification_event_type.graphql", Input: `"""
 通知变更事件类型，用于 subscription 事件推送。
 """
@@ -4655,6 +4667,11 @@ func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["quality"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "format", ec.unmarshalOImageFormat2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐImageFormat)
+	if err != nil {
+		return nil, err
+	}
+	args["format"] = arg2
 	return args, nil
 }
 
@@ -8619,7 +8636,7 @@ func (ec *executionContext) _Image_url(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Image_url,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int), fc.Args["quality"].(*int))
+			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int), fc.Args["quality"].(*int), fc.Args["format"].(*ImageFormat))
 		},
 		nil,
 		ec.marshalNURI2ᚖmainᚋinternalᚋscalarᚐURI,
@@ -26614,23 +26631,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 
@@ -27717,6 +27734,22 @@ func (ec *executionContext) unmarshalOImageFiltersInput2ᚖmainᚋinternalᚋsha
 	}
 	res, err := ec.unmarshalInputImageFiltersInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOImageFormat2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐImageFormat(ctx context.Context, v any) (*ImageFormat, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(ImageFormat)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOImageFormat2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐImageFormat(ctx context.Context, sel ast.SelectionSet, v *ImageFormat) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {

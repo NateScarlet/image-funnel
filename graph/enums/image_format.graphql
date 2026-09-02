@@ -1,0 +1,11 @@
+"""
+图片转码输出格式。
+前端通过能力探测选择格式，在 GraphQL 查询中显式指定；
+未传格式参数时默认 WEBP，保证向后兼容。
+"""
+enum ImageFormat {
+  "WebP 格式（默认，所有浏览器支持）"
+  WEBP
+  "AVIF 格式（更高效，Chrome 85+ / Firefox 93+ / Safari 16+ 支持）"
+  AVIF
+}

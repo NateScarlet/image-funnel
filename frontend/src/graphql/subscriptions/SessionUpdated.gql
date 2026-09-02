@@ -1,4 +1,4 @@
-subscription SessionUpdated($id: ID!) {
+subscription SessionUpdated($id: ID!, $format: ImageFormat = WEBP) {
   sessionUpdated(id: $id) {
     ...Session
   }

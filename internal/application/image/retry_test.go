@@ -19,7 +19,7 @@ type mockProcessor struct {
 	resultMeta *shared.ImageMeta
 }
 
-func (m *mockProcessor) Process(ctx context.Context, srcPath string, width, quality int) (File, error) {
+func (m *mockProcessor) Process(ctx context.Context, srcPath string, width, quality int, format ImageFormat) (File, error) {
 	m.calls++
 	if m.calls <= len(m.errs) {
 		return nil, m.errs[m.calls-1]
@@ -42,7 +42,7 @@ func TestRetryProcessor_Process_SuccessAfterRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond // 缩短退避以加速测试
 
-	_, err := p.Process(context.Background(), "test.png", 100, 75)
+	_, err := p.Process(context.Background(), "test.png", 100, 75, ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestRetryProcessor_Process_NonTargetErrorNoRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond
 
-	_, err := p.Process(context.Background(), "test.png", 100, 75)
+	_, err := p.Process(context.Background(), "test.png", 100, 75, ImageFormatWebP)
 	if !errors.Is(err, fatalErr) {
 		t.Fatalf("expected fatalErr, got: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestRetryProcessor_Process_ContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := p.Process(ctx, "test.png", 100, 75)
+	_, err := p.Process(ctx, "test.png", 100, 75, ImageFormatWebP)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got: %v", err)
 	}

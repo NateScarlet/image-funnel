@@ -1,13 +1,13 @@
 fragment Image on Image {
   id
   filename
-  url
+  url(format: $format)
   rawURL
-  url256: url(width: 256, quality: 75)
-  url512: url(width: 512, quality: 80)
-  url1024: url(width: 1024, quality: 85)
-  url2048: url(width: 2048, quality: 90)
-  url4096: url(width: 4096, quality: 95)
+  url256: url(width: 256, quality: 75, format: $format)
+  url512: url(width: 512, quality: 80, format: $format)
+  url1024: url(width: 1024, quality: 85, format: $format)
+  url2048: url(width: 2048, quality: 90, format: $format)
+  url4096: url(width: 4096, quality: 95, format: $format)
   modTime
   width
   height

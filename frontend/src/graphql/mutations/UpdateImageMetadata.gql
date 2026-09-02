@@ -1,4 +1,4 @@
-mutation UpdateImageMetadata($input: UpdateImageMetadataInput!) {
+mutation UpdateImageMetadata($input: UpdateImageMetadataInput!, $format: ImageFormat = WEBP) {
   updateImageMetadata(input: $input) {
     image {
       ...Image

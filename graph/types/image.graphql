@@ -7,8 +7,8 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   filename: String!
   "文件大小（字节）"
   size: Int!
-  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）和 quality"
-  url(width: Int, quality: Int): URI!
+  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）、quality 和 format（默认 WEBP）"
+  url(width: Int, quality: Int, format: ImageFormat = WEBP): URI!
   "带签名的原始图片URL（无缩放）"
   rawURL: URI!
   "文件最后修改时间"

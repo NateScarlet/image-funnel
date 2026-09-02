@@ -21,11 +21,11 @@ func NewSingleFlightImageProcessor(next appimage.Processor) *SingleFlightImagePr
 	}
 }
 
-func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string, width, quality int) (appimage.File, error) {
-	key := fmt.Sprintf("%s|%d|%d", srcPath, width, quality)
+func (p *SingleFlightImageProcessor) Process(ctx context.Context, srcPath string, width, quality int, format appimage.ImageFormat) (appimage.File, error) {
+	key := fmt.Sprintf("%s|%d|%d|%s", srcPath, width, quality, format.String())
 
 	result, err, _ := p.group.Do(key, func() (interface{}, error) {
-		return p.next.Process(context.Background(), srcPath, width, quality)
+		return p.next.Process(context.Background(), srcPath, width, quality, format)
 	})
 
 	if err != nil {

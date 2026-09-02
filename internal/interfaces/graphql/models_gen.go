@@ -506,6 +506,66 @@ type UpdateSessionPayload struct {
 	ClientMutationID *string            `json:"clientMutationId,omitempty"`
 }
 
+// 图片转码输出格式。
+// 前端通过能力探测选择格式，在 GraphQL 查询中显式指定；
+// 未传格式参数时默认 WEBP，保证向后兼容。
+type ImageFormat string
+
+const (
+	// WebP 格式（默认，所有浏览器支持）
+	ImageFormatWebp ImageFormat = "WEBP"
+	// AVIF 格式（更高效，Chrome 85+ / Firefox 93+ / Safari 16+ 支持）
+	ImageFormatAvif ImageFormat = "AVIF"
+)
+
+var AllImageFormat = []ImageFormat{
+	ImageFormatWebp,
+	ImageFormatAvif,
+}
+
+func (e ImageFormat) IsValid() bool {
+	switch e {
+	case ImageFormatWebp, ImageFormatAvif:
+		return true
+	}
+	return false
+}
+
+func (e ImageFormat) String() string {
+	return string(e)
+}
+
+func (e *ImageFormat) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ImageFormat(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ImageFormat", str)
+	}
+	return nil
+}
+
+func (e ImageFormat) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ImageFormat) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ImageFormat) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // 通知变更事件类型，用于 subscription 事件推送。
 type NotificationEventType string
 

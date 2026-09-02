@@ -42,14 +42,21 @@ func (f *rawFile) Open() (io.ReadSeekCloser, error) {
 	return os.Open(f.path)
 }
 
-func (p *Processor) Process(ctx context.Context, absPath string, width, quality int) (appimage.File, error) {
-	if width == 0 && quality == 0 {
+func (p *Processor) Process(ctx context.Context, absPath string, width, quality int, format appimage.ImageFormat) (appimage.File, error) {
+	// WebP 且无缩放/质量参数时返回原始文件（向后兼容）；AVIF 全分辨率也需要转码
+	if width == 0 && quality == 0 && format == appimage.ImageFormatWebP {
 		return &rawFile{path: absPath}, nil
 	}
 
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
+	}
+
+	// AVIF 全分辨率（无显式质量参数）使用质量上限 95
+	effectiveQuality := quality
+	if effectiveQuality == 0 {
+		effectiveQuality = 95
 	}
 
 	timestamp := fmt.Sprintf("%d", info.ModTime().UnixNano())
@@ -59,13 +66,14 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 		wStr = fmt.Sprintf("%d", width)
 	}
 	qStr := ""
-	if quality > 0 {
-		qStr = fmt.Sprintf("%d", quality)
+	if effectiveQuality > 0 {
+		qStr = fmt.Sprintf("%d", effectiveQuality)
 	}
+	formatStr := format.String()
 
 	hash := sha256.New()
 	// 使用文件名而非绝对路径，从而允许文件移动后复用已转码的缓存（只要文件名、修改时间和大小不变）
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, qStr)
+	fmt.Fprintf(hash, "%s|%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, qStr, formatStr)
 
 	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
 
@@ -92,10 +100,10 @@ func (p *Processor) Process(ctx context.Context, absPath string, width, quality 
 		if width > 0 {
 			args = append(args, "-resize", fmt.Sprintf("%dx>", width))
 		}
-		if quality > 0 {
-			args = append(args, "-quality", fmt.Sprintf("%d", quality))
+		if effectiveQuality > 0 {
+			args = append(args, "-quality", fmt.Sprintf("%d", effectiveQuality))
 		}
-		args = append(args, "webp:-")
+		args = append(args, format.String()+":-")
 
 		cmd := exec.CommandContext(ctx, "magick", args...)
 		cmd.Stdout = pipeWriter

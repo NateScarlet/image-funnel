@@ -1,4 +1,4 @@
-query TrashHistory($first: Int, $after: String) {
+query TrashHistory($first: Int, $after: String, $format: ImageFormat = WEBP) {
   trashHistory(first: $first, after: $after) {
     edges {
       node {
@@ -12,7 +12,7 @@ query TrashHistory($first: Int, $after: String) {
         message
         coverImage {
           id
-          url(width: 256)
+          url(width: 256, format: $format)
           width
           height
         }
@@ -30,7 +30,7 @@ query TrashHistory($first: Int, $after: String) {
       message
       coverImage {
         id
-        url(width: 256)
+        url(width: 256, format: $format)
         width
         height
       }
