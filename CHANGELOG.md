@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.8.0](https://github.com/NateScarlet/image-funnel/compare/v1.7.0...v1.8.0) (2026-09-02)
+
+
+### Features
+
+* add AVIF transcode support with client-side capability probe ([887132b](https://github.com/NateScarlet/image-funnel/commit/887132b473d4381db3bd5c60a06a548e8c094ef2)), closes [#108](https://github.com/NateScarlet/image-funnel/issues/108)
+* **example-hooks/comfyui:** add copy_workflow submodule for copy enhancement ([e5379e7](https://github.com/NateScarlet/image-funnel/commit/e5379e7cf2f883c6e5c83ec1b84bd90fc4003e1d)), closes [#106](https://github.com/NateScarlet/image-funnel/issues/106)
+* **example-hooks/comfyui:** add JSON-RPC serve mode for resident autocomplete ([efd8249](https://github.com/NateScarlet/image-funnel/commit/efd8249df4a48be089466306afe6607e31528e8e))
+* **example-hooks/comfyui:** format prompt base on model ([bc3bf3c](https://github.com/NateScarlet/image-funnel/commit/bc3bf3c9aa92c8ba72909b6df7aceb2ab46a9b33)), closes [#112](https://github.com/NateScarlet/image-funnel/issues/112)
+* **example-hooks/comfyui:** show effective format and source in set-model-format autocomplete ([90bac75](https://github.com/NateScarlet/image-funnel/commit/90bac751f84bcf946640d86543d4eee131cc99ac))
+* **example-hooks/comfyui:** suggest all regions before related tags in empty /add autocomplete ([462d5b3](https://github.com/NateScarlet/image-funnel/commit/462d5b30398406ad2e4ac64d60e869cce9bfbfb7)), closes [#111](https://github.com/NateScarlet/image-funnel/issues/111)
+* **frontend:** detect stale version on WS reconnect and prompt refresh ([eef1258](https://github.com/NateScarlet/image-funnel/commit/eef1258004cf67d90d6c354d6789e7c952a2da46)), closes [#109](https://github.com/NateScarlet/image-funnel/issues/109)
+* **frontend:** detect stale version on WS reconnect and prompt refresh ([de384e3](https://github.com/NateScarlet/image-funnel/commit/de384e300c2cc3a2ef2c40dc1b6649877ca9aef0)), closes [#109](https://github.com/NateScarlet/image-funnel/issues/109)
+* **frontend:** make app name on home clear query params ([f5a178a](https://github.com/NateScarlet/image-funnel/commit/f5a178abff889f1856eb684c9719725940b8b024))
+* **frontend:** redesign icon ([f7c6951](https://github.com/NateScarlet/image-funnel/commit/f7c695102c519a573cc0acb95824c9faac60f28a))
+* **frontend:** show hidden-by-filter counts on empty lists with one-click restore ([2fcb5f1](https://github.com/NateScarlet/image-funnel/commit/2fcb5f1b73e717b390e56a9390994da5bc913d6c)), closes [#110](https://github.com/NateScarlet/image-funnel/issues/110)
+* **hook:** add JSON-RPC resident protocol for directive autocomplete ([e14ddbc](https://github.com/NateScarlet/image-funnel/commit/e14ddbc2dd4c3e59c0e2953074a92761489590ea)), closes [#98](https://github.com/NateScarlet/image-funnel/issues/98)
+* provide clipboard copy content through [copy] capability hooks ([6af97d2](https://github.com/NateScarlet/image-funnel/commit/6af97d2bb3a1179946a30b05f1b36969f0d077e1))
+* provide clipboard copy content through [copy] capability hooks ([6af97d2](https://github.com/NateScarlet/image-funnel/commit/6af97d2bb3a1179946a30b05f1b36969f0d077e1))
+* **trash:** return and show freed disk size after emptying trash ([5a87659](https://github.com/NateScarlet/image-funnel/commit/5a87659ac3fe6644a32e17e230dbb927dfb0ba98)), closes [#107](https://github.com/NateScarlet/image-funnel/issues/107)
+
+
+### Bug Fixes
+
+* **clipboard:** should retry clipboard write when transiently busy ([9ac6c10](https://github.com/NateScarlet/image-funnel/commit/9ac6c10078634eb7322e692347e6a522b6754632))
+* **example-hooks/comfyui:** example hook scripts silently swallow errors via broad except Exception ([657e913](https://github.com/NateScarlet/image-funnel/commit/657e91348532a51209b4bdec0d2f328037d610a9)), closes [#99](https://github.com/NateScarlet/image-funnel/issues/99)
+* **example-hooks/comfyui:** notification messages should use natural Chinese word order without tense prefixes ([c5d4618](https://github.com/NateScarlet/image-funnel/commit/c5d46186c9fff3982f469b9724c39cc832363621))
+* **example-hooks/comfyui:** should cast parsed json object to dict[str, any] ([a75a15e](https://github.com/NateScarlet/image-funnel/commit/a75a15ebc4fcbcecb8bd78b8418cf296d81f0dfa))
+* **example-hooks/comfyui:** should close sqlite connections after autocomplete request ([15a059d](https://github.com/NateScarlet/image-funnel/commit/15a059d08ae99ee7b3c3d05dd4b8af4cc0554a86))
+* **example-hooks/comfyui:** should enforce fail-fast error throwing when workflow metadata widgets are out of sync or missing ([5ba16ed](https://github.com/NateScarlet/image-funnel/commit/5ba16edd08d9b65f20dd4767562d356cd7e3fba1)), closes [#103](https://github.com/NateScarlet/image-funnel/issues/103)
+* **example-hooks/comfyui:** should handle empty or short widgets_values on subgraph instance nodes during text updates ([666d6ed](https://github.com/NateScarlet/image-funnel/commit/666d6ed2fa525acb8389844db6470946ee0d22bb)), closes [#105](https://github.com/NateScarlet/image-funnel/issues/105)
+* **example-hooks/comfyui:** should keep filename_prefix untouched when it already outputs into the target directory ([68fd579](https://github.com/NateScarlet/image-funnel/commit/68fd5792a14eb1648460e5859200672574708804))
+* **example-hooks/comfyui:** should sync output directory to subgraph nodes in workflow metadata and fail fast when node is missing ([5b124a7](https://github.com/NateScarlet/image-funnel/commit/5b124a733150db8ec5e0664cc1d3a8be89e3c496)), closes [#102](https://github.com/NateScarlet/image-funnel/issues/102)
+* **example-hooks/retention:** should stay silent and keep action when nothing was removed ([c2222ac](https://github.com/NateScarlet/image-funnel/commit/c2222accfe20dd740a5cca5089cb432be766f6b8))
+* **frontend:** commit should persist the actual write actions as the directory default ([10ed08c](https://github.com/NateScarlet/image-funnel/commit/10ed08ce1207f5d2c6d53f45c43396f2ec506987)), closes [#100](https://github.com/NateScarlet/image-funnel/issues/100)
+* **frontend:** committing a session should advance to the next directory ([95036d7](https://github.com/NateScarlet/image-funnel/commit/95036d71ce60e3f043f9e2ff8acd4d1154b1911c)), closes [#101](https://github.com/NateScarlet/image-funnel/issues/101)
+* **frontend:** NoteEditor autocomplete should dismiss on outside click or Esc without closing the dialog ([8509e69](https://github.com/NateScarlet/image-funnel/commit/8509e69b236ad847bcfb9ae3514b3196d26a50c2))
+* **frontend:** reject flash replay after committing session ([e055296](https://github.com/NateScarlet/image-funnel/commit/e0552964f5060ff2ad677e6d71b8cb7a11339688)), closes [#96](https://github.com/NateScarlet/image-funnel/issues/96)
+* **frontend:** return to home keeps the source directory selected ([0209a6a](https://github.com/NateScarlet/image-funnel/commit/0209a6a6de80ad1a7252121f3d8234cd700a92b2))
+* **frontend:** should prefix trash total size with &gt; when a next page exists ([97339d2](https://github.com/NateScarlet/image-funnel/commit/97339d222c317d8afee621bfa022423f9eb67aa4))
+* **frontend:** should select higher resolution thumbnail for wide images in cover mode ([899a428](https://github.com/NateScarlet/image-funnel/commit/899a428cb8e98be25e90332bd7e4360aae15c67b)), closes [#104](https://github.com/NateScarlet/image-funnel/issues/104)
+* **frontend:** should show copied content type in viewer and keep copy toast visible ([fc252d3](https://github.com/NateScarlet/image-funnel/commit/fc252d3e8ba6acf0d57d658229c5bdce03ab3291))
+* **frontend:** trash cleanup should stay enabled and load next pages via infinite scroll when more history remains ([2cc3151](https://github.com/NateScarlet/image-funnel/commit/2cc31514f6fa72fd9f816de69aa78b5935d3be0e))
+* **hook:** should not notify on success when script keeps action without output ([c7d4afd](https://github.com/NateScarlet/image-funnel/commit/c7d4afd5f2ccdf58d4cc63b8837729c74c371ff8))
+* **localfs:** v1 state with object lastSession id migrates without error ([3837cbc](https://github.com/NateScarlet/image-funnel/commit/3837cbc238df0df1824cb8bba30d59f4a1d00917))
+* should handle concurrent EmptyTrash calls without returning errors ([368e4a6](https://github.com/NateScarlet/image-funnel/commit/368e4a633079dbea5bef93cc978c701926856b22))
+
+
+### Performance Improvements
+
+* **frontend:** cap zoom preview quality at 95 to avoid lossless webp ([1a12e04](https://github.com/NateScarlet/image-funnel/commit/1a12e046408c73c2dbcd0ff9942f67c40e35719d))
+
 ## [1.7.0](https://github.com/NateScarlet/image-funnel/compare/v1.6.0...v1.7.0) (2026-08-11)
 
 
