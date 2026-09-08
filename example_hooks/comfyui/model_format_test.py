@@ -135,6 +135,61 @@ class TestModelFormat(unittest.TestCase):
         ckpt_name = trace_model_name_for_node(prompt_meta, "6")
         self.assertEqual(ckpt_name, "animaPencilXL_v10.safetensors")
 
+    def test_trace_model_name_falls_back_to_checkpoint_after_clip_loader(self) -> None:
+        """clip 链终止于普通 CLIPLoader 时，回退沿 model 连线取检查点名（qwen 场景）。
+
+        普通 CLIPLoader 只提供文本编码权重，不决定标签格式；格式键应落在
+        model 侧连接的检查点（anima-base-v1.0）上，而不是 CLIPLoader 的 clip_name。
+        """
+        prompt_meta = {
+            "8": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "anima-base-v1.0.safetensors"},
+            },
+            "165": {
+                "class_type": "Power Lora Loader (rgthree)",
+                "inputs": {"model": ["8", 0], "clip": ["299", 0]},
+            },
+            "166": {
+                "class_type": "Context (rgthree)",
+                "inputs": {"model": ["165", 0], "clip": ["165", 1]},
+            },
+            "299": {
+                "class_type": "CLIPLoader",
+                "inputs": {
+                    "clip_name": "qwen_3_06b_base.safetensors",
+                    "type": "qwen_image",
+                },
+            },
+            "1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["166", 2], "text": "pink_hair, score_7"},
+            },
+        }
+
+        self.assertEqual(
+            trace_model_name_for_node(prompt_meta, "1"),
+            "anima-base-v1.0.safetensors",
+        )
+
+    def test_trace_model_name_ignores_plain_clip_loader(self) -> None:
+        """普通 CLIPLoader 的 clip_name 不是格式键：仅 CLIPLoader 时返回 None。"""
+        prompt_meta = {
+            "299": {
+                "class_type": "CLIPLoader",
+                "inputs": {
+                    "clip_name": "qwen_3_06b_base.safetensors",
+                    "type": "qwen_image",
+                },
+            },
+            "1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["299", 0], "text": "pink_hair"},
+            },
+        }
+
+        self.assertIsNone(trace_model_name_for_node(prompt_meta, "1"))
+
     def test_trace_model_name_for_dual_clip_loader(self) -> None:
         """追溯结尾的 DualCLIPLoader 节点应读取其 clip_name1 作为模型名。"""
         prompt_meta = {
@@ -250,6 +305,62 @@ class TestFormatWorkflowPromptPair(unittest.TestCase):
         self.assertEqual(
             workflow["nodes"][1]["widgets_values"][0], "blue hair, (cat ears:1.2)"
         )
+
+    def test_reformats_by_checkpoint_when_clip_chain_ends_at_clip_loader(self) -> None:
+        """clip 链终止于 CLIPLoader、检查点挂在 model 侧：格式按检查点配置生效。
+
+        用户为检查点（anima-base-v1.0）配置 anima 后，即使 CLIPTextEncode 的
+        clip 链末端是普通 CLIPLoader，也应沿 model 连线取检查点名并按其格式重排。
+        """
+        config = ModelFormatConfig.load()
+        config.models["anima-base-v1.0.safetensors"] = "anima"
+        config.save()
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": ["pink_hair, score_7"],
+                },
+            ],
+        }
+        prompt: Dict[str, Any] = {
+            "1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "pink_hair, score_7",
+                    "clip": ["166", 2],
+                },
+            },
+            "8": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "anima-base-v1.0.safetensors"},
+            },
+            "165": {
+                "class_type": "Power Lora Loader (rgthree)",
+                "inputs": {"model": ["8", 0], "clip": ["299", 0]},
+            },
+            "166": {
+                "class_type": "Context (rgthree)",
+                "inputs": {"model": ["165", 0], "clip": ["165", 1]},
+            },
+            "299": {
+                "class_type": "CLIPLoader",
+                "inputs": {
+                    "clip_name": "qwen_3_06b_base.safetensors",
+                    "type": "qwen_image",
+                },
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        format_workflow_prompt_pair(pair)
+
+        # anima 格式：普通标签下划线转空格且小写，score_7 保留下划线
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0], "pink hair, score_7"
+        )
+        self.assertEqual(prompt["1"]["inputs"]["text"], "pink hair, score_7")
 
     def test_missing_data_dir_raises(self) -> None:
         """集中重排时缺 IMAGE_FUNNEL_DATA_DIR 且存在可追溯模型则快速失败。"""

@@ -148,12 +148,31 @@ def infer_format_from_prompt(prompt_text: str) -> Optional[str]:
     return "anima" if space_count > underscore_count else "sdxl"
 
 
+# 格式键：提示词标签格式属于检查点/模型架构（Anima vs SDXL），只接受
+# CheckpointLoaderSimple/UNETLoader 的 ckpt_name/model_name/unet_name 与
+# DualCLIPLoader 的 clip_name1/clip_name2；普通 CLIPLoader 仅提供文本编码权重，
+# 不决定标签格式，其 clip_name 不作为格式键。
+_MODEL_LOADER_KEYS = (
+    "ckpt_name",
+    "model_name",
+    "unet_name",
+    "clip_name1",
+    "clip_name2",
+)
+
+
 def trace_model_name_for_node(
     prompt_meta: Dict[str, Any], start_node_id: str
 ) -> Optional[str]:
-    """从指定 prompt 节点逆向追溯 clip 连线，获取源头 CheckpointLoader/UNETLoader 的模型文件名。"""
+    """从指定 prompt 节点逆向追溯模型加载节点，获取源头检查点的模型文件名。
+
+    沿 clip 连线追溯，中途节点若带 model 连线（检查点常挂在 model 侧）则记录为
+    候选；clip 链终止于非模型加载节点（如普通 CLIPLoader）时，回退沿最近记录的
+    model 连线继续追溯检查点。clip 与 model 链均取不到模型名时返回 None。
+    """
     visited: set[str] = set()
     current_id: Optional[str] = start_node_id
+    model_candidate: Optional[str] = None  # clip 链上最近记录的 model 连线终点
 
     while current_id and current_id not in visited:
         visited.add(current_id)
@@ -168,18 +187,17 @@ def trace_model_name_for_node(
 
         inputs = cast(Dict[str, Any], inputs_raw)
 
-        # 校验是否本身就是模型加载节点（含 DualCLIPLoader 的 clip_name1/clip_name2）
-        for key in (
-            "ckpt_name",
-            "model_name",
-            "unet_name",
-            "clip_name",
-            "clip_name1",
-            "clip_name2",
-        ):
+        # 校验是否本身就是模型加载节点（检查点/UNet/DualCLIPLoader）
+        for key in _MODEL_LOADER_KEYS:
             val = inputs.get(key)
             if isinstance(val, str) and val.strip():
                 return val.strip()
+
+        model_link_raw = inputs.get("model")
+        if isinstance(model_link_raw, list):
+            model_list = cast(List[Any], model_link_raw)
+            if len(model_list) > 0:
+                model_candidate = str(model_list[0])
 
         # 继续沿着 clip 输入向上追溯
         clip_link_raw = inputs.get("clip")
@@ -189,15 +207,10 @@ def trace_model_name_for_node(
                 current_id = str(clip_list[0])
                 continue
 
-        # 若无 clip，尝试 model 输入
-        model_link_raw = inputs.get("model")
-        if isinstance(model_link_raw, list):
-            model_list = cast(List[Any], model_link_raw)
-            if len(model_list) > 0:
-                current_id = str(model_list[0])
-                continue
-
-        break
+        # clip 链终止且未取到模型名：回退沿最近 model 连线继续追溯检查点
+        current_id = model_candidate
+        model_candidate = None
+        continue
 
     return None
 
