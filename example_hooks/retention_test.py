@@ -601,6 +601,56 @@ class TestRetentionMain(unittest.TestCase):
         # 有笔记保护的 img:1 不应出现在 trash 列表中
         self.assertEqual(len(call_log), 2)
 
+    def test_output_reports_image_count_and_total_files(self):
+        """移除提示应按图片数报告，在括号中附注含配套文件的总文件数"""
+        mock_client = _make_client()
+        call_log: list[Any] = []
+
+        def side_effect(
+            query: str, variables: Optional[Dict[str, Any]] = None
+        ) -> Dict[str, Any]:
+            call_log.append((query, variables))
+            if "query GetDirectoryImages" in query:
+                return {
+                    "node": {
+                        "images": _page(
+                            [
+                                {
+                                    "id": "img:1",
+                                    "modTime": "2024-01-01T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:2",
+                                    "modTime": "2024-01-02T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:3",
+                                    "modTime": "2024-01-03T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                                {
+                                    "id": "img:4",
+                                    "modTime": "2024-01-04T00:00:00Z",
+                                    "note": {"content": ""},
+                                },
+                            ]
+                        )
+                    }
+                }
+            if "mutation TrashImages" in query:
+                # 超出保留数（最多保留 3 张）1 张图片，但配套文件使总文件数为 2
+                return {"trashImages": {"movedCount": 2, "historyId": "hist:1"}}
+            return {}
+
+        mock_client.execute.side_effect = side_effect
+
+        output = self._run_retention_captured(mock_client)
+        # 主数字按图片数（1 张）报告，括号中附注总文件数（含配套文件共 2 个文件）
+        self.assertIn("已清理 1 张较旧 2 星图片", output)
+        self.assertIn("含配套文件共 2 个文件", output)
+
     def test_missing_env_action_override(self):
         """跳过场景需要写入操作覆盖文件，缺失 IMAGE_FUNNEL_ACTION 应快速失败"""
         with patch.dict(os.environ, {}, clear=True):

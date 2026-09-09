@@ -150,9 +150,14 @@ def run_retention(client: GraphQLClient) -> None:
         }
     }
     result: Dict[str, Any] = client.execute(trash_query, trash_variables)
-    moved: int = result["trashImages"]["movedCount"]
+    # movedCount 是移动的文件总数（图片本体 + 同名配套文件，如 .xmp）
+    total_files_moved: int = result["trashImages"]["movedCount"]
 
-    print(f"已清理 {moved} 张较旧 {rating} 星图片，保留最新 {max_retain} 张")
+    # 主数字按图片数报告，括号中附注总文件数（含配套文件）
+    print(
+        f"已清理 {len(excess_ids)} 张较旧 {rating} 星图片"
+        f"（含配套文件共 {total_files_moved} 个文件），保留最新 {max_retain} 张"
+    )
     sys.exit(0)
 
 
