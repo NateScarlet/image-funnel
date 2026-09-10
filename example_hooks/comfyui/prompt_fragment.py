@@ -300,9 +300,9 @@ class PromptFragment:
 
                 new_workflow_text = (
                     before.rstrip()
-                    + f"\n{region_line}\n"
+                    + f"\n\n{region_line}\n"
                     + new_content_prompt
-                    + f"\n{end_line}\n"
+                    + f"\n{end_line}\n\n"
                     + after.lstrip()
                 )
 
@@ -351,7 +351,7 @@ class PromptFragment:
                     end_line = self._make_end_region_line(region)
                     new_workflow_text = (
                         workflow_text.rstrip()
-                        + f"\n{region_line}\n"
+                        + f"\n\n{region_line}\n"
                         + new_content_prompt
                         + f"\n{end_line}\n"
                     )
@@ -402,9 +402,9 @@ class PromptFragment:
 
                 new_workflow_text = (
                     before.rstrip()
-                    + f"\n{region_line}\n"
+                    + f"\n\n{region_line}\n"
                     + new_content_prompt
-                    + f"\n{end_line}\n"
+                    + f"\n{end_line}\n\n"
                     + after.lstrip()
                 )
 
