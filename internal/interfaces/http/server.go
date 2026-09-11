@@ -19,7 +19,7 @@ import (
 type Server struct {
 	logger         *zap.Logger
 	signer         *urlconv.Signer
-	imageProcessor appimage.Processor
+	coordinator    *appimage.TranscodeCoordinator
 	graphqlHandler http.Handler
 	playground     http.Handler
 	absRootDir     string
@@ -32,7 +32,7 @@ type Server struct {
 func NewServer(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	imageProcessor appimage.Processor,
+	coordinator    *appimage.TranscodeCoordinator,
 	graphqlHandler http.Handler,
 	playground http.Handler,
 	absRootDir string,
@@ -44,7 +44,7 @@ func NewServer(
 	return &Server{
 		logger:         logger,
 		signer:         signer,
-		imageProcessor: imageProcessor,
+		coordinator:    coordinator,
 		graphqlHandler: graphqlHandler,
 		playground:     playground,
 		absRootDir:     absRootDir,
@@ -69,7 +69,7 @@ func (s *Server) Serve(addr string) error {
 		s.graphqlHandler.ServeHTTP(w, r)
 	})
 
-	r.HandleFunc("/image", handleImage(s.logger, s.signer, s.imageProcessor, s.absRootDir))
+	r.HandleFunc("/image", handleImage(s.logger, s.signer, s.coordinator, s.absRootDir))
 
 	addStaticRoutes(r, s.frontendDir)
 
@@ -77,7 +77,7 @@ func (s *Server) Serve(addr string) error {
 		AllowOriginFunc: func(origin string) bool {
 			return isOriginAllowed(origin, "", s.corsHosts)
 		},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "HEAD", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan", "Token-Transfer"},
 		AllowCredentials: true,
 	}).Handler(r)

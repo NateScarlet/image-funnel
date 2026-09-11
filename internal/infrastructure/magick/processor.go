@@ -3,13 +3,9 @@ package magick
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	appimage "main/internal/application/image"
@@ -18,120 +14,59 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+// Processor 纯转码执行器：不负责缓存（缓存由应用层 TranscodeCoordinator 编排），
+// 只对单张源图执行一次 ImageMagick 转码并把结果流式交给调用方
 type Processor struct {
-	cache appimage.Cache
-	sem   *semaphore.Weighted
+	sem *semaphore.Weighted
 }
 
-func NewProcessor(cache appimage.Cache, concurrency int64) *Processor {
+func NewProcessor(concurrency int64) *Processor {
 	if concurrency <= 0 {
 		concurrency = 4
 	}
 	return &Processor{
-		cache: cache,
-		sem:   semaphore.NewWeighted(concurrency),
+		sem: semaphore.NewWeighted(concurrency),
 	}
 }
 
-type rawFile struct {
-	path string
-}
-
-// Open 实现 appimage.File 接口，延迟打开原始图像文件。
-func (f *rawFile) Open() (io.ReadSeekCloser, error) {
-	return os.Open(f.path)
-}
-
-func (p *Processor) Process(ctx context.Context, absPath string, width, quality int, format appimage.ImageFormat) (appimage.File, error) {
-	// WebP 且无缩放/质量参数时返回原始文件（向后兼容）；AVIF 全分辨率也需要转码
-	if width == 0 && quality == 0 && format == appimage.ImageFormatWebP {
-		return &rawFile{path: absPath}, nil
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return nil, err
-	}
-
+// Process 执行一次转码，结果流式写入 w。源文件状态（修改时间/大小）在执行时读取，
+// 由调用方用于缓存键计算
+func (p *Processor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
 	// AVIF 全分辨率（无显式质量参数）使用质量上限 95
-	effectiveQuality := quality
-	if effectiveQuality == 0 {
-		effectiveQuality = 95
+	quality := spec.Quality()
+	if quality == 0 {
+		quality = 95
 	}
 
-	timestamp := fmt.Sprintf("%d", info.ModTime().UnixNano())
-	size := fmt.Sprintf("%d", info.Size())
-	wStr := ""
-	if width > 0 {
-		wStr = fmt.Sprintf("%d", width)
+	if err := p.sem.Acquire(ctx, 1); err != nil {
+		return err
 	}
-	qStr := ""
-	if effectiveQuality > 0 {
-		qStr = fmt.Sprintf("%d", effectiveQuality)
+	defer p.sem.Release(1)
+
+	args := []string{srcPath, "-coalesce"}
+	if spec.Width() > 0 {
+		args = append(args, "-resize", fmt.Sprintf("%dx>", spec.Width()))
 	}
-	formatStr := format.String()
+	args = append(args, "-quality", fmt.Sprintf("%d", quality))
+	args = append(args, spec.Format().String()+":-")
 
-	hash := sha256.New()
-	// 使用文件名而非绝对路径，从而允许文件移动后复用已转码的缓存（只要文件名、修改时间和大小不变）
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, qStr, formatStr)
+	cmd := exec.CommandContext(ctx, "magick", args...)
+	cmd.Stdout = w
+	var b = new(bytes.Buffer)
+	cmd.Stderr = b
 
-	cacheKey := base64.URLEncoding.EncodeToString(hash.Sum(nil))
-
-	file, err := p.cache.Lookup(ctx, cacheKey)
-	if err != nil {
-		return nil, err
-	}
-	if file != nil {
-		return file, nil
-	}
-
-	pipeReader, pipeWriter := io.Pipe()
-
-	go func() {
-		defer pipeWriter.Close()
-
-		if err := p.sem.Acquire(ctx, 1); err != nil {
-			pipeWriter.CloseWithError(err)
-			return
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		defer p.sem.Release(1)
-
-		args := []string{absPath, "-coalesce"}
-		if width > 0 {
-			args = append(args, "-resize", fmt.Sprintf("%dx>", width))
+		errStr := b.String()
+		// 识别文件尚未写完时的意外截止错误
+		if strings.Contains(errStr, "unexpected end-of-file") || strings.Contains(errStr, "unexpected end of file") {
+			return fmt.Errorf("%w: ImageMagick error: %s", io.ErrUnexpectedEOF, errStr)
 		}
-		if effectiveQuality > 0 {
-			args = append(args, "-quality", fmt.Sprintf("%d", effectiveQuality))
-		}
-		args = append(args, format.String()+":-")
-
-		cmd := exec.CommandContext(ctx, "magick", args...)
-		cmd.Stdout = pipeWriter
-		var b = new(bytes.Buffer)
-		cmd.Stderr = b
-
-		if err := cmd.Run(); err != nil {
-			if ctx.Err() != nil {
-				pipeWriter.CloseWithError(ctx.Err())
-				return
-			}
-			errStr := b.String()
-			// 识别文件尚未写完时的意外截止错误
-			if strings.Contains(errStr, "unexpected end-of-file") || strings.Contains(errStr, "unexpected end of file") {
-				pipeWriter.CloseWithError(fmt.Errorf("%w: ImageMagick error: %s", io.ErrUnexpectedEOF, errStr))
-				return
-			}
-			pipeWriter.CloseWithError(fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, errStr))
-			return
-		}
-	}()
-
-	saveErr := p.cache.Save(ctx, cacheKey, pipeReader)
-	if saveErr != nil {
-		return nil, saveErr
+		return fmt.Errorf("ImageMagick error: %w, args: %v: stderr: %q", err, args, errStr)
 	}
-
-	return p.cache.Lookup(ctx, cacheKey)
+	return nil
 }
 
 func (p *Processor) Meta(ctx context.Context, absPath string) (*shared.ImageMeta, error) {

@@ -2,35 +2,19 @@ package magick
 
 import (
 	"context"
-	"io"
 	"testing"
-
-	appimage "main/internal/application/image"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type mockCache struct {
-}
-
-func (m *mockCache) Lookup(ctx context.Context, key string) (appimage.File, error) {
-	return nil, nil
-}
-
-func (m *mockCache) Save(ctx context.Context, key string, r io.Reader) error {
-	return nil
-}
-
 func TestNewProcessor(t *testing.T) {
-	cache := &mockCache{}
-	p := NewProcessor(cache, 4)
+	p := NewProcessor(4)
 	assert.NotNil(t, p)
 	assert.NotNil(t, p.sem)
 }
 
 func TestProcessor_Semaphore(t *testing.T) {
-	cache := &mockCache{}
-	p := NewProcessor(cache, 4)
+	p := NewProcessor(4)
 
 	ctx := context.Background()
 

@@ -1,6 +1,7 @@
 package image
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -15,16 +16,17 @@ import (
 type mockProcessor struct {
 	calls      int
 	errs       []error
-	resultFile File
+	resultData []byte
 	resultMeta *shared.ImageMeta
 }
 
-func (m *mockProcessor) Process(ctx context.Context, srcPath string, width, quality int, format ImageFormat) (File, error) {
+func (m *mockProcessor) Process(ctx context.Context, srcPath string, spec Spec, w io.Writer) error {
 	m.calls++
 	if m.calls <= len(m.errs) {
-		return nil, m.errs[m.calls-1]
+		return m.errs[m.calls-1]
 	}
-	return m.resultFile, nil
+	_, err := w.Write(m.resultData)
+	return err
 }
 
 func (m *mockProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
@@ -37,12 +39,18 @@ func (m *mockProcessor) Meta(ctx context.Context, srcPath string) (*shared.Image
 
 func TestRetryProcessor_Process_SuccessAfterRetry(t *testing.T) {
 	mock := &mockProcessor{
-		errs: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF},
+		errs:       []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF},
+		resultData: []byte("out"),
 	}
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond // 缩短退避以加速测试
 
-	_, err := p.Process(context.Background(), "test.png", 100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	if err != nil {
+		t.Fatalf("new spec: %v", err)
+	}
+	var out bytes.Buffer
+	err = p.Process(context.Background(), "test.png", spec, &out)
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
@@ -60,7 +68,12 @@ func TestRetryProcessor_Process_NonTargetErrorNoRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond
 
-	_, err := p.Process(context.Background(), "test.png", 100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	if err != nil {
+		t.Fatalf("new spec: %v", err)
+	}
+	var out bytes.Buffer
+	err = p.Process(context.Background(), "test.png", spec, &out)
 	if !errors.Is(err, fatalErr) {
 		t.Fatalf("expected fatalErr, got: %v", err)
 	}
@@ -72,7 +85,8 @@ func TestRetryProcessor_Process_NonTargetErrorNoRetry(t *testing.T) {
 
 func TestRetryProcessor_Process_ContextCancel(t *testing.T) {
 	mock := &mockProcessor{
-		errs: []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF},
+		errs:       []error{io.ErrUnexpectedEOF, io.ErrUnexpectedEOF},
+		resultData: []byte("out"),
 	}
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 50 * time.Millisecond
@@ -84,7 +98,12 @@ func TestRetryProcessor_Process_ContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	_, err := p.Process(ctx, "test.png", 100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	if err != nil {
+		t.Fatalf("new spec: %v", err)
+	}
+	var out bytes.Buffer
+	err = p.Process(ctx, "test.png", spec, &out)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got: %v", err)
 	}

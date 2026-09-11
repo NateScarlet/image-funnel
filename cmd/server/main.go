@@ -32,6 +32,7 @@ import (
 	"main/internal/infrastructure"
 	"main/internal/infrastructure/clipboard"
 	"main/internal/infrastructure/concurrency"
+	"main/internal/infrastructure/ffmpeg"
 	infrahook "main/internal/infrastructure/hook"
 	"main/internal/infrastructure/inmem"
 	"main/internal/infrastructure/jwt"
@@ -93,10 +94,23 @@ func main() {
 	// Cleanup every 1 hour, remove files older than 24 hours
 	imageCache, cleanupCache := localfs.NewImageCache(cacheDir, time.Hour, 24*time.Hour, logger)
 	defer cleanupCache()
-	magickProcessor := magick.NewProcessor(imageCache, cfg.MagickConcurrency)
-	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor)
+	transcodeQueue := inmem.NewTranscodeQueue()
+	magickProcessor := magick.NewProcessor(cfg.MagickConcurrency)
+	// AVIF 编码器探测：可用则用 ffmpeg(SVT-AV1)，不可用则显式回退 ImageMagick（无 nil 依赖）。
+	// 编码器标识参与变体 key 计算，回退切换不会误用另一编码器的缓存产物
+	avifEncoder := ffmpeg.Detect(logger)
+	avifProcessor := appimage.Processor(magickProcessor)
+	avifEncoderID := appimage.EncoderMagick
+	if avifEncoder != nil {
+		avifProcessor = avifEncoder
+		avifEncoderID = avifEncoder.ID()
+	}
+	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor, avifProcessor)
 	retryProcessor := appimage.NewRetryProcessor(hybridProcessor, logger)
-	imageProcessor := concurrency.NewSingleFlightImageProcessor(retryProcessor)
+	imageProcessor := appimage.NewTranscodeCoordinator(imageCache, retryProcessor, transcodeQueue, avifEncoderID, logger)
+	transcodeCtx, stopTranscodeWorkers := context.WithCancel(context.Background())
+	defer stopTranscodeWorkers()
+	imageProcessor.StartWorkers(transcodeCtx, int(cfg.MagickConcurrency))
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor, cfg.AbsRootDir)
 	dirRepo := localfs.NewDirectoryRepository(cfg.AbsRootDir)

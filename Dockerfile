@@ -87,9 +87,10 @@ RUN if [ -n "${ALPINE_MIRROR_URL}" ]; then \
 
 WORKDIR /app
 
-# 安装必要的系统运行时依赖
+# 安装必要的系统运行时依赖（ffmpeg 提供 AVIF/SVT-AV1 编码，缺失时服务自动回退 ImageMagick）
 RUN apk add --no-cache \
     imagemagick \
+    ffmpeg \
     ca-certificates \
     tzdata
 

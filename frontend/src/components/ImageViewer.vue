@@ -799,7 +799,9 @@ const src = computed(() =>
 
 const activeContainer = computed(() => (locked.value ? null : containerRef.value));
 
-// 主动按顺序预加载后续图片
+// 主动按顺序预加载后续图片：两阶段预载
+// 1. HEAD 登记服务端转码需求（低优先级），abort 即撤回需求（服务端放弃未开始的转码）
+// 2. HEAD 成功（缓存已就绪）后 GET + decode 预下载，保证切换时瞬时显示
 useAsyncTask({
   args() {
     return [
@@ -815,6 +817,31 @@ useAsyncTask({
     const concurrency = 8;
     const queue = [...urls];
 
+    const preloadOne = async (url: string) => {
+      // 阶段一：HEAD 登记需求。目标分辨率变化（本轮 task 被 abort 重算）时撤回
+      const signal = ctx.signal();
+      try {
+        await fetch(url, { method: "HEAD", signal });
+      } catch (err) {
+        if (signal.aborted) {
+          return;
+        }
+        console.error("图片预载 HEAD 失败", url, err);
+        return;
+      }
+      if (signal.aborted) {
+        return;
+      }
+      // 阶段二：GET + decode 预下载（此时服务端缓存已就绪）
+      const img = new window.Image();
+      img.src = url;
+      try {
+        await img.decode();
+      } catch (err) {
+        console.error("图片 decode 失败", url, err);
+      }
+    };
+
     const worker = async () => {
       while (queue.length > 0) {
         const url = queue.shift();
@@ -824,14 +851,7 @@ useAsyncTask({
         if (ctx.signal().aborted) {
           return;
         }
-
-        const img = new window.Image();
-        img.src = url;
-        try {
-          await img.decode();
-        } catch (err) {
-          console.error("图片 decode 失败", url, err);
-        }
+        await preloadOne(url);
       }
     };
 

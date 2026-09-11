@@ -19,18 +19,28 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
+// HybridProcessor 按格式分发转码的混合处理器：
+// AVIF 交给 avif 编码器（ffmpeg/SVT-AV1，由 main 显式注入回退实现），其余交给
+// fallback（magick）；元数据始终走 fallback（magick identify / Go 标准库解码）
 type HybridProcessor struct {
 	fallback appimage.Processor
+	avif     appimage.Processor
 }
 
-func NewHybridProcessor(fallback appimage.Processor) *HybridProcessor {
+// NewHybridProcessor 创建混合处理器。avif 是必传依赖（无 ffmpeg 时由装配方注入
+// magick 作为显式回退实现，本组件不做可选依赖判断）
+func NewHybridProcessor(fallback, avif appimage.Processor) *HybridProcessor {
 	return &HybridProcessor{
 		fallback: fallback,
+		avif:     avif,
 	}
 }
 
-func (p *HybridProcessor) Process(ctx context.Context, srcPath string, width, quality int, format appimage.ImageFormat) (appimage.File, error) {
-	return p.fallback.Process(ctx, srcPath, width, quality, format)
+func (p *HybridProcessor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	if spec.Format() == appimage.ImageFormatAVIF {
+		return p.avif.Process(ctx, srcPath, spec, w)
+	}
+	return p.fallback.Process(ctx, srcPath, spec, w)
 }
 
 func (p *HybridProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {

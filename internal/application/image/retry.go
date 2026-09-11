@@ -32,11 +32,13 @@ func NewRetryProcessor(next Processor, logger *zap.Logger) *RetryProcessor {
 	}
 }
 
-// Process 尝试对图片进行转码，如果在处理中发生意外截止错误，在 context 允许的范围内进行指数退避重试
-func (p *RetryProcessor) Process(ctx context.Context, srcPath string, width, quality int, format ImageFormat) (File, error) {
-	return retry(ctx, p, srcPath, "process", func() (File, error) {
-		return p.next.Process(ctx, srcPath, width, quality, format)
+// Process 尝试对图片进行转码，如果在处理中发生意外截止错误，在 context 允许的范围内进行指数退避重试。
+// 转码输出流式写入 w
+func (p *RetryProcessor) Process(ctx context.Context, srcPath string, spec Spec, w io.Writer) error {
+	_, err := retry(ctx, p, srcPath, "process", func() (struct{}, error) {
+		return struct{}{}, p.next.Process(ctx, srcPath, spec, w)
 	})
+	return err
 }
 
 // Meta 尝试获取图片元数据，如果因文件未写完出现意外截止错误，在后台进行指数退避重试
