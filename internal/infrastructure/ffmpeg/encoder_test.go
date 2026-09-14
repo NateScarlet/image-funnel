@@ -23,7 +23,7 @@ func TestBuildArgs_Scaled(t *testing.T) {
 	spec, err := appimage.NewSpec(2048, 90, appimage.ImageFormatAVIF)
 	require.NoError(t, err)
 
-	args := buildArgs("src/img.png", "out/result.avif", spec, crfFromQuality(90))
+	args := buildArgs("src/img.png", "out/result.avif", spec)
 	joined := strings.Join(args, " ")
 
 	// 动图语义（-coalesce 等价）：忽略帧延迟合成所有帧
@@ -43,20 +43,33 @@ func TestBuildArgs_FullResolution(t *testing.T) {
 	spec, err := appimage.NewSpec(0, 95, appimage.ImageFormatAVIF)
 	require.NoError(t, err)
 
-	args := buildArgs("src/img.png", "out/result.avif", spec, crfFromQuality(95))
+	args := buildArgs("src/img.png", "out/result.avif", spec)
 	joined := strings.Join(args, " ")
 
 	assert.NotContains(t, joined, "scale=")
 	assert.Contains(t, joined, "-f avif")
 }
 
-func TestCRFMapping(t *testing.T) {
-	// q95 → crf29, q80 → crf39, q75 → crf43（线性映射，clamp 到 [18,55]）
-	assert.Equal(t, 29, crfFromQuality(95))
-	assert.Equal(t, 39, crfFromQuality(80))
-	assert.Equal(t, 43, crfFromQuality(75))
-	assert.Equal(t, 25, crfFromQuality(100), "quality above max maps below crf 29")
-	assert.Equal(t, 55, crfFromQuality(1), "clamp lower bound")
+func TestBuildArgs_PreservesFullColorRange(t *testing.T) {
+	// magick 输出标记 color_range=pc（全范围）；ffmpeg 默认 tv（受限范围）会让
+	// 黑位与对比度被压缩。实测此标记影响 PSNR 约 0.6dB，必须显式设为 pc
+	spec, err := appimage.NewSpec(1024, 70, appimage.ImageFormatAVIF)
+	require.NoError(t, err)
+
+	args := buildArgs("src/img.png", "out/result.avif", spec)
+	joined := strings.Join(args, " ")
+
+	assert.Contains(t, joined, "-color_range pc", "must mark full range to match magick output")
+	assert.Contains(t, joined, "-pix_fmt yuv420p", "pixel format must be explicit")
+}
+
+func TestCRFForQuality_IsHighQuality(t *testing.T) {
+	// CRF 定档依据真实产物实测（4 个 ComfyUI 样本 × 4 个档位，共 16 组，与 ImageMagick
+	// 同档质量对比）：16/16 组画质不低于 ImageMagick、14/16 组高出 0.6dB 以上、最低仍高
+	// 0.14dB，且 16/16 组编码更快（全尺寸最多省约 1100ms）。
+	// 延迟预算分析：局域网传输仅占单张总延迟的 0.2%-3.2%，体积换不来有意义的延迟收益，
+	// 因此不存在"用画质换延迟"的必要，应取高画质侧
+	assert.Equal(t, 10, svtav1CRF, "crf must stay on the high-quality side calibrated against real products")
 }
 
 func TestProcess_WritesOutput(t *testing.T) {
@@ -113,64 +126,70 @@ func realFFmpegAvailable(t *testing.T) bool {
 	return DetectWithRunner(procRunner{}, t.TempDir()) != nil
 }
 
-func TestProcess_RealFFmpeg_Integration(t *testing.T) {
+func TestProcess_RealFFmpeg_ScaledOutputWidth(t *testing.T) {
 	if !realFFmpegAvailable(t) {
 		t.Skip("real ffmpeg not available")
 	}
-	// 用 magick 生成一张 4K 测试源图
 	src := filepath.Join(t.TempDir(), "source.png")
 	createTestImage(t, src)
 
 	p := NewEncoder(procRunner{}, t.TempDir())
-	spec, err := appimage.NewSpec(2048, 90, appimage.ImageFormatAVIF)
+	spec, err := appimage.NewSpec(1024, 70, appimage.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	var out bytes.Buffer
 	require.NoError(t, p.Process(context.Background(), src, spec, &out))
-	// 合成渐变图压缩率极高，体积断言不可靠；验证产物为合法 AVIF 且缩放到目标宽度
+	assert.Equal(t, "1024", probeWidth(t, out.Bytes()), "output width should match requested scale")
+}
+
+func TestProcess_RealFFmpeg_MarksFullColorRange(t *testing.T) {
+	if !realFFmpegAvailable(t) {
+		t.Skip("real ffmpeg not available")
+	}
+	src := filepath.Join(t.TempDir(), "source.png")
+	createTestImage(t, src)
+
+	p := NewEncoder(procRunner{}, t.TempDir())
+	spec, err := appimage.NewSpec(512, 65, appimage.ImageFormatAVIF)
+	require.NoError(t, err)
+
+	var out bytes.Buffer
+	require.NoError(t, p.Process(context.Background(), src, spec, &out))
+
+	// 产物必须标记全范围，与 magick 输出一致（否则黑位被压缩）
 	outFile := filepath.Join(t.TempDir(), "result.avif")
 	require.NoError(t, os.WriteFile(outFile, out.Bytes(), 0o644))
 	probe := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
-		"-show_entries", "stream=width", "-of", "csv=p=0", outFile)
+		"-show_entries", "stream=color_range", "-of", "csv=p=0", outFile)
 	var stdout, stderr bytes.Buffer
 	probe.Stdout = &stdout
 	probe.Stderr = &stderr
 	require.NoError(t, probe.Run(), "ffprobe stderr: %s", stderr.String())
-	assert.Equal(t, "2048", strings.TrimSpace(stdout.String()), "output width should match requested scale")
-}
-
-func TestProcess_RealFFmpeg_AlphaPreserved(t *testing.T) {
-	if !realFFmpegAvailable(t) {
-		t.Skip("real ffmpeg not available")
-	}
-	// 透明 PNG 回归测试：转码后仍是合法 AVIF（alpha 行为与 magick 路径一致性由像素对比另行保证）
-	src := filepath.Join(t.TempDir(), "alpha.png")
-	createTransparentTestImage(t, src)
-
-	p := NewEncoder(procRunner{}, t.TempDir())
-	spec, err := appimage.NewSpec(0, 95, appimage.ImageFormatAVIF)
-	require.NoError(t, err)
-
-	var out bytes.Buffer
-	require.NoError(t, p.Process(context.Background(), src, spec, &out))
-	assert.Greater(t, out.Len(), 100)
+	assert.Equal(t, "pc", strings.TrimSpace(stdout.String()), "output must be full color range")
 }
 
 // createTestImage 用 magick 生成 4K 不透明测试图
 func createTestImage(t *testing.T, path string) {
 	t.Helper()
-	runMagick(t, []string{"-size", "3840x2160", "gradient:blue-red", path})
+	runMagick(t, []string{"-size", "1200x800", "gradient:blue-red", path})
 }
 
-// createTransparentTestImage 用 magick 生成带 alpha 的测试图
-func createTransparentTestImage(t *testing.T, path string) {
+// probeWidth 用 ffprobe 读取产物宽度
+func probeWidth(t *testing.T, data []byte) string {
 	t.Helper()
-	runMagick(t, []string{"-size", "64x64", "xc:none", "-fill", "red", "-draw", "circle 32,32 32,8", path})
+	outFile := filepath.Join(t.TempDir(), "probe.avif")
+	require.NoError(t, os.WriteFile(outFile, data, 0o644))
+	cmd := exec.Command("ffprobe", "-hide_banner", "-loglevel", "error",
+		"-show_entries", "stream=width", "-of", "csv=p=0", outFile)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	require.NoError(t, cmd.Run(), "ffprobe stderr: %s", stderr.String())
+	return strings.TrimSpace(stdout.String())
 }
 
 func runMagick(t *testing.T, args []string) {
 	t.Helper()
-	// magick 仅生成测试源图（非被测路径）
 	cmd := exec.Command("magick", args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

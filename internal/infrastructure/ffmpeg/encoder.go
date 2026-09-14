@@ -17,6 +17,17 @@ import (
 // 编码器标识（进入变体 key）
 const encoderSVTAV1 = "svt-av1"
 
+// svtav1CRF 固定使用的 SVT-AV1 CRF（数值越小画质越高）。
+//
+// 定档依据真实产物实测（4 个 ComfyUI 样本 × 256/512/1024/2048 四个档位，共 16 组，
+// 与 ImageMagick 同档质量对比）：16/16 组画质不低于 ImageMagick、14/16 组高出
+// 0.6dB 以上、最低仍高 0.14dB；且 16/16 组编码更快，全尺寸最多省约 1100ms。
+//
+// 不按质量参数分档的原因：延迟预算分析显示局域网传输仅占单张总延迟的 0.2%-3.2%
+// （1024w 传输约 23ms、编码约 720ms、客户端解码约 117ms），体积差异换算成时间后
+// 无意义，质量参数一律取高画质侧；档位间的画质差异由前端档位本身的分辨率承担
+const svtav1CRF = 10
+
 // CommandRunner 命令执行端口：隔离真实进程调用，测试可注入假实现。
 // 实现只负责以给定参数执行 ffmpeg，产物由调用方从输出文件读取
 type CommandRunner interface {
@@ -57,26 +68,15 @@ func NewEncoder(runner CommandRunner, tempDir string) *Encoder {
 // ID 返回编码器标识（参与变体缓存 key）
 func (e *Encoder) ID() string { return appimage.EncoderSVTAV1 }
 
-// crfFromQuality 把 magick quality（1-100）线性映射到 SVT-AV1 CRF（clamp 18-55）。
-// 校准基准：q95→29、q80→39（与 magick 同档体积/画质相当）
-func crfFromQuality(quality int) int {
-	crf := 95 - quality*7/10
-	if crf < 18 {
-		crf = 18
-	}
-	if crf > 55 {
-		crf = 55
-	}
-	return crf
-}
-
 // buildArgs 组装 ffmpeg 转码参数。复刻 magick 管线语义：
 // - "-y" 覆盖已存在的临时输出文件（CreateTemp 预先创建了空文件）
 // - "-nostdin" 防止 ffmpeg 在无输入终端环境下挂起等待交互
 // - "-ignore_loop 1" 等价 magick 的 -coalesce（动图按帧序合成，忽略循环元数据）
 // - "scale='min(iw,N)':-2" 等价 magick 的 "Nx>"（仅当源宽超过 N 时缩小，且保证偶数高度）
+// - "-pix_fmt yuv420p -color_range pc"：显式全范围，与 magick 输出一致
+//   （ffmpeg 默认标为受限范围 tv，会让黑位与对比度被压缩，实测影响约 0.6dB）
 // - 输出目标为临时文件路径（AVIF muxer 需要可寻址输出）
-func buildArgs(srcPath, outPath string, spec appimage.Spec, crf int) []string {
+func buildArgs(srcPath, outPath string, spec appimage.Spec) []string {
 	args := []string{
 		"-hide_banner", "-loglevel", "error",
 		"-y",
@@ -90,7 +90,9 @@ func buildArgs(srcPath, outPath string, spec appimage.Spec, crf int) []string {
 	args = append(args,
 		"-c:v", "libsvtav1",
 		"-still-picture", "1",
-		"-crf", fmt.Sprintf("%d", crf),
+		"-crf", fmt.Sprintf("%d", svtav1CRF),
+		"-pix_fmt", "yuv420p",
+		"-color_range", "pc",
 		"-f", "avif",
 		outPath,
 	)
@@ -109,7 +111,7 @@ func (e *Encoder) Process(ctx context.Context, srcPath string, spec appimage.Spe
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
-	if err := e.runner.Run(ctx, buildArgs(srcPath, outPath, spec, crfFromQuality(spec.Quality()))); err != nil {
+	if err := e.runner.Run(ctx, buildArgs(srcPath, outPath, spec)); err != nil {
 		return err
 	}
 	result, err := os.ReadFile(outPath)
