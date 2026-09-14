@@ -49,15 +49,17 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (sc
 	params.Set("t", fmt.Sprintf("%d", timestamp))
 	params.Set("s", fmt.Sprintf("%d", size))
 
-	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"), params.Get("fmt"))
+	// Signature includes raw parameter (format removed)
+	signatureBytes := s.calculateSignature(relPath, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%d", size), params.Get("w"), params.Get("q"), params.Get("raw"))
 	params.Set("sig", base64.URLEncoding.EncodeToString(signatureBytes))
 
 	return scalar.ParseURI(fmt.Sprintf("image?%s", params.Encode()))
 }
 
-func (s *Signer) calculateSignature(relPath, timestamp, size, w, q, format string) []byte {
+// calculateSignature 计算签名：relPath|timestamp|size|w|q|raw（不再包含 format）
+func (s *Signer) calculateSignature(relPath, timestamp, size, w, q, raw string) []byte {
 	mac := hmac.New(sha256.New, s.secretKey)
-	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, format)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, raw)
 	return mac.Sum(nil)
 }
 
@@ -100,13 +102,14 @@ func (s *Signer) ValidateRequestFromValues(params url.Values) error {
 	signature := params.Get("sig")
 	w := params.Get("w")
 	q := params.Get("q")
-	format := params.Get("fmt")
+	raw := params.Get("raw")
+	// fmt 参数已移除，不再验证
 
 	if path == "" || timestampStr == "" || sizeStr == "" || signature == "" {
 		return fmt.Errorf("missing required parameters")
 	}
 
-	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q, format)
+	expectedSignature := s.calculateSignature(path, timestampStr, sizeStr, w, q, raw)
 	gotSignature, err := base64.URLEncoding.DecodeString(signature)
 	if err != nil {
 		return fmt.Errorf("invalid signature encoding")

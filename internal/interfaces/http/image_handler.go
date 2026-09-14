@@ -13,6 +13,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
+	"main/internal/util"
 
 	"go.uber.org/zap"
 )
@@ -21,6 +22,14 @@ import (
 // GET 取回内容；两者共用同一签名 URL
 func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 
+// formatDecision 格式决策结果
+type formatDecision struct {
+	format       appimage.ImageFormat // 0 表示返回原图
+	serveOriginal bool
+	contentType  string // 原图的 MIME 类型（仅当 serveOriginal=true 时有效）
+	sourceWidth  int    // 源图宽度（用于缓存键计算）
+}
+
 func handleImage(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
@@ -28,6 +37,9 @@ func handleImage(
 	absRootDir string,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 所有响应都加上 Vary: Accept，保证缓存正确性（含错误响应）
+		w.Header().Set("Vary", "Accept")
+
 		const etag = `"immutable"`
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(http.StatusNotModified)
@@ -38,8 +50,19 @@ func handleImage(
 		relativePath := query.Get("path")
 		widthStr := query.Get("w")
 		qualityStr := query.Get("q")
-		formatStr := query.Get("fmt")
 		raw := query.Has("raw")
+
+		// 不再支持 fmt 参数；改由 Accept 头协商
+		if query.Has("fmt") {
+			http.Error(w, "format parameter (fmt) is no longer supported; use Accept header", http.StatusBadRequest)
+			return
+		}
+
+		// raw=true 不能与 w/q 同时使用
+		if raw && (widthStr != "" || qualityStr != "") {
+			http.Error(w, "raw parameter cannot be combined with width or quality", http.StatusBadRequest)
+			return
+		}
 
 		err := signer.ValidateRequestFromValues(query)
 		if err != nil {
@@ -47,30 +70,15 @@ func handleImage(
 			return
 		}
 
-		// 解析格式参数，空值默认 WebP
-		format := appimage.ImageFormatWebP
-		switch formatStr {
-		case "avif":
-			format = appimage.ImageFormatAVIF
-		case "webp", "":
-			// 默认 WebP
-		default:
-			http.Error(w, "unsupported format: "+formatStr, http.StatusBadRequest)
-			return
-		}
-
 		absPath := filepath.Join(absRootDir, relativePath)
 
-		if raw {
-			reader, err := os.Open(absPath)
-			if err != nil {
-				handleAcquireError(w, logger, err)
-				return
-			}
-			defer reader.Close()
-			serveVariant(w, r, appimage.ImageFormatWebP, relativePath, reader)
+		// 读取源图元数据（宽度、高度），用于决定是否需要缩放
+		meta, err := coordinator.Meta(r.Context(), absPath)
+		if err != nil {
+			handleAcquireError(w, logger, err)
 			return
 		}
+		sourceWidth := meta.Width
 
 		width := 0
 		if widthStr != "" {
@@ -86,7 +94,35 @@ func handleImage(
 			}
 		}
 
-		spec, err := appimage.NewSpec(width, quality, format)
+		// 根据 Accept 头决定格式
+		decision := decideFormat(r, absPath, relativePath, width, quality, sourceWidth)
+
+		if decision.serveOriginal || raw {
+			// 直接返回原图（raw=true 或 无需转码时）
+			file, err := os.Open(absPath)
+			if err != nil {
+				handleAcquireError(w, logger, err)
+				return
+			}
+			defer file.Close()
+
+			// 使用共享读取器检测 MIME 类型（读取前 512 字节）
+			contentType, _, err := util.DetectContentType(file, relativePath)
+			if err != nil {
+				handleAcquireError(w, logger, err)
+				return
+			}
+			// 回退到文件开头用于服务
+			if _, err := file.Seek(0, io.SeekStart); err != nil {
+				handleAcquireError(w, logger, err)
+				return
+			}
+			serveOriginal(w, r, contentType, relativePath, file)
+			return
+		}
+
+		// 需要转码：创建 Spec 并获取变体
+		spec, err := appimage.NewSpec(width, quality, decision.format)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -110,8 +146,72 @@ func handleImage(
 			return
 		}
 		defer reader.Close()
-		serveVariant(w, r, format, relativePath, reader)
+		serveVariant(w, r, decision.format, relativePath, reader)
 	}
+}
+
+// decideFormat 根据 Accept 头、请求参数和源图信息决定返回格式
+// 返回的 formatDecision 中如果 serveOriginal=true，则 contentType 为源图 MIME
+func decideFormat(r *http.Request, absPath, relativePath string, width, quality, sourceWidth int) formatDecision {
+	accept := r.Header.Get("Accept")
+	preferredFormats := util.PreferredImageFormats(accept)
+
+	// 判断是否需要缩放
+	needsResize := width > 0 && width < sourceWidth
+	// 判断是否需要质量压缩（quality=0 表示不指定，>=95 视为无损/高质量不压缩）
+	needsQualityReduction := quality > 0 && quality < 95
+
+	// 如果无需缩放且无需质量压缩，尝试返回原图
+	if !needsResize && !needsQualityReduction {
+		// 检测源图 MIME 类型
+		file, err := os.Open(absPath)
+		if err == nil {
+			contentType, _, err := util.DetectContentType(file, relativePath)
+			file.Close()
+			if err == nil {
+				// 源图格式在客户端接受范围内，直接返回原图
+				// 直接解析 Accept 头检查源图 MIME 是否被接受（不限于支持的输出格式）
+				acceptedTypes := util.ParseAcceptHeader(accept)
+				for _, at := range acceptedTypes {
+					if at.Type == contentType || at.Type == "image/*" || at.Type == "*/*" {
+						return formatDecision{
+							serveOriginal: true,
+							contentType:   contentType,
+							sourceWidth:   sourceWidth,
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 需要转码：根据 Accept 优先级选择格式
+	for _, pf := range preferredFormats {
+		switch pf {
+		case "image/avif":
+			return formatDecision{format: appimage.ImageFormatAVIF, sourceWidth: sourceWidth}
+		case "image/webp":
+			return formatDecision{format: appimage.ImageFormatWebP, sourceWidth: sourceWidth}
+		}
+	}
+
+	// 默认 WebP
+	return formatDecision{format: appimage.ImageFormatWebP, sourceWidth: sourceWidth}
+}
+
+// serveOriginal 返回原始图片文件
+func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, relativePath string, reader io.ReadSeeker) {
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"immutable"`)
+	w.Header().Set("Content-Type", contentType)
+
+	filename := filepath.Base(relativePath)
+	cd := mime.FormatMediaType("inline", map[string]string{
+		"filename": filename,
+	})
+	w.Header().Set("Content-Disposition", cd)
+
+	http.ServeContent(w, r, "", time.Now(), reader)
 }
 
 // serveVariant 写出变体产物响应头与内容
@@ -119,7 +219,7 @@ func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageF
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"immutable"`)
 
-	// 根据请求格式显式设置 Content-Type，不依赖内容嗅探（嗅探无法识别 AVIF）
+	// 根据转码格式显式设置 Content-Type
 	switch format {
 	case appimage.ImageFormatAVIF:
 		w.Header().Set("Content-Type", "image/avif")
@@ -127,7 +227,6 @@ func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageF
 		w.Header().Set("Content-Type", "image/webp")
 	}
 
-	// 使用 mime.FormatMediaType 安全格式化 Content-Disposition 响应头，防止头部注入并正确转义文件名
 	filename := filepath.Base(relativePath)
 	cd := mime.FormatMediaType("inline", map[string]string{
 		"filename": filename,

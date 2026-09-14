@@ -1,4 +1,4 @@
-mutation MarkImage($input: MarkImageInput!, $format: ImageFormat = WEBP) {
+mutation MarkImage($input: MarkImageInput!) {
   markImage(input: $input) {
     session {
       ...Session

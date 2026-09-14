@@ -22,6 +22,7 @@ import (
 	"main/internal/infrastructure/urlconv"
 	"main/internal/shared"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -36,7 +37,8 @@ func (m *stubProcessor) Process(ctx context.Context, srcPath string, spec appima
 }
 
 func (m *stubProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
-	return nil, nil
+	// 返回固定尺寸用于测试
+	return &shared.ImageMeta{Width: 2048, Height: 1536}, nil
 }
 
 // stubCache 模拟缓存：可预设已存在条目
@@ -124,9 +126,10 @@ type stubReadSeekCloser struct {
 
 func (m *stubReadSeekCloser) Close() error { return nil }
 
-func calculateTestSignature(secret []byte, relPath, timestamp, size, w, q, format string) string {
+// calculateTestSignature 计算测试用签名（不包含 format，包含 raw）
+func calculateTestSignature(secret []byte, relPath, timestamp, size, w, q, raw string) string {
 	mac := hmac.New(sha256.New, secret)
-	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, format)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, raw)
 	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
 }
 
@@ -145,52 +148,63 @@ func newTestCoordinator(processErr error) *appimage.TranscodeCoordinator {
 	return appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
 }
 
-func TestHandleImage_NotFound(t *testing.T) {
+// testSetup 创建测试所需的通用组件，返回 signer、rootDir、relPath
+func testSetup(t *testing.T, logger *zap.Logger, coordinator *appimage.TranscodeCoordinator) (*urlconv.Signer, string, string) {
 	secret := "test-secret"
 	rootDir := t.TempDir()
 	signer := urlconv.NewSigner(secret, rootDir)
 
-	// 创建带 Observer 的 zap Logger，以便验证是否有 Error 级别的日志
-	core, recorded := observer.New(zap.ErrorLevel)
-	logger := zap.New(core)
-
-	// 源文件不存在 → coordinator 返回 os.ErrNotExist
-	coordinator := newTestCoordinator(os.ErrNotExist)
-
-	// 创建真实源文件（coordinator 需要读取源图元信息）
 	relPath := "image.jpg"
 	requireWriteSource(t, filepath.Join(rootDir, relPath))
 
-	handler := handleImage(logger, signer, coordinator, rootDir)
+	return signer, rootDir, relPath
+}
 
-	// 构建请求参数并签名
-	tVal := "1719660000"
-	sVal := "1024"
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "1024", "", "")
+// signedRequest 使用 signer 生成有效签名的请求
+// opts: 传递给 GenerateSignedURL 的选项（如 WithWidth, WithQuality）
+// extraParams: 生成 URL 后额外添加/修改的查询参数（如 raw=true, 或覆盖 w/q）
+// acceptHeader: 请求的 Accept 头
+func signedRequest(t *testing.T, signer *urlconv.Signer, rootDir, relPath string, opts []appimage.SignOption, extraParams map[string]string, acceptHeader string) *http.Request {
+	signedURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath), opts...)
+	require.NoError(t, err)
 
-	u, err := url.Parse("/image")
-	if err != nil {
-		t.Fatal(err)
+	parsedURL, err := url.Parse(signedURL.String())
+	require.NoError(t, err)
+	q := parsedURL.Query()
+
+	// 应用额外参数
+	for k, v := range extraParams {
+		q.Set(k, v) // 空字符串也设置，表示参数存在但无值
 	}
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("w", "1024")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
+	parsedURL.RawQuery = q.Encode()
 
-	req := httptest.NewRequest("GET", u.String(), nil)
+	// httptest.NewRequest 需要完整的 URL（包含 scheme 和 host）
+	fullURL := "http://localhost" + parsedURL.String()
+	req := httptest.NewRequest("GET", fullURL, nil)
+	if acceptHeader != "" {
+		req.Header.Set("Accept", acceptHeader)
+	}
+	return req
+}
+
+func TestHandleImage_NotFound(t *testing.T) {
+	core, recorded := observer.New(zap.ErrorLevel)
+	logger := zap.New(core)
+
+	coordinator := newTestCoordinator(os.ErrNotExist)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
-	// 验证状态码是否为 404
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected status 404, got %d", rr.Code)
 	}
 
-	// 验证未记录错误日志
 	if recorded.Len() > 0 {
 		t.Errorf("expected no error logs, but got %d", recorded.Len())
 		for _, log := range recorded.All() {
@@ -200,91 +214,47 @@ func TestHandleImage_NotFound(t *testing.T) {
 }
 
 func TestHandleImage_Canceled(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
-
 	core, recorded := observer.New(zap.ErrorLevel)
 	logger := zap.New(core)
 
-	// 模拟返回 context.Canceled 错误
 	coordinator := newTestCoordinator(context.Canceled)
 
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-	handler := handleImage(logger, signer, coordinator, rootDir)
-	tVal := "1719660000"
-	sVal := "1024"
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "1024", "", "")
-
-	u, _ := url.Parse("/image")
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("w", "1024")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
-
-	req := httptest.NewRequest("GET", u.String(), nil)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
-	// 验证状态码是否为 408 (Request Timeout)
 	if rr.Code != http.StatusRequestTimeout {
 		t.Errorf("expected status 408, got %d", rr.Code)
 	}
 
-	// 验证未记录错误日志
 	if recorded.Len() > 0 {
 		t.Errorf("expected no error logs for canceled request, but got %d", recorded.Len())
 	}
 }
 
 func TestHandleImage_OtherError(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
-
 	core, recorded := observer.New(zap.ErrorLevel)
 	logger := zap.New(core)
 
-	// 模拟返回其他一般错误
 	expectedErr := errors.New("some processor internal error")
 	coordinator := newTestCoordinator(expectedErr)
 
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-	handler := handleImage(logger, signer, coordinator, rootDir)
-	tVal := "1719660000"
-	sVal := "1024"
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "1024", "", "")
-
-	u, _ := url.Parse("/image")
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("w", "1024")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
-
-	req := httptest.NewRequest("GET", u.String(), nil)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
-	// 验证状态码是否为 500 (Internal Server Error)
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected status 500, got %d", rr.Code)
 	}
 
-	// 验证已记录 Error 级别的错误日志
 	if recorded.Len() != 1 {
 		t.Errorf("expected exactly 1 error log, but got %d", recorded.Len())
 	} else {
@@ -295,15 +265,11 @@ func TestHandleImage_OtherError(t *testing.T) {
 	}
 }
 
-// #region 格式参数测试
+// #region Accept 头协商测试
 
-func TestHandleImage_FormatForwardedToProcessor(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
+func TestHandleImage_AcceptAVIF(t *testing.T) {
 	logger := zap.NewNop()
 
-	// 记录传给处理链的格式参数
 	var capturedFormat appimage.ImageFormat
 	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
@@ -315,175 +281,273 @@ func TestHandleImage_FormatForwardedToProcessor(t *testing.T) {
 	processor := &stubProcessor{processFunc: processFn}
 	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
 
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-	handler := handleImage(logger, signer, coordinator, rootDir)
-	tVal := "1719660000"
-	sVal := "1024"
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "", "", "avif")
-
-	u, _ := url.Parse("/image")
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("fmt", "avif")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
-
-	req := httptest.NewRequest("GET", u.String(), nil)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "image/avif, image/webp")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
 	if capturedFormat != appimage.ImageFormatAVIF {
-		t.Errorf("expected format AVIF forwarded to processor, got %v", capturedFormat)
+		t.Errorf("expected format AVIF for Accept: image/avif, got %v", capturedFormat)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/avif" {
+		t.Errorf("expected Content-Type image/avif, got %q", got)
+	}
+	if got := rr.Header().Get("Vary"); got != "Accept" {
+		t.Errorf("expected Vary: Accept, got %q", got)
 	}
 }
 
-func TestHandleImage_SetsContentTypeByFormat(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
+func TestHandleImage_AcceptWebP(t *testing.T) {
 	logger := zap.NewNop()
 
-	coordinator := newTestCoordinator(nil)
-
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
-
-	handler := handleImage(logger, signer, coordinator, rootDir)
-
-	tests := []struct {
-		name         string
-		formatParam  string
-		expectedCT   string
-		formatForSig string
-	}{
-		{"default webp when no format", "", "image/webp", ""},
-		{"explicit webp", "webp", "image/webp", "webp"},
-		{"explicit avif", "avif", "image/avif", "avif"},
+	var capturedFormat appimage.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedFormat = spec.Format()
+		_, err := w.Write([]byte("fake-webp"))
+		return err
 	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			relPath := "image.jpg"
-			tVal := "1719660000"
-			sVal := "1024"
-			sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "", "", tt.formatForSig)
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-			u, _ := url.Parse("/image")
-			q := u.Query()
-			q.Set("path", relPath)
-			q.Set("t", tVal)
-			q.Set("s", sVal)
-			q.Set("sig", sig)
-			if tt.formatParam != "" {
-				q.Set("fmt", tt.formatParam)
-			}
-			u.RawQuery = q.Encode()
-
-			req := httptest.NewRequest("GET", u.String(), nil)
-			rr := httptest.NewRecorder()
-
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != http.StatusOK {
-				t.Errorf("expected status 200, got %d", rr.Code)
-			}
-			if got := rr.Header().Get("Content-Type"); got != tt.expectedCT {
-				t.Errorf("expected Content-Type %q, got %q", tt.expectedCT, got)
-			}
-		})
-	}
-}
-
-func TestHandleImage_InvalidFormatReturns400(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
-	logger := zap.NewNop()
-
-	coordinator := newTestCoordinator(nil)
-
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
-
-	handler := handleImage(logger, signer, coordinator, rootDir)
-	tVal := "1719660000"
-	sVal := "1024"
-	// 使用篡改的格式参数签名
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "", "", "png")
-
-	u, _ := url.Parse("/image")
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("fmt", "png")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
-
-	req := httptest.NewRequest("GET", u.String(), nil)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "image/webp")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if capturedFormat != appimage.ImageFormatWebP {
+		t.Errorf("expected format WebP for Accept: image/webp, got %v", capturedFormat)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/webp" {
+		t.Errorf("expected Content-Type image/webp, got %q", got)
+	}
+}
+
+func TestHandleImage_AcceptWithQValues(t *testing.T) {
+	logger := zap.NewNop()
+
+	var capturedFormat appimage.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedFormat = spec.Format()
+		_, err := w.Write([]byte("fake-avif"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// WebP has higher q-value, should be preferred
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "image/webp;q=0.9, image/avif;q=0.8")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if capturedFormat != appimage.ImageFormatWebP {
+		t.Errorf("expected format WebP (higher q-value), got %v", capturedFormat)
+	}
+}
+
+func TestHandleImage_ReturnsOriginalWhenNoResizeAndNoQualityLoss(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// 请求 width=1024 (< 源图 2048) 需要缩放，所以不会返回原图
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "image/jpeg")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	// 需要缩放，所以会转码为 WebP（默认）
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/webp" {
+		t.Errorf("expected Content-Type image/webp (transcoded), got %q", got)
+	}
+}
+
+func TestHandleImage_ReturnsOriginalWhenWidthExceedsSource(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// 源图 2048x1536，不指定 width (w=0) 无需缩放
+	req := signedRequest(t, signer, rootDir, relPath, nil, nil, "image/jpeg, image/webp")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	// 无需缩放，无质量压缩，源图格式在 Accept 中 → 返回原图
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("expected Content-Type image/jpeg (original), got %q", got)
+	}
+}
+
+func TestHandleImage_RawTrueReturnsOriginal(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// raw=true，不需要宽度/质量参数
+	req := signedRequest(t, signer, rootDir, relPath, nil, map[string]string{"raw": ""}, "")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	// raw=true 返回原图，Content-Type 应为检测到的类型
+	if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("expected Content-Type image/jpeg for raw, got %q", got)
+	}
+}
+
+func TestHandleImage_RawTrueWithWidthReturns400(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// raw=true 与 w 冲突
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, map[string]string{"raw": ""}, "")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rr.Code)
+		t.Errorf("expected status 400 for raw with width, got %d", rr.Code)
 	}
 }
 
-func TestHandleImage_TamperedFormatReturns403(t *testing.T) {
-	secret := "test-secret"
-	rootDir := t.TempDir()
-	signer := urlconv.NewSigner(secret, rootDir)
+func TestHandleImage_RawTrueWithQualityReturns400(t *testing.T) {
 	logger := zap.NewNop()
 
 	coordinator := newTestCoordinator(nil)
 
-	// 创建真实源文件（coordinator 需要读取源图元信息）
-	relPath := "image.jpg"
-	requireWriteSource(t, filepath.Join(rootDir, relPath))
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-	handler := handleImage(logger, signer, coordinator, rootDir)
-	tVal := "1719660000"
-	sVal := "1024"
-	// 签名按 webp 计算，但请求传 avif
-	sig := calculateTestSignature([]byte(secret), relPath, tVal, sVal, "", "", "webp")
-
-	u, _ := url.Parse("/image")
-	q := u.Query()
-	q.Set("path", relPath)
-	q.Set("t", tVal)
-	q.Set("s", sVal)
-	q.Set("fmt", "avif")
-	q.Set("sig", sig)
-	u.RawQuery = q.Encode()
-
-	req := httptest.NewRequest("GET", u.String(), nil)
+	// raw=true 与 q 冲突
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithQuality(80)}, map[string]string{"raw": ""}, "")
 	rr := httptest.NewRecorder()
 
+	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusForbidden {
-		t.Errorf("expected status 403, got %d", rr.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for raw with quality, got %d", rr.Code)
+	}
+}
+
+func TestHandleImage_FmtParamReturns400(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// fmt 参数已废弃，手动添加到 URL
+	signedURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath))
+	require.NoError(t, err)
+
+	parsedURL, err := url.Parse(signedURL.String())
+	require.NoError(t, err)
+	q := parsedURL.Query()
+	q.Set("fmt", "avif")
+	parsedURL.RawQuery = q.Encode()
+
+	// httptest.NewRequest 需要完整的 URL
+	fullURL := "http://localhost" + parsedURL.String()
+	req := httptest.NewRequest("GET", fullURL, nil)
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400 for fmt param, got %d", rr.Code)
+	}
+}
+
+func TestHandleImage_DefaultToWebPWhenNoAccept(t *testing.T) {
+	logger := zap.NewNop()
+
+	var capturedFormat appimage.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedFormat = spec.Format()
+		_, err := w.Write([]byte("fake-webp"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, nil, "")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if capturedFormat != appimage.ImageFormatWebP {
+		t.Errorf("expected default WebP when no Accept, got %v", capturedFormat)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/webp" {
+		t.Errorf("expected Content-Type image/webp, got %q", got)
 	}
 }
 
 // #endregion
 
-// requireWriteSource 在指定路径写入一个真实源图文件
+// requireWriteSource 在指定路径写入一个真实源图文件（带有 JPEG 头以便 MIME 检测）
 func requireWriteSource(t *testing.T, path string) {
 	t.Helper()
-	if err := os.WriteFile(path, []byte("fake-source-image"), 0o644); err != nil {
+	// 最小有效 JPEG 头：SOI + APP0 + 最小数据
+	jpegHeader := []byte{
+		0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+		0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00,
+	}
+	if err := os.WriteFile(path, jpegHeader, 0o644); err != nil {
 		t.Fatalf("write source file: %v", err)
 	}
 }

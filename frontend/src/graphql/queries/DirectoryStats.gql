@@ -1,4 +1,4 @@
-query DirectoryStats($id: ID!, $format: ImageFormat = WEBP) {
+query DirectoryStats($id: ID!) {
   node(id: $id) {
     ... on Directory {
       ...Directory

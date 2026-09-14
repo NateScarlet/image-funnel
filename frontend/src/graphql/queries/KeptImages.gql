@@ -1,4 +1,4 @@
-query KeptImages($sessionId: ID!, $limit: Int, $offset: Int, $format: ImageFormat = WEBP) {
+query KeptImages($sessionId: ID!, $limit: Int, $offset: Int) {
   session(id: $sessionId) {
     id
     keptImages(limit: $limit, offset: $offset) {

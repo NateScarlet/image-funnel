@@ -18,7 +18,6 @@ import type OperationContext from "./OperationContext";
 export type { OperationContext };
 import WebSocketLink from "./WebsocketLink";
 import { getValidToken, refreshToken, tokenStore } from "./tokenManager";
-import formatLink from "./formatLink";
 export { tokenStore };
 
 function containsUpload(v: unknown): boolean {
@@ -290,7 +289,7 @@ const authLink = new ApolloLink((operation, forward) => {
 });
 
 export const client = new ApolloClient({
-  link: ApolloLink.from([formatLink, errorLink, persistedQueryLink, authLink, link]),
+  link: ApolloLink.from([errorLink, persistedQueryLink, authLink, link]),
   cache: persistentCache,
   assumeImmutableResults: true,
   defaultOptions: {

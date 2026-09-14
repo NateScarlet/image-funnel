@@ -1,4 +1,4 @@
-query Session($id: ID!, $format: ImageFormat = WEBP) {
+query Session($id: ID!) {
   session(id: $id) {
     ...Session
   }

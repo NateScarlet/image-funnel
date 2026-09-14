@@ -26,12 +26,6 @@ func WithRaw() SignOption {
 	}
 }
 
-func WithFormat(f ImageFormat) SignOption {
-	return func(v url.Values) {
-		v.Set("fmt", f.String())
-	}
-}
-
 type URLSigner interface {
 	GenerateSignedURL(absPath string, opts ...SignOption) (scalar.URI, error)
 }

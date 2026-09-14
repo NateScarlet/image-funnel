@@ -1,4 +1,4 @@
-mutation CommitChanges($input: CommitChangesInput!, $format: ImageFormat = WEBP) {
+mutation CommitChanges($input: CommitChangesInput!) {
   commitChanges(input: $input) {
     written
     matched

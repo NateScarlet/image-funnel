@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	image "main/internal/application/image"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +74,7 @@ func TestToRelativePath_Absolute(t *testing.T) {
 	assert.NotEmpty(t, result)
 }
 
-func TestGenerateSignedURL_DifferentFormatProducesDifferentSignature(t *testing.T) {
+func TestValidateSignedURL_TamperedParamsFails(t *testing.T) {
 	rootDir := t.TempDir()
 	signer := NewSigner("test-secret-key", rootDir)
 
@@ -85,36 +83,39 @@ func TestGenerateSignedURL_DifferentFormatProducesDifferentSignature(t *testing.
 	err := os.WriteFile(tempFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	urlWebP, err := signer.GenerateSignedURL(relPath, image.WithFormat(image.ImageFormatWebP))
+	signedURL, err := signer.GenerateSignedURL(relPath)
 	require.NoError(t, err)
 
-	urlAVIF, err := signer.GenerateSignedURL(relPath, image.WithFormat(image.ImageFormatAVIF))
-	require.NoError(t, err)
-
-	// 不同格式应产生不同签名
-	assert.NotEqual(t, urlWebP.String(), urlAVIF.String())
-}
-
-func TestValidateSignedURL_TamperedFormatFails(t *testing.T) {
-	rootDir := t.TempDir()
-	signer := NewSigner("test-secret-key", rootDir)
-
-	relPath := "test.jpg"
-	tempFile := filepath.Join(rootDir, relPath)
-	err := os.WriteFile(tempFile, []byte("test"), 0644)
-	require.NoError(t, err)
-
-	// 按 WEBP 签名
-	signedURL, err := signer.GenerateSignedURL(relPath, image.WithFormat(image.ImageFormatWebP))
-	require.NoError(t, err)
-
-	// 篡改 fmt 参数为 avif
+	// 篡改 w 参数
 	parsed, err := url.Parse(signedURL.String())
 	require.NoError(t, err)
 	q := parsed.Query()
-	q.Set("fmt", "avif")
+	q.Set("w", "9999")
 	parsed.RawQuery = q.Encode()
 
 	_, err = signer.ValidateSignedURL(parsed.String())
-	assert.Error(t, err, "tampered format should fail validation")
+	assert.Error(t, err, "tampered width should fail validation")
+}
+
+func TestValidateSignedURL_TamperedTimestampFails(t *testing.T) {
+	rootDir := t.TempDir()
+	signer := NewSigner("test-secret-key", rootDir)
+
+	relPath := "test.jpg"
+	tempFile := filepath.Join(rootDir, relPath)
+	err := os.WriteFile(tempFile, []byte("test"), 0644)
+	require.NoError(t, err)
+
+	signedURL, err := signer.GenerateSignedURL(relPath)
+	require.NoError(t, err)
+
+	// 篡改 timestamp
+	parsed, err := url.Parse(signedURL.String())
+	require.NoError(t, err)
+	q := parsed.Query()
+	q.Set("t", "9999999999")
+	parsed.RawQuery = q.Encode()
+
+	_, err = signer.ValidateSignedURL(parsed.String())
+	assert.Error(t, err, "tampered timestamp should fail validation")
 }

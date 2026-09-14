@@ -1,4 +1,4 @@
-subscription ImageSaved($filterBy: ImageFiltersInput, $format: ImageFormat = WEBP) {
+subscription ImageSaved($filterBy: ImageFiltersInput) {
   imageSaved(filterBy: $filterBy) {
     ...Image
   }

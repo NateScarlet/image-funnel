@@ -1,4 +1,4 @@
-query DirectoryLastSession($id: ID!, $format: ImageFormat = WEBP) {
+query DirectoryLastSession($id: ID!) {
   node(id: $id) {
     ... on Directory {
       id
