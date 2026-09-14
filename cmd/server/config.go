@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/netip"
 	"net/url"
 	"os"
@@ -12,6 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// ImageProcessor 选择图片转码用的处理器。
+// 零值（""）等同 ImageProcessorAuto：调用方只需判断是否为 ImageProcessorMagick
+type ImageProcessor string
+
+const (
+	// ImageProcessorAuto 启动时探测 ffmpeg AVIF 编码器，可用则使用，否则回退 ImageMagick
+	ImageProcessorAuto ImageProcessor = "auto"
+	// ImageProcessorMagick 跳过探测，所有转码强制走 ImageMagick
+	ImageProcessorMagick ImageProcessor = "magick"
+)
+
 type Config struct {
 	Port                      string
 	RootDir                   string
@@ -21,6 +33,7 @@ type Config struct {
 	IsDev                     bool
 	FrontendDir               string
 	MagickConcurrency         int64
+	ImageProcessor            ImageProcessor
 	EnableDirectoryStatsCache bool
 	IdleThreshold             time.Duration
 	TrustedIPs                []netip.Prefix
@@ -87,6 +100,20 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		} else {
 			logger.Warn("invalid IMAGE_FUNNEL_MAGICK_CONCURRENCY, use default", zap.String("value", v))
 		}
+	}
+
+	// 图片处理器选择：auto 时优先 ffmpeg AVIF 编码（快且画质不低于基准），
+	// 探测失败自动回退 ImageMagick；magick 时跳过探测，所有转码强制走 ImageMagick。
+	// 显式写错的值直接报错，避免用户以为已生效而实际仍走 ffmpeg
+	var imageProcessor ImageProcessor
+	switch v := os.Getenv("IMAGE_FUNNEL_IMAGE_PROCESSOR"); v {
+	case "":
+		imageProcessor = ImageProcessorAuto
+	case string(ImageProcessorAuto), string(ImageProcessorMagick):
+		imageProcessor = ImageProcessor(v)
+	default:
+		return nil, fmt.Errorf("invalid IMAGE_FUNNEL_IMAGE_PROCESSOR %q: must be %q or %q",
+			v, ImageProcessorAuto, ImageProcessorMagick)
 	}
 
 	enableDirectoryStatsCache := true
@@ -218,6 +245,7 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		IsDev:                     isDev,
 		FrontendDir:               frontendDir,
 		MagickConcurrency:         magickConcurrency,
+		ImageProcessor:            imageProcessor,
 		EnableDirectoryStatsCache: enableDirectoryStatsCache,
 		IdleThreshold:             idleThreshold,
 		TrustedIPs:                trustedIPs,

@@ -96,12 +96,14 @@ func main() {
 	defer cleanupCache()
 	transcodeQueue := inmem.NewTranscodeQueue()
 	magickProcessor := magick.NewProcessor(cfg.MagickConcurrency)
-	// AVIF 编码器探测：可用则用 ffmpeg(SVT-AV1)，不可用则显式回退 ImageMagick（无 nil 依赖）。
-	// 编码器标识参与变体 key 计算，回退切换不会误用另一编码器的缓存产物
-	avifEncoder := ffmpeg.Detect(logger)
+	// AVIF 编码器探测：auto 且探测可用时用 ffmpeg(SVT-AV1)，否则显式用 ImageMagick（无 nil 依赖）。
+	// 编码器标识参与变体 key 计算，切换编码器不会误用另一编码器的缓存产物。
+	// IMAGE_FUNNEL_IMAGE_PROCESSOR=magick 时跳过探测，所有转码强制走 ImageMagick
 	avifProcessor := appimage.Processor(magickProcessor)
 	avifEncoderID := appimage.EncoderMagick
-	if avifEncoder != nil {
+	if cfg.ImageProcessor == ImageProcessorMagick {
+		logger.Info("image processor forced to imagemagick by config")
+	} else if avifEncoder := ffmpeg.Detect(logger); avifEncoder != nil {
 		avifProcessor = avifEncoder
 		avifEncoderID = avifEncoder.ID()
 	}

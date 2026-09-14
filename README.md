@@ -84,6 +84,7 @@ ImageFunnel 是一个专门用于 AI 生成图片筛选的 Web 应用，通过�
 #### 性能与调优
 
 - `IMAGE_FUNNEL_MAGICK_CONCURRENCY`: ImageMagick 并发处理线程数（默认 4）。
+- `IMAGE_FUNNEL_IMAGE_PROCESSOR`: 图片转码使用的处理器，`auto` 或 `magick`（默认 `auto`）。`auto` 会在启动时探测 ffmpeg 的 AVIF 编码器，可用则使用（比 ImageMagick 更快且画质不低于基准），探测失败自动回退 ImageMagick；`magick` 跳过探测，所有转码强制走 ImageMagick。填其他值会启动失败。
 - `IMAGE_FUNNEL_ENABLE_DIRECTORY_STATS_CACHE`: 是否启用目录统计缓存（默认 `true`）。
 - `IMAGE_FUNNEL_IDLE_THRESHOLD`: 在用户操作后阻止系统休眠的时长（默认 `5m`）。
 
