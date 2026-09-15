@@ -57,6 +57,34 @@ func TestGenerateSignedURL_Format(t *testing.T) {
 	assert.NotContains(t, sig, "/")
 }
 
+func TestGenerateSignedURL_KeepsPathSeparatorsLiteral(t *testing.T) {
+	// 子目录必须以字面 "/" 作为分隔符呈现，不能整体转义成 %2F——
+	// 否则多级路径会塌成一段，服务端按路径分段处理时会当作单个文件名。
+	// 同时不得出现反斜杠：URL 中非法，且浏览器规范化后会与被签名的载荷不一致
+	signer, rootDir := newTestSigner(t)
+	relPath := "a/b/c/deep.jpg"
+	writeSource(t, filepath.Join(rootDir, "a", "b", "c", "deep.jpg"))
+
+	signedURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath),
+		image.WithWidth(512))
+	require.NoError(t, err)
+	raw := signedURL.String()
+
+	assert.NotContains(t, raw, "%2F", "路径分隔符不得被编码")
+	assert.NotContains(t, raw, "%2f")
+	assert.NotContains(t, raw, "\\", "URL 中不得出现反斜杠")
+	assert.NotContains(t, raw, "%5C")
+	assert.Contains(t, raw, "/a/b/c/deep.jpg", "多级路径应保持字面分段")
+
+	// 被签名的载荷同样分段，且验签后能还原为原始相对路径
+	_, gotPath, _ := splitSignedURL(t, raw)
+	assert.True(t, strings.HasPrefix(gotPath, "a/b/c/deep.jpg"), "载荷应以字面斜杠分段: %q", gotPath)
+
+	validated, err := signer.ValidateSignedURL(raw)
+	require.NoError(t, err)
+	assert.Equal(t, relPath, validated)
+}
+
 func TestValidate_RoundTrip(t *testing.T) {
 	signer, rootDir := newTestSigner(t)
 	relPath := "photo.jpg"
