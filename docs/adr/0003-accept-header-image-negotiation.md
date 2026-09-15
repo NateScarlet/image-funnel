@@ -40,3 +40,23 @@ Accepted
 - 更新所有 GraphQL schema 移除 `$format`，重新生成代码
 - 删除 `frontend/src/utils/image-format.ts` 及测试
 - 移除 `frontend/src/graphql/formatLink.ts` 及 client 中引用
+
+## 后续：quality 参数的移除
+
+本 ADR 落地后，`quality` 参数暴露出同类问题并被移除（与 format 属同一次契约收窄）：
+
+**背景**：AVIF 编码质量改由服务端固定 CRF 决定（见 ADR 0002）后，`quality` 对 AVIF 完全失效，
+但对 WebP 与「是否直出原图」的判断仍然生效——同一参数喂两个编码器而只有一个听，
+属过渡期残留而非设计。
+
+**决定**：画质一律由服务端编码器配置决定，从 URL 契约中移除 `quality`：
+- AVIF 由 `svtav1CRF` 决定；WebP 由 `magick.webpQuality` 决定（取值 92——实测相比 q75 画质高
+  约 3.3dB 而编码仅慢约 15ms，且远离 q100 的无损编码悬崖：q100 时 1024w 编码从 501ms 涨到 2496ms）
+- 「是否直出原图」仅由宽度判定（`width == 0 || width >= 源宽` 且源图 MIME 在 Accept 内）——
+  转码与否本质是分辨率问题，与画质无关
+- 请求携带 `q` 时返回 400（而非静默忽略），避免调用者以为调参生效
+- 签名去掉 `q`（`relPath|timestamp|size|w|raw`）；GraphQL `url` 字段只保留 `width` 入参
+- `Spec` 不再包含 quality，变体缓存键随之少一个维度，同一档位不会因画质参数重复编码
+
+**代价**：WebP 失去运行时画质调节能力，调整画质需改配置并重新发版。评估为可接受——
+通过前端查询传递画质本身也需要发版，因此并未真正失去灵活性。

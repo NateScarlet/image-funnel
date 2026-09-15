@@ -49,7 +49,6 @@ func handleImage(
 		query := r.URL.Query()
 		relativePath := query.Get("path")
 		widthStr := query.Get("w")
-		qualityStr := query.Get("q")
 		raw := query.Has("raw")
 
 		// 不再支持 fmt 参数；改由 Accept 头协商
@@ -58,9 +57,16 @@ func handleImage(
 			return
 		}
 
-		// raw=true 不能与 w/q 同时使用
-		if raw && (widthStr != "" || qualityStr != "") {
-			http.Error(w, "raw parameter cannot be combined with width or quality", http.StatusBadRequest)
+		// 不再支持 q 参数：画质由服务端编码器配置决定（AVIF 见 svtav1CRF、WebP 见 webpQuality），
+		// 客户端指定画质既无意义（编码器已定档）又会让同一张图因参数不同重复编码
+		if query.Has("q") {
+			http.Error(w, "quality parameter (q) is no longer supported; quality is configured server-side", http.StatusBadRequest)
+			return
+		}
+
+		// raw=true 不能与 w 同时使用
+		if raw && widthStr != "" {
+			http.Error(w, "raw parameter cannot be combined with width", http.StatusBadRequest)
 			return
 		}
 
@@ -87,15 +93,8 @@ func handleImage(
 			}
 		}
 
-		quality := 0
-		if qualityStr != "" {
-			if q, err := strconv.Atoi(qualityStr); err == nil {
-				quality = q
-			}
-		}
-
 		// 根据 Accept 头决定格式
-		decision := decideFormat(r, absPath, relativePath, width, quality, sourceWidth)
+		decision := decideFormat(r, absPath, relativePath, width, sourceWidth)
 
 		if decision.serveOriginal || raw {
 			// 直接返回原图（raw=true 或 无需转码时）
@@ -122,7 +121,7 @@ func handleImage(
 		}
 
 		// 需要转码：创建 Spec 并获取变体
-		spec, err := appimage.NewSpec(width, quality, decision.format)
+		spec, err := appimage.NewSpec(width, decision.format)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -152,24 +151,22 @@ func handleImage(
 
 // decideFormat 根据 Accept 头、请求参数和源图信息决定返回格式
 // 返回的 formatDecision 中如果 serveOriginal=true，则 contentType 为源图 MIME
-func decideFormat(r *http.Request, absPath, relativePath string, width, quality, sourceWidth int) formatDecision {
+func decideFormat(r *http.Request, absPath, relativePath string, width, sourceWidth int) formatDecision {
 	accept := r.Header.Get("Accept")
 	preferredFormats := util.PreferredImageFormats(accept)
 
-	// 判断是否需要缩放
+	// 是否需要缩放：仅当显式指定宽度且小于源图宽度时才需要。
+	// 画质不参与该判断——转码与否本质是分辨率问题，画质由编码器统一配置
 	needsResize := width > 0 && width < sourceWidth
-	// 判断是否需要质量压缩（quality=0 表示不指定，>=95 视为无损/高质量不压缩）
-	needsQualityReduction := quality > 0 && quality < 95
 
-	// 如果无需缩放且无需质量压缩，尝试返回原图
-	if !needsResize && !needsQualityReduction {
+	// 无需缩放时尝试返回原图，前提是源图 MIME 在客户端接受范围内
+	if !needsResize {
 		// 检测源图 MIME 类型
 		file, err := os.Open(absPath)
 		if err == nil {
 			contentType, _, err := util.DetectContentType(file, relativePath)
 			file.Close()
 			if err == nil {
-				// 源图格式在客户端接受范围内，直接返回原图
 				// 直接解析 Accept 头检查源图 MIME 是否被接受（不限于支持的输出格式）
 				acceptedTypes := util.ParseAcceptHeader(accept)
 				for _, at := range acceptedTypes {

@@ -126,10 +126,10 @@ type stubReadSeekCloser struct {
 
 func (m *stubReadSeekCloser) Close() error { return nil }
 
-// calculateTestSignature 计算测试用签名（不包含 format，包含 raw）
-func calculateTestSignature(secret []byte, relPath, timestamp, size, w, q, raw string) string {
+// calculateTestSignature 计算测试用签名（不含 format 与 quality，包含 raw）
+func calculateTestSignature(secret []byte, relPath, timestamp, size, w, raw string) string {
 	mac := hmac.New(sha256.New, secret)
-	fmt.Fprintf(mac, "%s|%s|%s|%s|%s|%s", relPath, timestamp, size, w, q, raw)
+	fmt.Fprintf(mac, "%s|%s|%s|%s|%s", relPath, timestamp, size, w, raw)
 	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
 }
 
@@ -161,8 +161,8 @@ func testSetup(t *testing.T, logger *zap.Logger, coordinator *appimage.Transcode
 }
 
 // signedRequest 使用 signer 生成有效签名的请求
-// opts: 传递给 GenerateSignedURL 的选项（如 WithWidth, WithQuality）
-// extraParams: 生成 URL 后额外添加/修改的查询参数（如 raw=true, 或覆盖 w/q）
+// opts: 传递给 GenerateSignedURL 的选项（如 WithWidth）
+// extraParams: 生成 URL 后额外添加/修改的查询参数（如 raw=true, 或覆盖 w）
 // acceptHeader: 请求的 Accept 头
 func signedRequest(t *testing.T, signer *urlconv.Signer, rootDir, relPath string, opts []appimage.SignOption, extraParams map[string]string, acceptHeader string) *http.Request {
 	signedURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath), opts...)
@@ -367,7 +367,7 @@ func TestHandleImage_AcceptWithQValues(t *testing.T) {
 	}
 }
 
-func TestHandleImage_ReturnsOriginalWhenNoResizeAndNoQualityLoss(t *testing.T) {
+func TestHandleImage_TranscodesWhenResizeNeeded(t *testing.T) {
 	logger := zap.NewNop()
 
 	coordinator := newTestCoordinator(nil)
@@ -455,22 +455,81 @@ func TestHandleImage_RawTrueWithWidthReturns400(t *testing.T) {
 	}
 }
 
-func TestHandleImage_RawTrueWithQualityReturns400(t *testing.T) {
+func TestHandleImage_QualityParamReturns400(t *testing.T) {
+	// quality 已从 URL 契约移除（画质由服务端编码器配置决定，不再由客户端指定）。
+	// 显式传入 q 必须报错，避免旧前端或外部调用者以为调参生效而实际被忽略
 	logger := zap.NewNop()
 
 	coordinator := newTestCoordinator(nil)
 
 	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 
-	// raw=true 与 q 冲突
-	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithQuality(80)}, map[string]string{"raw": ""}, "")
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)},
+		map[string]string{"q": "80"}, "image/webp")
 	rr := httptest.NewRecorder()
 
 	handler := handleImage(logger, signer, coordinator, rootDir)
 	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400 for raw with quality, got %d", rr.Code)
+		t.Errorf("expected status 400 for quality param, got %d", rr.Code)
+	}
+}
+
+func TestHandleImage_ReturnsOriginalRegardlessOfSourceWidth(t *testing.T) {
+	// 直出原图的判据只看宽度：width 未超过源图宽度即无需缩放，直接返回原图。
+	// 源图 MIME 必须在 Accept 内，否则仍需转码
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// stubProcessor.Meta 报告源图宽度 2048；请求 4096 超过源图 → 无需缩放
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(4096)},
+		nil, "image/jpeg")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Errorf("expected Content-Type image/jpeg (original), got %q", got)
+	}
+}
+
+func TestHandleImage_TranscodesWhenSourceNotAcceptable(t *testing.T) {
+	// 无需缩放但源图 MIME 不被接受时仍需转码（例如 Accept 只收 avif）
+	logger := zap.NewNop()
+
+	var capturedFormat appimage.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedFormat = spec.Format()
+		_, err := w.Write([]byte("fake-avif"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// 源图是 JPEG，Accept 只要 avif → 必须转码
+	req := signedRequest(t, signer, rootDir, relPath, nil, nil, "image/avif")
+	rr := httptest.NewRecorder()
+
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if capturedFormat != appimage.ImageFormatAVIF {
+		t.Errorf("expected AVIF transcode when source MIME not accepted, got %v", capturedFormat)
 	}
 }
 

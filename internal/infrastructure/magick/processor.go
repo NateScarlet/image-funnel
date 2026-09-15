@@ -29,15 +29,14 @@ func NewProcessor(concurrency int64) *Processor {
 	}
 }
 
+// webpQuality WebP 输出质量。取 92 的依据（实测 2304px 源图）：
+// q92 相比 q75 画质高 3.3dB 而编码仅慢约 15ms；q95 附近会滑向无损编码
+// （q100 时 1024w 从 501ms 暴涨到 2496ms、体积 129KB→1298KB），故留出余量
+const webpQuality = 92
+
 // Process 执行一次转码，结果流式写入 w。源文件状态（修改时间/大小）在执行时读取，
 // 由调用方用于缓存键计算
 func (p *Processor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
-	// AVIF 全分辨率（无显式质量参数）使用质量上限 95
-	quality := spec.Quality()
-	if quality == 0 {
-		quality = 95
-	}
-
 	if err := p.sem.Acquire(ctx, 1); err != nil {
 		return err
 	}
@@ -47,7 +46,7 @@ func (p *Processor) Process(ctx context.Context, srcPath string, spec appimage.S
 	if spec.Width() > 0 {
 		args = append(args, "-resize", fmt.Sprintf("%dx>", spec.Width()))
 	}
-	args = append(args, "-quality", fmt.Sprintf("%d", quality))
+	args = append(args, "-quality", fmt.Sprintf("%d", webpQuality))
 	args = append(args, spec.Format().String()+":-")
 
 	cmd := exec.CommandContext(ctx, "magick", args...)

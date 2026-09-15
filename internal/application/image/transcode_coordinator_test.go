@@ -65,14 +65,13 @@ type fakeProcessor struct {
 type fakeProcessCall struct {
 	srcPath string
 	width   int
-	quality int
 	format  ImageFormat
 }
 
 func (p *fakeProcessor) Process(_ context.Context, srcPath string, spec Spec, w io.Writer) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.calls = append(p.calls, fakeProcessCall{srcPath, spec.Width(), spec.Quality(), spec.Format()})
+	p.calls = append(p.calls, fakeProcessCall{srcPath, spec.Width(), spec.Format()})
 	if p.err != nil {
 		return p.err
 	}
@@ -172,7 +171,7 @@ func TestAcquireVariant_CacheHitBypassesQueue(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
 
-	spec, err := NewSpec(1024, 85, ImageFormatAVIF)
+	spec, err := NewSpec(1024, ImageFormatAVIF)
 	require.NoError(t, err)
 
 	// 预热进缓存
@@ -197,7 +196,7 @@ func TestAcquireVariant_ProcessError(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
 
-	spec, err := NewSpec(1024, 85, ImageFormatWebP)
+	spec, err := NewSpec(1024, ImageFormatWebP)
 	require.NoError(t, err)
 
 	file, err := c.Acquire(context.Background(), src, spec, PrioHigh)
@@ -212,7 +211,7 @@ func TestAcquireVariant_MissingSource(t *testing.T) {
 	stop := startWorkers(t, c)
 	defer stop()
 
-	spec, err := NewSpec(1024, 85, ImageFormatWebP)
+	spec, err := NewSpec(1024, ImageFormatWebP)
 	require.NoError(t, err)
 
 	file, err := c.Acquire(context.Background(), filepath.Join(t.TempDir(), "missing.png"), spec, PrioHigh)
@@ -222,7 +221,7 @@ func TestAcquireVariant_MissingSource(t *testing.T) {
 }
 
 func TestAcquireVariant_RawPassthrough(t *testing.T) {
-	// webp + 无宽 + 无质量 → 直接返回原始文件（现状行为原样搬移）
+	// webp + 无宽度参数 → 直接返回原始文件（现状行为原样搬移）
 	processor := &fakeProcessor{result: []byte("out")}
 	c := newTestCoordinator(processor)
 	stop := startWorkers(t, c)
@@ -231,7 +230,7 @@ func TestAcquireVariant_RawPassthrough(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "a.jpg")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
 
-	spec, err := NewSpec(0, 0, ImageFormatWebP)
+	spec, err := NewSpec(0, ImageFormatWebP)
 	require.NoError(t, err)
 
 	file, err := c.Acquire(context.Background(), src, spec, PrioHigh)
@@ -245,9 +244,9 @@ func TestVariantKey_StableAndDistinct(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
 
-	specA, err := NewSpec(1024, 85, ImageFormatAVIF)
+	specA, err := NewSpec(1024, ImageFormatAVIF)
 	require.NoError(t, err)
-	specB, err := NewSpec(2048, 85, ImageFormatAVIF)
+	specB, err := NewSpec(2048, ImageFormatAVIF)
 	require.NoError(t, err)
 
 	keyA1, err := VariantKey(src, specA, EncoderSVTAV1)
@@ -270,7 +269,7 @@ func TestVariantKey_TouchFileChangesKey(t *testing.T) {
 	src := filepath.Join(dir, "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
 
-	spec, err := NewSpec(1024, 85, ImageFormatWebP)
+	spec, err := NewSpec(1024, ImageFormatWebP)
 	require.NoError(t, err)
 
 	key1, err := VariantKey(src, spec, EncoderMagick)

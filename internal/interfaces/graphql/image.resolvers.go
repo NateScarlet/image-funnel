@@ -13,18 +13,10 @@ import (
 )
 
 // URL is the resolver for the url field.
-func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error) {
+func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int) (*scalar.URI, error) {
 	var opts []image.SignOption
 	if width != nil && *width < obj.Width {
 		opts = append(opts, image.WithWidth(*width))
-	}
-	if quality != nil {
-		q := *quality
-		// 任何格式质量硬性上限 95（q≥100 libwebp 触发无损慢编码 / libaom 参数冲突）
-		if q > 95 {
-			q = 95
-		}
-		opts = append(opts, image.WithQuality(q))
 	}
 	uri, err := r.signer.GenerateSignedURL(obj.AbsPath, opts...)
 	if err != nil {

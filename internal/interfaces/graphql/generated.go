@@ -256,7 +256,7 @@ type ComplexityRoot struct {
 		RawURL        func(childComplexity int) int
 		RelPath       func(childComplexity int) int
 		Size          func(childComplexity int) int
-		URL           func(childComplexity int, width *int, quality *int) int
+		URL           func(childComplexity int, width *int) int
 		Width         func(childComplexity int) int
 		XMPExists     func(childComplexity int) int
 	}
@@ -606,7 +606,7 @@ type DirectoryStatsResolver interface {
 	RatingCounts(ctx context.Context, obj *shared.DirectoryStatsDTO) ([]*RatingCount, error)
 }
 type ImageResolver interface {
-	URL(ctx context.Context, obj *shared.ImageDTO, width *int, quality *int) (*scalar.URI, error)
+	URL(ctx context.Context, obj *shared.ImageDTO, width *int) (*scalar.URI, error)
 	RawURL(ctx context.Context, obj *shared.ImageDTO) (*scalar.URI, error)
 
 	Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error)
@@ -1407,7 +1407,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Image.URL(childComplexity, args["width"].(*int), args["quality"].(*int)), true
+		return e.complexity.Image.URL(childComplexity, args["width"].(*int)), true
 	case "Image.width":
 		if e.complexity.Image.Width == nil {
 			break
@@ -3339,8 +3339,8 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   filename: String!
   "文件大小（字节）"
   size: Int!
-  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效）和 quality，格式由 Accept 头协商"
-  url(width: Int, quality: Int): URI!
+  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效），格式由 Accept 头协商，画质由服务端编码器配置决定"
+  url(width: Int): URI!
   "带签名的原始图片URL（无缩放）"
   rawURL: URI!
   "文件最后修改时间"
@@ -4662,11 +4662,6 @@ func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["width"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "quality", ec.unmarshalOInt2ᚖint)
-	if err != nil {
-		return nil, err
-	}
-	args["quality"] = arg1
 	return args, nil
 }
 
@@ -8631,7 +8626,7 @@ func (ec *executionContext) _Image_url(ctx context.Context, field graphql.Collec
 		ec.fieldContext_Image_url,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int), fc.Args["quality"].(*int))
+			return ec.resolvers.Image().URL(ctx, obj, fc.Args["width"].(*int))
 		},
 		nil,
 		ec.marshalNURI2ᚖmainᚋinternalᚋscalarᚐURI,
@@ -25988,13 +25983,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -26626,23 +26621,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 

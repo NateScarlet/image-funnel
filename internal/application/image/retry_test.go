@@ -45,7 +45,7 @@ func TestRetryProcessor_Process_SuccessAfterRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond // 缩短退避以加速测试
 
-	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestRetryProcessor_Process_NonTargetErrorNoRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond
 
-	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestRetryProcessor_Process_ContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	spec, err := NewSpec(100, 75, ImageFormatWebP)
+	spec, err := NewSpec(100, ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}

@@ -14,12 +14,6 @@ func WithWidth(w int) SignOption {
 	}
 }
 
-func WithQuality(q int) SignOption {
-	return func(v url.Values) {
-		v.Set("q", fmt.Sprintf("%d", q))
-	}
-}
-
 func WithRaw() SignOption {
 	return func(v url.Values) {
 		v.Set("raw", "")

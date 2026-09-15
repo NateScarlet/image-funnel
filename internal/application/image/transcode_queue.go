@@ -17,29 +17,26 @@ const (
 	PrioHigh
 )
 
-// Spec 图片变体的转码规格：源图身份之外的变体参数三元组
+// Spec 图片变体的转码规格：源图身份之外的变体参数。
+// 只包含 width 与 format——画质由各编码器自身的配置决定（AVIF 见 svtav1CRF，
+// WebP 见 magick 的固定质量），不作为变体维度，避免同一张图因画质参数不同重复编码
 type Spec struct {
-	width   int
-	quality int
-	format  ImageFormat
+	width  int
+	format ImageFormat
 }
 
-func NewSpec(width, quality int, format ImageFormat) (Spec, error) {
-	// 可信边界校验：宽度/质量非负、格式合法；内部数据创建后即合法
+func NewSpec(width int, format ImageFormat) (Spec, error) {
+	// 可信边界校验：宽度非负、格式合法；内部数据创建后即合法
 	if width < 0 {
 		return Spec{}, fmt.Errorf("width must be non-negative, got %d", width)
-	}
-	if quality < 0 {
-		return Spec{}, fmt.Errorf("quality must be non-negative, got %d", quality)
 	}
 	if format != ImageFormatWebP && format != ImageFormatAVIF {
 		return Spec{}, fmt.Errorf("unsupported format: %d", format)
 	}
-	return Spec{width: width, quality: quality, format: format}, nil
+	return Spec{width: width, format: format}, nil
 }
 
-func (s Spec) Width() int   { return s.width }
-func (s Spec) Quality() int { return s.quality }
+func (s Spec) Width() int { return s.width }
 func (s Spec) Format() ImageFormat {
 	return s.format
 }

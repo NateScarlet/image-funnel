@@ -60,13 +60,9 @@ func VariantKey(absPath string, spec Spec, encoder string) (string, error) {
 	if spec.Width() > 0 {
 		wStr = fmt.Sprintf("%d", spec.Width())
 	}
-	qStr := ""
-	if spec.Quality() > 0 {
-		qStr = fmt.Sprintf("%d", spec.Quality())
-	}
 
 	hash := sha256.New()
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, qStr, spec.Format().String(), encoder)
+	fmt.Fprintf(hash, "%s|%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, spec.Format().String(), encoder)
 	return base64.URLEncoding.EncodeToString(hash.Sum(nil)), nil
 }
 
@@ -75,8 +71,8 @@ func VariantKey(absPath string, spec Spec, encoder string) (string, error) {
 // ctx 结束（客户端断开/请求放弃）时自动撤回需求登记——「撤回淘汰未启动任务」
 // 的语义由此保证，调用方无需手动 Cancel
 func (c *TranscodeCoordinator) Acquire(ctx context.Context, absPath string, spec Spec, priority Prio) (File, error) {
-	// WebP 且无缩放/质量参数时返回原始文件（向后兼容）；AVIF 全分辨率也需要转码
-	if spec.Width() == 0 && spec.Quality() == 0 && spec.Format() == ImageFormatWebP {
+	// WebP 且无缩放参数时返回原始文件（向后兼容）；AVIF 全分辨率也需要转码
+	if spec.Width() == 0 && spec.Format() == ImageFormatWebP {
 		return &rawFile{path: absPath}, nil
 	}
 
@@ -147,7 +143,6 @@ func (c *TranscodeCoordinator) runJob(ctx context.Context, job TranscodeJob) {
 	c.logger.Info("will transcode variant",
 		zap.String("key", item.Key()),
 		zap.Int("width", spec.Width()),
-		zap.Int("quality", spec.Quality()),
 		zap.String("format", spec.Format().String()),
 	)
 
