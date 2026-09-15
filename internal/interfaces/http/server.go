@@ -32,7 +32,7 @@ type Server struct {
 func NewServer(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	coordinator    *appimage.TranscodeCoordinator,
+	coordinator *appimage.TranscodeCoordinator,
 	graphqlHandler http.Handler,
 	playground http.Handler,
 	absRootDir string,
@@ -69,7 +69,15 @@ func (s *Server) Serve(addr string) error {
 		s.graphqlHandler.ServeHTTP(w, r)
 	})
 
-	r.HandleFunc("/image", handleImage(s.logger, s.signer, s.coordinator, s.absRootDir))
+	// 图片访问 URL 形如 /image/<sig>/<relPath>?<params>，签名与路径都是路径段，
+	// 故按前缀匹配后由 handler 自行从 RequestURI 解析（不取 mux 变量：
+	// 其值为解码后结果，无法区分 %2F 与 /，而签名校验依赖原始字形）
+	//
+	// 裸 /image 也交给同一 handler：前缀路由不匹配它，若不注册会落入 SPA catch-all
+	// 得到 200 HTML；交给 handler 则按「格式残缺」统一返回 403
+	imageHandler := handleImage(s.logger, s.signer, s.coordinator, s.absRootDir)
+	r.HandleFunc("/image", imageHandler)
+	r.PathPrefix(urlconv.ImageURLPrefix).HandlerFunc(imageHandler)
 
 	addStaticRoutes(r, s.frontendDir)
 

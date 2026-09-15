@@ -24,6 +24,12 @@
 - **不保留 alpha 通道**：SVT-AV1 编码器只支持 `yuv420p`/`yuv420p10le`，无法承载透明通道；
   当前样本（AI 生成图）均无 alpha，故不做 alpha 源图的路由分流。若将来出现透明源图且要求
   保留透明度，需按源图 alpha 分流回 ImageMagick（libheif 支持），判据可从图片 Meta 顺带取得。
+- **变体产物不保留元数据**：ComfyUI 把整个工作流写进 PNG 的 `tEXt`/`zTXt` 块，而两个编码器
+  的产物都不携带它（实测：ImageMagick 转 PNG 保留，转 WebP / AVIF 丢失，ffmpeg 转 AVIF 丢失）。
+  该元数据无需在产物中冗余携带——需要它时有两条既有通路：ComfyUI 钩子
+  （`example_hooks/comfyui/png_metadata.py` 的 `load_prompt_and_workflow`）直接用 PIL 从
+  **原图文件**读取；人工查看走查看器的「原图」开关取得原图直通 URL。体积上携带它约
+  50–58KB/张（占源文件 0.7%–8.0%，与图片尺寸无关），传输代价约 4ms，代价虽小但没有收益。
 
 ## 实测基准
 

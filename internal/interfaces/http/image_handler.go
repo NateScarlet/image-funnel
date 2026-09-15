@@ -24,10 +24,10 @@ func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 
 // formatDecision 格式决策结果
 type formatDecision struct {
-	format       appimage.ImageFormat // 0 表示返回原图
+	format        appimage.ImageFormat // 0 表示返回原图
 	serveOriginal bool
-	contentType  string // 原图的 MIME 类型（仅当 serveOriginal=true 时有效）
-	sourceWidth  int    // 源图宽度（用于缓存键计算）
+	contentType   string // 原图的 MIME 类型（仅当 serveOriginal=true 时有效）
+	sourceWidth   int    // 源图宽度（用于缓存键计算）
 }
 
 func handleImage(
@@ -40,6 +40,26 @@ func handleImage(
 		// 所有响应都加上 Vary: Accept，保证缓存正确性（含错误响应）
 		w.Header().Set("Vary", "Accept")
 
+		// 验签先于一切响应分支：签名是 /image 的唯一信任边界（该端点无登录态），
+		// 包括 304 短路在内都不得绕过它
+		//
+		// 必须使用 RequestURI（线路上的原始目标串）：URL.Path 已解码，无法区分 %2F 与 /，
+		// 而签名覆盖的是原始字形；RequestURI 不经过 url.Values 往返，故参数顺序与
+		// ?a ／ ?a= 等区别都被完整保留
+		relativePath, err := signer.ValidateSignedURL(r.RequestURI)
+		if err != nil {
+			// 不向客户端回显失败原因：细分原因会给探测者反馈，且具体错误对排障无价值
+			http.Error(w, "invalid signature", http.StatusForbidden)
+			return
+		}
+
+		// 签名只证明 URL 由本服务签发，不证明目标位于根目录内；
+		// 越界路径在任何情况下都不得被读取
+		if err := util.EnsurePathInRoot(absRootDir, relativePath); err != nil {
+			http.Error(w, "invalid signature", http.StatusForbidden)
+			return
+		}
+
 		const etag = `"immutable"`
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(http.StatusNotModified)
@@ -47,32 +67,16 @@ func handleImage(
 		}
 
 		query := r.URL.Query()
-		relativePath := query.Get("path")
 		widthStr := query.Get("w")
 		raw := query.Has("raw")
 
-		// 不再支持 fmt 参数；改由 Accept 头协商
-		if query.Has("fmt") {
-			http.Error(w, "format parameter (fmt) is no longer supported; use Accept header", http.StatusBadRequest)
-			return
-		}
+		// 未知/多余参数无需校验：签名覆盖签名之后的整个原始字符串，
+		// 任何未参与生成的参数（含 fmt、q）在验签阶段即已失败
 
-		// 不再支持 q 参数：画质由服务端编码器配置决定（AVIF 见 svtav1CRF、WebP 见 webpQuality），
-		// 客户端指定画质既无意义（编码器已定档）又会让同一张图因参数不同重复编码
-		if query.Has("q") {
-			http.Error(w, "quality parameter (q) is no longer supported; quality is configured server-side", http.StatusBadRequest)
-			return
-		}
-
-		// raw=true 不能与 w 同时使用
+		// raw 与 width 是两个已签名参数的语义矛盾（宽高变体 vs 原图），
+		// 属生成侧错误，静默取舍会掩盖 bug
 		if raw && widthStr != "" {
 			http.Error(w, "raw parameter cannot be combined with width", http.StatusBadRequest)
-			return
-		}
-
-		err := signer.ValidateRequestFromValues(query)
-		if err != nil {
-			http.Error(w, "invalid signature: "+err.Error(), http.StatusForbidden)
 			return
 		}
 

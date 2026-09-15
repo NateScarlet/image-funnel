@@ -14,10 +14,14 @@ Accepted
 移除 `fmt` 查询参数，改用标准 HTTP `Accept` 头进行内容协商：
 - 浏览器原生发送 `Accept: image/avif, image/webp, image/*, */*;q=0.8`
 - 服务端解析 Accept 头（支持 q-value 排序），按优先级选择 AVIF/WebP
-- 当无需缩放（width=0 或 width≥源图宽度）且无需质量压缩（quality=0 或 quality≥95）且源图 MIME 在 Accept 范围内时，直接返回原图并设置正确 Content-Type
-- `raw=true` 忽略 Accept，返回源文件并通过内容嗅探设置正确 MIME
+- 当无需缩放（width=0 或 width≥源图宽度）且源图 MIME 在 Accept 范围内时，直接返回原图并设置正确 Content-Type
+- `raw` 忽略 Accept，返回源文件并通过内容嗅探设置正确 MIME
 - 所有响应添加 `Vary: Accept` 头
 - 签名不再包含 format，旧签名 URL 失效（本地应用可接受停机）
+
+> 注：上面两条随后被后续改动收窄——「无需质量压缩」中的 `quality` 条件已随 quality 参数一并移除
+> （见下节），`raw=true` 的实际形式是空值 `raw`。当前判定条件与签署格式见
+> [ADR 0004](./0004-image-url-and-signature-format.md)。
 
 ## 后果
 ### 正面
@@ -54,9 +58,12 @@ Accepted
   约 3.3dB 而编码仅慢约 15ms，且远离 q100 的无损编码悬崖：q100 时 1024w 编码从 501ms 涨到 2496ms）
 - 「是否直出原图」仅由宽度判定（`width == 0 || width >= 源宽` 且源图 MIME 在 Accept 内）——
   转码与否本质是分辨率问题，与画质无关
-- 请求携带 `q` 时返回 400（而非静默忽略），避免调用者以为调参生效
-- 签名去掉 `q`（`relPath|timestamp|size|w|raw`）；GraphQL `url` 字段只保留 `width` 入参
+- 签名不再包含 `q`；GraphQL `url` 字段只保留 `width` 入参
 - `Spec` 不再包含 quality，变体缓存键随之少一个维度，同一档位不会因画质参数重复编码
+
+> 注：此处原先另有一条「请求携带 `q` 时返回 400」。该显式白名单随后被
+> [ADR 0004](./0004-image-url-and-signature-format.md) 移除——签名改为覆盖整段原始字符串后，
+> 任何未参与生成的参数都会验签失败，逐个拒绝既冗余又易漏。签署内容的完整定义见 ADR 0004。
 
 **代价**：WebP 失去运行时画质调节能力，调整画质需改配置并重新发版。评估为可接受——
 通过前端查询传递画质本身也需要发版，因此并未真正失去灵活性。
