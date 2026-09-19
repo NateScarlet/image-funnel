@@ -71,10 +71,10 @@ export function useClipboard(options?: { loadingCount?: Ref<number> }) {
       let enhancedContent: string | null | undefined = undefined;
       let enhancedDescription: string | null | undefined = undefined;
       try {
-        // 优先获取复制增强钩子提供的内容（cache-first：命中缓存不重复 spawn 脚本）
+        // 优先获取复制增强钩子提供的内容（no-cache：避免修改脚本设置之后还是复制到旧的）
         const result = await query(ImageCopyContentDocument, {
           variables: { id: imageId },
-          fetchPolicy: "cache-first",
+          fetchPolicy: "no-cache",
         });
         enhancedContent = result.data?.imageCopyContent?.content ?? null;
         enhancedDescription = result.data?.imageCopyContent?.description;
