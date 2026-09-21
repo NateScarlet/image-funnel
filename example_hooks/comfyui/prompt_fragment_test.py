@@ -595,6 +595,66 @@ class TestDoubleTrack(unittest.TestCase):
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
 
+class TestRegionBlankLines(unittest.TestCase):
+    """region 前后空行保持：已有空行保留一个、原本无空行不引入，重复 add 不累积"""
+
+    def _make_pair(self, node_text, prompt_text):
+        workflow = {
+            "nodes": [
+                {"id": "1", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ],
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt_text}}
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        return pair, workflow
+
+    def test_preserve_existing_blank_lines(self):
+        """region 前后已有空行时保留一个空行，重复 add 不额外累积"""
+        pair, workflow = self._make_pair(
+            "masterpiece,\n\n// #region positive\ncat,\n// #endregion positive\n\nbest quality,\n",
+            "masterpiece,\ncat,\nbest quality,\n",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        self.assertTrue(fragment.add("dog"))
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "masterpiece,\n\n// #region positive\ncat,\ndog,\n// #endregion positive\n\nbest quality,\n",
+        )
+        self.assertTrue(fragment.add("bird"))
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "masterpiece,\n\n// #region positive\ncat,\ndog,\nbird,\n// #endregion positive\n\nbest quality,\n",
+        )
+
+    def test_no_blank_lines_when_none_exist(self):
+        """region 位于文本开头且前后原本无空行时，add 不引入空行"""
+        pair, workflow = self._make_pair(
+            "// #region positive\nmasterpiece,\n// #endregion positive\nbest quality,\n",
+            "masterpiece,\nbest quality,\n",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        self.assertTrue(fragment.add("dog"))
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "// #region positive\nmasterpiece,\ndog,\n// #endregion positive\nbest quality,\n",
+        )
+
+    def test_blank_line_before_only(self):
+        """只有 region 前有空行时，仅在前面保留空行，后面不引入"""
+        pair, workflow = self._make_pair(
+            "masterpiece,\n\n// #region positive\ncat,\n// #endregion positive\nbest quality,\n",
+            "masterpiece,\ncat,\nbest quality,\n",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        self.assertTrue(fragment.add("dog"))
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "masterpiece,\n\n// #region positive\ncat,\ndog,\n// #endregion positive\nbest quality,\n",
+        )
+
+
 class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
     """自动格式化（总是重排已有提示词）：add/remove 时对整段已有提示词重排，disabled 作为 opt-out。"""
 

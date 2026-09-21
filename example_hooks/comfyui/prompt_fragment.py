@@ -31,6 +31,38 @@ def strip_comments_for_prompt(text: str) -> str:
     return "\n".join(lines)
 
 
+def _blank_lines_at_start(text: str) -> int:
+    """统计文本开头连续的空行数量（空行内允许空白字符）。"""
+    stripped = text.lstrip()
+    leading = text[: len(text) - len(stripped)]
+    newline_count = leading.count("\n")
+    return max(newline_count - 1, 0) if newline_count else 0
+
+
+def _blank_lines_at_end(text: str) -> int:
+    """统计文本末尾连续的空行数量（空行内允许空白字符）。"""
+    stripped = text.rstrip()
+    trailing = text[len(stripped) :]
+    newline_count = trailing.count("\n")
+    return max(newline_count - 1, 0) if newline_count else 0
+
+
+def _region_separators(before: str, after: str) -> Tuple[str, str]:
+    """
+    计算 region 前后与相邻文本之间的连接符，保留原有空行结构：
+    原本有空行则保留一个空行，原本没有则不额外添加；前后无内容时不添加空行。
+    """
+    if before.strip():
+        sep_before = "\n\n" if _blank_lines_at_end(before) >= 1 else "\n"
+    else:
+        sep_before = ""
+    if after.strip():
+        sep_after = "\n\n" if _blank_lines_at_start(after) >= 1 else "\n"
+    else:
+        sep_after = ""
+    return sep_before, sep_after
+
+
 class PromptFragment:
     """
     表示定位出来的一段提示词片段。
@@ -298,20 +330,27 @@ class PromptFragment:
                 else:
                     new_content_prompt = f"{prompt_str_arg},"
 
+                sep_before, sep_after = _region_separators(before, after)
                 new_workflow_text = (
                     before.rstrip()
-                    + f"\n\n{region_line}\n"
+                    + sep_before
+                    + region_line
+                    + "\n"
                     + new_content_prompt
-                    + f"\n{end_line}\n\n"
+                    + "\n"
+                    + end_line
+                    + sep_after
                     + after.lstrip()
                 )
 
                 if is_equivalent:
+                    # prompt 轨道无 region 标记，保持紧凑（单换行）拼接，
+                    # 仅在前后无内容时不添加多余换行
                     new_prompt_text_raw = (
                         before.rstrip()
-                        + "\n"
+                        + ("\n" if before.strip() else "")
                         + new_content_prompt
-                        + "\n"
+                        + ("\n" if after.strip() else "")
                         + after.lstrip()
                     )
                     new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
@@ -400,20 +439,27 @@ class PromptFragment:
                                 new_lines.append(line)
                         new_content_prompt = "\n".join(new_lines)
 
+                sep_before, sep_after = _region_separators(before, after)
                 new_workflow_text = (
                     before.rstrip()
-                    + f"\n\n{region_line}\n"
+                    + sep_before
+                    + region_line
+                    + "\n"
                     + new_content_prompt
-                    + f"\n{end_line}\n\n"
+                    + "\n"
+                    + end_line
+                    + sep_after
                     + after.lstrip()
                 )
 
                 if is_equivalent:
+                    # prompt 轨道无 region 标记，保持紧凑（单换行）拼接，
+                    # 仅在前后无内容时不添加多余换行
                     new_prompt_text_raw = (
                         before.rstrip()
-                        + "\n"
+                        + ("\n" if before.strip() else "")
                         + new_content_prompt
-                        + "\n"
+                        + ("\n" if after.strip() else "")
                         + after.lstrip()
                     )
                     new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)

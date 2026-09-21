@@ -44,8 +44,10 @@ def is_node_disabled(node: Dict[str, Any]) -> bool:
 
 # 标准 // #region / // #endregion 注释语法（ComfyUI 工作流需以 // 开头注释）
 # 允许 // 前有缩进，允许 // 与 # 之间有任意空格，endregion 可附带名称作为描述
-REGION_START_RE = re.compile(r"^\s*//\s*#region\s+(\S+)", re.MULTILINE)
-REGION_END_RE = re.compile(r"^\s*//\s*#endregion\b", re.MULTILINE)
+# 行首只匹配缩进空白（[ \t]）而非任意空白（\s），避免吞掉标记行前的换行符，
+# 否则 match.start() 会指向上一行的换行，导致 region 边界定位错误
+REGION_START_RE = re.compile(r"^[ \t]*//\s*#region\s+(\S+)", re.MULTILINE)
+REGION_END_RE = re.compile(r"^[ \t]*//\s*#endregion\b", re.MULTILINE)
 
 # #endregion
 

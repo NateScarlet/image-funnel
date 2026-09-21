@@ -346,6 +346,54 @@ class TestFindRegionBoundaries(unittest.TestCase):
         content = get_region_content(text2, "bar")
         self.assertEqual(content, "y")
 
+    def test_find_with_blank_line_before(self):
+        """region 前有空行时，起始边界仍应指向标记行本身（而非前面的换行）"""
+        text = (
+            "masterpiece,\n"
+            "\n"
+            "// #region positive\n"
+            "cat,\n"
+            "// #endregion positive\n"
+            "\n"
+            "best quality,\n"
+        )
+        start, endregion_start = find_region_boundaries(text, "positive")
+        self.assertEqual(
+            text[start : start + len("// #region positive")], "// #region positive"
+        )
+        self.assertEqual(
+            text[endregion_start : endregion_start + len("// #endregion positive")],
+            "// #endregion positive",
+        )
+
+    def test_get_content_with_blank_line_before(self):
+        """region 前有空行时，get_region_content 应返回纯内容而非包含标记行"""
+        text = (
+            "masterpiece,\n"
+            "\n"
+            "// #region positive\n"
+            "cat,\n"
+            "// #endregion positive\n"
+            "\n"
+            "best quality,\n"
+        )
+        self.assertEqual(get_region_content(text, "positive"), "cat,")
+
+    def test_find_with_blank_line_before_end_marker(self):
+        """#endregion 前有空行时，结束边界仍应指向标记行本身"""
+        text = (
+            "// #region positive\n"
+            "cat,\n"
+            "\n"
+            "// #endregion positive\n"
+            "best quality,\n"
+        )
+        _, endregion_start = find_region_boundaries(text, "positive")
+        self.assertEqual(
+            text[endregion_start : endregion_start + len("// #endregion positive")],
+            "// #endregion positive",
+        )
+
 
 # #endregion
 
