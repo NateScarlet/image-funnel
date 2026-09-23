@@ -112,6 +112,67 @@ func TestParseCommandArgs_EmptyOrInvalid(t *testing.T) {
 	assert.Equal(t, []string{"uv", "run", "runner.py", "comfyui", "add"}, argv)
 }
 
+// TestSplitArgs_DoubleQuotedEscapes 双引号内 \\ 与 \" 应还原为 \ 与 "，
+// 其余 \X 序列（如 ComfyUI 的 \( 转义括号、Windows 路径分隔符）按字面量保留
+func TestSplitArgs_DoubleQuotedEscapes(t *testing.T) {
+	args, err := splitArgs(`"elysia \\(herrscher of human: ego\\) \\(honkai impact\\)"`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`elysia \(herrscher of human: ego\) \(honkai impact\)`}, args)
+
+	args, err = splitArgs(`"say \"hi\""`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`say "hi"`}, args)
+
+	args, err = splitArgs(`"C:\Users\foo"`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`C:\Users\foo`}, args)
+}
+
+// TestSplitArgs_SingleQuotedNoEscape 单引号内反斜杠为字面量，不处理转义（与 shell 语义一致）
+func TestSplitArgs_SingleQuotedNoEscape(t *testing.T) {
+	args, err := splitArgs(`'elysia \(herrscher\) \\not-escaped'`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`elysia \(herrscher\) \\not-escaped`}, args)
+}
+
+// TestSplitArgs_UnquotedEscapes 引号外支持 \\、\"、\' 转义，
+// 其余 \X（如 Windows 路径中的 \p）按字面量保留
+func TestSplitArgs_UnquotedEscapes(t *testing.T) {
+	args, err := splitArgs(`it\'s`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`it's`}, args)
+
+	args, err = splitArgs(`a\\b`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`a\b`}, args)
+
+	args, err = splitArgs(`C:\path\to`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`C:\path\to`}, args)
+}
+
+// TestSplitArgs_TrailingBackslash 引号外结尾的孤立反斜杠按字面量保留，不报错
+func TestSplitArgs_TrailingBackslash(t *testing.T) {
+	args, err := splitArgs(`foo\`)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`foo\`}, args)
+}
+
+// TestSplitArgs_AutocompleteRoundTrip 模拟 Python 端 quote_if_needed 的转义输出，
+// splitArgs 必须还原为原始提示词（自动补全与指令执行的转义约定闭环）
+func TestSplitArgs_AutocompleteRoundTrip(t *testing.T) {
+	// quote_if_needed 对含空格的值：\ → \\、" → \"，再用双引号包裹
+	quoted := `"elysia \\(herrscher of human: ego\\) \\(honkai impact\\)"`
+	args, err := splitArgs(quoted)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`elysia \(herrscher of human: ego\) \(honkai impact\)`}, args)
+
+	quoted = `"he said \"\\ok\\\""`
+	args, err = splitArgs(quoted)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{`he said "\ok\"`}, args)
+}
+
 // TestRunner_ExecuteNoteDirectives_LiteralArgChars 验证指令参数中的 shell 元字符（如 >）
 // 必须作为字面参数传递给钩子脚本，而不是被 shell 解释为重定向等语法
 func TestRunner_ExecuteNoteDirectives_LiteralArgChars(t *testing.T) {

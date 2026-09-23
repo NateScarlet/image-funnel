@@ -68,8 +68,14 @@ func applyDirectiveAction(action string, matchedLine string, stdout string, stde
 	}
 }
 
-// splitArgs 按 shell 语法将字符串分割为参数：空白为分隔符，单引号或双引号包裹含空格的参数，
-// 引号内内容原样保留，不支持转义。若引号未闭合则返回语法错误（快速失败，不静默吞字）。
+// splitArgs 按 shell 语法将字符串分割为参数：空白为分隔符，单引号或双引号包裹含空格的参数。
+// 转义规则（与自动补全端 quote_if_needed 的转义约定闭环）：
+//   - 单引号内为字面量，不处理任何转义（与 shell 语义一致）
+//   - 双引号内与引号外支持 \\、\"、\' 三种转义，还原为对应的单字符
+//   - 其余 \X 序列保留反斜杠原样（避免把 \( 转义括号、Windows 路径 \p 等误吞）
+//   - 引号外结尾的孤立反斜杠按字面量保留
+//
+// 若引号未闭合则返回语法错误（快速失败，不静默吞字）。
 func splitArgs(s string) ([]string, error) {
 	var args []string
 	var current strings.Builder
@@ -79,6 +85,14 @@ func splitArgs(s string) ([]string, error) {
 	for i := 0; i < len(s); i++ {
 		ch := s[i]
 		switch {
+		case ch == '\\' && !inSingleQuotes && i+1 < len(s):
+			next := s[i+1]
+			if next == '\\' || next == '"' || next == '\'' {
+				current.WriteByte(next)
+				i++
+			} else {
+				current.WriteByte(ch)
+			}
 		case ch == '"' && !inSingleQuotes:
 			inDoubleQuotes = !inDoubleQuotes
 		case ch == '\'' && !inDoubleQuotes:
