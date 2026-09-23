@@ -314,22 +314,19 @@ class AdjustHandler:
         else:
             raise ValueError(f"unexpected adjust type '{ctx.args.adjust_type}'")
 
-        # 收集所有变体以计算总进度
-        variants = list(variant_gen)
-        variant_count = len(variants)
-        # 当 variant_count == 0 且 no_skip 时，仍会提交 ctx.jobs 次
-        total_steps = variant_count * ctx.jobs if variant_count > 0 else ctx.jobs
-
+        # 变体生成器是「原地变异 prompt 后 yield」：必须边迭代边提交，
+        # 若先 list() 耗尽，prompt 已停在末档，中间档会被跳过。
+        # 档位总数在提交前不可知，进度消息只报当前档序号。
         with progress_notification(
             ctx.client, ctx.progress_tag, "ComfyUI 权重调整", "调整权重并提交"
         ) as update:
-            step = 0
-            for v_idx, _ in enumerate(variants):
-                if v_idx > 0:
+            variant_count = 0
+            for _ in variant_gen:
+                if variant_count > 0:
                     enable_seed_update = True
+                variant_count += 1
                 for j_idx in range(ctx.jobs):
-                    step += 1
-                    update(f"变体 {v_idx + 1}/{variant_count}，第 {j_idx + 1} 次提交")
+                    update(f"变体 {variant_count}，第 {j_idx + 1} 次提交")
                     if enable_seed_update:
                         if seed_mgr.update_seeds() == 0:
                             raise ValueError(
@@ -340,8 +337,7 @@ class AdjustHandler:
 
             if variant_count == 0 and ctx.args.no_skip:
                 for j_idx in range(ctx.jobs):
-                    step += 1
-                    update(f"无变体，第 {j_idx + 1} 次提交 ({step}/{total_steps})")
+                    update(f"无变体，第 {j_idx + 1} 次提交")
                     if enable_seed_update:
                         if seed_mgr.update_seeds() == 0:
                             raise ValueError(
