@@ -26,6 +26,7 @@ from .autocomplete import (
     autocomplete,
     build_providers,
     build_request_from_params,
+    quote_if_needed,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag
@@ -80,6 +81,30 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         return history
 
     # ---- WorkflowPromptProvider tests ----
+
+    def test_quote_if_needed_escapes_for_split_args(self):
+        r"""quote_if_needed 的转义约定必须与 Go 端 splitArgs 闭环。
+
+        splitArgs 双引号内还原 \\ 与 \"，因此这里必须把原始值中的
+        \ 加倍为 \\、" 转义为 \"，再用双引号包裹；否则指令执行时
+        参数会保留双反斜杠，导致 /remove 等匹配失败。
+        """
+        # 含空格的 ComfyUI 转义括号提示词
+        raw = r"elysia \(herrscher of human: ego\) \(honkai impact\)"
+        quoted = quote_if_needed(raw)
+        self.assertEqual(
+            quoted,
+            r'"elysia \\(herrscher of human: ego\\) \\(honkai impact\\)"',
+        )
+        # 反向：splitArgs 还原后应等于原始值
+        # （等价于 Go 端 TestSplitArgs_AutocompleteRoundTrip 的对端断言）
+        unescaped = quoted[1:-1].replace(r"\\", "\\").replace(r"\"", '"')
+        self.assertEqual(unescaped, raw)
+
+        # 含双引号的值
+        self.assertEqual(quote_if_needed('say "hi"'), r'"say \"hi\""')
+        # 无空格无需包裹
+        self.assertEqual(quote_if_needed("masterpiece"), "masterpiece")
 
     def test_autocomplete_remove_prompt_normal(self):
         seen_prompts = {
