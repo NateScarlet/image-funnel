@@ -20,6 +20,13 @@
 **Danbooru 标签自动补全 / Danbooru Autocomplete**
 ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/SuzumiyaAkizuki/DanbooruSearchOnline) 的输入联想。支持根据关键字进行语义搜索（Suggestions）或根据已有标签推荐关联标签（Related Tags）。`/add` 指令在无输入且工作流含区域标记、且尚未指定 `--region`/`--node` 目标时，优先以 `--region <name>` 选项形式直接建议全部可用区域；选定目标或工作流无区域后才进入关联标签推荐。
 
+**两种数据来源（入口按环境变量选择，二选一或均未配置）：**
+
+- **在线链路（Akizuki）**：`DANBOORU_SEARCH_URL` 非空时启用，通过在线语义搜索服务，结果经 SQLite SWR 缓存装饰。
+- **本地编译产物链路（FileDanbooruTagProvider）**：`DANBOORU_DATA_DIR` 显式非空时**优先**启用（即使 URL 同时配置），完全不依赖在线服务；未设置时默认 `${IMAGE_FUNNEL_DATA_DIR}/danbooru`，且**仅当该目录已存在编译产物**时才启用（未编译则回落在线 URL，避免破坏在线用户）。数据目录需包含编译产物 `tags.bin`（Arrow IPC，预归一化字段）与 `cooc.bin`（双向 CSR 共现），由独立脚本 `example_hooks/compile_danbooru_data.py <源数据目录>` 从外部项目源 CSV/parquet 编译（**参数是源数据目录**；产物固定写入补全读取的 `${IMAGE_FUNNEL_DATA_DIR}/danbooru`，用户无需知道补全从哪读；缺源时脚本打印下载地址）；运行时缺产物时快速失败并提示运行编译脚本。匹配为**字面匹配**：分层打分（精确 > 中文别名精确 > 前缀 > 子串 > 模糊笔误容忍），同层按 `post_count` 降序，不做语义向量检索；`related` 基于 CSR 按种子节点邻接聚合计数（多 seed 跨 seed 求和），排除种子标签后按计数降序，并按 `target_categories` 与 NSFW 过滤。**性能结构**：构造仅校验编译产物存在（快速失败）；tags 产物与 cooc 产物**分别懒加载**（search 首次读 tags，related 首次读 CSR），数据集按目录路径模块级缓存。search 两趟：第一趟无模糊字面层；仅当强匹配不足 20 且无精确/中文别名命中且查询 ≤12 字符时，第二趟在 `name_norm` **长度邻域**补模糊，模糊前先做**首字符粗筛**（`_fuzzy_maybe_overlap`）把候选从 2 万+降到千级。延迟与内存基准脚本 `bench_danbooru_file.py`（`--data-dir` 指向编译产物目录，`--label`/`--out`），内存与延迟分阶段测（tracemalloc 不覆盖热路径计时）。
+
+两种链路均以 `DANBOORU_SEARCH_INCLUDE_NSFW` 控制是否包含 NSFW；源 `tags_enhanced.csv` 的 `category` 数字编码在**编译期**映射为 `General`/`Artist`/`Copyright`/`Character`/`Meta`。
+
 [接口文档](https://sakizuki-danboorusearch.hf.space/api/openapi.json)
 
 **目录分流 / Fork**

@@ -6,7 +6,7 @@ import argparse
 import tempfile
 import requests
 import sqlite3
-from typing import Dict, Any, Optional, List, Set, Tuple
+from typing import Dict, Any, Optional, List, Set, Tuple, cast
 from unittest.mock import patch, MagicMock
 
 from PIL import Image
@@ -1078,6 +1078,60 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertLess(
             names.index("RegionOptionProvider"), names.index("DanbooruProvider")
         )
+
+    def test_build_providers_file_mode_when_data_dir_set(self) -> None:
+        """DANBOORU_DATA_DIR 非空时启用 FileDanbooruTagProvider，且优先于在线 URL。"""
+        from .danbooru import FileDanbooruTagProvider
+        from .danbooru_test import write_file_fixture
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            write_file_fixture(
+                data_dir,
+                [
+                    {
+                        "name": "1girl",
+                        "cn_name": "女孩",
+                        "wiki": "A girl.",
+                        "post_count": "100",
+                        "category": "0",
+                        "nsfw": "0",
+                    }
+                ],
+                [],
+            )
+            with patch("comfyui.autocomplete.SQLiteContext"):
+                with build_providers(
+                    "root",
+                    "dir",
+                    "http://should-be-ignored",
+                    False,
+                    "add",
+                    data_dir,
+                ) as providers:
+                    danbooru = next(
+                        p for p in providers if type(p).__name__ == "DanbooruProvider"
+                    )
+                    self.assertIsInstance(
+                        cast(Any, danbooru).provider, FileDanbooruTagProvider
+                    )
+
+    def test_build_providers_file_mode_missing_files_fails_fast(self) -> None:
+        """数据目录缺编译产物时 build_providers 直接抛出（快速失败，不降级在线链路）。"""
+        with tempfile.TemporaryDirectory() as data_dir:
+            with patch("comfyui.autocomplete.SQLiteContext"):
+                with self.assertRaises(FileNotFoundError) as ctx:
+                    with build_providers(
+                        "root", "dir", "http://localhost", False, "add", data_dir
+                    ):
+                        pass
+                self.assertIn("compile_danbooru_data.py", str(ctx.exception))
+
+    def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
+        """URL 与数据目录均为空时不注册 DanbooruProvider。"""
+        with patch("comfyui.autocomplete.SQLiteContext"):
+            with build_providers("", "", "", False, "add", "") as providers:
+                names = [type(p).__name__ for p in providers]
+        self.assertNotIn("DanbooruProvider", names)
 
     def test_autocomplete_after_region_selection_shows_related_tags(self) -> None:
         """闭环：选定区域后，下一次空输入补全应进入该区域的关联标签模式。"""

@@ -19,10 +19,12 @@ from .db import SQLiteContext
 from .danbooru import (
     DanbooruTagProvider,
     AkizukiDanbooruTagProvider,
+    FileDanbooruTagProvider,
     SQLiteDanbooruTagProvider,
     AkizukiDanbooruTagLoader,
     SQLiteDanbooruTagLoader,
 )
+from .danbooru_data import resolve_danbooru_data_dir
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
@@ -1017,9 +1019,14 @@ def build_providers(
     danbooru_url: str,
     show_nsfw: bool,
     target_command: str,
+    danbooru_data_dir: str = "",
 ) -> Generator[List[AutocompleteProvider], None, None]:
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
 
+    danbooru_data_dir 非空时优先启用本地编译产物补全（FileDanbooruTagProvider，
+    字面匹配不依赖在线服务），否则在 danbooru_url 非空时启用 Akizuki 在线链路。
+    目录解析见 resolve_danbooru_data_dir：DANBOORU_DATA_DIR 显式优先，
+    否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当编译产物存在时启用。
     target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
     模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败。
     """
@@ -1036,7 +1043,17 @@ def build_providers(
                 RegionOptionProvider(),
             ]
         )
-        if danbooru_url:
+        if danbooru_data_dir:
+            # 本地文件模式：跳过 SQLite 搜索/联想缓存（数据已在内存），仍建 DB 供操作历史
+            db_ctx = stack.enter_context(
+                SQLiteContext(_db_path(root_dir, directory_rel_path))
+            )
+            history = OperationHistory(db_ctx)
+            file_provider = FileDanbooruTagProvider(
+                danbooru_data_dir, show_nsfw=show_nsfw
+            )
+            providers.append(DanbooruProvider(file_provider, history))
+        elif danbooru_url:
             db_ctx = stack.enter_context(
                 SQLiteContext(_db_path(root_dir, directory_rel_path))
             )
@@ -1165,6 +1182,7 @@ class _AutocompleteTask:
         writer: Any,
         active: Dict[Any, "_AutocompleteTask"],
         active_lock: threading.Lock,
+        danbooru_data_dir: str = "",
     ) -> None:
         self.req_id = req_id
         self.request = request
@@ -1174,6 +1192,7 @@ class _AutocompleteTask:
         self.writer = writer
         self.active = active
         self.active_lock = active_lock
+        self.danbooru_data_dir = danbooru_data_dir
         self._canceled = threading.Event()
         self._thread = threading.Thread(
             target=self._run, name=f"autocomplete-{req_id}", daemon=True
@@ -1199,6 +1218,7 @@ class _AutocompleteTask:
                 self.danbooru_url,
                 self.show_nsfw,
                 self.request.target_command,
+                self.danbooru_data_dir,
             ) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
@@ -1226,6 +1246,9 @@ def serve() -> None:
     # 进程级静态配置：从 spawn 注入的环境变量读取一次（最外层入口的职责）
     parser = get_parser()
     danbooru_url = os.environ.get("DANBOORU_SEARCH_URL", "").strip()
+    # 本地编译产物目录优先于在线 URL（resolve 见 danbooru_data：显式 DANBOORU_DATA_DIR
+    # 优先；否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当产物存在时启用）
+    danbooru_data_dir = resolve_danbooru_data_dir()
     show_nsfw = _show_nsfw_from_env()
 
     for raw_line in sys.stdin:
@@ -1262,6 +1285,7 @@ def serve() -> None:
             sys.stdout,
             active,
             active_lock,
+            danbooru_data_dir,
         )
         with active_lock:
             active[req_id] = task
@@ -1290,6 +1314,7 @@ def main() -> None:
             os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
             _show_nsfw_from_env(),
             target_cmd,
+            resolve_danbooru_data_dir(),
         ) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             for s in autocomplete(request, services):

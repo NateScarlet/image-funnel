@@ -5,6 +5,7 @@
 # dependencies = [
 #   "Pillow",
 #   "requests",
+#   "pyarrow",
 # ]
 # ///
 

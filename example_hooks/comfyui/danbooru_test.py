@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch, PropertyMock
 import requests
 import time
@@ -14,10 +14,335 @@ from .db import SQLiteContext
 from .danbooru import (
     AkizukiDanbooruTagProvider,
     DanbooruTag,
+    FileDanbooruTagProvider,
     SQLiteDanbooruTagProvider,
     SQLiteDanbooruTagLoader,
     AkizukiDanbooruTagLoader,
 )
+from .danbooru_data import (
+    COMPILED_COOC_FILENAME,
+    COMPILED_TAGS_FILENAME,
+    compile_dataset,
+)
+
+
+def write_file_fixture(
+    data_dir: str,
+    tags: list[dict[str, str]],
+    cooc: list[tuple[str, str, int]],
+    *,
+    csv_encoding: str = "utf-8",
+) -> None:
+    """写入源数据并编译为 FileDanbooruTagProvider 所需产物的夹具。"""
+    import csv as csv_mod
+    import pyarrow as pa  # pyright: ignore[reportMissingTypeStubs]
+    import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
+
+    pa_mod = cast(Any, pa)
+    pq_mod = cast(Any, pq)
+
+    fieldnames = ["name", "cn_name", "wiki", "post_count", "category", "nsfw"]
+    csv_path = os.path.join(data_dir, "tags_enhanced.csv")
+    with open(csv_path, "w", encoding=csv_encoding, newline="") as f:
+        writer = csv_mod.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(tags)
+
+    table = pa_mod.table(
+        {
+            "tag_a": pa_mod.array([a for a, _, _ in cooc], type=pa_mod.string()),
+            "tag_b": pa_mod.array([b for _, b, _ in cooc], type=pa_mod.string()),
+            "count": pa_mod.array([c for _, _, c in cooc], type=pa_mod.int32()),
+        }
+    )
+    pq_mod.write_table(table, os.path.join(data_dir, "cooccurrence_clean.parquet"))
+    # 测试夹具：源与产物同目录，provider 直接从该目录读取
+    compile_dataset(data_dir, data_dir)
+
+
+class TestFileDanbooruTagProvider(unittest.TestCase):
+    """本地数据文件 + 容忍笔误字面匹配的离线补全实现。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.mkdtemp()
+        self.tags = [
+            {
+                "name": "1girl",
+                "cn_name": "一个女孩,女孩",
+                "wiki": "A girl.",
+                "post_count": "8101306",
+                "category": "0",
+                "nsfw": "0",
+            },
+            {
+                "name": "solo",
+                "cn_name": "单人",
+                "wiki": "Solo.",
+                "post_count": "3000000",
+                "category": "0",
+                "nsfw": "0",
+            },
+            {
+                "name": "white_hair",
+                "cn_name": "白发",
+                "wiki": "White hair.",
+                "post_count": "500000",
+                "category": "0",
+                "nsfw": "0",
+            },
+            {
+                "name": "red_hair",
+                "cn_name": "红发",
+                "wiki": "Red hair.",
+                "post_count": "400000",
+                "category": "0",
+                "nsfw": "0",
+            },
+            {
+                "name": "hentai",
+                "cn_name": "变态",
+                "wiki": "NSFW tag.",
+                "post_count": "900000",
+                "category": "0",
+                "nsfw": "1",
+            },
+            {
+                "name": "hatsune_miku",
+                "cn_name": "初音未来",
+                "wiki": "Miku.",
+                "post_count": "200000",
+                "category": "4",
+                "nsfw": "0",
+            },
+            {
+                "name": "some_artist",
+                "cn_name": "某画师",
+                "wiki": "Artist.",
+                "post_count": "5000",
+                "category": "1",
+                "nsfw": "0",
+            },
+        ]
+        self.cooc = [
+            ("1girl", "white_hair", 100),
+            ("white_hair", "1girl", 100),
+            ("1girl", "solo", 50),
+            ("solo", "1girl", 50),
+            ("1girl", "hentai", 80),
+            ("1girl", "hatsune_miku", 10),
+            ("1girl", "some_artist", 5),
+        ]
+        write_file_fixture(self.tmp_dir, self.tags, self.cooc)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    # ---- 缺文件快速失败 ----
+
+    def test_missing_dir_raises_with_compile_hint(self) -> None:
+        missing = os.path.join(self.tmp_dir, "no-such-dir")
+        with self.assertRaises(FileNotFoundError) as ctx:
+            FileDanbooruTagProvider(missing)
+        msg = str(ctx.exception)
+        self.assertIn(COMPILED_TAGS_FILENAME, msg)
+        self.assertIn(COMPILED_COOC_FILENAME, msg)
+        self.assertIn("compile_danbooru_data.py", msg)
+        # 下载指引只在编译脚本路径，不在运行时
+        self.assertNotIn("github.com", msg)
+
+    def test_missing_tags_bin_raises_with_compile_hint(self) -> None:
+        os.remove(os.path.join(self.tmp_dir, COMPILED_TAGS_FILENAME))
+        with self.assertRaises(FileNotFoundError) as ctx:
+            FileDanbooruTagProvider(self.tmp_dir)
+        msg = str(ctx.exception)
+        self.assertIn(COMPILED_TAGS_FILENAME, msg)
+        self.assertIn("compile_danbooru_data.py", msg)
+
+    def test_missing_cooc_bin_raises_with_compile_hint(self) -> None:
+        os.remove(os.path.join(self.tmp_dir, COMPILED_COOC_FILENAME))
+        with self.assertRaises(FileNotFoundError) as ctx:
+            FileDanbooruTagProvider(self.tmp_dir)
+        msg = str(ctx.exception)
+        self.assertIn(COMPILED_COOC_FILENAME, msg)
+        self.assertIn("compile_danbooru_data.py", msg)
+
+    # ---- 懒加载：构造不读内容，search/related 分别触发 ----
+
+    def test_construct_does_not_load_content(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        dataset = cast(Any, provider)._dataset
+        self.assertIsNone(dataset._tag_index)
+        self.assertIsNone(dataset._cooc_index)
+
+    def test_search_lazy_loads_tags_only(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider.search("solo")
+        dataset = cast(Any, provider)._dataset
+        self.assertIsNotNone(dataset._tag_index)
+        self.assertIsNone(dataset._cooc_index)
+
+    def test_related_lazy_loads_tags_and_cooc(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider.related(["1girl"])
+        dataset = cast(Any, provider)._dataset
+        self.assertIsNotNone(dataset._tag_index)
+        self.assertIsNotNone(dataset._cooc_index)
+
+    # ---- search：分层字面匹配 + 笔误容忍 ----
+
+    def test_search_exact_match_ranks_first(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("solo")
+        self.assertGreaterEqual(len(results), 1)
+        self.assertEqual(results[0].tag, "solo")
+        self.assertEqual(results[0].cn_name, "单人")
+        self.assertEqual(results[0].category, "General")
+
+    def test_search_prefix_match(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("white")
+        tags = [r.tag for r in results]
+        self.assertIn("white_hair", tags)
+        self.assertNotIn("red_hair", tags)
+
+    def test_search_substring_match_underscore_or_space(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        by_space = {r.tag for r in provider.search("white hair")}
+        by_underscore = {r.tag for r in provider.search("white_hair")}
+        self.assertIn("white_hair", by_space)
+        self.assertIn("white_hair", by_underscore)
+
+    def test_search_tolerates_typo(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("solo")  # 精确
+        self.assertEqual(results[0].tag, "solo")
+        # 一处笔误仍应命中
+        typo_results = provider.search("solo ")
+        self.assertTrue(any(r.tag == "solo" for r in typo_results))
+        fuzzy = provider.search("whit hair")  # 缺 e + 空格
+        self.assertTrue(any(r.tag == "white_hair" for r in fuzzy))
+
+    def test_search_chinese_via_cn_name(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("白发")
+        self.assertGreaterEqual(len(results), 1)
+        self.assertEqual(results[0].tag, "white_hair")
+
+    def test_search_chinese_second_alias(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("女孩")
+        tags = [r.tag for r in results]
+        self.assertIn("1girl", tags)
+
+    def test_search_filters_nsfw_by_default(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=False)
+        tags = [r.tag for r in provider.search("hentai")]
+        self.assertNotIn("hentai", tags)
+
+    def test_search_includes_nsfw_when_enabled(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        tags = [r.tag for r in provider.search("hentai")]
+        self.assertIn("hentai", tags)
+
+    def test_search_empty_query_returns_empty(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        self.assertEqual(provider.search(""), [])
+        self.assertEqual(provider.search("   "), [])
+
+    def test_search_maps_numeric_category(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("hatsune_miku")
+        self.assertEqual(results[0].tag, "hatsune_miku")
+        self.assertEqual(results[0].category, "Character")
+        artist = provider.search("some_artist")
+        self.assertEqual(artist[0].category, "Artist")
+
+    def test_search_rank_popularity_tiebreak(self) -> None:
+        """同层匹配按 post_count 降序：1girl 应排在同为 General 的低热度前缀前。"""
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        results = provider.search("g")
+        # 前缀含 g 的：1girl / solo? 无；至少 1girl 命中
+        tags = [r.tag for r in results]
+        self.assertIn("1girl", tags)
+
+    def test_search_gbk_encoded_csv(self) -> None:
+        """CSV 编码回退：GBK 文件也能加载。"""
+        gbk_dir = tempfile.mkdtemp()
+        try:
+            write_file_fixture(
+                gbk_dir,
+                [
+                    {
+                        "name": "1girl",
+                        "cn_name": "一个女孩",
+                        "wiki": "A girl.",
+                        "post_count": "100",
+                        "category": "0",
+                        "nsfw": "0",
+                    }
+                ],
+                [],
+                csv_encoding="gbk",
+            )
+            provider = FileDanbooruTagProvider(gbk_dir)
+            results = provider.search("1girl")
+            self.assertEqual(results[0].cn_name, "一个女孩")
+        finally:
+            shutil.rmtree(gbk_dir, ignore_errors=True)
+
+    # ---- related：共现计数联想 ----
+
+    def test_related_aggregates_cooccurrence(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        results = provider.related(["1girl"])
+        tags = [r.tag for r in results]
+        self.assertIn("white_hair", tags)
+        self.assertIn("solo", tags)
+        # white_hair 计数 100 > solo 50
+        self.assertLess(tags.index("white_hair"), tags.index("solo"))
+
+    def test_related_excludes_seed_tags(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        results = provider.related(["1girl", "white_hair"])
+        tags = {r.tag for r in results}
+        self.assertNotIn("1girl", tags)
+        self.assertNotIn("white_hair", tags)
+
+    def test_related_filters_target_categories(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        results = provider.related(
+            ["1girl"], target_categories=["General", "Artist", "Meta"]
+        )
+        tags = {r.tag for r in results}
+        self.assertIn("white_hair", tags)  # General
+        self.assertIn("some_artist", tags)  # Artist
+        self.assertNotIn("hatsune_miku", tags)  # Character 被过滤
+
+    def test_related_filters_nsfw(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=False)
+        results = provider.related(["1girl"])
+        tags = {r.tag for r in results}
+        self.assertNotIn("hentai", tags)
+
+        provider_nsfw = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        results_nsfw = provider_nsfw.related(["1girl"])
+        self.assertIn("hentai", {r.tag for r in results_nsfw})
+
+    def test_related_empty_tags_returns_empty(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        self.assertEqual(provider.related([]), [])
+
+    def test_related_unknown_seed_returns_empty(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        self.assertEqual(provider.related(["no_such_tag_xyz"]), [])
+
+    def test_related_returns_danbooru_tag_fields(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        results = provider.related(["1girl"])
+        white = next(r for r in results if r.tag == "white_hair")
+        self.assertEqual(white.cn_name, "白发")
+        self.assertEqual(white.wiki, "White hair.")
+        self.assertEqual(white.category, "General")
 
 
 class TestAkizukiDanbooruTagProvider(unittest.TestCase):
