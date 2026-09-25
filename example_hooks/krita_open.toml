@@ -1,0 +1,10 @@
+
+id = "krita-open"
+name = "发送到 Krita"
+description = "将选中的图片在本机 Krita 中打开，Krita 已在运行时复用现有窗口"
+command = "uv run runner.py krita_open"
+
+[on.image_dispatch]
+
+[env]
+# KRITA_EXE = "" # Krita 可执行文件路径；未设置时依次探测 PATH 与常见安装位置
