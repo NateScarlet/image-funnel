@@ -83,6 +83,11 @@ class _FileDataset:
                     self._cooc_index = load_compiled_cooc(self.cooc_path)
         return self._cooc_index
 
+    def release_cooc(self) -> None:
+        """释放共现索引（下次 related 按需重载）；与懒加载共用锁避免竞态。"""
+        with self._load_lock:
+            self._cooc_index = None
+
 
 def _load_tag_index(tags_path: Path) -> _FileTagIndex:
     """加载编译 tags 产物并建立 by_name / 长度分桶索引。"""
@@ -116,6 +121,19 @@ def _get_or_create_dataset(data_dir: str) -> _FileDataset:
         dataset = _FileDataset(tags_path=tags_path, cooc_path=cooc_path)
         _DATASET_CACHE[cache_key] = dataset
         return dataset
+
+
+def release_cooc_cache(data_dir: str) -> None:
+    """按目录释放已缓存的共现索引；目录未缓存或尚未加载时为 no-op。
+
+    供常驻 serve 在无待处理请求时调用：cooc 常驻占 30MB 进程内存，
+    重载实测约 24ms（低于交互感知阈值），换空闲期把内存归还系统。
+    """
+    with _DATASET_LOCK:
+        dataset = _DATASET_CACHE.get(os.path.abspath(data_dir))
+    if dataset is None:
+        return
+    dataset.release_cooc()
 
 
 # 模糊层仅对短查询启用：长查询长度邻域候选爆炸且几乎不可能命中

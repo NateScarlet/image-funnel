@@ -1716,5 +1716,64 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         self.assertIn("当前格式: sdxl (默认)", suggestions[0].description)
 
 
+class TestAutocompleteTaskCoocRelease(unittest.TestCase):
+    """请求完成后：无待处理请求才释放 cooc，排队中的请求继续复用已加载索引。"""
+
+    def _run_task(self, data_dir: str, extra_active: Optional[Any] = None) -> MagicMock:
+        """以 serve 的方式跑一个请求任务，返回 release_cooc_cache 的 mock。"""
+        import io
+        import threading
+
+        from comfyui import autocomplete as autocomplete_module
+
+        # 与 danbooru_test 同惯例：cast(Any) 访问模块私有实现
+        task_cls = cast(Any, autocomplete_module)._AutocompleteTask
+
+        active: Dict[Any, Any] = {}
+        request = AutocompleteRequest(
+            target_command="add",
+            query="",
+            prev_word="",
+            cwords=["/add"],
+            image_paths=[],
+            root_dir="",
+            directory_rel_path="",
+        )
+        active_lock = threading.Lock()
+        task = task_cls(
+            1,
+            request,
+            get_parser(),
+            "",
+            False,
+            io.StringIO(),
+            active,
+            active_lock,
+            data_dir,
+        )
+        active[1] = task
+        if extra_active is not None:
+            active[99] = extra_active
+        with patch("comfyui.autocomplete.build_providers") as mock_build, patch(
+            "comfyui.autocomplete.release_cooc_cache"
+        ) as mock_release:
+            mock_build.return_value.__enter__.return_value = []
+            task.start()
+            task.join()
+        return cast(MagicMock, mock_release)
+
+    def test_releases_cooc_when_no_pending_request_left(self) -> None:
+        release = self._run_task("data-dir")
+        release.assert_called_once_with("data-dir")
+
+    def test_keeps_cooc_while_other_request_pending(self) -> None:
+        release = self._run_task("data-dir", extra_active=object())
+        release.assert_not_called()
+
+    def test_no_release_when_local_data_dir_disabled(self) -> None:
+        release = self._run_task("")
+        release.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

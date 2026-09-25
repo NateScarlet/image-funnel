@@ -23,6 +23,7 @@ from .danbooru import (
     SQLiteDanbooruTagProvider,
     AkizukiDanbooruTagLoader,
     SQLiteDanbooruTagLoader,
+    release_cooc_cache,
 )
 from .danbooru_data import resolve_danbooru_data_dir
 
@@ -1228,6 +1229,11 @@ class _AutocompleteTask:
         finally:
             with self.active_lock:
                 self.active.pop(self.req_id, None)
+                # 自己离开后队列为空 = 无待处理请求：立即释放 cooc 归还内存
+                # （下次 related 按需重载约 24ms）；排队中的请求继续复用索引
+                idle = not self.active
+            if idle and self.danbooru_data_dir:
+                release_cooc_cache(self.danbooru_data_dir)
         if self._canceled.is_set():
             return
         if failed:

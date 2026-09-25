@@ -18,6 +18,7 @@ from .danbooru import (
     SQLiteDanbooruTagProvider,
     SQLiteDanbooruTagLoader,
     AkizukiDanbooruTagLoader,
+    release_cooc_cache,
 )
 from .danbooru_data import (
     COMPILED_COOC_FILENAME,
@@ -187,6 +188,31 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         dataset = cast(Any, provider)._dataset
         self.assertIsNotNone(dataset._tag_index)
         self.assertIsNotNone(dataset._cooc_index)
+
+    # ---- cooc 释放：宿主在无待处理请求时释放，下次 related 按需重载 ----
+
+    def test_release_cooc_cache_unloads_then_related_reloads(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        first = provider.related(["1girl"])
+        dataset = cast(Any, provider)._dataset
+
+        release_cooc_cache(self.tmp_dir)
+        self.assertIsNone(dataset._cooc_index)
+        # 只释放 cooc，tags 索引仍常驻（search 热路径不受影响）
+        self.assertIsNotNone(dataset._tag_index)
+
+        again = provider.related(["1girl"])
+        self.assertEqual(again, first)
+        self.assertIsNotNone(dataset._cooc_index)
+
+    def test_release_cooc_cache_without_loaded_dataset_is_noop(self) -> None:
+        provider = FileDanbooruTagProvider(self.tmp_dir)
+        dataset = cast(Any, provider)._dataset
+        release_cooc_cache(self.tmp_dir)
+        self.assertIsNone(dataset._cooc_index)
+
+    def test_release_cooc_cache_unknown_dir_is_noop(self) -> None:
+        release_cooc_cache(os.path.join(self.tmp_dir, "never-used"))
 
     # ---- search：分层字面匹配 + 笔误容忍 ----
 
