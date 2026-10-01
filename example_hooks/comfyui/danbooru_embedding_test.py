@@ -35,12 +35,15 @@ from .danbooru_embedding import (
     DEFAULT_EMBEDDING_PROVIDER_URL,
     DEFAULT_EMBEDDING_TIMEOUT_MS,
     EMBEDDING_PROVIDER_URL_ENV,
+    EMBEDDING_VIEWS,
     MIN_COSINE,
     EmbeddingClient,
     EmbeddingError,
     OpenAIEmbeddingClient,
     OpenAITagEmbeddingSource,
+    ReusingTagEmbeddingSource,
     TagEmbeddingMatrix,
+    TagVectorCache,
     VectorSemanticTagSearcher,
     cached_semantic_searcher,
     embedding_failure_hint,
@@ -194,6 +197,186 @@ class TestParseEmbeddingEndpoint(unittest.TestCase):
             self.assertEqual(
                 parse_embedding_endpoint(spec).url, "http://host:1234/v1/embeddings"
             )
+
+
+class TestIncrementalReuse(unittest.TestCase):
+    """增量复用：探测一致性 → 按文本命中搬旧向量 → 只把 miss 发给接口。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _identity_matrix(
+        self, views: Sequence[Tuple[str, str, str]]
+    ) -> TagEmbeddingMatrix:
+        """确定性夹具矩阵：第 i 行的向量只由 i 决定，便于逐条断言来源。"""
+        n_rows = len(views)
+        dim = 4
+        columns: List[np.ndarray] = []
+        for _ in range(len(EMBEDDING_VIEWS)):
+            rows = np.zeros((n_rows, dim), dtype=np.float32)
+            for i in range(n_rows):
+                rows[i, i % dim] = 1.0
+            columns.append(rows)
+        return TagEmbeddingMatrix(tag=columns[0], cn_name=columns[1], wiki=columns[2])
+
+    def _view_of(self, matrix: TagEmbeddingMatrix, view_index: int) -> np.ndarray:
+        return getattr(matrix, EMBEDDING_VIEWS[view_index])
+
+    def _row_client(
+        self,
+        matrix: TagEmbeddingMatrix,
+        fallback: Optional[List[float]] = None,
+    ) -> RecordingEmbeddingClient:
+        """按文本所属行号返回与夹具矩阵一致的向量（模拟「同一模型」端点）。
+
+        fallback 用于旧表里没有的新文本。
+        """
+
+        def vector_for(text: str) -> List[float]:
+            for view_index in range(3):
+                for i, row in enumerate(self.views):
+                    if row[view_index] == text:
+                        return [float(v) for v in self._view_of(matrix, view_index)[i]]
+            if fallback is not None:
+                return list(fallback)
+            raise AssertionError(f"未知文本: {text!r}")
+
+        return RecordingEmbeddingClient(vector_for=vector_for)
+
+    def _old_views(self) -> List[Tuple[str, str, str]]:
+        self.views = [
+            ("alpha", "阿尔法", "Alpha wiki"),
+            ("bravo", "布拉沃", "Bravo wiki"),
+            ("charlie", "查理", "Charlie wiki"),
+            ("delta", "德尔塔", "Delta wiki"),
+            ("echo", "回声", "Echo wiki"),
+            ("foxtrot", "福克斯特", "Foxtrot wiki"),
+        ]
+        return self.views
+
+    def test_probe_passes_for_identical_vectors(self) -> None:
+        views = self._old_views()
+        matrix = self._identity_matrix(views)
+        cache = TagVectorCache(views, matrix)
+        ok, reason = cache.matches_endpoint(self._row_client(matrix))
+        self.assertTrue(ok, reason)
+        self.assertIn("探测文本", reason)
+
+    def test_probe_fails_when_vectors_differ(self) -> None:
+        """换了模型/权重的场景：探测必须拒绝复用，否则会静默给出错误召回。"""
+        views = self._old_views()
+        old = self._identity_matrix(views)
+        other = TagVectorCache(
+            views,
+            TagEmbeddingMatrix(
+                tag=np.zeros_like(old.tag),
+                cn_name=np.zeros_like(old.cn_name),
+                wiki=np.zeros_like(old.wiki),
+            ),
+        )
+        ok, reason = other.matches_endpoint(self._row_client(old))
+        self.assertFalse(ok)
+        self.assertIn("余弦", reason)
+
+    def test_probe_fails_on_dimension_mismatch(self) -> None:
+        views = self._old_views()
+        cache = TagVectorCache(views, self._identity_matrix(views))
+        client = RecordingEmbeddingClient(
+            vector_for=lambda text: [1.0] * 8  # 维度与旧产物不同
+        )
+        ok, reason = cache.matches_endpoint(client)
+        self.assertFalse(ok)
+        self.assertIn("维度不一致", reason)
+
+    def test_probe_failure_falls_back_to_full_rebuild(self) -> None:
+        """探测不通过时退化为全量重新生成，而不是报错或复用。"""
+        views = self._old_views()
+        old = self._identity_matrix(views)
+        mismatched = TagVectorCache(
+            views,
+            TagEmbeddingMatrix(
+                tag=np.zeros_like(old.tag),
+                cn_name=np.zeros_like(old.cn_name),
+                wiki=np.zeros_like(old.wiki),
+            ),
+        )
+        client = self._row_client(old)
+        source = ReusingTagEmbeddingSource(client, mismatched, batch_size=8)
+        matrix = source.build(views)
+        # 首次调用是探测，其后每个视图各一次全量生成
+        generated = [text for batch in client.batches[1:] for text in batch]
+        self.assertEqual(len(generated), 18)
+        self.assertEqual(matrix.tag.shape, old.tag.shape)
+
+    def test_reuses_unchanged_texts_and_only_calls_interface_for_new(self) -> None:
+        old_views = self._old_views()
+        old_matrix = self._identity_matrix(old_views)
+        # 新表：3 条未变 + 1 条新增 + 1 条改名（改名=新文本）
+        new_views = [
+            old_views[0],
+            old_views[1],
+            old_views[2],
+            ("golf", "高尔夫", "Golf wiki"),
+            ("bravo_two", "布拉沃二", "Bravo 2 wiki"),
+        ]
+        client = self._row_client(old_matrix, fallback=[0.0, 0.0, 1.0, 0.0])
+        cache = TagVectorCache(old_views, old_matrix)
+        source = ReusingTagEmbeddingSource(client, cache, batch_size=8)
+        matrix = source.build(new_views)
+        # batches[0] 是一次性探测；其后只发了 2 条新文本 × 3 视图 = 6 条
+        sent = [text for batch in client.batches[1:] for text in batch]
+        self.assertEqual(len(sent), 6)
+        self.assertIn("golf", sent)
+        self.assertIn("bravo_two", sent)
+        self.assertNotIn("alpha", sent)
+        # 未变的三行搬的是旧向量，新行是新生成的
+        np.testing.assert_allclose(
+            np.asarray(matrix.tag)[0], np.asarray(old_matrix.tag)[0]
+        )
+        np.testing.assert_allclose(np.asarray(matrix.tag)[3], [0.0, 0.0, 1.0, 0.0])
+
+    def test_reuse_releases_old_mapping(self) -> None:
+        """复用结束必须释放旧映射：新向量要 os.replace 到同一个文件名。"""
+        views = self._old_views()
+        matrix = self._identity_matrix(views)
+        cache = TagVectorCache(views, matrix)
+        client = self._row_client(matrix)
+        ReusingTagEmbeddingSource(client, cache, batch_size=8).build(views)
+        self.assertIsNone(cache.matrix)
+
+    def test_full_rebuild_also_releases_old_mapping(self) -> None:
+        views = self._old_views()
+        old = self._identity_matrix(views)
+        cache = TagVectorCache(
+            views,
+            TagEmbeddingMatrix(
+                tag=np.zeros_like(old.tag),
+                cn_name=np.zeros_like(old.cn_name),
+                wiki=np.zeros_like(old.wiki),
+            ),
+        )
+        client = self._row_client(old)
+        ReusingTagEmbeddingSource(client, cache, batch_size=8).build(views)
+        self.assertIsNone(cache.matrix)
+
+    def test_release_allows_promoting_over_the_old_file(self) -> None:
+        """端到端：新向量能接管被旧产物占用的文件名（Windows 上靠释放映射）。"""
+        path = self.tmp_dir / COMPILED_EMBEDDINGS_FILENAME
+        views = self._old_views()
+        matrix = self._identity_matrix(views)
+        write_compiled_embeddings(path, matrix)
+
+        cache = TagVectorCache(views, load_compiled_embeddings(path))
+        client = self._row_client(matrix)
+        new_matrix = ReusingTagEmbeddingSource(client, cache, batch_size=8).build(views)
+        staging = self.tmp_dir / "staged.bin"
+        write_compiled_embeddings(staging, new_matrix)
+        # 未释放映射时这一步会失败（Windows）
+        os.replace(staging, path)
+        self.assertTrue(path.is_file())
 
 
 class TestCompileHints(unittest.TestCase):

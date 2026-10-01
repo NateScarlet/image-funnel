@@ -43,6 +43,8 @@ from .danbooru_embedding import (
     COMPILED_EMBEDDINGS_FILENAME,
     TagEmbeddingMatrix,
     TagEmbeddingSource,
+    TagVectorCache,
+    load_compiled_embeddings,
     staged_embeddings_path,
     write_compiled_embeddings,
 )
@@ -437,8 +439,28 @@ def compile_dataset(
     )
 
 
+def open_vector_cache(data_dir: str | Path) -> Optional[TagVectorCache]:
+    """打开已有产物作为向量复用候选；不可用时返回 None（调用方退化为全量生成）。
+
+    旧标签表与旧向量产物行数必须一致，否则说明两者不是同一次编译的产物，
+    复用会错位——宁可不复用。
+    """
+    root = Path(data_dir)
+    tags_path = root / COMPILED_TAGS_FILENAME
+    embeddings_path = root / COMPILED_EMBEDDINGS_FILENAME
+    if not tags_path.is_file() or not embeddings_path.is_file():
+        return None
+    records = load_compiled_tags(tags_path)
+    matrix = load_compiled_embeddings(embeddings_path)
+    if len(records) != matrix.n_rows:
+        return None
+    return TagVectorCache(
+        [(record.tag, record.cn_name, record.wiki) for record in records], matrix
+    )
+
+
 def _write_and_promote_embeddings(
-    out_root: Path, embeddings_out: Path, matrices: "TagEmbeddingMatrix"
+    out_root: Path, embeddings_out: Path, matrices: TagEmbeddingMatrix
 ) -> None:
     """先写暂存向量产物，再原子重命名接管正式产物。
 

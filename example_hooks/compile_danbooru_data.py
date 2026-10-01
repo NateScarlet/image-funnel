@@ -29,6 +29,8 @@
 - 向量产物先写 embeddings.bin.new 再原子重命名接管：正式产物被常驻补全进程
   mmap 占用而无法覆盖时，已生成的向量完整保留在 .new 文件里，退出 image-funnel
   后手动重命名即可生效，不必重新生成。
+- 源数据更新后自动增量重编译：旧产物即缓存，探测确认当前端点能复现旧向量后，
+  文本未变的直接搬旧向量，只把新增/改动的文本发给接口（实测全量 48 分钟 → 22 秒）。
 - 没有嵌入向量服务也能编译：用 --no-embedding 只产出字面匹配所需的
   tags.bin 与 cooc.bin，并移除已有的向量产物（避免旧向量与新标签表行序错位）。
 - 编译成功不代表语义层已启用：还需要在钩子配置里设置
@@ -62,6 +64,7 @@ from comfyui.danbooru_data import (  # noqa: E402
     default_compile_data_dir,
     find_cooc_source,
     find_tags_source,
+    open_vector_cache,
 )
 from comfyui.danbooru_embedding import (  # noqa: E402
     DEFAULT_COMPILE_PROVIDER_URL,
@@ -73,6 +76,7 @@ from comfyui.danbooru_embedding import (  # noqa: E402
     NullTagEmbeddingSource,
     OpenAITagEmbeddingSource,
     OpenAIEmbeddingClient,
+    ReusingTagEmbeddingSource,
     TagEmbeddingSource,
     embedding_failure_hint,
     parse_embedding_endpoint,
@@ -173,9 +177,19 @@ def main() -> None:
             else parsed
         )
         print(f"嵌入端点: {endpoint.url}（model={endpoint.model}）")
-        embedding_source = OpenAITagEmbeddingSource(
-            OpenAIEmbeddingClient(endpoint), batch_size=args.embedding_batch_size
-        )
+        # 已有产物即缓存：探测确认当前端点能复现旧向量后，未变文本直接搬旧向量，
+        # 只把新增/改动的文本发给接口
+        cache = open_vector_cache(output_dir)
+        if cache is None:
+            embedding_source: TagEmbeddingSource = OpenAITagEmbeddingSource(
+                OpenAIEmbeddingClient(endpoint), batch_size=args.embedding_batch_size
+            )
+        else:
+            embedding_source = ReusingTagEmbeddingSource(
+                OpenAIEmbeddingClient(endpoint),
+                cache,
+                batch_size=args.embedding_batch_size,
+            )
 
     try:
         compiled = compile_dataset(source_dir, output_dir, embedding_source)

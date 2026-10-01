@@ -24,6 +24,7 @@ from typing import (
     Optional,
     Protocol,
     Sequence,
+    Set,
     Tuple,
     cast,
 )
@@ -408,9 +409,7 @@ class OpenAITagEmbeddingSource:
                 chunk = texts[start : start + self.batch_size]
                 block = _normalized(self.client.embed(chunk))
                 if stacked is None:
-                    stacked = np.empty(
-                        (n_rows, len(EMBEDDING_VIEWS), block.shape[1]), dtype=np.float32
-                    )
+                    stacked = _allocate_stack(n_rows, block.shape[1])
                 stacked[start : start + len(chunk), view_index, :] = block
                 _LOGGER.info(
                     "标签向量 %s 视图进度 %d/%d",
@@ -420,10 +419,203 @@ class OpenAITagEmbeddingSource:
                 )
         if stacked is None:
             raise ValueError("标签视图为空，无法生成向量矩阵")
-        columns = [
-            np.ascontiguousarray(stacked[:, i, :]) for i in range(len(EMBEDDING_VIEWS))
-        ]
-        return TagEmbeddingMatrix(tag=columns[0], cn_name=columns[1], wiki=columns[2])
+        return _stack_to_matrix(stacked)
+
+
+def _allocate_stack(n_rows: int, dim: int) -> np.ndarray:
+    """按 (行, 视图, 维) 分配待填矩阵（dim 由首次响应决定，故延迟分配）。"""
+    return np.empty((n_rows, len(EMBEDDING_VIEWS), dim), dtype=np.float32)
+
+
+def _stack_to_matrix(stacked: np.ndarray) -> TagEmbeddingMatrix:
+    """把 (行, 视图, 维) 暂存拆成三个连续矩阵。"""
+    columns = [
+        np.ascontiguousarray(stacked[:, i, :]) for i in range(len(EMBEDDING_VIEWS))
+    ]
+    return TagEmbeddingMatrix(tag=columns[0], cn_name=columns[1], wiki=columns[2])
+
+
+# #endregion
+
+# #region 增量复用旧产物
+
+
+# 复用判定的探测规模与阈值。
+# 阈值依据实测：同一端点对同一文本是逐位一致的（余弦 1.0000000±1e-7，
+# 最大分量差 ~1e-8），而不同模型的余弦在 0.4~0.9 区间。0.9999 两侧都有
+# 巨大余量，既不会因浮点噪声误判为「不同模型」，也不会放过换了权重的同名模型。
+REUSE_PROBE_ROWS = 3
+REUSE_PROBE_MIN_COSINE = 0.9999
+
+
+class TagVectorCache:
+    """按文本复用旧产物中的向量（旧标签表文本 + 旧向量矩阵）。
+
+    旧产物本身就是缓存，不额外落盘：命中即搬旧向量，只有新文本才发接口。
+    """
+
+    def __init__(
+        self, views: Sequence[Tuple[str, str, str]], matrix: TagEmbeddingMatrix
+    ) -> None:
+        self.views = list(views)
+        self.matrix: Optional[TagEmbeddingMatrix] = matrix
+
+    def release(self) -> None:
+        """释放旧产物映射。
+
+        Windows 下映射中的文件不可被 os.replace 覆盖，而新向量要接管同一个
+        文件名，因此复用结束后必须让映射随对象销毁。
+        """
+        self.matrix = None
+
+    def _probe_picks(self) -> List[Tuple[int, int]]:
+        """跨视图均匀取若干 (视图下标, 行号)，跳过空文本。"""
+        n_rows = len(self.views)
+        if n_rows == 0:
+            return []
+        step = max(1, n_rows // REUSE_PROBE_ROWS)
+        picks: List[Tuple[int, int]] = []
+        seen_rows: Set[int] = set()
+        for index in range(REUSE_PROBE_ROWS):
+            row = min(index * step, n_rows - 1)
+            if row in seen_rows:
+                continue
+            seen_rows.add(row)
+            for view_index in range(len(EMBEDDING_VIEWS)):
+                if self.views[row][view_index].strip():
+                    picks.append((view_index, row))
+        return picks
+
+    def matches_endpoint(self, client: EmbeddingClient) -> Tuple[bool, str]:
+        """探测当前端点能否复现旧向量；返回 (是否可复用, 依据)。
+
+        比对向量而不是记录模型名：名字本来就不可靠（同模型不同命名、同名
+        不同权重都能骗过它），而「同一段文本在同一端点是否给出同一向量」
+        是可直接验证的事实。
+        """
+        matrix = self.matrix
+        if matrix is None:
+            raise ValueError("向量缓存已释放")
+        picks = self._probe_picks()
+        if not picks:
+            return False, "旧产物没有可用于探测的文本"
+        texts = [self.views[row][view_index] for view_index, row in picks]
+        try:
+            fresh = _normalized(client.embed(texts))
+        except EmbeddingError as e:
+            return False, f"探测请求失败: {e}"
+        if fresh.shape[1] != matrix.dim:
+            return False, (
+                f"嵌入维度不一致: 当前 {fresh.shape[1]}，旧产物 {matrix.dim}"
+            )
+        min_cosine = 1.0
+        for (view_index, row), vector in zip(picks, fresh):
+            stored = getattr(matrix, EMBEDDING_VIEWS[view_index])[row]
+            cosine = float(np.dot(vector, stored))
+            if cosine < REUSE_PROBE_MIN_COSINE:
+                return False, (
+                    f"文本 {self.views[row][view_index]!r} 的余弦 {cosine:.6f} "
+                    f"低于阈值 {REUSE_PROBE_MIN_COSINE}"
+                )
+            min_cosine = min(min_cosine, cosine)
+        return True, (f"{len(picks)} 条探测文本全部一致（最小余弦 {min_cosine:.8f}）")
+
+
+class ReusingTagEmbeddingSource:
+    """编译期标签向量来源：先探测一致性，再按文本命中复用旧向量。
+
+    探测不通过就退化为全量重新生成——向量空间变了还复用旧向量，会静默
+    给出语义不符的召回。
+    """
+
+    def __init__(
+        self,
+        client: EmbeddingClient,
+        cache: TagVectorCache,
+        batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE,
+    ) -> None:
+        self.client = client
+        self.cache = cache
+        self.batch_size = batch_size
+
+    def build(self, views: Sequence[Tuple[str, str, str]]) -> TagEmbeddingMatrix:
+        try:
+            reusable, reason = self.cache.matches_endpoint(self.client)
+            if not reusable:
+                _LOGGER.info("不复用旧向量（%s），全量重新生成", reason)
+                return OpenAITagEmbeddingSource(self.client, self.batch_size).build(
+                    views
+                )
+            _LOGGER.info("复用旧向量：%s", reason)
+            return self._build_reusing(views)
+        finally:
+            # 新向量要 os.replace 到旧产物的文件名，必须先释放旧映射（全量重建路径同理）
+            self.cache.release()
+
+    def _build_reusing(
+        self, views: Sequence[Tuple[str, str, str]]
+    ) -> TagEmbeddingMatrix:
+        matrix = self.cache.matrix
+        if matrix is None:
+            raise ValueError("向量缓存已释放")
+        n_rows = len(views)
+        stacked: Optional[np.ndarray] = None
+        reused_total = 0
+        for view_index, view_name in enumerate(EMBEDDING_VIEWS):
+            old_view = getattr(matrix, EMBEDDING_VIEWS[view_index])
+            row_of_text: Dict[str, int] = {}
+            for old_row, row in enumerate(self.cache.views):
+                row_of_text.setdefault(row[view_index], old_row)
+            reused_rows: List[int] = []
+            reused_old: List[int] = []
+            missing_rows: List[int] = []
+            missing_texts: List[str] = []
+            for position, row in enumerate(views):
+                text = row[view_index]
+                old_row = row_of_text.get(text)
+                if old_row is None:
+                    missing_rows.append(position)
+                    missing_texts.append(text)
+                else:
+                    reused_rows.append(position)
+                    reused_old.append(old_row)
+            if reused_rows:
+                if stacked is None:
+                    stacked = _allocate_stack(n_rows, old_view.shape[1])
+                # 一次向量化拷贝，避免逐行 Python 循环读 mmap
+                stacked[np.asarray(reused_rows), view_index, :] = old_view[
+                    np.asarray(reused_old), :
+                ]
+            for start in range(0, len(missing_texts), self.batch_size):
+                chunk = missing_texts[start : start + self.batch_size]
+                block = _normalized(self.client.embed(chunk))
+                if stacked is None:
+                    stacked = _allocate_stack(n_rows, block.shape[1])
+                rows = missing_rows[start : start + len(chunk)]
+                stacked[np.asarray(rows), view_index, :] = block
+                _LOGGER.info(
+                    "标签向量 %s 视图新增进度 %d/%d",
+                    view_name,
+                    min(start + len(chunk), len(missing_texts)),
+                    len(missing_texts),
+                )
+            reused_total += len(reused_rows)
+            _LOGGER.info(
+                "标签向量 %s 视图：复用 %d 条，新增 %d 条",
+                view_name,
+                len(reused_rows),
+                len(missing_texts),
+            )
+        if stacked is None:
+            raise ValueError("标签视图为空，无法生成向量矩阵")
+        total = n_rows * len(EMBEDDING_VIEWS)
+        _LOGGER.info(
+            "标签向量合计：复用 %d/%d 条（%.1f%%），其余由嵌入接口生成",
+            reused_total,
+            total,
+            100.0 * reused_total / total,
+        )
+        return _stack_to_matrix(stacked)
 
 
 # #endregion
