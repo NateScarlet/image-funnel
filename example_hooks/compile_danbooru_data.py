@@ -26,6 +26,9 @@
   端点由 --embedding-provider-url 或 HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL 指定
   （缺省用本地 LM Studio 默认端点）；接口不可达时快速失败中止编译，不产出半成品，
   并提示「配置嵌入服务」或「--no-embedding 跳过向量」两条出路。
+- 向量产物先写 embeddings.bin.new 再原子重命名接管：正式产物被常驻补全进程
+  mmap 占用而无法覆盖时，已生成的向量完整保留在 .new 文件里，退出 image-funnel
+  后手动重命名即可生效，不必重新生成。
 - 没有嵌入向量服务也能编译：用 --no-embedding 只产出字面匹配所需的
   tags.bin 与 cooc.bin，并移除已有的向量产物（避免旧向量与新标签表行序错位）。
 - 编译成功不代表语义层已启用：还需要在钩子配置里设置
@@ -72,6 +75,7 @@ from comfyui.danbooru_embedding import (  # noqa: E402
     OpenAIEmbeddingClient,
     TagEmbeddingSource,
     parse_embedding_endpoint,
+    staged_embeddings_path,
 )
 
 
@@ -148,9 +152,17 @@ def main() -> None:
     embedding_source: TagEmbeddingSource
     if args.no_embedding:
         print("标签向量: 跳过（--no-embedding）")
+        # --no-embedding 只清正式产物；上次编译遗留的暂存向量属于用户成果，不动它
+        pending = staged_embeddings_path(output_dir)
+        if pending.is_file():
+            print(f"提示: 存在未接管的向量产物 {pending}（本次未改动它）")
         embedding_source = NullTagEmbeddingSource()
     else:
-        parsed = parse_embedding_endpoint(args.embedding_provider_url)
+        try:
+            parsed = parse_embedding_endpoint(args.embedding_provider_url)
+        except ValueError as e:
+            print(f"嵌入服务 URL 配置错误: {e}", file=sys.stderr)
+            sys.exit(1)
         # 仅在显式指定时覆盖端点 URL 里的 timeoutMs
         endpoint = (
             replace(parsed, timeout=args.embedding_timeout_ms / 1000)
@@ -168,6 +180,11 @@ def main() -> None:
         # 快速失败中止编译（不产出半成品），但要告诉用户下一步怎么走
         print(f"标签向量生成失败: {e}", file=sys.stderr)
         print(EMBEDDING_FAILURE_HINT, file=sys.stderr)
+        sys.exit(1)
+    except (PermissionError, FileExistsError) as e:
+        # 产物被占用 / 遗留未接管产物：消息里已带恢复步骤（暂存文件在哪、怎么重命名），
+        # 不要再叠一层 traceback 把提示埋掉
+        print(str(e), file=sys.stderr)
         sys.exit(1)
 
     print(f"编译完成: {compiled.tags}")

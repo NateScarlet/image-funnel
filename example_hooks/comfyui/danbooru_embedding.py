@@ -190,6 +190,18 @@ class OpenAIEmbeddingClient:
 
 # 脚本定义的规范产物名（与源数据解耦）；缺此产物时语义层完全不激活
 COMPILED_EMBEDDINGS_FILENAME = "embeddings.bin"
+# 向量生成耗时以小时计（5 万标签 × 3 视图），而正式产物可能被常驻补全进程 mmap
+# 占用而无法覆盖。故先写暂存名，再原子重命名接管；接管失败时暂存文件保留，
+# 用户释放占用后手动重命名即可，不必重新生成。
+COMPILED_EMBEDDINGS_STAGING_SUFFIX = ".new"
+
+
+def staged_embeddings_path(data_dir: str | Path) -> Path:
+    """尚未接管的向量产物路径（生成完成但未能替换正式产物时留存在此）。"""
+    return Path(data_dir) / (
+        COMPILED_EMBEDDINGS_FILENAME + COMPILED_EMBEDDINGS_STAGING_SUFFIX
+    )
+
 
 _EMBEDDINGS_MAGIC = b"DNEM"
 _EMBEDDINGS_VERSION = 1

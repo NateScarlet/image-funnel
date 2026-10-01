@@ -41,7 +41,9 @@ from typing import (
 
 from .danbooru_embedding import (
     COMPILED_EMBEDDINGS_FILENAME,
+    TagEmbeddingMatrix,
     TagEmbeddingSource,
+    staged_embeddings_path,
     write_compiled_embeddings,
 )
 
@@ -419,26 +421,67 @@ def compile_dataset(
     tags_out = out_root / COMPILED_TAGS_FILENAME
     cooc_out = out_root / COMPILED_COOC_FILENAME
     embeddings_out = out_root / COMPILED_EMBEDDINGS_FILENAME
-    # 向量产物最先落盘：它是唯一被运行时 mmap 占用的文件，先处理可在被占用时于
+    # 向量产物最先落盘：它是唯一被运行时 mmap 占用的文件，先接管可在被占用时于
     # tags/cooc 被改动前失败，避免留下「新 tags + 旧向量」的行序错位产物
     if matrices is None:
         # 显式跳过向量：清掉旧向量，胜过留着与新标签表行序错位的它
         _remove_stale_embeddings(embeddings_out)
         written_embeddings: Optional[Path] = None
     else:
-        try:
-            write_compiled_embeddings(embeddings_out, matrices)
-        except PermissionError as e:
-            raise PermissionError(
-                f"标签向量产物被占用，无法覆盖: {embeddings_out}\n"
-                "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可覆盖）；"
-                "请先退出 image-funnel 后重新编译。"
-            ) from e
+        _write_and_promote_embeddings(out_root, embeddings_out, matrices)
         written_embeddings = embeddings_out
     write_compiled_tags(tags_out, rows)
     write_compiled_cooc(cooc_out, len(rows), offsets, neighbors, counts)
     return CompiledDatasetPaths(
         tags=tags_out, cooc=cooc_out, embeddings=written_embeddings
+    )
+
+
+def _write_and_promote_embeddings(
+    out_root: Path, embeddings_out: Path, matrices: "TagEmbeddingMatrix"
+) -> None:
+    """先写暂存向量产物，再原子重命名接管正式产物。
+
+    向量生成是整个编译里唯一以小时计的步骤，而正式产物可能被常驻补全进程
+    mmap 占用（Windows 下打开中的文件不可覆盖）。因此：
+
+    - 暂存文件已存在时不覆盖：那是上一次编译的成果，不能因重跑而丢掉；
+    - 写入中途失败时清掉半截暂存文件（它不是成果，只是垃圾）；
+    - 接管失败时保留暂存文件并报错，由用户在释放占用后手动重命名。
+    """
+    staging = staged_embeddings_path(out_root)
+    _refuse_to_clobber_staging(staging, embeddings_out)
+    try:
+        write_compiled_embeddings(staging, matrices)
+    except BaseException:
+        # 半截暂存文件会让下次编译误判为「已有未接管成果」，先清掉
+        staging.unlink(missing_ok=True)
+        raise
+    try:
+        os.replace(staging, embeddings_out)
+    except PermissionError as e:
+        raise PermissionError(
+            f"标签向量产物已生成，但正式产物被占用，无法接管: {embeddings_out}\n"
+            "常驻补全进程 mmap 住该文件（Windows 下打开中的文件不可覆盖）。\n"
+            f"已生成的向量完整保留在: {staging}（不会丢弃，无需重新生成）\n"
+            "请先退出 image-funnel，然后手动重命名使其生效：\n"
+            f'  move "{staging}" "{embeddings_out}"\n'
+            "本次编译未改动 tags.bin 与 cooc.bin（保持与既有向量一致）；"
+            "若源数据与上次编译不同，重命名后请重跑本脚本同步标签与共现产物。"
+        ) from e
+
+
+def _refuse_to_clobber_staging(staging: Path, embeddings_out: Path) -> None:
+    """已有未接管的向量产物时不覆盖：先让用户处理，避免丢掉上一次编译的成果。"""
+    if not staging.exists():
+        return
+    raise FileExistsError(
+        f"已存在未接管的向量产物: {staging}\n"
+        "上一次编译生成后未能接管正式产物（多半是正式产物被补全进程占用）。\n"
+        "处理方式三选一：\n"
+        f'  1) 释放占用后接管：move "{staging}" "{embeddings_out}"\n'
+        f'  2) 确认无用后删除：del "{staging}"\n'
+        "  3) 源数据已更新且不需要旧向量：删除后重跑本脚本重新生成。"
     )
 
 
@@ -452,7 +495,7 @@ def _remove_stale_embeddings(path: Path) -> None:
         raise PermissionError(
             f"标签向量产物被占用，无法删除: {path}\n"
             "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可删除）；"
-            "请先退出 image-funnel 后重新编译，或改用默认参数重新生成向量。"
+            "请先退出 image-funnel 后重新编译。"
         ) from e
 
 

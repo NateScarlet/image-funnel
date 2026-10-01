@@ -36,6 +36,7 @@ from .danbooru_embedding import (
     EmbeddingError,
     NullTagEmbeddingSource,
     TagEmbeddingMatrix,
+    staged_embeddings_path,
 )
 from .danbooru_test import FakeTagEmbeddingSource, write_file_fixture
 
@@ -590,6 +591,29 @@ class TestCompileScriptMain(unittest.TestCase):
             self.assertIn("仅字面匹配", out)
             self.assertNotIn(EMBEDDING_PROVIDER_URL_ENV, out)
 
+    def test_malformed_embedding_url_exits_with_clean_message(self) -> None:
+        """URL 配置错误：只打印可读消息，不叠 traceback 把提示埋掉。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "source"
+            env = dict(os.environ)
+            env["IMAGE_FUNNEL_DATA_DIR"] = str(Path(tmp) / "if-root")
+            env.pop("DANBOORU_DATA_DIR", None)
+
+            with minimal_source_dir(source_dir):
+                proc = self._run(
+                    [
+                        str(source_dir),
+                        "--embedding-provider-url",
+                        '"http://localhost:1234#apiKey=&model=stub&timeoutMs=3000"',
+                    ],
+                    env,
+                )
+            self.assertNotEqual(proc.returncode, 0)
+            err = cast(str, proc.stderr) or ""
+            self.assertIn("嵌入服务 URL 配置错误", err)
+            self.assertIn("多余的成对引号", err)
+            self.assertNotIn("Traceback", err)
+
     def test_successful_compile_reports_semantic_layer_needs_env(self) -> None:
         """编译成功 ≠ 语义层已启用：产物齐备后仍要提示设置环境变量。"""
         with tempfile.TemporaryDirectory() as tmp:
@@ -607,6 +631,128 @@ class TestCompileScriptMain(unittest.TestCase):
             self.assertIn(EMBEDDING_PROVIDER_URL_ENV, out)
             self.assertIn("无需重新编译", out)
             self.assertNotIn("--no-embedding", out)
+
+
+class TestEmbeddingPromotion(unittest.TestCase):
+    """向量产物：暂存写入 → 原子重命名接管；被占用时保留成果、不改动其他产物。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.source = self.tmp_dir / "source"
+        self.output = self.tmp_dir / "out"
+        self.source.mkdir()
+        write_file_fixture(
+            str(self.source),
+            [
+                {
+                    "name": "1girl",
+                    "cn_name": "一个女孩",
+                    "wiki": "A girl.",
+                    "post_count": "10",
+                    "category": "0",
+                    "nsfw": "0",
+                }
+            ],
+            [],
+        )
+        for name in (
+            COMPILED_TAGS_FILENAME,
+            COMPILED_COOC_FILENAME,
+            COMPILED_EMBEDDINGS_FILENAME,
+        ):
+            (self.source / name).unlink()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _existing_tags_bytes(self) -> bytes:
+        """先成功编译一次，用它的标签产物作为「上一次编译」的基准。"""
+        compile_dataset(self.source, self.output, FakeTagEmbeddingSource())
+        return (self.output / COMPILED_TAGS_FILENAME).read_bytes()
+
+    def test_promote_renames_staging_into_place(self) -> None:
+        baseline = self._existing_tags_bytes()
+        compiled = compile_dataset(self.source, self.output, FakeTagEmbeddingSource())
+        assert compiled.embeddings is not None
+        self.assertTrue(compiled.embeddings.is_file())
+        # 暂存文件在成功接管后不应残留
+        self.assertFalse(staged_embeddings_path(self.output).exists())
+        self.assertEqual((self.output / COMPILED_TAGS_FILENAME).read_bytes(), baseline)
+
+    def test_occupied_target_keeps_generated_vectors(self) -> None:
+        """正式产物被占用：向量完整保留在暂存文件，且不改动 tags/cooc。"""
+        baseline_tags = self._existing_tags_bytes()
+        baseline_cooc = (self.output / COMPILED_COOC_FILENAME).read_bytes()
+        staging = staged_embeddings_path(self.output)
+
+        def refuse(src: str, dst: str) -> None:
+            raise PermissionError(13, "used by another process")
+
+        with patch("comfyui.danbooru_data.os.replace", side_effect=refuse):
+            with self.assertRaises(PermissionError) as ctx:
+                compile_dataset(self.source, self.output, FakeTagEmbeddingSource())
+
+        message = str(ctx.exception)
+        # 成果没丢：暂存文件在，且报错点名了它与手动重命名命令
+        self.assertTrue(staging.is_file(), "生成的向量应保留在暂存文件")
+        self.assertIn(str(staging), message)
+        self.assertIn("move", message)
+        # 其他产物保持上一次编译的状态，不产生「新 tags + 旧向量」错位
+        self.assertEqual(
+            (self.output / COMPILED_TAGS_FILENAME).read_bytes(), baseline_tags
+        )
+        self.assertEqual(
+            (self.output / COMPILED_COOC_FILENAME).read_bytes(), baseline_cooc
+        )
+
+    def test_existing_staging_is_not_clobbered(self) -> None:
+        """已有未接管的向量产物时拒绝覆盖：那是上一次编译的成果。"""
+        self._existing_tags_bytes()
+        staging = staged_embeddings_path(self.output)
+        staging.write_bytes(b"previous-run-result")
+
+        with self.assertRaises(FileExistsError) as ctx:
+            compile_dataset(self.source, self.output, FakeTagEmbeddingSource())
+        message = str(ctx.exception)
+        self.assertIn("未接管", message)
+        self.assertIn(str(staging), message)
+        self.assertEqual(staging.read_bytes(), b"previous-run-result")
+
+    def test_failed_vector_write_cleans_up_partial_staging(self) -> None:
+        """写入中途失败时清掉半截暂存文件：它不是成果，只会让下次编译误判。"""
+        self._existing_tags_bytes()
+
+        class FailingEmbeddingSource:
+            def build(
+                self, views: Sequence[Tuple[str, str, str]]
+            ) -> Optional[TagEmbeddingMatrix]:
+                raise EmbeddingError("写入前失败")
+
+        staging = staged_embeddings_path(self.output)
+        with self.assertRaises(EmbeddingError):
+            compile_dataset(
+                self.source, self.output, cast(Any, FailingEmbeddingSource())
+            )
+        self.assertFalse(staging.exists())
+
+    def test_manual_rename_recovers_generated_vectors(self) -> None:
+        """释放占用后手动重命名即可接管，无需重新生成。"""
+        self._existing_tags_bytes()
+        staging = staged_embeddings_path(self.output)
+
+        def refuse(src: str, dst: str) -> None:
+            raise PermissionError(13, "used by another process")
+
+        with patch("comfyui.danbooru_data.os.replace", side_effect=refuse):
+            with self.assertRaises(PermissionError):
+                compile_dataset(self.source, self.output, FakeTagEmbeddingSource())
+        self.assertTrue(staging.is_file())
+
+        # 用户释放占用后手动重命名
+        os.replace(staging, self.output / COMPILED_EMBEDDINGS_FILENAME)
+        self.assertTrue((self.output / COMPILED_EMBEDDINGS_FILENAME).is_file())
+        self.assertFalse(staging.exists())
+        self.assertTrue(has_compiled_dataset(self.output))
 
 
 if __name__ == "__main__":
