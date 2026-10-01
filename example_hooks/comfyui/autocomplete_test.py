@@ -28,7 +28,6 @@ from .autocomplete import (
     autocomplete,
     build_providers,
     build_request_from_params,
-    build_semantic_searcher,
     quote_if_needed,
     NullSuggestionTextFormatter,
     PromptTarget,
@@ -1308,38 +1307,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                     )
                     self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
 
-    def test_build_semantic_searcher_activation_matrix(self) -> None:
-        """激活双条件：向量产物存在 且 端点 URL 非空，缺一即传空实现。"""
-        from .danbooru_embedding import (
-            NullSemanticTagSearcher,
-            VectorSemanticTagSearcher,
-        )
-
-        data_dir = tempfile.mkdtemp()
-        try:
-            self.assertIsInstance(
-                build_semantic_searcher(data_dir, ""), NullSemanticTagSearcher
-            )
-            self.assertIsInstance(
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
-                NullSemanticTagSearcher,
-            )
-            self._write_single_tag_fixture(data_dir)
-            # 语义层常驻 mmap 住向量产物（Windows 下不可删除），忽略清理错误
-            self.assertIsInstance(
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
-                VectorSemanticTagSearcher,
-            )
-        finally:
-            shutil.rmtree(data_dir, ignore_errors=True)
-
-    def test_build_semantic_searcher_rejects_malformed_endpoint_url(self) -> None:
-        """端点 URL 非法属配置错误：入口直接抛出，不静默退回纯字面。"""
-        with tempfile.TemporaryDirectory() as data_dir:
-            self._write_single_tag_fixture(data_dir)
-            with self.assertRaises(ValueError):
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#timeoutMs=nope")
-
     def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
         """URL 与数据目录均为空时不注册 DanbooruProvider。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
@@ -1628,7 +1595,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
 class TestAutocompleteIntegration(unittest.TestCase):
 
-    @patch("comfyui.autocomplete.SQLiteDanbooruTagProvider")
+    @patch("comfyui.danbooru.CachedDanbooruTagProvider")
     def test_integration_autocomplete_danbooru_related(
         self, mock_sqlite_provider_class: MagicMock
     ) -> None:
@@ -1687,7 +1654,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
         self.assertEqual(len(lines), 20)
         self.assertEqual(lines[0]["text"], "1girl")
 
-    @patch("comfyui.autocomplete.SQLiteDanbooruTagProvider")
+    @patch("comfyui.danbooru.CachedDanbooruTagProvider")
     def test_single_shot_programming_error_propagates(
         self, mock_sqlite_provider_class: MagicMock
     ) -> None:

@@ -14,13 +14,17 @@ import time
 from .db import SQLiteContext
 from .danbooru import (
     AkizukiDanbooruTagProvider,
+    CachedDanbooruTagLoader,
+    CachedDanbooruTagProvider,
     DanbooruTag,
     EmbeddingError,
     FileDanbooruTagProvider,
+    NullDanbooruCache,
     SemanticLayerUnavailable,
-    SQLiteDanbooruTagProvider,
-    SQLiteDanbooruTagLoader,
+    SQLiteDanbooruCache,
     AkizukiDanbooruTagLoader,
+    build_danbooru_tag_provider,
+    build_semantic_searcher,
     release_cooc_cache,
 )
 from .danbooru_data import (
@@ -34,6 +38,7 @@ from .danbooru_embedding import (
     SemanticHit,
     SemanticTagSearcher,
     TagEmbeddingMatrix,
+    VectorSemanticTagSearcher,
 )
 
 _FAKE_EMBEDDING_DIM = 8
@@ -703,15 +708,18 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
             self.assertFalse(provider.show_nsfw)
 
 
-class TestSQLiteDanbooruTagProvider(unittest.TestCase):
+class TestCachedDanbooruTagProvider(unittest.TestCase):
 
     def setUp(self) -> None:
         self.tmp_dir = tempfile.mkdtemp()
         self.db_path = os.path.join(self.tmp_dir, "test.db")
         self.db_ctx = SQLiteContext(self.db_path)
         self.mock_inner = MagicMock()
-        self.provider = SQLiteDanbooruTagProvider(
-            self.mock_inner, self.db_ctx, "https://mock-api.com", ttl=100
+        self.provider = CachedDanbooruTagProvider(
+            self.mock_inner,
+            SQLiteDanbooruCache(self.db_ctx),
+            "https://mock-api.com",
+            ttl=100,
         )
 
     def tearDown(self) -> None:
@@ -756,7 +764,7 @@ class TestSQLiteDanbooruTagProvider(unittest.TestCase):
         self.assertEqual(results[0].tag, "solo")
         self.mock_inner.search.assert_not_called()
 
-    @patch("comfyui.danbooru.SQLiteDanbooruTagProvider._trigger_async_update")
+    @patch("comfyui.danbooru.CachedDanbooruTagProvider._trigger_async_update")
     def test_search_stale_cache_returns_and_triggers_swr(
         self, mock_trigger: MagicMock
     ) -> None:
@@ -956,7 +964,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         # 激活建表迁移
         _ = self.db_ctx.connection
         self.mock_inner = MagicMock()
-        self.loader = SQLiteDanbooruTagLoader(self.mock_inner, self.db_ctx, ttl=3600)
+        self.loader = CachedDanbooruTagLoader(
+            self.mock_inner, SQLiteDanbooruCache(self.db_ctx), ttl=3600
+        )
 
     def tearDown(self) -> None:
         self.db_ctx.close()
@@ -1210,3 +1220,234 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row[0], "红发")
         self.assertEqual(row[1], "Copyright")
+
+
+def _write_single_tag_fixture(data_dir: str) -> None:
+    """写入仅含单个标签的本地编译产物（语义层与工厂测试共用夹具）。"""
+    write_file_fixture(
+        data_dir,
+        [
+            {
+                "name": "1girl",
+                "cn_name": "女孩",
+                "wiki": "A girl.",
+                "post_count": "100",
+                "category": "0",
+                "nsfw": "0",
+            }
+        ],
+        [],
+    )
+
+
+class TestNullDanbooruCache(unittest.TestCase):
+    """空缓存端口：读取恒为 None、写入为 no-op，且完全不依赖数据库。"""
+
+    def test_reads_return_none(self) -> None:
+        cache = NullDanbooruCache()
+        self.assertIsNone(cache.tag_detail("1girl"))
+        self.assertIsNone(cache.search_payload("girl"))
+        self.assertIsNone(cache.related_payload(json.dumps(["1girl"])))
+
+    def test_writes_are_noop_without_database(self) -> None:
+        cache = NullDanbooruCache()
+        cache.save_tag_detail("1girl", "女孩", "A girl.", "General", 3600)
+        cache.save_search_payload("girl", "[]", 3600)
+        cache.save_related_payload(json.dumps(["1girl"]), "[]", 3600)
+        # no-op：写后读仍为空，且整个过程未创建任何数据库
+        self.assertIsNone(cache.tag_detail("1girl"))
+
+
+class TestSQLiteDanbooruCache(unittest.TestCase):
+    """缓存端口的 SQLite 实现：三类缓存往返、写入时清理过期行、读取失败回退 None。"""
+
+    def setUp(self) -> None:
+        self.db_ctx = SQLiteContext(":memory:")
+        self.cache = SQLiteDanbooruCache(self.db_ctx)
+
+    def tearDown(self) -> None:
+        self.db_ctx.close()
+
+    def test_tag_detail_round_trip(self) -> None:
+        self.cache.save_tag_detail("1girl", "女孩", "A girl.", "General", 3600)
+        detail = self.cache.tag_detail("1girl")
+        assert detail is not None
+        self.assertEqual(detail.cn_name, "女孩")
+        self.assertEqual(detail.wiki, "A girl.")
+        self.assertEqual(detail.category, "General")
+        self.assertGreater(detail.updated_at, 0)
+
+    def test_search_payload_round_trip(self) -> None:
+        self.cache.save_search_payload("girl", "[]", 3600)
+        payload = self.cache.search_payload("girl")
+        assert payload is not None
+        self.assertEqual(payload.payload, "[]")
+
+    def test_related_payload_round_trip(self) -> None:
+        key = json.dumps(["1girl"])
+        self.cache.save_related_payload(key, "[]", 3600)
+        payload = self.cache.related_payload(key)
+        assert payload is not None
+        self.assertEqual(payload.payload, "[]")
+
+    def test_save_prunes_expired_rows(self) -> None:
+        """写入新值时应清理超过 ttl 的旧行。"""
+        with self.db_ctx.transaction() as conn:
+            conn.execute(
+                "INSERT INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
+                ("old", "[]", 1),
+            )
+        self.cache.save_search_payload("new", "[]", 3600)
+        rows = self.db_ctx.connection.execute(
+            "SELECT query FROM danbooru_search_cache"
+        ).fetchall()
+        self.assertEqual([row[0] for row in rows], ["new"])
+
+    def test_read_sqlite_error_returns_none(self) -> None:
+        """读取失败仅吞掉 sqlite3.Error 并返回 None（保留 SWR 回退语义）。"""
+        broken_conn = MagicMock()
+        broken_conn.execute.side_effect = sqlite3.OperationalError("database is locked")
+        with patch.object(
+            SQLiteContext,
+            "connection",
+            new_callable=PropertyMock,
+            return_value=broken_conn,
+        ):
+            self.assertIsNone(self.cache.tag_detail("1girl"))
+
+
+class TestBuildSemanticSearcher(unittest.TestCase):
+    """语义层构建：仅在向量产物与端点 URL 齐备时激活。"""
+
+    def test_build_semantic_searcher_activation_matrix(self) -> None:
+        """激活双条件：向量产物存在 且 端点 URL 非空，缺一即传空实现。"""
+        data_dir = tempfile.mkdtemp()
+        try:
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, ""), NullSemanticTagSearcher
+            )
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                NullSemanticTagSearcher,
+            )
+            _write_single_tag_fixture(data_dir)
+            # 语义层常驻 mmap 住向量产物（Windows 下不可删除），忽略清理错误
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                VectorSemanticTagSearcher,
+            )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_build_semantic_searcher_rejects_malformed_endpoint_url(self) -> None:
+        """端点 URL 非法属配置错误：入口直接抛出，不静默退回纯字面。"""
+        with tempfile.TemporaryDirectory() as data_dir:
+            _write_single_tag_fixture(data_dir)
+            with self.assertRaises(ValueError):
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#timeoutMs=nope")
+
+
+class TestBuildDanbooruTagProvider(unittest.TestCase):
+    """裸工厂：按数据来源选择 provider，与指令上下文和 SQLite 解耦。"""
+
+    def test_local_wins_when_both_sources_set(self) -> None:
+        with tempfile.TemporaryDirectory() as data_dir:
+            _write_single_tag_fixture(data_dir)
+            provider = build_danbooru_tag_provider(
+                data_dir=data_dir,
+                search_url="http://should-be-ignored",
+                show_nsfw=False,
+                embedding_provider_url="",
+                cache=NullDanbooruCache(),
+            )
+            self.assertIsInstance(provider, FileDanbooruTagProvider)
+
+    def test_online_when_only_search_url(self) -> None:
+        provider = build_danbooru_tag_provider(
+            data_dir="",
+            search_url="https://mock-api.com",
+            show_nsfw=False,
+            embedding_provider_url="",
+            cache=NullDanbooruCache(),
+        )
+        self.assertIsInstance(provider, CachedDanbooruTagProvider)
+
+    def test_none_when_no_source_configured(self) -> None:
+        provider = build_danbooru_tag_provider(
+            data_dir="",
+            search_url="",
+            show_nsfw=False,
+            embedding_provider_url="",
+            cache=NullDanbooruCache(),
+        )
+        self.assertIsNone(provider)
+
+    def test_missing_compiled_artifacts_raises(self) -> None:
+        """本地目录缺编译产物时直接抛出（快速失败，不静默回落在线）。"""
+        with tempfile.TemporaryDirectory() as data_dir:
+            with self.assertRaises(FileNotFoundError) as ctx:
+                build_danbooru_tag_provider(
+                    data_dir=data_dir,
+                    search_url="",
+                    show_nsfw=False,
+                    embedding_provider_url="",
+                    cache=NullDanbooruCache(),
+                )
+            self.assertIn("compile_danbooru_data.py", str(ctx.exception))
+
+    def test_semantic_layer_injected_with_artifacts_and_endpoint(self) -> None:
+        data_dir = tempfile.mkdtemp()
+        try:
+            _write_single_tag_fixture(data_dir)
+            provider = build_danbooru_tag_provider(
+                data_dir=data_dir,
+                search_url="",
+                show_nsfw=False,
+                embedding_provider_url="http://127.0.0.1:1#model=stub",
+                cache=NullDanbooruCache(),
+            )
+            assert isinstance(provider, FileDanbooruTagProvider)
+            self.assertIsInstance(provider.semantic, VectorSemanticTagSearcher)
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_semantic_layer_null_without_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as data_dir:
+            _write_single_tag_fixture(data_dir)
+            provider = build_danbooru_tag_provider(
+                data_dir=data_dir,
+                search_url="",
+                show_nsfw=False,
+                embedding_provider_url="",
+                cache=NullDanbooruCache(),
+            )
+            assert isinstance(provider, FileDanbooruTagProvider)
+            self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
+
+    @patch("requests.post")
+    def test_online_works_with_null_cache(self, mock_post: MagicMock) -> None:
+        """在线链路配合 NullDanbooruCache 时不触及任何数据库，直接请求上游。"""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "tag": "1girl",
+                    "cn_name": "女孩",
+                    "wiki": "A girl.",
+                    "category": "General",
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        provider = build_danbooru_tag_provider(
+            data_dir="",
+            search_url="https://mock-api.com",
+            show_nsfw=False,
+            embedding_provider_url="",
+            cache=NullDanbooruCache(),
+        )
+        assert provider is not None
+        results = provider.search("girl")
+        self.assertEqual([item.tag for item in results], ["1girl"])
+        mock_post.assert_called_once()

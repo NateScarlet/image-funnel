@@ -29,7 +29,12 @@ from .danbooru_embedding import (
     CEILING_COSINE,
     MIN_COSINE,
     EmbeddingError,
+    NullSemanticTagSearcher,
+    OpenAIEmbeddingClient,
     SemanticTagSearcher,
+    cached_semantic_searcher,
+    has_compiled_embeddings,
+    parse_embedding_endpoint,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -438,6 +443,172 @@ class FileDanbooruTagProvider:
 # #endregion
 
 
+# #region Danbooru 缓存端口（在线链路专用）
+#
+# 缓存被抽象为端口，使裸工厂不必依赖 SQLite：在线链路注入 SQLiteDanbooruCache，
+# 离线/复用场景注入 NullDanbooruCache。本地字面链路完全不使用缓存。
+
+
+@dataclass(frozen=True)
+class CachedTagDetail:
+    """单个标签详情的缓存行。"""
+
+    cn_name: str
+    wiki: str
+    category: str
+    updated_at: int
+
+
+@dataclass(frozen=True)
+class CachedPayload:
+    """序列化结果（搜索/联想）的缓存行。"""
+
+    payload: str
+    updated_at: int
+
+
+class DanbooruCache(Protocol):
+    """在线 Danbooru 结果的本地缓存端口（本地/字面链路不使用）。"""
+
+    def tag_detail(self, tag: str) -> Optional[CachedTagDetail]: ...
+    def save_tag_detail(
+        self, tag: str, cn_name: str, wiki: str, category: str, ttl: int
+    ) -> None: ...
+    def search_payload(self, query: str) -> Optional[CachedPayload]: ...
+    def save_search_payload(self, query: str, payload: str, ttl: int) -> None: ...
+    def related_payload(self, key: str) -> Optional[CachedPayload]: ...
+    def save_related_payload(self, key: str, payload: str, ttl: int) -> None: ...
+
+
+class NullDanbooruCache:
+    """缓存端口空实现：所有读取返回 None、所有写入为 no-op，无需任何数据库。"""
+
+    def tag_detail(self, tag: str) -> Optional[CachedTagDetail]:
+        return None
+
+    def save_tag_detail(
+        self, tag: str, cn_name: str, wiki: str, category: str, ttl: int
+    ) -> None:
+        pass
+
+    def search_payload(self, query: str) -> Optional[CachedPayload]:
+        return None
+
+    def save_search_payload(self, query: str, payload: str, ttl: int) -> None:
+        pass
+
+    def related_payload(self, key: str) -> Optional[CachedPayload]:
+        return None
+
+    def save_related_payload(self, key: str, payload: str, ttl: int) -> None:
+        pass
+
+
+class SQLiteDanbooruCache:
+    """缓存端口的 SQLite 实现，承载标签详情与搜索/联想结果的持久化。
+
+    读取失败仅吞掉 sqlite3.Error（记录日志后返回 None），以保留既有的
+    stale-while-revalidate 回退语义；其他异常（如数据形状错误）直接抛出。
+    写入失败不捕获，交由调用方观察（快速失败）。
+    """
+
+    def __init__(self, store: SQLiteContext) -> None:
+        self.store = store
+        # 常驻 serve 多线程共享同一连接，串行化连接访问
+        self._lock = threading.Lock()
+
+    def tag_detail(self, tag: str) -> Optional[CachedTagDetail]:
+        try:
+            with self._lock:
+                row = self.store.connection.execute(
+                    "SELECT cn_name, wiki, category, updated_at FROM danbooru_tag_cache WHERE tag = ?",
+                    (tag,),
+                ).fetchone()
+        except sqlite3.Error as e:
+            _LOGGER.warning("SQLite tag cache read error: %s", e)
+            return None
+        if not row:
+            return None
+        cn_name, wiki, category, updated_at = row
+        return CachedTagDetail(
+            cn_name=cn_name, wiki=wiki, category=category, updated_at=updated_at
+        )
+
+    def save_tag_detail(
+        self, tag: str, cn_name: str, wiki: str, category: str, ttl: int
+    ) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self.store.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
+                    (now - ttl,),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (tag, cn_name, wiki, category, now),
+                )
+
+    def search_payload(self, query: str) -> Optional[CachedPayload]:
+        try:
+            with self._lock:
+                row = self.store.connection.execute(
+                    "SELECT results, updated_at FROM danbooru_search_cache WHERE query = ?",
+                    (query,),
+                ).fetchone()
+        except sqlite3.Error as e:
+            _LOGGER.warning("SQLite search cache read error: %s", e)
+            return None
+        if not row:
+            return None
+        payload, updated_at = row
+        return CachedPayload(payload=payload, updated_at=updated_at)
+
+    def save_search_payload(self, query: str, payload: str, ttl: int) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self.store.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM danbooru_search_cache WHERE updated_at < ?",
+                    (now - ttl,),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
+                    (query, payload, now),
+                )
+
+    def related_payload(self, key: str) -> Optional[CachedPayload]:
+        try:
+            with self._lock:
+                row = self.store.connection.execute(
+                    "SELECT results, updated_at FROM danbooru_related_cache WHERE tags = ?",
+                    (key,),
+                ).fetchone()
+        except sqlite3.Error as e:
+            _LOGGER.warning("SQLite related cache read error: %s", e)
+            return None
+        if not row:
+            return None
+        payload, updated_at = row
+        return CachedPayload(payload=payload, updated_at=updated_at)
+
+    def save_related_payload(self, key: str, payload: str, ttl: int) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self.store.transaction() as conn:
+                conn.execute(
+                    "DELETE FROM danbooru_related_cache WHERE updated_at < ?",
+                    (now - ttl,),
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO danbooru_related_cache (tags, results, updated_at) VALUES (?, ?, ?)",
+                    (key, payload, now),
+                )
+
+
+# #endregion
+
+
 class DanbooruTagLoader(Protocol):
     """支持按精确名称查询/加载单个 Danbooru 标签详情的接口。"""
 
@@ -496,40 +667,34 @@ class AkizukiDanbooruTagLoader:
         return None
 
 
-class SQLiteDanbooruTagLoader:
-    """带 SQLite 缓存的 DanbooruTagLoader 装饰器。"""
+class CachedDanbooruTagLoader:
+    """带缓存端口的 DanbooruTagLoader 装饰器。"""
 
     def __init__(
         self,
         loader: DanbooruTagLoader,
-        db_ctx: SQLiteContext,
+        cache: DanbooruCache,
         ttl: int = 2592000,  # 30天
     ) -> None:
         self.loader = loader
-        self.db_ctx = db_ctx
+        self.cache = cache
         self.ttl = ttl
-        self._lock = threading.Lock()
 
     def load(self, tag: str) -> Optional[DanbooruTag]:
         if not tag.strip():
             return None
 
         now = int(time.time())
-        # 1. 尝试从 SQLite 中读取精确匹配的缓存；读取失败（sqlite3.Error）回退上游（SWR 语义）
-        try:
-            with self._lock:
-                row = self.db_ctx.connection.execute(
-                    "SELECT cn_name, wiki, category, updated_at FROM danbooru_tag_cache WHERE tag = ?",
-                    (tag,),
-                ).fetchone()
-            if row:
-                cn_name, wiki, category, updated_at = row
-                if now - updated_at < self.ttl:
-                    return DanbooruTag(
-                        tag=tag, cn_name=cn_name, wiki=wiki, category=category
-                    )
-        except sqlite3.Error as e:
-            _LOGGER.warning("SQLite tag cache read error: %s", e)
+        # 1. 尝试从缓存端口读取精确匹配；读取失败由端口返回 None 回退上游（SWR 语义）
+        cached = self.cache.tag_detail(tag)
+        if cached is not None:
+            if now - cached.updated_at < self.ttl:
+                return DanbooruTag(
+                    tag=tag,
+                    cn_name=cached.cn_name,
+                    wiki=cached.wiki,
+                    category=cached.category,
+                )
 
         # 2. 缓存未命中或已过期，同步调用底层 loader 获取最新信息
         result = self.loader.load(tag)
@@ -538,18 +703,10 @@ class SQLiteDanbooruTagLoader:
         return result
 
     def write_cache(self, item: DanbooruTag) -> None:
-        """保存/更新单个 Tag 的详情至缓存。缓存写入失败直接抛出（快速失败）。"""
-        now = int(time.time())
-        with self._lock:
-            with self.db_ctx.transaction() as conn:
-                conn.execute(
-                    "DELETE FROM danbooru_tag_cache WHERE updated_at < ?",
-                    (now - self.ttl,),
-                )
-                conn.execute(
-                    "INSERT OR REPLACE INTO danbooru_tag_cache (tag, cn_name, wiki, category, updated_at) VALUES (?, ?, ?, ?, ?)",
-                    (item.tag, item.cn_name, item.wiki, item.category, now),
-                )
+        """保存/更新单个 Tag 的详情至缓存端口。写入失败直接抛出（快速失败）。"""
+        self.cache.save_tag_detail(
+            item.tag, item.cn_name, item.wiki, item.category, self.ttl
+        )
 
 
 class DanbooruTagProvider(Protocol):
@@ -685,18 +842,18 @@ class AkizukiDanbooruTagProvider:
             raise
 
 
-class SQLiteDanbooruTagProvider:
-    """带 SQLite 缓存装饰的 DanbooruTagProvider 包装器，支持 SWR (Stale-While-Revalidate) 机制。"""
+class CachedDanbooruTagProvider:
+    """带缓存端口装饰的 DanbooruTagProvider 包装器，支持 SWR (Stale-While-Revalidate) 机制。"""
 
     def __init__(
         self,
         provider: DanbooruTagProvider,
-        db_ctx: SQLiteContext,
+        cache: DanbooruCache,
         search_url: str,
         ttl: int = 86400,
     ) -> None:
         self.provider = provider
-        self.db_ctx = db_ctx
+        self.cache = cache
         self.search_url = search_url
         self.ttl = ttl
 
@@ -731,21 +888,12 @@ class SQLiteDanbooruTagProvider:
             _LOGGER.warning("Failed to spawn async cache updater process: %s", e)
 
     def write_search_cache(self, query: str, results: List[DanbooruTag]) -> None:
-        """持久化写入前缀搜索结果至 SQLite 缓存中，并执行过期数据清理。
+        """持久化写入前缀搜索结果至缓存端口，并执行过期数据清理。
 
         缓存写入失败直接抛出（快速失败），调用方可见失败状态。
         """
-        now = int(time.time())
-        data_str = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
-        with self.db_ctx.transaction() as conn:
-            conn.execute(
-                "DELETE FROM danbooru_search_cache WHERE updated_at < ?",
-                (now - self.ttl,),
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO danbooru_search_cache (query, results, updated_at) VALUES (?, ?, ?)",
-                (query, data_str, now),
-            )
+        payload = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
+        self.cache.save_search_payload(query, payload, self.ttl)
 
     def _make_related_cache_key(
         self, tags: List[str], target_categories: Optional[List[str]] = None
@@ -760,42 +908,30 @@ class SQLiteDanbooruTagProvider:
         results: List[DanbooruTag],
         target_categories: Optional[List[str]] = None,
     ) -> None:
-        """持久化写入联想词结果至 SQLite 缓存中，并执行过期数据清理。
+        """持久化写入联想词结果至缓存端口，并执行过期数据清理。
 
         缓存写入失败直接抛出（快速失败），调用方可见失败状态。
         """
-        now = int(time.time())
         tags_key = self._make_related_cache_key(tags, target_categories)
-        data_str = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
-        with self.db_ctx.transaction() as conn:
-            conn.execute(
-                "DELETE FROM danbooru_related_cache WHERE updated_at < ?",
-                (now - self.ttl,),
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO danbooru_related_cache (tags, results, updated_at) VALUES (?, ?, ?)",
-                (tags_key, data_str, now),
-            )
+        payload = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
+        self.cache.save_related_payload(tags_key, payload, self.ttl)
 
     def search(self, query: str) -> List[DanbooruTag]:
         now = int(time.time())
-        cached_results = None
+        cached_results: Optional[List[DanbooruTag]] = None
         is_stale = False
 
-        # 1. 尝试从 SQLite 读取缓存；读取失败（sqlite3/JSON 损坏）回退上游（SWR 语义）
-        try:
-            row = self.db_ctx.connection.execute(
-                "SELECT results, updated_at FROM danbooru_search_cache WHERE query = ?",
-                (query,),
-            ).fetchone()
-            if row:
-                results_str, updated_at = row
-                data = json.loads(results_str)
+        # 1. 尝试从缓存端口读取缓存；快照 JSON 损坏（JSONDecodeError）回退上游（SWR 语义）
+        cached_payload = self.cache.search_payload(query)
+        if cached_payload is not None:
+            try:
+                data = json.loads(cached_payload.payload)
                 cached_results = [DanbooruTag(**item) for item in data]
-                if now - updated_at >= self.ttl:
+            except json.JSONDecodeError as e:
+                _LOGGER.warning("SQLite search cache read error: %s", e)
+            else:
+                if now - cached_payload.updated_at >= self.ttl:
                     is_stale = True
-        except (sqlite3.Error, json.JSONDecodeError) as e:
-            _LOGGER.warning("SQLite search cache read error: %s", e)
 
         # 2. 如果缓存新鲜，直接返回
         if cached_results is not None and not is_stale:
@@ -827,23 +963,20 @@ class SQLiteDanbooruTagProvider:
 
         tags_key = self._make_related_cache_key(tags, target_categories)
         now = int(time.time())
-        cached_results = None
+        cached_results: Optional[List[DanbooruTag]] = None
         is_stale = False
 
-        # 1. 尝试从 SQLite 读取缓存；读取失败（sqlite3/JSON 损坏）回退上游（SWR 语义）
-        try:
-            row = self.db_ctx.connection.execute(
-                "SELECT results, updated_at FROM danbooru_related_cache WHERE tags = ?",
-                (tags_key,),
-            ).fetchone()
-            if row:
-                results_str, updated_at = row
-                data = json.loads(results_str)
+        # 1. 尝试从缓存端口读取缓存；快照 JSON 损坏（JSONDecodeError）回退上游（SWR 语义）
+        cached_payload = self.cache.related_payload(tags_key)
+        if cached_payload is not None:
+            try:
+                data = json.loads(cached_payload.payload)
                 cached_results = [DanbooruTag(**item) for item in data]
-                if now - updated_at >= self.ttl:
+            except json.JSONDecodeError as e:
+                _LOGGER.warning("SQLite related cache read error: %s", e)
+            else:
+                if now - cached_payload.updated_at >= self.ttl:
                     is_stale = True
-        except (sqlite3.Error, json.JSONDecodeError) as e:
-            _LOGGER.warning("SQLite related cache read error: %s", e)
 
         # 2. 如果缓存新鲜，直接返回
         if cached_results is not None and not is_stale:
@@ -866,6 +999,57 @@ class SQLiteDanbooruTagProvider:
         return results
 
 
+# #region 裸工厂（外部消费者复用入口）
+
+
+def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
+    """构建本地链路的语义层；不激活时显式传空实现，不让 provider 自行降级。
+
+    激活需同时满足两个条件：标签向量产物存在、嵌入服务 URL 非空。缺任一时
+    补全完全退回纯字面匹配，对未配置用户零行为变化。
+    """
+    if not endpoint_url or not has_compiled_embeddings(data_dir):
+        return NullSemanticTagSearcher()
+    endpoint = parse_embedding_endpoint(endpoint_url)
+    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
+
+
+def build_danbooru_tag_provider(
+    *,
+    data_dir: str,
+    search_url: str,
+    show_nsfw: bool,
+    embedding_provider_url: str,
+    cache: DanbooruCache,
+) -> Optional[DanbooruTagProvider]:
+    """构建裸的 Danbooru 标签补全 provider，供外部消费者（如外部 ComfyUI 节点）复用。
+
+    与指令上下文解耦：不读取任何环境变量，不依赖 root_dir / directory_rel_path /
+    target_command，也不持有 SQLite。data_dir 非空时优先启用本地编译产物（即使
+    search_url 同时配置），编译产物缺失由 FileDanbooruTagProvider 构造时抛出
+    FileNotFoundError；否则 search_url 非空时启用 Akizuki 在线链路，结果经传入的
+    cache 端口缓存；两者皆空返回 None，表示「未配置任何数据来源」，由调用方决定如何呈现。
+    cache 必须由调用者显式注入（在线链路可传 SQLiteDanbooruCache，无需持久化时传
+    NullDanbooruCache），本地链路不使用 cache。
+    """
+    if data_dir:
+        return FileDanbooruTagProvider(
+            data_dir,
+            show_nsfw=show_nsfw,
+            semantic=build_semantic_searcher(data_dir, embedding_provider_url),
+        )
+    if search_url:
+        loader = CachedDanbooruTagLoader(AkizukiDanbooruTagLoader(search_url), cache)
+        inner = AkizukiDanbooruTagProvider(
+            search_url, loader=loader, show_nsfw=show_nsfw
+        )
+        return CachedDanbooruTagProvider(inner, cache, search_url)
+    return None
+
+
+# #endregion
+
+
 def update_cache(
     method: str,
     key_arg: str,
@@ -876,10 +1060,11 @@ def update_cache(
     if db_ctx is None:
         db_ctx = SQLiteContext.from_env()
 
+    cache = SQLiteDanbooruCache(db_ctx)
     raw_loader = AkizukiDanbooruTagLoader(search_url)
-    cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
+    cache_loader = CachedDanbooruTagLoader(raw_loader, cache)
     akizuki = AkizukiDanbooruTagProvider.from_env(search_url, loader=cache_loader)
-    provider = SQLiteDanbooruTagProvider(akizuki, db_ctx, search_url)
+    provider = CachedDanbooruTagProvider(akizuki, cache, search_url)
 
     with db_ctx:
         if method == "search":

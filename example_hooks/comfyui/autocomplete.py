@@ -29,24 +29,13 @@ from PIL import Image
 from .db import SQLiteContext
 from .danbooru import (
     DanbooruTagProvider,
-    AkizukiDanbooruTagProvider,
-    FileDanbooruTagProvider,
     SemanticLayerUnavailable,
-    SQLiteDanbooruTagProvider,
-    AkizukiDanbooruTagLoader,
-    SQLiteDanbooruTagLoader,
+    SQLiteDanbooruCache,
+    build_danbooru_tag_provider,
     release_cooc_cache,
 )
 from .danbooru_data import resolve_danbooru_data_dir
-from .danbooru_embedding import (
-    EMBEDDING_PROVIDER_URL_ENV,
-    NullSemanticTagSearcher,
-    OpenAIEmbeddingClient,
-    SemanticTagSearcher,
-    cached_semantic_searcher,
-    has_compiled_embeddings,
-    parse_embedding_endpoint,
-)
+from .danbooru_embedding import EMBEDDING_PROVIDER_URL_ENV
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
@@ -1115,18 +1104,6 @@ def _embedding_provider_url_from_env() -> str:
     return os.environ.get(EMBEDDING_PROVIDER_URL_ENV, "").strip()
 
 
-def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
-    """入口构建本地链路的语义层；不激活时显式传空实现，不让 provider 自行降级。
-
-    激活需同时满足两个条件：标签向量产物存在、嵌入服务 URL 非空。缺任一时
-    补全完全退回纯字面匹配，对未配置用户零行为变化。
-    """
-    if not endpoint_url or not has_compiled_embeddings(data_dir):
-        return NullSemanticTagSearcher()
-    endpoint = parse_embedding_endpoint(endpoint_url)
-    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
-
-
 def build_suggestion_text_formatter(target_command: str) -> SuggestionTextFormatter:
     """入口构建建议文本格式化依赖。
 
@@ -1185,12 +1162,12 @@ def build_providers(
 ) -> Generator[List[AutocompleteProvider], None, None]:
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
 
-    danbooru_data_dir 非空时优先启用本地编译产物补全（FileDanbooruTagProvider，
-    字面匹配不依赖在线服务），否则在 danbooru_url 非空时启用 Akizuki 在线链路。
+    Danbooru 提供者委托裸工厂 build_danbooru_tag_provider 统一构建：danbooru_data_dir
+    非空时优先启用本地编译产物（字面匹配不依赖在线服务），否则在 danbooru_url 非空时
+    启用在线链路（结果经 SQLiteDanbooruCache 缓存），两者皆空时不注册。
     目录解析见 resolve_danbooru_data_dir：DANBOORU_DATA_DIR 显式优先，
     否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当编译产物存在时启用。
-    embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层；
-    该依赖只服务本地链路分支，不构建到在线链路与其他指令上。
+    embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层。
     target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
     模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；
     仅 /add 的 Danbooru 建议需要按模型格式重排建议文本（见
@@ -1209,46 +1186,26 @@ def build_providers(
                 RegionOptionProvider(),
             ]
         )
-        if danbooru_data_dir:
-            # 本地文件模式：跳过 SQLite 搜索/联想缓存（数据已在内存），仍建 DB 供操作历史
+        if danbooru_data_dir or danbooru_url:
             db_ctx = stack.enter_context(
                 SQLiteContext(_db_path(root_dir, directory_rel_path))
             )
             history = OperationHistory(db_ctx)
-            file_provider = FileDanbooruTagProvider(
-                danbooru_data_dir,
+            tag_provider = build_danbooru_tag_provider(
+                data_dir=danbooru_data_dir,
+                search_url=danbooru_url,
                 show_nsfw=show_nsfw,
-                semantic=build_semantic_searcher(
-                    danbooru_data_dir, embedding_provider_url
-                ),
+                embedding_provider_url=embedding_provider_url,
+                cache=SQLiteDanbooruCache(db_ctx),
             )
-            providers.append(
-                DanbooruProvider(
-                    file_provider,
-                    history,
-                    build_suggestion_text_formatter(target_command),
+            if tag_provider is not None:
+                providers.append(
+                    DanbooruProvider(
+                        tag_provider,
+                        history,
+                        build_suggestion_text_formatter(target_command),
+                    )
                 )
-            )
-        elif danbooru_url:
-            db_ctx = stack.enter_context(
-                SQLiteContext(_db_path(root_dir, directory_rel_path))
-            )
-            history = OperationHistory(db_ctx)
-            raw_loader = AkizukiDanbooruTagLoader(danbooru_url)
-            cache_loader = SQLiteDanbooruTagLoader(raw_loader, db_ctx)
-            akizuki = AkizukiDanbooruTagProvider(
-                danbooru_url, loader=cache_loader, show_nsfw=show_nsfw
-            )
-            danbooru_tag_provider = SQLiteDanbooruTagProvider(
-                akizuki, db_ctx, danbooru_url
-            )
-            providers.append(
-                DanbooruProvider(
-                    danbooru_tag_provider,
-                    history,
-                    build_suggestion_text_formatter(target_command),
-                )
-            )
         yield providers
 
 
