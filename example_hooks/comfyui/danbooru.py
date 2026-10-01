@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+import math
 import os
 import sqlite3
 import subprocess
@@ -10,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List, Protocol, Optional, Any, Dict, Tuple, cast
+from typing import List, Protocol, Optional, Any, Dict, Set, Tuple, cast
 import requests
 
 from .db import SQLiteContext
@@ -24,6 +25,12 @@ from .danbooru_data import (
     load_compiled_tags,
     normalize_literal,
 )
+from .danbooru_embedding import (
+    CEILING_COSINE,
+    MIN_COSINE,
+    EmbeddingError,
+    SemanticTagSearcher,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +41,22 @@ class DanbooruTag:
     cn_name: str
     wiki: str
     category: str
+
+
+@dataclass(frozen=True)
+class SemanticLayerUnavailable(DanbooruTag):
+    """语义层不可用的降级提示项。
+
+    嵌入接口超时或失败时以补全建议项形式告知用户，字面结果不受影响；
+    继承 DanbooruTag 以复用既有 search 返回通道，调用方按类型分流出提示项。
+    标签字段全部为空：该条目不对应任何真实标签。
+    """
+
+    tag: str = ""
+    cn_name: str = ""
+    wiki: str = ""
+    category: str = ""
+    reason: str = ""
 
 
 # #region 本地数据文件 provider（FileDanbooruTagProvider）
@@ -56,6 +79,22 @@ class _FileTagIndex:
     by_name: Dict[str, CompiledTagRecord]
     # length(name_norm) -> 该长度的记录列表（模糊匹配只扫长度邻域）
     by_norm_len: Dict[int, List[CompiledTagRecord]]
+    # 语义层热度分（log1p(post_count) 归一化），仅在语义层激活时惰性计算
+    _pop_scores: Optional[List[float]] = None
+
+    @property
+    def pop_scores(self) -> List[float]:
+        """每条标签的热度分，供语义层做 post_count 加权排序。"""
+        if self._pop_scores is None:
+            logs = [math.log1p(record.post_count) for record in self.records]
+            # post_count 全为 0 时 max_log 为 0，除法无意义：直接给全 0 分
+            max_log = max(logs, default=0.0)
+            self._pop_scores = (
+                [value / max_log for value in logs]
+                if max_log > 0
+                else [0.0] * len(logs)
+            )
+        return self._pop_scores
 
 
 class _FileDataset:
@@ -223,18 +262,42 @@ def _score_fuzzy_match(query_norm: str, record: _FileTagRecord) -> float:
     return 0.0
 
 
+# 语义层：字面层无强匹配时追加的向量召回
+# 召回条数略多于最终展示上限，使 NSFW 过滤后仍能填满 top20
+_SEMANTIC_TOP_K = 40
+# 语义分映射到字面分层之下、模糊层之上的区间，使两类结果在同一次排序中竞争
+_SEMANTIC_SCORE_MAX = 72.0
+# post_count 加权占比（与参考实现 DanbooruSearchOnline 的 popularity_weight 一致）
+_SEMANTIC_POP_WEIGHT = 0.15
+
+
+def _semantic_score(cosine: float, pop_score: float) -> float:
+    """把余弦相似度与热度分映射到可与字面层比较的分数区间。"""
+    weighted = cosine * (1.0 - _SEMANTIC_POP_WEIGHT) + pop_score * _SEMANTIC_POP_WEIGHT
+    normalized = (weighted - MIN_COSINE) / (CEILING_COSINE - MIN_COSINE)
+    return min(max(normalized, 0.0), 1.0) * _SEMANTIC_SCORE_MAX
+
+
 class FileDanbooruTagProvider:
-    """基于本地编译产物的 Danbooru 标签补全（字面匹配，容忍笔误，不依赖在线服务）。
+    """基于本地编译产物的 Danbooru 标签补全（字面匹配 + 语义层，不依赖在线服务）。
 
     数据目录由入口注入；构造时校验编译产物存在（快速失败），内容懒加载：
     search 首次调用读 tags 产物，related 首次调用读共现 CSR 产物。
+    semantic 由入口注入的语义层（向量产物与嵌入端点齐备时召回，否则为空实现）。
     """
 
-    def __init__(self, data_dir: str, show_nsfw: bool = False) -> None:
+    def __init__(
+        self,
+        data_dir: str,
+        show_nsfw: bool = False,
+        *,
+        semantic: SemanticTagSearcher,
+    ) -> None:
         if not data_dir:
             raise ValueError("data_dir 不能为空")
         self.data_dir = data_dir
         self.show_nsfw = show_nsfw
+        self.semantic = semantic
         self._dataset = _get_or_create_dataset(data_dir)
 
     def search(self, query: str) -> List[DanbooruTag]:
@@ -249,6 +312,7 @@ class FileDanbooruTagProvider:
 
         # 第一趟：无模糊（精确/前缀/子串/中文别名），避免全表 SequenceMatcher
         scored: List[Tuple[float, int, _FileTagRecord]] = []
+        matched_ids: Set[int] = set()
         strong_count = 0
         has_top = False
         for record in index.records:
@@ -257,6 +321,7 @@ class FileDanbooruTagProvider:
             score = _score_literal_match(query_norm, record, allow_fuzzy=False)
             if score > 0:
                 scored.append((-score, -record.post_count, record))
+                matched_ids.add(record.rec_id)
                 # 模糊分 <=65，子串(65)及以上已能占满 top20 时无需模糊
                 if score >= 65:
                     strong_count += 1
@@ -271,7 +336,6 @@ class FileDanbooruTagProvider:
             and len(query_norm) <= _FUZZY_MAX_QUERY_LEN
         ):
             max_delta = max(3, len(query_norm) // 2)
-            seen_ids = {id(r) for _, _, r in scored}
             for length in range(
                 max(0, len(query_norm) - max_delta),
                 len(query_norm) + max_delta + 1,
@@ -279,16 +343,43 @@ class FileDanbooruTagProvider:
                 for record in index.by_norm_len.get(length, ()):
                     if record.nsfw and not show_nsfw:
                         continue
-                    if id(record) in seen_ids:
+                    if record.rec_id in matched_ids:
                         continue
                     fuzzy = _score_fuzzy_match(query_norm, record)
                     if fuzzy > 0:
                         scored.append((-fuzzy, -record.post_count, record))
-                        seen_ids.add(id(record))
+                        matched_ids.add(record.rec_id)
 
+        # 语义层：仅当字面层无强匹配（精确等于标签名或中文别名）时追加；
+        # 接口超时或失败时降级为「字面结果 + 明确错误提示项」，补全不中断
+        semantic_unavailable: Optional[str] = None
+        if not has_top:
+            try:
+                hits = self.semantic.search(query.strip(), _SEMANTIC_TOP_K)
+            except EmbeddingError as e:
+                _LOGGER.warning("Danbooru 语义层不可用: %s", e)
+                hits = []
+                semantic_unavailable = str(e)
+            if hits:
+                # 热度分只在语义层真正召回时惰性计算：未配置语义层的用户零开销
+                pop_scores = index.pop_scores
+                for hit in hits:
+                    # 共用 rec_id 作为向量行号，越界说明产物与标签表不对齐
+                    if hit.rec_id < 0 or hit.rec_id >= len(index.records):
+                        raise ValueError(f"语义层命中越界: {hit.rec_id}")
+                    if hit.rec_id in matched_ids:
+                        continue
+                    record = index.records[hit.rec_id]
+                    if record.nsfw and not show_nsfw:
+                        continue
+                    score = _semantic_score(hit.score, pop_scores[hit.rec_id])
+                    if score <= 0:
+                        continue
+                    matched_ids.add(hit.rec_id)
+                    scored.append((-score, -record.post_count, record))
         # 分高优先，同分按热度（post_count 降序）
         scored.sort(key=lambda item: (item[0], item[1]))
-        return [
+        results: List[DanbooruTag] = [
             DanbooruTag(
                 tag=record.tag,
                 cn_name=record.cn_name,
@@ -297,6 +388,9 @@ class FileDanbooruTagProvider:
             )
             for _, _, record in scored[:20]
         ]
+        if semantic_unavailable is not None:
+            results.append(SemanticLayerUnavailable(reason=semantic_unavailable))
+        return results
 
     def related(
         self,

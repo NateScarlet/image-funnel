@@ -25,6 +25,14 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
 from comfyui.danbooru import FileDanbooruTagProvider  # noqa: E402
+from comfyui.danbooru_embedding import (  # noqa: E402
+    NullSemanticTagSearcher,
+    OpenAIEmbeddingClient,
+    SemanticTagSearcher,
+    cached_semantic_searcher,
+    has_compiled_embeddings,
+    parse_embedding_endpoint,
+)
 
 
 def _rss_mb() -> float:
@@ -97,9 +105,22 @@ def _time_median(fn: Callable[[], Any], rounds: int) -> float:
     return statistics.median(samples)
 
 
+def _build_semantic(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
+    """与补全入口同一套激活判定：向量产物存在且端点非空才启用语义层。"""
+    if not endpoint_url or not has_compiled_embeddings(data_dir):
+        return NullSemanticTagSearcher()
+    endpoint = parse_embedding_endpoint(endpoint_url)
+    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="FileDanbooruTagProvider 基准")
     parser.add_argument("--data-dir", required=True)
+    parser.add_argument(
+        "--embedding-provider-url",
+        default="",
+        help="语义层嵌入端点；留空则只测字面层",
+    )
     parser.add_argument("--label", required=True, help="before / after 等标签")
     parser.add_argument("--out", required=True, help="JSON 结果输出路径")
     parser.add_argument("--rounds", type=int, default=7)
@@ -131,9 +152,11 @@ def main() -> None:
     tracemalloc.start()
     result["stages"].append(_mem("baseline_import", True))
     t0 = time.perf_counter()
-    provider = FileDanbooruTagProvider(args.data_dir, show_nsfw=True)
+    semantic = _build_semantic(args.data_dir, args.embedding_provider_url)
+    provider = FileDanbooruTagProvider(args.data_dir, show_nsfw=True, semantic=semantic)
     construct_ms = (time.perf_counter() - t0) * 1000
     result["construct_ms"] = round(construct_ms, 1)
+    result["semantic_layer"] = type(semantic).__name__
     result["stages"].append(_mem("after_construct", True))
 
     first_search_ms = _time_one(lambda: provider.search("1girl"))

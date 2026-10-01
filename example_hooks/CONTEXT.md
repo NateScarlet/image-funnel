@@ -18,16 +18,30 @@
 - **移除提示词 / Remove Prompt**: 自动剔除工作流中的某些标签或节点。
 
 **Danbooru 标签自动补全 / Danbooru Autocomplete**
-ComfyUI 提示词编辑时基于 [DanbooruSearchOnline](https://github.com/SuzumiyaAkizuki/DanbooruSearchOnline) 的输入联想。支持根据关键字进行语义搜索（Suggestions）或根据已有标签推荐关联标签（Related Tags）。`/add` 指令在无输入且工作流含区域标记、且尚未指定 `--region`/`--node` 目标时，优先以 `--region <name>` 选项形式直接建议全部可用区域；选定目标或工作流无区域后才进入关联标签推荐。
+ComfyUI 提示词编辑时的输入联想，包含两种能力：按关键字给出候选标签（搜索），以及按已有标签推荐关联标签（关联联想）。候选标签受类目与 NSFW 开关约束。`/add` 指令在无输入且工作流含区域标记、且尚未指定 `--region`/`--node` 目标时，优先以 `--region <name>` 选项形式直接建议全部可用区域；选定目标或工作流无区域后才进入关联标签推荐。
 
 **两种数据来源（入口按环境变量选择，二选一或均未配置）：**
 
-- **在线链路（Akizuki）**：`DANBOORU_SEARCH_URL` 非空时启用，通过在线语义搜索服务，结果经 SQLite SWR 缓存装饰。
-- **本地编译产物链路（FileDanbooruTagProvider）**：`DANBOORU_DATA_DIR` 显式非空时**优先**启用（即使 URL 同时配置），完全不依赖在线服务；未设置时默认 `${IMAGE_FUNNEL_DATA_DIR}/danbooru`，且**仅当该目录已存在编译产物**时才启用（未编译则回落在线 URL，避免破坏在线用户）。数据目录需包含编译产物 `tags.bin`（Arrow IPC，预归一化字段）与 `cooc.bin`（双向 CSR 共现），由独立脚本 `example_hooks/compile_danbooru_data.py <源数据目录>` 从外部项目源 CSV/parquet 编译（**参数是源数据目录**；产物固定写入补全读取的 `${IMAGE_FUNNEL_DATA_DIR}/danbooru`，用户无需知道补全从哪读；缺源时脚本打印下载地址）；运行时缺产物时快速失败并提示运行编译脚本。匹配为**字面匹配**：分层打分（精确 > 中文别名精确 > 前缀 > 子串 > 模糊笔误容忍），同层按 `post_count` 降序，不做语义向量检索；`related` 基于 CSR 按种子节点邻接聚合计数（多 seed 跨 seed 求和），排除种子标签后按计数降序，并按 `target_categories` 与 NSFW 过滤。**性能结构**：构造仅校验编译产物存在（快速失败）；tags 产物与 cooc 产物**分别懒加载**（search 首次读 tags，related 首次读 CSR），数据集按目录路径模块级缓存。**cooc 释放**：常驻 serve 在请求完成且任务队列已空（无待处理请求）时调用 `release_cooc_cache` 释放共现索引归还内存（排队中的请求继续复用已加载索引），tags 索引不参与释放（保 search 热路径）；下次 `related` 按需重载。search 两趟：第一趟无模糊字面层；仅当强匹配不足 20 且无精确/中文别名命中且查询 ≤12 字符时，第二趟在 `name_norm` **长度邻域**补模糊，模糊前先做**首字符粗筛**（`_fuzzy_maybe_overlap`）把候选从 2 万+降到千级。延迟与内存基准脚本 `bench_danbooru_file.py`（`--data-dir` 指向编译产物目录，`--label`/`--out`），内存与延迟分阶段测（tracemalloc 不覆盖热路径计时）。
+- **在线服务**：`DANBOORU_SEARCH_URL` 非空时启用，走在线语义搜索服务，结果经本地缓存装饰。
+- **本地编译产物**：`DANBOORU_DATA_DIR` 显式非空时**优先**启用（即使在线地址同时配置），完全不依赖在线服务；未设置时默认使用应用数据目录下的本地 Danbooru 目录，且**仅当该目录已存在编译产物**时才启用（未编译则回落在线服务，避免破坏在线用户）。本地产物由独立脚本从外部项目的源数据编译（参数为源数据目录），运行时缺产物时快速失败并提示运行编译脚本。
 
-两种链路均以 `DANBOORU_SEARCH_INCLUDE_NSFW` 控制是否包含 NSFW；源 `tags_enhanced.csv` 的 `category` 数字编码在**编译期**映射为 `General`/`Artist`/`Copyright`/`Character`/`Meta`。
+两种来源均以 `DANBOORU_SEARCH_INCLUDE_NSFW` 控制是否包含 NSFW；源数据的类目数字编码在编译期映射为 `General`/`Artist`/`Copyright`/`Character`/`Meta`。
 
 [接口文档](https://sakizuki-danboorusearch.hf.space/api/openapi.json)
+
+**强匹配 / Exact Match**
+查询与标签名或某个中文别名精确相等。命中强匹配即认为用户意图明确，**字面匹配**与**语义层**都会据此让路（语义层不再追加），因此强命中路径的可用性不受语义层依赖影响。
+
+**字面匹配 / Literal Match**
+基于字符的分层匹配：从最严格到最宽松依次判定（精确 > 中文别名精确 > 前缀 > 子串 > 模糊笔误容忍），同层按标签热度降序，并容忍常见笔误。完全离线，无需任何外部服务。
+
+**语义层 / Semantic Layer**
+**仅在字面匹配没有任何强匹配时**追加的召回阶段：把查询与标签都表示为向量，按相似度找出语义相近的标签，补充「只记得语义、说不出标签名」的场景。召回结果经 NSFW 过滤与热度加权后并入同一份排序——因此字面命中并非总是排在语义命中之前，强相似度的语义命中会排在宽松的字面命中之上。语义层只作用于搜索，**关联联想**行为不变。
+
+**标签向量 / Tag Embedding**
+标签在语义层中参与相似度比较的向量表示，按标签名、中文名与释义分视图保存，编译期生成，行序与标签表严格一致。
+
+语义层需要**标签向量产物**与**可达的嵌入服务**同时成立才激活；缺任一时补全完全退回纯字面匹配，对未配置用户零行为变化。嵌入服务由用户通过 `HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL` 指定（OpenAI 兼容接口），查询的向量结果会被缓存，连续输入不重复请求；嵌入服务超时或失败时本次查询跳过语义层，仍返回字面结果并附一条错误提示，补全始终可用。取舍与理由见 [ADR 0005](../docs/adr/0005-remote-openai-compatible-embeddings-for-danbooru-semantic-layer.md)。
 
 **目录分流 / Fork**
 根据指令参数将筛选保留的图片及配套的 XMP 文件，移动到同级按规则命名的子目录（例如 `原目录名,suffix`，未指定 suffix 时默认为 `TODO`）中，以实现图片的物理归类。

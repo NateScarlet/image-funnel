@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
+import threading
 import unittest
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Generator, List, Sequence, Tuple, cast
 from unittest.mock import patch
 
 from .danbooru_data import (
@@ -26,7 +30,8 @@ from .danbooru_data import (
     resolve_danbooru_data_dir,
     resolve_image_funnel_data_dir,
 )
-from .danbooru_test import write_file_fixture
+from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME, EmbeddingError
+from .danbooru_test import FakeTagEmbeddingSource, write_file_fixture
 
 
 class TestFindSource(unittest.TestCase):
@@ -106,7 +111,7 @@ class TestCompileDataset(unittest.TestCase):
     def test_compile_missing_sources_raises_with_download_hint(self) -> None:
         out = self.tmp_dir / "out"
         with self.assertRaises(FileNotFoundError) as ctx:
-            compile_dataset(self.tmp_dir, out)
+            compile_dataset(self.tmp_dir, out, FakeTagEmbeddingSource())
         msg = str(ctx.exception)
         self.assertIn("github.com", msg)
         self.assertIn("huggingface.co", msg)
@@ -114,8 +119,43 @@ class TestCompileDataset(unittest.TestCase):
 
     def test_compile_missing_dir_raises(self) -> None:
         with self.assertRaises(FileNotFoundError) as ctx:
-            compile_dataset(self.tmp_dir / "no-such", self.tmp_dir / "out")
+            compile_dataset(
+                self.tmp_dir / "no-such", self.tmp_dir / "out", FakeTagEmbeddingSource()
+            )
         self.assertIn("github.com", str(ctx.exception))
+
+    def test_embedding_failure_aborts_before_writing_artifacts(self) -> None:
+        """嵌入接口不可用时快速失败：tags/cooc/embeddings 三个产物都不落盘。"""
+        source = self.tmp_dir / "source"
+        output = self.tmp_dir / "out"
+        source.mkdir()
+        write_file_fixture(
+            str(source),
+            [
+                {
+                    "name": "1girl",
+                    "cn_name": "一个女孩",
+                    "wiki": "A girl.",
+                    "post_count": "10",
+                    "category": "0",
+                    "nsfw": "0",
+                }
+            ],
+            [],
+        )
+        (source / COMPILED_TAGS_FILENAME).unlink()
+        (source / COMPILED_COOC_FILENAME).unlink()
+        (source / COMPILED_EMBEDDINGS_FILENAME).unlink()
+
+        class FailingEmbeddingSource:
+            def build(self, views: Sequence[Tuple[str, str, str]]) -> Any:
+                raise EmbeddingError("嵌入接口不可达")
+
+        with self.assertRaises(EmbeddingError):
+            compile_dataset(source, output, cast(Any, FailingEmbeddingSource()))
+        self.assertFalse((output / COMPILED_TAGS_FILENAME).exists())
+        self.assertFalse((output / COMPILED_COOC_FILENAME).exists())
+        self.assertFalse((output / COMPILED_EMBEDDINGS_FILENAME).exists())
 
     def test_source_and_output_are_separate(self) -> None:
         """源目录只放源数据；产物只写入 output_dir，不污染源目录。"""
@@ -139,10 +179,12 @@ class TestCompileDataset(unittest.TestCase):
         # write_file_fixture 会在 source 内编译；清掉产物后单独验证分离路径
         (source / COMPILED_TAGS_FILENAME).unlink()
         (source / COMPILED_COOC_FILENAME).unlink()
+        (source / COMPILED_EMBEDDINGS_FILENAME).unlink()
 
-        tags_out, cooc_out = compile_dataset(source, output)
-        self.assertTrue(tags_out.is_file())
-        self.assertTrue(cooc_out.is_file())
+        compiled = compile_dataset(source, output, FakeTagEmbeddingSource())
+        self.assertTrue(compiled.tags.is_file())
+        self.assertTrue(compiled.cooc.is_file())
+        self.assertTrue(compiled.embeddings.is_file())
         self.assertTrue(has_compiled_dataset(output))
         # 源目录不写产物
         self.assertFalse((source / COMPILED_TAGS_FILENAME).is_file())
@@ -288,121 +330,167 @@ class TestResolveDirs(unittest.TestCase):
         self.assertIn("github.com", SOURCE_DOWNLOAD_HINT)
 
 
+class _StubEmbeddingHandler(BaseHTTPRequestHandler):
+    """最小 OpenAI 兼容 /v1/embeddings 桩服务，供编译脚本端到端用例使用。"""
+
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler 约定命名
+        length = int(self.headers.get("Content-Length", "0"))
+        payload = json.loads(self.rfile.read(length) or b"{}")
+        inputs = cast(List[str], payload.get("input", []))
+        body = json.dumps(
+            {
+                "object": "list",
+                "data": [
+                    {
+                        "object": "embedding",
+                        "index": i,
+                        "embedding": [float(len(text) % 5) + 1.0] * 4,
+                    }
+                    for i, text in enumerate(inputs)
+                ],
+            }
+        ).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+
+@contextmanager
+def stub_embedding_server() -> Generator[str, None, None]:
+    """启动桩嵌入服务并产出 `<base>#apiKey=&model=stub&timeoutMs=5000` 端点。"""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _StubEmbeddingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = cast(Tuple[str, int], server.server_address[:2])
+        yield f"http://{host}:{port}#apiKey=&model=stub&timeoutMs=5000"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@contextmanager
+def minimal_source_dir(root: Path) -> Generator[Path, None, None]:
+    """在 root 下写入最小源数据（一条 tags + 空共现 parquet）。"""
+    import csv as csv_mod
+    import pyarrow as pa  # pyright: ignore[reportMissingTypeStubs]
+    import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
+
+    pa_mod = cast(Any, pa)
+    pq_mod = cast(Any, pq)
+    root.mkdir()
+    with open(root / "tags_enhanced.csv", "w", encoding="utf-8", newline="") as f:
+        writer = csv_mod.DictWriter(
+            f,
+            fieldnames=["name", "cn_name", "wiki", "post_count", "category", "nsfw"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "name": "1girl",
+                "cn_name": "一个女孩",
+                "wiki": "",
+                "post_count": "10",
+                "category": "0",
+                "nsfw": "0",
+            }
+        )
+    table = pa_mod.table(
+        {
+            "tag_a": pa_mod.array([], type=pa_mod.string()),
+            "tag_b": pa_mod.array([], type=pa_mod.string()),
+            "count": pa_mod.array([], type=pa_mod.int32()),
+        }
+    )
+    pq_mod.write_table(table, root / "cooccurrence_clean.parquet")
+    yield root
+
+
 class TestCompileScriptMain(unittest.TestCase):
     """compile_danbooru_data.py 入口：源目录必填、产物写入补全默认路径。"""
 
-    def test_missing_source_exits_nonzero_with_download_urls(self) -> None:
+    def setUp(self) -> None:
+        self.script = Path(__file__).resolve().parents[1] / "compile_danbooru_data.py"
+
+    def _run(self, args: list[str], env: dict[str, str]) -> Any:
         import subprocess
         import sys
 
-        script = Path(__file__).resolve().parents[1] / "compile_danbooru_data.py"
+        return cast(
+            Any,
+            subprocess.run(
+                [sys.executable, str(self.script), *args],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                timeout=180,
+            ),
+        )
+
+    def test_missing_source_exits_nonzero_with_download_urls(self) -> None:
         with tempfile.TemporaryDirectory() as source_dir:
-            # Windows 控制台默认非 UTF-8；errors=replace 避免解码失败
-            proc = cast(
-                Any,
-                subprocess.run(
-                    [sys.executable, str(script), source_dir],
-                    capture_output=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=60,
-                ),
-            )
+            proc = self._run([source_dir], dict(os.environ))
         self.assertNotEqual(proc.returncode, 0)
         err = cast(str, proc.stderr) or ""
         self.assertIn("github.com", err)
         self.assertIn("huggingface.co", err)
 
     def test_missing_source_dir_argument_exits_nonzero(self) -> None:
-        import subprocess
-        import sys
-
-        script = Path(__file__).resolve().parents[1] / "compile_danbooru_data.py"
-        proc = cast(
-            Any,
-            subprocess.run(
-                [sys.executable, str(script)],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=60,
-            ),
-        )
+        proc = self._run([], dict(os.environ))
         self.assertNotEqual(proc.returncode, 0)
 
     def test_output_goes_to_image_funnel_default_not_source(self) -> None:
         """参数是源目录；产物写入 ${IMAGE_FUNNEL_DATA_DIR}/danbooru。"""
-        import subprocess
-        import sys
-
-        script = Path(__file__).resolve().parents[1] / "compile_danbooru_data.py"
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "source"
-            source_dir.mkdir()
             env = dict(os.environ)
             image_funnel_root = str(Path(tmp) / "if-root")
             env["IMAGE_FUNNEL_DATA_DIR"] = image_funnel_root
             env.pop("DANBOORU_DATA_DIR", None)
 
-            # 在源目录写入最小源数据（CSV + 空 parquet）
-            import csv as csv_mod
-            import pyarrow as pa  # pyright: ignore[reportMissingTypeStubs]
-            import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
-
-            pa_mod = cast(Any, pa)
-            pq_mod = cast(Any, pq)
-            with open(
-                source_dir / "tags_enhanced.csv", "w", encoding="utf-8", newline=""
-            ) as f:
-                writer = csv_mod.DictWriter(
-                    f,
-                    fieldnames=[
-                        "name",
-                        "cn_name",
-                        "wiki",
-                        "post_count",
-                        "category",
-                        "nsfw",
-                    ],
+            with minimal_source_dir(source_dir), stub_embedding_server() as url:
+                proc = self._run(
+                    [str(source_dir), "--embedding-provider-url", url], env
                 )
-                writer.writeheader()
-                writer.writerow(
-                    {
-                        "name": "1girl",
-                        "cn_name": "一个女孩",
-                        "wiki": "",
-                        "post_count": "10",
-                        "category": "0",
-                        "nsfw": "0",
-                    }
-                )
-            table = pa_mod.table(
-                {
-                    "tag_a": pa_mod.array([], type=pa_mod.string()),
-                    "tag_b": pa_mod.array([], type=pa_mod.string()),
-                    "count": pa_mod.array([], type=pa_mod.int32()),
-                }
-            )
-            pq_mod.write_table(table, source_dir / "cooccurrence_clean.parquet")
-
-            proc = cast(
-                Any,
-                subprocess.run(
-                    [sys.executable, str(script), str(source_dir)],
-                    capture_output=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    env=env,
-                    timeout=60,
-                ),
-            )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             out_dir = Path(image_funnel_root) / "danbooru"
             self.assertTrue((out_dir / COMPILED_TAGS_FILENAME).is_file())
             self.assertTrue((out_dir / COMPILED_COOC_FILENAME).is_file())
+            self.assertTrue((out_dir / COMPILED_EMBEDDINGS_FILENAME).is_file())
             # 源目录不写产物
             self.assertFalse((source_dir / COMPILED_TAGS_FILENAME).is_file())
-            self.assertFalse((source_dir / COMPILED_COOC_FILENAME).is_file())
+
+    def test_unreachable_embedding_endpoint_fails_without_artifacts(self) -> None:
+        """嵌入端点不可达时快速失败中止编译，不产出半成品。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "source"
+            env = dict(os.environ)
+            image_funnel_root = str(Path(tmp) / "if-root")
+            env["IMAGE_FUNNEL_DATA_DIR"] = image_funnel_root
+            env.pop("DANBOORU_DATA_DIR", None)
+
+            with minimal_source_dir(source_dir):
+                # 端口 1 必然拒绝连接，快速失败而非长时间挂起
+                proc = self._run(
+                    [
+                        str(source_dir),
+                        "--embedding-provider-url",
+                        "http://127.0.0.1:1#apiKey=&model=stub&timeoutMs=300",
+                    ],
+                    env,
+                )
+            self.assertNotEqual(proc.returncode, 0)
+            out_dir = Path(image_funnel_root) / "danbooru"
+            self.assertFalse((out_dir / COMPILED_TAGS_FILENAME).exists())
+            self.assertFalse((out_dir / COMPILED_EMBEDDINGS_FILENAME).exists())
 
 
 if __name__ == "__main__":

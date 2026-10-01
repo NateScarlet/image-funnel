@@ -20,12 +20,22 @@ from .danbooru import (
     DanbooruTagProvider,
     AkizukiDanbooruTagProvider,
     FileDanbooruTagProvider,
+    SemanticLayerUnavailable,
     SQLiteDanbooruTagProvider,
     AkizukiDanbooruTagLoader,
     SQLiteDanbooruTagLoader,
     release_cooc_cache,
 )
 from .danbooru_data import resolve_danbooru_data_dir
+from .danbooru_embedding import (
+    EMBEDDING_PROVIDER_URL_ENV,
+    NullSemanticTagSearcher,
+    OpenAIEmbeddingClient,
+    SemanticTagSearcher,
+    cached_semantic_searcher,
+    has_compiled_embeddings,
+    parse_embedding_endpoint,
+)
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
@@ -831,8 +841,14 @@ class DanbooruProvider(AutocompleteProvider):
             # 用户正在打字，执行前缀语义搜索
             try:
                 tags = self.provider.search(context.query)
+                # 语义层降级提示项与标签分流：错误以建议项展示，字面结果照常返回
+                unavailable = [
+                    item for item in tags if isinstance(item, SemanticLayerUnavailable)
+                ]
                 suggestions: List[AutocompleteSuggestion] = []
                 for item in tags:
+                    if isinstance(item, SemanticLayerUnavailable):
+                        continue
                     display = (
                         f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
                     )
@@ -871,6 +887,14 @@ class DanbooruProvider(AutocompleteProvider):
             )
 
             yield from _yield_styled(suggestions)
+            for item in unavailable:
+                yield AutocompleteSuggestion(
+                    text="",
+                    displayText="⚠ Danbooru 语义搜索不可用",
+                    description=item.reason,
+                    type="error",
+                    style="",
+                )
         else:
             # 当前词未输入，执行关联联想
             prompt_tags = _extract_prompt_tags(
@@ -979,6 +1003,23 @@ def _show_nsfw_from_env() -> bool:
     )
 
 
+def _embedding_provider_url_from_env() -> str:
+    """从环境变量读取语义层嵌入服务端点；空串表示语义层不激活（入口职责）。"""
+    return os.environ.get(EMBEDDING_PROVIDER_URL_ENV, "").strip()
+
+
+def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
+    """入口构建本地链路的语义层；不激活时显式传空实现，不让 provider 自行降级。
+
+    激活需同时满足两个条件：标签向量产物存在、嵌入服务 URL 非空。缺任一时
+    补全完全退回纯字面匹配，对未配置用户零行为变化。
+    """
+    if not endpoint_url or not has_compiled_embeddings(data_dir):
+        return NullSemanticTagSearcher()
+    endpoint = parse_embedding_endpoint(endpoint_url)
+    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
+
+
 def build_request_from_env(target_command: str) -> AutocompleteRequest:
     """单次模式：入口从环境变量构造请求上下文（缺失环境变量即报错中止，快速失败）。"""
     return AutocompleteRequest(
@@ -1021,6 +1062,7 @@ def build_providers(
     show_nsfw: bool,
     target_command: str,
     danbooru_data_dir: str = "",
+    embedding_provider_url: str = "",
 ) -> Generator[List[AutocompleteProvider], None, None]:
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
 
@@ -1028,6 +1070,8 @@ def build_providers(
     字面匹配不依赖在线服务），否则在 danbooru_url 非空时启用 Akizuki 在线链路。
     目录解析见 resolve_danbooru_data_dir：DANBOORU_DATA_DIR 显式优先，
     否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当编译产物存在时启用。
+    embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层；
+    该依赖只服务本地链路分支，不构建到在线链路与其他指令上。
     target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
     模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败。
     """
@@ -1051,7 +1095,11 @@ def build_providers(
             )
             history = OperationHistory(db_ctx)
             file_provider = FileDanbooruTagProvider(
-                danbooru_data_dir, show_nsfw=show_nsfw
+                danbooru_data_dir,
+                show_nsfw=show_nsfw,
+                semantic=build_semantic_searcher(
+                    danbooru_data_dir, embedding_provider_url
+                ),
             )
             providers.append(DanbooruProvider(file_provider, history))
         elif danbooru_url:
@@ -1184,6 +1232,7 @@ class _AutocompleteTask:
         active: Dict[Any, "_AutocompleteTask"],
         active_lock: threading.Lock,
         danbooru_data_dir: str = "",
+        embedding_provider_url: str = "",
     ) -> None:
         self.req_id = req_id
         self.request = request
@@ -1194,6 +1243,7 @@ class _AutocompleteTask:
         self.active = active
         self.active_lock = active_lock
         self.danbooru_data_dir = danbooru_data_dir
+        self.embedding_provider_url = embedding_provider_url
         self._canceled = threading.Event()
         self._thread = threading.Thread(
             target=self._run, name=f"autocomplete-{req_id}", daemon=True
@@ -1220,6 +1270,7 @@ class _AutocompleteTask:
                 self.show_nsfw,
                 self.request.target_command,
                 self.danbooru_data_dir,
+                self.embedding_provider_url,
             ) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
@@ -1256,6 +1307,8 @@ def serve() -> None:
     # 优先；否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当产物存在时启用）
     danbooru_data_dir = resolve_danbooru_data_dir()
     show_nsfw = _show_nsfw_from_env()
+    # 语义层嵌入端点：非空且向量产物存在时，本地链路 search 追加语义召回
+    embedding_provider_url = _embedding_provider_url_from_env()
 
     for raw_line in sys.stdin:
         line = raw_line.strip()
@@ -1292,6 +1345,7 @@ def serve() -> None:
             active,
             active_lock,
             danbooru_data_dir,
+            embedding_provider_url,
         )
         with active_lock:
             active[req_id] = task
@@ -1321,6 +1375,7 @@ def main() -> None:
             _show_nsfw_from_env(),
             target_cmd,
             resolve_danbooru_data_dir(),
+            _embedding_provider_url_from_env(),
         ) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             for s in autocomplete(request, services):

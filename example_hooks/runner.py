@@ -4,6 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "Pillow",
+#   "numpy",
 #   "requests",
 #   "pyarrow",
 # ]

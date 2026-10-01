@@ -5,8 +5,9 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
-from typing import Any, cast
+from typing import Any, List, Optional, Sequence, Tuple, cast
 from unittest.mock import MagicMock, patch, PropertyMock
+import numpy as np
 import requests
 import time
 
@@ -14,7 +15,9 @@ from .db import SQLiteContext
 from .danbooru import (
     AkizukiDanbooruTagProvider,
     DanbooruTag,
+    EmbeddingError,
     FileDanbooruTagProvider,
+    SemanticLayerUnavailable,
     SQLiteDanbooruTagProvider,
     SQLiteDanbooruTagLoader,
     AkizukiDanbooruTagLoader,
@@ -25,6 +28,56 @@ from .danbooru_data import (
     COMPILED_TAGS_FILENAME,
     compile_dataset,
 )
+from .danbooru_embedding import (
+    EMBEDDING_VIEWS,
+    NullSemanticTagSearcher,
+    SemanticHit,
+    SemanticTagSearcher,
+    TagEmbeddingMatrix,
+)
+
+_FAKE_EMBEDDING_DIM = 8
+
+
+def _char_count_vector(text: str, dim: int) -> np.ndarray:
+    """把文本按字符码哈希成固定维度的计数向量（夹具用，替代真实嵌入服务）。"""
+    vector = np.zeros(dim, dtype=np.float32)
+    for char in text:
+        vector[ord(char) % dim] += 1.0
+    norm = float(np.linalg.norm(vector))
+    return vector / norm if norm > 0 else vector
+
+
+class FakeTagEmbeddingSource:
+    """夹具用向量来源：按三视图生成确定性向量，无需嵌入服务。"""
+
+    def build(self, views: Sequence[Tuple[str, str, str]]) -> TagEmbeddingMatrix:
+        columns: List[np.ndarray] = []
+        for index in range(len(EMBEDDING_VIEWS)):
+            rows = [
+                _char_count_vector(row[index], _FAKE_EMBEDDING_DIM) for row in views
+            ]
+            columns.append(np.asarray(rows, dtype=np.float32).reshape(len(views), -1))
+        return TagEmbeddingMatrix(tag=columns[0], cn_name=columns[1], wiki=columns[2])
+
+
+class StubSemanticTagSearcher:
+    """语义层测试替身：记录调用并返回预置命中，可选抛错模拟接口不可用。"""
+
+    def __init__(
+        self,
+        hits: Sequence[Tuple[int, float]] = (),
+        error: Optional[Exception] = None,
+    ) -> None:
+        self.hits = [SemanticHit(rec_id=rec_id, score=score) for rec_id, score in hits]
+        self.error = error
+        self.calls: List[Tuple[str, int]] = []
+
+    def search(self, query: str, top_k: int) -> list[SemanticHit]:
+        self.calls.append((query, top_k))
+        if self.error is not None:
+            raise self.error
+        return list(self.hits)
 
 
 def write_file_fixture(
@@ -58,7 +111,7 @@ def write_file_fixture(
     )
     pq_mod.write_table(table, os.path.join(data_dir, "cooccurrence_clean.parquet"))
     # 测试夹具：源与产物同目录，provider 直接从该目录读取
-    compile_dataset(data_dir, data_dir)
+    compile_dataset(data_dir, data_dir, FakeTagEmbeddingSource())
 
 
 class TestFileDanbooruTagProvider(unittest.TestCase):
@@ -138,12 +191,25 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
+    def _provider(
+        self,
+        data_dir: str = "",
+        show_nsfw: bool = False,
+        semantic: Optional[SemanticTagSearcher] = None,
+    ) -> FileDanbooruTagProvider:
+        """默认注入空语义层，使字面匹配相关用例与改动前行为一致。"""
+        return FileDanbooruTagProvider(
+            data_dir or self.tmp_dir,
+            show_nsfw=show_nsfw,
+            semantic=semantic if semantic is not None else NullSemanticTagSearcher(),
+        )
+
     # ---- 缺文件快速失败 ----
 
     def test_missing_dir_raises_with_compile_hint(self) -> None:
         missing = os.path.join(self.tmp_dir, "no-such-dir")
         with self.assertRaises(FileNotFoundError) as ctx:
-            FileDanbooruTagProvider(missing)
+            self._provider(missing)
         msg = str(ctx.exception)
         self.assertIn(COMPILED_TAGS_FILENAME, msg)
         self.assertIn(COMPILED_COOC_FILENAME, msg)
@@ -154,7 +220,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     def test_missing_tags_bin_raises_with_compile_hint(self) -> None:
         os.remove(os.path.join(self.tmp_dir, COMPILED_TAGS_FILENAME))
         with self.assertRaises(FileNotFoundError) as ctx:
-            FileDanbooruTagProvider(self.tmp_dir)
+            self._provider()
         msg = str(ctx.exception)
         self.assertIn(COMPILED_TAGS_FILENAME, msg)
         self.assertIn("compile_danbooru_data.py", msg)
@@ -162,7 +228,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     def test_missing_cooc_bin_raises_with_compile_hint(self) -> None:
         os.remove(os.path.join(self.tmp_dir, COMPILED_COOC_FILENAME))
         with self.assertRaises(FileNotFoundError) as ctx:
-            FileDanbooruTagProvider(self.tmp_dir)
+            self._provider()
         msg = str(ctx.exception)
         self.assertIn(COMPILED_COOC_FILENAME, msg)
         self.assertIn("compile_danbooru_data.py", msg)
@@ -170,20 +236,20 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     # ---- 懒加载：构造不读内容，search/related 分别触发 ----
 
     def test_construct_does_not_load_content(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         dataset = cast(Any, provider)._dataset
         self.assertIsNone(dataset._tag_index)
         self.assertIsNone(dataset._cooc_index)
 
     def test_search_lazy_loads_tags_only(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         provider.search("solo")
         dataset = cast(Any, provider)._dataset
         self.assertIsNotNone(dataset._tag_index)
         self.assertIsNone(dataset._cooc_index)
 
     def test_related_lazy_loads_tags_and_cooc(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         provider.related(["1girl"])
         dataset = cast(Any, provider)._dataset
         self.assertIsNotNone(dataset._tag_index)
@@ -192,7 +258,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     # ---- cooc 释放：宿主在无待处理请求时释放，下次 related 按需重载 ----
 
     def test_release_cooc_cache_unloads_then_related_reloads(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         first = provider.related(["1girl"])
         dataset = cast(Any, provider)._dataset
 
@@ -206,7 +272,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertIsNotNone(dataset._cooc_index)
 
     def test_release_cooc_cache_without_loaded_dataset_is_noop(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         dataset = cast(Any, provider)._dataset
         release_cooc_cache(self.tmp_dir)
         self.assertIsNone(dataset._cooc_index)
@@ -217,7 +283,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     # ---- search：分层字面匹配 + 笔误容忍 ----
 
     def test_search_exact_match_ranks_first(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("solo")
         self.assertGreaterEqual(len(results), 1)
         self.assertEqual(results[0].tag, "solo")
@@ -225,21 +291,21 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertEqual(results[0].category, "General")
 
     def test_search_prefix_match(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("white")
         tags = [r.tag for r in results]
         self.assertIn("white_hair", tags)
         self.assertNotIn("red_hair", tags)
 
     def test_search_substring_match_underscore_or_space(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         by_space = {r.tag for r in provider.search("white hair")}
         by_underscore = {r.tag for r in provider.search("white_hair")}
         self.assertIn("white_hair", by_space)
         self.assertIn("white_hair", by_underscore)
 
     def test_search_tolerates_typo(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("solo")  # 精确
         self.assertEqual(results[0].tag, "solo")
         # 一处笔误仍应命中
@@ -249,34 +315,34 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertTrue(any(r.tag == "white_hair" for r in fuzzy))
 
     def test_search_chinese_via_cn_name(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("白发")
         self.assertGreaterEqual(len(results), 1)
         self.assertEqual(results[0].tag, "white_hair")
 
     def test_search_chinese_second_alias(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("女孩")
         tags = [r.tag for r in results]
         self.assertIn("1girl", tags)
 
     def test_search_filters_nsfw_by_default(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=False)
+        provider = self._provider(show_nsfw=False)
         tags = [r.tag for r in provider.search("hentai")]
         self.assertNotIn("hentai", tags)
 
     def test_search_includes_nsfw_when_enabled(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         tags = [r.tag for r in provider.search("hentai")]
         self.assertIn("hentai", tags)
 
     def test_search_empty_query_returns_empty(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         self.assertEqual(provider.search(""), [])
         self.assertEqual(provider.search("   "), [])
 
     def test_search_maps_numeric_category(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("hatsune_miku")
         self.assertEqual(results[0].tag, "hatsune_miku")
         self.assertEqual(results[0].category, "Character")
@@ -285,7 +351,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_search_rank_popularity_tiebreak(self) -> None:
         """同层匹配按 post_count 降序：1girl 应排在同为 General 的低热度前缀前。"""
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         results = provider.search("g")
         # 前缀含 g 的：1girl / solo? 无；至少 1girl 命中
         tags = [r.tag for r in results]
@@ -310,16 +376,138 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
                 [],
                 csv_encoding="gbk",
             )
-            provider = FileDanbooruTagProvider(gbk_dir)
+            provider = self._provider(gbk_dir)
             results = provider.search("1girl")
             self.assertEqual(results[0].cn_name, "一个女孩")
         finally:
             shutil.rmtree(gbk_dir, ignore_errors=True)
 
+    # ---- search：语义层（无强匹配时追加） ----
+
+    def test_semantic_skipped_on_exact_name_match(self) -> None:
+        """强匹配 = 查询精确等于标签名；此时不触发语义层。"""
+        semantic = StubSemanticTagSearcher([(1, 0.9)])
+        provider = self._provider(semantic=semantic)
+        results = provider.search("solo")
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual([r.tag for r in results], ["solo"])
+
+    def test_semantic_skipped_on_exact_cn_alias_match(self) -> None:
+        """强匹配 = 查询精确等于某个中文别名；此时不触发语义层。"""
+        semantic = StubSemanticTagSearcher([(1, 0.9)])
+        provider = self._provider(semantic=semantic)
+        results = provider.search("白发")
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(results[0].tag, "white_hair")
+
+    def test_semantic_skipped_on_empty_query(self) -> None:
+        semantic = StubSemanticTagSearcher([(1, 0.9)])
+        provider = self._provider(semantic=semantic)
+        self.assertEqual(provider.search("   "), [])
+        self.assertEqual(semantic.calls, [])
+
+    def test_semantic_appended_when_no_strong_match(self) -> None:
+        """查询无任何强匹配（字面层只有子串命中）时追加语义召回并合并。"""
+        semantic = StubSemanticTagSearcher([(5, 0.65)])
+        provider = self._provider(semantic=semantic)
+        results = provider.search("hair")
+        self.assertEqual(len(semantic.calls), 1)
+        self.assertEqual(semantic.calls[0][0], "hair")
+        tags = [r.tag for r in results]
+        # 字面子串命中在前，中等相似度的语义命中追加在后
+        self.assertEqual(tags[:2], ["white_hair", "red_hair"])
+        self.assertIn("hatsune_miku", tags)
+
+    def test_semantic_recall_when_literal_layer_empty(self) -> None:
+        """字面层完全没有命中时，语义层是唯一结果来源。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9), (1, 0.7)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("蓝色")]
+        self.assertEqual(tags, ["1girl", "solo"])
+
+    def test_semantic_high_similarity_outranks_literal_substring(self) -> None:
+        """近乎完全命中的语义结果应排到字面子串层之上。"""
+        semantic = StubSemanticTagSearcher([(5, 0.95)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("hair")]
+        self.assertEqual(tags[0], "hatsune_miku")
+
+    def test_semantic_hits_weighted_by_post_count(self) -> None:
+        """同余弦相似度时按 post_count 加权：热度高的排前。"""
+        semantic = StubSemanticTagSearcher([(3, 0.6), (1, 0.6)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("蓝色")]
+        self.assertEqual(tags, ["solo", "red_hair"])
+
+    def test_semantic_hits_filtered_by_nsfw(self) -> None:
+        semantic = StubSemanticTagSearcher([(4, 0.9)])
+        provider = self._provider(semantic=semantic)
+        self.assertNotIn("hentai", [r.tag for r in provider.search("蓝色")])
+
+        provider_nsfw = self._provider(show_nsfw=True, semantic=semantic)
+        self.assertIn("hentai", [r.tag for r in provider_nsfw.search("蓝色")])
+
+    def test_semantic_does_not_duplicate_literal_hits(self) -> None:
+        """字面层已命中的标签不因语义层重复出现。"""
+        semantic = StubSemanticTagSearcher([(2, 0.9), (3, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("hair")]
+        self.assertEqual(tags.count("white_hair"), 1)
+        self.assertEqual(tags.count("red_hair"), 1)
+
+    def test_semantic_below_candidate_floor_is_dropped(self) -> None:
+        """加权后映射到 0 分的语义命中不进结果（热度分无法抬升到下限之上）。"""
+        semantic = StubSemanticTagSearcher([(0, 0.0)])
+        provider = self._provider(semantic=semantic)
+        self.assertEqual([r.tag for r in provider.search("蓝色")], [])
+
+    def test_embedding_error_degrades_to_literal_plus_hint_item(self) -> None:
+        """嵌入接口失败：字面结果照常返回，并附加一条明确错误提示项。"""
+        semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
+        provider = self._provider(semantic=semantic)
+        results = provider.search("hair")
+        self.assertEqual([r.tag for r in results[:2]], ["white_hair", "red_hair"])
+        hint = results[-1]
+        self.assertIsInstance(hint, SemanticLayerUnavailable)
+        self.assertIn("超时", cast(SemanticLayerUnavailable, hint).reason)
+
+    def test_embedding_error_on_literal_empty_query_only_yields_hint(self) -> None:
+        semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
+        provider = self._provider(semantic=semantic)
+        results = provider.search("蓝色")
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0], SemanticLayerUnavailable)
+
+    def test_embedding_error_not_surfaced_when_strong_match(self) -> None:
+        """有强匹配时语义层不执行，接口故障不影响精确命中结果。"""
+        semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
+        provider = self._provider(semantic=semantic)
+        results = provider.search("solo")
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual([r.tag for r in results], ["solo"])
+
+    def test_semantic_hit_out_of_range_fails_fast(self) -> None:
+        """产物与标签表行序不对齐属于数据损坏，直接中止而非静默跳过。"""
+        semantic = StubSemanticTagSearcher([(999, 0.9)])
+        provider = self._provider(semantic=semantic)
+        with self.assertRaises(ValueError):
+            provider.search("蓝色")
+
+    def test_without_semantic_layer_results_match_pure_literal(self) -> None:
+        """语义层未激活（空实现）时行为与纯字面一致：无提示项、无重复、无越界。"""
+        provider = self._provider(semantic=NullSemanticTagSearcher())
+        results = provider.search("hair")
+        self.assertTrue(
+            all(not isinstance(r, SemanticLayerUnavailable) for r in results)
+        )
+        baseline = [r.tag for r in provider.search("hair")]
+        self.assertEqual([r.tag for r in results], baseline)
+        self.assertEqual(baseline[:2], ["white_hair", "red_hair"])
+
     # ---- related：共现计数联想 ----
 
     def test_related_aggregates_cooccurrence(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         results = provider.related(["1girl"])
         tags = [r.tag for r in results]
         self.assertIn("white_hair", tags)
@@ -328,14 +516,14 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertLess(tags.index("white_hair"), tags.index("solo"))
 
     def test_related_excludes_seed_tags(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         results = provider.related(["1girl", "white_hair"])
         tags = {r.tag for r in results}
         self.assertNotIn("1girl", tags)
         self.assertNotIn("white_hair", tags)
 
     def test_related_filters_target_categories(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         results = provider.related(
             ["1girl"], target_categories=["General", "Artist", "Meta"]
         )
@@ -345,25 +533,25 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertNotIn("hatsune_miku", tags)  # Character 被过滤
 
     def test_related_filters_nsfw(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=False)
+        provider = self._provider(show_nsfw=False)
         results = provider.related(["1girl"])
         tags = {r.tag for r in results}
         self.assertNotIn("hentai", tags)
 
-        provider_nsfw = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider_nsfw = self._provider(show_nsfw=True)
         results_nsfw = provider_nsfw.related(["1girl"])
         self.assertIn("hentai", {r.tag for r in results_nsfw})
 
     def test_related_empty_tags_returns_empty(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         self.assertEqual(provider.related([]), [])
 
     def test_related_unknown_seed_returns_empty(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir)
+        provider = self._provider()
         self.assertEqual(provider.related(["no_such_tag_xyz"]), [])
 
     def test_related_returns_danbooru_tag_fields(self) -> None:
-        provider = FileDanbooruTagProvider(self.tmp_dir, show_nsfw=True)
+        provider = self._provider(show_nsfw=True)
         results = provider.related(["1girl"])
         white = next(r for r in results if r.tag == "white_hair")
         self.assertEqual(white.cn_name, "白发")

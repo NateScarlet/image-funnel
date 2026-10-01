@@ -11,6 +11,9 @@
 
 运行时 FileDanbooruTagProvider 只加载编译产物，不再读取源文件；
 源文件识别（含变体文件名/重命名）与下载提示均在编译路径。
+
+标签向量产物由语义层（见 danbooru_embedding）消费，本模块只负责编排
+「先算完向量、再落盘」以保证嵌入接口不可用时不留半成品。
 """
 
 from __future__ import annotations
@@ -34,6 +37,12 @@ from typing import (
     Set,
     Tuple,
     cast,
+)
+
+from .danbooru_embedding import (
+    COMPILED_EMBEDDINGS_FILENAME,
+    TagEmbeddingSource,
+    write_compiled_embeddings,
 )
 
 # #region 编译产物文件名与格式
@@ -358,14 +367,26 @@ def write_compiled_cooc(
         f.write(counts.tobytes())
 
 
+@dataclass(frozen=True)
+class CompiledDatasetPaths:
+    """编译产物路径（语义层向量产物可选，故与 tags/cooc 一并显式列出）。"""
+
+    tags: Path
+    cooc: Path
+    embeddings: Path
+
+
 def compile_dataset(
-    source_dir: str | Path, output_dir: str | Path
-) -> Tuple[Path, Path]:
+    source_dir: str | Path,
+    output_dir: str | Path,
+    embedding_source: TagEmbeddingSource,
+) -> CompiledDatasetPaths:
     """将源数据目录编译为运行时产物写入 output_dir；缺源时抛出含下载指引的错误。
 
     source_dir：外部项目源数据（tags CSV + 共现 parquet）所在目录。
     output_dir：补全读取的编译产物目录（通常为 default_compile_data_dir()）。
-    返回 (tags 产物路径, cooc 产物路径)。
+    embedding_source：标签向量来源；嵌入接口不可用时直接抛出，
+    此时磁盘上尚未写入任何产物，不留半成品。
     """
     root = Path(source_dir)
     if not root.is_dir():
@@ -389,14 +410,27 @@ def compile_dataset(
         raise ValueError(f"tags 源无有效数据行: {tags_src}")
     pairs = read_source_cooc(cooc_src)
     offsets, neighbors, counts = build_cooc_arrays([r.tag for r in rows], pairs)
+    # 向量先算完：嵌入接口不可用时在此抛出，磁盘上不留半成品
+    matrices = embedding_source.build([(r.tag, r.cn_name, r.wiki) for r in rows])
 
     out_root = Path(output_dir)
     out_root.mkdir(parents=True, exist_ok=True)
     tags_out = out_root / COMPILED_TAGS_FILENAME
     cooc_out = out_root / COMPILED_COOC_FILENAME
+    embeddings_out = out_root / COMPILED_EMBEDDINGS_FILENAME
+    # 向量产物先落盘：它是唯一被运行时 mmap 占用的文件，先写可在被占用时于
+    # tags/cooc 被改动前失败，避免留下「新 tags + 旧向量」的行序错位产物
+    try:
+        write_compiled_embeddings(embeddings_out, matrices)
+    except PermissionError as e:
+        raise PermissionError(
+            f"标签向量产物被占用，无法覆盖: {embeddings_out}\n"
+            "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可覆盖）；"
+            "请先退出 image-funnel 后重新编译。"
+        ) from e
     write_compiled_tags(tags_out, rows)
     write_compiled_cooc(cooc_out, len(rows), offsets, neighbors, counts)
-    return tags_out, cooc_out
+    return CompiledDatasetPaths(tags=tags_out, cooc=cooc_out, embeddings=embeddings_out)
 
 
 # #endregion

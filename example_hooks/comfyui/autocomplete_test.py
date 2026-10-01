@@ -3,6 +3,7 @@ import unittest
 import os
 import json
 import argparse
+import shutil
 import tempfile
 import requests
 import sqlite3
@@ -26,10 +27,12 @@ from .autocomplete import (
     autocomplete,
     build_providers,
     build_request_from_params,
+    build_semantic_searcher,
     quote_if_needed,
 )
 from .__main__ import get_parser
-from .danbooru import DanbooruTag
+from .danbooru import DanbooruTag, SemanticLayerUnavailable
+from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME
 from .model_format import ModelFormatConfig
 
 
@@ -716,6 +719,32 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         with self.assertRaises(KeyError):
             list(provider.provide(context))
 
+    def test_autocomplete_danbooru_semantic_unavailable_yields_error_item(
+        self,
+    ) -> None:
+        """语义层降级提示项渲染为 ⚠ 错误建议项，字面标签建议仍照常输出。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("1girl", "女孩", "A girl.", "General"),
+            SemanticLayerUnavailable(reason="嵌入接口不可用: 超时"),
+        ]
+
+        context = self._make_context(
+            target_command="add",
+            query="girl",
+            prev_word="",
+            cwords=["/add"],
+            parsed_args=self._make_parsed_args(command="add"),
+        )
+        provider = DanbooruProvider(mock_provider, self._make_history())
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["1girl", ""])
+        self.assertEqual(suggestions[-1].type, "error")
+        self.assertIn("语义搜索不可用", suggestions[-1].displayText)
+        self.assertEqual(suggestions[-1].description, "嵌入接口不可用: 超时")
+
     def test_autocomplete_danbooru_related_upstream_error_yields_error_item(
         self,
     ) -> None:
@@ -1125,6 +1154,135 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                     ):
                         pass
                 self.assertIn("compile_danbooru_data.py", str(ctx.exception))
+
+    def _write_single_tag_fixture(self, data_dir: str) -> None:
+        from .danbooru_test import write_file_fixture
+
+        write_file_fixture(
+            data_dir,
+            [
+                {
+                    "name": "1girl",
+                    "cn_name": "女孩",
+                    "wiki": "A girl.",
+                    "post_count": "100",
+                    "category": "0",
+                    "nsfw": "0",
+                }
+            ],
+            [],
+        )
+
+    def test_build_providers_injects_semantic_layer_when_artifacts_exist(
+        self,
+    ) -> None:
+        """配置端点且向量产物存在时，本地 provider 注入向量语义层。"""
+        from .danbooru import FileDanbooruTagProvider
+        from .danbooru_embedding import VectorSemanticTagSearcher
+
+        # 语义层常驻 mmap 住向量产物（Windows 下不可删除），故用 mkdtemp + 忽略错误清理
+        data_dir = tempfile.mkdtemp()
+        try:
+            self._write_single_tag_fixture(data_dir)
+            with patch("comfyui.autocomplete.SQLiteContext"):
+                with build_providers(
+                    "root",
+                    "dir",
+                    "",
+                    False,
+                    "add",
+                    data_dir,
+                    "http://127.0.0.1:1#model=stub",
+                ) as providers:
+                    danbooru = next(
+                        p for p in providers if type(p).__name__ == "DanbooruProvider"
+                    )
+                    provider = cast(
+                        FileDanbooruTagProvider, cast(Any, danbooru).provider
+                    )
+                    self.assertIsInstance(provider.semantic, VectorSemanticTagSearcher)
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_build_providers_semantic_inactive_without_artifacts(self) -> None:
+        """配置端点但缺向量产物时注入空语义层，补全退回纯字面行为。"""
+        from .danbooru import FileDanbooruTagProvider
+        from .danbooru_embedding import NullSemanticTagSearcher
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            self._write_single_tag_fixture(data_dir)
+            os.remove(os.path.join(data_dir, COMPILED_EMBEDDINGS_FILENAME))
+            with patch("comfyui.autocomplete.SQLiteContext"):
+                with build_providers(
+                    "root",
+                    "dir",
+                    "",
+                    False,
+                    "add",
+                    data_dir,
+                    "http://127.0.0.1:1#model=stub",
+                ) as providers:
+                    danbooru = next(
+                        p for p in providers if type(p).__name__ == "DanbooruProvider"
+                    )
+                    provider = cast(
+                        FileDanbooruTagProvider, cast(Any, danbooru).provider
+                    )
+                    self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
+                    self.assertEqual(
+                        [r.tag for r in provider.search("1girl")], ["1girl"]
+                    )
+
+    def test_build_providers_semantic_inactive_without_endpoint_url(self) -> None:
+        """未配置端点时即便向量产物存在也不启用语义层。"""
+        from .danbooru import FileDanbooruTagProvider
+        from .danbooru_embedding import NullSemanticTagSearcher
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            self._write_single_tag_fixture(data_dir)
+            with patch("comfyui.autocomplete.SQLiteContext"):
+                with build_providers(
+                    "root", "dir", "", False, "add", data_dir, ""
+                ) as providers:
+                    danbooru = next(
+                        p for p in providers if type(p).__name__ == "DanbooruProvider"
+                    )
+                    provider = cast(
+                        FileDanbooruTagProvider, cast(Any, danbooru).provider
+                    )
+                    self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
+
+    def test_build_semantic_searcher_activation_matrix(self) -> None:
+        """激活双条件：向量产物存在 且 端点 URL 非空，缺一即传空实现。"""
+        from .danbooru_embedding import (
+            NullSemanticTagSearcher,
+            VectorSemanticTagSearcher,
+        )
+
+        data_dir = tempfile.mkdtemp()
+        try:
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, ""), NullSemanticTagSearcher
+            )
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                NullSemanticTagSearcher,
+            )
+            self._write_single_tag_fixture(data_dir)
+            # 语义层常驻 mmap 住向量产物（Windows 下不可删除），忽略清理错误
+            self.assertIsInstance(
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                VectorSemanticTagSearcher,
+            )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_build_semantic_searcher_rejects_malformed_endpoint_url(self) -> None:
+        """端点 URL 非法属配置错误：入口直接抛出，不静默退回纯字面。"""
+        with tempfile.TemporaryDirectory() as data_dir:
+            self._write_single_tag_fixture(data_dir)
+            with self.assertRaises(ValueError):
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#timeoutMs=nope")
 
     def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
         """URL 与数据目录均为空时不注册 DanbooruProvider。"""
