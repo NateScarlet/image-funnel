@@ -52,12 +52,30 @@ _EMBEDDINGS_PATH = "/v1/embeddings"
 
 @dataclass(frozen=True)
 class EmbeddingEndpoint:
-    """解析后的嵌入服务端点（apiKey 为空表示不发送 Authorization 头）。"""
+    """解析后的嵌入服务端点（apiKey 为空表示不发送 Authorization 头）。
 
-    url: str
+    base 保留用户写的基址原样（不含 /v1/embeddings），以便按别的 timeoutMs
+    还原出可粘贴的端点写法：编译与补全用同一个服务，但超时预算不同。
+    """
+
+    base: str
     model: str
     api_key: str
     timeout: float
+
+    @property
+    def url(self) -> str:
+        """完整的 OpenAI 兼容 /v1/embeddings 请求地址。"""
+        if self.base.endswith(_EMBEDDINGS_PATH):
+            return self.base
+        if self.base.endswith("/v1"):
+            return self.base + _EMBEDDINGS_PATH[len("/v1") :]
+        return self.base + _EMBEDDINGS_PATH
+
+    def spec(self, timeout_ms: Optional[int] = None) -> str:
+        """还原成 `<base>#apiKey=<k>&model=<m>&timeoutMs=<ms>` 形式。"""
+        ms = int(self.timeout * 1000) if timeout_ms is None else timeout_ms
+        return f"{self.base}#apiKey={self.api_key}&model={self.model}&timeoutMs={ms}"
 
 
 def parse_embedding_endpoint(spec: str) -> EmbeddingEndpoint:
@@ -68,8 +86,9 @@ def parse_embedding_endpoint(spec: str) -> EmbeddingEndpoint:
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
         raise ValueError(
             f"嵌入服务 URL 含多余的成对引号: {raw!r}；"
-            '环境变量的值不要带引号（TOML 里写成 "..." 时引号是字符串定界符，'
-            "不会出现在取到的值中）"
+            f"{EMBEDDING_PROVIDER_URL_ENV} 的值不要带引号"
+            '（TOML 里写成 "..." 时引号是字符串定界符，不会进入值；'
+            "cmd 的 set VAR=... 也不应加引号）"
         )
     parts = urlsplit(raw)
     params = dict(parse_qsl(parts.fragment, keep_blank_values=True))
@@ -90,14 +109,8 @@ def parse_embedding_endpoint(spec: str) -> EmbeddingEndpoint:
 
     # 基址可省略 /v1 后缀（http://host 与 http://host/v1 等价），
     # 也可直接给到完整 /v1/embeddings；三种写法收敛到同一请求地址
-    if base.endswith(_EMBEDDINGS_PATH):
-        url = base
-    elif base.endswith("/v1"):
-        url = base + _EMBEDDINGS_PATH[len("/v1") :]
-    else:
-        url = base + _EMBEDDINGS_PATH
     return EmbeddingEndpoint(
-        url=url,
+        base=base,
         model=params.get("model", "").strip() or DEFAULT_EMBEDDING_MODEL,
         api_key=params.get("apiKey", ""),
         timeout=timeout_ms / 1000,
@@ -224,24 +237,44 @@ DEFAULT_COMPILE_PROVIDER_URL = (
 # #region 编译期用户提示（只由编译脚本打印）
 #
 # 嵌入向量服务是可选项：没配服务不应该连字面匹配都用不了，因此失败与成功
-# 两条路径都要明确告诉用户下一步该做什么。
+# 两条路径都要明确告诉用户下一步该做什么。提示只针对本次实际使用的端点，
+# 不假设任何默认端点可用。
 
-EMBEDDING_FAILURE_HINT = f"""\
+
+def embedding_failure_hint(endpoint: EmbeddingEndpoint) -> str:
+    """嵌入生成失败时的提示：点名本次失败的端点，并给出两条出路。"""
+    return f"""\
 两种处理方式，任选其一：
-  1) 配置嵌入向量服务后重新编译（推荐，可启用语义匹配）
-     - 设置环境变量 {EMBEDDING_PROVIDER_URL_ENV}=<base>#apiKey=<k>&model=<m>&timeoutMs=<ms>
-       （值不要带引号；本地 LM Studio 可直接用 {DEFAULT_COMPILE_PROVIDER_URL}）
-     - 或用 --embedding-provider-url 指定本次编译的端点，
+  1) 换一个可用的嵌入向量服务后重新编译（推荐，可启用语义匹配）
+     本次失败的端点: {endpoint.spec()}
+       请求地址: {endpoint.url}（model={endpoint.model}）
+     - 用 --embedding-provider-url 指定端点，
        --embedding-timeout-ms / --embedding-batch-size 调整批量与超时
+     - 或把 {EMBEDDING_PROVIDER_URL_ENV} 设为一个可用的端点后再编译
   2) 只要字面匹配：加 --no-embedding 跳过向量生成
      补全仍可按标签名、中文名、前缀、子串与笔误匹配工作，只是不做语义检索
 已中止编译，未写入任何产物。"""
 
-SEMANTIC_LAYER_ENABLE_HINT = f"""\
-提示：语义匹配还需要在钩子配置的 [env] 里设置 {EMBEDDING_PROVIDER_URL_ENV}
-  （值不要带引号；本地 LM Studio 可直接用 {DEFAULT_EMBEDDING_PROVIDER_URL}）
-  未设置时补全只使用字面匹配；本次已编译出标签向量，
-  之后设置该环境变量即可启用，无需重新编译。"""
+
+def semantic_layer_enable_hint(endpoint: EmbeddingEndpoint) -> str:
+    """编译成功后的提示：语义层还差环境变量，并给出可直接粘贴的取值。
+
+    timeoutMs 给交互式默认值而非照抄编译值：编译一次请求要发送上千条文本，
+    超时按批量调大；补全是单条输入查询，照抄会让接口卡住时拖住补全。
+    """
+    return f"""\
+提示：语义匹配还需要设置环境变量 {EMBEDDING_PROVIDER_URL_ENV}，本次编译用的端点可直接用:
+  {endpoint.spec(DEFAULT_EMBEDDING_TIMEOUT_MS)}
+  （timeoutMs 已按交互式单条查询取默认值 {DEFAULT_EMBEDDING_TIMEOUT_MS}，
+    编译用的 {int(endpoint.timeout * 1000)} 是批量预算，不适合直接照抄）
+两种设置位置都可以，取值内容相同:
+  · 钩子 TOML 的 [env] 段: {EMBEDDING_PROVIDER_URL_ENV} = "<上面的值>"
+    TOML 里引号是必需的字符串定界符，不会出现在环境变量的值中
+  · 启动 image-funnel 的 cmd/bat 脚本: set {EMBEDDING_PROVIDER_URL_ENV}=<上面的值>
+    不要加引号，cmd 的 set 会把引号留在值里
+未设置时补全只使用字面匹配；本次已编译出标签向量，
+之后设置该环境变量即可启用，无需重新编译。"""
+
 
 # #endregion
 

@@ -46,6 +46,7 @@ import os
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Optional
 
 # 作为脚本直接运行时补上 example_hooks 到 import 路径
 _HERE = Path(__file__).resolve().parent
@@ -66,15 +67,16 @@ from comfyui.danbooru_embedding import (  # noqa: E402
     DEFAULT_COMPILE_PROVIDER_URL,
     DEFAULT_COMPILE_TIMEOUT_MS,
     DEFAULT_EMBEDDING_BATCH_SIZE,
-    EMBEDDING_FAILURE_HINT,
     EMBEDDING_PROVIDER_URL_ENV,
-    SEMANTIC_LAYER_ENABLE_HINT,
+    EmbeddingEndpoint,
     EmbeddingError,
     NullTagEmbeddingSource,
     OpenAITagEmbeddingSource,
     OpenAIEmbeddingClient,
     TagEmbeddingSource,
+    embedding_failure_hint,
     parse_embedding_endpoint,
+    semantic_layer_enable_hint,
     staged_embeddings_path,
 )
 
@@ -150,6 +152,7 @@ def main() -> None:
     print(f"产物输出: {output_dir}")
 
     embedding_source: TagEmbeddingSource
+    endpoint: Optional[EmbeddingEndpoint] = None
     if args.no_embedding:
         print("标签向量: 跳过（--no-embedding）")
         # --no-embedding 只清正式产物；上次编译遗留的暂存向量属于用户成果，不动它
@@ -179,7 +182,8 @@ def main() -> None:
     except EmbeddingError as e:
         # 快速失败中止编译（不产出半成品），但要告诉用户下一步怎么走
         print(f"标签向量生成失败: {e}", file=sys.stderr)
-        print(EMBEDDING_FAILURE_HINT, file=sys.stderr)
+        assert endpoint is not None
+        print(embedding_failure_hint(endpoint), file=sys.stderr)
         sys.exit(1)
     except (PermissionError, FileExistsError) as e:
         # 产物被占用 / 遗留未接管产物：消息里已带恢复步骤（暂存文件在哪、怎么重命名），
@@ -197,7 +201,8 @@ def main() -> None:
             "补全将从该输出目录读取以启用本地 Danbooru 标签补全。"
         )
         # 编译产物齐备 ≠ 语义层已启用：还差补全侧的环境变量
-        print(SEMANTIC_LAYER_ENABLE_HINT)
+        assert endpoint is not None
+        print(semantic_layer_enable_hint(endpoint))
     else:
         print(
             f"产物文件名: {COMPILED_TAGS_FILENAME}, {COMPILED_COOC_FILENAME}；"

@@ -34,6 +34,7 @@ from .danbooru_embedding import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_EMBEDDING_PROVIDER_URL,
     DEFAULT_EMBEDDING_TIMEOUT_MS,
+    EMBEDDING_PROVIDER_URL_ENV,
     MIN_COSINE,
     EmbeddingClient,
     EmbeddingError,
@@ -42,8 +43,10 @@ from .danbooru_embedding import (
     TagEmbeddingMatrix,
     VectorSemanticTagSearcher,
     cached_semantic_searcher,
+    embedding_failure_hint,
     load_compiled_embeddings,
     parse_embedding_endpoint,
+    semantic_layer_enable_hint,
     write_compiled_embeddings,
 )
 
@@ -164,6 +167,80 @@ class TestParseEmbeddingEndpoint(unittest.TestCase):
         """只有成对引号才判定为多余；URL 里的单个引号仍按原样解析。"""
         endpoint = parse_embedding_endpoint('http://localhost:1234#model=bge"x')
         self.assertEqual(endpoint.model, 'bge"x')
+
+    def test_spec_round_trips_parsed_values(self) -> None:
+        endpoint = parse_embedding_endpoint(
+            "http://gw:8000#apiKey=abc&model=m1&timeoutMs=250"
+        )
+        self.assertEqual(
+            endpoint.spec(), "http://gw:8000#apiKey=abc&model=m1&timeoutMs=250"
+        )
+
+    def test_spec_can_override_timeout(self) -> None:
+        """编译的超时不能直接照抄到补全：spec 能按另一个超时还原同一端点。"""
+        endpoint = parse_embedding_endpoint(
+            "http://gw:8000#apiKey=abc&model=m1&timeoutMs=60000"
+        )
+        self.assertIn("timeoutMs=3000", endpoint.spec(DEFAULT_EMBEDDING_TIMEOUT_MS))
+        self.assertIn("model=m1", endpoint.spec(DEFAULT_EMBEDDING_TIMEOUT_MS))
+        self.assertIn("apiKey=abc", endpoint.spec(DEFAULT_EMBEDDING_TIMEOUT_MS))
+
+    def test_url_derived_from_base_for_each_spelling(self) -> None:
+        for spec in (
+            "http://host:1234#model=m",
+            "http://host:1234/v1#model=m",
+            "http://host:1234/v1/embeddings#model=m",
+        ):
+            self.assertEqual(
+                parse_embedding_endpoint(spec).url, "http://host:1234/v1/embeddings"
+            )
+
+
+class TestCompileHints(unittest.TestCase):
+    """编译期提示：只针对本次实际使用的端点，且两种设置位置的引号规则说清。"""
+
+    def setUp(self) -> None:
+        self.endpoint = parse_embedding_endpoint(
+            "http://gw.internal:8000#apiKey=k&model=bge-m3&timeoutMs=60000"
+        )
+
+    def test_failure_hint_names_the_endpoint_actually_used(self) -> None:
+        hint = embedding_failure_hint(self.endpoint)
+        self.assertIn(
+            "http://gw.internal:8000#apiKey=k&model=bge-m3&timeoutMs=60000", hint
+        )
+        self.assertIn("http://gw.internal:8000/v1/embeddings", hint)
+        self.assertIn(EMBEDDING_PROVIDER_URL_ENV, hint)
+        self.assertIn("--no-embedding", hint)
+        # 不得假设默认端点可用
+        self.assertNotIn(DEFAULT_EMBEDDING_PROVIDER_URL, hint)
+        self.assertNotIn("localhost", hint)
+
+    def test_enable_hint_recommends_interactive_timeout(self) -> None:
+        hint = semantic_layer_enable_hint(self.endpoint)
+        self.assertIn(EMBEDDING_PROVIDER_URL_ENV, hint)
+        # 给出可直接粘贴的交互式取值，而不是照抄编译用的批量超时
+        self.assertIn("timeoutMs=3000", hint)
+        self.assertIn(
+            "http://gw.internal:8000#apiKey=k&model=bge-m3&timeoutMs=3000", hint
+        )
+        self.assertNotIn("timeoutMs=60000", hint.splitlines()[1])
+        self.assertNotIn(DEFAULT_EMBEDDING_PROVIDER_URL, hint)
+
+    def test_enable_hint_explains_quoting_per_setting_style(self) -> None:
+        hint = semantic_layer_enable_hint(self.endpoint)
+        # TOML：引号必需且是定界符
+        self.assertIn("[env]", hint)
+        self.assertIn('= "<上面的值>"', hint)
+        # cmd/bat：不要引号
+        self.assertIn("set " + EMBEDDING_PROVIDER_URL_ENV + "=<上面的值>", hint)
+        self.assertIn("不要加引号", hint)
+
+    def test_hints_work_for_default_endpoint_too(self) -> None:
+        endpoint = parse_embedding_endpoint(DEFAULT_EMBEDDING_PROVIDER_URL)
+        self.assertIn(
+            DEFAULT_EMBEDDING_PROVIDER_URL, semantic_layer_enable_hint(endpoint)
+        )
 
 
 class TestOpenAIEmbeddingClient(unittest.TestCase):
