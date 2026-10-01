@@ -369,11 +369,11 @@ def write_compiled_cooc(
 
 @dataclass(frozen=True)
 class CompiledDatasetPaths:
-    """编译产物路径（语义层向量产物可选，故与 tags/cooc 一并显式列出）。"""
+    """编译产物路径；embeddings 为 None 表示本次编译未产出标签向量。"""
 
     tags: Path
     cooc: Path
-    embeddings: Path
+    embeddings: Optional[Path]
 
 
 def compile_dataset(
@@ -386,7 +386,8 @@ def compile_dataset(
     source_dir：外部项目源数据（tags CSV + 共现 parquet）所在目录。
     output_dir：补全读取的编译产物目录（通常为 default_compile_data_dir()）。
     embedding_source：标签向量来源；嵌入接口不可用时直接抛出，
-    此时磁盘上尚未写入任何产物，不留半成品。
+    此时磁盘上尚未写入任何产物，不留半成品。显式传入 NullTagEmbeddingSource
+    则只编译字面匹配产物，并移除已有的向量产物（避免旧向量与新标签表行序错位）。
     """
     root = Path(source_dir)
     if not root.is_dir():
@@ -418,19 +419,41 @@ def compile_dataset(
     tags_out = out_root / COMPILED_TAGS_FILENAME
     cooc_out = out_root / COMPILED_COOC_FILENAME
     embeddings_out = out_root / COMPILED_EMBEDDINGS_FILENAME
-    # 向量产物先落盘：它是唯一被运行时 mmap 占用的文件，先写可在被占用时于
+    # 向量产物最先落盘：它是唯一被运行时 mmap 占用的文件，先处理可在被占用时于
     # tags/cooc 被改动前失败，避免留下「新 tags + 旧向量」的行序错位产物
-    try:
-        write_compiled_embeddings(embeddings_out, matrices)
-    except PermissionError as e:
-        raise PermissionError(
-            f"标签向量产物被占用，无法覆盖: {embeddings_out}\n"
-            "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可覆盖）；"
-            "请先退出 image-funnel 后重新编译。"
-        ) from e
+    if matrices is None:
+        # 显式跳过向量：清掉旧向量，胜过留着与新标签表行序错位的它
+        _remove_stale_embeddings(embeddings_out)
+        written_embeddings: Optional[Path] = None
+    else:
+        try:
+            write_compiled_embeddings(embeddings_out, matrices)
+        except PermissionError as e:
+            raise PermissionError(
+                f"标签向量产物被占用，无法覆盖: {embeddings_out}\n"
+                "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可覆盖）；"
+                "请先退出 image-funnel 后重新编译。"
+            ) from e
+        written_embeddings = embeddings_out
     write_compiled_tags(tags_out, rows)
     write_compiled_cooc(cooc_out, len(rows), offsets, neighbors, counts)
-    return CompiledDatasetPaths(tags=tags_out, cooc=cooc_out, embeddings=embeddings_out)
+    return CompiledDatasetPaths(
+        tags=tags_out, cooc=cooc_out, embeddings=written_embeddings
+    )
+
+
+def _remove_stale_embeddings(path: Path) -> None:
+    """删除已存在的向量产物；被常驻进程占用时快速失败（与覆盖写同一约束）。"""
+    if not path.exists():
+        return
+    try:
+        path.unlink()
+    except PermissionError as e:
+        raise PermissionError(
+            f"标签向量产物被占用，无法删除: {path}\n"
+            "常驻补全进程会 mmap 住该文件（Windows 下打开中的文件不可删除）；"
+            "请先退出 image-funnel 后重新编译，或改用默认参数重新生成向量。"
+        ) from e
 
 
 # #endregion

@@ -24,7 +24,12 @@
   运行时 FileDanbooruTagProvider 只加载这三个文件。
 - 标签向量需调用用户提供的 OpenAI 兼容 /v1/embeddings 接口生成：
   端点由 --embedding-provider-url 或 HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL 指定
-  （缺省用本地 LM Studio 默认端点）；接口不可达时快速失败中止编译，不产出半成品。
+  （缺省用本地 LM Studio 默认端点）；接口不可达时快速失败中止编译，不产出半成品，
+  并提示「配置嵌入服务」或「--no-embedding 跳过向量」两条出路。
+- 没有嵌入向量服务也能编译：用 --no-embedding 只产出字面匹配所需的
+  tags.bin 与 cooc.bin，并移除已有的向量产物（避免旧向量与新标签表行序错位）。
+- 编译成功不代表语义层已启用：还需要在钩子配置里设置
+  HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL，脚本成功后会提示这一点。
 
 编译完成后，补全默认数据目录即可启用本地 Danbooru 标签补全
 （见 example_hooks/comfyui_add.toml）。
@@ -55,20 +60,18 @@ from comfyui.danbooru_data import (  # noqa: E402
     find_tags_source,
 )
 from comfyui.danbooru_embedding import (  # noqa: E402
+    DEFAULT_COMPILE_PROVIDER_URL,
     DEFAULT_COMPILE_TIMEOUT_MS,
     DEFAULT_EMBEDDING_BATCH_SIZE,
-    DEFAULT_EMBEDDING_MODEL,
+    EMBEDDING_FAILURE_HINT,
     EMBEDDING_PROVIDER_URL_ENV,
+    SEMANTIC_LAYER_ENABLE_HINT,
+    EmbeddingError,
+    NullTagEmbeddingSource,
     OpenAITagEmbeddingSource,
     OpenAIEmbeddingClient,
+    TagEmbeddingSource,
     parse_embedding_endpoint,
-)
-
-# 编译期批量生成向量耗时远长于交互式单条查询（一次请求 = batch_size 条），
-# 故脚本自带的默认端点带更长的 timeoutMs；URL 里显式指定的值一律优先
-DEFAULT_COMPILE_PROVIDER_URL = (
-    "http://localhost:1234#apiKey="
-    f"&model={DEFAULT_EMBEDDING_MODEL}&timeoutMs={DEFAULT_COMPILE_TIMEOUT_MS}"
 )
 
 
@@ -108,6 +111,12 @@ def main() -> None:
         f"（脚本自带默认端点为 {DEFAULT_COMPILE_TIMEOUT_MS}，"
         "因为批量生成远慢于交互式单条查询）",
     )
+    parser.add_argument(
+        "--no-embedding",
+        action="store_true",
+        help="不生成标签向量：只编译字面匹配所需的标签与共现产物，"
+        "并移除已有的向量产物（没有嵌入向量服务时用这个）",
+    )
     args = parser.parse_args()
     source_dir = Path(args.source_dir)
     output_dir = Path(default_compile_data_dir())
@@ -132,29 +141,52 @@ def main() -> None:
         print(SOURCE_DOWNLOAD_HINT, file=sys.stderr)
         sys.exit(1)
 
-    parsed = parse_embedding_endpoint(args.embedding_provider_url)
-    # 仅在显式指定时覆盖端点 URL 里的 timeoutMs
-    endpoint = (
-        replace(parsed, timeout=args.embedding_timeout_ms / 1000)
-        if args.embedding_timeout_ms is not None
-        else parsed
-    )
     print(f"tags 源: {tags_src}")
     print(f"共现源: {cooc_src}")
     print(f"产物输出: {output_dir}")
-    print(f"嵌入端点: {endpoint.url}（model={endpoint.model}）")
-    embedding_source = OpenAITagEmbeddingSource(
-        OpenAIEmbeddingClient(endpoint), batch_size=args.embedding_batch_size
-    )
-    compiled = compile_dataset(source_dir, output_dir, embedding_source)
+
+    embedding_source: TagEmbeddingSource
+    if args.no_embedding:
+        print("标签向量: 跳过（--no-embedding）")
+        embedding_source = NullTagEmbeddingSource()
+    else:
+        parsed = parse_embedding_endpoint(args.embedding_provider_url)
+        # 仅在显式指定时覆盖端点 URL 里的 timeoutMs
+        endpoint = (
+            replace(parsed, timeout=args.embedding_timeout_ms / 1000)
+            if args.embedding_timeout_ms is not None
+            else parsed
+        )
+        print(f"嵌入端点: {endpoint.url}（model={endpoint.model}）")
+        embedding_source = OpenAITagEmbeddingSource(
+            OpenAIEmbeddingClient(endpoint), batch_size=args.embedding_batch_size
+        )
+
+    try:
+        compiled = compile_dataset(source_dir, output_dir, embedding_source)
+    except EmbeddingError as e:
+        # 快速失败中止编译（不产出半成品），但要告诉用户下一步怎么走
+        print(f"标签向量生成失败: {e}", file=sys.stderr)
+        print(EMBEDDING_FAILURE_HINT, file=sys.stderr)
+        sys.exit(1)
+
     print(f"编译完成: {compiled.tags}")
     print(f"编译完成: {compiled.cooc}")
-    print(f"编译完成: {compiled.embeddings}")
-    print(
-        f"产物文件名: {COMPILED_TAGS_FILENAME}, {COMPILED_COOC_FILENAME}, "
-        f"{COMPILED_EMBEDDINGS_FILENAME}；"
-        "补全将从该输出目录读取以启用本地 Danbooru 标签补全。"
-    )
+    if compiled.embeddings is not None:
+        print(f"编译完成: {compiled.embeddings}")
+        print(
+            f"产物文件名: {COMPILED_TAGS_FILENAME}, {COMPILED_COOC_FILENAME}, "
+            f"{COMPILED_EMBEDDINGS_FILENAME}；"
+            "补全将从该输出目录读取以启用本地 Danbooru 标签补全。"
+        )
+        # 编译产物齐备 ≠ 语义层已启用：还差补全侧的环境变量
+        print(SEMANTIC_LAYER_ENABLE_HINT)
+    else:
+        print(
+            f"产物文件名: {COMPILED_TAGS_FILENAME}, {COMPILED_COOC_FILENAME}；"
+            "补全将从该输出目录读取以启用本地 Danbooru 标签补全"
+            "（仅字面匹配：按标签名/中文名/前缀/子串/笔误匹配，不做语义检索）。"
+        )
 
 
 if __name__ == "__main__":

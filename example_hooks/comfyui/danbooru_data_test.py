@@ -12,7 +12,7 @@ import unittest
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Generator, List, Sequence, Tuple, cast
+from typing import Any, Generator, List, Optional, Sequence, Tuple, cast
 from unittest.mock import patch
 
 from .danbooru_data import (
@@ -30,7 +30,13 @@ from .danbooru_data import (
     resolve_danbooru_data_dir,
     resolve_image_funnel_data_dir,
 )
-from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME, EmbeddingError
+from .danbooru_embedding import (
+    COMPILED_EMBEDDINGS_FILENAME,
+    EMBEDDING_PROVIDER_URL_ENV,
+    EmbeddingError,
+    NullTagEmbeddingSource,
+    TagEmbeddingMatrix,
+)
 from .danbooru_test import FakeTagEmbeddingSource, write_file_fixture
 
 
@@ -148,7 +154,9 @@ class TestCompileDataset(unittest.TestCase):
         (source / COMPILED_EMBEDDINGS_FILENAME).unlink()
 
         class FailingEmbeddingSource:
-            def build(self, views: Sequence[Tuple[str, str, str]]) -> Any:
+            def build(
+                self, views: Sequence[Tuple[str, str, str]]
+            ) -> Optional[TagEmbeddingMatrix]:
                 raise EmbeddingError("嵌入接口不可达")
 
         with self.assertRaises(EmbeddingError):
@@ -156,6 +164,65 @@ class TestCompileDataset(unittest.TestCase):
         self.assertFalse((output / COMPILED_TAGS_FILENAME).exists())
         self.assertFalse((output / COMPILED_COOC_FILENAME).exists())
         self.assertFalse((output / COMPILED_EMBEDDINGS_FILENAME).exists())
+
+    def test_null_embedding_source_compiles_literal_only(self) -> None:
+        """--no-embedding：只编译字面匹配产物，且不产出向量（仍满足 has_compiled_dataset）。"""
+        source = self.tmp_dir / "source"
+        source.mkdir()
+        write_file_fixture(
+            str(source),
+            [
+                {
+                    "name": "1girl",
+                    "cn_name": "一个女孩",
+                    "wiki": "A girl.",
+                    "post_count": "10",
+                    "category": "0",
+                    "nsfw": "0",
+                }
+            ],
+            [],
+        )
+        # 只留源数据，清掉夹具顺手编译出的产物
+        for name in (
+            COMPILED_TAGS_FILENAME,
+            COMPILED_COOC_FILENAME,
+            COMPILED_EMBEDDINGS_FILENAME,
+        ):
+            (source / name).unlink()
+
+        output = self.tmp_dir / "out"
+        compiled = compile_dataset(source, output, NullTagEmbeddingSource())
+        self.assertIsNone(compiled.embeddings)
+        self.assertTrue(compiled.tags.is_file())
+        self.assertTrue(compiled.cooc.is_file())
+        self.assertFalse((output / COMPILED_EMBEDDINGS_FILENAME).exists())
+        # 字面链路照常可用：补全入口据此启用本地 provider
+        self.assertTrue(has_compiled_dataset(output))
+
+    def test_null_embedding_source_removes_stale_vectors(self) -> None:
+        """显式跳过向量时清掉旧向量：留着会与新标签表行序错位，静默给出错误召回。"""
+        write_file_fixture(
+            str(self.tmp_dir),
+            [
+                {
+                    "name": "1girl",
+                    "cn_name": "一个女孩",
+                    "wiki": "A girl.",
+                    "post_count": "10",
+                    "category": "0",
+                    "nsfw": "0",
+                }
+            ],
+            [],
+        )
+        stale = self.tmp_dir / COMPILED_EMBEDDINGS_FILENAME
+        self.assertTrue(stale.is_file())
+
+        compiled = compile_dataset(self.tmp_dir, self.tmp_dir, NullTagEmbeddingSource())
+        self.assertIsNone(compiled.embeddings)
+        self.assertFalse(stale.exists())
+        self.assertTrue(has_compiled_dataset(self.tmp_dir))
 
     def test_source_and_output_are_separate(self) -> None:
         """源目录只放源数据；产物只写入 output_dir，不污染源目录。"""
@@ -184,6 +251,7 @@ class TestCompileDataset(unittest.TestCase):
         compiled = compile_dataset(source, output, FakeTagEmbeddingSource())
         self.assertTrue(compiled.tags.is_file())
         self.assertTrue(compiled.cooc.is_file())
+        assert compiled.embeddings is not None
         self.assertTrue(compiled.embeddings.is_file())
         self.assertTrue(has_compiled_dataset(output))
         # 源目录不写产物
@@ -469,7 +537,7 @@ class TestCompileScriptMain(unittest.TestCase):
             self.assertFalse((source_dir / COMPILED_TAGS_FILENAME).is_file())
 
     def test_unreachable_embedding_endpoint_fails_without_artifacts(self) -> None:
-        """嵌入端点不可达时快速失败中止编译，不产出半成品。"""
+        """嵌入端点不可达时快速失败中止编译，不产出半成品，并给出两条可选出路。"""
         with tempfile.TemporaryDirectory() as tmp:
             source_dir = Path(tmp) / "source"
             env = dict(os.environ)
@@ -488,9 +556,57 @@ class TestCompileScriptMain(unittest.TestCase):
                     env,
                 )
             self.assertNotEqual(proc.returncode, 0)
+            err = cast(str, proc.stderr) or ""
+            # 失败原因 + 两条出路（配置服务 / --no-embedding）
+            self.assertIn("标签向量生成失败", err)
+            self.assertIn(EMBEDDING_PROVIDER_URL_ENV, err)
+            self.assertIn("--no-embedding", err)
             out_dir = Path(image_funnel_root) / "danbooru"
             self.assertFalse((out_dir / COMPILED_TAGS_FILENAME).exists())
             self.assertFalse((out_dir / COMPILED_EMBEDDINGS_FILENAME).exists())
+
+    def test_no_embedding_compiles_literal_dataset_without_endpoint(self) -> None:
+        """--no-embedding：没有嵌入服务也能编译出字面匹配产物，且提示语义层仍需环境变量。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "source"
+            env = dict(os.environ)
+            image_funnel_root = str(Path(tmp) / "if-root")
+            env["IMAGE_FUNNEL_DATA_DIR"] = image_funnel_root
+            env.pop("DANBOORU_DATA_DIR", None)
+            # 端点必然不可达：--no-embedding 下不应被访问
+            env[EMBEDDING_PROVIDER_URL_ENV] = "http://127.0.0.1:1#model=stub"
+
+            with minimal_source_dir(source_dir):
+                proc = self._run([str(source_dir), "--no-embedding"], env)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out_dir = Path(image_funnel_root) / "danbooru"
+            self.assertTrue((out_dir / COMPILED_TAGS_FILENAME).is_file())
+            self.assertTrue((out_dir / COMPILED_COOC_FILENAME).is_file())
+            self.assertFalse((out_dir / COMPILED_EMBEDDINGS_FILENAME).exists())
+            # 字面链路可用
+            self.assertTrue(has_compiled_dataset(out_dir))
+            out = cast(str, proc.stdout) or ""
+            self.assertIn("--no-embedding", out)
+            self.assertIn("仅字面匹配", out)
+            self.assertNotIn(EMBEDDING_PROVIDER_URL_ENV, out)
+
+    def test_successful_compile_reports_semantic_layer_needs_env(self) -> None:
+        """编译成功 ≠ 语义层已启用：产物齐备后仍要提示设置环境变量。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "source"
+            env = dict(os.environ)
+            env["IMAGE_FUNNEL_DATA_DIR"] = str(Path(tmp) / "if-root")
+            env.pop("DANBOORU_DATA_DIR", None)
+
+            with minimal_source_dir(source_dir), stub_embedding_server() as url:
+                proc = self._run(
+                    [str(source_dir), "--embedding-provider-url", url], env
+                )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            out = cast(str, proc.stdout) or ""
+            self.assertIn(EMBEDDING_PROVIDER_URL_ENV, out)
+            self.assertIn("无需重新编译", out)
+            self.assertNotIn("--no-embedding", out)
 
 
 if __name__ == "__main__":

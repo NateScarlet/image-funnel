@@ -203,6 +203,35 @@ EMBEDDING_VIEWS = ("tag", "cn_name", "wiki")
 DEFAULT_EMBEDDING_BATCH_SIZE = 32
 # 编译期单批默认超时：批量生成一次请求要发送上千条文本，远慢于交互式单条查询
 DEFAULT_COMPILE_TIMEOUT_MS = 60000
+# 编译脚本自带的默认端点：与补全侧同一台服务，但超时按编译批量设定
+DEFAULT_COMPILE_PROVIDER_URL = (
+    f"http://localhost:1234#apiKey=&model={DEFAULT_EMBEDDING_MODEL}"
+    f"&timeoutMs={DEFAULT_COMPILE_TIMEOUT_MS}"
+)
+
+# #region 编译期用户提示（只由编译脚本打印）
+#
+# 嵌入向量服务是可选项：没配服务不应该连字面匹配都用不了，因此失败与成功
+# 两条路径都要明确告诉用户下一步该做什么。
+
+EMBEDDING_FAILURE_HINT = f"""\
+两种处理方式，任选其一：
+  1) 配置嵌入向量服务后重新编译（推荐，可启用语义匹配）
+     - 设置环境变量 {EMBEDDING_PROVIDER_URL_ENV}=<base>#apiKey=<k>&model=<m>&timeoutMs=<ms>
+       （值不要带引号；本地 LM Studio 可直接用 {DEFAULT_COMPILE_PROVIDER_URL}）
+     - 或用 --embedding-provider-url 指定本次编译的端点，
+       --embedding-timeout-ms / --embedding-batch-size 调整批量与超时
+  2) 只要字面匹配：加 --no-embedding 跳过向量生成
+     补全仍可按标签名、中文名、前缀、子串与笔误匹配工作，只是不做语义检索
+已中止编译，未写入任何产物。"""
+
+SEMANTIC_LAYER_ENABLE_HINT = f"""\
+提示：语义匹配还需要在钩子配置的 [env] 里设置 {EMBEDDING_PROVIDER_URL_ENV}
+  （值不要带引号；本地 LM Studio 可直接用 {DEFAULT_EMBEDDING_PROVIDER_URL}）
+  未设置时补全只使用字面匹配；本次已编译出标签向量，
+  之后设置该环境变量即可启用，无需重新编译。"""
+
+# #endregion
 
 # 零向量（如空文本的嵌入）归一化时的分母下界，避免除零产生 NaN 污染排序
 _MIN_VECTOR_NORM = 1e-12
@@ -293,9 +322,27 @@ def load_compiled_embeddings(path: Path) -> TagEmbeddingMatrix:
 class TagEmbeddingSource(Protocol):
     """标签向量来源：为三视图批量生成与标签表行序对齐的向量矩阵。"""
 
-    def build(self, views: Sequence[Tuple[str, str, str]]) -> TagEmbeddingMatrix:
-        """按 (tag, cn_name, wiki) 行序生成矩阵；失败一律抛出以中止编译。"""
+    def build(
+        self, views: Sequence[Tuple[str, str, str]]
+    ) -> Optional[TagEmbeddingMatrix]:
+        """按 (tag, cn_name, wiki) 行序生成矩阵。
+
+        失败一律抛出以中止编译；显式返回 None 表示本次编译不产出向量
+        （见 NullTagEmbeddingSource），不是「出错后降级」。
+        """
         ...
+
+
+class NullTagEmbeddingSource:
+    """显式空实现：本次编译不产出标签向量（命令行 --no-embedding）。
+
+    只编译字面匹配所需的标签与共现产物；向量层因此保持未激活。
+    """
+
+    def build(
+        self, views: Sequence[Tuple[str, str, str]]
+    ) -> Optional[TagEmbeddingMatrix]:
+        return None
 
 
 class OpenAITagEmbeddingSource:
