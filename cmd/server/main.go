@@ -116,6 +116,7 @@ func main() {
 
 	imageFactory := image.NewFactory(metadataRepo, imageProcessor, cfg.AbsRootDir)
 	dirRepo := localfs.NewDirectoryRepository(cfg.AbsRootDir)
+	dirRenamer := localfs.NewDirectoryRenamer(cfg.AbsRootDir)
 
 	var imageRepo image.Repository = localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
@@ -160,7 +161,7 @@ func main() {
 
 	rawFileWatcher := localfs.NewWatcher(logger)
 	fileWatcher := inmem.NewDebouncedWatcher(rawFileWatcher, 300*time.Millisecond)
-	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, fileChangedTopic, cfg.AbsRootDir, dirRepo, logger)
+	dirSvc, dirServiceCleanup := domdirectory.NewService(fileWatcher, fileChangedTopic, cfg.AbsRootDir, dirRepo, dirRenamer, logger)
 	defer dirServiceCleanup()
 
 	notifFilterBuilder := domnotification.NewFilterBuilder()

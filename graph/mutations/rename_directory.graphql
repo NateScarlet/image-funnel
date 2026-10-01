@@ -1,0 +1,26 @@
+"""
+将当前浏览的目录重命名为同一父目录下的新名称。
+
+目录 ID 由相对路径派生，重命名后 ID 会随之变化，因此响应返回重命名后的目录供前端跳转。
+根目录不可重命名；重命名不会迁移绑定在该目录上的活动筛选会话。
+"""
+input RenameDirectoryInput {
+  "待重命名的目录ID"
+  directoryId: ID!
+  """
+  新的目录名。只能是单个目录名，不能包含路径分隔符，也不能是 `.` 或 `..`；
+  与同级已有条目重名时重命名失败并保持原状。
+  """
+  newName: String!
+  clientMutationId: String
+}
+
+type RenameDirectoryPayload {
+  "重命名后的目录，其 ID 与重命名前不同"
+  directory: Directory!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  renameDirectory(input: RenameDirectoryInput!): RenameDirectoryPayload!
+}

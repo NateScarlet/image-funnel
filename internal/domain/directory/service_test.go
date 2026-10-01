@@ -67,7 +67,7 @@ func TestService_SuggestDirectories_IgnoreNotExist(t *testing.T) {
 	}
 	watcher := &mockWatcher{}
 	ebus := &mockFileChangedPub{}
-	s, cleanup := NewService(watcher, ebus, "C:/mock_root", repo, logger)
+	s, cleanup := NewService(watcher, ebus, "C:/mock_root", repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	// 尽管 Find 报错 fs.ErrNotExist，SuggestDirectories 应当吞掉此错误并返回空列表

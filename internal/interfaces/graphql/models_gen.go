@@ -329,6 +329,25 @@ type RejectPairingRequestPayload struct {
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
 }
 
+// 将当前浏览的目录重命名为同一父目录下的新名称。
+//
+// 目录 ID 由相对路径派生，重命名后 ID 会随之变化，因此响应返回重命名后的目录供前端跳转。
+// 根目录不可重命名；重命名不会迁移绑定在该目录上的活动筛选会话。
+type RenameDirectoryInput struct {
+	// 待重命名的目录ID
+	DirectoryID scalar.ID `json:"directoryId"`
+	// 新的目录名。只能是单个目录名，不能包含路径分隔符，也不能是 `.` 或 `..`；
+	// 与同级已有条目重名时重命名失败并保持原状。
+	NewName          string  `json:"newName"`
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+type RenameDirectoryPayload struct {
+	// 重命名后的目录，其 ID 与重命名前不同
+	Directory        *shared.DirectoryDTO `json:"directory"`
+	ClientMutationID *string              `json:"clientMutationId,omitempty"`
+}
+
 // 发送通知的输入参数
 type SendNotificationInput struct {
 	// 客户端唯一标签（UUID 或 <UUID>.<后缀>），同标签将替换已有通知。未指定时由服务端自动生成

@@ -29,30 +29,43 @@
     </RouterLink>
     <span class="text-primary-600 select-none mx-0.5">/</span>
   </template>
-  <!-- 子目录展示最后一级目录名 -->
-  <RouterLink
-    v-else
-    :to="{
-      path: '/browse',
-      query: myDirectory ? { dir: myDirectory.id } : {},
-    }"
-    class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0 select-all no-underline"
-    :class="[
-      isCurrent
-        ? 'text-white font-semibold pointer-events-none'
-        : 'text-primary-300 hover:text-white hover:bg-white/10 cursor-pointer',
-    ]"
-    :title="myDirectory?.relPath || '加载中…'"
-  >
-    {{ displayName }}
-  </RouterLink>
+  <!-- 子目录展示最后一级目录名，当前目录额外提供重命名入口（根目录不可重命名） -->
+  <span v-else class="flex items-center gap-1 min-w-0">
+    <RouterLink
+      :to="{
+        path: '/browse',
+        query: myDirectory ? { dir: myDirectory.id } : {},
+      }"
+      class="px-1 py-0.5 rounded transition-all flex items-center gap-1 shrink-0 select-all no-underline"
+      :class="[
+        isCurrent
+          ? 'text-white font-semibold pointer-events-none'
+          : 'text-primary-300 hover:text-white hover:bg-white/10 cursor-pointer',
+      ]"
+      :title="myDirectory?.relPath || '加载中…'"
+    >
+      {{ displayName }}
+    </RouterLink>
+    <button
+      v-if="canRename"
+      type="button"
+      class="p-1 rounded text-primary-400 hover:text-white hover:bg-white/10 transition-all flex items-center shrink-0 cursor-pointer"
+      title="重命名当前目录"
+      @click="emit('rename')"
+    >
+      <svg class="w-4 h-4" viewBox="0 0 24 24">
+        <path :d="mdiPencil" fill="currentColor" />
+      </svg>
+    </button>
+  </span>
   <!-- #endregion -->
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { mdiFolderOpen } from "@mdi/js";
+import { mdiFolderOpen, mdiPencil } from "@mdi/js";
 import useDirectories from "@/composables/useDirectories";
+import basename from "@/utils/basename";
 
 // #region 组件属性与事件定义
 const props = defineProps<{
@@ -60,6 +73,8 @@ const props = defineProps<{
   isCurrent?: boolean;
 }>();
 
+// 仅当前（末级）节点会向外抛出重命名意图，父级节点静默忽略
+const emit = defineEmits<(e: "rename") => void>();
 // #endregion
 
 // #region 目录数据查询与解析
@@ -72,6 +87,12 @@ const { currentDirectory: myDirectory } = useDirectories(() => ({
 // 是否是相对路径根目录
 const isRoot = computed(() => {
   return myDirectory.value?.root ?? false;
+});
+
+// 是否可以重命名：仅当前（末级）节点可重命名，根目录不可重命名。
+// 依赖 myDirectory 已就绪，避免数据加载前把根目录误判为可重命名而闪现铅笔图标。
+const canRename = computed(() => {
+  return !!props.isCurrent && myDirectory.value !== undefined && !myDirectory.value.root;
 });
 
 // 父级目录 ID，用于上级面包屑递归
@@ -92,13 +113,7 @@ const displayName = computed(() => {
   if (!myDirectory.value) {
     return "…";
   }
-  return getDirName(myDirectory.value.relPath);
+  return basename(myDirectory.value.relPath);
 });
-
-// 从相对路径中提取最后一级目录的名称
-function getDirName(relPath: string): string {
-  if (!relPath) return "";
-  return relPath.split(/[/\\]/).pop() || "";
-}
 // #endregion
 </script>

@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/directory"
 	"main/internal/pubsub"
 	"main/internal/shared"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -73,6 +74,12 @@ func (m *mockRepository) WriteState(ctx context.Context, relPath string, state *
 	return nil
 }
 
+type mockRenamer struct{}
+
+func (m *mockRenamer) Rename(ctx context.Context, relPath string, newName string) (string, error) {
+	return filepath.ToSlash(filepath.Join(filepath.Dir(relPath), newName)), nil
+}
+
 func TestDirectoryChanged_NoThrottle(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -82,7 +89,7 @@ func TestDirectoryChanged_NoThrottle(t *testing.T) {
 	watcher := &mockWatcher{}
 	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)
@@ -126,7 +133,7 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 	watcher := &mockWatcher{}
 	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)

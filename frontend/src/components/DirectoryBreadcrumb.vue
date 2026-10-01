@@ -1,6 +1,10 @@
 <template>
   <div class="flex flex-wrap items-center gap-1">
-    <DirectoryBreadcrumbContent :directory-id="directoryId" :is-current="isCurrent" />
+    <DirectoryBreadcrumbContent
+      :directory-id="directoryId"
+      :is-current="isCurrent"
+      @rename="emit('rename')"
+    />
   </div>
 </template>
 
@@ -12,5 +16,8 @@ defineProps<{
   directoryId: string;
   isCurrent?: boolean;
 }>();
+
+// 透传末级目录的重命名意图，递归渲染的父级节点不会触发该事件
+const emit = defineEmits<(e: "rename") => void>();
 // #endregion
 </script>

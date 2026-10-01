@@ -43,6 +43,7 @@
               v-if="currentDirectoryId"
               :directory-id="currentDirectoryId"
               :is-current="true"
+              @rename="renameDirectoryDialog.open"
             />
           </div>
 
@@ -240,6 +241,7 @@
             v-if="currentDirectoryId"
             :directory-id="currentDirectoryId"
             :is-current="true"
+            @rename="renameDirectoryDialog.open"
           />
         </div>
       </div>
@@ -282,11 +284,23 @@
         </button>
       </div>
     </moreMenuDialog.component>
+
+    <renameDirectoryDialog.component
+      v-if="currentDirectory && !currentDirectory.root"
+      container-class="sm:max-w-md p-6"
+    >
+      <RenameDirectoryForm
+        ref="renameDirectoryFormRef"
+        :directory="currentDirectory"
+        @close="renameDirectoryDialog.close()"
+        @renamed="handleDirectoryRenamed"
+      />
+    </renameDirectoryDialog.component>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, nextTick, useTemplateRef } from "vue";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
@@ -301,7 +315,7 @@ import {
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
 import { formatDate } from "@/utils/date";
-import { MetaDocument } from "../graphql/generated";
+import { MetaDocument, type DirectoryFragment } from "../graphql/generated";
 import useDirectories, {
   maxUnratedCount,
   showLargeUnrated,
@@ -312,6 +326,7 @@ import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
 import NoteList from "../components/NoteList.vue";
+import RenameDirectoryForm from "../components/RenameDirectoryForm.vue";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "../components/DeviceManagerButton.vue";
 import NotificationCenterButton from "../components/NotificationCenterButton.vue";
@@ -362,6 +377,24 @@ function navigateToDir(id: string) {
     path: "/browse",
     query: id ? { dir: id } : {},
   });
+}
+// #endregion
+
+// #region 目录重命名
+const renameDirectoryFormRef =
+  useTemplateRef<InstanceType<typeof RenameDirectoryForm>>("renameDirectoryFormRef");
+
+const renameDirectoryDialog = useModalDialog({
+  onDidOpen() {
+    // 弹窗内容此时尚未挂载，等一次渲染后再回填输入框
+    nextTick(() => renameDirectoryFormRef.value?.reset());
+  },
+});
+
+// 目录 ID 由相对路径派生，重命名后 ID 会变化，因此跳转到新 ID 保持在原处浏览
+function handleDirectoryRenamed(directory: DirectoryFragment) {
+  renameDirectoryDialog.close();
+  navigateToDir(directory.id);
 }
 // #endregion
 

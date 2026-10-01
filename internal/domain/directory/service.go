@@ -23,16 +23,18 @@ type Service struct {
 	rootDir        string
 	logger         *zap.Logger
 	repo           Repository
+	renamer        Renamer
 }
 
 // NewService 创建目录服务
-func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], rootDir string, repo Repository, logger *zap.Logger) (*Service, func()) {
+func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], rootDir string, repo Repository, renamer Renamer, logger *zap.Logger) (*Service, func()) {
 	s := &Service{
 		watcher:        watcher,
 		fileChangedPub: fileChangedPub,
 		rootDir:        rootDir,
 		logger:         logger,
 		repo:           repo,
+		renamer:        renamer,
 	}
 
 	// 启动后台监听
@@ -93,6 +95,41 @@ func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, e
 		return nil, err
 	}
 	return s.repo.Get(ctx, relPath)
+}
+
+// Rename 重命名同级目录，返回重命名后的目录实体。
+// 根目录不可重命名；新名称为纯目录名，不接受路径。
+func (s *Service) Rename(ctx context.Context, id scalar.ID, newName string) (*Directory, error) {
+	dir, err := s.GetDirectory(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if dir.IsRoot() {
+		return nil, apperror.New("ROOT_DIRECTORY_NOT_RENAMEABLE", "root directory cannot be renamed", "根目录不能重命名")
+	}
+	if err := validateDirectoryName(newName); err != nil {
+		return nil, err
+	}
+
+	newRelPath, err := s.renamer.Rename(ctx, dir.RelPath(), newName)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.Get(ctx, newRelPath)
+}
+
+// validateDirectoryName 校验新目录名只含目录名本身，不允许路径语义
+func validateDirectoryName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return apperror.New("DIRECTORY_NAME_INVALID", "directory name must not be empty", "目录名不能为空")
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return apperror.New("DIRECTORY_NAME_INVALID", "directory name must not contain path separators", "目录名不能包含路径分隔符")
+	}
+	if name == "." || name == ".." {
+		return apperror.New("DIRECTORY_NAME_INVALID", "directory name must not be a relative path reference", "目录名不能为 . 或 ..")
+	}
+	return nil
 }
 
 // ResolvePathInput 解析并校验 PathInput，返回相对于根目录的规范化相对路径。

@@ -19,7 +19,7 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	watcher := &mockWatcher{}
 	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)

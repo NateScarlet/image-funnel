@@ -1,0 +1,12 @@
+fragment RenameDirectoryResult on RenameDirectoryPayload {
+  directory {
+    ...Directory
+  }
+  clientMutationId
+}
+
+mutation RenameDirectory($input: RenameDirectoryInput!) {
+  renameDirectory(input: $input) {
+    ...RenameDirectoryResult
+  }
+}

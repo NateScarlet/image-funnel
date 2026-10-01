@@ -317,6 +317,7 @@ type ComplexityRoot struct {
 		MoveImages                 func(childComplexity int, input MoveImagesInput) int
 		RefreshToken               func(childComplexity int, input RefreshTokenInput) int
 		RejectPairingRequest       func(childComplexity int, input RejectPairingRequestInput) int
+		RenameDirectory            func(childComplexity int, input RenameDirectoryInput) int
 		SendNotification           func(childComplexity int, input SendNotificationInput) int
 		SetDirectoryState          func(childComplexity int, input SetDirectoryStateInput) int
 		TrashImages                func(childComplexity int, input TrashImagesInput) int
@@ -452,6 +453,11 @@ type ComplexityRoot struct {
 
 	RejectPairingRequestPayload struct {
 		ClientMutationID func(childComplexity int) int
+	}
+
+	RenameDirectoryPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Directory        func(childComplexity int) int
 	}
 
 	SendNotificationPayload struct {
@@ -629,6 +635,7 @@ type MutationResolver interface {
 	MoveImages(ctx context.Context, input MoveImagesInput) (*MoveImagesPayload, error)
 	RefreshToken(ctx context.Context, input RefreshTokenInput) (*RefreshTokenPayload, error)
 	RejectPairingRequest(ctx context.Context, input RejectPairingRequestInput) (*RejectPairingRequestPayload, error)
+	RenameDirectory(ctx context.Context, input RenameDirectoryInput) (*RenameDirectoryPayload, error)
 	SendNotification(ctx context.Context, input SendNotificationInput) (*SendNotificationPayload, error)
 	SetDirectoryState(ctx context.Context, input SetDirectoryStateInput) (*SetDirectoryStatePayload, error)
 	TrashImages(ctx context.Context, input TrashImagesInput) (*TrashImagesPayload, error)
@@ -1734,6 +1741,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RejectPairingRequest(childComplexity, args["input"].(RejectPairingRequestInput)), true
+	case "Mutation.renameDirectory":
+		if e.complexity.Mutation.RenameDirectory == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_renameDirectory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RenameDirectory(childComplexity, args["input"].(RenameDirectoryInput)), true
 	case "Mutation.sendNotification":
 		if e.complexity.Mutation.SendNotification == nil {
 			break
@@ -2351,6 +2369,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.RejectPairingRequestPayload.ClientMutationID(childComplexity), true
 
+	case "RenameDirectoryPayload.clientMutationId":
+		if e.complexity.RenameDirectoryPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.RenameDirectoryPayload.ClientMutationID(childComplexity), true
+	case "RenameDirectoryPayload.directory":
+		if e.complexity.RenameDirectoryPayload.Directory == nil {
+			break
+		}
+
+		return e.complexity.RenameDirectoryPayload.Directory(childComplexity), true
+
 	case "SendNotificationPayload.clientMutationId":
 		if e.complexity.SendNotificationPayload.ClientMutationID == nil {
 			break
@@ -2916,6 +2947,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputPathInput,
 		ec.unmarshalInputRefreshTokenInput,
 		ec.unmarshalInputRejectPairingRequestInput,
+		ec.unmarshalInputRenameDirectoryInput,
 		ec.unmarshalInputSendNotificationInput,
 		ec.unmarshalInputSetDirectoryStateInput,
 		ec.unmarshalInputTrashImagesInput,
@@ -4339,6 +4371,33 @@ input RejectPairingRequestInput {
   clientMutationId: String
 }
 `, BuiltIn: false},
+	{Name: "../../../graph/mutations/rename_directory.graphql", Input: `"""
+将当前浏览的目录重命名为同一父目录下的新名称。
+
+目录 ID 由相对路径派生，重命名后 ID 会随之变化，因此响应返回重命名后的目录供前端跳转。
+根目录不可重命名；重命名不会迁移绑定在该目录上的活动筛选会话。
+"""
+input RenameDirectoryInput {
+  "待重命名的目录ID"
+  directoryId: ID!
+  """
+  新的目录名。只能是单个目录名，不能包含路径分隔符，也不能是 ` + "`" + `.` + "`" + ` 或 ` + "`" + `..` + "`" + `；
+  与同级已有条目重名时重命名失败并保持原状。
+  """
+  newName: String!
+  clientMutationId: String
+}
+
+type RenameDirectoryPayload {
+  "重命名后的目录，其 ID 与重命名前不同"
+  directory: Directory!
+  clientMutationId: String
+}
+
+extend type Mutation {
+  renameDirectory(input: RenameDirectoryInput!): RenameDirectoryPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/send_notification.graphql", Input: `"发送通知的输入参数"
 input SendNotificationInput {
   "客户端唯一标签（UUID 或 <UUID>.<后缀>），同标签将替换已有通知。未指定时由服务端自动生成"
@@ -4845,6 +4904,17 @@ func (ec *executionContext) field_Mutation_rejectPairingRequest_args(ctx context
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRejectPairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRejectPairingRequestInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_renameDirectory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRenameDirectoryInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRenameDirectoryInput)
 	if err != nil {
 		return nil, err
 	}
@@ -10514,6 +10584,53 @@ func (ec *executionContext) fieldContext_Mutation_rejectPairingRequest(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_renameDirectory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_renameDirectory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RenameDirectory(ctx, fc.Args["input"].(RenameDirectoryInput))
+		},
+		nil,
+		ec.marshalNRenameDirectoryPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRenameDirectoryPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_renameDirectory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "directory":
+				return ec.fieldContext_RenameDirectoryPayload_directory(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_RenameDirectoryPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RenameDirectoryPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_renameDirectory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_sendNotification(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13767,6 +13884,90 @@ func (ec *executionContext) _RejectPairingRequestPayload_clientMutationId(ctx co
 func (ec *executionContext) fieldContext_RejectPairingRequestPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RejectPairingRequestPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RenameDirectoryPayload_directory(ctx context.Context, field graphql.CollectedField, obj *RenameDirectoryPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RenameDirectoryPayload_directory,
+		func(ctx context.Context) (any, error) {
+			return obj.Directory, nil
+		},
+		nil,
+		ec.marshalNDirectory2ᚖmainᚋinternalᚋsharedᚐDirectoryDTO,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RenameDirectoryPayload_directory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RenameDirectoryPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Directory_id(ctx, field)
+			case "parentId":
+				return ec.fieldContext_Directory_parentId(ctx, field)
+			case "relPath":
+				return ec.fieldContext_Directory_relPath(ctx, field)
+			case "path":
+				return ec.fieldContext_Directory_path(ctx, field)
+			case "root":
+				return ec.fieldContext_Directory_root(ctx, field)
+			case "state":
+				return ec.fieldContext_Directory_state(ctx, field)
+			case "stats":
+				return ec.fieldContext_Directory_stats(ctx, field)
+			case "directories":
+				return ec.fieldContext_Directory_directories(ctx, field)
+			case "directoriesV2":
+				return ec.fieldContext_Directory_directoriesV2(ctx, field)
+			case "images":
+				return ec.fieldContext_Directory_images(ctx, field)
+			case "notes":
+				return ec.fieldContext_Directory_notes(ctx, field)
+			case "lastSession":
+				return ec.fieldContext_Directory_lastSession(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Directory", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RenameDirectoryPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *RenameDirectoryPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RenameDirectoryPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RenameDirectoryPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RenameDirectoryPayload",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -19500,6 +19701,47 @@ func (ec *executionContext) unmarshalInputRejectPairingRequestInput(ctx context.
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputRenameDirectoryInput(ctx context.Context, obj any) (RenameDirectoryInput, error) {
+	var it RenameDirectoryInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"directoryId", "newName", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "directoryId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("directoryId"))
+			data, err := ec.unmarshalNID2mainᚋinternalᚋscalarᚐID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DirectoryID = data
+		case "newName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("newName"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NewName = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSendNotificationInput(ctx context.Context, obj any) (SendNotificationInput, error) {
 	var it SendNotificationInput
 	asMap := map[string]any{}
@@ -22405,6 +22647,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "renameDirectory":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_renameDirectory(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "sendNotification":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_sendNotification(ctx, field)
@@ -23730,6 +23979,47 @@ func (ec *executionContext) _RejectPairingRequestPayload(ctx context.Context, se
 			out.Values[i] = graphql.MarshalString("RejectPairingRequestPayload")
 		case "clientMutationId":
 			out.Values[i] = ec._RejectPairingRequestPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var renameDirectoryPayloadImplementors = []string{"RenameDirectoryPayload"}
+
+func (ec *executionContext) _RenameDirectoryPayload(ctx context.Context, sel ast.SelectionSet, obj *RenameDirectoryPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, renameDirectoryPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RenameDirectoryPayload")
+		case "directory":
+			out.Values[i] = ec._RenameDirectoryPayload_directory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._RenameDirectoryPayload_clientMutationId(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -25983,13 +26273,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -26621,23 +26911,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -26819,6 +27109,25 @@ func (ec *executionContext) marshalNRejectPairingRequestPayload2ᚖmainᚋintern
 		return graphql.Null
 	}
 	return ec._RejectPairingRequestPayload(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRenameDirectoryInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐRenameDirectoryInput(ctx context.Context, v any) (RenameDirectoryInput, error) {
+	res, err := ec.unmarshalInputRenameDirectoryInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRenameDirectoryPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐRenameDirectoryPayload(ctx context.Context, sel ast.SelectionSet, v RenameDirectoryPayload) graphql.Marshaler {
+	return ec._RenameDirectoryPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRenameDirectoryPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐRenameDirectoryPayload(ctx context.Context, sel ast.SelectionSet, v *RenameDirectoryPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RenameDirectoryPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNSendNotificationInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐSendNotificationInput(ctx context.Context, v any) (SendNotificationInput, error) {
