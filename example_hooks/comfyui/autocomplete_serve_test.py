@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 import unittest
 from typing import Any, Dict, List
@@ -192,7 +193,7 @@ class TestServe(unittest.TestCase):
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
-                return_value=({}, {"nodes": []}, fake_prompt_meta),
+                return_value=({}, {"nodes": []}, fake_prompt_meta, None),
             ):
                 suggestions = list(autocomplete(request, services))
 
@@ -206,7 +207,9 @@ class TestServe(unittest.TestCase):
     ) -> None:
         """验证 build_providers 作为 contextmanager，会在退出时通过 ExitStack 退出 SQLiteContext。"""
         fake_ctx = MagicMock()
-        with patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
+        with tempfile.TemporaryDirectory() as data_dir, patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": data_dir}
+        ), patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
             with build_providers(
                 "root", "dir", "http://localhost", False, "add"
             ) as providers:
@@ -216,9 +219,13 @@ class TestServe(unittest.TestCase):
 
     def test_serve_closes_db_contexts_after_request(self) -> None:
         fake_ctx = MagicMock()
-        with patch.dict(os.environ, {"DANBOORU_SEARCH_URL": "http://localhost"}), patch(
+        with tempfile.TemporaryDirectory() as data_dir, patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": data_dir}
+        ), patch.dict(os.environ, {"DANBOORU_SEARCH_URL": "http://localhost"}), patch(
             "comfyui.autocomplete.SQLiteContext", return_value=fake_ctx
-        ), patch("comfyui.autocomplete.autocomplete", return_value=iter([])):
+        ), patch(
+            "comfyui.autocomplete.autocomplete", return_value=iter([])
+        ):
             _run_serve(
                 [
                     _autocomplete_request(

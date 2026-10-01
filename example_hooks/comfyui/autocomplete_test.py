@@ -7,7 +7,8 @@ import shutil
 import tempfile
 import requests
 import sqlite3
-from typing import Dict, Any, Optional, List, Set, Tuple, cast
+from contextlib import contextmanager
+from typing import Dict, Any, Generator, Optional, List, Set, Tuple, cast
 from unittest.mock import patch, MagicMock
 
 from PIL import Image
@@ -29,11 +30,28 @@ from .autocomplete import (
     build_request_from_params,
     build_semantic_searcher,
     quote_if_needed,
+    NullSuggestionTextFormatter,
+    PromptTarget,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag, SemanticLayerUnavailable
 from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME
-from .model_format import ModelFormatConfig
+from .model_format import (
+    MissingDataDirError,
+    ModelFormatConfig,
+    NodeTextFormatter,
+    format_workflow_prompt_pair,
+)
+from .prompt_fragment import PromptFragment
+from .workflow_prompt_pair import WorkflowPromptPair
+
+
+@contextmanager
+def _data_dir_env() -> Generator[str, None, None]:
+    """把 IMAGE_FUNNEL_DATA_DIR 临时指向空目录（/add 补全按需加载模型格式配置）。"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tmp_dir}):
+            yield tmp_dir
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
@@ -222,7 +240,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertFalse(provider.can_provide(context))
         provider2 = WorkflowPromptProvider()
         self.assertFalse(provider2.can_provide(context))
-        provider3 = DanbooruProvider(MagicMock(), self._make_history())
+        provider3 = DanbooruProvider(
+            MagicMock(), self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertFalse(provider3.can_provide(context))
 
     def test_autocomplete_adjust_prompt_normal(self):
@@ -310,7 +330,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -353,7 +375,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "masterpiece,", "1girl,"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -384,7 +408,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -407,7 +433,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             DanbooruTag("solo", "单人", "Solo image.", "General"),
         ]
         history = self._make_history(added={"1girl"})
-        provider = DanbooruProvider(mock_provider, history)
+        provider = DanbooruProvider(
+            mock_provider, history, NullSuggestionTextFormatter()
+        )
 
         # 场景 1：有 query，执行前缀语义搜索
         context1 = self._make_context(
@@ -452,7 +480,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("solo", "2026-08-06T10:00:00"),
         ]
         provider = DanbooruProvider(
-            MagicMock(), self._make_history(all_added=mock_history)
+            MagicMock(),
+            self._make_history(all_added=mock_history),
+            NullSuggestionTextFormatter(),
         )
 
         # 空 query，无 cwords，无 workflow
@@ -483,7 +513,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("solo", "2026-08-06T10:00:00"),
         ]
         provider = DanbooruProvider(
-            MagicMock(), self._make_history(all_added=mock_history)
+            MagicMock(),
+            self._make_history(all_added=mock_history),
+            NullSuggestionTextFormatter(),
         )
 
         # seen_prompts 中包含 "1girl"
@@ -505,7 +537,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_danbooru_history_empty(self) -> None:
         """历史为空时，历史回退不产生建议"""
-        provider = DanbooruProvider(MagicMock(), self._make_history())
+        provider = DanbooruProvider(
+            MagicMock(), self._make_history(), NullSuggestionTextFormatter()
+        )
         context = self._make_context(
             target_command="add",
             query="",
@@ -533,7 +567,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ("masterpiece", "2026-08-05T10:00:00"),
         ]
         provider = DanbooruProvider(
-            mock_provider, self._make_history(all_added=mock_history)
+            mock_provider,
+            self._make_history(all_added=mock_history),
+            NullSuggestionTextFormatter(),
         )
 
         context = self._make_context(
@@ -571,7 +607,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--neg"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -592,7 +630,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -618,7 +658,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -639,7 +681,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="add", region=["positive"]),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -667,7 +711,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             workflow={"nodes": []},
             prompt_meta={},
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
 
         suggestions = list(provider.provide(context))
@@ -691,7 +737,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
 
         suggestions = list(provider.provide(context))
 
@@ -714,7 +762,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
 
         with self.assertRaises(KeyError):
             list(provider.provide(context))
@@ -736,7 +786,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
 
         suggestions = list(provider.provide(context))
 
@@ -761,7 +813,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "masterpiece,", "1girl,"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
 
         suggestions = list(provider.provide(context))
 
@@ -785,7 +839,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             cwords=["/add", "masterpiece,", "1girl,"],
             parsed_args=self._make_parsed_args(command="add"),
         )
-        provider = DanbooruProvider(mock_provider, self._make_history())
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
 
         with self.assertRaises(sqlite3.Error):
             list(provider.provide(context))
@@ -796,7 +852,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         history.get_all_added_prompts.side_effect = sqlite3.OperationalError(
             "database is locked"
         )
-        provider = DanbooruProvider(MagicMock(), history)
+        provider = DanbooruProvider(MagicMock(), history, NullSuggestionTextFormatter())
         context = self._make_context(
             target_command="add",
             query="",
@@ -820,7 +876,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """历史读取的编程错误（非 sqlite3.Error）不再被吞掉。"""
         history = self._make_history()
         history.get_all_added_prompts.side_effect = KeyError("boom")
-        provider = DanbooruProvider(MagicMock(), history)
+        provider = DanbooruProvider(MagicMock(), history, NullSuggestionTextFormatter())
         context = self._make_context(
             target_command="add",
             query="",
@@ -1039,7 +1095,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
-                DanbooruProvider(mock_danbooru, history),
+                DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
             ],
         )
 
@@ -1074,7 +1130,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
-                DanbooruProvider(mock_danbooru, history),
+                DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
             ],
         )
 
@@ -1099,7 +1155,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_build_providers_registers_region_option_before_danbooru(self) -> None:
         """真实 provider 链中区域选项提供者必须注册在 Danbooru 提供者之前。"""
-        with patch("comfyui.autocomplete.SQLiteContext"):
+        with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
                 "root", "dir", "http://localhost", False, "add"
             ) as providers:
@@ -1128,7 +1184,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ],
                 [],
             )
-            with patch("comfyui.autocomplete.SQLiteContext"):
+            with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     "root",
                     "dir",
@@ -1147,7 +1203,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_build_providers_file_mode_missing_files_fails_fast(self) -> None:
         """数据目录缺编译产物时 build_providers 直接抛出（快速失败，不降级在线链路）。"""
         with tempfile.TemporaryDirectory() as data_dir:
-            with patch("comfyui.autocomplete.SQLiteContext"):
+            with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with self.assertRaises(FileNotFoundError) as ctx:
                     with build_providers(
                         "root", "dir", "http://localhost", False, "add", data_dir
@@ -1184,7 +1240,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         data_dir = tempfile.mkdtemp()
         try:
             self._write_single_tag_fixture(data_dir)
-            with patch("comfyui.autocomplete.SQLiteContext"):
+            with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     "root",
                     "dir",
@@ -1212,7 +1268,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         with tempfile.TemporaryDirectory() as data_dir:
             self._write_single_tag_fixture(data_dir)
             os.remove(os.path.join(data_dir, COMPILED_EMBEDDINGS_FILENAME))
-            with patch("comfyui.autocomplete.SQLiteContext"):
+            with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     "root",
                     "dir",
@@ -1240,7 +1296,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as data_dir:
             self._write_single_tag_fixture(data_dir)
-            with patch("comfyui.autocomplete.SQLiteContext"):
+            with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     "root", "dir", "", False, "add", data_dir, ""
                 ) as providers:
@@ -1302,7 +1358,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
-                DanbooruProvider(mock_danbooru, history),
+                DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
             ],
         )
         # 区域标记写在节点文本中：既能被 extract_region_names 识别，
@@ -1604,7 +1660,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
         }
 
         # 3. 拦截 stdout 并运行 main()
-        with patch.dict(os.environ, env_vars), patch(
+        with _data_dir_env(), patch.dict(os.environ, env_vars), patch(
             "sys.argv", ["comfyui.autocomplete", "add"]
         ), patch("sys.stdout", new_io := io.StringIO()):
             try:
@@ -1653,7 +1709,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
             "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
         }
 
-        with patch.dict(os.environ, env_vars), patch(
+        with _data_dir_env(), patch.dict(os.environ, env_vars), patch(
             "sys.argv", ["comfyui.autocomplete", "add"]
         ), patch("sys.stdout", io.StringIO()):
             with self.assertRaises(KeyError):
@@ -1931,6 +1987,505 @@ class TestAutocompleteTaskCoocRelease(unittest.TestCase):
     def test_no_release_when_local_data_dir_disabled(self) -> None:
         release = self._run_task("")
         release.assert_not_called()
+
+
+class TestAddSuggestionModelFormat(unittest.TestCase):
+    """`/add` 建议按目标节点模型的提示词格式输出，使其与提交后落盘形态逐字符一致。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.mkdtemp()
+        self._env_patch = patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": self.tmp_dir}
+        )
+        self._env_patch.start()
+
+    def tearDown(self) -> None:
+        self._env_patch.stop()
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _set_model_format(self, ckpt_name: str, fmt: str) -> None:
+        config = ModelFormatConfig.load()
+        config.models[ckpt_name] = fmt
+        config.save()
+
+    def _make_workflow_data(
+        self, ckpt_name: str, node_text: str
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """构造带检查点格式化链路的 CLIPTextEncode 工作流夹具。"""
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {"id": "6", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ]
+        }
+        prompt_meta: Dict[str, Any] = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": node_text, "clip": ["4", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": ckpt_name},
+            },
+        }
+        return workflow, prompt_meta
+
+    def _make_context(
+        self,
+        *,
+        ckpt_name: Optional[str] = "animaPencilXL_v10.safetensors",
+        node_text: str = "masterpiece, Blue_Hair",
+        inference_text: str = "",
+        query: str = "",
+        prev_word: str = "",
+        cwords: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> AutocompleteContext:
+        """构造带目标节点的 add 补全上下文。"""
+        defaults: Dict[str, Any] = dict(
+            target_command="add",
+            query=query,
+            prev_word=prev_word,
+            cwords=cwords if cwords is not None else ["/add"],
+            image_paths=[],
+            parsed_args=argparse.Namespace(
+                command="add",
+                neg=False,
+                all=False,
+                region=None,
+                node=None,
+                raw=False,
+                hard=False,
+                no_skip=False,
+            ),
+            seen_prompts={},
+        )
+        if ckpt_name is not None:
+            workflow, prompt_meta = self._make_workflow_data(ckpt_name, node_text)
+            defaults["workflow"] = workflow
+            defaults["prompt_meta"] = prompt_meta
+            defaults["prompt_target"] = PromptTarget(
+                node_id="6", inference_text=inference_text or node_text
+            )
+        # kwargs 最后覆盖，便于个别用例替换工作流元数据等夹具
+        defaults.update(kwargs)
+        defaults["parser"] = get_parser()
+        return AutocompleteContext(**defaults)
+
+    def _make_provider(
+        self,
+        mock_provider: Any,
+        history: Any,
+        *,
+        formatter: Optional[Any] = None,
+    ) -> DanbooruProvider:
+        """构造注入了真实格式化接缝的 DanbooruProvider。"""
+        return DanbooruProvider(
+            mock_provider,
+            history,
+            (
+                formatter
+                if formatter is not None
+                else NodeTextFormatter(ModelFormatConfig.load())
+            ),
+        )
+
+    def _make_history(
+        self,
+        added: Optional[Set[str]] = None,
+        added_times: Optional[Dict[str, str]] = None,
+        all_added: Optional[List[Tuple[str, str]]] = None,
+    ) -> MagicMock:
+        history = MagicMock()
+        history.get_added_prompts.return_value = set(added or [])
+        history.get_added_prompt_times.return_value = dict(added_times or {})
+        history.get_all_added_prompts.return_value = list(all_added or [])
+        return history
+
+    # ---- 搜索建议 ----
+
+    def test_search_suggestions_formatted_as_anima(self) -> None:
+        """anima 格式模型：建议插入文本小写、下划线转空格，含空格者加引号。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("Blue_Eyes", "蓝眼", "Blue eyes.", "General"),
+            DanbooruTag("score_9", "评分", "Score.", "Meta"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        suggestions = list(provider.provide(self._make_context(query="blue")))
+
+        self.assertEqual(suggestions[0].text, '"blue eyes"')
+        # displayText 保持原文（含中文名），仅用于浮层展示
+        self.assertEqual(suggestions[0].displayText, "Blue_Eyes (蓝眼)")
+        # score_* 评分标签在 anima 下保留下划线，无需引号
+        self.assertEqual(suggestions[1].text, "score_9")
+
+    def test_search_suggestions_formatted_as_sdxl(self) -> None:
+        """sdxl 格式模型：建议插入文本空格转下划线。"""
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("blue eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        suggestions = list(provider.provide(self._make_context(query="blue")))
+
+        self.assertEqual(suggestions[0].text, "blue_eyes")
+
+    def test_suggestions_keep_original_when_model_format_disabled(self) -> None:
+        """模型为 disabled（opt-out）时建议保持原文。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "disabled")
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("Blue_Eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        suggestions = list(provider.provide(self._make_context(query="blue")))
+
+        self.assertEqual(suggestions[0].text, "Blue_Eyes")
+
+    def test_suggestions_keep_original_when_model_not_traceable(self) -> None:
+        """目标节点已解析但模型无法追溯（如 clip 链终止于普通 CLIPLoader）时保持原文。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("Blue_Eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+        prompt_meta: Dict[str, Any] = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece", "clip": ["5", 0]},
+            },
+            # 普通 CLIPLoader 的 clip_name 不是格式键，clip 链到此终止
+            "5": {
+                "class_type": "CLIPLoader",
+                "inputs": {"clip_name": "sdxl15.safetensors"},
+            },
+        }
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        context = self._make_context(
+            query="blue", prompt_meta=prompt_meta, workflow={"nodes": []}
+        )
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(suggestions[0].text, "Blue_Eyes")
+
+    def test_suggestions_keep_original_without_workflow_metadata(self) -> None:
+        """图片无 ComfyUI 元数据（未解析出目标节点）时保持原文。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("Blue_Eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        suggestions = list(
+            provider.provide(self._make_context(ckpt_name=None, query="blue"))
+        )
+
+        self.assertEqual(suggestions[0].text, "Blue_Eyes")
+
+    def test_inferred_model_format_is_persisted_then_reused(self) -> None:
+        """补全沿用提交路径的格式推导（ADR 0006）：首次推理写回配置，之后不再落盘。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("Blue_Eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        context = self._make_context(node_text="masterpiece, blue hair", query="blue")
+        self.assertEqual(list(provider.provide(context))[0].text, '"blue eyes"')
+        self.assertEqual(
+            ModelFormatConfig.load().models, {"animaPencilXL_v10.safetensors": "anima"}
+        )
+
+        # 之后命中「配置」来源：格式一致且不再写文件
+        config_file = os.path.join(self.tmp_dir, "comfyui_model_formats.toml")
+        mtime_before = os.path.getmtime(config_file)
+        self.assertEqual(list(provider.provide(context))[0].text, '"blue eyes"')
+        self.assertEqual(os.path.getmtime(config_file), mtime_before)
+
+    # ---- 关联联想与操作历史 ----
+
+    def test_related_suggestions_formatted(self) -> None:
+        """关联联想来源的建议同样按目标模型格式重排。"""
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("blue eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        context = self._make_context(prev_word="1girl,", cwords=["/add", "1girl,"])
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(suggestions[0].text, "blue_eyes")
+
+    def test_history_suggestions_formatted(self) -> None:
+        """操作历史来源的建议同样按目标模型格式重排，展示文本保持原文。"""
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        history = self._make_history(all_added=[("blue eyes", "2026-08-07T10:00:00")])
+        provider = self._make_provider(MagicMock(), history)
+
+        suggestions = list(provider.provide(self._make_context()))
+
+        self.assertEqual(suggestions[0].text, "blue_eyes")
+        self.assertEqual(suggestions[0].displayText, "blue eyes")
+        self.assertIn("blue eyes", suggestions[0].description)
+
+    def test_formatted_suggestion_still_marked_as_already_in_workflow(self) -> None:
+        """已见提示词集合与建议文本在同一形态下比对，「(已有)」标记不失效。
+
+        工作流里还是旧的下划线形态（目标模型是 anima）时也必须能命中。
+        """
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = [
+            DanbooruTag("Blue_Hair", "蓝发", "Blue hair.", "General"),
+        ]
+
+        provider = self._make_provider(mock_provider, self._make_history())
+        context = self._make_context(
+            node_text="masterpiece,\nBlue_Hair",
+            seen_prompts={
+                "masterpiece,": "区域: positive",
+                "Blue_Hair": "区域: positive",
+            },
+        )
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(suggestions[0].text, '"blue hair"')
+        self.assertEqual(suggestions[0].style, "muted")
+        self.assertTrue(suggestions[0].description.startswith("(已有) "))
+
+    # ---- 其它指令不受影响 ----
+
+    def test_remove_and_adjust_prompt_suggestions_unchanged(self) -> None:
+        """`/remove` 与 `/adjust prompt` 列出工作流中已有标签文本，保持原文。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        seen_prompts = {"Blue_Hair": "区域: positive"}
+        provider = WorkflowPromptProvider()
+        for command, cwords in (
+            ("remove", ["/remove"]),
+            ("adjust", ["/adjust", "prompt"]),
+        ):
+            context = AutocompleteContext(
+                target_command=command,
+                cwords=cwords,
+                parsed_args=argparse.Namespace(command=command, neg=False, all=False),
+                seen_prompts=seen_prompts,
+                parser=get_parser(),
+            )
+            self.assertTrue(provider.can_provide(context))
+            self.assertEqual([s.text for s in provider.provide(context)], ["Blue_Hair"])
+
+    # ---- 目标解析 ----
+
+    def _write_sample(
+        self, workflow: Dict[str, Any], prompt_meta: Dict[str, Any]
+    ) -> str:
+        img = Image.new("RGB", (1, 1), "white")
+        meta = PngInfo()
+        meta.add_text("prompt", json.dumps(prompt_meta))
+        meta.add_text("workflow", json.dumps(workflow))
+        path = os.path.join(
+            self.tmp_dir, f"sample_{abs(hash(json.dumps(prompt_meta)))}.png"
+        )
+        img.save(path, pnginfo=meta)
+        return path
+
+    def _run_autocomplete(
+        self,
+        image_paths: List[str],
+        cwords: List[str],
+        query: str = "",
+        tag: str = "blue eyes",
+    ) -> List[Any]:
+        """以真实图片元数据跑一遍 autocomplete，返回建议列表。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag(tag, "蓝眼", "Blue eyes.", "General"),
+        ]
+        request = AutocompleteRequest(
+            target_command="add",
+            query=query,
+            prev_word="",
+            cwords=cwords,
+            image_paths=image_paths,
+            root_dir="",
+            directory_rel_path="",
+        )
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[self._make_provider(mock_provider, self._make_history())],
+        )
+        return list(autocomplete(request, services))
+
+    def test_default_region_resolves_target_model_format(self) -> None:
+        """未指定 --region/--node 时按默认 positive 区域解析目标模型格式。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        workflow, prompt_meta = self._make_workflow_data(
+            "animaPencilXL_v10.safetensors",
+            "// #region positive\nmasterpiece,\n// #endregion\n"
+            "// #region negative\nworst quality\n// #endregion\n",
+        )
+        image_path = self._write_sample(workflow, prompt_meta)
+
+        suggestions = self._run_autocomplete(
+            [image_path], ["/add"], query="blue", tag="Blue_Eyes"
+        )
+
+        self.assertEqual([s.text for s in suggestions], ['"blue eyes"'])
+
+    def test_first_target_wins_when_multiple_targets_specified(self) -> None:
+        """多目标时按第一个目标解析格式。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        workflow = {
+            "nodes": [
+                {
+                    "id": "6",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": ["masterpiece,"],
+                },
+                {
+                    "id": "7",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": ["worst quality,"],
+                },
+            ]
+        }
+        prompt_meta: Dict[str, Any] = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece,", "clip": ["4", 0]},
+            },
+            "7": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "worst quality,", "clip": ["5", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "animaPencilXL_v10.safetensors"},
+            },
+            "5": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "sdxlModel.safetensors"},
+            },
+        }
+        image_path = self._write_sample(workflow, prompt_meta)
+
+        suggestions = self._run_autocomplete(
+            [image_path],
+            ["/add", "--node", "6", "--node", "7"],
+            query="blue",
+            tag="Blue_Eyes",
+        )
+
+        self.assertEqual([s.text for s in suggestions], ['"blue eyes"'])
+
+    def test_neg_flag_resolves_negative_region_format(self) -> None:
+        """--neg 时按 negative 默认区域解析目标模型格式。"""
+        self._set_model_format("sdxlModel.safetensors", "sdxl")
+        workflow = {
+            "nodes": [
+                {
+                    "id": "6",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\nmasterpiece,\n// #endregion\n"
+                        "// #region negative\nblue eyes\n// #endregion\n"
+                    ],
+                }
+            ]
+        }
+        prompt_meta: Dict[str, Any] = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece,", "clip": ["4", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "sdxlModel.safetensors"},
+            },
+        }
+        image_path = self._write_sample(workflow, prompt_meta)
+
+        suggestions = self._run_autocomplete(
+            [image_path], ["/add", "--neg"], query="blue"
+        )
+
+        self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
+
+    # ---- 建议与落盘一致 ----
+
+    def test_suggestion_text_matches_text_written_on_submit(self) -> None:
+        """补全给出的插入文本与同一输入提交后落盘的文本逐字符一致。"""
+        self._set_model_format("animaPencilXL_v10.safetensors", "anima")
+        workflow, prompt_meta = self._make_workflow_data(
+            "animaPencilXL_v10.safetensors", "masterpiece, Blue_Hair"
+        )
+        image_path = self._write_sample(workflow, prompt_meta)
+
+        suggestions = self._run_autocomplete(
+            [image_path], ["/add"], query="cat", tag="Cat_Ears"
+        )
+        self.assertEqual(suggestions[0].text, '"cat ears"')
+
+        # 用 Go 端 splitArgs 的还原规则去掉引号后提交，再走提交路径的格式化
+        submitted = suggestions[0].text[1:-1]
+        pair = WorkflowPromptPair(json.loads(json.dumps(workflow)), prompt_meta)
+        format_workflow_prompt_pair(pair)
+        fragment = PromptFragment(pair, "6")
+        self.assertTrue(fragment.add(submitted))
+        # 落盘文本逐字符等于建议文本：已有标签与新增标签同属一种形态
+        self.assertEqual(
+            pair.get_prompt_input("6", "text"), "masterpiece, blue hair\ncat ears,"
+        )
+        self.assertEqual(
+            pair.get_workflow_node_text("6"), "masterpiece, blue hair\ncat ears,"
+        )
+
+    # ---- 依赖构建 ----
+
+    def test_build_providers_injects_model_formatter_for_add_only(self) -> None:
+        """格式化依赖仅注入 /add；其余指令显式注入空实现。"""
+        with patch("comfyui.autocomplete.SQLiteContext"):
+            with build_providers(
+                "root", "dir", "http://localhost", False, "add"
+            ) as add_providers:
+                with build_providers(
+                    "root", "dir", "http://localhost", False, "remove"
+                ) as remove_providers:
+                    add_formatter = cast(
+                        Any,
+                        next(
+                            p for p in add_providers if isinstance(p, DanbooruProvider)
+                        ),
+                    ).text_formatter
+                    remove_formatter = cast(
+                        Any,
+                        next(
+                            p
+                            for p in remove_providers
+                            if isinstance(p, DanbooruProvider)
+                        ),
+                    ).text_formatter
+        self.assertIsInstance(add_formatter, NodeTextFormatter)
+        self.assertIsInstance(remove_formatter, NullSuggestionTextFormatter)
+
+    def test_build_providers_add_missing_data_dir_fails_fast(self) -> None:
+        """`/add` 缺 IMAGE_FUNNEL_DATA_DIR 时快速失败，不静默输出原文建议。"""
+        with patch("comfyui.autocomplete.SQLiteContext"):
+            with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
+                with self.assertRaises(MissingDataDirError):
+                    with build_providers(
+                        "root", "dir", "http://localhost", False, "add"
+                    ):
+                        pass
 
 
 if __name__ == "__main__":

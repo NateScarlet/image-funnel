@@ -247,6 +247,37 @@ def collect_inference_texts(prompt_meta: Optional[Dict[str, Any]]) -> Dict[str, 
     return texts
 
 
+class NodeTextFormatter:
+    """按节点（或模型）所属提示词格式重排文本，持有已加载的模型格式配置。
+
+    供补全等只读路径使用：入口层构建配置后整体注入，核心逻辑不必读取全局环境变量。
+    格式推导与提交路径同为 resolve_format（接受首次推理后写回配置的副作用，见 ADR 0006），
+    保证补全文本与落盘文本逐字符一致。
+    """
+
+    def __init__(self, config: ModelFormatConfig) -> None:
+        self.config = config
+
+    def format(self, ckpt_name: Optional[str], text: str, inference_text: str) -> str:
+        """按指定模型的格式重排 text 文本。
+
+        ckpt_name 为空（模型不可追溯）或模型为 disabled 时原样返回 text。
+        """
+        if not ckpt_name:
+            return text
+        return format_prompt_text(
+            text, self.config.resolve_format(ckpt_name, inference_text)
+        )
+
+    def format_for_node(
+        self, prompt_meta: Dict[str, Any], node_id: str, text: str, inference_text: str
+    ) -> str:
+        """按指定节点相连模型的格式重排 text 文本。"""
+        return self.format(
+            trace_model_name_for_node(prompt_meta, node_id), text, inference_text
+        )
+
+
 def format_text_for_node(
     prompt_meta: Dict[str, Any],
     node_id: str,
@@ -262,9 +293,9 @@ def format_text_for_node(
     ckpt_name = trace_model_name_for_node(prompt_meta, node_id)
     if not ckpt_name:
         return text
-    source = inference_text if inference_text is not None else text
-    fmt = ModelFormatConfig.load().resolve_format(ckpt_name, source)
-    return format_prompt_text(text, fmt)
+    return NodeTextFormatter(ModelFormatConfig.load()).format(
+        ckpt_name, text, inference_text if inference_text is not None else text
+    )
 
 
 def format_workflow_prompt_pair(accessor: NodeAccessor) -> None:

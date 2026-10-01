@@ -11,7 +11,18 @@ from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
-from typing import Dict, List, Tuple, Any, Optional, Iterator, Set, Generator, cast
+from typing import (
+    Dict,
+    List,
+    Tuple,
+    Any,
+    Optional,
+    Iterator,
+    Protocol,
+    Set,
+    Generator,
+    cast,
+)
 import requests
 from PIL import Image
 
@@ -47,7 +58,7 @@ from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
 from .operation_history import OperationHistory
-from .model_format import ModelFormatConfig, collect_inference_texts
+from .model_format import ModelFormatConfig, NodeTextFormatter, collect_inference_texts
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +68,31 @@ def quote_if_needed(val: str) -> str:
         escaped = val.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
     return val
+
+
+class SuggestionTextFormatter(Protocol):
+    """把补全建议文本重排为目标节点模型的提示词格式（由最外层入口构建并注入）。"""
+
+    def format_for_node(
+        self,
+        prompt_meta: Dict[str, Any],
+        node_id: str,
+        text: str,
+        inference_text: str,
+    ) -> str: ...
+
+
+class NullSuggestionTextFormatter:
+    """不重排建议文本的空实现：给出的是工作流/配置中已有原文的指令使用。"""
+
+    def format_for_node(
+        self,
+        prompt_meta: Dict[str, Any],
+        node_id: str,
+        text: str,
+        inference_text: str,
+    ) -> str:
+        return text
 
 
 @dataclass
@@ -162,13 +198,32 @@ def _parse_args_for_autocomplete(
     return parsed_args
 
 
+@dataclass(frozen=True)
+class PromptTarget:
+    """本次请求解析出的目标提示词节点。
+
+    node_id 用于按目标节点追溯模型格式；inference_text 是目标节点当前提示词全文，
+    作为格式推理依据——与提交路径 format_workflow_prompt_pair 的推理来源保持一致，
+    从而保证补全建议与提交后落盘的文本形态相同。
+    """
+
+    node_id: str
+    inference_text: str
+
+
 def _load_workflow_data(
     image_paths: List[str],
     parsed_args: Optional[argparse.Namespace],
-) -> Tuple[Dict[str, str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> Tuple[
+    Dict[str, str],
+    Optional[Dict[str, Any]],
+    Optional[Dict[str, Any]],
+    Optional[PromptTarget],
+]:
     seen_prompts: Dict[str, str] = {}
     workflow: Optional[Dict[str, Any]] = None
     prompt_meta: Optional[Dict[str, Any]] = None
+    target: Optional[PromptTarget] = None
 
     for path in image_paths:
         if not os.path.isfile(path):
@@ -185,7 +240,7 @@ def _load_workflow_data(
             continue
 
     if not (workflow and prompt_meta):
-        return seen_prompts, workflow, prompt_meta
+        return seen_prompts, workflow, prompt_meta, target
 
     is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
     is_all = getattr(parsed_args, "all", False) if parsed_args else False
@@ -238,6 +293,20 @@ def _load_workflow_data(
                 )
                 fragments_to_process.append((fragment, label))
 
+    # 多目标时取第一个目标：补全建议按该目标节点的模型格式输出
+    if fragments_to_process:
+        node_id = fragments_to_process[0][0].node_id
+        # 推理来源与提交路径一致：优先 prompt 轨道文本，空时回落到 workflow 轨道文本
+        prompt_text = pair.get_prompt_input(node_id, "text")
+        workflow_text = pair.get_workflow_node_text(node_id)
+        if isinstance(prompt_text, str) and prompt_text:
+            inference_text = prompt_text
+        elif isinstance(workflow_text, str):
+            inference_text = workflow_text
+        else:
+            inference_text = ""
+        target = PromptTarget(node_id=node_id, inference_text=inference_text)
+
     for fragment, label in fragments_to_process:
         content = fragment.text
         if not content:
@@ -255,7 +324,7 @@ def _load_workflow_data(
             if cleaned not in seen_prompts:
                 seen_prompts[cleaned] = label
 
-    return seen_prompts, workflow, prompt_meta
+    return seen_prompts, workflow, prompt_meta, target
 
 
 class AutocompleteContext:
@@ -273,6 +342,7 @@ class AutocompleteContext:
         seen_prompts: Optional[Dict[str, str]] = None,
         workflow: Optional[Dict[str, Any]] = None,
         prompt_meta: Optional[Dict[str, Any]] = None,
+        prompt_target: Optional[PromptTarget] = None,
         parser: argparse.ArgumentParser,
     ):
         self.target_command: str = target_command
@@ -322,6 +392,7 @@ class AutocompleteContext:
         self._seen_prompts: Dict[str, str] = seen_prompts or {}
         self._workflow: Optional[Dict[str, Any]] = workflow
         self._prompt_meta: Optional[Dict[str, Any]] = prompt_meta
+        self._prompt_target: Optional[PromptTarget] = prompt_target
 
     @property
     def parsed_args(self) -> Optional[argparse.Namespace]:
@@ -342,6 +413,10 @@ class AutocompleteContext:
     @property
     def prompt_meta(self) -> Optional[Dict[str, Any]]:
         return self._prompt_meta
+
+    @property
+    def prompt_target(self) -> Optional[PromptTarget]:
+        return self._prompt_target
 
 
 class AutocompleteProvider:
@@ -744,10 +819,15 @@ class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
 
     def __init__(
-        self, provider: DanbooruTagProvider, history: OperationHistory
+        self,
+        provider: DanbooruTagProvider,
+        history: OperationHistory,
+        text_formatter: SuggestionTextFormatter,
     ) -> None:
         self.provider = provider
         self.history = history
+        # 建议文本格式化依赖（仅 /add 需要按目标节点模型格式重排，由入口注入）
+        self.text_formatter = text_formatter
 
     def can_provide(self, context: AutocompleteContext) -> bool:
         if not context.is_add_cmd:
@@ -763,12 +843,39 @@ class DanbooruProvider(AutocompleteProvider):
 
         return not is_real_option_arg_prev and not is_option_input
 
+    def _format_for_target(self, context: AutocompleteContext, text: str) -> str:
+        """按目标提示词节点的模型格式重排文本。
+
+        未解析出目标节点（如图片无 ComfyUI 元数据、或区域定位不到节点）时无法追溯
+        模型格式，原样返回。
+        """
+        prompt_meta = context.prompt_meta
+        target = context.prompt_target
+        if prompt_meta is None or target is None:
+            return text
+        return self.text_formatter.format_for_node(
+            prompt_meta, target.node_id, text, target.inference_text
+        )
+
+    def _suggestion_text(self, context: AutocompleteContext, tag: str) -> str:
+        """把标签转成可直接插入的补全文本。
+
+        格式化必须先于引号包裹：anima 会把下划线换成空格，从而新增引号需求。
+        """
+        return quote_if_needed(self._format_for_target(context, tag))
+
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        # 已见提示词同样重排到目标格式后再比对：建议文本已经过格式化，拿它去比对
+        # 原文形态的已见提示词会让「(已有)」标记失效。
+        seen_in_target_format = {
+            self._format_for_target(context, line) for line in context.seen_prompts
+        }
+
         def is_in_workflow(text: str) -> bool:
             cleaned_text = (
                 text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")
             )
-            return cleaned_text in context.seen_prompts
+            return cleaned_text in seen_in_target_format
 
         def apply_styles(
             suggestions: List[AutocompleteSuggestion],
@@ -818,7 +925,7 @@ class DanbooruProvider(AutocompleteProvider):
                         _format_relative_time(created_at) if created_at else "之前"
                     )
                     yield AutocompleteSuggestion(
-                        text=quote_if_needed(prompt),
+                        text=self._suggestion_text(context, prompt),
                         displayText=prompt,
                         description=f"({relative}历史添加) {prompt}",
                         type="danbooru",
@@ -856,7 +963,7 @@ class DanbooruProvider(AutocompleteProvider):
                     escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
                     suggestions.append(
                         AutocompleteSuggestion(
-                            text=quote_if_needed(escaped_tag),
+                            text=self._suggestion_text(context, escaped_tag),
                             displayText=display,
                             description=desc,
                             type="danbooru",
@@ -927,7 +1034,7 @@ class DanbooruProvider(AutocompleteProvider):
                         escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
                         suggestions.append(
                             AutocompleteSuggestion(
-                                text=quote_if_needed(escaped_tag),
+                                text=self._suggestion_text(context, escaped_tag),
                                 displayText=display,
                                 description=desc,
                                 type="danbooru",
@@ -1020,6 +1127,18 @@ def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSear
     return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
 
 
+def build_suggestion_text_formatter(target_command: str) -> SuggestionTextFormatter:
+    """入口构建建议文本格式化依赖。
+
+    仅 /add 的建议需要按目标节点模型格式重排（使其与提交后落盘形态一致），其余指令
+    建议给出的是工作流/配置中已有原文，显式传空实现。模型格式配置缺失
+    IMAGE_FUNNEL_DATA_DIR 时在此直接抛出（快速失败，不降级为原文）。
+    """
+    if target_command != "add":
+        return NullSuggestionTextFormatter()
+    return NodeTextFormatter(ModelFormatConfig.load())
+
+
 def build_request_from_env(target_command: str) -> AutocompleteRequest:
     """单次模式：入口从环境变量构造请求上下文（缺失环境变量即报错中止，快速失败）。"""
     return AutocompleteRequest(
@@ -1073,7 +1192,9 @@ def build_providers(
     embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层；
     该依赖只服务本地链路分支，不构建到在线链路与其他指令上。
     target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
-    模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败。
+    模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；
+    仅 /add 的 Danbooru 建议需要按模型格式重排建议文本（见
+    build_suggestion_text_formatter）。
     """
     with ExitStack() as stack:
         providers: List[AutocompleteProvider] = []
@@ -1101,7 +1222,13 @@ def build_providers(
                     danbooru_data_dir, embedding_provider_url
                 ),
             )
-            providers.append(DanbooruProvider(file_provider, history))
+            providers.append(
+                DanbooruProvider(
+                    file_provider,
+                    history,
+                    build_suggestion_text_formatter(target_command),
+                )
+            )
         elif danbooru_url:
             db_ctx = stack.enter_context(
                 SQLiteContext(_db_path(root_dir, directory_rel_path))
@@ -1115,7 +1242,13 @@ def build_providers(
             danbooru_tag_provider = SQLiteDanbooruTagProvider(
                 akizuki, db_ctx, danbooru_url
             )
-            providers.append(DanbooruProvider(danbooru_tag_provider, history))
+            providers.append(
+                DanbooruProvider(
+                    danbooru_tag_provider,
+                    history,
+                    build_suggestion_text_formatter(target_command),
+                )
+            )
         yield providers
 
 
@@ -1139,7 +1272,7 @@ def autocomplete(
         request.query,
     )
 
-    seen_prompts, workflow, prompt_meta = _load_workflow_data(
+    seen_prompts, workflow, prompt_meta, target = _load_workflow_data(
         request.image_paths, parsed_args
     )
 
@@ -1153,6 +1286,7 @@ def autocomplete(
         seen_prompts=seen_prompts,
         workflow=workflow,
         prompt_meta=prompt_meta,
+        prompt_target=target,
         parser=services.parser,
     )
 
