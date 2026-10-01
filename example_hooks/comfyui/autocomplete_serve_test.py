@@ -162,6 +162,17 @@ class TestServe(unittest.TestCase):
         self.assertIn("failed", resp["error"]["message"])
         self.assertNotIn("result", resp)
 
+    def test_serve_error_response_carries_failure_reason(self) -> None:
+        """错误消息必须带真实原因：钩子 stderr 只在 Debug 转发，界面上没有第二处线索。"""
+        with patch(
+            "comfyui.autocomplete.autocomplete",
+            side_effect=ValueError("嵌入服务 URL 含多余的成对引号"),
+        ):
+            out = _run_serve([_autocomplete_request(1, cwords=["/add"])])
+        message = json.loads(out.strip())["error"]["message"]
+        self.assertIn("ValueError", message)
+        self.assertIn("多余的成对引号", message)
+
     def test_autocomplete_explicit_context_used_for_node_completion(self) -> None:
         """逐请求显式传入的上下文驱动补全：空 query + prev_word=--node 应完成节点补全。"""
         fake_prompt_meta: Dict[str, Any] = {

@@ -62,7 +62,16 @@ class EmbeddingEndpoint:
 
 def parse_embedding_endpoint(spec: str) -> EmbeddingEndpoint:
     """解析 `<base>#apiKey=&model=&timeoutMs=` 形式的端点 URL。"""
-    parts = urlsplit(spec.strip())
+    raw = spec.strip()
+    # 环境变量值常被连同引号一起设置（cmd 的 set VAR="..." 会把引号留在值里），
+    # 与其让它在下游变成看不懂的 timeoutMs 非法，不如直接指出多余引号
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+        raise ValueError(
+            f"嵌入服务 URL 含多余的成对引号: {raw!r}；"
+            '环境变量的值不要带引号（TOML 里写成 "..." 时引号是字符串定界符，'
+            "不会出现在取到的值中）"
+        )
+    parts = urlsplit(raw)
     params = dict(parse_qsl(parts.fragment, keep_blank_values=True))
     unknown = set(params) - _ENDPOINT_PARAMS
     if unknown:

@@ -146,6 +146,25 @@ class TestParseEmbeddingEndpoint(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_embedding_endpoint("#model=bge")
 
+    def test_surrounding_quotes_rejected_with_actionable_message(self) -> None:
+        """cmd 的 set VAR="..." 会把引号留在值里；错误要直接点名，而不是下游 timeoutMs 非法。"""
+        quoted = '"http://localhost:1234#apiKey=&model=bge&timeoutMs=3000"'
+        with self.assertRaises(ValueError) as ctx:
+            parse_embedding_endpoint(quoted)
+        message = str(ctx.exception)
+        self.assertIn("多余的成对引号", message)
+        self.assertIn("不要带引号", message)
+
+    def test_single_quotes_also_rejected(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            parse_embedding_endpoint("'http://localhost:1234#model=bge'")
+        self.assertIn("多余的成对引号", str(ctx.exception))
+
+    def test_unpaired_quote_not_mistaken_for_wrapping(self) -> None:
+        """只有成对引号才判定为多余；URL 里的单个引号仍按原样解析。"""
+        endpoint = parse_embedding_endpoint('http://localhost:1234#model=bge"x')
+        self.assertEqual(endpoint.model, 'bge"x')
+
 
 class TestOpenAIEmbeddingClient(unittest.TestCase):
     def test_sends_model_input_and_timeout(self) -> None:

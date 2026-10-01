@@ -1261,7 +1261,7 @@ class _AutocompleteTask:
 
     def _run(self) -> None:
         suggestions: List[AutocompleteSuggestion] = []
-        failed = False
+        failure: Optional[str] = None
         try:
             with build_providers(
                 self.request.root_dir,
@@ -1274,9 +1274,11 @@ class _AutocompleteTask:
             ) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
-        except Exception:
+        except Exception as e:
             _LOGGER.error("Autocomplete request %s failed", self.req_id, exc_info=True)
-            failed = True
+            # 失败原因随 JSON-RPC 错误回给调用方：钩子 stderr 只在 Debug 级别转发，
+            # 只报 "request failed" 会让配置错误（如环境变量带了引号）在界面上无从排查
+            failure = f"autocomplete request failed: {type(e).__name__}: {e}"
         finally:
             with self.active_lock:
                 self.active.pop(self.req_id, None)
@@ -1287,10 +1289,8 @@ class _AutocompleteTask:
                 release_cooc_cache(self.danbooru_data_dir)
         if self._canceled.is_set():
             return
-        if failed:
-            _write_error_response(
-                self.writer, self.req_id, "autocomplete request failed"
-            )
+        if failure is not None:
+            _write_error_response(self.writer, self.req_id, failure)
             return
         _write_response(self.writer, self.req_id, suggestions)
 
