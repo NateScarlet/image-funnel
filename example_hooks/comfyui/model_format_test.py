@@ -8,6 +8,7 @@ from unittest.mock import patch
 from .model_format import (
     ModelFormatConfig,
     MissingDataDirError,
+    existing_tags,
     format_prompt_text,
     format_workflow_prompt_pair,
     get_config_path,
@@ -368,6 +369,60 @@ class TestFormatWorkflowPromptPair(unittest.TestCase):
         with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
             with self.assertRaises(MissingDataDirError):
                 format_workflow_prompt_pair(pair)
+
+
+class TestExistingTags(unittest.TestCase):
+    """已存在判定：两侧都规范化到目标格式后再比对。"""
+
+    def test_anima_treats_space_and_underscore_as_the_same_tag(self) -> None:
+        # anima 下提示词写的是空格分隔，候选是标签名形态
+        self.assertEqual(
+            existing_tags(["blue eyes"], ["blue_eyes", "red_eyes"], "anima"),
+            {"blue_eyes"},
+        )
+
+    def test_anima_comparison_is_case_insensitive(self) -> None:
+        self.assertEqual(existing_tags(["Solo"], ["solo"], "anima"), {"solo"})
+
+    def test_sdxl_treats_space_and_underscore_as_the_same_tag(self) -> None:
+        self.assertEqual(
+            existing_tags(["blue_hair"], ["blue_hair", "red hair"], "sdxl"),
+            {"blue_hair"},
+        )
+
+    def test_sdxl_keeps_case(self) -> None:
+        self.assertEqual(existing_tags(["solo"], ["Solo"], "sdxl"), set())
+
+    def test_score_tags_keep_their_underscore_in_both_formats(self) -> None:
+        self.assertEqual(existing_tags(["score_7"], ["score_7"], "anima"), {"score_7"})
+        self.assertEqual(existing_tags(["score_7"], ["score_7"], "sdxl"), {"score_7"})
+
+    def test_candidate_quotes_are_stripped_before_comparison(self) -> None:
+        # 候选文本会按格式化结果决定是否引号包裹，引号不该挡住「已有」判定
+        self.assertEqual(
+            existing_tags(["long hair"], ['"long hair"'], "anima"), {'"long hair"'}
+        )
+
+    def test_candidate_escaped_parentheses_are_unwrapped_before_comparison(
+        self,
+    ) -> None:
+        self.assertEqual(
+            existing_tags(["(long hair)"], [r"\(long hair\)"], "anima"),
+            {r"\(long hair\)"},
+        )
+
+    def test_disabled_format_compares_verbatim(self) -> None:
+        self.assertEqual(existing_tags(["blue eyes"], ["blue_eyes"], "disabled"), set())
+
+    def test_returns_candidates_rather_than_prompt_tags(self) -> None:
+        """返回值用于标记候选，因此必须回候选自身的形态（含候选侧才有的引号与转义）。"""
+        self.assertEqual(
+            existing_tags(["blue eyes"], ['"blue eyes"'], "anima"), {'"blue eyes"'}
+        )
+
+    def test_empty_inputs_yield_no_existing_tags(self) -> None:
+        self.assertEqual(existing_tags([], ["solo"], "anima"), set())
+        self.assertEqual(existing_tags(["solo"], [], "anima"), set())
 
 
 if __name__ == "__main__":

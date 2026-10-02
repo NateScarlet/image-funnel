@@ -4,7 +4,7 @@ import re
 import tomllib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 
 from .node_accessor import NodeAccessor
 
@@ -416,3 +416,36 @@ def _format_sdxl_line(line: str) -> str:
         new_parts.append(f"{leading_space}{replaced_part}{trailing_space}")
 
     return ",".join(new_parts)
+
+
+def existing_tags(
+    prompt_tags: Iterable[str],
+    candidate_tags: Iterable[str],
+    target_format: str,
+) -> Set[str]:
+    """判定候选中哪些已出现在提示词里，返回已存在的那一部分候选。
+
+    两侧都规范化到目标格式后再比对：候选按标签名形态给出（`blue_eyes`），而提示词
+    在 anima 下写成空格（`blue eyes`），不规范化会让同一标签被当成新标签。反过来，
+    返回的是候选自身的形态，调用方据此标记候选即可。
+
+    `prompt_tags` 与 `candidate_tags` 由调用方从各自的数据形状里取标签名传入，本函数
+    不接触提示词全文：命令行补全的「已见提示词」是逐行原文，ComfyUI 节点侧是已解析出的
+    标签名列表。`target_format` 取 "anima"/"sdxl"/"disabled"，非 anima/sdxl 的取值原样
+    比对。
+
+    候选侧额外剥掉引号并还原 `\\(`/`\\)` 转义：候选文本在格式化后才会决定是否引号包裹，
+    括号也会被转义后再插入提示词，这些是候选的书写形态而非标签本身。
+    """
+    normalized_prompt = {format_prompt_text(tag, target_format) for tag in prompt_tags}
+    return {
+        candidate
+        for candidate in candidate_tags
+        if format_prompt_text(_unwrap_candidate(candidate), target_format)
+        in normalized_prompt
+    }
+
+
+def _unwrap_candidate(text: str) -> str:
+    """剥掉候选文本的引号包裹并还原括号转义，还原成标签本身。"""
+    return text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")

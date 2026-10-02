@@ -47,7 +47,12 @@ from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .prompt_locator import get_workflow_node_text
 from .operation_history import OperationHistory
-from .model_format import ModelFormatConfig, NodeTextFormatter, collect_inference_texts
+from .model_format import (
+    ModelFormatConfig,
+    NodeTextFormatter,
+    collect_inference_texts,
+    existing_tags,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -860,19 +865,20 @@ class DanbooruProvider(AutocompleteProvider):
             self._format_for_target(context, line) for line in context.seen_prompts
         }
 
-        def is_in_workflow(text: str) -> bool:
-            cleaned_text = (
-                text.strip('"').strip("'").replace(r"\(", "(").replace(r"\)", ")")
-            )
-            return cleaned_text in seen_in_target_format
-
         def apply_styles(
             suggestions: List[AutocompleteSuggestion],
             added: Set[str],
             added_times: dict[str, str],
         ) -> Iterator[AutocompleteSuggestion]:
+            # 提示词侧已按目标格式重排，再规范化是幂等的；候选侧只需剥掉引号与括号转义，
+            # 因此传空格式让 format_prompt_text 原样比对。
+            already_existing = existing_tags(
+                seen_in_target_format,
+                [s.text for s in suggestions],
+                "",
+            )
             for s in suggestions:
-                if is_in_workflow(s.text):
+                if s.text in already_existing:
                     s.style = "muted"
                     s.description = f"(已有) {s.description}"
                 elif not s.style and s.text in added:
