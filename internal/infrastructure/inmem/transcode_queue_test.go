@@ -88,15 +88,18 @@ func TestTranscodeQueue_SameKeySharesExecution(t *testing.T) {
 }
 
 func TestTranscodeQueue_AllWaitersCancelledNotYielded(t *testing.T) {
+	// 契约只保证「等待者已全部撤回的未启动任务不会产出」（见 TranscodeQueue）：
+	// 消费循环一旦先行启动就可能抢在 Cancel 之前认领该任务，而认领后
+	// 再撤回已无法召回。因此先撤回需求再启动消费，才能确定性地验证淘汰逻辑
 	q := NewTranscodeQueue()
 	item, err := appimage.NewTranscodeItem("k1", "src/a.png", appimage.Spec{}, appimage.PrioLow)
 	require.NoError(t, err)
 
-	jobs := drain(t, q, appimage.PrioLow, 1)
-
 	waiter, err := q.Enqueue(context.Background(), item)
 	require.NoError(t, err)
 	waiter.Cancel()
+
+	jobs := drain(t, q, appimage.PrioLow, 1)
 
 	select {
 	case job := <-jobs:
@@ -165,8 +168,8 @@ func TestTranscodeQueue_ConsumeAfterCancelFreesSlot(t *testing.T) {
 	// 撤回后队列变空，Consume 循环应保持存活可继续收新任务
 	q := NewTranscodeQueue()
 
-	jobs := drain(t, q, appimage.PrioLow, 1)
-
+	// 同 AllWaitersCancelledNotYielded：撤回先于消费启动，
+	// 否则被撤回的任务可能被先认领，占掉本用例唯一一次拉取机会
 	cancelled, err := appimage.NewTranscodeItem("gone", "src/gone.png", appimage.Spec{}, appimage.PrioLow)
 	require.NoError(t, err)
 	w, err := q.Enqueue(context.Background(), cancelled)
@@ -178,8 +181,12 @@ func TestTranscodeQueue_ConsumeAfterCancelFreesSlot(t *testing.T) {
 	waiter, err := q.Enqueue(context.Background(), next)
 	require.NoError(t, err)
 
+	jobs := drain(t, q, appimage.PrioLow, 1)
 	select {
 	case job := <-jobs:
+		if key := job.Item().Key(); key != "next" {
+			t.Fatalf("expected the live item to be yielded, got %v", key)
+		}
 		go job.Resolve(nil, nil)
 	case <-time.After(time.Second):
 		t.Fatal("job not yielded after earlier cancellation")
