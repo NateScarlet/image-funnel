@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -505,7 +506,7 @@ func TestHandleImage_PathTraversalReturns403(t *testing.T) {
 	// 「签名有效但路径越界」的请求，验证 handler 的围栏独立生效
 	//
 	// 说明：含 .. 的路径会被 mux 的 cleanPath 提前 301（fail-closed），
-	// 因此这里选用能真正到达 handler 的形式——Windows 盘符相对路径
+	// 因此这里选用能真正到达 handler 的形式——UNC 与 Windows 盘符路径
 	logger := zap.NewNop()
 
 	coordinator := newTestCoordinator(nil)
@@ -513,9 +514,13 @@ func TestHandleImage_PathTraversalReturns403(t *testing.T) {
 	signer, rootDir, _ := testSetup(t, logger, coordinator)
 
 	cases := map[string]string{
-		"Windows 盘符相对路径": "C:/Windows/win.ini",
-		"Windows 盘符反斜杠":  "C:\\Windows\\win.ini",
-		"UNC 路径":         "//server/share/x.jpg",
+		"UNC 路径": "//server/share/x.jpg",
+	}
+	// 盘符只在 Windows 上是卷的一部分，在其他平台它只是根目录内的普通
+	// 相对路径（EnsurePathInRoot 按 filepath 语义判定，故同理）
+	if runtime.GOOS == "windows" {
+		cases["Windows 盘符相对路径"] = "C:/Windows/win.ini"
+		cases["Windows 盘符反斜杠"] = "C:\\Windows\\win.ini"
 	}
 	for name, escaped := range cases {
 		t.Run(name, func(t *testing.T) {
