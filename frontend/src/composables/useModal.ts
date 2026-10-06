@@ -30,6 +30,12 @@ export default function useModal() {
   const skipRender = ref(true);
   const visible = ref(false);
 
+  // 恢复到"从未渲染过"的初始状态，保证遮罩不会脱离关闭流程残留在页面上
+  function reset() {
+    skipRender.value = true;
+    visible.value = false;
+  }
+
   // 包装模态框的函数式组件
   const component: FunctionalComponent<
     {
@@ -54,6 +60,10 @@ export default function useModal() {
         to:
           (props.teleport?.to === ":provide" ? inject(rendererKey)?.() : props.teleport?.to) ??
           defaultRenderer.value,
+        // 渲染状态复位在退场动画的 afterLeave 上，但调用端按文档把数据就绪判定的 v-if 绑在包装组件上，
+        // 数据可能在退场动画播完前就消失（切换目录、重新拉取等），此时 afterLeave 不会再触发。
+        // 卸载时在此复位，避免残留的"可见"状态在下一次挂载时渲染出一个吞掉整页点击的空遮罩。
+        onVnodeUnmounted: reset,
       },
       h(
         Transition,
