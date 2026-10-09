@@ -42,10 +42,10 @@ const (
 	dropFilesHeadLen = 20 // DROPFILES 结构头长度：pFiles(4)+pt(8)+fNC(4)+fWide(4)
 
 	// clipboardWriteRetryTimes / clipboardWriteRetryDelayMs 写入重试参数：
-	// 剪贴板是系统全局共享资源，MuMu 等模拟器进程会高频抢占剪贴板（尤其是 OLE 路径，
-	// 表现为 .NET/WPF SetDataObject 频繁 CLIPBRD_E_CANT_OPEN）。本实现绕过 OLE，
-	// 直接使用 Win32 原始 API，并对 OpenClipboard 与 EmptyClipboard 两个可失败
-	// 步骤分别重试；实测竞争下平均 1 轮成功，30 轮上限留足余量。
+	// 剪贴板是系统全局共享资源，MuMu 等模拟器进程会高频抢占剪贴板。本实现绕过
+	// OLE，直接使用 Win32 原始 API（原因见 AddFiles），并对 OpenClipboard 与
+	// EmptyClipboard 两个可失败步骤分别重试；实测竞争下平均 1 轮成功，30 轮上限
+	// 留足余量。
 	clipboardWriteRetryTimes   = 30
 	clipboardWriteRetryDelayMs = 100
 )
@@ -201,10 +201,12 @@ func formatName(id uint32) string {
 
 // AddFiles 将文件列表以 CF_HDROP 写入剪贴板，同时写回纯文本与 HTML 格式。
 //
-// MuMu 等模拟器进程会高频抢占剪贴板，.NET/WPF 的 SetDataObject（OLE 路径）会因此
-// 频繁报 CLIPBRD_E_CANT_OPEN；本实现绕过 OLE，直接使用 Win32 原始 API
-// （OpenClipboard/EmptyClipboard/SetClipboardData），并对 OpenClipboard 与
-// EmptyClipboard 两个可失败步骤分别重试。所有调用必须在同一 OS 线程上执行。
+// Win32 有两套写入路径：.NET/WPF 的 Clipboard.SetDataObject 走 OLE（OleSetClipboard /
+// OleFlushClipboard），MuMu 等模拟器的剪贴板桥会高频抢占 OLE 层（偶尔连带原始层），
+// 该路径因此频繁报 CLIPBRD_E_CANT_OPEN（0x800401D0）。clip.exe 与本实现用的
+// OpenClipboard/EmptyClipboard/SetClipboardData 走原始 Win32 路径，通常不受影响，
+// 故绕过 OLE 直接调原始 API，并对 OpenClipboard 与 EmptyClipboard 两个可失败步骤
+// 分别重试。所有调用必须在同一 OS 线程上执行。
 func (c *Clipboard) AddFiles(filePaths []string, html string) error {
 	if len(filePaths) == 0 {
 		return nil
@@ -324,6 +326,8 @@ const cfHTMLHeaderFmt = "Version:0.9\r\nStartHTML:%010d\r\nEndHTML:%010d\r\nStar
 // buildCFHTML 构造 CF_HTML 剪贴板数据：头部 + HTML 内容。
 // StartHTML/EndHTML 指向 HTML 内容的起止字节偏移，使读取端可 round-trip 还原；
 // Start/EndFragment 与 Start/EndHTML 相同（内容整体即片段）。
+// 头部不可省略：clip.exe 只写 CF_UNICODETEXT，无法写 HTML Format，跨进程写
+// HTML Format 必须自行带上这套偏移头。
 func buildCFHTML(html string) []byte {
 	headerLen := len(fmt.Sprintf(cfHTMLHeaderFmt, 0, 0, 0, 0))
 	startHTML := headerLen

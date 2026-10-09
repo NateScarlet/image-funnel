@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 FilenameManager：管理 ComfyUI 工作流中的输出文件名更新和目录调整。
+
+全局约束（改动这套逻辑时不要破坏）：
+
+- **不得静默丢弃原有路径数据**：输出文件名里除目标目录外的层级只能拍平进文件名
+  前缀，直接取 basename 等于丢掉用户的目录结构信息。
+- **两侧必须一致**：workflow 侧保留 `%…%` 模板语法（只存在于 widgets_values 中），
+  prompt 侧恒为按同一模板求值出的静态快照——提交侧不能持有工作流侧无法复现的值。
 """
 
 import datetime
@@ -185,6 +192,9 @@ class FilenameManager:
         根据相对路径 rel_dir 调整所有输出节点的 filename_prefix，使输出文件总是
         直接落在 rel_dir 下，不创建任何子目录：rel_dir 之外的目录层级（字面目录、
         模板变量之间的分隔符）统一拍平为 __ 连接的文件名前缀。
+        唯一的例外是模板中的非日期变量与 rel_dir 分段一一对应：此时变量值本身
+        充当 rel_dir 路径（如 %Project.value%/%Title.value% 对应 NewProject/NewTitle），
+        分隔符保留。
         在 workflow 中保留模版变量语法，在 prompt 中求值展开为静态快照字符串。
         """
         prompt = self._accessor.prompt
