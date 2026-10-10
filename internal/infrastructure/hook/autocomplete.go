@@ -49,7 +49,7 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 
 	var targetHook *hookConfig
 	for _, h := range hooks {
-		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
+		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, nil, h.On.NoteDispatch != nil, nil, false, false)
 		if domH.ID() == hookID {
 			targetHook = &h
 			break

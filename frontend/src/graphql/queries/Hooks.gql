@@ -5,6 +5,7 @@ query Hooks {
     description
     canDispatchByImage
     canDispatchByNote
+    hotkeys
     directive {
       name
       usage

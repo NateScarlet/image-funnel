@@ -37,6 +37,7 @@ type Hook struct {
 	name                         string
 	description                  string
 	canDispatchByImage           bool
+	imageDispatchHotkeys         []string // [on.image_dispatch] 声明的快捷键，为空表示未声明
 	canDispatchByNote            bool
 	directive                    *Directive // nil 表示该 hook 不提供指令
 	hasPostUpdateNote            bool
@@ -48,6 +49,7 @@ func FromRepository(
 	rawID string,
 	name, description string,
 	canDispatchByImage bool,
+	imageDispatchHotkeys []string,
 	canDispatchByNote bool,
 	directive *Directive,
 	hasPostUpdateNote bool,
@@ -58,6 +60,7 @@ func FromRepository(
 		name:                         name,
 		description:                  description,
 		canDispatchByImage:           canDispatchByImage,
+		imageDispatchHotkeys:         imageDispatchHotkeys,
 		canDispatchByNote:            canDispatchByNote,
 		directive:                    directive,
 		hasPostUpdateNote:            hasPostUpdateNote,
@@ -84,6 +87,10 @@ func (h *Hook) CanDispatchByNote() bool            { return h.canDispatchByNote 
 func (h *Hook) Directive() *Directive              { return h.directive }
 func (h *Hook) HasPostUpdateNote() bool            { return h.hasPostUpdateNote }
 func (h *Hook) HasPostCommitSessionNoteScan() bool { return h.hasPostCommitSessionNoteScan }
+
+// ImageDispatchHotkeys 返回该钩子在图片派发上下文中声明的快捷键原始声明，
+// 后端只做透传，组合键是否可用（是否与其它快捷键冲突）由前端判定
+func (h *Hook) ImageDispatchHotkeys() []string { return h.imageDispatchHotkeys }
 
 // Repository 钩子领域持久化层接口
 type Repository interface {

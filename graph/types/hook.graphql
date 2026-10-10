@@ -7,6 +7,8 @@ type Hook @goModel(model: "main/internal/shared.HookDTO") {
   canDispatchByImage: Boolean!
   "是否支持按笔记手动触发分发"
   canDispatchByNote: Boolean!
+  "图片派发上下文中的快捷键声明（原样透传钩子配置，不保证可用；与其它快捷键冲突的组合会被降级并在快捷键列表中标注）。空数组表示未声明"
+  hotkeys: [String!]!
   "笔记指令配置，如果为空则表示不支持通过该钩子触发指令"
   directive: HookDirective
 }

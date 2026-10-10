@@ -235,6 +235,7 @@ type ComplexityRoot struct {
 		CanDispatchByNote  func(childComplexity int) int
 		Description        func(childComplexity int) int
 		Directive          func(childComplexity int) int
+		Hotkeys            func(childComplexity int) int
 		ID                 func(childComplexity int) int
 		Name               func(childComplexity int) int
 	}
@@ -1312,6 +1313,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Hook.Directive(childComplexity), true
+	case "Hook.hotkeys":
+		if e.complexity.Hook.Hotkeys == nil {
+			break
+		}
+
+		return e.complexity.Hook.Hotkeys(childComplexity), true
 	case "Hook.id":
 		if e.complexity.Hook.ID == nil {
 			break
@@ -3348,6 +3355,8 @@ type Hook @goModel(model: "main/internal/shared.HookDTO") {
   canDispatchByImage: Boolean!
   "是否支持按笔记手动触发分发"
   canDispatchByNote: Boolean!
+  "图片派发上下文中的快捷键声明（原样透传钩子配置，不保证可用；与其它快捷键冲突的组合会被降级并在快捷键列表中标注）。空数组表示未声明"
+  hotkeys: [String!]!
   "笔记指令配置，如果为空则表示不支持通过该钩子触发指令"
   directive: HookDirective
 }
@@ -8477,6 +8486,35 @@ func (ec *executionContext) fieldContext_Hook_canDispatchByNote(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Hook_hotkeys(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Hook_hotkeys,
+		func(ctx context.Context) (any, error) {
+			return obj.Hotkeys, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Hook_hotkeys(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Hook",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Hook_directive(ctx context.Context, field graphql.CollectedField, obj *shared.HookDTO) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13074,6 +13112,8 @@ func (ec *executionContext) fieldContext_Query_hooks(_ context.Context, field gr
 				return ec.fieldContext_Hook_canDispatchByImage(ctx, field)
 			case "canDispatchByNote":
 				return ec.fieldContext_Hook_canDispatchByNote(ctx, field)
+			case "hotkeys":
+				return ec.fieldContext_Hook_hotkeys(ctx, field)
 			case "directive":
 				return ec.fieldContext_Hook_directive(ctx, field)
 			}
@@ -21963,6 +22003,11 @@ func (ec *executionContext) _Hook(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "hotkeys":
+			out.Values[i] = ec._Hook_hotkeys(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "directive":
 			out.Values[i] = ec._Hook_directive(ctx, field, obj)
 		default:
@@ -26273,13 +26318,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 
@@ -26911,23 +26956,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
-	var res enum.Enum[shared.NotificationPriorityMeta]
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
+	var res shared.NotificationPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
-	var res enum.Enum[shared.NotificationStatusMeta]
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
+	var res shared.NotificationStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
 	return v
 }
 

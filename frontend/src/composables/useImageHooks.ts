@@ -1,7 +1,7 @@
 import { ref, computed, toValue, type MaybeRefOrGetter } from "vue";
 import type { ImageFiltersInput } from "@/graphql/generated";
 import useNotification from "@/composables/useNotification";
-import { useHotkeys } from "@/composables/useHotkeys";
+import { useHotkeys, type HotkeyBinding } from "@/composables/useHotkeys";
 import useStorage from "@/composables/useStorage";
 import useImage from "./domain/useImage";
 
@@ -59,6 +59,20 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
     }
   }
 
+  // 钩子在 TOML 中声明的快捷键按原始声明透传，声明标识取钩子 id：
+  // 同一钩子可以在多个上下文中各自绑定，彼此不算撞键
+  const hookHotkeys = computed<HotkeyBinding[]>(() =>
+    dispatchableHooks.value.map((hook) => ({
+      keys: hook.hotkeys,
+      handler: async () => {
+        const filterBy = toValue(options.selectedFilterBy);
+        if (!filterBy) return;
+        await dispatch(hook.id, hook.name, filterBy);
+      },
+      options: { description: hook.name, declared: hook.id },
+    })),
+  );
+
   // 绑定 F4 快捷键重复上一次动作
   useHotkeys(
     {
@@ -88,6 +102,7 @@ export default function useImageHooks(options: UseImageHooksOptions = {}) {
   return {
     hooksLoadingCount: hooksLoadingCountRef,
     dispatchableHooks,
+    hookHotkeys,
     isDispatching,
     currentDispatchingHookId,
     dispatch,

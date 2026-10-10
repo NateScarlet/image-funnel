@@ -33,10 +33,14 @@
               v-for="item in group.items"
               :key="item.id"
               class="flex items-center justify-between py-2 px-4 bg-primary-900/40 hover:bg-primary-900/80 border border-primary-800/30 hover:border-primary-700/40 rounded-xl transition-all duration-200"
+              :class="item.invalid ? 'border-red-900/50' : ''"
+              :title="item.invalid ? '该快捷键与其它快捷键冲突，按下不会触发' : undefined"
             >
-              <span class="text-xs md:text-sm text-primary-200 font-medium mr-4">{{
-                item.description
-              }}</span>
+              <span
+                class="text-xs md:text-sm font-medium mr-4"
+                :class="item.invalid ? 'text-red-300' : 'text-primary-200'"
+                >{{ item.description }}</span
+              >
               <div class="flex items-center gap-2 flex-wrap justify-end">
                 <div
                   v-for="(combo, comboIdx) in item.keys"
@@ -52,12 +56,18 @@
                       >+</span
                     >
                     <kbd
-                      class="px-2 py-0.5 min-w-6 text-center bg-primary-950 text-primary-100 rounded-lg border border-primary-800 font-mono text-xs shadow-md select-none"
+                      class="px-2 py-0.5 min-w-6 text-center rounded-lg border font-mono text-xs shadow-md select-none"
+                      :class="
+                        item.invalid
+                          ? 'bg-red-950 text-red-300 border-red-900'
+                          : 'bg-primary-950 text-primary-100 border-primary-800'
+                      "
                     >
                       {{ keyName }}
                     </kbd>
                   </template>
                 </div>
+                <span v-if="item.invalid" class="text-xs text-red-400 select-none">[冲突]</span>
               </div>
             </div>
           </div>
@@ -106,6 +116,7 @@ const groupedHotkeys = computed(() => {
     "图片评分",
     "图片标签",
     "图片操作",
+    "钩子动作",
     "其他",
   ];
 

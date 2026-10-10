@@ -280,6 +280,7 @@ type HookDTO struct {
 	Description        string
 	CanDispatchByImage bool
 	CanDispatchByNote  bool
+	Hotkeys            []string
 	Directive          *HookDirectiveDTO
 }
 

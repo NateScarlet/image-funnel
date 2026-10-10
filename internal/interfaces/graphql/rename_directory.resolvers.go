@@ -23,7 +23,7 @@ func (r *mutationResolver) RenameDirectory(ctx context.Context, input RenameDire
 	}
 
 	return &RenameDirectoryPayload{
-		Directory:       dir,
+		Directory:        dir,
 		ClientMutationID: input.ClientMutationID,
 	}, nil
 }

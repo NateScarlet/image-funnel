@@ -987,9 +987,14 @@ useEventListeners(containerRef, ({ on }) => {
 });
 
 // #region 外部后置动作
-const { dispatchableHooks, isDispatching, currentDispatchingHookId, dispatch } = useImageHooks({
-  selectedFilterBy: () => ({ id: [image.id] }),
-});
+const { dispatchableHooks, hookHotkeys, isDispatching, currentDispatchingHookId, dispatch } =
+  useImageHooks({
+    selectedFilterBy: () => ({ id: [image.id] }),
+  });
+
+// 钩子声明的快捷键作用于当前这张图片，与下方动作菜单同语义；
+// 组件随查看器一同挂载卸载，因此只在查看器上下文出现在快捷键列表中
+useHotkeys(hookHotkeys, { category: "钩子动作" });
 
 const showActionPopover = ref(false);
 const actionPopoverContainerRef = useTemplateRef<HTMLElement>("actionPopoverContainerRef");

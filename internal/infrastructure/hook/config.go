@@ -17,6 +17,9 @@ import (
 
 // imageDispatchTrigger 图片手动触发分发器定义
 type imageDispatchTrigger struct {
+	// Hotkeys 在图片派发上下文中触发该钩子的快捷键声明，语法沿用前端的组合键表示（如 "ctrl+shift+k"，不区分大小写）。
+	// 后端只做透传，是否与其它快捷键冲突由前端判定，冲突的键会降级为不可用并在快捷键列表中标注。
+	Hotkeys []string `toml:"hotkeys"`
 }
 
 // copyTrigger 复制增强能力标记：声明 [copy] 即让脚本在用户复制图片时被同步调用，

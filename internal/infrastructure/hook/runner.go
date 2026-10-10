@@ -132,11 +132,16 @@ func (r *Runner) List(ctx context.Context) ([]*hook.Hook, error) {
 	for _, h := range hooks {
 		hasPostUpdateNote := h.On.PostUpdateNote != nil
 		hasPostCommitSessionNoteScan := h.On.PostCommitSession != nil && h.On.PostCommitSession.NoteScan != nil
+		var imageDispatchHotkeys []string
+		if h.On.ImageDispatch != nil {
+			imageDispatchHotkeys = h.On.ImageDispatch.Hotkeys
+		}
 		res = append(res, hook.FromRepository(
 			h.ID,
 			h.Name,
 			h.Description,
 			h.On.ImageDispatch != nil,
+			imageDispatchHotkeys,
 			h.On.NoteDispatch != nil,
 			toDomainDirective(h.Directive),
 			hasPostUpdateNote,
@@ -154,7 +159,7 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 
 	var targetHook *hookConfig
 	for _, h := range hooks {
-		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
+		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, nil, h.On.NoteDispatch != nil, nil, false, false)
 		if domH.ID() == hookID {
 			targetHook = &h
 			break
@@ -211,7 +216,7 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 
 	var targetHook *hookConfig
 	for _, h := range hooks {
-		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, h.On.NoteDispatch != nil, nil, false, false)
+		domH := hook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, nil, h.On.NoteDispatch != nil, nil, false, false)
 		r.logger.Debug("TriggerForNote comparing hook", zap.String("h.ID", h.ID), zap.String("domH.ID", domH.ID().String()))
 		if domH.ID() == hookID {
 			targetHook = &h

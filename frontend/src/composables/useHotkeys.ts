@@ -57,6 +57,17 @@ export interface HotkeyOptions {
    * 显式指定快捷键所属的 scope。默认从父组件 inject 注入。
    */
   scope?: MaybeRefOrGetter<string | undefined>;
+  /**
+   * 声明式快捷键的声明标识（如钩子 id）。声明式快捷键由用户自由填写，
+   * 可能与应用自身快捷键或其它声明撞键。
+   * 撞键时采取可见降级：不注册 handler（按下既不派发也不拦截事件），
+   * 但仍以 `invalid: "conflict"` 出现在快捷键说明列表中。
+   * 判定按逐键粒度进行，同一声明中的某个键冲突不影响其余键。
+   *
+   * 同一标识的多个注册项（如同一个钩子绑定到查看器与批量操作栏两个上下文）
+   * 属于同一声明，彼此不算撞键，由 scope 决定当下哪个上下文生效。
+   */
+  declared?: string;
 }
 
 /**
@@ -100,7 +111,17 @@ interface RegisteredHotkey {
     | ((ctx: { topmostScope: string | undefined; activeScopes: string[] }) => boolean);
   global: boolean;
   getScope: () => string | undefined;
+  /** 声明标识，undefined 表示应用自身快捷键 */
+  declared?: string;
+  /** 是否已登记到帮助列表，用于决定失效状态是否需要同步到列表 */
+  listedInHelp: boolean;
+  invalid?: HotkeyInvalidReason;
 }
+
+/**
+ * 快捷键失效原因
+ */
+export type HotkeyInvalidReason = "conflict";
 
 /**
  * 活跃快捷键条目 (供帮助列表使用)
@@ -113,6 +134,11 @@ export interface ActiveHotkey {
   enabled?:
     | MaybeRefOrGetter<boolean>
     | ((ctx: { topmostScope: string | undefined; activeScopes: string[] }) => boolean);
+  /**
+   * 失效原因。非空表示该条快捷键已被声明但当前不可用（详见 ADR 0008），
+   * 此时不注册 handler，仅在帮助列表中以错误样式提示。
+   */
+  invalid?: HotkeyInvalidReason;
 }
 
 // 依赖注入标识
@@ -156,6 +182,15 @@ function parseHotkey(shortcut: string): HotkeyCombination {
 }
 
 /**
+ * 组合键的规范化标识，用于比对两个组合键在语义上是否等价
+ * （如 "F5" 与 "f5"、"ctrl+k" 与 "control+K" 视为同一个组合键）
+ */
+function combinationKey(comb: HotkeyCombination): string {
+  const modifiers = `${comb.ctrl ? "ctrl+" : ""}${comb.shift ? "shift+" : ""}${comb.alt ? "alt+" : ""}${comb.meta ? "meta+" : ""}`;
+  return `${modifiers}${comb.key.toLowerCase()}`;
+}
+
+/**
  * 全局按键分发处理器，实现作用域匹配和事件隔离
  */
 function globalKeydownHandler(e: KeyboardEvent) {
@@ -164,6 +199,11 @@ function globalKeydownHandler(e: KeyboardEvent) {
 
   for (let i = registeredHotkeys.length - 1; i >= 0; i--) {
     const hotkey = registeredHotkeys[i];
+
+    // 0. 声明式快捷键撞键后不参与分发，按下既不派发也不拦截事件
+    if (hotkey.invalid !== undefined) {
+      continue;
+    }
 
     // 1. 判断是否被启用
     let isEnabled: boolean;
@@ -287,14 +327,62 @@ function parseCombinationToKeys(comb: HotkeyCombination): string[] {
 }
 
 /**
+ * 同步某个注册项的失效状态到帮助列表
+ */
+function setHotkeyInvalid(hotkey: RegisteredHotkey, invalid: HotkeyInvalidReason | undefined) {
+  if (hotkey.invalid === invalid) return;
+  hotkey.invalid = invalid;
+  if (!hotkey.listedInHelp) return;
+  activeHotkeys.value = activeHotkeys.value.map((item) =>
+    item.id === hotkey.id ? { ...item, invalid } : item,
+  );
+}
+
+/**
+ * 重新判定所有声明式快捷键的冲突状态。
+ *
+ * 冲突的钩子键采取可见降级（见 ADR 0008）：不注册 handler，但仍出现在快捷键说明列表中。
+ * 判定按逐键粒度进行；两个声明占用同一个组合键时双方都失效，不存在先到先得的赢家。
+ * 每次注册或注销后都需整体重算，避免残留的失效状态无法随声明变化恢复。
+ */
+function resolveDeclaredConflicts() {
+  if (!registeredHotkeys.some((item) => item.declared !== undefined)) return;
+
+  // 组合键 -> 占用它的全部注册项
+  const claims = new Map<string, RegisteredHotkey[]>();
+  for (const hotkey of registeredHotkeys) {
+    for (const combination of hotkey.combinations) {
+      const key = combinationKey(combination);
+      const claim = claims.get(key);
+      if (claim) {
+        claim.push(hotkey);
+      } else {
+        claims.set(key, [hotkey]);
+      }
+    }
+  }
+
+  for (const hotkey of registeredHotkeys) {
+    if (hotkey.declared === undefined) continue;
+    const conflicted = hotkey.combinations.some((combination) =>
+      (claims.get(combinationKey(combination)) ?? []).some(
+        // 同一声明标识的多个注册项属于同一声明，彼此不算撞键
+        (other) => other.id !== hotkey.id && other.declared !== hotkey.declared,
+      ),
+    );
+    setHotkeyInvalid(hotkey, conflicted ? "conflict" : undefined);
+  }
+}
+
+/**
  * 内部快捷键注册方法
  */
 function registerSingleHotkey(
   id: string,
-  keys: string | HotkeyCombination | (string | HotkeyCombination)[],
+  keys: HotkeyBinding["keys"],
   handler: (e: KeyboardEvent) => void,
   options: HotkeyOptions = {},
-) {
+): void {
   const {
     allowInInputs = false,
     preventDefault = true,
@@ -303,15 +391,12 @@ function registerSingleHotkey(
     enabled,
     global = false,
     scope,
+    declared,
   } = options;
 
-  const combinations = (Array.isArray(keys) ? keys : [keys]).map((k) => {
-    if (typeof k === "string") {
-      return parseHotkey(k);
-    }
-    return k;
-  });
+  const combinations = toCombinations(keys);
 
+  const description = options.description;
   const newHotkey: RegisteredHotkey = {
     id,
     combinations,
@@ -322,19 +407,18 @@ function registerSingleHotkey(
     enabled,
     global,
     getScope: () => (scope !== undefined ? toValue(scope) : undefined),
+    declared,
+    listedInHelp: !!description,
   };
   registeredHotkeys.push(newHotkey);
 
   // 收集快捷键配置以展示到帮助列表中
-  const description = options.description;
   if (description) {
-    const keysList = combinations.map(parseCombinationToKeys);
-
     activeHotkeys.value = [
       ...activeHotkeys.value,
       {
         id,
-        keys: keysList,
+        keys: combinations.map(parseCombinationToKeys),
         description,
         category,
         enabled,
@@ -342,24 +426,46 @@ function registerSingleHotkey(
     ];
   }
 
-  const instance = getCurrentInstance();
-  if (instance) {
-    onUnmounted(() => {
-      const index = registeredHotkeys.findIndex((item) => item.id === id);
-      if (index !== -1) {
-        registeredHotkeys.splice(index, 1);
-      }
-      if (description) {
-        activeHotkeys.value = activeHotkeys.value.filter((item) => item.id !== id);
-      }
-    });
-  }
+  resolveDeclaredConflicts();
+}
+
+/**
+ * 内部快捷键注销方法
+ */
+function unregisterSingleHotkey(id: string) {
+  const index = registeredHotkeys.findIndex((item) => item.id === id);
+  if (index === -1) return;
+  registeredHotkeys.splice(index, 1);
+  activeHotkeys.value = activeHotkeys.value.filter((item) => item.id !== id);
+  resolveDeclaredConflicts();
 }
 
 export interface HotkeyBinding {
   keys: string | HotkeyCombination | (string | HotkeyCombination)[];
   handler: (e: KeyboardEvent) => void;
   options?: Omit<HotkeyOptions, "scope" | "category">;
+}
+
+/**
+ * 快捷键绑定集合
+ */
+export type HotkeyBindings = HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>;
+
+/**
+ * 把绑定输入统一成数组形式
+ */
+function normalizeBindings(bindings: HotkeyBindings): HotkeyBinding[] {
+  if (Array.isArray(bindings)) return bindings;
+  return Object.entries(bindings).map(([keys, handler]) => ({ keys, handler }));
+}
+
+/**
+ * 把组合键输入统一成组合键数组
+ */
+function toCombinations(keys: HotkeyBinding["keys"]): HotkeyCombination[] {
+  return (Array.isArray(keys) ? keys : [keys]).map((key) =>
+    typeof key === "string" ? parseHotkey(key) : key,
+  );
 }
 
 // 重载定义 1：仅定义 Scope
@@ -371,7 +477,7 @@ export function useHotkeys(
 
 // 重载定义 2：注册多个快捷键，并可选定义 Scope
 export function useHotkeys(
-  bindings: HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void>,
+  bindings: MaybeRefOrGetter<HotkeyBindings>,
   options?: HotkeyOptions & {
     defineScope?: MaybeRefOrGetter<string | undefined>;
   },
@@ -382,14 +488,13 @@ export function useHotkeys(
  */
 export function useHotkeys(
   bindingsOrOptions:
-    | HotkeyBinding[]
-    | Record<string, (e: KeyboardEvent) => void>
+    | MaybeRefOrGetter<HotkeyBindings>
     | (HotkeyOptions & { defineScope: MaybeRefOrGetter<string | undefined> }),
   optionsOrUndefined?: HotkeyOptions & {
     defineScope?: MaybeRefOrGetter<string | undefined>;
   },
 ): Ref<string | undefined> {
-  let bindings: HotkeyBinding[] | Record<string, (e: KeyboardEvent) => void> | null = null;
+  let bindings: MaybeRefOrGetter<HotkeyBindings> | null = null;
   let resolvedOptions: HotkeyOptions & {
     defineScope?: MaybeRefOrGetter<string | undefined>;
   };
@@ -401,11 +506,11 @@ export function useHotkeys(
     !("keys" in bindingsOrOptions) &&
     "defineScope" in (bindingsOrOptions as unknown as Record<string, unknown>)
   ) {
-    resolvedOptions = bindingsOrOptions;
+    resolvedOptions = bindingsOrOptions as HotkeyOptions & {
+      defineScope: MaybeRefOrGetter<string | undefined>;
+    };
   } else {
-    bindings = bindingsOrOptions as unknown as
-      | HotkeyBinding[]
-      | Record<string, (e: KeyboardEvent) => void>;
+    bindings = bindingsOrOptions as unknown as MaybeRefOrGetter<HotkeyBindings>;
     resolvedOptions = optionsOrUndefined || {};
   }
 
@@ -450,27 +555,57 @@ export function useHotkeys(
 
   // 2. 注册快捷键
   if (bindings) {
-    const items = Array.isArray(bindings)
-      ? bindings
-      : Object.entries(bindings).map(([keys, handler]) => ({
-          keys,
-          handler,
-        }));
+    const source = bindings;
+    const baseId = useId();
+    const hotkeyScope = computed(() => {
+      if (hotkeyOptions.global) return undefined;
+      if (defineScope !== undefined) return localScopeId.value;
+      if (hotkeyOptions.scope !== undefined) return toValue(hotkeyOptions.scope);
+      return toValue(injectedScope);
+    });
 
-    for (const item of items) {
-      const hotkeyScope = computed(() => {
-        if (hotkeyOptions.global) return undefined;
-        if (defineScope !== undefined) return localScopeId.value;
-        if (hotkeyOptions.scope !== undefined) return toValue(hotkeyOptions.scope);
-        return toValue(injectedScope);
+    // 本次调用已注册的快捷键 id，用于重新注册与卸载时清理
+    let registeredIds: string[] = [];
+
+    // 绑定可能来自异步数据（如钩子配置经 GraphQL 加载），变化时整体重注册，
+    // 冲突判定也因此始终基于当前完整的声明集合
+    function syncRegistrations(items: HotkeyBinding[]) {
+      for (const id of registeredIds) {
+        unregisterSingleHotkey(id);
+      }
+      registeredIds = [];
+
+      items.forEach((item, index) => {
+        const bindingOptions = "options" in item ? item.options : undefined;
+        const options: HotkeyOptions = { ...hotkeyOptions, ...bindingOptions, scope: hotkeyScope };
+        const bindingId = `${baseId}-${index}`;
+
+        if (options.declared === undefined) {
+          registerSingleHotkey(bindingId, item.keys, item.handler, options);
+          registeredIds.push(bindingId);
+          return;
+        }
+
+        // 声明式快捷键逐键生效：同一声明中的重复键只算一次，某个键冲突不影响其余键
+        const declaredKeys = new Set<string>();
+        for (const combination of toCombinations(item.keys)) {
+          const key = combinationKey(combination);
+          if (declaredKeys.has(key)) continue;
+          declaredKeys.add(key);
+          const declaredId = `${bindingId}-${declaredKeys.size}`;
+          registerSingleHotkey(declaredId, combination, item.handler, options);
+          registeredIds.push(declaredId);
+        }
       });
+    }
 
-      const hotkeyId = useId();
-      const itemOptions = "options" in item ? item.options : undefined;
-      registerSingleHotkey(hotkeyId, item.keys, item.handler, {
-        ...hotkeyOptions,
-        ...itemOptions,
-        scope: hotkeyScope,
+    watch(() => normalizeBindings(toValue(source)), syncRegistrations, { immediate: true });
+
+    if (getCurrentInstance()) {
+      onUnmounted(() => {
+        for (const id of registeredIds) {
+          unregisterSingleHotkey(id);
+        }
       });
     }
   }

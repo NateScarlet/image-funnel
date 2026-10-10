@@ -30,6 +30,7 @@ func (f *DTOFactory) New(h *domain.Hook) *shared.HookDTO {
 		Description:        h.Description(),
 		CanDispatchByImage: h.CanDispatchByImage(),
 		CanDispatchByNote:  h.CanDispatchByNote(),
+		Hotkeys:            h.ImageDispatchHotkeys(),
 		Directive:          dir,
 	}
 }

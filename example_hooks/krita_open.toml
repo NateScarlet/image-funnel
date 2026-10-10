@@ -5,6 +5,7 @@ description = "将选中的图片在本机 Krita 中打开，Krita 已在运行�
 command = "uv run runner.py krita_open"
 
 [on.image_dispatch]
+hotkeys = ["F6"] # 图片派发上下文中的快捷键，与应用自身快捷键冲突时该键失效并标注
 
 [env]
 # KRITA_EXE = "" # Krita 可执行文件路径；未设置时依次探测 PATH 与常见安装位置

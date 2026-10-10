@@ -203,6 +203,7 @@ rating = [4, 5]
 label = [""]
 
 [on.image_dispatch]
+hotkeys = ["F5", "ctrl+shift+k"]
 `
 	tomlPath := filepath.Join(hooksDir, "comfyui.toml")
 	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
@@ -226,6 +227,35 @@ label = [""]
 	assert.Equal(t, "hk:comfyui-test", h.ID().String())
 	assert.Equal(t, "ComfyUI 测试", h.Name())
 	assert.True(t, h.CanDispatchByImage())
+	assert.Equal(t, []string{"F5", "ctrl+shift+k"}, h.ImageDispatchHotkeys())
+}
+
+func TestRunner_TOML_Parsing_ImageDispatchWithoutHotkeys(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	tomlContent := `
+id = "no-hotkey"
+name = "无快捷键"
+command = "python test.py"
+
+[on.image_dispatch]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "no-hotkey.toml"), []byte(tomlContent), 0644)
+	assert.NoError(t, err)
+
+	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
+	defer runner.Close()
+
+	hooks, err := runner.List(context.Background())
+	assert.NoError(t, err)
+	assert.Len(t, hooks, 1)
+	assert.Empty(t, hooks[0].ImageDispatchHotkeys())
 }
 
 func TestRunner_FilteringAndDebounce(t *testing.T) {

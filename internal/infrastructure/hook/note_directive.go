@@ -199,7 +199,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		r.logger.Debug("executeNoteDirectives trigger filter passed", zap.Bool("passed", filterPassed))
 
 		if !filterHookID.IsZero() {
-			domH := domhook.FromRepository(hookConfig.ID, hookConfig.Name, hookConfig.Description, hookConfig.On.ImageDispatch != nil, hookConfig.On.NoteDispatch != nil, nil, false, false)
+			domH := domhook.FromRepository(hookConfig.ID, hookConfig.Name, hookConfig.Description, hookConfig.On.ImageDispatch != nil, nil, hookConfig.On.NoteDispatch != nil, nil, false, false)
 			idMatch := domH.ID() == filterHookID
 			r.logger.Debug("executeNoteDirectives hook ID filter check",
 				zap.String("domH.ID", domH.ID().String()),

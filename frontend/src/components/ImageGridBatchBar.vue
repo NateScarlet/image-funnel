@@ -250,6 +250,7 @@ import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingSelector from "./RatingSelector.vue";
 import AppDropdown from "./AppDropdown.vue";
 import useImageHooks from "@/composables/useImageHooks";
+import { useHotkeys, activeScopes } from "@/composables/useHotkeys";
 import type { ImageFragment, ImageFiltersInput } from "@/graphql/generated";
 import type { Ref, ComputedRef } from "vue";
 
@@ -314,10 +315,20 @@ async function handleBulkDispatch(hookId: string, hookName: string, closeDropdow
 // #region 动作派发
 const {
   dispatchableHooks,
+  hookHotkeys,
   isDispatching: isBulkDispatching,
   dispatch,
 } = useImageHooks({
   selectedFilterBy: () => props.bulkOps.selectedFilterBy.value,
+});
+
+// 钩子在配置中声明的快捷键，与菜单派发同语义：按当前筛选上下文触发。
+// 查看器打开时由查看器上下文的注册项接管，两者不同时出现在快捷键列表中
+useHotkeys(hookHotkeys, {
+  category: "钩子动作",
+  enabled: computed(
+    () => activeScopes.value.length === 0 && !!props.bulkOps.selectedFilterBy.value,
+  ),
 });
 // #endregion
 
