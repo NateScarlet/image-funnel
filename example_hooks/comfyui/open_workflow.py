@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 「在工作流页面打开」钩子：读取选中图片内置的 ComfyUI 工作流，执行与复制增强一致的
-输出目录调整与提示词模型格式重排，然后 POST 到 comfyui-nodes 扩展的
-``/io.github.natescarlet/open`` 路由，由最近连接的网页端直接打开，免去复制粘贴。
+输出目录调整与提示词模型格式重排，然后连同按图片路径派生的名称 POST 到 comfyui-nodes
+扩展的 ``/io.github.natescarlet/open`` 路由，由最近连接的网页端直接打开，免去复制粘贴。
 
 经统一 runner 以「模块名回退直跑」方式启动（uv run runner.py comfyui.open_workflow），
 与 copy_workflow 单次执行同模式。核心逻辑不读取环境变量，依赖（请求上下文 + 元数据
@@ -45,18 +45,35 @@ MetadataLoader = Callable[
     [str], Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]
 ]
 
-# 发送函数协议：把调整后的工作流 POST 到目标 ComfyUI。抛异常表示送达失败（快速失败）
-SendWorkflow = Callable[[str, Dict[str, Any]], None]
+# 发送函数协议：把调整后的工作流连同派生名称 POST 到目标 ComfyUI。
+# 名称需从图片路径派生，故接收整个请求上下文而非仅 URL。抛异常表示送达失败（快速失败）
+SendWorkflow = Callable[[OpenRequest, Dict[str, Any]], None]
 
 
-def send_workflow(comfyui_url: str, workflow: Dict[str, Any]) -> None:
-    """把工作流 POST 到 comfyui-nodes 的打开路由。
+def build_workflow_name(image_path: str) -> str:
+    """按 `<目录名>__<图片名>` 拼装网页端显示的工作流名称。
+
+    comfyui-nodes 只透传该字段、不解析格式，因此命名规则由本钩子定义。
+    """
+    directory = os.path.basename(os.path.dirname(image_path))
+    image_name = os.path.splitext(os.path.basename(image_path))[0]
+    return f"{directory}__{image_name}"
+
+
+def send_workflow(request: OpenRequest, workflow: Dict[str, Any]) -> None:
+    """把工作流与名称 POST 到 comfyui-nodes 的打开路由。
 
     失败按两类区分并抛出可读异常：目标返回 404 说明路由不存在（扩展未装/未启用），
     其余网络错误说明连不上 ComfyUI。两者文案不同，因为用户要采取的行动不同。
     """
-    url = f"{comfyui_url.rstrip('/')}{OPEN_ROUTE_PATH}"
-    data: bytes = json.dumps({"workflow": workflow}, ensure_ascii=False).encode("utf-8")
+    url = f"{request.comfyui_url.rstrip('/')}{OPEN_ROUTE_PATH}"
+    data: bytes = json.dumps(
+        {
+            "workflow": workflow,
+            "name": build_workflow_name(request.image_path),
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
     req: urllib.request.Request = urllib.request.Request(
         url,
         data=data,
@@ -95,7 +112,7 @@ def open_workflow(
         request.comfyui_output_dir,
         request.hook_output_dir,
     )
-    send(request.comfyui_url, adjusted)
+    send(request, adjusted)
     return "已在 ComfyUI 页面打开该图片的工作流"
 
 

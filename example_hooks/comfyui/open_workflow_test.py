@@ -21,6 +21,7 @@ from .open_workflow import (
     UNREACHABLE_ERROR,
     OpenRequest,
     build_request_from_env,
+    build_workflow_name,
     main,
     open_workflow,
     send_workflow,
@@ -58,12 +59,13 @@ def _make_pair_fixture(prefix: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return workflow, prompt
 
 
-def _make_sender() -> Tuple[List[Tuple[str, Dict[str, Any]]], Any]:
-    """构造注入的发送函数 mock：记录 (comfyui_url, workflow) 调用"""
-    sent: List[Tuple[str, Dict[str, Any]]] = []
+def _make_sender() -> Tuple[List[Tuple[OpenRequest, Dict[str, Any]]], Any]:
+    """构造注入的发送函数 mock：记录 (request, workflow) 调用"""
 
-    def _send(comfyui_url: str, workflow: Dict[str, Any]) -> None:
-        sent.append((comfyui_url, workflow))
+    sent: List[Tuple[OpenRequest, Dict[str, Any]]] = []
+
+    def _send(request: OpenRequest, workflow: Dict[str, Any]) -> None:
+        sent.append((request, workflow))
 
     return sent, _send
 
@@ -92,8 +94,8 @@ class TestOpenWorkflow(unittest.TestCase):
 
         self.assertIn("打开", result)
         self.assertEqual(len(sent), 1)
-        url, delivered = sent[0]
-        self.assertEqual(url, "http://127.0.0.1:8188")
+        request, delivered = sent[0]
+        self.assertEqual(request.comfyui_url, "http://127.0.0.1:8188")
         self.assertEqual(
             delivered["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI"
         )
@@ -194,6 +196,25 @@ class TestOpenWorkflow(unittest.TestCase):
         self.assertEqual(json.loads(copy_result.content), sent[0][1])
 
 
+class TestBuildWorkflowName(unittest.TestCase):
+
+    def test_joins_directory_and_image_name(self):
+        """名称 = 目录 basename + 双下划线 + 图片名（去扩展名）"""
+        self.assertEqual(build_workflow_name(r"C:\output\sub\image.png"), "sub__image")
+
+    def test_uses_containing_directory_not_ancestors(self):
+        """只取图片的直接上级目录名，更上层目录不参与"""
+        self.assertEqual(
+            build_workflow_name(r"C:\output\sub1\sub2\image.png"), "sub2__image"
+        )
+
+    def test_strips_only_the_extension(self):
+        """文件名中的其他点号保留，只剥掉最后一个扩展名"""
+        self.assertEqual(
+            build_workflow_name(r"C:\output\sub\my.photo.png"), "sub__my.photo"
+        )
+
+
 class _FakeResponse:
     """urlopen 的最小响应替身：只需支持上下文管理器与 read。"""
 
@@ -212,8 +233,8 @@ class TestSendWorkflow(unittest.TestCase):
     def _patch_urlopen(self, side_effect: BaseException):
         return patch("urllib.request.urlopen", side_effect=side_effect)
 
-    def test_posts_workflow_to_open_route(self):
-        """把工作流包成 {workflow: ...} POST 到打开路由"""
+    def test_posts_workflow_with_name_to_open_route(self):
+        """请求体为 {workflow, name}，name 由图片路径派生"""
         captured: Dict[str, Any] = {}
 
         def _urlopen(
@@ -227,11 +248,30 @@ class TestSendWorkflow(unittest.TestCase):
             return _FakeResponse()
 
         with patch("urllib.request.urlopen", _urlopen):
-            send_workflow("http://127.0.0.1:8188", {"nodes": []})
+            send_workflow(_make_request(r"C:\output\sub\image.png"), {"nodes": []})
 
         self.assertEqual(captured["url"], f"http://127.0.0.1:8188{OPEN_ROUTE_PATH}")
         self.assertEqual(captured["method"], "POST")
-        self.assertEqual(json.loads(captured["data"]), {"workflow": {"nodes": []}})
+        self.assertEqual(
+            json.loads(captured["data"]),
+            {"workflow": {"nodes": []}, "name": "sub__image"},
+        )
+
+    def test_legacy_target_reading_only_workflow_still_delivered(self):
+        """旧版目标能理解的只有 workflow 字段：多余字段被忽略，请求依然有效送达"""
+
+        def _urlopen(
+            req: urllib.request.Request,
+            *args: object,
+            **kwargs: object,
+        ) -> _FakeResponse:
+            data: Any = req.data
+            body = json.loads(data)
+            self.assertIn("workflow", body)
+            return _FakeResponse()
+
+        with patch("urllib.request.urlopen", _urlopen):
+            send_workflow(_make_request(r"C:\output\sub\image.png"), {"nodes": []})
 
     def test_404_raises_route_missing_error(self):
         """目标返回 404：提示 comfyui-nodes 扩展未安装/未启用"""
@@ -244,7 +284,7 @@ class TestSendWorkflow(unittest.TestCase):
         )
         with self._patch_urlopen(side_effect=error):
             with self.assertRaises(ValueError) as ctx:
-                send_workflow("http://127.0.0.1:8188", {"nodes": []})
+                send_workflow(_make_request(r"C:\out\image.png"), {"nodes": []})
         self.assertIn("comfyui-nodes", str(ctx.exception))
 
     def test_connection_error_raises_unreachable_error(self):
@@ -252,7 +292,7 @@ class TestSendWorkflow(unittest.TestCase):
         error = urllib.error.URLError("connection refused")
         with self._patch_urlopen(side_effect=error):
             with self.assertRaises(ValueError) as ctx:
-                send_workflow("http://127.0.0.1:8188", {"nodes": []})
+                send_workflow(_make_request(r"C:\out\image.png"), {"nodes": []})
         self.assertEqual(str(ctx.exception), UNREACHABLE_ERROR)
 
     def test_route_missing_and_unreachable_messages_differ(self):
