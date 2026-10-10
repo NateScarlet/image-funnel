@@ -4,7 +4,7 @@ description = "把图片内嵌工作流直接送达最近打开的 ComfyUI 页�
 command = "uv run runner.py comfyui.open_workflow"
 
 [on.image_dispatch] # 手动派发：用户右键选中图片时触发
-hotkeys = ["F5"]     # 图片派发上下文中的快捷键，与应用自身快捷键冲突时该键失效并标注
+hotkeys = ["F9"]     # 图片派发上下文中的快捷键，与应用自身快捷键冲突时该键失效并标注
 
 [env]
 # COMFYUI_URL = ""        # ComfyUI 服务地址。默认 http://127.0.0.1:8188
