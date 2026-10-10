@@ -43,6 +43,35 @@ class CopyResult:
     description: str
 
 
+def prepare_workflow(
+    image_path: str,
+    prompt: Dict[str, Any],
+    workflow: Dict[str, Any],
+    comfyui_output_dir: str,
+    hook_output_dir: str,
+) -> Dict[str, Any]:
+    """把图片内置工作流调整为「就地复用」版本并返回调整后的工作流。
+
+    供复制增强与「在工作流页面打开」钩子共同调用，保证二者的输出目录调整与提示词
+    模型格式重排行为完全一致（打开与复制粘回是同一件事的两种送达方式）。
+
+    :inherit: 时完全关闭输出目录自动调整（原样保留，仅重排标签格式）。就地修改传入的
+    workflow，与既有入列、复制流程一致。
+    """
+    pair = WorkflowPromptPair(workflow, prompt)
+    if hook_output_dir != ":inherit:":
+        rel_dir = get_relative_output_dir(
+            image_path, comfyui_output_dir, hook_output_dir
+        )
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node
+        ).adjust_output_directory(rel_dir)
+
+    # 所有输出路径统一按节点模型格式重排提示词（与入列、复制一致）
+    format_workflow_prompt_pair(pair)
+    return pair.workflow
+
+
 def build_copy_content(
     request: CopyRequest, load_metadata: MetadataLoader
 ) -> Optional[CopyResult]:
@@ -63,24 +92,21 @@ def build_copy_content(
     if not prompt or not workflow or "nodes" not in workflow:
         return None
 
-    pair = WorkflowPromptPair(workflow, prompt)
     if request.hook_output_dir == ":inherit:":
-        # 与入列侧语义一致：完全关闭输出目录自动调整，复制原始（仅重排标签格式）的工作流
         description = "已复制原始 ComfyUI 工作流"
     else:
-        rel_dir = get_relative_output_dir(
-            image_path, request.comfyui_output_dir, request.hook_output_dir
-        )
-        FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
-        ).adjust_output_directory(rel_dir)
         description = "已复制 ComfyUI 工作流（输出目录已调整）"
 
-    # 复制增强与入列一致：所有输出路径统一按节点模型格式重排提示词
-    format_workflow_prompt_pair(pair)
+    adjusted = prepare_workflow(
+        image_path,
+        prompt,
+        workflow,
+        request.comfyui_output_dir,
+        request.hook_output_dir,
+    )
 
     return CopyResult(
-        content=json.dumps(pair.workflow, ensure_ascii=False),
+        content=json.dumps(adjusted, ensure_ascii=False),
         description=description,
     )
 
