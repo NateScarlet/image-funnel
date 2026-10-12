@@ -305,7 +305,7 @@ class FileDanbooruTagProvider:
         self.semantic = semantic
         self._dataset = _get_or_create_dataset(data_dir)
 
-    def search(self, query: str) -> List[DanbooruTag]:
+    def search(self, query: str, skip_semantic: bool = False) -> List[DanbooruTag]:
         if not query.strip():
             return []
         query_norm = _normalize_literal(query)
@@ -356,9 +356,11 @@ class FileDanbooruTagProvider:
                         matched_ids.add(record.rec_id)
 
         # 语义层：仅当字面层无强匹配（精确等于标签名或中文别名）时追加；
-        # 接口超时或失败时降级为「字面结果 + 明确错误提示项」，补全不中断
+        # 接口超时或失败时降级为「字面结果 + 明确错误提示项」，补全不中断。
+        # skip_semantic 由调用方按耗时预算决定（如前端先上屏字面候选再补语义），
+        # 跳过时整段不执行：不发嵌入请求，也不产出降级提示项
         semantic_unavailable: Optional[str] = None
-        if not has_top:
+        if not has_top and not skip_semantic:
             try:
                 hits = self.semantic.search(query.strip(), _SEMANTIC_TOP_K)
             except EmbeddingError as e:
@@ -712,8 +714,12 @@ class CachedDanbooruTagLoader:
 class DanbooruTagProvider(Protocol):
     """Danbooru 标签自动补全提供者接口。"""
 
-    def search(self, query: str) -> List[DanbooruTag]:
-        """前缀搜索 Danbooru 提示词。"""
+    def search(self, query: str, skip_semantic: bool = False) -> List[DanbooruTag]:
+        """前缀搜索 Danbooru 提示词。
+
+        ``skip_semantic`` 是 opt-out：默认 ``False`` 保持既有行为（字面匹配 + 语义召回合并）。
+        没有语义层的实现忽略它即可——语义层不在它们这条链路上，跳过与否结果相同。
+        """
         ...
 
     def related(
@@ -748,7 +754,8 @@ class AkizukiDanbooruTagProvider:
         show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
         return cls(search_url, loader=loader, show_nsfw=show_nsfw)
 
-    def search(self, query: str) -> List[DanbooruTag]:
+    def search(self, query: str, skip_semantic: bool = False) -> List[DanbooruTag]:
+        # 忽略 skip_semantic：在线链路的检索在远端服务里完成，本侧没有语义层
         if not query.strip():
             return []
 
@@ -916,7 +923,10 @@ class CachedDanbooruTagProvider:
         payload = json.dumps([item.__dict__ for item in results], ensure_ascii=False)
         self.cache.save_related_payload(tags_key, payload, self.ttl)
 
-    def search(self, query: str) -> List[DanbooruTag]:
+    def search(self, query: str, skip_semantic: bool = False) -> List[DanbooruTag]:
+        # 忽略 skip_semantic：内层 provider 没有语义层，开不开它结果完全一样。
+        # 也因此不把它并进缓存键——键保持原样才不会让 SWR 的异步刷新按「带语义」
+        # 的口径回填出与这里不一致的缓存
         now = int(time.time())
         cached_results: Optional[List[DanbooruTag]] = None
         is_stale = False

@@ -509,6 +509,32 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         self.assertEqual([r.tag for r in results], baseline)
         self.assertEqual(baseline[:2], ["white_hair", "red_hair"])
 
+    # ---- search：skip_semantic opt-out（调用方只要字面层） ----
+
+    def test_skip_semantic_never_calls_semantic_layer(self) -> None:
+        """显式跳过语义层时，语义入口一次都不被调用。"""
+        semantic = StubSemanticTagSearcher([(5, 0.9)])
+        provider = self._provider(semantic=semantic)
+        provider.search("hair", skip_semantic=True)
+        self.assertEqual(semantic.calls, [])
+
+    def test_skip_semantic_returns_literal_layer_only(self) -> None:
+        """跳过语义层的结果等于纯字面层结果（同一查询、同一夹具）。"""
+        semantic = StubSemanticTagSearcher([(5, 0.9)])
+        provider = self._provider(semantic=semantic)
+        literal_only = [r.tag for r in provider.search("hair", skip_semantic=True)]
+        baseline = [r.tag for r in self._provider().search("hair")]
+        self.assertEqual(literal_only, baseline)
+        self.assertEqual(literal_only[:2], ["white_hair", "red_hair"])
+
+    def test_skip_semantic_suppresses_unavailable_hint_item(self) -> None:
+        """语义层本会降级成提示项，跳过时既不调用也不产出提示项。"""
+        semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
+        provider = self._provider(semantic=semantic)
+        results = provider.search("蓝色", skip_semantic=True)
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(results, [])
+
     # ---- related：共现计数联想 ----
 
     def test_related_aggregates_cooccurrence(self) -> None:
