@@ -4,9 +4,19 @@ import re
 import tomllib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+)
 
 from .node_accessor import NodeAccessor
+from .prompt_comment import iter_prompt_segments, strip_comments
 
 _SCORE_TAG_PATTERN = re.compile(r"\bscore_[0-9]+(?:_[a-z0-9]+)*\b", re.IGNORECASE)
 
@@ -117,24 +127,17 @@ class ModelFormatConfig:
         return fmt
 
 
-def _strip_comment_lines(text: str) -> str:
-    """剔除以 // 开头的注释行，注释不参与格式推理。"""
-    return "\n".join(
-        line for line in text.splitlines() if not line.strip().startswith("//")
-    )
-
-
 def infer_format_from_prompt(prompt_text: str) -> Optional[str]:
     """基于提示词文本推理模型期望的标签格式。
 
-    先剔除注释行与 score_* 评分标签（评分标签是唯一在 anima/sdxl 下都保留下划线的
+    先剔除注释区段与 score_* 评分标签（评分标签是唯一在 anima/sdxl 下都保留下划线的
     标签，不能作为判断依据），再比较空格与下划线数量：空格多于下划线 → anima；
     否则 → sdxl。若空格与下划线均为 0（空文本或仅含评分标签），无法判断，返回 None。
     """
     if not prompt_text:
         return None
 
-    masked = _SCORE_TAG_PATTERN.sub("", _strip_comment_lines(prompt_text))
+    masked = _SCORE_TAG_PATTERN.sub("", strip_comments(prompt_text))
     # 若剔除评分标签后已无任何标签内容（如仅剩 ", " 等分隔符），无法判断
     if not re.search(r"[A-Za-z0-9\u4e00-\u9fff]", masked):
         return None
@@ -339,7 +342,7 @@ def format_prompt_text(text: str, format_type: str) -> str:
 
     - anima: 转换为小写；普通 Tag 下划线转空格，但严格保留 score_* 评分词的下划线。
     - sdxl: 空格转下划线。
-    - 注释行（// 开头）保持原样不处理。
+    - 注释区段（行内 // 至行尾、闭合的 /* ... */）整段保持原样，不做上述处理。
     """
     if not text:
         return text
@@ -348,26 +351,15 @@ def format_prompt_text(text: str, format_type: str) -> str:
     if fmt not in ("anima", "sdxl"):
         return text
 
-    lines = text.splitlines(keepends=True)
-    new_lines: List[str] = []
-
-    for line in lines:
-        if line.strip().startswith("//"):
-            new_lines.append(line)
-            continue
-
-        if fmt == "anima":
-            formatted_line = _format_anima_line(line)
-        else:
-            formatted_line = _format_sdxl_line(line)
-
-        new_lines.append(formatted_line)
-
-    return "".join(new_lines)
+    format_segment = _format_anima_segment if fmt == "anima" else _format_sdxl_segment
+    return "".join(
+        segment.text if segment.is_comment else format_segment(segment.text)
+        for segment in iter_prompt_segments(text)
+    )
 
 
-def _format_anima_line(line: str) -> str:
-    """处理 Anima 格式整行文本。"""
+def _format_anima_segment(segment: str) -> str:
+    """处理 Anima 格式下的一段非注释文本。"""
     score_matches: List[Tuple[str, str]] = []
 
     def replace_score(match: re.Match[str]) -> str:
@@ -378,7 +370,7 @@ def _format_anima_line(line: str) -> str:
         return token
 
     # 替换 score_* 标签为占位符（不带下划线，防止被 replace('_', ' ') 破坏）
-    masked = _SCORE_TAG_PATTERN.sub(replace_score, line)
+    masked = _SCORE_TAG_PATTERN.sub(replace_score, segment)
 
     # 普通文字：转小写，下划线转空格
     masked = masked.lower()
@@ -391,9 +383,9 @@ def _format_anima_line(line: str) -> str:
     return masked
 
 
-def _format_sdxl_line(line: str) -> str:
-    """处理 SDXL 格式整行文本。"""
-    parts = line.split(",")
+def _format_sdxl_segment(segment: str) -> str:
+    """处理 SDXL 格式下的一段非注释文本。"""
+    parts = segment.split(",")
     new_parts: List[str] = []
     for part in parts:
         stripped = part.strip()

@@ -21,6 +21,7 @@ from PIL import Image
 
 
 from .workflow_prompt_pair import WorkflowPromptPair
+from .prompt_comment import strip_comments
 from .prompt_fragment import PromptFragment
 from .prompt_locator import (
     get_workflow_node_text,
@@ -1767,13 +1768,9 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 # 从 workflow 文本中动态选取第一个非注释的单词作为测试目标
                 target_word = None
-                for line in wf_text.splitlines():
+                for line in strip_comments(wf_text).splitlines():
                     stripped = line.strip()
-                    if (
-                        stripped
-                        and not stripped.startswith("//")
-                        and not stripped.startswith("#")
-                    ):
+                    if stripped and not stripped.startswith("#"):
                         target_word = stripped.split(",")[0].strip()
                         break
                 if not target_word:

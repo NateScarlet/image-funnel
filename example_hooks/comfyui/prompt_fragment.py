@@ -14,21 +14,10 @@ from typing import List, Optional, Tuple
 
 
 from .node_accessor import NodeAccessor
+from .prompt_comment import is_comment_only, iter_prompt_segments, strip_comments
 from .prompt_locator import get_region_content, find_region_boundaries
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def strip_comments_for_prompt(text: str) -> str:
-    """
-    为 prompt 剥离注释行。如果一行去除首尾空白后以 '//' 开头，该整行将被完全过滤掉。
-    """
-    lines: List[str] = []
-    for line in text.splitlines():
-        if line.strip().startswith("//"):
-            continue
-        lines.append(line)
-    return "\n".join(lines)
 
 
 def _blank_lines_at_start(text: str) -> int:
@@ -45,6 +34,28 @@ def _blank_lines_at_end(text: str) -> int:
     trailing = text[len(stripped) :]
     newline_count = trailing.count("\n")
     return max(newline_count - 1, 0) if newline_count else 0
+
+
+def _comment_out_matching_lines(text: str, target_lower: str, hard: bool) -> str:
+    """
+    把命中 target_lower 的整行注释掉；hard 为真时直接删掉该行。
+
+    命中判定只看非注释内容：注释里提到目标词不算命中，整行本就是注释的保持原样。
+    """
+    new_lines: List[str] = []
+    for line in text.split("\n"):
+        if target_lower not in strip_comments(line).lower():
+            new_lines.append(line)
+            continue
+        if hard:
+            # hard 语义：命中行整行删除，不产出
+            continue
+        if is_comment_only(line):
+            new_lines.append(line)
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        new_lines.append(f"{indent}// {line.lstrip()}")
+    return "\n".join(new_lines)
 
 
 def _region_separators(before: str, after: str) -> Tuple[str, str]:
@@ -138,7 +149,7 @@ class PromptFragment:
         if not text:
             return None
 
-        text = strip_comments_for_prompt(text)
+        text = strip_comments(text)
 
         escaped = re.escape(target_prompt)
 
@@ -183,7 +194,7 @@ class PromptFragment:
 
         if mod_wf or mod_pr:
             self.accessor.set_prompt_input(
-                self.node_id, "text", strip_comments_for_prompt(new_prompt_text)
+                self.node_id, "text", strip_comments(new_prompt_text)
             )
             self.accessor.update_workflow_node_text(self.node_id, new_workflow_text)
             return True
@@ -283,7 +294,7 @@ class PromptFragment:
                 self.accessor.prompt, node_id, prompt_text, prompt_text
             )
 
-        stripped_workflow = strip_comments_for_prompt(workflow_text)
+        stripped_workflow = strip_comments(workflow_text)
         workflow_cleaned = "\n".join(
             [line.strip() for line in stripped_workflow.splitlines() if line.strip()]
         )
@@ -299,14 +310,11 @@ class PromptFragment:
 
         def contains_prompt(area: str) -> bool:
             target_lower = prompt_str_arg.strip().lower()
+            # 注释不是提示词：先剔除注释区段再判断，否则注释里提到的词会被当成已存在
+            plain_area = strip_comments(area).lower()
             if raw:
-                return target_lower in area.lower()
-            for line in area.splitlines():
-                if line.strip().startswith("//"):
-                    continue
-                if target_lower in line.lower():
-                    return True
-            return False
+                return target_lower in plain_area
+            return any(target_lower in line for line in plain_area.splitlines())
 
         new_workflow_text = None
         new_prompt_text = None
@@ -353,11 +361,9 @@ class PromptFragment:
                         + ("\n" if after.strip() else "")
                         + after.lstrip()
                     )
-                    new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
+                    new_prompt_text = strip_comments(new_prompt_text_raw)
                 else:
-                    target_match_content = strip_comments_for_prompt(
-                        marker_content
-                    ).strip()
+                    target_match_content = strip_comments(marker_content).strip()
                     if target_match_content and target_match_content in prompt_text:
                         new_prompt_text = prompt_text.replace(
                             target_match_content, new_content_prompt.strip(), 1
@@ -417,27 +423,12 @@ class PromptFragment:
                         )
                         return False
                     new_content_prompt = marker_content
+                elif raw:
+                    new_content_prompt = marker_content.replace(prompt_str_arg, "")
                 else:
-                    if raw:
-                        new_content_prompt = marker_content.replace(prompt_str_arg, "")
-                    else:
-                        target_lower = prompt_str_arg.strip().lower()
-                        lines = marker_content.split("\n")
-                        new_lines: List[str] = []
-                        for line in lines:
-                            if target_lower in line.lower():
-                                if effective_hard:
-                                    pass
-                                else:
-                                    stripped = line.strip()
-                                    if stripped.startswith("//"):
-                                        new_lines.append(line)
-                                    else:
-                                        indent = line[: len(line) - len(line.lstrip())]
-                                        new_lines.append(f"{indent}// {line.lstrip()}")
-                            else:
-                                new_lines.append(line)
-                        new_content_prompt = "\n".join(new_lines)
+                    new_content_prompt = _comment_out_matching_lines(
+                        marker_content, prompt_str_arg.strip().lower(), effective_hard
+                    )
 
                 sep_before, sep_after = _region_separators(before, after)
                 new_workflow_text = (
@@ -462,11 +453,9 @@ class PromptFragment:
                         + ("\n" if after.strip() else "")
                         + after.lstrip()
                     )
-                    new_prompt_text = strip_comments_for_prompt(new_prompt_text_raw)
+                    new_prompt_text = strip_comments(new_prompt_text_raw)
                 else:
-                    target_match_content = strip_comments_for_prompt(
-                        marker_content
-                    ).strip()
+                    target_match_content = strip_comments(marker_content).strip()
                     if target_match_content and target_match_content in prompt_text:
                         new_prompt_text = prompt_text.replace(
                             target_match_content, new_content_prompt.strip(), 1
@@ -489,28 +478,16 @@ class PromptFragment:
                     if raw:
                         new_content_prompt = workflow_text.replace(prompt_str_arg, "")
                     else:
-                        target_lower = prompt_str_arg.strip().lower()
-                        lines = workflow_text.split("\n")
-                        new_lines = []
-                        for line in lines:
-                            if target_lower in line.lower():
-                                if effective_hard:
-                                    pass
-                                else:
-                                    stripped = line.strip()
-                                    if stripped.startswith("//"):
-                                        new_lines.append(line)
-                                    else:
-                                        indent = line[: len(line) - len(line.lstrip())]
-                                        new_lines.append(f"{indent}// {line.lstrip()}")
-                            else:
-                                new_lines.append(line)
-                        new_content_prompt = "\n".join(new_lines)
+                        new_content_prompt = _comment_out_matching_lines(
+                            workflow_text,
+                            prompt_str_arg.strip().lower(),
+                            effective_hard,
+                        )
 
                 new_workflow_text = new_content_prompt
                 new_prompt_text = new_content_prompt
 
-        new_prompt_text = strip_comments_for_prompt(new_prompt_text)
+        new_prompt_text = strip_comments(new_prompt_text)
 
         self.accessor.set_prompt_input(node_id, "text", new_prompt_text)
         self.accessor.update_workflow_node_text(node_id, new_workflow_text)
@@ -523,7 +500,7 @@ class PromptFragment:
         """
         在文本中找到并更新特定提示词的权重为 new_weight。
         支持匹配格式：(word:weight)、(word) 以及裸词 word。
-        逐行处理，注释行（// 开头）被跳过不受影响。
+        只改写非注释区段，注释区段原样保留；目标词只出现在注释里时视为未找到。
         返回 (new_text, is_modified)。
         """
         escaped_target = re.escape(target_prompt)
@@ -537,34 +514,40 @@ class PromptFragment:
         pattern_bare = re.compile(rf"(?<!\w){escaped_target}(?!\w)", re.IGNORECASE)
 
         modified = False
-        lines = text.splitlines(keepends=True)
-        new_lines: List[str] = []
+        new_segments: List[str] = []
         target_lower = target_prompt.lower()
 
-        for line in lines:
-            if line.strip().startswith("//"):
-                new_lines.append(line)
+        for segment in iter_prompt_segments(text):
+            # 注释区段原样保留：目标词只出现在注释里时不算命中
+            if segment.is_comment:
+                new_segments.append(segment.text)
                 continue
 
-            # 粗检查：目标文本不在当前行则跳过正则
-            if target_lower not in line.lower():
-                new_lines.append(line)
+            # 粗检查：目标文本不在当前区段则跳过正则
+            if target_lower not in segment.text.lower():
+                new_segments.append(segment.text)
                 continue
 
-            if pattern_with_weight.search(line):
-                line = pattern_with_weight.sub(f"({target_prompt}:{new_weight})", line)
-                modified = True
-            elif pattern_with_brackets.search(line):
-                line = pattern_with_brackets.sub(
-                    f"({target_prompt}:{new_weight})", line
+            if pattern_with_weight.search(segment.text):
+                segment_text = pattern_with_weight.sub(
+                    f"({target_prompt}:{new_weight})", segment.text
                 )
                 modified = True
-            elif pattern_bare.search(line):
-                line = pattern_bare.sub(f"({target_prompt}:{new_weight})", line)
+            elif pattern_with_brackets.search(segment.text):
+                segment_text = pattern_with_brackets.sub(
+                    f"({target_prompt}:{new_weight})", segment.text
+                )
                 modified = True
+            elif pattern_bare.search(segment.text):
+                segment_text = pattern_bare.sub(
+                    f"({target_prompt}:{new_weight})", segment.text
+                )
+                modified = True
+            else:
+                segment_text = segment.text
 
-            new_lines.append(line)
+            new_segments.append(segment_text)
 
-        return "".join(new_lines), modified
+        return "".join(new_segments), modified
 
     # #endregion

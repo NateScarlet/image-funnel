@@ -46,6 +46,41 @@ class TestModelFormat(unittest.TestCase):
         expected = "blue_hair, (cat_ears:1.2), masterpiece"
         self.assertEqual(formatted, expected)
 
+    def test_format_prompt_text_keeps_inline_comments_verbatim(self) -> None:
+        """行内 // 到行尾整段保持原样，不做小写与下划线转换；注释之后的行仍正常重排。"""
+        self.assertEqual(
+            format_prompt_text("Blue_Eyes//Red_Hair\nRed_Hair, Safe", "anima"),
+            "blue eyes//Red_Hair\nred hair, safe",
+        )
+        self.assertEqual(
+            format_prompt_text("blue hair//red hair", "sdxl"), "blue_hair//red hair"
+        )
+
+    def test_format_prompt_text_keeps_block_comments_verbatim(self) -> None:
+        """/* ... */ 整段保持原样，注释内的大小写与分隔符都不受影响。"""
+        self.assertEqual(
+            format_prompt_text("Blue_Eyes/*a b*/Red_Hair", "anima"),
+            "blue eyes/*a b*/red hair",
+        )
+        self.assertEqual(
+            format_prompt_text("blue_hair /* a b */ red hair", "sdxl"),
+            "blue_hair /* a b */ red_hair",
+        )
+
+    def test_format_prompt_text_keeps_multiline_block_comment_verbatim(self) -> None:
+        """跨行块注释整段原样，其后的标签仍按格式规则重排。"""
+        self.assertEqual(
+            format_prompt_text("Blue_Eyes /* A_B\nC_D */ Red_Hair", "anima"),
+            "blue eyes /* A_B\nC_D */ red hair",
+        )
+
+    def test_format_prompt_text_keeps_unclosed_block_comment_formatted(self) -> None:
+        """未闭合的 /* 不产生注释区段，因此按普通文本格式化（只是不被剔除）。"""
+        self.assertEqual(
+            format_prompt_text("Blue_Eyes /* Not_Closed", "anima"),
+            "blue eyes /* not closed",
+        )
+
     def test_format_prompt_text_disabled_returns_original(self) -> None:
         raw_text = "Blue_Hair, score_7\n// maintain as-is"
         self.assertEqual(format_prompt_text(raw_text, "disabled"), raw_text)
@@ -75,6 +110,40 @@ class TestModelFormat(unittest.TestCase):
         self.assertIsNone(infer_format_from_prompt("score_7"))
         self.assertIsNone(infer_format_from_prompt("score_7, score_8"))
         self.assertIsNone(infer_format_from_prompt("// only comments"))
+
+    def test_infer_format_ignores_inline_line_comments(self) -> None:
+        """行内 // 到行尾都算注释：1girl//blue_eyes 只剩 1girl，推不出格式。"""
+        self.assertIsNone(infer_format_from_prompt("1girl//blue_eyes"))
+        # 注释里的空格若参与计数会判为 anima
+        self.assertIsNone(infer_format_from_prompt("1girl//x y z"))
+        # 注释里的下划线若参与计数会判为 sdxl
+        self.assertEqual(infer_format_from_prompt("blue hair, a//x_y_z"), "anima")
+        # 行注释止于行终止符（与上游的 . 一致），\u2028 之后的标签仍是提示词
+        self.assertEqual(infer_format_from_prompt("1girl//x\u2028blue_eyes"), "sdxl")
+
+    def test_infer_format_ignores_block_comments(self) -> None:
+        """/* ... */ 整段剔除后不参与空格/下划线计数。"""
+        self.assertEqual(infer_format_from_prompt("long_hair/* note */"), "sdxl")
+        self.assertIsNone(infer_format_from_prompt("1girl/*x_y*/"))
+        self.assertEqual(infer_format_from_prompt("blue_eyes/*a b*/"), "sdxl")
+
+    def test_infer_format_block_comment_is_non_greedy(self) -> None:
+        """块注释匹配到最近的 */，不支持嵌套，剩余的 c_d 继续参与计数。"""
+        # 若匹配到末尾的 */，c_d 会被一并吞掉从而少一个下划线（未剔除时判为 anima）
+        self.assertEqual(infer_format_from_prompt("a_b /* x /* y */ c_d"), "sdxl")
+
+    def test_infer_format_keeps_unclosed_block_comment(self) -> None:
+        """未闭合的 /* 不是注释，原样保留参与计数。"""
+        self.assertEqual(infer_format_from_prompt("a /* not closed b"), "anima")
+        # 若错误地剔除到文档末尾，a_b 的下划线会消失从而判为 sdxl
+        self.assertEqual(infer_format_from_prompt("a_b /* not closed c"), "anima")
+
+    def test_infer_format_block_comment_spans_lines(self) -> None:
+        """块注释可跨行，且整段消失不留换行，两侧文本直接拼在一起。"""
+        # 跨行的块注释里那个换行若被保留，空格数会与下划线数持平从而判为 anima
+        self.assertEqual(
+            infer_format_from_prompt("blue_eyes /* multi\nline */ red_hair"), "sdxl"
+        )
 
     def test_resolve_format_explicit_mapping_overrides_inference(self) -> None:
         config = ModelFormatConfig.load()

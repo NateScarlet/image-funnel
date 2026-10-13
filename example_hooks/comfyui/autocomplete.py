@@ -45,6 +45,7 @@ from .__main__ import (
 )
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
+from .prompt_comment import strip_comments
 from .prompt_locator import get_workflow_node_text
 from .operation_history import OperationHistory
 from .model_format import (
@@ -306,11 +307,10 @@ def _load_workflow_data(
         if not content:
             continue
 
-        for line in content.splitlines():
+        # 注释不是提示词：先剔除注释区段再逐行收集，否则行内注释会被当成已见标签
+        for line in strip_comments(content).splitlines():
             stripped = line.strip()
             if not stripped:
-                continue
-            if stripped.startswith("//"):
                 continue
             cleaned = stripped.rstrip(",").rstrip("，").strip()
             if not cleaned:

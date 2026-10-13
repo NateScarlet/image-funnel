@@ -15,6 +15,8 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
 logging.disable(logging.CRITICAL)
+# _load_workflow_data 是已见提示词收集的唯一入口，测试直接覆盖该内部接缝
+# pyright: reportPrivateUsage=false
 from .autocomplete import (
     AutocompleteContext,
     WorkflowPromptProvider,
@@ -31,6 +33,7 @@ from .autocomplete import (
     quote_if_needed,
     NullSuggestionTextFormatter,
     PromptTarget,
+    _load_workflow_data,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag, SemanticLayerUnavailable
@@ -930,6 +933,24 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         path = os.path.join(tmp_dir, "sample.png")
         img.save(path, pnginfo=meta)
         return path
+
+    def test_seen_prompts_ignore_comments(self):
+        """已见提示词只收集非注释内容：行内注释与注释行都不算已见标签"""
+        workflow = self._get_mock_region_workflow()
+        workflow["nodes"][0]["widgets_values"] = [
+            "// #region positive\nmasterpiece // keep the style\n/* 1girl */\n"
+            "// #endregion\nworst quality\n"
+        ]
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            path = self._write_workflow_sample(workflow, tmp_dir)
+            seen_prompts, _, _, _ = _load_workflow_data(
+                [path], self._make_parsed_args(region=["positive"])
+            )
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        self.assertEqual(seen_prompts, {"masterpiece": "区域: positive"})
 
     def test_region_option_provider_suggests_all_regions_on_empty_input(self):
         context = self._make_context(

@@ -14,21 +14,8 @@ import unittest
 from unittest.mock import patch
 
 from .workflow_prompt_pair import WorkflowPromptPair
-from .prompt_fragment import PromptFragment, strip_comments_for_prompt
+from .prompt_fragment import PromptFragment
 from .model_format import MissingDataDirError, ModelFormatConfig
-
-
-class TestStripCommentsForPrompt(unittest.TestCase):
-    def test_strip_comments(self):
-        text = "hello\n// this is a comment\nworld\n// another comment"
-        result = strip_comments_for_prompt(text)
-        self.assertEqual(result, "hello\nworld")
-
-    def test_strip_comments_empty(self):
-        self.assertEqual(strip_comments_for_prompt(""), "")
-
-    def test_strip_comments_no_comments(self):
-        self.assertEqual(strip_comments_for_prompt("hello\nworld"), "hello\nworld")
 
 
 class TestAdjustPromptWeightInText(unittest.TestCase):
@@ -79,6 +66,38 @@ class TestAdjustPromptWeightInText(unittest.TestCase):
         )
         self.assertTrue(modified)
         self.assertEqual(new_text, "(oil painting \\(medium\\):0.9), other")
+
+    def test_inline_comment_is_left_verbatim(self):
+        """行内注释原样保留，只有注释前的提示词被加上权重"""
+        new_text, modified = PromptFragment._adjust_prompt_weight_in_text(
+            "hello world // hello again", "hello", 1.5
+        )
+        self.assertTrue(modified)
+        self.assertEqual(new_text, "(hello:1.5) world // hello again")
+
+    def test_target_only_in_line_comment_is_not_found(self):
+        """目标词只出现在行注释里时视为未找到，注释也不被改写"""
+        new_text, modified = PromptFragment._adjust_prompt_weight_in_text(
+            "hello world // add cat later", "cat", 1.5
+        )
+        self.assertFalse(modified)
+        self.assertEqual(new_text, "hello world // add cat later")
+
+    def test_target_only_in_block_comment_is_not_found(self):
+        """目标词只出现在块注释里时视为未找到"""
+        new_text, modified = PromptFragment._adjust_prompt_weight_in_text(
+            "hello world /* cat */", "cat", 1.5
+        )
+        self.assertFalse(modified)
+        self.assertEqual(new_text, "hello world /* cat */")
+
+    def test_block_comment_is_left_verbatim(self):
+        """块注释原样保留，注释前后的提示词照常加权"""
+        new_text, modified = PromptFragment._adjust_prompt_weight_in_text(
+            "hello /* keep */ world", "world", 1.5
+        )
+        self.assertTrue(modified)
+        self.assertEqual(new_text, "hello /* keep */ (world:1.5)")
 
 
 class TestAddPromptToNode(unittest.TestCase):
@@ -234,6 +253,17 @@ class TestDoubleTrack(unittest.TestCase):
             node_id,
             region=self.REGION if use_region else "",
         )
+
+    def _make_pair(self, node_text, prompt_text):
+        workflow = {
+            "nodes": [
+                {"id": "1", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ],
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt_text}}
+        }
+        return WorkflowPromptPair(workflow, prompt), workflow
 
     def test_add_without_markers(self):
         """region="" 时直接追加"""
@@ -593,6 +623,57 @@ class TestDoubleTrack(unittest.TestCase):
         )
         self.assertTrue(result)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
+
+    def test_add_is_not_skipped_for_prompt_mentioned_only_in_comment(self):
+        """行注释里提到待添加的提示词不算已存在：注释不是提示词"""
+        pair, workflow = self._make_pair(
+            "masterpiece, // scenery later\n", "masterpiece,\n"
+        )
+        fragment = PromptFragment(pair, "1", region=self.REGION)
+        result = fragment._process_double_track(
+            "1", "add", "scenery", self.REGION, False, False, False
+        )
+        self.assertTrue(result)
+        self.assertIn("scenery,", workflow["nodes"][0]["widgets_values"][0])
+
+    def test_add_is_skipped_for_prompt_before_inline_comment(self):
+        """同一行注释之前的提示词仍算已存在"""
+        pair, _ = self._make_pair("scenery, // keep\n", "scenery,\n")
+        fragment = PromptFragment(pair, "1", region=self.REGION)
+        result = fragment._process_double_track(
+            "1", "add", "scenery", self.REGION, False, False, False
+        )
+        self.assertFalse(result)
+
+    def test_remove_comments_out_line_holding_inline_comment(self):
+        """remove 命中同一行的提示词时整行注释掉，行内注释随之一起被注释"""
+        pair, workflow = self._make_pair(
+            "masterpiece,\nscenery // wide shot\n", "masterpiece,\nscenery\n"
+        )
+        fragment = PromptFragment(pair, "1", region="")
+        result = fragment._process_double_track(
+            "1", "remove", "scenery", "", False, False, False
+        )
+        self.assertTrue(result)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "masterpiece,\n// scenery // wide shot\n",
+        )
+
+    def test_remove_ignores_prompt_mentioned_only_in_comment(self):
+        """目标词只出现在注释里时不触发 remove，也不误注释所在行"""
+        pair, workflow = self._make_pair(
+            "masterpiece, // drop scenery\n", "masterpiece,\n"
+        )
+        fragment = PromptFragment(pair, "1", region="")
+        result = fragment._process_double_track(
+            "1", "remove", "scenery", "", False, False, False
+        )
+        self.assertFalse(result)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "masterpiece, // drop scenery\n",
+        )
 
 
 class TestRegionBlankLines(unittest.TestCase):

@@ -9,7 +9,7 @@ from PIL import Image
 logging.disable(logging.CRITICAL)
 
 from .output_directory import get_relative_output_dir
-from .prompt_fragment import strip_comments_for_prompt
+from .prompt_comment import strip_comments
 from .prompt_locator import (
     get_workflow_node_text,
     get_target_clip_node,
@@ -78,7 +78,7 @@ class TestComfyUIHook(unittest.TestCase):
                     pr_text = prompt[nid]["inputs"]["text"]
 
                     if wf_text is not None and isinstance(pr_text, str):
-                        stripped_wf = strip_comments_for_prompt(wf_text)
+                        stripped_wf = strip_comments(wf_text)
 
                         # 比对时，我们去除连续的空行和每一行前后的空白，以忽略纯排版造成的空白差异
                         wf_lines = [
