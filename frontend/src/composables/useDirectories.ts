@@ -99,6 +99,7 @@ export default function useDirectories(
 
   return {
     currentDirectory,
+    liveDirectories,
     largeUnratedCount,
     largeUnratedHiddenCount,
     sortedDirectories,

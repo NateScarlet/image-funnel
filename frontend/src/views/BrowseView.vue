@@ -314,6 +314,8 @@ import {
   mdiMenu,
 } from "@mdi/js";
 import useQuery from "../graphql/utils/useQuery";
+import useAsyncTask from "@/composables/useAsyncTask";
+import SingleFlightGroup from "@/utils/SingleFlightGroup";
 import { formatDate } from "@/utils/date";
 import { MetaDocument, type DirectoryFragment } from "../graphql/generated";
 import useDirectories, {
@@ -435,7 +437,12 @@ const parentDirectoryId = computed(() => {
 });
 
 // 查询并排序的同级目录列表（当 parentDirectoryId 为空或 undefined 时跳过）
-const { sortedDirectories: sortedSiblings } = useDirectories(
+const {
+  sortedDirectories: sortedSiblings,
+  liveDirectories: siblingDirectories,
+  hasNextPage: siblingsHasNextPage,
+  fetchMore: fetchMoreSiblings,
+} = useDirectories(
   () => {
     if (!parentDirectoryId.value) {
       return { id: "" };
@@ -447,6 +454,38 @@ const { sortedDirectories: sortedSiblings } = useDirectories(
     showLargeUnrated,
   },
 );
+
+// 父目录的子目录可能超过单页大小，此时当前目录落在后续页上，
+// 只消费首页会找不到它的相邻目录（索引为 -1），与子目录网格的无限滚动结果不一致，
+// 因此把父目录的剩余分页全部加载完。
+// 以父目录 id 为键单飞串行：并发加载会被 useRelayConnection 的重入保护直接跳过而空转，
+// 换目录或组件卸载时随任务作用域中止。
+const siblingsFlight = new SingleFlightGroup();
+
+async function fetchAllSiblings(parentId: string, signal: AbortSignal): Promise<void> {
+  await siblingsFlight.do(
+    parentId,
+    async (flightSignal) => {
+      while (!flightSignal.aborted && siblingsHasNextPage.value) {
+        const loadedCount = siblingDirectories.value.length;
+        await fetchMoreSiblings();
+        // 已加载数量没有增长说明分页已无法推进，避免变成无上限的请求循环
+        if (siblingDirectories.value.length <= loadedCount) return;
+      }
+    },
+    signal,
+  );
+}
+
+// 无父目录（位于根目录）时不加载，父目录连接不存在时也不会发起额外请求
+useAsyncTask({
+  // 已加载数量只用于让任务在分页推进后重新就绪，实际加载由上面的循环串行完成
+  args: () =>
+    parentDirectoryId.value
+      ? [parentDirectoryId.value, siblingDirectories.value.length]
+      : undefined,
+  task: (parentId, _loadedCount, ctx) => fetchAllSiblings(parentId, ctx.signal()),
+});
 
 const { getCachedStats } = useDirectoryStats();
 
