@@ -574,8 +574,6 @@ import { getImageUrlByZoom } from "@/utils/image";
 import useCurrentTime from "@/composables/useCurrentTime";
 import Time from "@/utils/Time";
 import useAsyncTask from "@/composables/useAsyncTask";
-import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument } from "@/graphql/generated";
 import useImageHooks from "@/composables/useImageHooks";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useOpenDir } from "@/composables/useOpenDir";
@@ -583,6 +581,7 @@ import NoteForm from "./NoteForm.vue";
 import useNote from "@/composables/domain/useNote";
 import useModalDialog from "@/composables/useModalDialog";
 import { useClipboard } from "@/composables/useClipboard";
+import { useFileSystemContext } from "@/composables/useFileSystemContext";
 
 const { revealInExplorer } = useOpenDir();
 
@@ -605,22 +604,9 @@ const {
   hideImageButton?: boolean;
 }>();
 
-const metaLoadingCount = ref(0);
-const { data: metaData } = useQuery(MetaDocument, {
-  loadingCount: metaLoadingCount,
-});
+const { absPath } = useFileSystemContext();
 
-const fullFilePath = computed(() => {
-  const rootPath = metaData.value?.meta?.rootAbsPath;
-  const relPath = image.relPath;
-  if (!rootPath || !relPath) {
-    return "";
-  }
-  if (rootPath.includes("\\")) {
-    return rootPath + "\\" + relPath.replace(/\//g, "\\");
-  }
-  return rootPath + "/" + relPath.replace(/\\/g, "/");
-});
+const fullFilePath = computed(() => absPath(image.relPath));
 
 const showOverflowMenu = ref(false);
 const overflowMenuRef = useTemplateRef<HTMLElement>("overflowMenuRef");

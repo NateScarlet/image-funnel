@@ -131,6 +131,8 @@ const props = defineProps<{
 const emit = defineEmits<(e: "close" | "saved") => void>();
 // #endregion
 
+// 笔记名取笔记自身 basename 并去掉 .md 后缀：笔记的根相对路径是目录内的相对路径，
+// 不经过「文件系统上下文」显示名（那里不处理后缀，也无法在笔记位于根目录时区分）
 const displayTitle = computed(() => {
   const basename = props.note.relPath.split("/").pop() ?? props.note.relPath;
   return basename.replace(/\.md$/, "");

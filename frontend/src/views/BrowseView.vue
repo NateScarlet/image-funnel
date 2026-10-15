@@ -313,11 +313,10 @@ import {
   mdiArrowUp,
   mdiMenu,
 } from "@mdi/js";
-import useQuery from "../graphql/utils/useQuery";
 import useAsyncTask from "@/composables/useAsyncTask";
 import SingleFlightGroup from "@/utils/SingleFlightGroup";
 import { formatDate } from "@/utils/date";
-import { MetaDocument, type DirectoryFragment } from "../graphql/generated";
+import type { DirectoryFragment } from "../graphql/generated";
 import useDirectories, {
   maxUnratedCount,
   showLargeUnrated,
@@ -558,27 +557,12 @@ function getDirName(relPath: string): string {
 
 // #region 绝对物理路径与资源管理器打开
 import { useOpenDir } from "../composables/useOpenDir";
+import { useFileSystemContext } from "../composables/useFileSystemContext";
 const { revealInExplorer } = useOpenDir();
 
-const metaLoadingCount = ref(0);
-const { data: metaData } = useQuery(MetaDocument, {
-  loadingCount: metaLoadingCount,
-});
+const { absPath } = useFileSystemContext();
 
-const fullDirectoryPath = computed(() => {
-  const rootPath = metaData.value?.meta?.rootAbsPath;
-  const relPath = currentDirectory.value?.relPath;
-  if (!rootPath) {
-    return "";
-  }
-  if (!relPath) {
-    return rootPath;
-  }
-  if (rootPath.includes("\\")) {
-    return rootPath + "\\" + relPath.replace(/\//g, "\\");
-  }
-  return rootPath + "/" + relPath.replace(/\\/g, "/");
-});
+const fullDirectoryPath = computed(() => absPath(currentDirectory.value?.relPath));
 // #endregion
 
 // #region 同级目录切换快捷键

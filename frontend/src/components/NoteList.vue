@@ -182,6 +182,7 @@ interface Props {
 const props = defineProps<Props>();
 // #endregion
 
+// 笔记名取笔记自身 basename 并去掉 .md 后缀，不经过「文件系统上下文」显示名
 function noteDisplayName(note: NoteFragment) {
   const basename = note.relPath.split("/").pop() ?? note.relPath;
   return basename.replace(/\.md$/, "");

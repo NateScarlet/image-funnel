@@ -156,9 +156,8 @@
 <script setup lang="ts">
 import { mdiMenu, mdiUndo, mdiCheck, mdiLoading, mdiCogOutline, mdiHome, mdiFolder } from "@mdi/js";
 import { computed } from "vue";
-import basename from "@/utils/basename";
-import useQuery from "@/graphql/utils/useQuery";
-import { MetaDocument, SessionFragment } from "@/graphql/generated";
+import { useFileSystemContext } from "@/composables/useFileSystemContext";
+import { SessionFragment } from "@/graphql/generated";
 import useModalDialog from "@/composables/useModalDialog";
 import DeviceManagerButton from "./DeviceManagerButton.vue";
 import NotificationCenterButton from "./NotificationCenterButton.vue";
@@ -175,11 +174,7 @@ defineEmits<(e: "undo" | "showUpdateSessionModal" | "showCommitModal") => void>(
 
 const menuDialog = useModalDialog();
 
-const { data } = useQuery(MetaDocument);
-const displayName = computed(() => {
-  if (session.value?.directory?.root) {
-    return data.value?.meta.rootAbsPath ?? "/";
-  }
-  return basename(session.value?.directory?.relPath ?? "");
-});
+// 根目录的显示名由文件系统上下文解析为根绝对路径，非根目录取 basename
+const { displayName: directoryDisplayName } = useFileSystemContext();
+const displayName = computed(() => directoryDisplayName(session.value?.directory?.relPath));
 </script>

@@ -44,9 +44,11 @@
       </template>
       <template #title>
         <span class="flex-1 break-all">
+          <!-- 根目录没有 basename 可取，只能显示根绝对路径；非根目录在选中态下显示完整根相对路径，
+               以便复制到剪贴板时无需再拼接。这两点是有意区别于「文件系统上下文」显示名的渲染需求。 -->
           {{
             directory.root
-              ? rootAbsPath
+              ? rootPath
               : selected
                 ? directory.relPath
                 : directory.relPath.split(/[\\/]/).pop()
@@ -60,8 +62,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
-import useQuery from "../graphql/utils/useQuery";
-import { MetaDocument } from "../graphql/generated";
+import { useFileSystemContext } from "@/composables/useFileSystemContext";
 import type { DirectoryFragment } from "../graphql/generated";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
@@ -87,8 +88,7 @@ const { getCachedStats } = useDirectoryStats();
 
 const selectedId = defineModel<string>();
 
-const { data: metaData } = useQuery(MetaDocument);
-const rootAbsPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
+const { rootPath } = useFileSystemContext();
 
 const stats = computed(() => getCachedStats(props.directory.id));
 

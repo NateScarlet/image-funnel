@@ -119,6 +119,7 @@ import useRouteQuery from "../composables/useRouteQuery";
 import useSession from "../composables/domain/useSession";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useAutoCreateSession } from "../composables/useAutoCreateSession";
+import { useFileSystemContext } from "../composables/useFileSystemContext";
 import useModalDialog from "../composables/useModalDialog";
 import optionalArray from "../utils/optionalArray";
 
@@ -133,8 +134,10 @@ const { data: rootData } = useQuery(RootDirectoryDocument, {
   loadingCount,
 });
 
+// 根路径与由根相对路径发起的推导统一由文件系统上下文提供
+const { rootPath } = useFileSystemContext();
+
 const version = computed(() => metaData.value?.meta?.version || "");
-const rootPath = computed(() => metaData.value?.meta?.rootAbsPath || "");
 
 // #region 目录选择与状态
 const dirQuery = useRouteQuery("dir");

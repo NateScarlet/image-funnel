@@ -274,6 +274,8 @@ function saveMinAgeSetting() {
   saveMinAge();
 }
 
+// 回收站条目展示的是被删除目录自身的 basename，根目录条目回退为 "/" 以保持列表可读，
+// 有意不同于「文件系统上下文」的显示名（根目录展示根绝对路径）
 function getDirName(relPath: string) {
   return basename(relPath) || "/";
 }
