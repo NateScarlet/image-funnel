@@ -274,47 +274,44 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         self.assertFalse(provider3.can_provide(context))
 
-    def test_autocomplete_adjust_prompt_normal(self):
-        seen_prompts = {
-            "1girl, masterpiece, score_7, cute": "区域: positive",
-            "another prompt line": "区域: positive",
-        }
+    def test_add_never_suggests_existing_prompts(self):
+        """`--add` 后面填的始终是标签：末尾 token 是不是权重表达式只在提交时判定，
+        因此补全不该在第二个值位置切换成「工作流中已有提示词」——那里填的是数字或
+        表达式，给出提示词名反而会让人误选成一个新标签。"""
+        for cwords in (
+            ["/remix", "--add", "1girl, masterpiece, score_7, cute"],
+            ["/remix", "--add", '"another prompt line"', "0.8"],
+        ):
+            with self.subTest(cwords=cwords):
+                context = self._make_context(
+                    target_command="remix",
+                    cwords=cwords,
+                    parsed_args=self._make_parsed_args(command="remix"),
+                    seen_prompts={
+                        "1girl, masterpiece, score_7, cute": "区域: positive"
+                    },
+                )
+                self.assertFalse(WorkflowPromptProvider().can_provide(context))
+
+    def test_add_keeps_tag_completion_after_one_tag(self):
+        """已经给了一个标签后仍应继续补标签，而不是切走。"""
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = []
         context = self._make_context(
             target_command="remix",
-            cwords=["/remix", "--add", "1girl, masterpiece, score_7, cute"],
+            query="",
+            prev_word="masterpiece,",
+            cwords=["/remix", "--add", "masterpiece,"],
             parsed_args=self._make_parsed_args(command="remix"),
-            seen_prompts=seen_prompts,
         )
-        provider = WorkflowPromptProvider()
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
         self.assertTrue(provider.can_provide(context))
-        suggestions = list(provider.provide(context))
-        texts = [s.text for s in suggestions]
-        self.assertEqual(len(suggestions), 2)
-        self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
-        self.assertIn('"another prompt line"', texts)
-
-    def test_autocomplete_adjust_prompt_skip_by_text(self):
-        context = self._make_context(
-            target_command="remix",
-            prev_word='"another prompt line"',
-            cwords=["/remix", "--add", '"another prompt line"'],
-            parsed_args=None,
-            seen_prompts={"1girl, masterpiece, score_7, cute": "区域: positive"},
+        list(provider.provide(context))
+        mock_provider.related.assert_called_once_with(
+            ["masterpiece"], target_categories=["General", "Artist", "Meta"]
         )
-        provider = WorkflowPromptProvider()
-        self.assertFalse(provider.can_provide(context))
-
-    def test_autocomplete_adjust_prompt_skip_by_weight(self):
-        context = self._make_context(
-            target_command="remix",
-            query="1",
-            prev_word='"another prompt line"',
-            cwords=["/remix", "--add", '"another prompt line"', "1"],
-            parsed_args=None,
-            seen_prompts={},
-        )
-        provider = WorkflowPromptProvider()
-        self.assertFalse(provider.can_provide(context))
 
     def test_remove_prompt_suggestions_work_before_its_value_is_typed(self):
         """`/remix --remove bad` 时旗标后面还没有值，argparse 会校验失败；
@@ -2320,23 +2317,19 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
 
     # ---- 其它指令不受影响 ----
 
-    def test_remove_and_adjust_prompt_suggestions_unchanged(self) -> None:
-        """移除与提示词调权列出工作流中已有标签文本，保持原文。"""
+    def test_remove_suggestions_keep_original_text(self) -> None:
+        """移除列出工作流中已有标签文本，保持原文，不按目标模型格式重排。"""
         self._set_model_format("animaPencilXL_v10.safetensors", "anima")
         seen_prompts = {"Blue_Hair": "区域: positive"}
         provider = WorkflowPromptProvider()
-        for cwords in (
-            ["/remix", "--remove"],
-            ["/remix", "--add", "Blue_Hair"],
-        ):
-            context = _make_context_with(
-                target_command="remix",
-                cwords=cwords,
-                parsed_args=argparse.Namespace(command="remix", neg=False),
-                seen_prompts=seen_prompts,
-            )
-            self.assertTrue(provider.can_provide(context))
-            self.assertEqual([s.text for s in provider.provide(context)], ["Blue_Hair"])
+        context = _make_context_with(
+            target_command="remix",
+            cwords=["/remix", "--remove"],
+            parsed_args=argparse.Namespace(command="remix", neg=False),
+            seen_prompts=seen_prompts,
+        )
+        self.assertTrue(provider.can_provide(context))
+        self.assertEqual([s.text for s in provider.provide(context)], ["Blue_Hair"])
 
     # ---- 目标解析 ----
 

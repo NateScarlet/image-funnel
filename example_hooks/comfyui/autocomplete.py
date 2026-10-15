@@ -62,8 +62,6 @@ _LOGGER = logging.getLogger(__name__)
 NO_ACTION = ""
 ADD_ACTION = "add"
 REMOVE_ACTION = "remove"
-# `--add <tag> <weight>` 中权重所在的第二个值位置：调权建议给出工作流中已有原文
-PROMPT_WEIGHT_ACTION = "prompt-weight"
 LORA_ACTION = "lora"
 CFG_ACTION = "cfg"
 ASPECT_ACTION = "aspect"
@@ -76,8 +74,6 @@ _ACTION_FLAGS: Dict[str, str] = {
     "--cfg": CFG_ACTION,
     "--aspect": ASPECT_ACTION,
 }
-# 接受多个位置值的旗标
-_MULTI_VALUE_ACTIONS = frozenset({ADD_ACTION, REMOVE_ACTION, LORA_ACTION})
 
 # 解析「指令还写了一半」时用来补位的占位值：它只让 argparse 通过校验，
 # 补全逻辑只读 --region / --node / --neg 等修饰选项，不会把占位值当成真实输入
@@ -109,12 +105,14 @@ def classify_action(cwords: List[str], option_with_args: Set[str]) -> str:
     """按当前输入位置所处的旗标判定补全上下文。
 
     cwords 只含已完成的词（正在输入的词在 query 中），因此扫描到最后一个编辑旗标
-    及其已消费的位置值个数即可定位当前所在的动作。只有编辑旗标（--add / --remove
-    等）会切换动作；其余选项都是当前动作的修饰（取值选项的参数值直接跳过），
-    `--` 结束标记之后同理按位置值看。
+    即可定位当前所在的动作。只有编辑旗标（--add / --remove 等）会切换动作；其余
+    选项都是当前动作的修饰（取值选项的参数值直接跳过），`--` 结束标记之后同理按
+    位置值看。
+
+    `--add` 全程都是「补 tag」的位置：末尾 token 是不是权重表达式只在提交时才判定，
+    补全不必（也不该）为此换一套候选——权重位置填的是数字或表达式。
     """
     action: str = NO_ACTION
-    taken = 0
     expect_value = False
     for word in cwords[1:]:
         if expect_value:
@@ -124,17 +122,8 @@ def classify_action(cwords: List[str], option_with_args: Set[str]) -> str:
             continue
         if word in _ACTION_FLAGS:
             action = _ACTION_FLAGS[word]
-            taken = 0
         elif word in option_with_args:
             expect_value = True
-        elif word.startswith("-"):
-            continue
-        elif action in _MULTI_VALUE_ACTIONS:
-            taken += 1
-
-    # `--add` 恰好给了一个标签时，当前词落在权重位置（权重只服务于单个标签）
-    if action == ADD_ACTION and taken == 1:
-        return PROMPT_WEIGHT_ACTION
     return action
 
 
@@ -763,10 +752,10 @@ class LoraProvider(AutocompleteProvider):
 
 
 class WorkflowPromptProvider(AutocompleteProvider):
-    """工作流已存在提示词推荐"""
+    """工作流已存在提示词推荐（只有移除动作需要：它按原文精确匹配既有文本）"""
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if context.action not in (REMOVE_ACTION, PROMPT_WEIGHT_ACTION):
+        if context.action != REMOVE_ACTION:
             return False
 
         is_option_input = (
