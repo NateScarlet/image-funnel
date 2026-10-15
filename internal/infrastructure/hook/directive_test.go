@@ -323,3 +323,65 @@ on_fail_action = "%s"
 		})
 	}
 }
+
+// TestRunner_ExecuteNoteDirectives_ScriptActionOverridesOnFail 脚本执行失败时，
+// 通过 IMAGE_FUNNEL_ACTION 写入的操作覆盖应优先于 on_fail_action：脚本比配置更清楚
+// 本次执行是否已经产生了对外可见的结果（例如提交过工作流）
+func TestRunner_ExecuteNoteDirectives_ScriptActionOverridesOnFail(t *testing.T) {
+	if _, err := exec.LookPath("python"); err != nil {
+		t.Skip("python not found, skipping")
+	}
+	tempDir, err := os.MkdirTemp("", "image-funnel-hook-fail-override-test")
+	assert.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
+	err = os.MkdirAll(hooksDir, 0755)
+	assert.NoError(t, err)
+
+	// 钩子脚本：声明本次没有任何结果（KEEP）后以非零码退出
+	script := `import os
+with open(os.environ["IMAGE_FUNNEL_ACTION"], "w") as f:
+    f.write("KEEP")
+raise SystemExit(1)
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "fail_keep.py"), []byte(script), 0644)
+	assert.NoError(t, err)
+
+	hookToml := `
+id = "fail-keep-test"
+name = "fail-keep-test"
+command = "python fail_keep.py"
+
+[directive]
+name = "t"
+on_fail_action = "COMMENT_OUT"
+
+[on.post_update_note]
+`
+	err = os.WriteFile(filepath.Join(hooksDir, "fail-keep.toml"), []byte(hookToml), 0644)
+	assert.NoError(t, err)
+
+	mockDirRepo := &mockDirectoryRepository{
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+		},
+	}
+	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
+	defer runner.Close()
+
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
+	initialContent := "/t do it\n"
+	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
+	assert.NoError(t, err)
+
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	assert.Error(t, err, "脚本失败仍应向上报错")
+	assert.True(t, ok)
+
+	// 脚本声明「没有产生任何结果」→ 指令行保留，而不是按 on_fail_action 注释掉
+	contentBytes, err := os.ReadFile(noteAbsPath)
+	assert.NoError(t, err)
+	assert.Contains(t, string(contentBytes), "/t do it")
+}

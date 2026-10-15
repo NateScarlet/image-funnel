@@ -261,7 +261,7 @@ class TestComfyUIHook(unittest.TestCase):
             self.assertEqual(cm.exception.code, 0)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
-        # 2. add command, no images, auto trigger → exit 0, write KEEP
+        # 2. remix command, no images, auto trigger → exit 0, write KEEP
         config = ComfyUIConfig(
             image_paths=[],
             image_ids=[],
@@ -270,9 +270,9 @@ class TestComfyUIHook(unittest.TestCase):
         )
         mock_client = _make_mock_client()
         mock_client.fetch_images.return_value = []
-        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
-            "sys.exit", side_effect=exit_side_effect
-        ), patch(
+        with patch(
+            "sys.argv", ["comfyui/__main__.py", "remix", "--add", "dummy_prompt"]
+        ), patch("sys.exit", side_effect=exit_side_effect), patch(
             "comfyui.__main__._write_action_override"
         ) as mock_override, patch.dict(
             os.environ,
@@ -295,9 +295,9 @@ class TestComfyUIHook(unittest.TestCase):
         )
         mock_client = _make_mock_client()
         mock_client.fetch_images.return_value = []
-        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
-            "sys.exit", side_effect=exit_side_effect
-        ), patch(
+        with patch(
+            "sys.argv", ["comfyui/__main__.py", "remix", "--add", "dummy_prompt"]
+        ), patch("sys.exit", side_effect=exit_side_effect), patch(
             "comfyui.__main__._write_action_override"
         ) as mock_override, patch.dict(
             os.environ,
@@ -320,9 +320,9 @@ class TestComfyUIHook(unittest.TestCase):
         )
         mock_client = _make_mock_client()
         mock_client.fetch_images.return_value = []
-        with patch("sys.argv", ["comfyui/__main__.py", "add", "dummy_prompt"]), patch(
-            "sys.exit", side_effect=exit_side_effect
-        ), patch(
+        with patch(
+            "sys.argv", ["comfyui/__main__.py", "remix", "--add", "dummy_prompt"]
+        ), patch("sys.exit", side_effect=exit_side_effect), patch(
             "comfyui.__main__._write_action_override"
         ) as mock_override, patch.dict(
             os.environ,
@@ -335,6 +335,38 @@ class TestComfyUIHook(unittest.TestCase):
                 run_comfyui(mock_client, config)
             self.assertEqual(cm.exception.code, 1)
             mock_override.assert_called_once_with("KEEP", "dummy_action_path")
+
+    def test_invalid_flag_combination_keeps_directive_line(self):
+        """旗标组合非法时一次变体都没发送，保留指令行让用户改写后重试。"""
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+        )
+        mock_client = MagicMock(spec=GraphQLClient)
+        mock_client.fetch_images.return_value = []
+        with patch(
+            "sys.argv",
+            ["comfyui/__main__.py", "remix", "--add", "a", "b", "c", "0.8"],
+        ), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override, patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
+        ):
+            with self.assertRaises(ValueError):
+                run_comfyui(mock_client, config)
+
+        mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
     def test_queue_post_commit_session_fetches_unlabeled_images(self):
         from unittest.mock import patch, MagicMock

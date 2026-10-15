@@ -15,7 +15,7 @@ import socket
 import tempfile
 import http.server
 import threading
-from typing import Any, Dict, List, cast, Type
+from typing import Any, Dict, List, Optional, cast, Type
 from unittest.mock import patch
 from PIL import Image
 
@@ -33,6 +33,41 @@ from .weight_manager import WeightManager
 from . import variant_engine
 from .model_format import ModelFormatConfig
 from .submission import submit as _submit_fn
+
+
+def _apply_prompt_weight_steps(
+    pair: WorkflowPromptPair,
+    fragments: List[PromptFragment],
+    target: str,
+    expr: str,
+    skip_add: bool,
+) -> int:
+    """展开提示词权重档位并逐档写入工作流，返回产出的档数。
+
+    档位展开是纯函数，写入由 WeightManager 负责，两者合起来才是完整的一次调权。
+    """
+    manager = WeightManager(pair)
+    steps = variant_engine.prompt_steps(fragments, target, expr, skip_add)
+    for step in steps:
+        manager.modify_prompt_weights(fragments, target, step, skip_add)
+    return len(steps)
+
+
+def _apply_aspect_steps(
+    pair: WorkflowPromptPair,
+    expr: str,
+    node_ids: Optional[List[str]] = None,
+) -> List[Any]:
+    """展开长宽比档位并逐档写入工作流，返回产出的档位列表。
+
+    与旧的原地变异生成器一样，逐档写完后的工作流停在末档。
+    """
+    manager = WeightManager(pair)
+    steps = variant_engine.aspect_steps(manager, expr, node_ids)
+    for step in steps:
+        for node_id, (width, height) in step:
+            manager.modify_aspect_ratio(width, height, [node_id])
+    return list(steps)
 
 
 # #region 节点分析测试
@@ -886,7 +921,7 @@ class TestCfgWeight(unittest.TestCase):
         with self.assertRaises(ValueError):
             mgr.modify_cfg_weights(9.0)
 
-    def test_generate_cfg_variants_absolute(self):
+    def test_cfg_steps_absolute(self):
         prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
         workflow = {
             "nodes": [
@@ -898,14 +933,11 @@ class TestCfgWeight(unittest.TestCase):
             ],
         }
         _, pair = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_cfg_variants(
-                WeightManager(pair), prompt, "5.0:9.0:2.0"
-            )
-        )
-        self.assertEqual(len(variants), 3)
+        steps = variant_engine.cfg_steps(WeightManager(pair), "5.0:9.0:2.0")
+        # 7.0 等于当前值，该档是恒等，不单独产出变体
+        self.assertEqual([dict(step) for step in steps], [{"1": 5.0}, {"1": 9.0}])
 
-    def test_generate_cfg_variants_with_node_ids(self):
+    def test_cfg_steps_with_node_ids(self):
         prompt = {
             "1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}},
             "2": {"class_type": "KSampler", "inputs": {"cfg": 5.0}},
@@ -925,16 +957,10 @@ class TestCfgWeight(unittest.TestCase):
             ],
         }
         _, pair = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_cfg_variants(
-                WeightManager(pair), prompt, "8.0", node_ids=["1"]
-            )
-        )
-        self.assertEqual(len(variants), 1)
-        self.assertEqual(prompt["1"]["inputs"]["cfg"], 8.0)
-        self.assertEqual(prompt["2"]["inputs"]["cfg"], 5.0)
+        steps = variant_engine.cfg_steps(WeightManager(pair), "8.0", node_ids=["1"])
+        self.assertEqual([dict(step) for step in steps], [{"1": 8.0}])
 
-    def test_generate_cfg_variants_no_ksampler(self):
+    def test_cfg_steps_no_ksampler(self):
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
         workflow = {
             "nodes": [
@@ -942,12 +968,9 @@ class TestCfgWeight(unittest.TestCase):
             ]
         }
         _, pair = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_cfg_variants(WeightManager(pair), prompt, "7.0")
-        )
-        self.assertEqual(len(variants), 0)
+        self.assertEqual(variant_engine.cfg_steps(WeightManager(pair), "7.0"), [])
 
-    def test_generate_cfg_variants_relative(self):
+    def test_cfg_steps_relative(self):
         """相对权重表达式"""
         prompt = {"1": {"class_type": "KSampler", "inputs": {"cfg": 7.0}}}
         workflow = {
@@ -960,12 +983,8 @@ class TestCfgWeight(unittest.TestCase):
             ],
         }
         _, pair = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_cfg_variants(
-                WeightManager(pair), prompt, "x-1.0:x+1.0:1.0"
-            )
-        )
-        self.assertEqual(len(variants), 3)
+        steps = variant_engine.cfg_steps(WeightManager(pair), "x-1.0:x+1.0:1.0")
+        self.assertEqual([dict(step) for step in steps], [{"1": 6.0}, {"1": 8.0}])
 
     def test_modify_cfg_weights_returns_count(self):
         """单个 KSampler 的 cfg source 存在时返回 1"""
@@ -1263,19 +1282,16 @@ class TestPromptWeight(unittest.TestCase):
         text = pair.get_workflow_node_text("1")
         self.assertIsNone(text)
 
-    def test_generate_prompt_variants_relative_no_current(self):
+    def test_prompt_steps_relative_no_current(self):
         """相对权重但无法获取当前值时不生成变体"""
         workflow = {"nodes": []}
         prompt = {}
-        mgr, _ = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_prompt_variants(
-                mgr, [], "nonexistent", "x+0.1", False
-            )
+        _, _ = self._weight_mgr(workflow, prompt)
+        self.assertEqual(
+            variant_engine.prompt_steps([], "nonexistent", "x+0.1", False), []
         )
-        self.assertEqual(len(variants), 0)
 
-    def test_generate_prompt_variants_skip_add_no_exist(self):
+    def test_prompt_steps_skip_add_no_exist(self):
         """skip_add=True 且提示词不存在时不生成变体"""
         workflow = {
             "nodes": [
@@ -1283,13 +1299,13 @@ class TestPromptWeight(unittest.TestCase):
             ]
         }
         prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": "hello"}}}
-        mgr, pair = self._weight_mgr(workflow, prompt)
-        variants = list(
-            variant_engine.generate_prompt_variants(
-                mgr, [PromptFragment(pair, "1")], "nonexistent", "1.5", skip_add=True
-            )
+        _, pair = self._weight_mgr(workflow, prompt)
+        self.assertEqual(
+            variant_engine.prompt_steps(
+                [PromptFragment(pair, "1")], "nonexistent", "1.5", True
+            ),
+            [],
         )
-        self.assertEqual(len(variants), 0)
 
 
 # #endregion
@@ -1649,13 +1665,12 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                     continue
 
                 pair = WorkflowPromptPair(workflow, prompt)
-                variants = list(
-                    variant_engine.generate_lora_variants(
-                        WeightManager(pair), lora_name, "0.99"
-                    )
-                )
-                if not variants:
+                lora_mgr = WeightManager(pair)
+                steps = variant_engine.lora_steps(lora_mgr, lora_name, "0.99")
+                if not steps:
                     continue
+                for step in steps:
+                    lora_mgr.modify_lora_weights(lora_name, step)
                 prompt, workflow = pair.prompt, pair.workflow
 
                 query_lower = lora_name.lower()
@@ -1722,12 +1737,11 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
         }
 
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_lora_variants(
-                WeightManager(pair), "style_test", "-0.75"
-            )
-        )
-        self.assertTrue(len(variants) > 0)
+        lora_mgr = WeightManager(pair)
+        steps = variant_engine.lora_steps(lora_mgr, "style_test", "-0.75")
+        self.assertTrue(len(steps) > 0)
+        for step in steps:
+            lora_mgr.modify_lora_weights("style_test", step)
         prompt, workflow = pair.prompt, pair.workflow
 
         node_prim = cast(Dict[str, Any], prompt["node_prim"])
@@ -1776,15 +1790,10 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 if not target_word:
                     continue
 
-                modified = variant_engine.generate_prompt_variants(
-                    WeightManager(pair),
-                    target_nodes,
-                    target_word,
-                    "1.35",
-                    skip_add=True,
+                modified = _apply_prompt_weight_steps(
+                    pair, target_nodes, target_word, "1.35", True
                 )
-                variants = list(modified)
-                self.assertTrue(len(variants) > 0)
+                self.assertTrue(modified > 0)
                 prompt, workflow = pair.prompt, pair.workflow
 
                 new_wf_text = get_workflow_node_text(workflow, target_node_id)
@@ -1797,15 +1806,10 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
 
                 # 再次修改：支持在带权重的括号中继续修改
                 pair2 = WorkflowPromptPair(workflow, prompt)
-                modified2 = variant_engine.generate_prompt_variants(
-                    WeightManager(pair2),
-                    target_nodes,
-                    target_word,
-                    "-0.5",
-                    skip_add=True,
+                modified2 = _apply_prompt_weight_steps(
+                    pair2, target_nodes, target_word, "-0.5", True
                 )
-                variants2 = list(modified2)
-                self.assertTrue(len(variants2) > 0)
+                self.assertTrue(modified2 > 0)
                 prompt, workflow = pair2.prompt, pair2.workflow
 
                 new_wf_text2 = get_workflow_node_text(workflow, target_node_id)
@@ -1813,29 +1817,25 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 assert new_wf_text2 is not None
                 self.assertIn(f"({target_word}:-0.5)", new_wf_text2)
 
-                # 测试不存在的词，且 skip_add=True -> 应不修改，生成器为空
+                # 测试不存在的词，且 skip_add=True -> 应不修改，不产出档位
                 pair_skip = WorkflowPromptPair(workflow, prompt)
-                modified_skip = variant_engine.generate_prompt_variants(
-                    WeightManager(pair_skip),
-                    target_nodes,
-                    "non_existent_word_abc",
-                    "1.5",
-                    skip_add=True,
+                self.assertEqual(
+                    _apply_prompt_weight_steps(
+                        pair_skip,
+                        target_nodes,
+                        "non_existent_word_abc",
+                        "1.5",
+                        True,
+                    ),
+                    0,
                 )
-                variants_skip = list(modified_skip)
-                self.assertEqual(len(variants_skip), 0)
 
-                # 测试不存在的词，且 skip_add=False -> 应修改成功，生成器非空且添加该词
+                # 测试不存在的词，且 skip_add=False -> 应修改成功并添加该词
                 pair_add = WorkflowPromptPair(workflow, prompt)
-                modified_add = variant_engine.generate_prompt_variants(
-                    WeightManager(pair_add),
-                    target_nodes,
-                    "non_existent_word_abc",
-                    "1.5",
-                    skip_add=False,
+                added = _apply_prompt_weight_steps(
+                    pair_add, target_nodes, "non_existent_word_abc", "1.5", False
                 )
-                variants_add = list(modified_add)
-                self.assertTrue(len(variants_add) > 0)
+                self.assertTrue(added > 0)
                 prompt, workflow = pair_add.prompt, pair_add.workflow
 
                 new_wf_text3 = get_workflow_node_text(workflow, target_node_id)
@@ -2074,11 +2074,7 @@ class TestCoverageGaps(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         with self.assertRaises(ValueError):
-            list(
-                variant_engine.generate_cfg_variants(
-                    WeightManager(pair), prompt, "x:10:1"
-                )
-            )
+            variant_engine.cfg_steps(WeightManager(pair), "x:10:1")
 
     def test_update_output_filenames_date_patterns_empty(self):
         """date 模板存在但正则不匹配（如 %date:% 格式）"""
@@ -2121,11 +2117,7 @@ class TestAspectAdjustment(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         # 调整为 16:9 (1.7778)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "16:9"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "16:9"))
         self.assertEqual(len(variants), 1)
         # 512*512 = 262144. 16:9 对应 W=680, H=384 (680*384 = 261120，最接近 262144 且是 8 的倍数)
         self.assertEqual(prompt["1"]["inputs"]["width"], 680)
@@ -2151,11 +2143,7 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "swap"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "swap"))
         self.assertEqual(len(variants), 1)
         self.assertEqual(prompt["1"]["inputs"]["width"], 1344)
         self.assertEqual(prompt["1"]["inputs"]["height"], 768)
@@ -2182,38 +2170,22 @@ class TestAspectAdjustment(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
 
         # w+1 索引增 1，到达 13:19 (0.6842)。768*1344 = 1032192 -> W = sqrt(1032192 * 13 / 19) = 840.0 -> round to 8: 840; H = 1228.2 -> round to 8: 1232
-        list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "w+1"
-            )
-        )
+        list(_apply_aspect_steps(pair, "w+1"))
         self.assertEqual(prompt["1"]["inputs"]["width"], 840)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
 
         # 默认不带前缀视为 w。再次 +1，到达 7:9 (0.7778) -> W=896, H=1152
-        list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "+1"
-            )
-        )
+        list(_apply_aspect_steps(pair, "+1"))
         self.assertEqual(prompt["1"]["inputs"]["width"], 896)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
 
         # h+1 高度增加，代表比例索引减少 1。此时从 7:9 退回到 13:19
-        list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "h+1"
-            )
-        )
+        list(_apply_aspect_steps(pair, "h+1"))
         self.assertEqual(prompt["1"]["inputs"]["width"], 840)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1232)
 
         # h-1 高度减少，代表比例索引增加 1。再次从 13:19 到达 7:9
-        list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "h-1"
-            )
-        )
+        list(_apply_aspect_steps(pair, "h-1"))
         self.assertEqual(prompt["1"]["inputs"]["width"], 896)
         self.assertEqual(prompt["1"]["inputs"]["height"], 1152)
 
@@ -2235,11 +2207,7 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "+3"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "+3"))
         # +1→9:7, +2→19:13, +3→7:4 共 3 个变体
         self.assertEqual(len(variants), 3)
 
@@ -2261,11 +2229,7 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "-2"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "-2"))
         # -1→7:9, -2→13:19 共 2 个变体
         self.assertEqual(len(variants), 2)
 
@@ -2287,11 +2251,7 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "3"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "3"))
         self.assertEqual(len(variants), 3)
 
     def test_aspect_shift_h_prefix(self):
@@ -2312,11 +2272,7 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "h+2"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "h+2"))
         # -1→7:9, -2→13:19 共 2 个变体
         self.assertEqual(len(variants), 2)
 
@@ -2338,12 +2294,9 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "0"
-            )
-        )
-        self.assertEqual(len(variants), 1)
+        variants = list(_apply_aspect_steps(pair, "0"))
+        # 目标就是当前尺寸，该档是恒等，不单独产出变体
+        self.assertEqual(len(variants), 0)
 
     def test_aspect_symmetric_variants(self):
         # 原始 1024x1024 (1:1), 索引为 4
@@ -2363,23 +2316,15 @@ class TestAspectAdjustment(unittest.TestCase):
             }
         }
 
-        # 测试 +-1 (生成 3 个变体：7:9, 1:1, 9:7)
+        # 测试 +-1 (3 档：7:9、1:1、9:7；1:1 等于当前尺寸，按恒等剔除)
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "+-1"
-            )
-        )
-        self.assertEqual(len(variants), 3)
+        variants = list(_apply_aspect_steps(pair, "+-1"))
+        self.assertEqual(len(variants), 2)
 
-        # 测试 +-2:2 (生成 3 个变体：13:19, 1:1, 19:13)
+        # 测试 +-2:2 (3 档：13:19、1:1、19:13；1:1 按恒等剔除)
         pair2 = WorkflowPromptPair(workflow, prompt)
-        variants2 = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair2), prompt, pair2.nodes_cache, "w+-2:2"
-            )
-        )
-        self.assertEqual(len(variants2), 3)
+        variants2 = list(_apply_aspect_steps(pair2, "w+-2:2"))
+        self.assertEqual(len(variants2), 2)
 
     def test_aspect_primitive_connections(self):
         # width 和 height 分别连接到 PrimitiveInt 节点
@@ -2399,11 +2344,7 @@ class TestAspectAdjustment(unittest.TestCase):
             "3": {"class_type": "PrimitiveInt", "inputs": {"value": 512}},
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_aspect_variants(
-                WeightManager(pair), prompt, pair.nodes_cache, "16:9"
-            )
-        )
+        variants = list(_apply_aspect_steps(pair, "16:9"))
         self.assertEqual(len(variants), 1)
         self.assertEqual(prompt["2"]["inputs"]["value"], 680)
         self.assertEqual(prompt["3"]["inputs"]["value"], 384)

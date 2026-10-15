@@ -2,7 +2,13 @@ import unittest
 import os
 
 
-from .weight_parser import parse_weights, eval_part, generate_range, is_relative
+from .weight_parser import (
+    parse_weights,
+    eval_part,
+    generate_range,
+    is_relative,
+    looks_like_weight,
+)
 
 
 class TestWeightParser(unittest.TestCase):
@@ -209,6 +215,41 @@ class TestWeightParser(unittest.TestCase):
             parse_weights("+-.1:.05", current_value=0.5),
             [0.4, 0.45, 0.5, 0.55, 0.6],
         )
+
+    # --- looks_like_weight ---
+
+    def test_looks_like_weight_absolute(self):
+        self.assertTrue(looks_like_weight("0.8"))
+        self.assertTrue(looks_like_weight(".8"))
+        self.assertTrue(looks_like_weight("-0.3"))
+        self.assertTrue(looks_like_weight("+0.3"))
+        self.assertTrue(looks_like_weight("1"))
+
+    def test_looks_like_weight_range(self):
+        self.assertTrue(looks_like_weight("0.5:1.0:0.1"))
+        self.assertTrue(looks_like_weight("0.5:1.0"))
+
+    def test_looks_like_weight_relative(self):
+        self.assertTrue(looks_like_weight("x"))
+        self.assertTrue(looks_like_weight("x-0.1"))
+        self.assertTrue(looks_like_weight("x-0.1:x+0.2:0.1"))
+        self.assertTrue(looks_like_weight("+-0.3"))
+        self.assertTrue(looks_like_weight("+-0.3:0.1"))
+
+    def test_looks_like_weight_rejects_tags(self):
+        """Danbooru 标签绝不能被误判成权重表达式，否则 /remix 会把标签当权重解析。"""
+        self.assertFalse(looks_like_weight("masterpiece"))
+        self.assertFalse(looks_like_weight("1girl"))
+        self.assertFalse(looks_like_weight("long_hair"))
+        # 含字母 x 但不是相对表达式
+        self.assertFalse(looks_like_weight("expressionless"))
+        self.assertFalse(looks_like_weight("plex"))
+
+    def test_looks_like_weight_rejects_malformed(self):
+        self.assertFalse(looks_like_weight(""))
+        self.assertFalse(looks_like_weight("+-"))
+        self.assertFalse(looks_like_weight("1:2:3:4"))
+        self.assertFalse(looks_like_weight("+-0.3:0.1:0.1"))
 
 
 if __name__ == "__main__":

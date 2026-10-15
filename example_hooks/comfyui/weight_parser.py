@@ -5,7 +5,14 @@
 """
 
 import os
+import re
 from typing import List, Optional
+
+# 权重表达式的单个「值段」：可省略小数点前的 0，可带 x 前缀（代表当前值）与正负号。
+# 例如 0.8 / .8 / -0.3 / x / x-0.1 / x+.2。
+_WEIGHT_PART_RE = re.compile(
+    r"^(?:[xX](?:[+-]?(?:\d+(?:\.\d*)?|\.\d+))?|[+-]?(?:\d+(?:\.\d*)?|\.\d+))$"
+)
 
 
 def eval_part(part: str, current: float) -> float:
@@ -120,3 +127,23 @@ def parse_weights(
 def is_relative(weight_str: str) -> bool:
     """检测权重表达式是否为相对表达式（含 x 或 +- 前缀）。"""
     return "x" in weight_str or weight_str.startswith("+-")
+
+
+def looks_like_weight(expr: str) -> bool:
+    """判断一个 token 是否具备权重表达式的结构（只做结构判定，不求值）。
+
+    /remix 的 `--add` 需要靠位置和引号区分「新增标签」与「调整标签权重」：恰好一个
+    标签时末尾 token 按权重表达式解析，多个标签时末尾出现权重表达式必须报错而不是
+    猜测含义。两者都要求在没有当前值可代入的阶段先行判定，因此需要独立于
+    `parse_weights` 的结构判定入口。
+    """
+    if expr.startswith("+-"):
+        parts = expr[2:].split(":")
+        if not 1 <= len(parts) <= 2:
+            return False
+        return all(_WEIGHT_PART_RE.match(part) for part in parts)
+
+    parts = expr.split(":")
+    if not 1 <= len(parts) <= 3:
+        return False
+    return all(_WEIGHT_PART_RE.match(part) for part in parts)

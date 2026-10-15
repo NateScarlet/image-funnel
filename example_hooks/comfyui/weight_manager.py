@@ -221,16 +221,18 @@ class WeightManager:
         target_prompt: str,
         weight: float,
         skip_add: bool,
-    ) -> None:
-        """在 CLIPTextEncode 节点中调整提示词的权重（原地修改）。"""
+    ) -> bool:
+        """在 CLIPTextEncode 节点中调整提示词的权重（原地修改），返回是否产生了改动。"""
         any_existing_modified = False
         for f in fragments:
             if f.modify_weight(target_prompt, weight, skip_add=True):
                 any_existing_modified = True
 
-        if not any_existing_modified and not skip_add:
-            if fragments:
-                fragments[0].modify_weight(target_prompt, weight, skip_add=False)
+        if any_existing_modified or skip_add:
+            return any_existing_modified
+        if fragments:
+            return fragments[0].modify_weight(target_prompt, weight, skip_add=False)
+        return False
 
     # #endregion
 

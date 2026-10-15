@@ -5,27 +5,26 @@
 仅在 __main__.py 的执行路径中调用，autocomplete 有独立入口，不会经过此模块。
 """
 
-import argparse
 import json
 import os
 from dataclasses import dataclass
 from typing import Any
 
 from .db import SQLiteContext
+from .remix import RemixRequest
 
 
-@dataclass
+@dataclass(frozen=True)
 class RemoveRecord:
-    """历史 remove 操作的完整参数记录"""
+    """历史 remove 操作的完整参数记录。
+
+    移除动作已无范围概念（重混总是作用于所有 CLIPTextEncode 节点），因此这里只保留
+    提示词本身与删除方式；范围参数仅存在于旧记录中，重放时一律忽略。
+    """
 
     prompt: str
-    region: list[str] | None = None
-    node: list[str] | None = None
-    neg: bool = False
     raw: bool = False
     hard: bool = False
-    all: bool = False
-    no_skip: bool = False
 
 
 class OperationHistory:
@@ -45,53 +44,36 @@ class OperationHistory:
                 (command, json.dumps(data, ensure_ascii=False)),
             )
 
-    def extract_params(self, args: argparse.Namespace) -> None:
-        """从 argparse 解析结果中提取参数并写入历史记录。
+    def record_remix(self, request: RemixRequest) -> None:
+        """把一次重混请求逐项写入历史记录。
 
-        add/remove 的每个 prompt 参数是独立操作，分别写入一条记录。
+        各项仍以原 command 名（add / remove / adjust）落库，既有的 `list_remove`、
+        `get_added_prompts` 等查询与 `--remove-again` 重放因此不受指令合并影响。
+        每个新增/移除提示词是独立操作，分别写入一条记录。
         """
+        for tag in request.add_tags:
+            self.record("add", {"prompt": tag})
 
-        cmd = args.command
+        for tag in request.remove_tags:
+            self.record(
+                "remove",
+                {"prompt": tag, "raw": request.raw, "hard": request.hard},
+            )
 
-        if cmd in ("queue", "remove-again"):
-            self.record(cmd, {})
-            return
-
-        if cmd in ("add", "remove"):
-            base = {
-                "region": getattr(args, "region", None),
-                "node": getattr(args, "node", None),
-                "neg": getattr(args, "neg", False),
-                "raw": getattr(args, "raw", False),
-                "hard": getattr(args, "hard", False),
-                "all": getattr(args, "all", False),
-                "no_skip": getattr(args, "no_skip", False),
-            }
-            for prompt in args.prompt:
-                self.record(cmd, {**base, "prompt": prompt})
-            return
-
-        if cmd == "adjust":
-            adjust_type: str = getattr(args, "adjust_type", "")
-            data: dict[str, str] = {"adjust_type": adjust_type}
-            if adjust_type == "lora":
-                data["name"] = args.name
-                data["weight"] = args.weight
-            elif adjust_type == "prompt":
-                data["text"] = args.text
-                data["weight"] = args.weight
-            elif adjust_type == "cfg":
-                data["weight"] = args.weight
-            elif adjust_type == "aspect":
-                data["ratio"] = args.ratio
-            else:
-                raise AssertionError(
-                    f"unreachable: unknown adjust_type {adjust_type!r}"
-                )
-            self.record("adjust", data)
-            return
-
-        raise AssertionError(f"unreachable: unknown command {cmd!r}")
+        for edit in request.prompt_weights:
+            self.record(
+                "adjust",
+                {"adjust_type": "prompt", "text": edit.tag, "weight": edit.weight_expr},
+            )
+        for edit in request.loras:
+            self.record(
+                "adjust",
+                {"adjust_type": "lora", "name": edit.name, "weight": edit.weight_expr},
+            )
+        for expr in request.cfgs:
+            self.record("adjust", {"adjust_type": "cfg", "weight": expr})
+        for expr in request.aspects:
+            self.record("adjust", {"adjust_type": "aspect", "ratio": expr})
 
     def get_added_prompts(self, candidates: list[str]) -> set[str]:
         """返回 candidates 中已在历史记录中存在的提示词集合。"""
@@ -109,7 +91,11 @@ class OperationHistory:
         return {row[0] for row in rows}
 
     def list_remove(self) -> list[RemoveRecord]:
-        """返回所有历史 remove 操作的去重列表，按首次出现顺序排列。"""
+        """返回所有历史 remove 操作的去重列表，按首次出现顺序排列。
+
+        旧记录中的范围参数（region / node / neg / all）在重混语义下已无意义，
+        显式丢弃而不是随记录原样带出。
+        """
         with self.db_ctx.transaction() as conn:
             rows = conn.execute(
                 "SELECT data, MIN(id) FROM history "
@@ -117,7 +103,17 @@ class OperationHistory:
                 "GROUP BY data "
                 "ORDER BY MIN(id)"
             ).fetchall()
-            return [RemoveRecord(**json.loads(row[0])) for row in rows]
+        records: list[RemoveRecord] = []
+        for row in rows:
+            data: dict[str, Any] = json.loads(row[0])
+            records.append(
+                RemoveRecord(
+                    prompt=data["prompt"],
+                    raw=bool(data.get("raw", False)),
+                    hard=bool(data.get("hard", False)),
+                )
+            )
+        return records
 
     def get_added_prompt_times(self, candidates: list[str]) -> dict[str, str]:
         """返回 candidates 中各提示词最近一次添加的 created_at 时间戳字典。"""

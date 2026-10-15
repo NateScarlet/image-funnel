@@ -261,17 +261,14 @@ class TestLoraWeight(unittest.TestCase):
         with self.assertRaises(ValueError):
             WeightManager(pair).modify_lora_weights("my_style", 0.5)
 
-    def test_generate_lora_variants_relative_no_current(self):
+    def test_lora_steps_relative_no_current(self):
         """相对权重但无法获取当前值时不生成变体"""
         prompt = {}
         workflow = {"nodes": []}
         pair = WorkflowPromptPair(workflow, prompt)
-        variants = list(
-            variant_engine.generate_lora_variants(
-                WeightManager(pair), "nonexistent", "x+0.1"
-            )
+        self.assertEqual(
+            variant_engine.lora_steps(WeightManager(pair), "nonexistent", "x+0.1"), []
         )
-        self.assertEqual(len(variants), 0)
 
 
 if __name__ == "__main__":

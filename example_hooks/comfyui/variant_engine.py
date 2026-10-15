@@ -1,27 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-VariantEngine：变体生成引擎。
+变体档位展开。
 
-从 WorkflowPromptPair 提取变体生成模式，将 "parse weight string → iterate → mutate → yield"
-抽象为一个统一接口。每个具体的变异策略实现 MutationStrategy 协议。
+把「权重/长宽比表达式 → 逐档取值」抽象为纯函数：档位只依赖基线工作流的当前值，
+不产生任何副作用，因此 /remix 的编排层可以自由地对多个维度取笛卡尔积、让每个变体
+都从同一份基线出发，而不会出现变体之间互相污染（相对表达式含义随顺序漂移）。
+
+应用档位由调用方负责：CFG/长宽比档位是「节点 → 目标值」的映射，提示词/Lora 档位
+是单个数值。
 """
 
 import math
 import re
 from typing import (
+    Any,
     Dict,
     List,
-    Any,
-    Optional,
-    Generator,
     Iterable,
+    Optional,
     Tuple,
 )
 
 from .weight_parser import parse_weights, is_relative
 from .weight_manager import WeightManager
 from .prompt_fragment import PromptFragment
+
+# CFG 档位：按节点列出的目标权重（用元组保存以便去重与哈希）
+CfgStep = Tuple[Tuple[str, float], ...]
+# 长宽比档位：按节点列出的目标宽高
+AspectStep = Tuple[Tuple[str, Tuple[int, int]], ...]
 
 COMMON_RATIOS = [
     "5:12",
@@ -46,23 +54,24 @@ COMMON_VALUES = [
     2.4,
 ]
 
+# #region 档位展开
 
-def generate_cfg_variants(
+
+def cfg_steps(
     weight_manager: WeightManager,
-    prompt: Dict[str, Any],
     weight_expr: str,
     node_ids: Optional[List[str]] = None,
-) -> Generator[None, None, None]:
-    """
-    为每个 CFG 权重变体原地修改并 yield。
-    """
+) -> List[CfgStep]:
+    """把 CFG 权重表达式展开为逐档的目标值；所有目标节点取值都等于当前值的档为恒等，不产出。"""
     sources = weight_manager.collect_cfg_sources(node_ids)
     if not sources:
-        return
+        return []
 
     node_weights_map: Dict[str, List[float]] = {}
+    current_map: Dict[str, float] = {}
     for src in sources:
         node_weights_map[src.node_id] = parse_weights(weight_expr, src.current_value)
+        current_map[src.node_id] = src.current_value
 
     version_lengths = {nid: len(w) for nid, w in node_weights_map.items()}
     unique_lengths = set(version_lengths.values())
@@ -76,81 +85,119 @@ def generate_cfg_variants(
         )
 
     first_weights = list(node_weights_map.values())[0]
+    steps: List[CfgStep] = []
     for vi in range(len(first_weights)):
-        any_modified = False
-        for nid in node_weights_map:
-            count = weight_manager.modify_cfg_weights(node_weights_map[nid][vi], [nid])
-            if count > 0:
-                any_modified = True
-        if any_modified:
-            yield
+        targets = {nid: weights[vi] for nid, weights in node_weights_map.items()}
+        if all(targets[nid] == current_map[nid] for nid in targets):
+            continue
+        steps.append(tuple(sorted(targets.items())))
+    return steps
 
 
-def generate_lora_variants(
+def lora_steps(
     weight_manager: WeightManager,
     lora_name_query: str,
     weight_expr: str,
-) -> Generator[None, None, None]:
-    """
-    为每个 Lora 权重变体原地修改并 yield。
-    """
+) -> List[float]:
+    """把 Lora 权重表达式展开为逐档取值；相对表达式解析不出当前权重时不产出档位。"""
+    relative = is_relative(weight_expr)
     current = (
-        weight_manager.get_current_lora_weight(lora_name_query)
-        if is_relative(weight_expr)
-        else None
+        weight_manager.get_current_lora_weight(lora_name_query) if relative else None
     )
-    if is_relative(weight_expr) and current is None:
-        return
-    weights = parse_weights(weight_expr, current)
-
-    for w in weights:
-        weight_manager.modify_lora_weights(lora_name_query, w)
-        yield
+    if relative and current is None:
+        return []
+    return parse_weights(weight_expr, current)
 
 
-def generate_prompt_variants(
-    weight_manager: WeightManager,
+def prompt_steps(
     fragments: Iterable[PromptFragment],
     target_prompt: str,
     weight_expr: str,
     skip_add: bool,
-) -> Generator[None, None, None]:
-    """
-    为每个提示词权重变体原地修改并 yield。
-    """
+) -> List[float]:
+    """把提示词权重表达式展开为逐档取值；相对表达式解析不出当前权重时不产出档位。"""
     actual_fragments = list(fragments)
+    relative = is_relative(weight_expr)
 
-    current = None
-    if is_relative(weight_expr):
+    current: Optional[float] = None
+    if relative:
         for fragment in actual_fragments:
             val = fragment.get_weight(target_prompt)
             if val is not None:
                 current = val
                 break
+        if current is None:
+            return []
 
-    if is_relative(weight_expr) and current is None:
-        return
+    if not relative and skip_add:
+        if not any(f.get_weight(target_prompt) is not None for f in actual_fragments):
+            return []
 
-    if not is_relative(weight_expr) and skip_add:
-        has_existing = False
-        for fragment in actual_fragments:
-            if fragment.get_weight(target_prompt) is not None:
-                has_existing = True
-                break
-        if not has_existing:
-            return
+    return parse_weights(weight_expr, current)
 
-    weights = parse_weights(weight_expr, current)
 
-    for w in weights:
-        any_modified = False
-        for fragment in actual_fragments:
-            if fragment.modify_weight(target_prompt, w, skip_add=True):
-                any_modified = True
-        if not any_modified and not skip_add:
-            if actual_fragments:
-                actual_fragments[0].modify_weight(target_prompt, w, skip_add=False)
-        yield
+def aspect_steps(
+    weight_manager: WeightManager,
+    ratio_expr: str,
+    node_ids: Optional[List[str]] = None,
+) -> List[AspectStep]:
+    """把长宽比表达式展开为逐档的目标宽高；所有目标节点取值都等于当前值的档为恒等，不产出。"""
+    sources = weight_manager.collect_aspect_sources(node_ids)
+    if not sources:
+        return []
+
+    node_variants_map: Dict[str, List[Tuple[int, int]]] = {}
+    current_map: Dict[str, Tuple[int, int]] = {}
+    swap = ratio_expr.strip().lower() in ("swap", "exchange")
+
+    for src in sources:
+        W = src.current_width
+        H = src.current_height
+        # 当前尺寸统一到整数再比较：档位是按 8 对齐取整后的值
+        current_map[src.node_id] = (int(round(W)), int(round(H)))
+
+        # swap/exchange 直接交换宽高，与目标比例序列无关
+        if swap:
+            node_variants_map[src.node_id] = [(int(round(H)), int(round(W)))]
+            continue
+
+        curr_idx = _find_closest_ratio_index(W / H)
+        if curr_idx is None:
+            continue
+
+        S = W * H
+        variants: List[Tuple[int, int]] = []
+        for R in _compute_target_ratios(ratio_expr, curr_idx):
+            W_new = max(8, int(round(math.sqrt(S * R) / 8) * 8))
+            H_new = max(8, int(round(math.sqrt(S / R) / 8) * 8))
+            variants.append((W_new, H_new))
+        node_variants_map[src.node_id] = variants
+
+    if not node_variants_map:
+        return []
+
+    lengths = {nid: len(vts) for nid, vts in node_variants_map.items()}
+    unique_lengths = set(lengths.values())
+    if len(unique_lengths) > 1:
+        details = ", ".join(f"node {nid}: {l} versions" for nid, l in lengths.items())
+        raise ValueError(
+            f"Inconsistent aspect ratio version counts generated for latent nodes ({details}) "
+            f"under expression '{ratio_expr}'."
+        )
+
+    first_variants = list(node_variants_map.values())[0]
+    steps: List[AspectStep] = []
+    for vi in range(len(first_variants)):
+        targets = {nid: variants[vi] for nid, variants in node_variants_map.items()}
+        if all(targets[nid] == current_map[nid] for nid in targets):
+            continue
+        steps.append(tuple(sorted(targets.items())))
+    return steps
+
+
+# #endregion
+
+# #region 长宽比表达式解析
 
 
 def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
@@ -159,7 +206,6 @@ def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
 
     m_sym = _parse_symmetric_expression(ratio_expr_clean)
     if m_sym:
-        prefix = m_sym.group(1) or "w"
         delta = int(m_sym.group(2))
         step = int(m_sym.group(3)) if m_sym.group(3) else 1
 
@@ -195,9 +241,7 @@ def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
             target_idx = max(0, min(len(COMMON_RATIOS) - 1, curr_idx + offset))
             indices.append(target_idx)
 
-        unique_indices = list(dict.fromkeys(indices))
-
-        return [COMMON_VALUES[idx] for idx in unique_indices]
+        return [COMMON_VALUES[idx] for idx in dict.fromkeys(indices)]
 
     if ":" in ratio_expr_clean:
         try:
@@ -213,74 +257,6 @@ def _compute_target_ratios(ratio_expr: str, curr_idx: int) -> List[float]:
     raise ValueError(f"Invalid aspect ratio expression: '{ratio_expr_clean}'")
 
 
-def generate_aspect_variants(
-    weight_manager: WeightManager,
-    prompt: Dict[str, Any],
-    nodes_cache: Dict[str, Any],
-    ratio_expr: str,
-    node_ids: Optional[List[str]] = None,
-) -> Generator[None, None, None]:
-    """
-    为每个长宽比变体原地修改并 yield。
-    """
-    sources = weight_manager.collect_aspect_sources(node_ids)
-    if not sources:
-        return
-
-    node_variants_map: Dict[str, List[Tuple[int, int]]] = {}
-    for src in sources:
-        W = src.current_width
-        H = src.current_height
-
-        # 处理 swap/exchange 直接交换
-        if ratio_expr.strip().lower() in ("swap", "exchange"):
-            node_variants_map[src.node_id] = [(int(round(H)), int(round(W)))]
-            continue
-
-        R_curr = W / H
-        curr_idx = _find_closest_ratio_index(R_curr)
-        if curr_idx is None:
-            continue
-
-        target_ratios = _compute_target_ratios(ratio_expr, curr_idx)
-
-        S = W * H
-        variants: List[Tuple[int, int]] = []
-        for R in target_ratios:
-            W_raw = math.sqrt(S * R)
-            H_raw = math.sqrt(S / R)
-            W_new = int(round(W_raw / 8) * 8)
-            H_new = int(round(H_raw / 8) * 8)
-            W_new = max(8, W_new)
-            H_new = max(8, H_new)
-            variants.append((W_new, H_new))
-
-        node_variants_map[src.node_id] = variants
-
-    if not node_variants_map:
-        return
-
-    lengths = {nid: len(vts) for nid, vts in node_variants_map.items()}
-    unique_lengths = set(lengths.values())
-    if len(unique_lengths) > 1:
-        details = ", ".join(f"node {nid}: {l} versions" for nid, l in lengths.items())
-        raise ValueError(
-            f"Inconsistent aspect ratio version counts generated for latent nodes ({details}) "
-            f"under expression '{ratio_expr}'."
-        )
-
-    first_variants = list(node_variants_map.values())[0]
-    for vi in range(len(first_variants)):
-        any_modified = False
-        for nid, variants in node_variants_map.items():
-            w_target, h_target = variants[vi]
-            count = weight_manager.modify_aspect_ratio(w_target, h_target, [nid])
-            if count > 0:
-                any_modified = True
-        if any_modified:
-            yield
-
-
 def _find_closest_ratio_index(ratio: float) -> Optional[int]:
     """从 COMMON_VALUES 中查找最接近的比率索引"""
     diffs = [abs(v - ratio) for v in COMMON_VALUES]
@@ -290,3 +266,6 @@ def _find_closest_ratio_index(ratio: float) -> Optional[int]:
 def _parse_symmetric_expression(expr: str) -> Optional[Any]:
     """解析对称表达式如 w+-2:2 或 +-3"""
     return re.match(r"^([wh]?)\+-(\d+)(?::(\d+))?$", expr)
+
+
+# #endregion

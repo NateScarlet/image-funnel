@@ -6,18 +6,40 @@
 每个 Handler 接收 CommandContext 并在其中执行对应操作。
 """
 
+import copy
 import logging
 import uuid
-from typing import Dict, List, Set, Any, Optional, Protocol, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Protocol,
+    Set,
+    Tuple,
+    cast,
+)
 
-from graphql_utils import GraphQLClient, progress_notification
-from .workflow_prompt_pair import WorkflowPromptPair
+from graphql_utils import GraphQLClient, ProgressUpdate, progress_notification
 from .prompt_fragment import PromptFragment
 from .seed_manager import SeedManager
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
+from .workflow_prompt_pair import WorkflowPromptPair
 from .submission import submit as _submit_fn
-from . import variant_engine
+from .remix import (
+    NodeStep,
+    RemixRequest,
+    VariantDimension,
+    build_matrix,
+    locate_fragments,
+    ASPECT_KIND,
+    CFG_KIND,
+    LORA_KIND,
+    PROMPT_KIND,
+)
 from . import operation_history
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,7 +54,7 @@ class CommandContext:
         path: str,
         prompt: Dict[str, Any],
         workflow: Dict[str, Any],
-        args: Any,
+        request: RemixRequest,
         comfyui_url: str,
         jobs: int,
         label_to_set: Optional[str],
@@ -44,7 +66,7 @@ class CommandContext:
         self.path = path
         self.prompt = prompt
         self.workflow = workflow
-        self.args = args
+        self.request = request
         self.comfyui_url = comfyui_url
         self.jobs = jobs
         self.label_to_set = label_to_set
@@ -81,97 +103,229 @@ class CommandHandler(Protocol):
         ...
 
 
-class QueueHandler:
-    """queue 命令：提交工作流到 ComfyUI"""
+class RemixHandler:
+    """remix 命令：按旗标集合执行 ComfyUI 编辑并提交；不含编辑旗标时等价于直接入列。"""
 
     def run(self, ctx: CommandContext) -> None:
-        pair = WorkflowPromptPair(ctx.workflow, ctx.prompt)
-        seed_mgr = SeedManager(pair, pair.seed_nodes)
-        filename_mgr = FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
-        )
-
-        with progress_notification(
-            ctx.client, ctx.progress_tag, "ComfyUI 队列提交", "提交 ComfyUI 任务"
-        ) as update:
-            for q_idx in range(ctx.jobs):
-                if ctx.jobs > 1:
-                    _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, ctx.jobs)
-                update(f"第 {q_idx + 1}/{ctx.jobs} 次提交")
-                if seed_mgr.update_seeds() == 0:
-                    raise ValueError(
-                        f"Failed to update any seeds for image: {ctx.path}."
-                    )
-                filename_mgr.update_output_filenames()
-                _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
-
-        ctx.update_label()
-
-
-class AddHandler:
-    """add 命令：添加提示词并提交"""
-
-    def run(self, ctx: CommandContext) -> None:
-        pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
-        fragments = pair.locate_prompts(
-            nodes=ctx.args.node, regions=ctx.args.region, is_neg=ctx.args.neg
-        )
-
-        fragment = next(fragments, None)
-        if fragment:
-            for prompt_item in ctx.args.prompt:
-                fragment.add(prompt_item, raw=ctx.args.raw, no_skip=ctx.args.no_skip)
-
-                # 默认从非目标区域移除重复提示词，--keep 保留现有行为
-                if not getattr(ctx.args, "keep", False):
-                    _remove_from_other_regions(
-                        pair, prompt_item, fragment.node_id, fragment.region, ctx.args
-                    )
-
-        _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
-        ctx.update_label()
-
-
-class RemoveHandler:
-    """remove 命令：移除提示词并提交"""
-
-    def run(self, ctx: CommandContext) -> None:
-        pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
-        fragments = pair.locate_prompts(
-            nodes=ctx.args.node, regions=ctx.args.region, is_neg=ctx.args.neg
-        )
-        hard = getattr(ctx.args, "hard", False)
-
-        if ctx.args.all:
-            fragments = [
-                PromptFragment(pair, nid) for nid in _clip_text_encode_nodes(ctx.prompt)
-            ]
-
-        prompt_list: List[str] = list(ctx.args.prompt)
-        remove_prompts: Set[str] = set()
-        for p in prompt_list:
-            remove_prompts.update((p, p.replace("_", " "), p.replace(" ", "_")))
-
-        any_processed = False
-        for fragment in fragments:
-            for prompt_str_arg in remove_prompts:
-                if fragment.remove(
-                    prompt_str_arg,
-                    raw=ctx.args.raw,
-                    hard=hard,
-                    no_skip=ctx.args.no_skip,
-                ):
-                    any_processed = True
-
-        if not any_processed:
-            preview = " ".join(ctx.args.prompt)
-            if len(preview) > 40:
-                preview = preview[:40] + "…"
-            ctx.skip(f"未找到待移除的提示词「{preview}」")
+        request = ctx.request
+        if not request.has_edits:
+            _submit_jobs(ctx, WorkflowPromptPair(ctx.workflow, ctx.prompt), None)
+            ctx.update_label()
             return
 
-        _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
+        base_workflow = copy.deepcopy(ctx.workflow)
+        base_prompt = copy.deepcopy(ctx.prompt)
+        matrix = build_matrix(request, WorkflowPromptPair(base_workflow, base_prompt))
+
+        submitted = 0
+        with progress_notification(
+            ctx.client, ctx.progress_tag, "ComfyUI 重混", "重混并提交"
+        ) as update:
+            for index, selection in enumerate(matrix.iter_variants()):
+                # 每个变体都从同一份基线出发：相对表达式的「当前值」不随变体顺序漂移
+                pair = WorkflowPromptPair(
+                    copy.deepcopy(base_workflow), copy.deepcopy(base_prompt)
+                )
+                changed = _apply_edits(pair, request, selection, ctx.history)
+                if not changed and not request.no_skip:
+                    continue
+
+                submitted += 1
+                # 从第二个变体起强制更新种子，否则各变体只会重复生成同一张图
+                _submit_jobs(ctx, pair, index, update, submitted, len(matrix))
+
+        if submitted == 0:
+            ctx.skip("重混未产生任何改动")
+            return
         ctx.update_label()
+
+
+def _submit_jobs(
+    ctx: CommandContext,
+    pair: WorkflowPromptPair,
+    variant_index: Optional[int],
+    update: Optional[ProgressUpdate] = None,
+    variant_no: int = 0,
+    variant_total: int = 0,
+) -> None:
+    """提交单张图片的工作流 jobs 次。
+
+    种子更新策略：改动提示词内容的编辑（新增 / 移除 / 重放历史移除）以及重新入列
+    必定更新，否则提交出去的就是与上一张完全相同的图；纯参数调整（提示词权重、
+    Lora、CFG、长宽比）只在用户显式要求（--update-seed）、需要多次提交（多 job）
+    或有多档变体时更新，好让同一噪波下的不同参数可以直接对照。
+    """
+    seed_mgr = SeedManager(pair, pair.seed_nodes)
+    filename_mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
+    enable_seed_update = (
+        not ctx.request.has_edits
+        or ctx.request.edits_prompt_content
+        or ctx.request.update_seed
+        or ctx.jobs > 1
+        or (variant_index or 0) > 0
+    )
+
+    for j_idx in range(ctx.jobs):
+        if ctx.jobs > 1:
+            _LOGGER.debug("  -> Queueing run %d/%d", j_idx + 1, ctx.jobs)
+        if update is not None:
+            progress = f"变体 {variant_no}/{variant_total}，" if variant_total else ""
+            update(f"{progress}第 {j_idx + 1}/{ctx.jobs} 次提交")
+        if enable_seed_update:
+            if seed_mgr.update_seeds() == 0:
+                raise ValueError(f"Failed to update any seeds for image: {ctx.path}.")
+        filename_mgr.update_output_filenames()
+        _submit_fn(pair.prompt, pair.workflow, ctx.comfyui_url)
+
+
+# #region 变体内编辑
+
+
+def _apply_edits(
+    pair: WorkflowPromptPair,
+    request: RemixRequest,
+    selection: List[Tuple[VariantDimension, Any]],
+    history: operation_history.OperationHistory,
+) -> bool:
+    """在单个变体内按固定顺序执行全部编辑，返回是否产生了实际改动。
+
+    顺序：重放历史移除 → 移除 → 调整提示词权重 → 新增 → 调整 Lora/CFG/长宽比。
+    """
+    changed = False
+    if request.replay_removals:
+        changed = _replay_history_removals(pair, history, request) or changed
+    if request.remove_tags:
+        changed = _remove_tags(pair, request) or changed
+
+    # 片段在移除之后才定位：移除会改动文本，目标区域可能因此消失
+    fragments = locate_fragments(pair, request)
+    weight_manager = WeightManager(pair)
+    prompt_edits = [(d, s) for d, s in selection if d.kind == PROMPT_KIND]
+    node_edits = [(d, s) for d, s in selection if d.kind != PROMPT_KIND]
+
+    for dimension, step in prompt_edits:
+        edit = dimension.edit
+        if weight_manager.modify_prompt_weights(
+            fragments, edit.tag, step, request.skip_add
+        ):
+            changed = True
+
+    if request.add_tags:
+        changed = _add_tags(pair, fragments, request) or changed
+
+    for dimension, step in node_edits:
+        if dimension.kind == LORA_KIND:
+            weight_manager.modify_lora_weights(dimension.edit.name, step)
+            changed = True
+        else:
+            changed = _apply_node_steps(weight_manager, step, dimension.kind) or changed
+    return changed
+
+
+def _write_cfg_step(manager: WeightManager, node_id: str, value: Any) -> None:
+    """把 CFG 档位写入目标 KSampler 节点。"""
+    manager.modify_cfg_weights(value, [node_id])
+
+
+def _write_aspect_step(manager: WeightManager, node_id: str, value: Any) -> None:
+    """把长宽比档位写入目标 latent 节点。"""
+    manager.modify_aspect_ratio(value[0], value[1], [node_id])
+
+
+# 档位是「节点 → 目标值」的维度各自如何写入工作流
+_NODE_STEP_WRITERS: Dict[str, Callable[[WeightManager, str, Any], None]] = {
+    CFG_KIND: _write_cfg_step,
+    ASPECT_KIND: _write_aspect_step,
+}
+
+
+def _apply_node_steps(manager: WeightManager, step: NodeStep, kind: str) -> bool:
+    """把「节点 → 目标值」档位逐节点写入工作流。"""
+    writer = _NODE_STEP_WRITERS.get(kind)
+    if writer is None:
+        raise ValueError(f"Unknown variant dimension kind '{kind}'")
+    for node_id, value in step:
+        writer(manager, node_id, value)
+    return True
+
+
+def _replay_history_removals(
+    pair: WorkflowPromptPair,
+    history: operation_history.OperationHistory,
+    request: RemixRequest,
+) -> bool:
+    """重放历史移除记录。移除已无范围概念，历史记录中的范围参数一律忽略。"""
+    records = history.list_remove()
+    changed = False
+    for record in records:
+        changed = (
+            _remove_from_clip_nodes(
+                pair, [record.prompt], raw=record.raw, hard=record.hard, no_skip=False
+            )
+            or changed
+        )
+    return changed
+
+
+def _remove_tags(pair: WorkflowPromptPair, request: RemixRequest) -> bool:
+    return _remove_from_clip_nodes(
+        pair,
+        list(request.remove_tags),
+        raw=request.raw,
+        hard=request.hard,
+        no_skip=request.no_skip,
+    )
+
+
+def _spellings(prompts: Iterable[str]) -> Set[str]:
+    """提示词的匹配形态：原词、空格形态与下划线形态互通，三者都要尝试匹配。"""
+    spellings: Set[str] = set()
+    for prompt_str in prompts:
+        spellings.update(
+            (prompt_str, prompt_str.replace("_", " "), prompt_str.replace(" ", "_"))
+        )
+    return spellings
+
+
+def _remove_from_clip_nodes(
+    pair: WorkflowPromptPair,
+    prompts: List[str],
+    raw: bool,
+    hard: bool,
+    no_skip: bool,
+) -> bool:
+    """从工作流所有 CLIPTextEncode 节点移除给定提示词。"""
+    changed = False
+    for node_id in _clip_text_encode_nodes(pair.prompt):
+        fragment = PromptFragment(pair, node_id)
+        for spelling in _spellings(prompts):
+            if fragment.remove(spelling, raw=raw, hard=hard, no_skip=no_skip):
+                changed = True
+    return changed
+
+
+def _add_tags(
+    pair: WorkflowPromptPair,
+    fragments: List[PromptFragment],
+    request: RemixRequest,
+) -> bool:
+    """把标签追加到首个目标片段，默认同时清理其他区域中的同名提示词（--keep 保留）。"""
+    fragment = next(iter(fragments), None)
+    if fragment is None:
+        return False
+
+    changed = False
+    for tag in request.add_tags:
+        if fragment.add(tag, raw=request.raw, no_skip=request.no_skip):
+            changed = True
+        if not request.keep:
+            _remove_from_other_regions(
+                pair, tag, fragment.node_id, fragment.region, request
+            )
+    return changed
+
+
+# #endregion
 
 
 # #region CLIPTextEncode 节点辅助
@@ -192,16 +346,12 @@ def _remove_from_other_regions(
     prompt_str: str,
     target_node_id: str,
     target_region: str,
-    args: Any,
+    request: RemixRequest,
 ) -> None:
-    """从目标节点中非目标区域移除重复的提示词（与 /remove 相同的匹配逻辑）"""
+    """从目标节点中非目标区域移除重复的提示词（与移除动作相同的匹配逻辑）。"""
     from .prompt_locator import REGION_START_RE
 
-    # 生成变体（与 /remove 逻辑一致：原词、下划线、空格三种形态）
-    remove_prompts: Set[str] = set()
-    remove_prompts.update(
-        (prompt_str, prompt_str.replace("_", " "), prompt_str.replace(" ", "_"))
-    )
+    spellings = _spellings([prompt_str])
 
     wf_text = pair.get_workflow_node_text(target_node_id)
     if not wf_text:
@@ -217,162 +367,12 @@ def _remove_from_other_regions(
         if region == target_region:
             continue
         fragment = PromptFragment(pair, target_node_id, region=region)
-        for variant in remove_prompts:
+        for spelling in spellings:
             # no_skip=True 静默跳过不存在的情况
-            fragment.remove(variant, raw=args.raw, hard=False, no_skip=True)
+            fragment.remove(spelling, raw=request.raw, hard=False, no_skip=True)
 
 
 # #endregion
-
-
-class RemoveAgainHandler:
-    """remove-again 命令：重放历史移除操作，合并为一个变体"""
-
-    def run(self, ctx: CommandContext) -> None:
-        records = ctx.history.list_remove()
-
-        if not records:
-            ctx.skip("无历史移除记录")
-            return
-
-        pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
-        any_processed = False
-
-        for record in records:
-            # 根据历史记录中的范围参数定位目标片段
-            fragments = pair.locate_prompts(
-                nodes=record.node, regions=record.region, is_neg=record.neg
-            )
-
-            if record.all:
-                fragments = [
-                    PromptFragment(pair, nid)
-                    for nid in _clip_text_encode_nodes(ctx.prompt)
-                ]
-
-            # 生成提示词的变体形式（空格/下划线互换）
-            remove_prompts: Set[str] = set()
-            remove_prompts.update(
-                (
-                    record.prompt,
-                    record.prompt.replace("_", " "),
-                    record.prompt.replace(" ", "_"),
-                )
-            )
-
-            for fragment in fragments:
-                for prompt_str_arg in remove_prompts:
-                    if fragment.remove(
-                        prompt_str_arg,
-                        raw=record.raw,
-                        hard=record.hard,
-                        no_skip=record.no_skip,
-                    ):
-                        any_processed = True
-
-        if not any_processed:
-            ctx.skip("历史移除内容已不存在")
-            return
-
-        _submit_simple(ctx.prompt, ctx.workflow, ctx.comfyui_url, ctx.jobs, ctx.path)
-        ctx.update_label()
-
-
-class AdjustHandler:
-    """adjust 命令：调整权重/比例并提交"""
-
-    def run(self, ctx: CommandContext) -> None:
-        node_ids: Optional[List[str]] = getattr(ctx.args, "node", None)
-        enable_seed_update = ctx.args.update_seed or (ctx.jobs > 1)
-
-        pair = WorkflowPromptPair(workflow=ctx.workflow, prompt=ctx.prompt)
-        weight_mgr = WeightManager(pair)
-        seed_mgr = SeedManager(pair, pair.seed_nodes)
-        filename_mgr = FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
-        )
-
-        if ctx.args.adjust_type == "cfg":
-            variant_gen = variant_engine.generate_cfg_variants(
-                weight_mgr, ctx.prompt, ctx.args.weight, node_ids
-            )
-        elif ctx.args.adjust_type in ("lora", "l"):
-            variant_gen = variant_engine.generate_lora_variants(
-                weight_mgr, ctx.args.name, ctx.args.weight
-            )
-        elif ctx.args.adjust_type == "aspect":
-            variant_gen = variant_engine.generate_aspect_variants(
-                weight_mgr, ctx.prompt, pair.nodes_cache, ctx.args.ratio, node_ids
-            )
-        elif ctx.args.adjust_type in ("prompt", "p"):
-            fragments = pair.locate_prompts(
-                nodes=ctx.args.node, regions=ctx.args.region, is_neg=ctx.args.neg
-            )
-            variant_gen = variant_engine.generate_prompt_variants(
-                weight_mgr, fragments, ctx.args.text, ctx.args.weight, ctx.args.skip_add
-            )
-        else:
-            raise ValueError(f"unexpected adjust type '{ctx.args.adjust_type}'")
-
-        # 变体生成器是「原地变异 prompt 后 yield」：必须边迭代边提交，
-        # 若先 list() 耗尽，prompt 已停在末档，中间档会被跳过。
-        # 档位总数在提交前不可知，进度消息只报当前档序号。
-        with progress_notification(
-            ctx.client, ctx.progress_tag, "ComfyUI 权重调整", "调整权重并提交"
-        ) as update:
-            variant_count = 0
-            for _ in variant_gen:
-                if variant_count > 0:
-                    enable_seed_update = True
-                variant_count += 1
-                for j_idx in range(ctx.jobs):
-                    update(f"变体 {variant_count}，第 {j_idx + 1} 次提交")
-                    if enable_seed_update:
-                        if seed_mgr.update_seeds() == 0:
-                            raise ValueError(
-                                f"Failed to update any seeds for image: {ctx.path}."
-                            )
-                    filename_mgr.update_output_filenames()
-                    _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
-
-            if variant_count == 0 and ctx.args.no_skip:
-                for j_idx in range(ctx.jobs):
-                    update(f"无变体，第 {j_idx + 1} 次提交")
-                    if enable_seed_update:
-                        if seed_mgr.update_seeds() == 0:
-                            raise ValueError(
-                                f"Failed to update any seeds for image: {ctx.path}."
-                            )
-                    filename_mgr.update_output_filenames()
-                    _submit_fn(ctx.prompt, ctx.workflow, ctx.comfyui_url)
-
-        processed = variant_count > 0 or ctx.args.no_skip
-        if not processed:
-            ctx.skip("无有效变体（提示词不存在或权重未变化）")
-            return
-
-        ctx.update_label()
-
-
-def _submit_simple(
-    prompt: Dict[str, Any],
-    workflow: Dict[str, Any],
-    comfyui_url: str,
-    jobs: int,
-    path: str,
-) -> None:
-    """基础提交逻辑：更新种子、文件名并提交"""
-    pair = WorkflowPromptPair(workflow, prompt)
-    seed_mgr = SeedManager(pair, pair.seed_nodes)
-    filename_mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
-
-    for q_idx in range(jobs):
-        if jobs > 1:
-            _LOGGER.debug("  -> Queueing run %d/%d", q_idx + 1, jobs)
-        if seed_mgr.update_seeds() == 0:
-            raise ValueError(f"Failed to update any seeds for image: {path}.")
-        filename_mgr.update_output_filenames()
-        _submit_fn(prompt, workflow, comfyui_url)
 
 
 def handle_set_model_format_cmd(args: Any) -> None:
@@ -402,12 +402,11 @@ def handle_set_model_format_cmd(args: Any) -> None:
 
 # #region 命令注册表
 
+# queue 是「无编辑项的重混」，与 remix 共用同一个处理器
+_remix_handler = RemixHandler()
 COMMAND_HANDLERS: Dict[str, CommandHandler] = {
-    "queue": QueueHandler(),
-    "add": AddHandler(),
-    "remove": RemoveHandler(),
-    "remove-again": RemoveAgainHandler(),
-    "adjust": AdjustHandler(),
+    "queue": _remix_handler,
+    "remix": _remix_handler,
 }
 
 # #endregion

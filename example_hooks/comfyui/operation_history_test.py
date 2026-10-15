@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import argparse
 import json
 import os
 import sqlite3
@@ -8,6 +7,7 @@ import unittest
 
 from .db import SQLiteContext
 from .operation_history import OperationHistory
+from .remix import RemixRequest, LoraEdit, PromptWeightEdit
 
 
 def _query(db_path: str, sql: str, params: tuple[object, ...] = ()):
@@ -50,125 +50,107 @@ class TestOperationHistory(unittest.TestCase):
                 ("remove", json.dumps({"prompt": "bad hands"}, ensure_ascii=False)),
             )
 
-    def test_extract_params_queue(self):
+    def test_record_remix_splits_each_prompt_into_its_own_record(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = os.path.join(tmp, "test.db")
             with SQLiteContext(db_path) as db_ctx:
                 history = OperationHistory(db_ctx)
-                args = argparse.Namespace(command="queue")
-                history.extract_params(args)
-
-            rows = _query(db_path, "SELECT command, data FROM history")
-            self.assertEqual(rows[0], ("queue", "{}"))
-
-    def test_extract_params_remove_again(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = os.path.join(tmp, "test.db")
-            with SQLiteContext(db_path) as db_ctx:
-                history = OperationHistory(db_ctx)
-                args = argparse.Namespace(command="remove-again")
-                history.extract_params(args)
-
-            rows = _query(db_path, "SELECT command, data FROM history")
-            self.assertEqual(rows[0], ("remove-again", "{}"))
-
-    def test_extract_params_add(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = os.path.join(tmp, "test.db")
-            with SQLiteContext(db_path) as db_ctx:
-                history = OperationHistory(db_ctx)
-                args = argparse.Namespace(command="add", prompt=["1girl", "solo"])
-                history.extract_params(args)
+                history.record_remix(
+                    RemixRequest(add_tags=("1girl", "solo"), remove_tags=("bad hands",))
+                )
 
             rows = _query(db_path, "SELECT command, data FROM history ORDER BY id")
-            self.assertEqual(len(rows), 2)
-            expected_base = {
-                "region": None,
-                "node": None,
-                "neg": False,
-                "raw": False,
-                "hard": False,
-                "all": False,
-                "no_skip": False,
-            }
+            self.assertEqual([row[0] for row in rows], ["add", "add", "remove"])
+            self.assertEqual(json.loads(rows[0][1]), {"prompt": "1girl"})
+            self.assertEqual(json.loads(rows[1][1]), {"prompt": "solo"})
             self.assertEqual(
-                json.loads(rows[0][1]), {**expected_base, "prompt": "1girl"}
-            )
-            self.assertEqual(
-                json.loads(rows[1][1]), {**expected_base, "prompt": "solo"}
+                json.loads(rows[2][1]),
+                {"prompt": "bad hands", "raw": False, "hard": False},
             )
 
-    def test_extract_params_remove(self):
+    def test_record_remix_keeps_removal_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = os.path.join(tmp, "test.db")
             with SQLiteContext(db_path) as db_ctx:
                 history = OperationHistory(db_ctx)
-                args = argparse.Namespace(command="remove", prompt=["bad hands"])
-                history.extract_params(args)
-
-            rows = _query(db_path, "SELECT command, data FROM history")
-            expected_base = {
-                "region": None,
-                "node": None,
-                "neg": False,
-                "raw": False,
-                "hard": False,
-                "all": False,
-                "no_skip": False,
-            }
-            self.assertEqual(
-                json.loads(rows[0][1]), {**expected_base, "prompt": "bad hands"}
-            )
-
-    def test_extract_params_adjust_lora(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = os.path.join(tmp, "test.db")
-            with SQLiteContext(db_path) as db_ctx:
-                history = OperationHistory(db_ctx)
-                args = argparse.Namespace(
-                    command="adjust", adjust_type="lora", name="my_lora", weight="0.5"
+                history.record_remix(
+                    RemixRequest(remove_tags=("a",), raw=True, hard=True)
                 )
-                history.extract_params(args)
 
-            rows = _query(db_path, "SELECT command, data FROM history")
+            rows = _query(db_path, "SELECT data FROM history")
             self.assertEqual(
-                json.loads(rows[0][1]),
-                {
-                    "adjust_type": "lora",
-                    "name": "my_lora",
-                    "weight": "0.5",
-                },
+                json.loads(rows[0][0]),
+                {"prompt": "a", "raw": True, "hard": True},
             )
 
-    def test_extract_params_adjust_cfg(self):
+    def test_record_remix_records_weight_edits_by_original_command(self):
+        """调权仍以 adjust 落库，既有查询与重放因此不受指令合并影响。"""
         with tempfile.TemporaryDirectory() as tmp:
             db_path = os.path.join(tmp, "test.db")
             with SQLiteContext(db_path) as db_ctx:
                 history = OperationHistory(db_ctx)
-                args = argparse.Namespace(
-                    command="adjust", adjust_type="cfg", weight="7.0"
+                history.record_remix(
+                    RemixRequest(
+                        prompt_weights=(PromptWeightEdit("masterpiece", "0.8"),),
+                        loras=(LoraEdit("my_lora", "0.5"),),
+                        cfgs=("5", "7"),
+                        aspects=("16:9",),
+                    )
                 )
-                history.extract_params(args)
 
-            rows = _query(db_path, "SELECT command, data FROM history")
+            rows = _query(db_path, "SELECT data FROM history ORDER BY id")
             self.assertEqual(
-                json.loads(rows[0][1]), {"adjust_type": "cfg", "weight": "7.0"}
+                [json.loads(row[0]) for row in rows],
+                [
+                    {
+                        "adjust_type": "prompt",
+                        "text": "masterpiece",
+                        "weight": "0.8",
+                    },
+                    {
+                        "adjust_type": "lora",
+                        "name": "my_lora",
+                        "weight": "0.5",
+                    },
+                    {"adjust_type": "cfg", "weight": "5"},
+                    {"adjust_type": "cfg", "weight": "7"},
+                    {"adjust_type": "aspect", "ratio": "16:9"},
+                ],
             )
 
-    def test_extract_params_adjust_aspect(self):
+    def test_record_remix_without_edits_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = os.path.join(tmp, "test.db")
             with SQLiteContext(db_path) as db_ctx:
                 history = OperationHistory(db_ctx)
-                args = argparse.Namespace(
-                    command="adjust", adjust_type="aspect", ratio="16:9"
-                )
-                history.extract_params(args)
+                history.record_remix(RemixRequest())
+                self.assertEqual(history.list_remove(), [])
 
-            rows = _query(db_path, "SELECT command, data FROM history")
-            self.assertEqual(
-                json.loads(rows[0][1]), {"adjust_type": "aspect", "ratio": "16:9"}
-            )
+    def test_list_remove_drops_legacy_scope_parameters(self):
+        """旧记录中的范围参数在重混语义下无意义，显式丢弃而不是随记录带出。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, ".io.github.natescarlet.hook.db")
+            with SQLiteContext(db_path) as db_ctx:
+                history = OperationHistory(db_ctx)
+                history.record(
+                    "remove",
+                    {
+                        "prompt": "bad hands",
+                        "region": ["positive"],
+                        "node": ["1"],
+                        "neg": True,
+                        "raw": True,
+                        "hard": False,
+                        "all": True,
+                        "no_skip": False,
+                    },
+                )
+
+                records = history.list_remove()
+                self.assertEqual(len(records), 1)
+                self.assertEqual(records[0].prompt, "bad hands")
+                self.assertTrue(records[0].raw)
+                self.assertFalse(records[0].hard)
 
     def test_get_added_prompts(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -23,6 +23,7 @@ from .command_handlers import (
     handle_set_model_format_cmd,
 )
 from .model_format import format_workflow_prompt_pair
+from . import remix
 
 from .config import ComfyUIConfig
 from .db import SQLiteContext
@@ -82,6 +83,16 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         handle_set_model_format_cmd(args)
         return
 
+    # queue 是「无编辑项的重混」：既不带旗标，也不做任何编辑
+    try:
+        request = (
+            remix.from_args(args) if args.command == "remix" else remix.RemixRequest()
+        )
+    except ValueError:
+        # 旗标组合非法：一张都没提交过，保留指令行让用户改写后重试（报错仍照常抛出）
+        _write_action_override("KEEP", config.action_path)
+        raise
+
     max_match = args.max_match if args.max_match is not None else config.max_match
     if max_match < 0:
         raise ValueError(f"--max-match must be non-negative, got: {max_match}")
@@ -92,7 +103,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
-    if args.command in ["add", "remove", "adjust", "remove-again"]:
+    if args.command == "remix":
         _LOGGER.debug(f"Command is {args.command}, fetching images via GraphQL...")
 
         directory_id = os.getenv("IMAGE_FUNNEL_DIRECTORY_ID")
@@ -153,7 +164,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     # 在执行前记录操作历史，失败的操作也需要被追溯和重放
     op_history = operation_history.OperationHistory(SQLiteContext.from_env())
-    op_history.extract_params(args)
+    op_history.record_remix(request)
 
     # 构建进度通知 tag
     progress_tag = str(uuid.uuid4())
@@ -162,39 +173,12 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     if args.command == "queue":
         channel = "ComfyUI 队列提交"
         title = "提交 ComfyUI 任务"
-    elif args.command == "add":
-        channel = "ComfyUI 添加提示词"
-        preview = " ".join(args.prompt)
-        if len(preview) > 60:
-            preview = preview[:60] + "…"
-        title = f"添加提示词「{preview}」"
-    elif args.command == "remove":
-        channel = "ComfyUI 移除提示词"
-        preview = " ".join(args.prompt)
-        if len(preview) > 60:
-            preview = preview[:60] + "…"
-        title = f"移除提示词「{preview}」"
-    elif args.command == "remove-again":
-        channel = "ComfyUI 移除提示词"
-        title = "重放历史移除操作"
-    elif args.command == "adjust":
-        channel = "ComfyUI 权重调整"
-        if args.adjust_type == "lora":
-            title = f"调整 Lora「{args.name}」至 {args.weight}"
-        elif args.adjust_type == "prompt":
-            preview = args.text
-            if len(preview) > 60:
-                preview = preview[:60] + "…"
-            title = f"调整提示词「{preview}」至 {args.weight}"
-        elif args.adjust_type == "cfg":
-            title = f"调整 CFG 至 {args.weight}"
-        elif args.adjust_type == "aspect":
-            title = f"调整宽高比至 {args.ratio}"
-        else:
-            title = "调整权重"
+    elif request.has_edits:
+        channel = "ComfyUI 重混"
+        title = "重混并提交"
     else:
-        channel = "ComfyUI"
-        title = f"{args.command} 操作"
+        channel = "ComfyUI 队列提交"
+        title = "提交 ComfyUI 任务"
 
     has_errors = False
     success_count = 0
@@ -271,7 +255,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 path=path,
                 prompt=prompt,
                 workflow=workflow,
-                args=args,
+                request=request,
                 comfyui_url=config.comfyui_url,
                 jobs=jobs,
                 label_to_set=config.label_to_set,
@@ -292,73 +276,22 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         parts = [f"跳过 {n} 张：{r}" for r, n in summary.items()]
         skip_msg = "（" + "；".join(parts) + "）"
 
-    def describe_action():
-        if args.command == "add":
-            preview = " ".join(args.prompt)
-            if len(preview) > 40:
-                preview = preview[:40] + "…"
-            return f"添加提示词「{preview}」"
-        elif args.command == "remove":
-            preview = " ".join(args.prompt)
-            if len(preview) > 40:
-                preview = preview[:40] + "…"
-            return f"移除提示词「{preview}」"
-        elif args.command == "remove-again":
-            return "重放移除操作"
-        elif args.command == "queue":
+    # 重混可能同时含多项编辑，逐项罗列会超出可读长度，只截断整体摘要
+    def describe_request() -> str:
+        if not request.has_edits:
             return "重新入列"
-        elif args.command == "adjust":
-            if args.adjust_type == "lora":
-                return f"调整 Lora「{args.name}」权重为 {args.weight}"
-            elif args.adjust_type == "prompt":
-                preview = args.text
-                if len(preview) > 40:
-                    preview = preview[:40] + "…"
-                return f"调整提示词「{preview}」权重为 {args.weight}"
-            elif args.adjust_type == "cfg":
-                return f"调整 CFG 为 {args.weight}"
-            elif args.adjust_type == "aspect":
-                return f"调整宽高比为 {args.ratio}"
-        return "处理"
+        summary = remix.describe(request)
+        return summary if len(summary) <= 40 else summary[:40] + "…"
 
+    action = describe_request()
     if success_count > 0:
-        if args.command == "add":
-            preview = " ".join(args.prompt)
-            if len(preview) > 40:
-                preview = preview[:40] + "…"
-            print(f"向 {success_count} 张图片添加提示词「{preview}」{skip_msg}")
-        elif args.command == "remove":
-            preview = " ".join(args.prompt)
-            if len(preview) > 40:
-                preview = preview[:40] + "…"
-            print(f"从 {success_count} 张图片移除提示词「{preview}」{skip_msg}")
-        elif args.command == "remove-again":
-            print(f"向 {success_count} 张图片重放历史移除操作{skip_msg}")
-        elif args.command == "queue":
-            print(f"将 {success_count} 张图片重新入列{skip_msg}")
-        elif args.command == "adjust":
-            if args.adjust_type == "lora":
-                print(
-                    f"将 {success_count} 张图片的 Lora「{args.name}」权重调整为 {args.weight}{skip_msg}"
-                )
-            elif args.adjust_type == "prompt":
-                preview = args.text
-                if len(preview) > 40:
-                    preview = preview[:40] + "…"
-                print(
-                    f"将 {success_count} 张图片的提示词「{preview}」权重调整为 {args.weight}{skip_msg}"
-                )
-            elif args.adjust_type == "cfg":
-                print(f"将 {success_count} 张图片的 CFG 调整为 {args.weight}{skip_msg}")
-            elif args.adjust_type == "aspect":
-                print(f"将 {success_count} 张图片的宽高比调整为 {args.ratio}{skip_msg}")
+        print(f"将 {success_count} 张图片{action}{skip_msg}")
+    elif skip_reasons:
+        summary = dict(Counter(skip_reasons))
+        parts = [f"{n} 张：{r}" for r, n in summary.items()]
+        print(f"没有图片需要{action}（" + "；".join(parts) + "）")
     else:
-        if skip_reasons:
-            summary = dict(Counter(skip_reasons))
-            parts = [f"{n} 张：{r}" for r, n in summary.items()]
-            print("没有图片需要" + describe_action() + "（" + "；".join(parts) + "）")
-        else:
-            print("没有图片需要" + describe_action())
+        print(f"没有图片需要{action}")
 
     if success_count == 0:
         _write_action_override("KEEP", config.action_path)
@@ -394,16 +327,60 @@ def get_parser() -> argparse.ArgumentParser:
         help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
     )
 
-    add_parser = subparsers.add_parser(
-        "add", help="Add prompt to image metadata and queue"
+    remix_parser = subparsers.add_parser(
+        "remix",
+        help="按旗标集合编辑当前目录图片的 ComfyUI 工作流并入列（无编辑旗标时等价 queue）",
     )
-    add_parser.add_argument(
+    remix_parser.add_argument(
+        "--add",
+        action="append",
+        nargs="+",
+        default=None,
+        metavar="tag",
+        help="新增提示词，可多次指定；恰好一个 tag 时末尾 token 可为权重表达式（表示调整该 tag 权重）",
+    )
+    remix_parser.add_argument(
+        "--remove",
+        action="append",
+        nargs="+",
+        default=None,
+        metavar="tag",
+        help="移除提示词，可多次指定；从所有 CLIPTextEncode 节点中移除",
+    )
+    remix_parser.add_argument(
+        "--remove-again",
+        action="store_true",
+        help="在其他编辑之前重放当前目录的历史移除操作（忽略历史记录中的范围参数）",
+    )
+    remix_parser.add_argument(
+        "--lora",
+        action="append",
+        nargs="+",
+        default=None,
+        metavar=("name", "weight"),
+        help="调整 Lora 权重（子串匹配名称），可多次指定",
+    )
+    remix_parser.add_argument(
+        "--cfg",
+        action="append",
+        default=None,
+        metavar="weight",
+        help="调整 KSampler 的 CFG，可多次指定（各产一个变体）",
+    )
+    remix_parser.add_argument(
+        "--aspect",
+        action="append",
+        default=None,
+        metavar="ratio",
+        help="调整图像长宽比，可多次指定（各产一个变体）",
+    )
+    remix_parser.add_argument(
         "--no-skip",
         "-S",
         action="store_true",
-        help="Do not skip if prompt already exists",
+        help="不跳过：新增忽略已存在、移除忽略未找到、无改动也照常提交",
     )
-    add_parser.add_argument(
+    remix_parser.add_argument(
         "-j",
         "--jobs",
         type=int,
@@ -411,254 +388,51 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
     )
-    add_parser.add_argument(
+    remix_parser.add_argument(
         "--neg",
         action="store_true",
-        help="When no region or node matches, use negative keyword matching instead of positive",
+        help="当没有 region 或 node 匹配时，提示词调整匹配负向区域而不是正向",
     )
-    add_parser.add_argument(
-        "--raw", action="store_true", help="Add raw text without trailing comma"
-    )
-    add_parser.add_argument(
-        "--region",
-        action="append",
-        default=None,
-        metavar="name",
-        help="Target region name, can be specified multiple times; priority after node",
-    )
-    add_parser.add_argument(
-        "--node",
-        action="append",
-        default=None,
-        metavar="node-id",
-        help="Target node ID, can be specified multiple times; highest priority",
-    )
-    add_parser.add_argument(
-        "--keep",
-        action="store_true",
-        help="保留非目标区域中已有的同名提示词，不移除",
-    )
-    add_parser.add_argument("prompt", nargs="+", help="The prompt text to add")
-
-    remove_parser = subparsers.add_parser(
-        "remove", help="Remove prompt from image metadata and queue"
-    )
-    remove_parser.add_argument(
-        "--no-skip", "-S", action="store_true", help="Do not skip if prompt not found"
-    )
-    remove_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-    remove_parser.add_argument(
-        "--neg",
-        action="store_true",
-        help="When no region or node matches, use negative keyword matching instead of positive",
-    )
-    remove_parser.add_argument(
+    remix_parser.add_argument(
         "--raw",
         action="store_true",
-        help="Remove raw text substring without line matching",
+        help="新增时不附加尾随逗号；移除时精确移除子串而不是整行",
     )
-    remove_parser.add_argument(
-        "--hard",
-        action="store_true",
-        help="Directly delete the text instead of commenting it out",
-    )
-    remove_parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Remove from all CLIP input nodes, ignoring region/node constraints",
-    )
-    remove_parser.add_argument(
+    remix_parser.add_argument(
         "--region",
         action="append",
         default=None,
         metavar="name",
-        help="Target region name, can be specified multiple times; searches all matching areas",
+        help="新增与调权的目标区域，可多次指定；优先匹配 node",
     )
-    remove_parser.add_argument(
+    remix_parser.add_argument(
         "--node",
         action="append",
         default=None,
         metavar="node-id",
-        help="Target node ID, can be specified multiple times; searches all matching nodes",
+        help="目标节点，可多次指定；优先匹配 node。CFG/长宽比同样作用于这些节点",
     )
-    remove_parser.add_argument("prompt", nargs="+", help="The prompt text to remove")
-
-    remove_again_parser = subparsers.add_parser(
-        "remove-again",
-        help="重放当前目录所有历史 /remove 操作，保留原始范围参数",
-    )
-    remove_again_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-
-    # adjust command
-    adjust_parser = subparsers.add_parser(
-        "adjust", help="Adjust prompt weights or existing Lora weights"
-    )
-    adjust_subparsers = adjust_parser.add_subparsers(
-        dest="adjust_type", required=True, help="Adjustment types"
-    )
-
-    # 1. adjust lora
-    lora_parser = adjust_subparsers.add_parser(
-        "lora", help="Adjust existing Lora weights"
-    )
-    lora_parser.add_argument("name", help="Target Lora name (substring match)")
-    lora_parser.add_argument(
-        "weight",
-        help="Weight value or range (e.g. 0.8, 0.5:1.0:0.1, x-0.1:x+0.2:0.1, +-0.3:0.1)",
-    )
-    lora_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-    lora_parser.add_argument(
-        "--update-seed",
-        "-u",
+    remix_parser.add_argument(
+        "--keep",
         action="store_true",
-        help="Force enable seed updating",
+        help="新增时保留非目标区域中已有的同名提示词，不移除",
     )
-    lora_parser.add_argument(
-        "--no-skip",
-        action="store_true",
-        help="Do not skip ComfyUI submission even if no changes were made",
-    )
-
-    # 2. adjust prompt
-    prompt_parser = adjust_subparsers.add_parser("prompt", help="Adjust prompt weights")
-    prompt_parser.add_argument("text", help="Target prompt text to adjust")
-    prompt_parser.add_argument(
-        "weight",
-        help="Weight value or range (e.g. 1.2, 0.8:1.2:0.1, x-0.1:x+0.2:0.1, +-0.3:0.1)",
-    )
-    prompt_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-    prompt_parser.add_argument(
-        "--update-seed",
-        "-u",
-        action="store_true",
-        help="Force enable seed updating",
-    )
-    prompt_parser.add_argument(
-        "--no-skip",
-        action="store_true",
-        help="Do not skip ComfyUI submission even if no changes were made",
-    )
-    prompt_parser.add_argument(
+    remix_parser.add_argument(
         "--skip-add",
         action="store_true",
-        help="Skip adding the prompt if it does not exist",
+        help="调权目标不存在时跳过添加，默认不存在时会添加",
     )
-    prompt_parser.add_argument(
-        "--neg",
+    remix_parser.add_argument(
+        "--hard",
         action="store_true",
-        help="When no region or node matches, use negative keyword matching instead of positive",
+        help="移除时直接删除文本而不是注释掉（指定 --raw 时自动隐含）",
     )
-    prompt_parser.add_argument(
-        "--region",
-        action="append",
-        default=None,
-        metavar="name",
-        help="Target region name, can be specified multiple times; priority after node",
-    )
-    prompt_parser.add_argument(
-        "--node",
-        action="append",
-        default=None,
-        metavar="node-id",
-        help="Target node ID, can be specified multiple times; highest priority",
-    )
-
-    # 3. adjust cfg
-    cfg_parser = adjust_subparsers.add_parser("cfg", help="Adjust KSampler CFG scale")
-    cfg_parser.add_argument(
-        "weight",
-        help="CFG value or range (e.g. 7.0, 5.0:9.0:0.5, x-0.5:x+0.5:0.5, +-1.0:0.5)",
-    )
-    cfg_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-    cfg_parser.add_argument(
+    remix_parser.add_argument(
         "--update-seed",
         "-u",
         action="store_true",
-        help="Force enable seed updating",
+        help="强制启用随机种子更新（在生成多个变体或多次 job 时会自动启用）",
     )
-    cfg_parser.add_argument(
-        "--no-skip",
-        action="store_true",
-        help="Do not skip ComfyUI submission even if no changes were made",
-    )
-    cfg_parser.add_argument(
-        "--node",
-        action="append",
-        default=None,
-        metavar="node-id",
-        help="Target KSampler node ID, can be specified multiple times; if omitted, adjusts all KSampler nodes",
-    )
-
-    # 4. adjust aspect
-    aspect_parser = adjust_subparsers.add_parser(
-        "aspect", help="Adjust image aspect ratio (total pixels unchanged)"
-    )
-    aspect_parser.add_argument(
-        "ratio",
-        help="Target ratio or range (e.g. 16:9, +1, -1, +-1, +-2:2, swap)",
-    )
-    aspect_parser.add_argument(
-        "-j",
-        "--jobs",
-        type=int,
-        default=None,
-        metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
-    )
-    aspect_parser.add_argument(
-        "--update-seed",
-        "-u",
-        action="store_true",
-        help="Force enable seed updating",
-    )
-    aspect_parser.add_argument(
-        "--no-skip",
-        action="store_true",
-        help="Do not skip ComfyUI submission even if no changes were made",
-    )
-    aspect_parser.add_argument(
-        "--node",
-        action="append",
-        default=None,
-        metavar="node-id",
-        help="Target latent node ID containing width and height inputs, can be specified multiple times; if omitted, adjusts all latent nodes",
-    )
-
     # 5. set-model-format
     set_fmt_parser = subparsers.add_parser(
         "set-model-format", help="Set prompt tag format for a ComfyUI model"

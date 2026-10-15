@@ -3,21 +3,9 @@ name = "发送至 ComfyUI"
 description = "提取图片内置的工作流，更新随机种子并自动发送至 ComfyUI API 重新入列生成，如果配置了 HOOK_IMAGE_SET_LABEL 环境变量则自动更新图片颜色标签"
 command = "uv run runner.py comfyui queue"
 
-[directive]
-name = "queue"
-usage = """
-/queue [-j <N>]
-和通过图片触发 `发送至 ComfyUI` 入列效果一致
-
-选项：
--j --jobs <N> 发送工作流次数，默认使用 HOOK_JOBS 环境变量值
-"""
-on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
-
+# 不注册笔记指令：在笔记里发起重新入列走 /remix（不带任何编辑旗标），本配置只保留
+# 图片派发与会话提交两个非指令入口
 [on.post_commit_session]
-
-[on.post_update_note]
-ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）
 
 [on.image_dispatch]
 

@@ -30,6 +30,8 @@ from .autocomplete import (
     autocomplete,
     build_providers,
     build_request_from_params,
+    classify_action,
+    collect_options,
     quote_if_needed,
     NullSuggestionTextFormatter,
     PromptTarget,
@@ -50,30 +52,56 @@ from .workflow_prompt_pair import WorkflowPromptPair
 
 @contextmanager
 def _data_dir_env() -> Generator[str, None, None]:
-    """把 IMAGE_FUNNEL_DATA_DIR 临时指向空目录（/add 补全按需加载模型格式配置）。"""
+    """把 IMAGE_FUNNEL_DATA_DIR 临时指向空目录（新增标签补全按需加载模型格式配置）。"""
     with tempfile.TemporaryDirectory() as tmp_dir:
         with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tmp_dir}):
             yield tmp_dir
+
+
+def _request(
+    cwords: Optional[List[str]] = None, target_command: str = "remix"
+) -> AutocompleteRequest:
+    """构造一个补全请求上下文，默认落在「新增标签」这一编辑动作上。"""
+    return AutocompleteRequest(
+        target_command=target_command,
+        query="",
+        prev_word="",
+        cwords=cwords if cwords is not None else ["/remix", "--add"],
+        image_paths=[],
+        root_dir="root",
+        directory_rel_path="dir",
+    )
+
+
+def _make_context_with(**kwargs: Any) -> AutocompleteContext:
+    """按当前已输入的词推导编辑动作来构造补全上下文（与生产路径同一判定）。"""
+    cwords = cast(List[str], kwargs.get("cwords") or [])
+    parser = get_parser()
+    defaults: Dict[str, Any] = dict(
+        target_command="remix",
+        query="",
+        prev_word="",
+        cwords=cwords,
+        image_paths=[],
+        parsed_args=None,
+        seen_prompts={},
+        workflow=None,
+        prompt_meta=None,
+        parser=parser,
+        action=classify_action(
+            [w for w in cwords if not (w.startswith("<") and w.endswith(">"))],
+            collect_options(parser, cwords)[0],
+        ),
+    )
+    defaults.update(kwargs)
+    return AutocompleteContext(**defaults)
 
 
 class TestComfyUIAutocomplete(unittest.TestCase):
 
     def _make_context(self, **kwargs: Any) -> AutocompleteContext:
         """Helper to build AutocompleteContext with sane defaults."""
-        defaults: Dict[str, Any] = dict(
-            target_command="",
-            query="",
-            prev_word="",
-            cwords=[],
-            image_paths=[],
-            parsed_args=None,
-            seen_prompts={},
-            workflow=None,
-            prompt_meta=None,
-            parser=get_parser(),
-        )
-        defaults.update(kwargs)
-        return AutocompleteContext(**defaults)
+        return _make_context_with(**kwargs)
 
     def _make_parsed_args(self, **kwargs: Any) -> argparse.Namespace:
         """Helper to build a Namespace simulating parsed CLI args."""
@@ -135,8 +163,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="remove",
-            cwords=["/remove"],
+            target_command="remix",
+            cwords=["/remix", "--remove"],
             parsed_args=self._make_parsed_args(),
             seen_prompts=seen_prompts,
         )
@@ -157,9 +185,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             query="cute",
-            cwords=["/remove", "--region", "positive"],
+            cwords=["/remix", "--remove", "--region", "positive"],
             parsed_args=self._make_parsed_args(region=["positive"]),
             seen_prompts=seen_prompts,
         )
@@ -172,9 +200,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_remove_prompt_skip_on_option(self):
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             prev_word="--region",
-            cwords=["/remove", "--region"],
+            cwords=["/remix", "--remove", "--region"],
             parsed_args=self._make_parsed_args(),
         )
         provider = WorkflowPromptProvider()
@@ -182,10 +210,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_remove_prompt_skip_on_dash_query(self):
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             query="--r",
             prev_word="",
-            cwords=["/remove"],
+            cwords=["/remix", "--remove"],
             parsed_args=self._make_parsed_args(),
         )
         provider = WorkflowPromptProvider()
@@ -197,8 +225,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="remove",
-            cwords=["/delete_prompt"],
+            target_command="remix",
+            cwords=["/delete_prompt", "--remove"],
             parsed_args=self._make_parsed_args(),
             seen_prompts=seen_prompts,
         )
@@ -215,10 +243,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "masterpiece": "区域: positive",
         }
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             query="-a",
             prev_word="--",
-            cwords=["/remove", "--"],
+            cwords=["/remix", "--remove", "--"],
             parsed_args=self._make_parsed_args(),
             seen_prompts=seen_prompts,
         )
@@ -231,12 +259,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_adjust_lora_no_prompt_or_danbooru(self):
         context = self._make_context(
-            target_command="adjust",
+            target_command="remix",
             prev_word="my_lora",
-            cwords=["/adjust", "lora", "my_lora"],
-            parsed_args=argparse.Namespace(
-                command="adjust", adjust_type="lora", name="my_lora", weight="0.8"
-            ),
+            cwords=["/remix", "--lora", "my_lora"],
+            parsed_args=argparse.Namespace(command="remix"),
         )
         provider = LoraProvider()
         self.assertFalse(provider.can_provide(context))
@@ -253,14 +279,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="adjust",
-            cwords=["/adjust", "prompt"],
-            parsed_args=self._make_parsed_args(
-                command="adjust",
-                adjust_type="prompt",
-                text="dummy_prompt",
-                weight="dummy_weight",
-            ),
+            target_command="remix",
+            cwords=["/remix", "--add", "1girl, masterpiece, score_7, cute"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts=seen_prompts,
         )
         provider = WorkflowPromptProvider()
@@ -273,9 +294,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_adjust_prompt_skip_by_text(self):
         context = self._make_context(
-            target_command="adjust",
+            target_command="remix",
             prev_word='"another prompt line"',
-            cwords=["/adjust", "prompt", '"another prompt line"'],
+            cwords=["/remix", "--add", '"another prompt line"'],
             parsed_args=None,
             seen_prompts={"1girl, masterpiece, score_7, cute": "区域: positive"},
         )
@@ -284,10 +305,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_adjust_prompt_skip_by_weight(self):
         context = self._make_context(
-            target_command="adjust",
+            target_command="remix",
             query="1",
             prev_word='"another prompt line"',
-            cwords=["/adjust", "prompt", '"another prompt line"', "1"],
+            cwords=["/remix", "--add", '"another prompt line"', "1"],
             parsed_args=None,
             seen_prompts={},
         )
@@ -300,10 +321,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             query="a",
             prev_word="--region",
-            cwords=["/remove", "--", "--region"],
+            cwords=["/remix", "--remove", "--", "--region"],
             parsed_args=self._make_parsed_args(),
             seen_prompts=seen_prompts,
         )
@@ -326,11 +347,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -355,11 +376,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 选项不满足的情况
         context2 = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="pos",
             prev_word="--region",
-            cwords=["/add", "--region"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
         )
         self.assertFalse(provider.can_provide(context2))
 
@@ -371,11 +392,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="1girl,",
-            cwords=["/add", "masterpiece,", "1girl,"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -401,11 +422,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         seen_prompts = {"masterpiece, 1girl": "区域: positive"}
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts=seen_prompts,
             workflow={"nodes": []},
             prompt_meta={},
@@ -441,11 +462,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 场景 1：有 query，执行前缀语义搜索
         context1 = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         suggestions1 = list(provider.provide(context1))
 
@@ -457,11 +478,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 场景 2：空 query，执行关联联想
         context2 = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={"portrait": "区域: positive"},
             workflow={"nodes": []},
             prompt_meta={},
@@ -489,11 +510,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 空 query，无 cwords，无 workflow
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={},
             workflow=None,
             prompt_meta=None,
@@ -522,11 +543,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # seen_prompts 中包含 "1girl"
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={"1girl": "区域: positive"},
             workflow=None,
             prompt_meta=None,
@@ -543,11 +564,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             MagicMock(), self._make_history(), NullSuggestionTextFormatter()
         )
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={},
             workflow=None,
             prompt_meta=None,
@@ -575,11 +596,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={"portrait": "区域: positive"},
             workflow={"nodes": []},
             prompt_meta={},
@@ -603,11 +624,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="--neg",
-            cwords=["/add", "--neg"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "--neg"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -626,11 +647,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -651,11 +672,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         seen_prompts = {"1girl, masterpiece, score_7, cute": "区域: positive"}
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
             seen_prompts=seen_prompts,
             workflow={"nodes": []},
             prompt_meta={},
@@ -677,11 +698,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -704,11 +725,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "区域: positive",
         }
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
             seen_prompts=seen_prompts,
             workflow={"nodes": []},
             prompt_meta={},
@@ -733,11 +754,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_provider.search.side_effect = requests.RequestException("timeout")
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -758,11 +779,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_provider.search.side_effect = KeyError("tag")
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -782,11 +803,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="girl",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -809,11 +830,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="1girl,",
-            cwords=["/add", "masterpiece,", "1girl,"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -835,11 +856,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
 
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="1girl,",
-            cwords=["/add", "masterpiece,", "1girl,"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "masterpiece,", "1girl,"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = DanbooruProvider(
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
@@ -856,11 +877,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         provider = DanbooruProvider(MagicMock(), history, NullSuggestionTextFormatter())
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={},
             workflow=None,
             prompt_meta=None,
@@ -880,11 +901,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         history.get_all_added_prompts.side_effect = KeyError("boom")
         provider = DanbooruProvider(MagicMock(), history, NullSuggestionTextFormatter())
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             seen_prompts={},
             workflow=None,
             prompt_meta=None,
@@ -945,7 +966,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         try:
             path = self._write_workflow_sample(workflow, tmp_dir)
             seen_prompts, _, _, _ = _load_workflow_data(
-                [path], self._make_parsed_args(region=["positive"])
+                [path], self._make_parsed_args(region=["positive"]), "add"
             )
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -954,11 +975,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_suggests_all_regions_on_empty_input(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -977,11 +998,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_skips_when_query_typed(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="g",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -990,11 +1011,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_skips_when_prompt_words_typed(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="1girl,",
-            cwords=["/add", "1girl,"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "1girl,"],
+            parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -1003,11 +1024,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_skips_when_region_specified(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
-            parsed_args=self._make_parsed_args(command="add", region=["positive"]),
+            cwords=["/remix", "--add", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -1016,11 +1037,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_skips_when_node_specified(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="5",
-            cwords=["/add", "--node", "5"],
-            parsed_args=self._make_parsed_args(command="add", node=["5"]),
+            cwords=["/remix", "--add", "--node", "5"],
+            parsed_args=self._make_parsed_args(command="remix", node=["5"]),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -1029,22 +1050,22 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_region_option_provider_skips_without_workflow(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = RegionOptionProvider()
         self.assertFalse(provider.can_provide(context))
 
     def test_region_option_provider_skips_without_region_markers(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
             workflow={"nodes": []},
             prompt_meta={},
         )
@@ -1054,11 +1075,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_region_option_provider_suggests_regions_with_neg_flag(self):
         """--neg 只改变默认区域，不应阻止显式选择区域的建议。"""
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="--neg",
-            cwords=["/add", "--neg"],
-            parsed_args=self._make_parsed_args(command="add", neg=True),
+            cwords=["/remix", "--add", "--neg"],
+            parsed_args=self._make_parsed_args(command="remix", neg=True),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
@@ -1071,10 +1092,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 无任何目标选项时正常建议区域
         context_plain = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
+            cwords=["/remix", "--add"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1083,10 +1104,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         # 扫描到 --region 视为已指定目标
         context_targeted = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/add", "--region", "positive"],
+            cwords=["/remix", "--add", "--region", "positive"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1096,10 +1117,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_region_option_provider_target_scan_respects_end_of_options(self):
         """结束标记 -- 之后的 --region 属于提示词文本，不算指定目标。"""
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="--region",
-            cwords=["/add", "--", "--region"],
+            cwords=["/remix", "--add", "--", "--region"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1124,10 +1145,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 self._get_mock_region_workflow(), tmp_dir
             )
             request = AutocompleteRequest(
-                target_command="add",
+                target_command="remix",
                 query="",
                 prev_word="",
-                cwords=["/add"],
+                cwords=["/remix", "--add"],
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
@@ -1157,10 +1178,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_path = self._write_workflow_sample({"nodes": []}, tmp_dir)
             request = AutocompleteRequest(
-                target_command="add",
+                target_command="remix",
                 query="",
                 prev_word="",
-                cwords=["/add"],
+                cwords=["/remix", "--add"],
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
@@ -1177,7 +1198,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """真实 provider 链中区域选项提供者必须注册在 Danbooru 提供者之前。"""
         with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                "root", "dir", "http://localhost", False, "add"
+                _request(), get_parser(), "http://localhost", False
             ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertLess(
@@ -1206,11 +1227,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             )
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    "root",
-                    "dir",
+                    _request(),
+                    get_parser(),
                     "http://should-be-ignored",
                     False,
-                    "add",
                     data_dir,
                 ) as providers:
                     danbooru = next(
@@ -1226,7 +1246,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with self.assertRaises(FileNotFoundError) as ctx:
                     with build_providers(
-                        "root", "dir", "http://localhost", False, "add", data_dir
+                        _request(), get_parser(), "http://localhost", False, data_dir
                     ):
                         pass
                 self.assertIn("compile_danbooru_data.py", str(ctx.exception))
@@ -1262,11 +1282,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self._write_single_tag_fixture(data_dir)
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    "root",
-                    "dir",
+                    _request(),
+                    get_parser(),
                     "",
                     False,
-                    "add",
                     data_dir,
                     "http://127.0.0.1:1#model=stub",
                 ) as providers:
@@ -1290,11 +1309,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             os.remove(os.path.join(data_dir, COMPILED_EMBEDDINGS_FILENAME))
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    "root",
-                    "dir",
+                    _request(),
+                    get_parser(),
                     "",
                     False,
-                    "add",
                     data_dir,
                     "http://127.0.0.1:1#model=stub",
                 ) as providers:
@@ -1318,7 +1336,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self._write_single_tag_fixture(data_dir)
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    "root", "dir", "", False, "add", data_dir, ""
+                    _request(), get_parser(), "", False, data_dir
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -1331,7 +1349,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
         """URL 与数据目录均为空时不注册 DanbooruProvider。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
-            with build_providers("", "", "", False, "add", "") as providers:
+            with build_providers(_request(), get_parser(), "", False) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertNotIn("DanbooruProvider", names)
 
@@ -1365,10 +1383,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_path = self._write_workflow_sample(workflow, tmp_dir)
             request = AutocompleteRequest(
-                target_command="add",
+                target_command="remix",
                 query="",
                 prev_word="positive",
-                cwords=["/add", "--region", "positive"],
+                cwords=["/remix", "--add", "--region", "positive"],
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
@@ -1451,10 +1469,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         prompt_meta = self._get_mock_node_prompt_meta()
         workflow = self._get_mock_node_workflow()
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             prev_word="--node",
-            cwords=["/add", "--node"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "--node"],
+            parsed_args=self._make_parsed_args(command="remix"),
             prompt_meta=prompt_meta,
             workflow=workflow,
         )
@@ -1487,7 +1505,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context = self._make_context(
             target_command="adjust",
             prev_word="--node",
-            cwords=["/adjust", "cfg", "--node"],
+            cwords=["/remix", "--cfg", "--node"],
             parsed_args=self._make_parsed_args(command="adjust"),
             prompt_meta=prompt_meta,
             workflow=workflow,
@@ -1506,7 +1524,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context = self._make_context(
             target_command="adjust",
             prev_word="--node",
-            cwords=["/adjust", "aspect", "--node"],
+            cwords=["/remix", "--aspect", "--node"],
             parsed_args=self._make_parsed_args(command="adjust"),
             prompt_meta=prompt_meta,
             workflow=workflow,
@@ -1526,10 +1544,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         prompt_meta = self._get_mock_node_prompt_meta()
         workflow = self._get_mock_node_workflow()
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             prev_word="--node",
-            cwords=["/add", "--node", "node_1", "--node"],
-            parsed_args=self._make_parsed_args(command="add", node=["node_1"]),
+            cwords=["/remix", "--add", "--node", "node_1", "--node"],
+            parsed_args=self._make_parsed_args(command="remix", node=["node_1"]),
             prompt_meta=prompt_meta,
             workflow=workflow,
         )
@@ -1548,10 +1566,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """workflow 为 None 时，description 应 fallback 到 prompt 文本"""
         prompt_meta = self._get_mock_node_prompt_meta()
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             prev_word="--node",
-            cwords=["/add", "--node"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "--node"],
+            parsed_args=self._make_parsed_args(command="remix"),
             prompt_meta=prompt_meta,
             workflow=None,
         )
@@ -1568,10 +1586,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         # 清空 node_1 的 widgets_values 模拟无 workflow 文本的场景
         workflow["nodes"][0]["widgets_values"] = []
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             prev_word="--node",
-            cwords=["/add", "--node"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "--node"],
+            parsed_args=self._make_parsed_args(command="remix"),
             prompt_meta=prompt_meta,
             workflow=workflow,
         )
@@ -1582,10 +1600,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
     def test_autocomplete_no_images_robustness(self):
         context = self._make_context(
-            target_command="add",
+            target_command="remix",
             prev_word="--node",
-            cwords=["/add", "--node"],
-            parsed_args=self._make_parsed_args(command="add"),
+            cwords=["/remix", "--add", "--node"],
+            parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = NodeProvider()
         self.assertTrue(provider.can_provide(context))
@@ -1598,9 +1616,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             "another prompt line": "节点: node_1",
         }
         context = self._make_context(
-            target_command="remove",
+            target_command="remix",
             prev_word="--all",
-            cwords=["/remove", "--all"],
+            cwords=["/remix", "--remove", "--all"],
             parsed_args=self._make_parsed_args(all=True),
             seen_prompts=seen_prompts,
         )
@@ -1641,7 +1659,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
             "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
             "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "1girl,",
-            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/add", "masterpiece,", "1girl,"]',
+            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/remix", "--add", "masterpiece,", "1girl,"]',
             "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
             "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
             "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
@@ -1649,7 +1667,7 @@ class TestAutocompleteIntegration(unittest.TestCase):
 
         # 3. 拦截 stdout 并运行 main()
         with _data_dir_env(), patch.dict(os.environ, env_vars), patch(
-            "sys.argv", ["comfyui.autocomplete", "add"]
+            "sys.argv", ["comfyui.autocomplete", "remix"]
         ), patch("sys.stdout", new_io := io.StringIO()):
             try:
                 autocomplete_main()
@@ -1691,14 +1709,14 @@ class TestAutocompleteIntegration(unittest.TestCase):
             "DANBOORU_SEARCH_URL": "https://mock-danbooru.space",
             "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "girl",
             "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "",
-            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/add"]',
+            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/remix", "--add"]',
             "IMAGE_FUNNEL_IMAGE_PATHS": "[]",
             "IMAGE_FUNNEL_ROOT_DIR": "mock_root",
             "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "mock_rel",
         }
 
         with _data_dir_env(), patch.dict(os.environ, env_vars), patch(
-            "sys.argv", ["comfyui.autocomplete", "add"]
+            "sys.argv", ["comfyui.autocomplete", "remix"]
         ), patch("sys.stdout", io.StringIO()):
             with self.assertRaises(KeyError):
                 autocomplete_main()
@@ -1718,20 +1736,7 @@ class TestModelFormatAutocomplete(unittest.TestCase):
 
     def _make_context(self, **kwargs: Any) -> AutocompleteContext:
         """Helper to build AutocompleteContext with sane defaults."""
-        defaults: Dict[str, Any] = dict(
-            target_command="",
-            query="",
-            prev_word="",
-            cwords=[],
-            image_paths=[],
-            parsed_args=None,
-            seen_prompts={},
-            workflow=None,
-            prompt_meta=None,
-            parser=get_parser(),
-        )
-        defaults.update(kwargs)
-        return AutocompleteContext(**defaults)
+        return _make_context_with(**kwargs)
 
     def _suggest(self, context: AutocompleteContext) -> List[Any]:
         provider = ModelFormatProvider(self.config)
@@ -1846,7 +1851,9 @@ class TestModelFormatAutocomplete(unittest.TestCase):
                 "directoryRelPath": "",
             }
         )
-        with build_providers("", "", "", False, "set-model-format") as providers:
+        with build_providers(
+            _request(["/set-model-format"], "set-model-format"), get_parser(), "", False
+        ) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             suggestions = list(autocomplete(request, services))
         texts = [s.text for s in suggestions]
@@ -1933,10 +1940,10 @@ class TestAutocompleteTaskCoocRelease(unittest.TestCase):
 
         active: Dict[Any, Any] = {}
         request = AutocompleteRequest(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="",
-            cwords=["/add"],
+            cwords=["/remix", "--add"],
             image_paths=[],
             root_dir="",
             directory_rel_path="",
@@ -2028,15 +2035,15 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         cwords: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AutocompleteContext:
-        """构造带目标节点的 add 补全上下文。"""
+        """构造带目标节点的新增标签补全上下文。"""
         defaults: Dict[str, Any] = dict(
-            target_command="add",
+            target_command="remix",
             query=query,
             prev_word=prev_word,
-            cwords=cwords if cwords is not None else ["/add"],
+            cwords=cwords if cwords is not None else ["/remix", "--add"],
             image_paths=[],
             parsed_args=argparse.Namespace(
-                command="add",
+                command="remix",
                 neg=False,
                 all=False,
                 region=None,
@@ -2055,9 +2062,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
                 node_id="6", inference_text=inference_text or node_text
             )
         # kwargs 最后覆盖，便于个别用例替换工作流元数据等夹具
-        defaults.update(kwargs)
-        defaults["parser"] = get_parser()
-        return AutocompleteContext(**defaults)
+        return _make_context_with(**{**defaults, **kwargs})
 
     def _make_provider(
         self,
@@ -2207,7 +2212,10 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         ]
 
         provider = self._make_provider(mock_provider, self._make_history())
-        context = self._make_context(prev_word="1girl,", cwords=["/add", "1girl,"])
+        context = self._make_context(
+            prev_word="masterpiece,",
+            cwords=["/remix", "--add", "1girl,", "masterpiece,"],
+        )
         suggestions = list(provider.provide(context))
 
         self.assertEqual(suggestions[0].text, "blue_eyes")
@@ -2252,20 +2260,19 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
     # ---- 其它指令不受影响 ----
 
     def test_remove_and_adjust_prompt_suggestions_unchanged(self) -> None:
-        """`/remove` 与 `/adjust prompt` 列出工作流中已有标签文本，保持原文。"""
+        """移除与提示词调权列出工作流中已有标签文本，保持原文。"""
         self._set_model_format("animaPencilXL_v10.safetensors", "anima")
         seen_prompts = {"Blue_Hair": "区域: positive"}
         provider = WorkflowPromptProvider()
-        for command, cwords in (
-            ("remove", ["/remove"]),
-            ("adjust", ["/adjust", "prompt"]),
+        for cwords in (
+            ["/remix", "--remove"],
+            ["/remix", "--add", "Blue_Hair"],
         ):
-            context = AutocompleteContext(
-                target_command=command,
+            context = _make_context_with(
+                target_command="remix",
                 cwords=cwords,
-                parsed_args=argparse.Namespace(command=command, neg=False, all=False),
+                parsed_args=argparse.Namespace(command="remix", neg=False),
                 seen_prompts=seen_prompts,
-                parser=get_parser(),
             )
             self.assertTrue(provider.can_provide(context))
             self.assertEqual([s.text for s in provider.provide(context)], ["Blue_Hair"])
@@ -2298,7 +2305,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             DanbooruTag(tag, "蓝眼", "Blue eyes.", "General"),
         ]
         request = AutocompleteRequest(
-            target_command="add",
+            target_command="remix",
             query=query,
             prev_word="",
             cwords=cwords,
@@ -2323,7 +2330,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         image_path = self._write_sample(workflow, prompt_meta)
 
         suggestions = self._run_autocomplete(
-            [image_path], ["/add"], query="blue", tag="Blue_Eyes"
+            [image_path], ["/remix", "--add"], query="blue", tag="Blue_Eyes"
         )
 
         self.assertEqual([s.text for s in suggestions], ['"blue eyes"'])
@@ -2368,7 +2375,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
 
         suggestions = self._run_autocomplete(
             [image_path],
-            ["/add", "--node", "6", "--node", "7"],
+            ["/remix", "--add", "--node", "6", "--node", "7"],
             query="blue",
             tag="Blue_Eyes",
         )
@@ -2403,7 +2410,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         image_path = self._write_sample(workflow, prompt_meta)
 
         suggestions = self._run_autocomplete(
-            [image_path], ["/add", "--neg"], query="blue"
+            [image_path], ["/remix", "--add", "--neg"], query="blue"
         )
 
         self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
@@ -2419,7 +2426,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         image_path = self._write_sample(workflow, prompt_meta)
 
         suggestions = self._run_autocomplete(
-            [image_path], ["/add"], query="cat", tag="Cat_Ears"
+            [image_path], ["/remix", "--add"], query="cat", tag="Cat_Ears"
         )
         self.assertEqual(suggestions[0].text, '"cat ears"')
 
@@ -2443,10 +2450,13 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         """格式化依赖仅注入 /add；其余指令显式注入空实现。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                "root", "dir", "http://localhost", False, "add"
+                _request(), get_parser(), "http://localhost", False
             ) as add_providers:
                 with build_providers(
-                    "root", "dir", "http://localhost", False, "remove"
+                    _request(cwords=["/remix", "--remove"]),
+                    get_parser(),
+                    "http://localhost",
+                    False,
                 ) as remove_providers:
                     add_formatter = cast(
                         Any,
@@ -2471,7 +2481,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
                 with self.assertRaises(MissingDataDirError):
                     with build_providers(
-                        "root", "dir", "http://localhost", False, "add"
+                        _request(), get_parser(), "http://localhost", False
                     ):
                         pass
 

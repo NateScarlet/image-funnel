@@ -37,7 +37,7 @@
   HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL，脚本成功后会提示这一点。
 
 编译完成后，补全默认数据目录即可启用本地 Danbooru 标签补全
-（见 example_hooks/comfyui_add.toml）。
+（见 example_hooks/comfyui_remix.toml）。
 """
 
 from __future__ import annotations

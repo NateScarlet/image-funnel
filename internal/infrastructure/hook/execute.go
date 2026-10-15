@@ -43,7 +43,11 @@ func (r *Runner) executeHookSync(hook hookConfig, triggerName string, events []h
 	select {
 	case result := <-resChan:
 		if result.Error != nil {
-			// 失败时总是使用 on_fail_action
+			// 失败时脚本仍可通过 IMAGE_FUNNEL_ACTION 覆盖：脚本比配置更清楚
+			// 本次执行是否已经产生了对外可见的结果（例如提交过工作流）
+			if result.Action != "" {
+				return result.Action, result.Stdout, result.Stderr, result.Error
+			}
 			if hook.Directive != nil {
 				return hook.Directive.OnFailAction, result.Stdout, result.Stderr, result.Error
 			}
@@ -151,6 +155,15 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	stderrStr := stderr.String()
 
 	if err != nil {
+		// 失败路径同样读取脚本的操作覆盖：覆盖文件由 defer 清理，必须在此之前读
+		overrideAction, readErr := readActionOverride(actionFilePath)
+		if readErr != nil {
+			r.logger.Error("failed to read IMAGE_FUNNEL_ACTION file", zap.String("path", actionFilePath), zap.Error(readErr))
+			execErr := fmt.Errorf("%s", readErr.Error())
+			r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
+			task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
+			return
+		}
 		r.logger.Error("external hook command failed",
 			zap.String("hook_id", task.HookID),
 			zap.Duration("duration", duration),
@@ -166,7 +179,7 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 			execErr = fmt.Errorf("hook script failed: %w", err)
 		}
 		r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
-		task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
+		task.resultChan <- hookExecutionResult{Error: execErr, Action: overrideAction, Stdout: stdoutStr, Stderr: stderrStr}
 		return
 	}
 
@@ -184,29 +197,13 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 	}
 
 	// 读取脚本通过 IMAGE_FUNNEL_ACTION 写入的覆盖操作
-	var overrideAction string
-	data, readErr := os.ReadFile(actionFilePath)
+	overrideAction, readErr := readActionOverride(actionFilePath)
 	if readErr != nil {
-		if os.IsNotExist(readErr) {
-			// 文件不存在 = 脚本未覆盖，正常路径
-		} else {
-			errMsg := fmt.Sprintf("failed to read IMAGE_FUNNEL_ACTION file: %v", readErr)
-			r.logger.Error(errMsg, zap.String("hook_id", task.HookID), zap.String("path", actionFilePath))
-			execErr := fmt.Errorf("%s", errMsg)
-			r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
-			task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
-			return
-		}
-	} else {
-		overrideAction = strings.TrimSpace(string(data))
-		if overrideAction != "" && !isValidDirectiveAction(overrideAction) {
-			errMsg := fmt.Sprintf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", overrideAction)
-			r.logger.Error(errMsg, zap.String("hook_id", task.HookID))
-			execErr := fmt.Errorf("%s", errMsg)
-			r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
-			task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
-			return
-		}
+		r.logger.Error("failed to read IMAGE_FUNNEL_ACTION file", zap.String("path", actionFilePath), zap.Error(readErr))
+		execErr := fmt.Errorf("%s", readErr.Error())
+		r.sendHookNotification(ctx, task, execErr, stdoutStr, stderrStr)
+		task.resultChan <- hookExecutionResult{Error: execErr, Stdout: stdoutStr, Stderr: stderrStr}
+		return
 	}
 
 	// 脚本通过 IMAGE_FUNNEL_ACTION 覆盖为 KEEP 表示保持现状、本次未产生实际变更；
@@ -221,6 +218,23 @@ func (r *Runner) executeHook(ctx context.Context, task hookExecutionTask) {
 		r.sendHookNotification(ctx, task, nil, stdoutStr, stderrStr)
 	}
 	task.resultChan <- hookExecutionResult{Action: overrideAction, Stdout: stdoutStr, Stderr: stderrStr}
+}
+
+// readActionOverride 读取脚本通过 IMAGE_FUNNEL_ACTION 写入的覆盖操作。
+// 文件不存在表示脚本未覆盖（正常路径）；读取失败或内容非法则报错，不静默忽略。
+func readActionOverride(actionFilePath string) (string, error) {
+	data, err := os.ReadFile(actionFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read IMAGE_FUNNEL_ACTION file: %w", err)
+	}
+	action := strings.TrimSpace(string(data))
+	if action != "" && !isValidDirectiveAction(action) {
+		return "", fmt.Errorf("unsupported action in IMAGE_FUNNEL_ACTION file: %q", action)
+	}
+	return action, nil
 }
 
 // sendHookNotification 捕获钩子执行状态并向通用通知系统发送反馈

@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import os
+import io
 import sys
 import json
 import logging
 import sqlite3
 import threading
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, redirect_stderr
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import argparse
@@ -56,6 +57,103 @@ from .model_format import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# 补全上下文：当前输入位置所处的 /remix 编辑动作
+NO_ACTION = ""
+ADD_ACTION = "add"
+REMOVE_ACTION = "remove"
+# `--add <tag> <weight>` 中权重所在的第二个值位置：调权建议给出工作流中已有原文
+PROMPT_WEIGHT_ACTION = "prompt-weight"
+LORA_ACTION = "lora"
+CFG_ACTION = "cfg"
+ASPECT_ACTION = "aspect"
+
+# 每个旗标把补全上下文切到哪个动作；`--cfg` / `--aspect` 只取一个值，其余多值
+_ACTION_FLAGS: Dict[str, str] = {
+    "--add": ADD_ACTION,
+    "--remove": REMOVE_ACTION,
+    "--lora": LORA_ACTION,
+    "--cfg": CFG_ACTION,
+    "--aspect": ASPECT_ACTION,
+}
+# 接受多个位置值的旗标
+_MULTI_VALUE_ACTIONS = frozenset({ADD_ACTION, REMOVE_ACTION, LORA_ACTION})
+
+
+def collect_options(
+    parser: argparse.ArgumentParser, cwords: List[str]
+) -> Tuple[Set[str], Set[str]]:
+    """收集当前已输入词所能匹配到的活跃解析器上的选项集合。
+
+    返回 (取值选项, 无值选项)。取值选项的下一个词是它的参数值而非新的编辑动作，
+    因此判定当前所在动作时必须跳过。
+    """
+    with_args: Set[str] = set()
+    without_args: Set[str] = set()
+
+    for p in _collect_active_parsers(parser, cwords):
+        # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
+        for action in p._actions:
+            if not action.option_strings:
+                continue
+            target = without_args if action.nargs == 0 else with_args
+            target.update(action.option_strings)
+    return with_args, without_args
+
+
+def classify_action(cwords: List[str], option_with_args: Set[str]) -> str:
+    """按当前输入位置所处的旗标判定补全上下文。
+
+    cwords 只含已完成的词（正在输入的词在 query 中），因此扫描到最后一个编辑旗标
+    及其已消费的位置值个数即可定位当前所在的动作。只有编辑旗标（--add / --remove
+    等）会切换动作；其余选项都是当前动作的修饰（取值选项的参数值直接跳过），
+    `--` 结束标记之后同理按位置值看。
+    """
+    action: str = NO_ACTION
+    taken = 0
+    expect_value = False
+    for word in cwords[1:]:
+        if expect_value:
+            expect_value = False
+            continue
+        if word == "--":
+            continue
+        if word in _ACTION_FLAGS:
+            action = _ACTION_FLAGS[word]
+            taken = 0
+        elif word in option_with_args:
+            expect_value = True
+        elif word.startswith("-"):
+            continue
+        elif action in _MULTI_VALUE_ACTIONS:
+            taken += 1
+
+    # `--add` 恰好给了一个标签时，当前词落在权重位置（权重只服务于单个标签）
+    if action == ADD_ACTION and taken == 1:
+        return PROMPT_WEIGHT_ACTION
+    return action
+
+
+def action_tags(cwords: List[str], action: str) -> List[str]:
+    """取出当前动作已键入的位置值（可再按逗号拆分），供关联联想作为查询标签。"""
+    flag = next((f for f, a in _ACTION_FLAGS.items() if a == action), None)
+    if flag is None:
+        return []
+
+    tags: List[str] = []
+    collecting = False
+    for word in cwords[1:]:
+        if word.startswith("-"):
+            collecting = word == flag
+            continue
+        if not collecting:
+            continue
+        cleaned = word.strip().strip(",").strip('"').strip("'").strip()
+        for part in cleaned.split(","):
+            part_cleaned = part.strip()
+            if part_cleaned:
+                tags.append(part_cleaned)
+    return tags
 
 
 def quote_if_needed(val: str) -> str:
@@ -132,64 +230,33 @@ def _collect_active_parsers(
     return active
 
 
-def _extract_prompt_tags(cwords: List[str], option_with_args: Set[str]) -> List[str]:
-    # 动态排除命令行选项及其参数，提取可能已输入的提示词 tags
-    if not cwords:
-        return []
-
-    tags: List[str] = []
-    skip_next = False
-    for w in cwords[1:]:
-        if skip_next:
-            skip_next = False
-            continue
-
-        if w in option_with_args:
-            skip_next = True
-            continue
-
-        if w.startswith("-"):
-            continue
-
-        cleaned = w.strip().strip(",").strip('"').strip("'").strip()
-        if cleaned:
-            for part in cleaned.split(","):
-                part_cleaned = part.strip()
-                if part_cleaned:
-                    tags.append(part_cleaned)
-    return tags
-
-
 def _parse_args_for_autocomplete(
     parser: argparse.ArgumentParser,
     target_command: str,
     cleaned_cwords: List[str],
-    is_adjust_prompt_cmd: bool,
-    query: str,
 ) -> Optional[argparse.Namespace]:
-    # set-model-format 的 format 位置参数带 choices（anima/sdxl/disabled），追加的 dummy 值
-    # 必然触发 argparse 校验失败（打印 usage 到 stderr 再 SystemExit）；该命令的补全
-    # （ModelFormatProvider）不依赖 parsed_args，直接跳过解析避免 stderr 噪音。
+    """按当前已输入的词解析出旗标状态，供需要区域/节点上下文的 provider 使用。
+
+    cwords[0] 带前导斜杠（`/remix`），不是合法的子命令名，用去斜杠的
+    target_command 代替；解析失败（指令写了一半）时返回 None，调用方按无上下文处理。
+    """
+    # set-model-format 的 format 位置参数带 choices（anima/sdxl/disabled），缺值时
+    # argparse 校验失败；该命令的补全（ModelFormatProvider）不依赖 parsed_args，
+    # 直接跳过解析。
     if target_command == "set-model-format":
         return None
 
     args_to_parse = (
-        [target_command] + cleaned_cwords[1:] + ["dummy_prompt", "dummy_weight"]
+        [target_command] + cleaned_cwords[1:]
         if target_command
-        else cleaned_cwords + ["dummy_prompt", "dummy_weight"]
+        else list(cleaned_cwords)
     )
     try:
-        parsed_args, _ = parser.parse_known_args(args_to_parse)
+        # 补全是「写了一半」的状态，argparse 的 usage 报错对用户无意义
+        with redirect_stderr(io.StringIO()):
+            parsed_args, _ = parser.parse_known_args(args_to_parse)
     except SystemExit:
         parsed_args = None
-
-    if is_adjust_prompt_cmd and parsed_args:
-        text_val = getattr(parsed_args, "text", None)
-        weight_val = getattr(parsed_args, "weight", None)
-        if weight_val and weight_val != "dummy_weight":
-            parsed_args = None
-        elif text_val and text_val != "dummy_prompt" and not query:
-            parsed_args = None
     return parsed_args
 
 
@@ -209,6 +276,7 @@ class PromptTarget:
 def _load_workflow_data(
     image_paths: List[str],
     parsed_args: Optional[argparse.Namespace],
+    action: str,
 ) -> Tuple[
     Dict[str, str],
     Optional[Dict[str, Any]],
@@ -238,7 +306,6 @@ def _load_workflow_data(
         return seen_prompts, workflow, prompt_meta, target
 
     is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
-    is_all = getattr(parsed_args, "all", False) if parsed_args else False
     regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
     nodes_raw = getattr(parsed_args, "node", None) if parsed_args else None
     regions_arg = (
@@ -255,7 +322,8 @@ def _load_workflow_data(
     pair = WorkflowPromptPair(workflow, prompt_meta)
     fragments_to_process: List[Tuple[PromptFragment, str]] = []
 
-    if is_all:
+    if action == REMOVE_ACTION:
+        # 移除已无范围概念：候选来自所有 CLIPTextEncode 节点
         clip_nodes = [
             nid
             for nid, node in prompt_meta.items()
@@ -338,38 +406,24 @@ class AutocompleteContext:
         prompt_meta: Optional[Dict[str, Any]] = None,
         prompt_target: Optional[PromptTarget] = None,
         parser: argparse.ArgumentParser,
+        action: str,
     ):
         self.target_command: str = target_command
         self.query: str = query
         self.prev_word: str = prev_word
         self.cwords: List[str] = cwords or []
         self.image_paths: List[str] = image_paths or []
-        self.cleaned_cwords: List[str] = [
-            w for w in self.cwords if not (w.startswith("<") and w.endswith(">"))
-        ]
-
-        self.is_add_cmd: bool = target_command == "add"
-        self.is_remove_cmd: bool = target_command == "remove"
-        self.is_adjust_prompt_cmd: bool = (
-            target_command == "adjust" and "prompt" in self.cleaned_cwords
-        )
+        self.cleaned_cwords: List[str] = _cleaned_cwords(self.cwords)
 
         # 动态解析选项参数（解析器由入口注入）
-        active_parsers = _collect_active_parsers(parser, self.cwords)
-        self.option_with_args: Set[str] = set()
-        self.option_without_args: Set[str] = set()
+        (
+            self.option_with_args,
+            self.option_without_args,
+        ) = collect_options(parser, self.cwords)
 
-        for p in active_parsers:
-            # pyright: ignore[reportPrivateUsage,reportUnknownMemberType,reportUnknownVariableType]
-            for action in p._actions:
-                if not action.option_strings:
-                    continue
-                if action.nargs == 0:
-                    for opt in action.option_strings:
-                        self.option_without_args.add(opt)
-                else:
-                    for opt in action.option_strings:
-                        self.option_with_args.add(opt)
+        # /remix 把所有编辑合并成一条指令：补全按当前输入所处的旗标分派到对应动作
+        self.action: str = action
+        self.action_tags: List[str] = action_tags(self.cleaned_cwords, self.action)
 
         self.is_real_option_prev = False
         if self.prev_word in self.option_with_args:
@@ -512,8 +566,8 @@ class NodeProvider(AutocompleteProvider):
                         seen_nodes.add(val)
 
         # 确定当前命令支持 of node 类型的过滤逻辑
-        is_cfg = "cfg" in context.cleaned_cwords
-        is_aspect = "aspect" in context.cleaned_cwords
+        is_cfg = context.action == CFG_ACTION
+        is_aspect = context.action == ASPECT_ACTION
 
         for node_id, node_data in sorted(
             context.prompt_meta.items(), key=lambda x: x[0]
@@ -674,7 +728,7 @@ class LoraProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.prev_word == "lora"
+        return context.action == LORA_ACTION and context.prev_word == "--lora"
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         loras: Iterator[str] = (
@@ -696,7 +750,7 @@ class WorkflowPromptProvider(AutocompleteProvider):
     """工作流已存在提示词推荐"""
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if not (context.is_remove_cmd or context.is_adjust_prompt_cmd):
+        if context.action not in (REMOVE_ACTION, PROMPT_WEIGHT_ACTION):
             return False
 
         is_option_input = (
@@ -742,7 +796,7 @@ class RegionOptionProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if not context.is_add_cmd:
+        if context.action != ADD_ACTION:
             return False
 
         # 正在输入查询词时交给语义搜索补全
@@ -750,7 +804,7 @@ class RegionOptionProvider(AutocompleteProvider):
             return False
 
         # 已键入提示词时不建议区域，保持基于已输入标签的关联联想
-        if _extract_prompt_tags(context.cleaned_cwords, context.option_with_args):
+        if context.action_tags:
             return False
 
         # 目标已确定（--region/--node）或工作流无可用区域时，直接进入关联联想
@@ -824,7 +878,7 @@ class DanbooruProvider(AutocompleteProvider):
         self.text_formatter = text_formatter
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if not context.is_add_cmd:
+        if context.action != ADD_ACTION:
             return False
 
         is_option_input = context.prev_word.startswith("-")
@@ -999,9 +1053,7 @@ class DanbooruProvider(AutocompleteProvider):
                 )
         else:
             # 当前词未输入，执行关联联想
-            prompt_tags = _extract_prompt_tags(
-                context.cleaned_cwords, context.option_with_args
-            )
+            prompt_tags = list(context.action_tags)
             if not prompt_tags and context.workflow_loaded:
                 # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
                 raw_tags: List[str] = []
@@ -1110,14 +1162,14 @@ def _embedding_provider_url_from_env() -> str:
     return os.environ.get(EMBEDDING_PROVIDER_URL_ENV, "").strip()
 
 
-def build_suggestion_text_formatter(target_command: str) -> SuggestionTextFormatter:
+def build_suggestion_text_formatter(action: str) -> SuggestionTextFormatter:
     """入口构建建议文本格式化依赖。
 
-    仅 /add 的建议需要按目标节点模型格式重排（使其与提交后落盘形态一致），其余指令
-    建议给出的是工作流/配置中已有原文，显式传空实现。模型格式配置缺失
+    仅新增标签（--add）的建议需要按目标节点模型格式重排（使其与提交后落盘形态一致），
+    其余上下文建议给出的是工作流/配置中已有原文，显式传空实现。模型格式配置缺失
     IMAGE_FUNNEL_DATA_DIR 时在此直接抛出（快速失败，不降级为原文）。
     """
-    if target_command != "add":
+    if action != ADD_ACTION:
         return NullSuggestionTextFormatter()
     return NodeTextFormatter(ModelFormatConfig.load())
 
@@ -1156,13 +1208,24 @@ def build_request_from_params(params: Dict[str, Any]) -> AutocompleteRequest:
     )
 
 
+def action_for(request: AutocompleteRequest, parser: argparse.ArgumentParser) -> str:
+    """按本次请求已输入的词判定所处的编辑动作（解析器由入口注入）。"""
+    cleaned_cwords = _cleaned_cwords(request.cwords)
+    with_args, _ = collect_options(parser, request.cwords)
+    return classify_action(cleaned_cwords, with_args)
+
+
+def _cleaned_cwords(cwords: List[str]) -> List[str]:
+    """去掉编辑器占位符（如 <region>）后的已完成词列表。"""
+    return [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
+
+
 @contextmanager
 def build_providers(
-    root_dir: str,
-    directory_rel_path: str,
+    request: AutocompleteRequest,
+    parser: argparse.ArgumentParser,
     danbooru_url: str,
     show_nsfw: bool,
-    target_command: str,
     danbooru_data_dir: str = "",
     embedding_provider_url: str = "",
 ) -> Generator[List[AutocompleteProvider], None, None]:
@@ -1174,14 +1237,14 @@ def build_providers(
     目录解析见 resolve_danbooru_data_dir：DANBOORU_DATA_DIR 显式优先，
     否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当编译产物存在时启用。
     embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层。
-    target_command 用于按指令按需构建轻量依赖：仅 /set-model-format 需要加载
-    模型格式配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；
-    仅 /add 的 Danbooru 建议需要按模型格式重排建议文本（见
+    request 与 parser 用于按需构建轻量依赖：仅 /set-model-format 需要加载模型格式
+    配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；仅新增
+    标签（--add）的 Danbooru 建议需要按模型格式重排建议文本（见
     build_suggestion_text_formatter）。
     """
     with ExitStack() as stack:
         providers: List[AutocompleteProvider] = []
-        if target_command == "set-model-format":
+        if request.target_command == "set-model-format":
             providers.append(ModelFormatProvider(ModelFormatConfig.load()))
         providers.extend(
             [
@@ -1194,7 +1257,7 @@ def build_providers(
         )
         if danbooru_data_dir or danbooru_url:
             db_ctx = stack.enter_context(
-                SQLiteContext(_db_path(root_dir, directory_rel_path))
+                SQLiteContext(_db_path(request.root_dir, request.directory_rel_path))
             )
             history = OperationHistory(db_ctx)
             tag_provider = build_danbooru_tag_provider(
@@ -1209,7 +1272,7 @@ def build_providers(
                     DanbooruProvider(
                         tag_provider,
                         history,
-                        build_suggestion_text_formatter(target_command),
+                        build_suggestion_text_formatter(action_for(request, parser)),
                     )
                 )
         yield providers
@@ -1220,23 +1283,16 @@ def autocomplete(
     services: AutocompleteServices,
 ) -> Iterator[AutocompleteSuggestion]:
     """生成自动完成建议：上下文与依赖全部由调用方（入口）注入，自身不读取任何环境变量。"""
-    cleaned_cwords = [
-        w for w in request.cwords if not (w.startswith("<") and w.endswith(">"))
-    ]
-    is_adjust_prompt_cmd = (
-        request.target_command == "adjust" and "prompt" in cleaned_cwords
-    )
+    action = action_for(request, services.parser)
 
     parsed_args = _parse_args_for_autocomplete(
         services.parser,
         request.target_command,
-        cleaned_cwords,
-        is_adjust_prompt_cmd,
-        request.query,
+        _cleaned_cwords(request.cwords),
     )
 
     seen_prompts, workflow, prompt_meta, target = _load_workflow_data(
-        request.image_paths, parsed_args
+        request.image_paths, parsed_args, action
     )
 
     context = AutocompleteContext(
@@ -1251,6 +1307,7 @@ def autocomplete(
         prompt_meta=prompt_meta,
         prompt_target=target,
         parser=services.parser,
+        action=action,
     )
 
     for provider in services.providers:
@@ -1361,11 +1418,10 @@ class _AutocompleteTask:
         failure: Optional[str] = None
         try:
             with build_providers(
-                self.request.root_dir,
-                self.request.directory_rel_path,
+                self.request,
+                self.parser,
                 self.danbooru_url,
                 self.show_nsfw,
-                self.request.target_command,
                 self.danbooru_data_dir,
                 self.embedding_provider_url,
             ) as providers:
@@ -1464,17 +1520,17 @@ def main() -> None:
         target_cmd = sys.argv[1]
 
         # 单次模式：入口从环境变量构造请求上下文与依赖（快速失败：缺失配置即报错退出）
+        parser = get_parser()
         request = build_request_from_env(target_cmd)
         with build_providers(
-            request.root_dir,
-            request.directory_rel_path,
+            request,
+            parser,
             os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
             _show_nsfw_from_env(),
-            target_cmd,
             resolve_danbooru_data_dir(),
             _embedding_provider_url_from_env(),
         ) as providers:
-            services = AutocompleteServices(parser=get_parser(), providers=providers)
+            services = AutocompleteServices(parser=parser, providers=providers)
             for s in autocomplete(request, services):
                 print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))
         sys.exit(0)

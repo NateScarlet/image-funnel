@@ -1,0 +1,71 @@
+id = "comfyui-remix"
+name = "重混 ComfyUI 工作流"
+description = "在会话提交或笔记更新时运行 /remix 指令，按旗标集合编辑 ComfyUI 工作流后入列生成"
+command = "uv run runner.py comfyui remix"
+
+[directive]
+name = "remix"
+usage = """
+/remix [--add <tag>...] [--remove <tag>...] [--remove-again] [--lora <name> <weight>] [--cfg <weight>]... [--aspect <ratio>]... [--neg] [--region <region>]... [--node <node-id>]... [-S] [--keep] [--raw] [--hard] [--skip-add] [-u] [-j <N>]
+给当前目录所有 4 星图片的 ComfyUI 工作流应用全部编辑后入列生成。不带任何编辑项时等价于直接重新入列。
+在会话提交后触发，写入笔记时也触发，还可以手动通过笔记触发。
+
+多个各自产出多档的编辑之间取笛卡尔积，每个组合是一个独立变体、各自入列：
+`/remix --cfg 5:7:1 --aspect 16:9 --aspect 4:3` 产出 3×2=6 个变体。
+
+编辑项：
+--add <tag>...       新增提示词，可多次指定。tag 含空格时用引号包裹（--add "long hair"），多个 tag 各自添加为一行
+--add <tag> <w>      恰好一个 tag 时，末尾 token 解析为权重表达式时改为调整该 tag 的权重（原 /adjust prompt）
+--remove <tag>...    从工作流中所有 CLIPTextEncode 节点移除提示词，可多次指定；多值逐个移除
+--remove-again       在其他编辑之前重放当前目录的历史移除操作
+--lora <name> <w>    调整 Lora 权重（名称子串匹配），可多次指定
+--cfg <w>            调整 KSampler 的 CFG，可多次指定，各产一个变体
+--aspect <ratio>     调整图像长宽比，可多次指定，各产一个变体
+权重表达式（--add 的权重部分、--lora、--cfg）可以是精确值（0.8）、范围（0.5:1.0:0.1）、
+基于当前值的相对表达式（x-0.1、x-0.1:x+0.2:0.1）或上下对称浮动（+-0.3:0.1）；所有浮点数均可省略小数点前的 0。
+长宽比表达式支持升降档（+3 生成三档、-2 生成两档、h+3 向窄方向）、对称调整（+-1、w+-2:2）、
+交换宽高（swap / exchange）、精确值（16:9）与常见比例序列。
+
+选项：
+--neg                当没有 region 或 node 匹配时，提示词新增与调权匹配负向区域而不是正向
+--region <region>    指定提示词目标区域，可多次指定；优先匹配 node
+--node <node-id>     指定目标节点，可多次指定；优先匹配 node。CFG 与长宽比同样作用于这些节点
+-S --no-skip         不跳过：新增忽略已存在、移除忽略未找到、无改动也照常提交
+--keep               新增时保留非目标区域中已有的同名提示词，不移除
+--raw                新增时不附加尾随逗号；移除时精确移除子串而不是整行
+--hard               移除时直接删除文本而不是注释掉（指定 --raw 时自动隐含）
+--skip-add           调权目标不存在时跳过添加，默认不存在时会添加
+-u --update-seed     强制启用随机种子更新（多档变体或多次 job 时会自动启用）
+-j --jobs <N>        每个变体发送工作流次数，默认使用 HOOK_JOBS 环境变量值
+移除动作没有范围概念：总是作用于所有 CLIPTextEncode 节点，--neg / --region / --node 对移除无效。
+未指定 --region 和 --node 时，新增与调权默认使用 positive 区域（指定 --neg 时使用 negative 区域）。
+"""
+on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remix ... %% 注释掉避免再次触发
+# 失败时同样注释掉：脚本在「整次执行一张都没发送」时通过 IMAGE_FUNNEL_ACTION 覆盖为 KEEP，
+# 保留原指令行便于排查与重试；只要发送过任一变体就必须注释掉，否则再次提交会重复发送
+on_fail_action = "COMMENT_OUT"
+
+[directive.autocomplete]
+command = "uv run runner.py comfyui.autocomplete serve"
+protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输入触发脚本冷启动
+
+[on.post_commit_session.note_scan] # 会话提交后，扫描目录内笔记，对每一个笔记触发钩子逻辑
+ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义了指令，笔记中未含该指令也依然触发）
+
+[on.note_dispatch]
+
+[on.post_update_note]
+
+[env]
+# DANBOORU_SEARCH_URL = "https://sakizuki-danboorusearch.hf.space" # Danbooru 标签在线语义搜索服务的地址，取消注释以启用智能提示词补全。接口文档：https://sakizuki-danboorusearch.hf.space/api/openapi.json
+# DANBOORU_SEARCH_INCLUDE_NSFW = "false" # Danbooru 标签搜索是否包含 NSFW 标签，默认为 false
+# DANBOORU_DATA_DIR = "" # 本地 Danbooru 编译产物目录；缺省时默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru（仅当该目录已编译产物时启用）。先运行编译脚本（参数为源数据目录，产物自动写入补全读取路径）：uv run example_hooks/compile_danbooru_data.py <源数据目录>，设置后优先于 DANBOORU_SEARCH_URL
+# HOOK_AUTOCOMPLETE_EMBEDDING_PROVIDER_URL = "http://localhost:1234#apiKey=&model=text-embedding-bge-m3&timeoutMs=3000" # Danbooru 语义层使用的 OpenAI 兼容 /v1/embeddings 端点；语法 <base>#apiKey=<k>&model=<m>&timeoutMs=<ms>，apiKey 为空则不发送 Authorization 头。仅在本地编译产物含标签向量时生效（否则补全退回纯字面匹配）
+# COMFYUI_OUTPUT_DIR = ""  # ComfyUI 的输出根目录。若未提供，自动为图片绝对路径中最后一个名为 output 的目录。显式提供时会校验图片及目标目录是否在其中。
+# HOOK_OUTPUT_DIR = ""     # 覆盖目标输出目录。默认不指定时，输出到图片当前所在目录；指定相对路径时，该路径相对于 ComfyUI 的输出根目录；若设为绝对路径，则必须在输出根目录内部，否则报错；若设为 :inherit:，则完全关闭目录自动调整功能。
+HOOK_IMAGE_RATING = "4"
+HOOK_JOBS = "2"
+HOOK_MAX_MATCH = "4"
+HOOK_WEIGHT_STEP = "0.1"
+HOOK_POSITIVE_KEYWORDS = "masterpiece, best quality, score_7"
+HOOK_NEGATIVE_KEYWORDS = "worst quality, low quality, score_1, score_2, score_3"

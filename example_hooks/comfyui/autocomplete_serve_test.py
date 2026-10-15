@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import patch, MagicMock
 
 logging.disable(logging.CRITICAL)
@@ -19,6 +19,24 @@ from .autocomplete import (
     serve,
 )
 from .__main__ import get_parser
+
+
+def _request(
+    *,
+    root_dir: str = "",
+    directory_rel_path: str = "",
+    cwords: Optional[List[str]] = None,
+) -> AutocompleteRequest:
+    """构造一个指向 /remix 新增标签上下文的补全请求。"""
+    return AutocompleteRequest(
+        target_command="remix",
+        query="",
+        prev_word="",
+        cwords=cwords if cwords is not None else ["/remix", "--add"],
+        image_paths=[],
+        root_dir=root_dir,
+        directory_rel_path=directory_rel_path,
+    )
 
 
 def _run_serve(input_lines: List[str]) -> str:
@@ -181,15 +199,15 @@ class TestServe(unittest.TestCase):
             "node_2": {"class_type": "KSampler", "inputs": {"cfg": 8.0}},
         }
         request = AutocompleteRequest(
-            target_command="add",
+            target_command="remix",
             query="",
             prev_word="--node",
-            cwords=["/add", "--node"],
+            cwords=["/remix", "--add", "--node"],
             image_paths=["mock.png"],
             root_dir="",
             directory_rel_path="",
         )
-        with build_providers("", "", "", False, "add") as providers:
+        with build_providers(request, get_parser(), "", False) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
@@ -211,7 +229,10 @@ class TestServe(unittest.TestCase):
             os.environ, {"IMAGE_FUNNEL_DATA_DIR": data_dir}
         ), patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
             with build_providers(
-                "root", "dir", "http://localhost", False, "add"
+                _request(root_dir="root", directory_rel_path="dir"),
+                get_parser(),
+                "http://localhost",
+                False,
             ) as providers:
                 self.assertEqual(len(providers), 6)
                 fake_ctx.__enter__.assert_called_once()
