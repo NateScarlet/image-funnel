@@ -4,10 +4,10 @@ import (
 	"context"
 	"iter"
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"main/internal/util"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,7 +19,7 @@ import (
 // 负责监听文件变更并转换为应用层事件
 type Service struct {
 	watcher        Watcher
-	fileChangedPub pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedPub pubsub.Topic[*FileChangedEvent]
 	rootDir        string
 	logger         *zap.Logger
 	repo           Repository
@@ -27,7 +27,7 @@ type Service struct {
 }
 
 // NewService 创建目录服务
-func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], rootDir string, repo Repository, renamer Renamer, logger *zap.Logger) (*Service, func()) {
+func NewService(watcher Watcher, fileChangedPub pubsub.Topic[*FileChangedEvent], rootDir string, repo Repository, renamer Renamer, logger *zap.Logger) (*Service, func()) {
 	s := &Service{
 		watcher:        watcher,
 		fileChangedPub: fileChangedPub,
@@ -56,8 +56,8 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 			continue
 		}
 
-		// 将绝对路径转换为相对路径
-		relPath, err := filepath.Rel(s.rootDir, fileChange.absPath)
+		// 变更路径来自文件系统遍历（绝对路径），在此处转为根相对路径（出生点之一）并围栏
+		relStr, err := filepath.Rel(s.rootDir, fileChange.absPath)
 		if err != nil {
 			s.logger.Error("failed to get relative path",
 				zap.String("path", fileChange.absPath),
@@ -65,20 +65,28 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 				zap.Error(err))
 			continue
 		}
-
-		// 编码目录ID
-		dir, err := s.repo.Get(ctx, filepath.Dir(relPath))
+		relPath, err := relpath.New(s.rootDir, relStr)
 		if err != nil {
-			s.logger.Error("failed to get directory by path",
-				zap.String("path", filepath.Dir(relPath)),
+			s.logger.Error("failed to resolve root-relative path",
+				zap.String("path", fileChange.absPath),
+				zap.String("root", s.rootDir),
 				zap.Error(err))
 			continue
 		}
 
-		// 构建应用层事件，将 RelPath 统一标准化为正斜杠格式
-		event := &shared.FileChangedEvent{
+		// 编码目录ID
+		dir, err := s.repo.Get(ctx, relPath.Dir())
+		if err != nil {
+			s.logger.Error("failed to get directory by path",
+				zap.String("path", relPath.Dir().String()),
+				zap.Error(err))
+			continue
+		}
+
+		// 构建应用层事件
+		event := &FileChangedEvent{
 			DirectoryID: dir.ID(),
-			RelPath:     filepath.ToSlash(relPath),
+			RelPath:     relPath,
 			Action:      fileChange.action,
 			OccurredAt:  fileChange.occurredAt,
 		}
@@ -90,7 +98,7 @@ func (s *Service) watchAndTransform(ctx context.Context) {
 
 // GetDirectory 根据目录 ID 获取目录实体，由领域层内部解码 ID
 func (s *Service) GetDirectory(ctx context.Context, id scalar.ID) (*Directory, error) {
-	relPath, err := decodeID(id)
+	relPath, err := decodeID(s.rootDir, id)
 	if err != nil {
 		return nil, err
 	}
@@ -132,16 +140,16 @@ func validateDirectoryName(name string) error {
 	return nil
 }
 
-// ResolvePathInput 解析并校验 PathInput，返回相对于根目录的规范化相对路径。
-// 若解析失败或路径逃逸根目录，则返回错误。
-func (s *Service) ResolvePathInput(ctx context.Context, currentRelPath string, input shared.PathInput) (string, error) {
+// ResolvePathInput 解析并校验 PathInput，返回相对于根目录的规范化根相对路径。
+// 路径输入由用户提供，故此处是构造根相对路径的出生点，越界路径直接拒绝。
+func (s *Service) ResolvePathInput(ctx context.Context, currentRelPath relpath.Path, input shared.PathInput) (relpath.Path, error) {
 	var resolvedRelPath string
 	var modeCount int
 
 	if input.Absolute != "" {
 		rel, err := filepath.Rel(s.rootDir, input.Absolute)
 		if err != nil {
-			return "", apperror.New("PATH_INVALID", "invalid absolute path", "无效的绝对路径")
+			return relpath.Path{}, apperror.New("PATH_INVALID", "invalid absolute path", "无效的绝对路径")
 		}
 		resolvedRelPath = rel
 		modeCount++
@@ -151,29 +159,28 @@ func (s *Service) ResolvePathInput(ctx context.Context, currentRelPath string, i
 		modeCount++
 	}
 	if input.RelativeToCurrent != "" {
-		resolvedRelPath = filepath.Join(currentRelPath, input.RelativeToCurrent)
+		resolvedRelPath = filepath.Join(currentRelPath.String(), input.RelativeToCurrent)
 		modeCount++
 	}
 
 	if modeCount == 0 {
-		return "", apperror.New("PATH_INVALID", "path input is empty", "路径输入不能为空")
+		return relpath.Path{}, apperror.New("PATH_INVALID", "path input is empty", "路径输入不能为空")
 	}
 	if modeCount > 1 {
-		return "", apperror.New("PATH_INVALID", "multiple path modes specified", "只能指定一种路径模式")
+		return relpath.Path{}, apperror.New("PATH_INVALID", "multiple path modes specified", "只能指定一种路径模式")
 	}
-
-	resolvedRelPath = filepath.Clean(resolvedRelPath)
 
 	// 安全校验：确保最终目标路径在配置的根目录范围内，防止目录穿越
-	if err := util.EnsurePathInRoot(s.rootDir, resolvedRelPath); err != nil {
-		return "", apperror.New("PATH_INVALID", "path escapes root directory", "路径超出项目根目录范围")
+	relPath, err := relpath.New(s.rootDir, resolvedRelPath)
+	if err != nil {
+		return relpath.Path{}, apperror.New("PATH_INVALID", "path escapes root directory", "路径超出项目根目录范围")
 	}
 
-	return resolvedRelPath, nil
+	return relPath, nil
 }
 
-// SuggestDirectories 根据当前所在目录的相对路径和用户当前的路径输入，智能建议匹配的子目录迭代器
-func (s *Service) SuggestDirectories(ctx context.Context, currentRelPath string, input shared.PathInput) iter.Seq2[*Directory, error] {
+// SuggestDirectories 根据当前所在目录的根相对路径和用户当前的路径输入，智能建议匹配的子目录迭代器
+func (s *Service) SuggestDirectories(ctx context.Context, currentRelPath relpath.Path, input shared.PathInput) iter.Seq2[*Directory, error] {
 	return func(yield func(*Directory, error) bool) {
 		var rawInput string
 		var testInput shared.PathInput
@@ -222,7 +229,7 @@ func (s *Service) SuggestDirectories(ctx context.Context, currentRelPath string,
 				return
 			}
 
-			name := filepath.Base(dir.RelPath())
+			name := dir.RelPath().Base()
 			// 过滤隐藏目录
 			if strings.HasPrefix(name, ".") {
 				continue

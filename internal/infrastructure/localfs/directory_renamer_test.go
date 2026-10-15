@@ -3,6 +3,7 @@ package localfs
 import (
 	"context"
 	"main/internal/apperror"
+	"main/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,11 +22,11 @@ func TestDirectoryRenamer_Rename(t *testing.T) {
 
 	renamer := NewDirectoryRenamer(tmpDir)
 
-	newRelPath, err := renamer.Rename(ctx, filepath.Join("parent", "old"), "new")
+	newRelPath, err := renamer.Rename(ctx, testutil.RelIn(t, tmpDir, "parent/old"), "new")
 	if err != nil {
 		t.Fatalf("Rename() unexpected error: %v", err)
 	}
-	if newRelPath != "parent/new" {
+	if newRelPath.String() != "parent/new" {
 		t.Errorf("newRelPath = %q, want %q", newRelPath, "parent/new")
 	}
 	if _, err := os.Stat(filepath.Join(tmpDir, "parent", "old")); !os.IsNotExist(err) {
@@ -48,7 +49,7 @@ func TestDirectoryRenamer_Rename_TargetExists(t *testing.T) {
 
 	renamer := NewDirectoryRenamer(tmpDir)
 
-	_, err := renamer.Rename(ctx, "old", "taken")
+	_, err := renamer.Rename(ctx, testutil.RelIn(t, tmpDir, "old"), "taken")
 	if err == nil {
 		t.Fatal("expected error when target name already exists")
 	}
@@ -74,7 +75,7 @@ func TestDirectoryRenamer_Rename_TargetIsFile(t *testing.T) {
 
 	renamer := NewDirectoryRenamer(tmpDir)
 
-	_, err := renamer.Rename(ctx, "old", "name.png")
+	_, err := renamer.Rename(ctx, testutil.RelIn(t, tmpDir, "old"), "name.png")
 	if err == nil {
 		t.Fatal("expected error when target name is taken by a file")
 	}
@@ -92,9 +93,10 @@ func TestDirectoryRenamer_Rename_TargetIsFile(t *testing.T) {
 
 func TestDirectoryRenamer_Rename_SourceMissing(t *testing.T) {
 	ctx := context.Background()
-	renamer := NewDirectoryRenamer(t.TempDir())
+	tmpDir := t.TempDir()
+	renamer := NewDirectoryRenamer(tmpDir)
 
-	if _, err := renamer.Rename(ctx, "missing", "new"); err == nil {
+	if _, err := renamer.Rename(ctx, testutil.RelIn(t, tmpDir, "missing"), "new"); err == nil {
 		t.Fatal("expected error when source directory does not exist")
 	}
 }
@@ -108,7 +110,7 @@ func TestDirectoryRenamer_Rename_EscapeRoot(t *testing.T) {
 
 	renamer := NewDirectoryRenamer(tmpDir)
 
-	if _, err := renamer.Rename(ctx, "old", filepath.Join("..", "escaped")); err == nil {
+	if _, err := renamer.Rename(ctx, testutil.RelIn(t, tmpDir, "old"), filepath.Join("..", "escaped")); err == nil {
 		t.Fatal("expected error when target escapes root directory")
 	}
 }

@@ -3,37 +3,51 @@ package directory
 import (
 	"context"
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"path/filepath"
 	"testing"
 
 	"go.uber.org/zap"
 )
 
 type mockRenamer struct {
-	gotRelPath string
+	gotRelPath relpath.Path
 	gotNewName string
-	result     string
+	result     relpath.Path
 	err        error
 	calls      int
 }
 
-func (m *mockRenamer) Rename(ctx context.Context, relPath string, newName string) (string, error) {
+func (m *mockRenamer) Rename(ctx context.Context, relPath relpath.Path, newName string) (relpath.Path, error) {
 	m.calls++
 	m.gotRelPath = relPath
 	m.gotNewName = newName
 	if m.err != nil {
-		return "", m.err
+		return relpath.Path{}, m.err
 	}
-	if m.result != "" {
+	if !m.result.IsRoot() {
 		return m.result, nil
 	}
-	return filepath.ToSlash(filepath.Join(filepath.Dir(relPath), newName)), nil
+	newRelPath, err := relPath.Dir().Join(testRootDir, newName)
+	if err != nil {
+		return relpath.Path{}, err
+	}
+	return newRelPath, nil
+}
+
+// dirAt 构造测试用的目录实体
+func dirAt(t *testing.T, relPath string) *Directory {
+	t.Helper()
+	p, err := relpath.New(testRootDir, relPath)
+	if err != nil {
+		t.Fatalf("failed to build root-relative path %q: %v", relPath, err)
+	}
+	return FromRepository(p)
 }
 
 func newRenameTestService(t *testing.T, repo Repository, renamer Renamer) *Service {
 	t.Helper()
-	s, cleanup := NewService(&mockWatcher{}, &mockFileChangedPub{}, "C:/mock_root", repo, renamer, zap.NewNop())
+	s, cleanup := NewService(&mockWatcher{}, &mockFileChangedPub{}, testRootDir, repo, renamer, zap.NewNop())
 	t.Cleanup(cleanup)
 	return s
 }
@@ -44,23 +58,23 @@ func TestService_Rename(t *testing.T) {
 	renamer := &mockRenamer{}
 	svc := newRenameTestService(t, repo, renamer)
 
-	dir, err := svc.Rename(ctx, FromRepository("parent/old").ID(), "new")
+	dir, err := svc.Rename(ctx, dirAt(t, "parent/old").ID(), "new")
 	if err != nil {
 		t.Fatalf("Rename() unexpected error: %v", err)
 	}
-	if renamer.gotRelPath != "parent/old" {
+	if renamer.gotRelPath.String() != "parent/old" {
 		t.Errorf("renamer received relPath %q, want %q", renamer.gotRelPath, "parent/old")
 	}
 	if renamer.gotNewName != "new" {
 		t.Errorf("renamer received newName %q, want %q", renamer.gotNewName, "new")
 	}
-	if dir.RelPath() != "parent/new" {
-		t.Errorf("returned relPath %q, want %q", dir.RelPath(), "parent/new")
+	if dir.RelPath().String() != "parent/new" {
+		t.Errorf("returned relPath %q, want %q", dir.RelPath().String(), "parent/new")
 	}
-	if dir.ParentID() != FromRepository("parent").ID() {
+	if dir.ParentID() != dirAt(t, "parent").ID() {
 		t.Errorf("parent ID changed unexpectedly: %v", dir.ParentID())
 	}
-	if dir.ID() == FromRepository("parent/old").ID() {
+	if dir.ID() == dirAt(t, "parent/old").ID() {
 		t.Error("expected directory ID to change after rename")
 	}
 }
@@ -70,7 +84,7 @@ func TestService_Rename_RootNotAllowed(t *testing.T) {
 	renamer := &mockRenamer{}
 	svc := newRenameTestService(t, &mockRepository{}, renamer)
 
-	_, err := svc.Rename(ctx, FromRepository("").ID(), "new")
+	_, err := svc.Rename(ctx, dirAt(t, "").ID(), "new")
 	if err == nil {
 		t.Fatal("expected error renaming root directory")
 	}
@@ -99,7 +113,7 @@ func TestService_Rename_InvalidName(t *testing.T) {
 			renamer := &mockRenamer{}
 			svc := newRenameTestService(t, &mockRepository{}, renamer)
 
-			_, err := svc.Rename(ctx, FromRepository("parent/old").ID(), newName)
+			_, err := svc.Rename(ctx, dirAt(t, "parent/old").ID(), newName)
 			if err == nil {
 				t.Fatalf("expected error for name %q", newName)
 			}
@@ -118,7 +132,7 @@ func TestService_Rename_PropagateRenamerError(t *testing.T) {
 	renamer := &mockRenamer{err: apperror.New("DIRECTORY_ALREADY_EXISTS", "exists", "已存在")}
 	svc := newRenameTestService(t, &mockRepository{}, renamer)
 
-	if _, err := svc.Rename(ctx, FromRepository("parent/old").ID(), "new"); err == nil {
+	if _, err := svc.Rename(ctx, dirAt(t, "parent/old").ID(), "new"); err == nil {
 		t.Fatal("expected error from renamer")
 	}
 }

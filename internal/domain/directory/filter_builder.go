@@ -1,7 +1,6 @@
 package directory
 
 import (
-	"path/filepath"
 	"strings"
 
 	"main/internal/shared"
@@ -26,7 +25,7 @@ func (fb *FilterBuilder) Build(filters shared.DirectoryFilters) func(*Directory)
 	if filters.Query != "" {
 		query := strings.ToLower(strings.TrimSpace(filters.Query))
 		b.Add(func(dir *Directory) bool {
-			name := strings.ToLower(filepath.Base(dir.relPath))
+			name := strings.ToLower(dir.relPath.Base())
 			return strings.Contains(name, query)
 		})
 	}

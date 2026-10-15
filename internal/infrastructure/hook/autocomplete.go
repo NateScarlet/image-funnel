@@ -6,11 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"main/internal/apperror"
 	"main/internal/domain/hook"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 
 	"go.uber.org/zap"
@@ -64,21 +64,31 @@ func (r *Runner) Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath
 		return nil, nil
 	}
 
-	// 构建笔记和配套图片的路径与 ID
+	// 构建笔记和配套图片的路径与 ID。
+	// noteRelPath 为空串表示「没有关联笔记」，此时无需解析任何根相对路径
 	var noteAbsPath string
 	var imageIDs []string
 	var imagePaths []string
 	if noteRelPath != "" {
-		noteAbsPath = filepath.Join(r.rootDir, noteRelPath)
-	}
-	if imgRelPath, ok := associatedImageRelPath(noteRelPath); ok {
-		imagePaths = []string{filepath.Join(r.rootDir, imgRelPath)}
-		img, err := apperror.IgnoreNotFound(r.imgRepo.Get(ctx, imgRelPath))
+		notePath, err := relpath.New(r.rootDir, noteRelPath)
+		if err != nil {
+			return nil, fmt.Errorf("invalid note path for autocomplete: %w", err)
+		}
+		noteAbsPath = notePath.Abs(r.rootDir)
+
+		imgPath, ok, err := r.associatedImagePath(notePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve associated image for autocomplete: %w", err)
 		}
-		if img != nil {
-			imageIDs = []string{img.ID().String()}
+		if ok {
+			img, err := apperror.IgnoreNotFound(r.imgRepo.Get(ctx, imgPath))
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve associated image for autocomplete: %w", err)
+			}
+			imagePaths = []string{imgPath.Abs(r.rootDir)}
+			if img != nil {
+				imageIDs = []string{img.ID().String()}
+			}
 		}
 	}
 

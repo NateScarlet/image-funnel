@@ -26,14 +26,14 @@ func (h *Handler) TrashImages(
 
 	h.logger.Info("will trash images",
 		zap.Stringer("directoryID", directoryID),
-		zap.String("fromDirectory", relPath),
+		zap.String("fromDirectory", relPath.String()),
 	)
 
 	historyId, totalFileCount, err = h.imgTrasher.Trash(ctx, relPath, filterBy, message)
 	if err != nil {
 		h.logger.Error("trash images failed",
 			zap.Stringer("directoryID", directoryID),
-			zap.String("fromDirectory", relPath),
+			zap.String("fromDirectory", relPath.String()),
 			zap.Duration("duration", time.Since(startTime)),
 			zap.Error(err),
 		)
@@ -42,7 +42,7 @@ func (h *Handler) TrashImages(
 
 	h.logger.Info("did trash images",
 		zap.Stringer("directoryID", directoryID),
-		zap.String("fromDirectory", relPath),
+		zap.String("fromDirectory", relPath.String()),
 		zap.String("historyId", historyId),
 		zap.Int("totalFileCount", totalFileCount),
 		zap.Duration("duration", time.Since(startTime)),

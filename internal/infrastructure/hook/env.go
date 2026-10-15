@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 )
 
@@ -36,18 +37,36 @@ func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName
 	}
 
 	// 从第一个可用路径推导目录信息，无法推导时使用调用者传入的回退值
-	if noteAbsPath != "" {
-		dirRel = r.dirRelFromAbsPath(noteAbsPath)
-	} else if len(imagePaths) > 0 {
-		dirRel = r.dirRelFromAbsPath(imagePaths[0])
+	dirRelPath, hasDirRelPath := relpath.Path{}, false
+	switch {
+	case noteAbsPath != "":
+		rel, err := r.relFromAbsPath(noteAbsPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve directory for %q: %w", noteAbsPath, err)
+		}
+		dirRelPath, hasDirRelPath = rel.Dir(), true
+	case len(imagePaths) > 0:
+		rel, err := r.relFromAbsPath(imagePaths[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve directory for %q: %w", imagePaths[0], err)
+		}
+		dirRelPath, hasDirRelPath = rel.Dir(), true
+	case dirRel != "":
+		var err error
+		dirRelPath, err = relpath.New(r.rootDir, dirRel)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve directory for %q: %w", dirRel, err)
+		}
+		hasDirRelPath = true
 	}
 
-	if dirRel != "" {
-		resolvedDir, err := r.dirRepo.Get(ctx, dirRel)
+	if hasDirRelPath {
+		resolvedDir, err := r.dirRepo.Get(ctx, dirRelPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve directory ID for %q: %w", dirRel, err)
+			return nil, fmt.Errorf("failed to resolve directory ID for %q: %w", dirRelPath, err)
 		}
 		dirID = resolvedDir.ID().String()
+		dirRel = dirRelPath.String()
 	}
 
 	env := append(os.Environ(),
@@ -56,6 +75,8 @@ func (r *Runner) buildBaseEnv(ctx context.Context, hookID, hookName, triggerName
 		"IMAGE_FUNNEL_TRIGGER="+triggerName,
 		"IMAGE_FUNNEL_ROOT_DIR="+r.rootDir,
 		"IMAGE_FUNNEL_DIRECTORY_ID="+dirID,
+		// 根目录的相对路径为空串（根相对路径的零值），与 GraphQL 中
+		// Directory.relPath 的约定一致；脚本拼路径时应直接用 {ROOT_DIR}/{REL_PATH}
 		"IMAGE_FUNNEL_DIRECTORY_REL_PATH="+dirRel,
 		"IMAGE_FUNNEL_GRAPHQL_URL="+r.graphqlURL,
 		"IMAGE_FUNNEL_DATA_DIR="+r.dataDir,

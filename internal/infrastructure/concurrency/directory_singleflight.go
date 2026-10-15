@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -22,10 +23,10 @@ func NewSingleFlightDirectoryAnalyzer(next directory.Analyzer) *SingleFlightDire
 }
 
 // Analyze 通过 singleflight 合并相同路径的并发 Analyze 请求
-func (a *SingleFlightDirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
+func (a *SingleFlightDirectoryAnalyzer) Analyze(ctx context.Context, relPath relpath.Path) (*directory.Stats, error) {
 	// 使用 context.Background() 运行底层的 Analyze 逻辑，
 	// 这样可以避免其中一个调用者的 Context 取消导致共享此请求的其他调用者也返回错误。
-	result, err, _ := a.group.Do(relPath, func() (interface{}, error) {
+	result, err, _ := a.group.Do(relPath.String(), func() (interface{}, error) {
 		return a.next.Analyze(context.Background(), relPath)
 	})
 

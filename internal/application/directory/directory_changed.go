@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"iter"
+	"main/internal/domain/directory"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -35,7 +36,7 @@ func DirectoryChangedWithThrottle(throttle time.Duration) DirectoryChangedOption
 func (h *Handler) DirectoryChanged(ctx context.Context, filters shared.DirectoryFilters, options ...DirectoryChangedOption) iter.Seq2[*shared.DirectoryDTO, error] {
 	var opts = NewDirectoryChangedOptions(options...)
 
-	keyOf := func(event *shared.FileChangedEvent, err error) scalar.ID {
+	keyOf := func(event *directory.FileChangedEvent, err error) scalar.ID {
 		if err != nil {
 			var zero scalar.ID
 			return zero

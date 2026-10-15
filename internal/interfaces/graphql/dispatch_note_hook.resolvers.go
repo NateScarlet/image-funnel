@@ -7,6 +7,7 @@ package graphql
 
 import (
 	"context"
+	"main/internal/domain/relpath"
 )
 
 // DispatchNoteHook is the resolver for the dispatchNoteHook field.
@@ -16,7 +17,13 @@ func (r *mutationResolver) DispatchNoteHook(ctx context.Context, input DispatchN
 		return nil, err
 	}
 
-	err = r.app.DispatchNote(ctx, note.RelPath, input.HookID)
+	// 笔记路径来自 DTO 字符串，在接口层重新构造根相对路径并围栏
+	noteRelPath, err := relpath.New(r.rootDir, note.RelPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.app.DispatchNote(ctx, noteRelPath, input.HookID)
 	if err != nil {
 		return nil, err
 	}

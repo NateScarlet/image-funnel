@@ -5,6 +5,7 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"main/internal/util"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestUpdateImage_ShouldNotRemoveMarkedImageWhenFilterChanges(t *testing.T) {
 	img := image.New(
 		scalar.ToID("img-0"),
 		"test.jpg",
-		"test-0.jpg",
+		testutil.Rel(t, "test-0.jpg"),
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),

@@ -5,6 +5,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"testing"
 	"time"
 
@@ -114,9 +115,9 @@ func TestMarkImage_KeptInFirstRound_ShouldKeepStatusInSecondRound(t *testing.T) 
 }
 
 func TestSession_MarkImage_Sorting(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/to/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", testutil.Rel(t, "path/to/img2.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", testutil.Rel(t, "path/to/img3.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2, img3}
 
 	sess := New(scalar.ToID("sessSort"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
@@ -144,7 +145,7 @@ func TestSession_MarkImage_Sorting(t *testing.T) {
 }
 
 func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/to/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1}
 	sess := New(scalar.ToID("sessAcc"), scalar.ToID("dir1"), nil, 10, images, image.NewFilterBuilder())
 
@@ -169,9 +170,9 @@ func TestSession_MarkImage_DurationAccumulation(t *testing.T) {
 }
 
 func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/to/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/to/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/to/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/to/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", testutil.Rel(t, "path/to/img2.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", testutil.Rel(t, "path/to/img3.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img3, img2}
 
 	sess := New(scalar.ToID("sessAvoid"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
@@ -197,8 +198,8 @@ func TestSession_MarkImage_AvoidConsecutiveSameImage(t *testing.T) {
 // 复现 Bug：用户在队列末尾（刚完成状态）对之前的图片做乱序标记，
 // 使 Kept > targetKeep，此时必须触发 NextRound，否则 currentImage 永远为 null。
 func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", testutil.Rel(t, "path/img2.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2}
 
 	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
@@ -226,11 +227,11 @@ func TestMarkImage_OutOfOrder_AtEndOfQueue_ShouldTriggerNextRound(t *testing.T) 
 
 // 乱序标记保留不在当前轮队列中的前一轮图片，该图片应自动进入当前轮队列，并在后续轮中可被筛选
 func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_ShouldAddToCurrentQueue(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img4 := image.New(scalar.ToID("img4"), "img4.jpg", "/path/img4.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img5 := image.New(scalar.ToID("img5"), "img5.jpg", "/path/img5.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", testutil.Rel(t, "path/img2.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", testutil.Rel(t, "path/img3.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img4 := image.New(scalar.ToID("img4"), "img4.jpg", testutil.Rel(t, "path/img4.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img5 := image.New(scalar.ToID("img5"), "img5.jpg", testutil.Rel(t, "path/img5.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2, img3, img4, img5}
 
 	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())
@@ -268,9 +269,9 @@ func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_ShouldAddToCurrentQueue(t *
 }
 
 func TestMarkImage_OutOfOrder_KeepPreviousRoundImage_Undo_ShouldRemoveFromQueue(t *testing.T) {
-	img1 := image.New(scalar.ToID("img1"), "img1.jpg", "/path/img1.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img2 := image.New(scalar.ToID("img2"), "img2.jpg", "/path/img2.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
-	img3 := image.New(scalar.ToID("img3"), "img3.jpg", "/path/img3.jpg", scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img1 := image.New(scalar.ToID("img1"), "img1.jpg", testutil.Rel(t, "path/img1.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img2 := image.New(scalar.ToID("img2"), "img2.jpg", testutil.Rel(t, "path/img2.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
+	img3 := image.New(scalar.ToID("img3"), "img3.jpg", testutil.Rel(t, "path/img3.jpg"), scalar.ToID("dir1"), 1000, time.Now(), nil, 100, 100)
 	images := []*image.Image{img1, img2, img3}
 
 	sess := New(scalar.ToID("sess"), scalar.ToID("dir1"), nil, 1, images, image.NewFilterBuilder())

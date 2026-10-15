@@ -4,6 +4,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 	imgA := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
-		"test-a.jpg",
+		testutil.Rel(t, "test-a.jpg"),
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),
@@ -36,7 +37,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 	imgAFresh := image.New(
 		scalar.ToID("img-a"),
 		"test.jpg",
-		"test-a.jpg",
+		testutil.Rel(t, "test-a.jpg"),
 		scalar.ToID("d1"),
 		1000,
 		time.Now(),
@@ -64,7 +65,7 @@ func TestSession_MarkedButNotWritten_AfterNextRound(t *testing.T) {
 func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 	// 场景一：正常完成当前轮（即 prevIdx 刚好增加到队列长度，表示当前轮所有图片已全部标记完毕）
 	t.Run("complete round", func(t *testing.T) {
-		images := createTestImages(3) // img-0, img-1, img-2
+		images := createTestImages(t, 3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		// 设置目标保留数为 1。当 3 张图都被标记为 Keep 时，会因为 Keep 数量大于目标数而自动触发换轮
 		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images, image.NewFilterBuilder())
@@ -94,7 +95,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 
 	// 场景二：中途通过外部干预直接换轮（此时当前轮未完成，prevIdx 依然小于当前队列长度）
 	t.Run("incomplete round", func(t *testing.T) {
-		images := createTestImages(3) // img-0, img-1, img-2
+		images := createTestImages(t, 3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images, image.NewFilterBuilder())
 
@@ -118,7 +119,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 
 	// 场景三：无冲突情况（下一轮排序后的首张图片本来就和上一轮的最后一张不同）
 	t.Run("no exchange needed", func(t *testing.T) {
-		images := createTestImages(3) // img-0, img-1, img-2
+		images := createTestImages(t, 3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 1, images, image.NewFilterBuilder())
 
@@ -140,7 +141,7 @@ func TestSession_NextRound_ShouldAvoidContinuousImage(t *testing.T) {
 
 	// 场景四：新一轮队列只有单张图片（即使这唯一的一张图与上一轮最后一张相同，也无法且无需对调）
 	t.Run("single image no exchange", func(t *testing.T) {
-		images := createTestImages(3) // img-0, img-1, img-2
+		images := createTestImages(t, 3) // img-0, img-1, img-2
 		filter := &shared.ImageFilters{}
 		// 将目标保留数量设为 0。当有图片被 Keep 时（哪怕只有 1 张），由于 1 > 0，也会触发换轮
 		session := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 0, images, image.NewFilterBuilder())

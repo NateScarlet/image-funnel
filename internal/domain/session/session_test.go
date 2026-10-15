@@ -4,6 +4,7 @@ import (
 	"main/internal/domain/image"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 
 func TestNewSession_ShouldInitializeCorrectly(t *testing.T) {
 	filter := &shared.ImageFilters{Rating: []int{0, 1, 2}}
-	images := createTestImages(10)
+	images := createTestImages(t, 10)
 
 	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, 5, images, image.NewFilterBuilder())
 
@@ -47,10 +48,10 @@ func TestCurrentImage_ShouldReturnCorrectImage(t *testing.T) {
 
 func TestSession_KeptImages(t *testing.T) {
 	images := []*image.Image{
-		image.New(scalar.ToID("1"), "b.jpg", "/path/b.jpg", scalar.ToID("d1"), 100, time.Now(), nil, 100, 100),
-		image.New(scalar.ToID("2"), "a.jpg", "/path/a.jpg", scalar.ToID("d1"), 200, time.Now(), nil, 100, 100),
-		image.New(scalar.ToID("3"), "c.jpg", "/path/c.jpg", scalar.ToID("d1"), 300, time.Now(), nil, 100, 100),
-		image.New(scalar.ToID("4"), "d.jpg", "/path/d.jpg", scalar.ToID("d1"), 400, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("1"), "b.jpg", testutil.Rel(t, "path/b.jpg"), scalar.ToID("d1"), 100, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("2"), "a.jpg", testutil.Rel(t, "path/a.jpg"), scalar.ToID("d1"), 200, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("3"), "c.jpg", testutil.Rel(t, "path/c.jpg"), scalar.ToID("d1"), 300, time.Now(), nil, 100, 100),
+		image.New(scalar.ToID("4"), "d.jpg", testutil.Rel(t, "path/d.jpg"), scalar.ToID("d1"), 400, time.Now(), nil, 100, 100),
 	}
 
 	session := New(scalar.ToID("s1"), scalar.ToID("d1"), nil, 10, images, image.NewFilterBuilder())

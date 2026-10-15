@@ -3,7 +3,7 @@ package inmem
 import (
 	"context"
 	"main/internal/domain/directory"
-	"path/filepath"
+	"main/internal/domain/relpath"
 	"sync"
 
 	"go.uber.org/zap"
@@ -13,7 +13,8 @@ import (
 type DirectoryStatsCache struct {
 	underlying directory.Analyzer
 	logger     *zap.Logger
-	cache      sync.Map // key: relPath (string), value: *directory.DirectoryStats
+	// key 直接使用根相对路径：它是可比较的值，根目录的零值天然与普通路径区分开
+	cache sync.Map
 }
 
 // NewDirectoryStatsCache 创建目录统计缓存层
@@ -27,23 +28,14 @@ func NewDirectoryStatsCache(
 	}
 }
 
-// cacheKey 生成统一路径作为缓存 key
-func (c *DirectoryStatsCache) cacheKey(relPath string) string {
-	if relPath == "" {
-		relPath = "."
-	}
-	return filepath.ToSlash(filepath.Clean(relPath))
-}
-
 // Invalidate clears the cache for a specific directory path.
-func (c *DirectoryStatsCache) Invalidate(relPath string) {
-	c.cache.Delete(c.cacheKey(relPath))
+func (c *DirectoryStatsCache) Invalidate(relPath relpath.Path) {
+	c.cache.Delete(relPath)
 }
 
 // Analyze 返回缓存的统计信息或委托给底层的 Analyzer
-func (c *DirectoryStatsCache) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
-	key := c.cacheKey(relPath)
-	if val, ok := c.cache.Load(key); ok {
+func (c *DirectoryStatsCache) Analyze(ctx context.Context, relPath relpath.Path) (*directory.Stats, error) {
+	if val, ok := c.cache.Load(relPath); ok {
 		return val.(*directory.Stats), nil
 	}
 
@@ -52,7 +44,7 @@ func (c *DirectoryStatsCache) Analyze(ctx context.Context, relPath string) (*dir
 		return nil, err
 	}
 
-	c.cache.Store(key, stats)
+	c.cache.Store(relPath, stats)
 	return stats, nil
 }
 

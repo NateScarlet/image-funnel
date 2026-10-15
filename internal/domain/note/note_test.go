@@ -4,14 +4,23 @@ import (
 	"context"
 	"iter"
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"main/internal/testutil"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
-func TestParseNoteContent(t *testing.T) {
-	// 定义测试用例结构体
+// testRootDir 返回当前平台形态的虚拟根目录，仅用于根相对路径的围栏，不实际访问磁盘
+func testRootDir() string {
+	if filepath.Separator == '\\' {
+		return `C:\absolute\path`
+	}
+	return "/absolute/path"
+}
+
+func TestParseNoteContent(t *testing.T) { // 定义测试用例结构体
 	tests := []struct {
 		name           string
 		raw            string
@@ -103,19 +112,17 @@ hidden: true
 
 func TestNoteCreation(t *testing.T) {
 	// 测试 Factory.New 是否正确封装了 ParseNoteContent 的结果，并进行了校验
-	rootDir := "/absolute/path"
-	if filepath.Separator == '\\' {
-		rootDir = `C:\absolute\path`
-	}
+	rootDir := testRootDir()
 	raw := "---\nhidden: true\n---\nHello World"
+	relPath := testutil.RelIn(t, rootDir, "test.jpg.md")
 
 	f := NewFactory(rootDir)
-	m, err := f.New("test.jpg.md", raw)
+	m, err := f.New(relPath, raw)
 	if err != nil {
 		t.Fatalf("Factory.New 失败: %v", err)
 	}
 
-	expectedID := encodeID("test.jpg.md")
+	expectedID := encodeID(relPath)
 	if m.ID() != expectedID {
 		t.Errorf("Factory.New().ID() = %v, 想要 %v", m.ID(), expectedID)
 	}
@@ -135,46 +142,29 @@ func TestNoteCreation(t *testing.T) {
 }
 
 func TestNoteFactoryValidation(t *testing.T) {
-	rootDir := "/absolute/path"
-	if filepath.Separator == '\\' {
-		rootDir = `C:\absolute\path`
-	}
+	rootDir := testRootDir()
 	f := NewFactory(rootDir)
 
-	// 1. relPath 不能为空
-	_, err := f.New("", "")
+	// 1. relPath 不能为空：根目录本身是合法的根相对路径，但不能作为笔记文件的位置，
+	// 因此空路径的拒绝是笔记的约束而非路径的约束
+	_, err := f.New(relpath.Path{}, "")
 	if err == nil {
 		t.Error("期望 relPath 校验报错，但成功了")
 	}
 
-	// 2. relPath 不能为绝对路径
-	absRelPath := "/subdir/test.jpg.md"
-	if filepath.Separator == '\\' {
-		absRelPath = `C:\subdir\test.jpg.md`
-	}
-	_, err = f.New(absRelPath, "")
-	if err == nil {
-		t.Error("期望 relPath 绝对路径校验报错，但成功了")
-	}
-
-	// 3. relPath 必须以 .md 结尾
-	_, err = f.New("test.jpg", "")
+	// 2. relPath 必须以 .md 结尾
+	_, err = f.New(testutil.RelIn(t, rootDir, "test.jpg"), "")
 	if err == nil {
 		t.Error("期望 relPath 缺少 .md 校验报错，但成功了")
-	}
-
-	// 4. relPath 不能逃逸根目录
-	_, err = f.New("../test.jpg.md", "")
-	if err == nil {
-		t.Error("期望 relPath 逃逸校验报错，但成功了")
 	}
 }
 
 func TestIDEncodingDecoding(t *testing.T) {
-	relPath := "subdir/image.png.md"
+	rootDir := testRootDir()
+	relPath := testutil.RelIn(t, rootDir, "subdir/image.png.md")
 	id := encodeID(relPath)
 
-	decoded, err := decodeID(id)
+	decoded, err := decodeID(rootDir, id)
 	if err != nil {
 		t.Fatalf("decodeID 失败: %v", err)
 	}
@@ -182,49 +172,51 @@ func TestIDEncodingDecoding(t *testing.T) {
 		t.Errorf("decodeID() = %q, 想要 %q", decoded, relPath)
 	}
 
-	_, err = decodeID(scalar.ToID(""))
+	_, err = decodeID(rootDir, scalar.ToID(""))
 	if err == nil {
 		t.Error("decodeID 空ID 应该报错但没有")
 	}
-	_, err = decodeID(scalar.ToID("invalid-prefix:abc"))
+	_, err = decodeID(rootDir, scalar.ToID("invalid-prefix:abc"))
 	if err == nil {
 		t.Error("decodeID 错误前缀 应该报错但没有")
 	}
 }
 
 type mockRepo struct {
-	notes map[string]*Note // key is relPath
+	notes map[relpath.Path]*Note
 }
 
-func (r *mockRepo) Read(ctx context.Context, relPath string) (*Note, error) {
+func (r *mockRepo) Read(ctx context.Context, relPath relpath.Path) (*Note, error) {
 	return r.notes[relPath], nil
 }
 
-func (r *mockRepo) Write(ctx context.Context, relPath string, content string) error {
+func (r *mockRepo) Write(ctx context.Context, relPath relpath.Path, content string) error {
 	if content == "" {
 		delete(r.notes, relPath)
 		return nil
 	}
-	r.notes[relPath] = FromRepository(relPath, relPath, content, time.Now())
+	r.notes[relPath] = FromRepository(relPath, relPath.String(), content, time.Now())
 	return nil
 }
 
-func (r *mockRepo) Find(ctx context.Context, relPath string) iter.Seq2[*Note, error] {
+func (r *mockRepo) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*Note, error] {
 	return func(yield func(*Note, error) bool) {}
 }
 
 func TestServiceCreate(t *testing.T) {
-	repo := &mockRepo{notes: make(map[string]*Note)}
-	service := NewService(repo, NewFactory(""))
+	rootDir := testRootDir()
+	repo := &mockRepo{notes: make(map[relpath.Path]*Note)}
+	service := NewService(repo, NewFactory(rootDir), rootDir)
 	ctx := context.Background()
+	dirRelPath := testutil.RelIn(t, rootDir, "subdir")
 
 	// 1. 测试成功创建新笔记
-	m, err := service.Create(ctx, "subdir", "README.md", "测试内容")
+	m, err := service.Create(ctx, dirRelPath, "README.md", "测试内容")
 	if err != nil {
 		t.Fatalf("创建笔记失败: %v", err)
 	}
 
-	expectedID := encodeID("subdir/README.md")
+	expectedID := encodeID(testutil.RelIn(t, rootDir, "subdir/README.md"))
 	if m.ID() != expectedID {
 		t.Errorf("创建出的 Note ID = %v, 想要 %v", m.ID(), expectedID)
 	}
@@ -233,7 +225,7 @@ func TestServiceCreate(t *testing.T) {
 	}
 
 	// 2. 测试试图覆盖已存在的同名笔记，应返回 ALREADY_EXISTS 错误
-	_, err = service.Create(ctx, "subdir", "README", "新内容")
+	_, err = service.Create(ctx, dirRelPath, "README", "新内容")
 	if err == nil {
 		t.Fatal("尝试创建已存在的同名笔记，期望报错但返回了成功")
 	}
@@ -243,13 +235,22 @@ func TestServiceCreate(t *testing.T) {
 	}
 }
 
-func TestNewEmpty(t *testing.T) {
-	rootDir := "/absolute/path"
-	if filepath.Separator == '\\' {
-		rootDir = `C:\absolute\path`
+// 笔记名由用户输入，拼接结果重新围栏：越界的目标名无法被创建
+func TestServiceCreateRejectsEscapingName(t *testing.T) {
+	rootDir := testRootDir()
+	repo := &mockRepo{notes: make(map[relpath.Path]*Note)}
+	service := NewService(repo, NewFactory(rootDir), rootDir)
+
+	_, err := service.Create(context.Background(), testutil.RelIn(t, rootDir, "subdir"), "../../escaped", "测试内容")
+	if err == nil {
+		t.Fatal("期望逃逸根目录的笔记名被拒绝，但创建成功了")
 	}
-	service := NewService(nil, NewFactory(rootDir))
-	relPath := "subdir/image.png.md"
+}
+
+func TestNewEmpty(t *testing.T) {
+	rootDir := testRootDir()
+	service := NewService(nil, NewFactory(rootDir), rootDir)
+	relPath := testutil.RelIn(t, rootDir, "subdir/image.png.md")
 	m := service.newEmpty(relPath)
 	if m.ID() != encodeID(relPath) {
 		t.Errorf("newEmpty().ID() = %v, 想要 %v", m.ID(), encodeID(relPath))
@@ -257,7 +258,7 @@ func TestNewEmpty(t *testing.T) {
 	if m.RelPath() != relPath {
 		t.Errorf("newEmpty().RelPath() = %q, 想要 %q", m.RelPath(), relPath)
 	}
-	expectedAbsPath := filepath.Join(rootDir, relPath)
+	expectedAbsPath := filepath.Join(rootDir, "subdir", "image.png.md")
 	if m.AbsPath() != expectedAbsPath {
 		t.Errorf("newEmpty().AbsPath() = %q, 想要 %q", m.AbsPath(), expectedAbsPath)
 	}
@@ -267,15 +268,12 @@ func TestNewEmpty(t *testing.T) {
 }
 
 func TestServiceReadNonExistent(t *testing.T) {
-	repo := &mockRepo{notes: make(map[string]*Note)}
-	rootDir := "/root"
-	if filepath.Separator == '\\' {
-		rootDir = `C:\root`
-	}
-	service := NewService(repo, NewFactory(rootDir))
+	rootDir := testRootDir()
+	repo := &mockRepo{notes: make(map[relpath.Path]*Note)}
+	service := NewService(repo, NewFactory(rootDir), rootDir)
 	ctx := context.Background()
 
-	relPath := "subdir/non_existent.md"
+	relPath := testutil.RelIn(t, rootDir, "subdir/non_existent.md")
 	id := encodeID(relPath)
 
 	m, err := service.Read(ctx, id)
@@ -291,27 +289,19 @@ func TestServiceReadNonExistent(t *testing.T) {
 	if m.Content() != "" {
 		t.Errorf("期望内容为空，实际为 %q", m.Content())
 	}
-	expectedAbsPath := "/root/subdir/non_existent.md"
-	if filepath.Separator == '\\' {
-		expectedAbsPath = `C:\root\subdir\non_existent.md`
-	} else {
-		expectedAbsPath = filepath.FromSlash(expectedAbsPath)
-	}
+	expectedAbsPath := filepath.Join(rootDir, "subdir", "non_existent.md")
 	if m.AbsPath() != expectedAbsPath {
 		t.Errorf("期望绝对路径为 %q, 实际为 %q", expectedAbsPath, m.AbsPath())
 	}
 }
 
 func TestServiceReadByRelPathNonExistent(t *testing.T) {
-	repo := &mockRepo{notes: make(map[string]*Note)}
-	rootDir := "/root"
-	if filepath.Separator == '\\' {
-		rootDir = `C:\root`
-	}
-	service := NewService(repo, NewFactory(rootDir))
+	rootDir := testRootDir()
+	repo := &mockRepo{notes: make(map[relpath.Path]*Note)}
+	service := NewService(repo, NewFactory(rootDir), rootDir)
 	ctx := context.Background()
 
-	relPath := "subdir/non_existent.md"
+	relPath := testutil.RelIn(t, rootDir, "subdir/non_existent.md")
 	m, err := service.ReadByRelPath(ctx, relPath)
 	if err != nil {
 		t.Fatalf("ReadByRelPath 失败: %v", err)
@@ -322,12 +312,7 @@ func TestServiceReadByRelPathNonExistent(t *testing.T) {
 	if m.RelPath() != relPath {
 		t.Errorf("期望相对路径为 %q, 实际为 %q", relPath, m.RelPath())
 	}
-	expectedAbsPath := "/root/subdir/non_existent.md"
-	if filepath.Separator == '\\' {
-		expectedAbsPath = `C:\root\subdir\non_existent.md`
-	} else {
-		expectedAbsPath = filepath.FromSlash(expectedAbsPath)
-	}
+	expectedAbsPath := filepath.Join(rootDir, "subdir", "non_existent.md")
 	if m.AbsPath() != expectedAbsPath {
 		t.Errorf("期望绝对路径为 %q, 实际为 %q", expectedAbsPath, m.AbsPath())
 	}

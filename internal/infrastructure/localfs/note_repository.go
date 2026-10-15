@@ -6,7 +6,7 @@ import (
 	"iter"
 	"main/internal/apperror"
 	"main/internal/domain/note"
-	"main/internal/util"
+	"main/internal/domain/relpath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,11 +39,8 @@ func isText(data []byte) bool {
 	return true
 }
 
-func (r *NoteRepository) Read(ctx context.Context, relPath string) (*note.Note, error) {
-	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
-		return nil, err
-	}
-	absPath := r.absPath(relPath)
+func (r *NoteRepository) Read(ctx context.Context, relPath relpath.Path) (*note.Note, error) {
+	absPath := relPath.Abs(r.rootDir)
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -66,11 +63,8 @@ func (r *NoteRepository) Read(ctx context.Context, relPath string) (*note.Note, 
 	return note.FromRepository(relPath, absPath, string(content), info.ModTime()), nil
 }
 
-func (r *NoteRepository) Write(ctx context.Context, relPath string, content string) error {
-	if err := util.EnsurePathInRoot(r.rootDir, relPath); err != nil {
-		return err
-	}
-	absPath := r.absPath(relPath)
+func (r *NoteRepository) Write(ctx context.Context, relPath relpath.Path, content string) error {
+	absPath := relPath.Abs(r.rootDir)
 	if content == "" {
 		err := os.Remove(absPath)
 		if err != nil && !os.IsNotExist(err) {
@@ -81,9 +75,9 @@ func (r *NoteRepository) Write(ctx context.Context, relPath string, content stri
 	return os.WriteFile(absPath, []byte(content), 0644)
 }
 
-func (r *NoteRepository) Find(ctx context.Context, relPath string) iter.Seq2[*note.Note, error] {
+func (r *NoteRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*note.Note, error] {
 	return func(yield func(*note.Note, error) bool) {
-		absPath := filepath.Join(r.rootDir, relPath)
+		absPath := relPath.Abs(r.rootDir)
 		entries, err := os.ReadDir(absPath)
 		if err != nil {
 			yield(nil, fmt.Errorf("failed to read directory: %w", err))
@@ -118,16 +112,21 @@ func (r *NoteRepository) Find(ctx context.Context, relPath string) iter.Seq2[*no
 				continue
 			}
 
-			n := note.FromRepository(filepath.Join(relPath, entry.Name()), absFilePath, string(contentBytes), info.ModTime())
+			// 笔记项来自文件系统遍历，在此处构造根相对路径（出生点之一）并围栏
+			fileRelPath, err := relPath.Join(r.rootDir, entry.Name())
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
+
+			n := note.FromRepository(fileRelPath, absFilePath, string(contentBytes), info.ModTime())
 			if !yield(n, nil) {
 				return
 			}
 		}
 	}
-}
-
-func (r *NoteRepository) absPath(relPath string) string {
-	return filepath.Join(r.rootDir, relPath)
 }
 
 var _ note.Repository = (*NoteRepository)(nil)

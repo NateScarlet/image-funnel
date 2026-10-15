@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -213,8 +215,8 @@ on_fail_action = "KEEP"
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
@@ -222,14 +224,14 @@ on_fail_action = "KEEP"
 	defer runner.Close()
 
 	// 复现用户上报的畸形指令：alert 块被粘到指令行末尾后，参数中出现 ">" 特殊字符
-	noteRelPath := "test_note.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	literalArg := "x:x-0.6:0.2>[!stdout]2026-07-31T13:21:15"
 	initialContent := fmt.Sprintf("/literal-arg %s\n", literalArg)
 	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
 	assert.NoError(t, err)
 
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.NoError(t, err)
 	assert.True(t, ok)
 
@@ -283,23 +285,23 @@ on_fail_action = "%s"
 			fileChangedSub := &mockFileChangedSub{}
 			logger := zap.NewNop()
 			mockDirRepo := &mockDirectoryRepository{
-				dirs: map[string]*directory.Directory{
-					".": directory.FromRepository("."),
+				dirs: map[relpath.Path]*directory.Directory{
+					relpath.Path{}: directory.FromRepository(relpath.Path{}),
 				},
 			}
 			notifSender := &mockNotificationSender{}
 			runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, notifSender)
 			defer runner.Close()
 
-			noteRelPath := "test_note.md"
-			noteAbsPath := filepath.Join(tempDir, noteRelPath)
+			noteRelPath := testutil.Rel(t, "test_note.md")
+			noteAbsPath := noteRelPath.Abs(tempDir)
 			directiveLine := "/t it's a"
 			initialContent := directiveLine + "\n"
 			err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
 			assert.NoError(t, err)
 
 			// 未闭合单引号 → 语法错误：不执行钩子，返回错误并通知用户
-			ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+			ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 			assert.Error(t, err)
 			assert.True(t, ok)
 			assert.Contains(t, err.Error(), "unterminated single quote")

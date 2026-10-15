@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/pubsub"
 	"main/internal/scalar"
@@ -17,7 +18,7 @@ func TestService_LastSession(t *testing.T) {
 	fakeRepo := NewFakeSessionRepo()
 	fakeMeta := NewFakeMetadataRepo()
 	fakeScanner := &FakeImageRepo{}
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, topicCleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer topicCleanup()

@@ -22,7 +22,7 @@ type Service struct {
 	sessionRepo        Repository
 	metadataRepo       metadata.Repository
 	imageRepo          image.Repository
-	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedSub     pubsub.Topic[*directory.FileChangedEvent]
 	metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent]
 	directoryResolver  DirectoryResolver
 	logger             *zap.Logger
@@ -37,7 +37,7 @@ func NewService(
 	sessionRepo Repository,
 	metadataRepo metadata.Repository,
 	imageRepo image.Repository,
-	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
+	fileChangedSub pubsub.Topic[*directory.FileChangedEvent],
 	metadataUpdatedPub pubsub.Topic[*shared.MetadataUpdatedEvent],
 	directoryResolver DirectoryResolver,
 	logger *zap.Logger,

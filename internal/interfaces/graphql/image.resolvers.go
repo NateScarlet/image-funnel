@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"main/internal/application/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
 )
@@ -37,7 +38,10 @@ func (r *imageResolver) RawURL(ctx context.Context, obj *shared.ImageDTO) (*scal
 // Note is the resolver for the note field.
 func (r *imageResolver) Note(ctx context.Context, obj *shared.ImageDTO) (*shared.NoteDTO, error) {
 	// 配套文件：以图片文件名加上额外后缀的文件为配套文件
-	noteRelPath := obj.RelPath + ".md"
+	noteRelPath, err := relpath.New(r.rootDir, obj.RelPath+".md")
+	if err != nil {
+		return nil, err
+	}
 	return r.app.NoteByRelPath(ctx, noteRelPath)
 }
 

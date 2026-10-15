@@ -7,7 +7,6 @@ import (
 	"main/internal/domain/metadata"
 	"main/internal/scalar"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -71,7 +70,7 @@ func (s *Service) UpdateLabel(ctx context.Context, sessionID scalar.ID, imageID 
 	img := sess.images[idx]
 
 	// 校验修改时间以防止对过时版本的图片进行修改
-	absPath := filepath.Join(s.rootDir, img.RelPath())
+	absPath := img.RelPath().Abs(s.rootDir)
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err

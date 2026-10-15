@@ -3,6 +3,7 @@ package image
 import (
 	"fmt"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -33,7 +34,7 @@ func TestImageFilters_Rating(t *testing.T) {
 }
 
 func TestBuildImageFilter_WithRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 0, 1, 2, 3, 4})
+	images := createTestImagesWithRatings(t, []int{0, 1, 2, 3, 4, 0, 1, 2, 3, 4})
 
 	filter := &shared.ImageFilters{Rating: []int{0, 1}}
 	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
@@ -46,7 +47,7 @@ func TestBuildImageFilter_WithRating(t *testing.T) {
 }
 
 func TestBuildImageFilter_WithNilFilter(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+	images := createTestImagesWithRatings(t, []int{0, 1, 2, 3, 4, 5})
 
 	var filter *shared.ImageFilters
 	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
@@ -56,7 +57,7 @@ func TestBuildImageFilter_WithNilFilter(t *testing.T) {
 }
 
 func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+	images := createTestImagesWithRatings(t, []int{0, 1, 2, 3, 4, 5})
 
 	filter := &shared.ImageFilters{Rating: []int{}}
 	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
@@ -66,7 +67,7 @@ func TestBuildImageFilter_WithEmptyRating(t *testing.T) {
 }
 
 func TestBuildImageFilter_WithSingleRating(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5, 2, 2})
+	images := createTestImagesWithRatings(t, []int{0, 1, 2, 3, 4, 5, 2, 2})
 
 	filter := &shared.ImageFilters{Rating: []int{2}}
 	filterFunc := NewFilterBuilder().Build(util.UnwrapPointer(filter))
@@ -79,21 +80,26 @@ func TestBuildImageFilter_WithSingleRating(t *testing.T) {
 }
 
 func TestFilterImages_WithNilFilter(t *testing.T) {
-	images := createTestImagesWithRatings([]int{0, 1, 2, 3, 4, 5})
+	images := createTestImagesWithRatings(t, []int{0, 1, 2, 3, 4, 5})
 
 	filtered := filterImages(images, nil)
 
 	assert.Equal(t, 6, len(filtered), "Should return all images when filter is nil")
 }
 
-func createTestImagesWithRatings(ratings []int) []*Image {
+func createTestImagesWithRatings(t *testing.T, ratings []int) []*Image {
+	rootDir := t.TempDir()
 	images := make([]*Image, len(ratings))
 	for i, rating := range ratings {
 		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
+		relPath, err := relpath.New(rootDir, fmt.Sprintf("test/test-%d.jpg", i))
+		if err != nil {
+			t.Fatalf("构造根相对路径失败: %v", err)
+		}
 		images[i] = New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
-			fmt.Sprintf("/test/test-%d.jpg", i),
+			relPath,
 			scalar.ToID("dir-test"),
 			1000,
 			time.Now(),

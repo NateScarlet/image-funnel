@@ -4,11 +4,10 @@ import (
 	"context"
 	"main/internal/apperror"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"main/internal/util"
-	"path/filepath"
 	"time"
 )
 
@@ -32,7 +31,7 @@ func NewService(xmpRepo metadata.Repository, imageRepo Repository, rootDir strin
 
 // GetImage 根据图片 ID 获取图片实体，由领域层内部解码 ID 并校验版本一致性
 func (s *Service) GetImage(ctx context.Context, id scalar.ID) (*Image, error) {
-	relPath, expectedModTime, err := decodeID(id)
+	relPath, expectedModTime, err := decodeID(s.rootDir, id)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +49,8 @@ func (s *Service) GetImage(ctx context.Context, id scalar.ID) (*Image, error) {
 	return img, nil
 }
 
-// ImageByRelPath 根据图片相对路径获取图片实体
-func (s *Service) ImageByRelPath(ctx context.Context, relPath string) (*Image, error) {
+// ImageByRelPath 根据图片根相对路径获取图片实体
+func (s *Service) ImageByRelPath(ctx context.Context, relPath relpath.Path) (*Image, error) {
 	return s.imageRepo.Get(ctx, relPath)
 }
 
@@ -67,12 +66,8 @@ func (s *Service) UpdateImageMetadata(
 		return err
 	}
 
-	relPath := img.RelPath()
-	absPath := filepath.Join(s.rootDir, relPath)
-
-	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
-		return err
-	}
+	// RelPath 是已围栏的根相对路径，直接换算绝对路径即可触碰磁盘
+	absPath := img.RelPath().Abs(s.rootDir)
 
 	// 读取现有元数据，如果不存在则创建空白结构
 	xmpData, err := s.xmpRepo.Read(absPath)

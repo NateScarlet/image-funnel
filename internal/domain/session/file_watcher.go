@@ -2,11 +2,11 @@ package session
 
 import (
 	"context"
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/shared"
 	"main/internal/util"
 	"os"
-	"strings"
 
 	"go.uber.org/zap"
 )
@@ -20,23 +20,24 @@ func (s *Service) subscribeFileChanges(ctx context.Context) {
 		if err := s.handleFileChange(ctx, e); err != nil {
 			s.logger.Error("failed to handle file changed event",
 				zap.Stringer("action", e.Action),
-				zap.String("relPath", e.RelPath),
+				zap.String("relPath", e.RelPath.String()),
 				zap.Stringer("directoryID", e.DirectoryID),
 				zap.Error(err))
 		}
 	}
 }
 
-func (s *Service) handleFileChange(ctx context.Context, e *shared.FileChangedEvent) error {
-	relPath := e.RelPath
-	isXMP := strings.HasSuffix(strings.ToLower(relPath), ".xmp")
-	if isXMP {
-		relPath = relPath[:len(relPath)-4] // 去除 .xmp 后缀以定位到图片本身
+func (s *Service) handleFileChange(ctx context.Context, e *directory.FileChangedEvent) error {
+	// XMP 是图片的配套文件，事件路径去掉后缀后即图片本体路径；
+	// 不是配套文件时原样返回事件路径。判定与裁剪同源于 TrimExtSuffix，
+	// 避免大小写不一致的后缀漏裁
+	relPath, isXMP, err := e.RelPath.TrimExtSuffix(s.rootDir, ".xmp")
+	if err != nil {
+		return err
 	}
 
 	var img *image.Image
 	if e.Action == shared.FileActionCreate || e.Action == shared.FileActionWrite || (e.Action == shared.FileActionRemove && isXMP) {
-		var err error
 		img, err = s.imageRepo.Get(ctx, relPath)
 		if err != nil {
 			if !os.IsNotExist(err) {

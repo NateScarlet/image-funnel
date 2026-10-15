@@ -8,6 +8,7 @@ package graphql
 import (
 	"context"
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/shared"
 	"path/filepath"
 )
@@ -18,12 +19,18 @@ func (r *trashHistoryItemResolver) CoverImage(ctx context.Context, obj *shared.T
 		return nil, nil
 	}
 
-	relPath, err := filepath.Rel(r.rootDir, obj.CoverImageAbsPath)
+	relStr, err := filepath.Rel(r.rootDir, obj.CoverImageAbsPath)
 	if err != nil {
 		return nil, err
 	}
 
-	img, err := r.app.ImageByRelPath(ctx, filepath.ToSlash(relPath))
+	// 回收站封面路径来自磁盘遍历，在接口层构造根相对路径并围栏
+	rel, err := relpath.New(r.rootDir, relStr)
+	if err != nil {
+		return nil, err
+	}
+
+	img, err := r.app.ImageByRelPath(ctx, rel)
 	return apperror.IgnoreNotFound(img, err)
 }
 

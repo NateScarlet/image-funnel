@@ -7,7 +7,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -41,21 +40,17 @@ func handleImage(
 		w.Header().Set("Vary", "Accept")
 
 		// 验签先于一切响应分支：签名是 /image 的唯一信任边界（该端点无登录态），
-		// 包括 304 短路在内都不得绕过它
+		// 包括 304 短路在内都不得绕过它。
 		//
 		// 必须使用 RequestURI（线路上的原始目标串）：URL.Path 已解码，无法区分 %2F 与 /，
 		// 而签名覆盖的是原始字形；RequestURI 不经过 url.Values 往返，故参数顺序与
-		// ?a ／ ?a= 等区别都被完整保留
-		relativePath, err := signer.ValidateSignedURL(r.RequestURI)
+		// ?a ／ ?a= 等区别都被完整保留。
+		//
+		// 返回的根相对路径自带「位于根目录内」的保证（围栏在验签时由返回类型构造完成），
+		// 故此处无需再自行复核，越界载荷在验签阶段即已失败。
+		relPath, err := signer.ValidateSignedURL(r.RequestURI)
 		if err != nil {
 			// 不向客户端回显失败原因：细分原因会给探测者反馈，且具体错误对排障无价值
-			http.Error(w, "invalid signature", http.StatusForbidden)
-			return
-		}
-
-		// 签名只证明 URL 由本服务签发，不证明目标位于根目录内；
-		// 越界路径在任何情况下都不得被读取
-		if err := util.EnsurePathInRoot(absRootDir, relativePath); err != nil {
 			http.Error(w, "invalid signature", http.StatusForbidden)
 			return
 		}
@@ -80,7 +75,7 @@ func handleImage(
 			return
 		}
 
-		absPath := filepath.Join(absRootDir, relativePath)
+		absPath := relPath.Abs(absRootDir)
 
 		// 读取源图元数据（宽度、高度），用于决定是否需要缩放
 		meta, err := coordinator.Meta(r.Context(), absPath)
@@ -98,7 +93,7 @@ func handleImage(
 		}
 
 		// 根据 Accept 头决定格式
-		decision := decideFormat(r, absPath, relativePath, width, sourceWidth)
+		decision := decideFormat(r, absPath, relPath.Base(), width, sourceWidth)
 
 		if decision.serveOriginal || raw {
 			// 直接返回原图（raw=true 或 无需转码时）
@@ -110,7 +105,7 @@ func handleImage(
 			defer file.Close()
 
 			// 使用共享读取器检测 MIME 类型（读取前 512 字节）
-			contentType, _, err := util.DetectContentType(file, relativePath)
+			contentType, _, err := util.DetectContentType(file, relPath.Base())
 			if err != nil {
 				handleAcquireError(w, logger, err)
 				return
@@ -120,7 +115,7 @@ func handleImage(
 				handleAcquireError(w, logger, err)
 				return
 			}
-			serveOriginal(w, r, contentType, relativePath, file)
+			serveOriginal(w, r, contentType, relPath.Base(), file)
 			return
 		}
 
@@ -149,13 +144,13 @@ func handleImage(
 			return
 		}
 		defer reader.Close()
-		serveVariant(w, r, decision.format, relativePath, reader)
+		serveVariant(w, r, decision.format, relPath.Base(), reader)
 	}
 }
 
 // decideFormat 根据 Accept 头、请求参数和源图信息决定返回格式
 // 返回的 formatDecision 中如果 serveOriginal=true，则 contentType 为源图 MIME
-func decideFormat(r *http.Request, absPath, relativePath string, width, sourceWidth int) formatDecision {
+func decideFormat(r *http.Request, absPath, filename string, width, sourceWidth int) formatDecision {
 	accept := r.Header.Get("Accept")
 	preferredFormats := util.PreferredImageFormats(accept)
 
@@ -168,7 +163,7 @@ func decideFormat(r *http.Request, absPath, relativePath string, width, sourceWi
 		// 检测源图 MIME 类型
 		file, err := os.Open(absPath)
 		if err == nil {
-			contentType, _, err := util.DetectContentType(file, relativePath)
+			contentType, _, err := util.DetectContentType(file, filename)
 			file.Close()
 			if err == nil {
 				// 直接解析 Accept 头检查源图 MIME 是否被接受（不限于支持的输出格式）
@@ -201,12 +196,11 @@ func decideFormat(r *http.Request, absPath, relativePath string, width, sourceWi
 }
 
 // serveOriginal 返回原始图片文件
-func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, relativePath string, reader io.ReadSeeker) {
+func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, filename string, reader io.ReadSeeker) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"immutable"`)
 	w.Header().Set("Content-Type", contentType)
 
-	filename := filepath.Base(relativePath)
 	cd := mime.FormatMediaType("inline", map[string]string{
 		"filename": filename,
 	})
@@ -216,7 +210,7 @@ func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, relative
 }
 
 // serveVariant 写出变体产物响应头与内容
-func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageFormat, relativePath string, reader io.ReadSeekCloser) {
+func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageFormat, filename string, reader io.ReadSeekCloser) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"immutable"`)
 
@@ -228,7 +222,6 @@ func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageF
 		w.Header().Set("Content-Type", "image/webp")
 	}
 
-	filename := filepath.Base(relativePath)
 	cd := mime.FormatMediaType("inline", map[string]string{
 		"filename": filename,
 	})

@@ -6,9 +6,9 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/iterator"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -28,20 +28,14 @@ func NewImageRepository(rootDir string, factory *image.Factory, dirRepo director
 	}
 }
 
-func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image, error) {
-	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
-	if filepath.IsAbs(relPath) {
-		return nil, fmt.Errorf("absolute path not allowed: %s", relPath)
-	}
-
-	absPath := filepath.Join(r.rootDir, relPath)
+func (r *ImageRepository) Get(ctx context.Context, relPath relpath.Path) (*image.Image, error) {
+	absPath := relPath.Abs(r.rootDir)
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return nil, err
 	}
 
-	dirRelPath := filepath.Dir(relPath)
-	dir, err := r.dirRepo.Get(ctx, dirRelPath)
+	dir, err := r.dirRepo.Get(ctx, relPath.Dir())
 	if err != nil {
 		return nil, err
 	}
@@ -49,17 +43,9 @@ func (r *ImageRepository) Get(ctx context.Context, relPath string) (*image.Image
 	return r.factory.CreateFromInfo(ctx, info, relPath, dir.ID())
 }
 
-func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
-	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
-	if filepath.IsAbs(relPath) {
-		return func(yield func(*image.Image, error) bool) {
-			yield(nil, fmt.Errorf("absolute path not allowed: %s", relPath))
-		}
-	}
-
+func (r *ImageRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*image.Image, error] {
 	return func(yield func(*image.Image, error) bool) {
-		absPath := filepath.Join(r.rootDir, relPath)
-		entries, err := os.ReadDir(absPath)
+		entries, err := os.ReadDir(relPath.Abs(r.rootDir))
 		if err != nil {
 			yield(nil, fmt.Errorf("failed to read directory: %w", err))
 			return
@@ -85,7 +71,11 @@ func (r *ImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*i
 					return true
 				}
 
-				fileRelPath := filepath.Join(relPath, entry.Name())
+				// 文件项来自文件系统遍历，在此处构造根相对路径（出生点之一）并围栏
+				fileRelPath, err := relPath.Join(r.rootDir, entry.Name())
+				if err != nil {
+					return yield(nil, err)
+				}
 				info, err := entry.Info()
 				if err != nil {
 					return yield(nil, err)

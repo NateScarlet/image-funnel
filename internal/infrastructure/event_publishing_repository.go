@@ -7,9 +7,9 @@ import (
 	"main/internal/apperror"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/shared"
-	"path/filepath"
 	"time"
 )
 
@@ -17,12 +17,12 @@ import (
 // 负责拦截加载失败（文件不存在）并在后台补发删除事件
 type EventPublishingImageRepository struct {
 	repo           image.Repository
-	fileChangedPub pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedPub pubsub.Topic[*directory.FileChangedEvent]
 	dirRepo        directory.Repository
 }
 
 // NewEventPublishingImageRepository 创建一个图像仓库装饰器
-func NewEventPublishingImageRepository(repo image.Repository, fileChangedPub pubsub.Topic[*shared.FileChangedEvent], dirRepo directory.Repository) image.Repository {
+func NewEventPublishingImageRepository(repo image.Repository, fileChangedPub pubsub.Topic[*directory.FileChangedEvent], dirRepo directory.Repository) image.Repository {
 	return &EventPublishingImageRepository{
 		repo:           repo,
 		fileChangedPub: fileChangedPub,
@@ -31,11 +31,11 @@ func NewEventPublishingImageRepository(repo image.Repository, fileChangedPub pub
 }
 
 // Get 包装底层 Repository 的 Get 方法，并在磁盘查验文件不存在时自动补发删除事件，维护一致性状态
-func (r *EventPublishingImageRepository) Get(ctx context.Context, relPath string) (*image.Image, error) {
+func (r *EventPublishingImageRepository) Get(ctx context.Context, relPath relpath.Path) (*image.Image, error) {
 	img, err := r.repo.Get(ctx, relPath)
 	if err != nil {
 		if apperror.IsNotFound(err) {
-			dir, errDir := r.dirRepo.Get(ctx, filepath.Dir(relPath))
+			dir, errDir := r.dirRepo.Get(ctx, relPath.Dir())
 			if errDir != nil {
 				// 若目录也已被删除，可直接忽略该目录获取错误并返回原文件不存在错误
 				if apperror.IsNotFound(errDir) {
@@ -45,7 +45,7 @@ func (r *EventPublishingImageRepository) Get(ctx context.Context, relPath string
 				return nil, errors.Join(err, errDir)
 			}
 
-			r.fileChangedPub.Publish(ctx, &shared.FileChangedEvent{
+			r.fileChangedPub.Publish(ctx, &directory.FileChangedEvent{
 				DirectoryID: dir.ID(),
 				RelPath:     relPath,
 				Action:      shared.FileActionRemove,
@@ -58,6 +58,6 @@ func (r *EventPublishingImageRepository) Get(ctx context.Context, relPath string
 }
 
 // Find 包装底层 Repository 的 Find 方法并透传
-func (r *EventPublishingImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+func (r *EventPublishingImageRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*image.Image, error] {
 	return r.repo.Find(ctx, relPath)
 }

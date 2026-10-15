@@ -3,7 +3,6 @@ package directory
 import (
 	"main/internal/domain/directory"
 	"main/internal/pubsub"
-	"main/internal/shared"
 	"time"
 
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ type Handler struct {
 	filterBuilder              *directory.FilterBuilder
 	repo                       directory.Repository
 	dirSvc                     *directory.Service
-	fileChangedSub             pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedSub             pubsub.Topic[*directory.FileChangedEvent]
 	dirEntryDeletedBatchWindow time.Duration
 	logger                     *zap.Logger
 }
@@ -29,7 +28,7 @@ func NewHandler(
 	filterBuilder *directory.FilterBuilder,
 	repo directory.Repository,
 	dirSvc *directory.Service,
-	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
+	fileChangedSub pubsub.Topic[*directory.FileChangedEvent],
 ) *Handler {
 	return &Handler{
 		logger:         logger,

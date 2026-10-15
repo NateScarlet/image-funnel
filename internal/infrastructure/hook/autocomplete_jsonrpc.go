@@ -101,11 +101,20 @@ func (r *Runner) autocompleteJSONRPC(ctx context.Context, targetHook *hookConfig
 
 	cwords, cwordIdx, prevWord := parseLineContext(linePrefix, query)
 	// 目录上下文：与 buildBaseEnv 的推导一致（单次模式注入 IMAGE_FUNNEL_DIRECTORY_REL_PATH 的来源）
-	dirRel := ""
-	if noteAbsPath != "" {
-		dirRel = r.dirRelFromAbsPath(noteAbsPath)
-	} else if len(imagePaths) > 0 {
-		dirRel = r.dirRelFromAbsPath(imagePaths[0])
+	var dirRel string
+	switch {
+	case noteAbsPath != "":
+		rel, err := r.dirRelPath(noteAbsPath)
+		if err != nil {
+			return nil, err
+		}
+		dirRel = rel.String()
+	case len(imagePaths) > 0:
+		rel, err := r.dirRelPath(imagePaths[0])
+		if err != nil {
+			return nil, err
+		}
+		dirRel = rel.String()
 	}
 	params := autocompleteJSONRPCParams{
 		Cwords:           cwords,

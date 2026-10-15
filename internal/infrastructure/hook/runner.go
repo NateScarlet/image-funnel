@@ -12,6 +12,7 @@ import (
 	"main/internal/domain/directory"
 	"main/internal/domain/hook"
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
@@ -34,7 +35,7 @@ type Runner struct {
 	dataDir                 string
 	logger                  *zap.Logger
 	metadataUpdatedSub      pubsub.Topic[*shared.MetadataUpdatedEvent]
-	fileChangedSub          pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedSub          pubsub.Topic[*directory.FileChangedEvent]
 	graphqlURL              string
 	tokenSource             device.TokenSource
 	imgRepo                 image.Repository
@@ -62,7 +63,7 @@ func NewRunner(
 	dataDir string,
 	logger *zap.Logger,
 	metadataUpdatedSub pubsub.Topic[*shared.MetadataUpdatedEvent],
-	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
+	fileChangedSub pubsub.Topic[*directory.FileChangedEvent],
 	graphqlURL string,
 	tokenSource device.TokenSource,
 	imgRepo image.Repository,
@@ -207,8 +208,8 @@ func (r *Runner) Trigger(ctx context.Context, ids []string, paths []string, hook
 }
 
 // TriggerForNote 手动派发笔记触发的外部钩子任务
-func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
-	r.logger.Debug("TriggerForNote start", zap.String("noteRelPath", noteRelPath), zap.String("hookID", hookID.String()))
+func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath relpath.Path, hookID scalar.ID) error {
+	r.logger.Debug("TriggerForNote start", zap.String("noteRelPath", noteRelPath.String()), zap.String("hookID", hookID.String()))
 	hooks, err := r.loadHooks()
 	if err != nil {
 		return err
@@ -238,21 +239,15 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 		return fmt.Errorf("failed to get associated image for note dispatch: %w", err)
 	}
 
-	dirRelPath := filepath.Dir(noteRelPath)
-	if dirRelPath == "." {
-		dirRelPath = ""
-	}
-
-	// 依照领域仓库通过相对路径加载目录实体
-	dir, err := r.dirRepo.Get(ctx, dirRelPath)
+	// 依照领域仓库通过根相对路径加载目录实体
+	dir, err := r.dirRepo.Get(ctx, noteRelPath.Dir())
 	if err != nil {
 		return fmt.Errorf("failed to get directory for note dispatch: %w", err)
 	}
 
 	if targetHook.Directive != nil && targetHook.Directive.Name != "" {
 		r.logger.Debug("TriggerForNote directive matches, will execute directives", zap.String("directiveName", targetHook.Directive.Name))
-		noteAbsPath := filepath.Join(r.rootDir, noteRelPath)
-		contentBytes, err := os.ReadFile(noteAbsPath)
+		contentBytes, err := os.ReadFile(noteRelPath.Abs(r.rootDir))
 		if err != nil {
 			return fmt.Errorf("failed to read note file for dispatch: %w", err)
 		}
@@ -266,14 +261,14 @@ func (r *Runner) TriggerForNote(ctx context.Context, noteRelPath string, hookID 
 
 		if !executed {
 			r.logger.Debug("TriggerForNote not executed by directives, fallback to executeHookSync", zap.String("hookID", targetHook.ID))
-			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "", "")
+			_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath.String(), dir, "", "")
 			return err
 		}
 		return nil
 	}
 
 	r.logger.Debug("TriggerForNote no directive defined, executing hook directly", zap.String("hookID", targetHook.ID))
-	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath, dir, "", "")
+	_, _, _, err = r.executeHookSync(*targetHook, "note_dispatch", events, nil, noteRelPath.String(), dir, "", "")
 	return err
 }
 
@@ -364,21 +359,33 @@ func (r *Runner) runWorker(ctx context.Context) {
 	}
 }
 
-// dirRelFromAbsPath 从绝对路径中提取相对于 rootDir 的目录路径
-func (r *Runner) dirRelFromAbsPath(absPath string) string {
-	relPath, err := filepath.Rel(r.rootDir, absPath)
-	if err != nil {
-		return ""
-	}
-	return filepath.Dir(relPath)
-}
-
 // resolveDirFromPath 从绝对路径中推导目录实体
 func (r *Runner) resolveDirFromPath(ctx context.Context, absPath string) (*directory.Directory, error) {
-	dirRel := r.dirRelFromAbsPath(absPath)
-	dir, err := r.dirRepo.Get(ctx, dirRel)
+	rel, err := r.relFromAbsPath(absPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve directory for %q: %w", dirRel, err)
+		return nil, fmt.Errorf("failed to resolve directory for %q: %w", absPath, err)
+	}
+	dir, err := r.dirRepo.Get(ctx, rel.Dir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve directory for %q: %w", rel.Dir(), err)
 	}
 	return dir, nil
+}
+
+// relFromAbsPath 从绝对路径中提取根相对路径（文件系统遍历是构造根相对路径的出生点之一）
+func (r *Runner) relFromAbsPath(absPath string) (relpath.Path, error) {
+	relStr, err := filepath.Rel(r.rootDir, absPath)
+	if err != nil {
+		return relpath.Path{}, err
+	}
+	return relpath.New(r.rootDir, relStr)
+}
+
+// dirRelPath 从绝对路径中提取相对于根目录的目录根相对路径，供注入脚本的 env 使用
+func (r *Runner) dirRelPath(absPath string) (relpath.Path, error) {
+	rel, err := r.relFromAbsPath(absPath)
+	if err != nil {
+		return relpath.Path{}, fmt.Errorf("failed to resolve directory for %q: %w", absPath, err)
+	}
+	return rel.Dir(), nil
 }

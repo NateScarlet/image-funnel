@@ -3,6 +3,7 @@ package localfs
 import (
 	"context"
 	"encoding/json"
+	"main/internal/domain/relpath"
 	"main/internal/shared"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func TestDirectoryRepository_State(t *testing.T) {
 	repo := NewDirectoryRepository(tmpDir)
 
 	// 1. 读取不存在的状态，应返回 nil, nil
-	state, err := repo.ReadState(ctx, "")
+	state, err := repo.ReadState(ctx, relpath.Path{})
 	if err != nil {
 		t.Fatalf("ReadState empty failed: %v", err)
 	}
@@ -38,7 +39,7 @@ func TestDirectoryRepository_State(t *testing.T) {
 			},
 		},
 	}
-	err = repo.WriteState(ctx, "", originalState)
+	err = repo.WriteState(ctx, relpath.Path{}, originalState)
 	if err != nil {
 		t.Fatalf("WriteState failed: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestDirectoryRepository_State(t *testing.T) {
 	}
 
 	// 4. 读取状态并比对
-	loadedState, err := repo.ReadState(ctx, "")
+	loadedState, err := repo.ReadState(ctx, relpath.Path{})
 	if err != nil {
 		t.Fatalf("ReadState failed: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestDirectoryRepository_State(t *testing.T) {
 	}
 
 	// 5. 写入 nil 应删除文件
-	err = repo.WriteState(ctx, "", nil)
+	err = repo.WriteState(ctx, relpath.Path{}, nil)
 	if err != nil {
 		t.Fatalf("WriteState nil failed: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestDirectoryRepository_MigrateStateFromV1(t *testing.T) {
 	}
 
 	// 读取应自动迁移到 v2
-	loadedState, err := repo.ReadState(ctx, "")
+	loadedState, err := repo.ReadState(ctx, relpath.Path{})
 	if err != nil {
 		t.Fatalf("ReadState failed: %v", err)
 	}
@@ -163,7 +164,7 @@ func TestDirectoryRepository_MigrateStateFromV1WithLastSession(t *testing.T) {
 	}
 
 	// 读取应自动迁移到 v2
-	loadedState, err := repo.ReadState(ctx, "")
+	loadedState, err := repo.ReadState(ctx, relpath.Path{})
 	if err != nil {
 		t.Fatalf("ReadState failed: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestDirectoryRepository_MigrateStateFromV1WithEmptyObjectID(t *testing.T) {
 		t.Fatalf("failed to write v1 state file: %v", err)
 	}
 
-	loadedState, err := repo.ReadState(ctx, "")
+	loadedState, err := repo.ReadState(ctx, relpath.Path{})
 	if err != nil {
 		t.Fatalf("ReadState failed: %v", err)
 	}

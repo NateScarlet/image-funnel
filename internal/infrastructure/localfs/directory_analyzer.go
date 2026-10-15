@@ -3,15 +3,14 @@ package localfs
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/iterator"
-	"main/internal/util"
 )
 
 // DirectoryAnalyzer 负责收集并汇总目标物理目录中包含的图片总数、等级统计及子目录数量等
@@ -31,12 +30,8 @@ func NewDirectoryAnalyzer(rootDir string, imageFactory *domainimage.Factory, dir
 }
 
 // Analyze 遍历物理目录并汇总得到统计数据
-func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
-	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
-		return nil, err
-	}
-
-	absPath := filepath.Join(s.rootDir, relPath)
+func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath relpath.Path) (*directory.Stats, error) {
+	absPath := relPath.Abs(s.rootDir)
 	entries, err := os.ReadDir(absPath)
 	if err != nil {
 		return nil, err
@@ -95,8 +90,8 @@ func (s *DirectoryAnalyzer) Analyze(ctx context.Context, relPath string) (*direc
 				return yield(nil, err)
 			}
 
-			imagePath := filepath.Join(absPath, entry.Name())
-			imgRelPath, err := filepath.Rel(s.rootDir, imagePath)
+			// 文件项来自文件系统遍历，在此处构造根相对路径（出生点之一）并围栏
+			imgRelPath, err := relPath.Join(s.rootDir, entry.Name())
 			if err != nil {
 				return yield(nil, err)
 			}

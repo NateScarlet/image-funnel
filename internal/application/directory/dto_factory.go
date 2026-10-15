@@ -20,7 +20,7 @@ func (f *DTOFactory) New(dirInfo *directory.Directory) *shared.DirectoryDTO {
 	return &shared.DirectoryDTO{
 		ID:       dirInfo.ID(),
 		ParentID: dirInfo.ParentID(),
-		RelPath:  dirInfo.RelPath(),
+		RelPath:  dirInfo.RelPath().String(),
 		Root:     dirInfo.IsRoot(),
 	}
 }

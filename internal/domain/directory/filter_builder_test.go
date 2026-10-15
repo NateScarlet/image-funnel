@@ -1,9 +1,8 @@
 package directory
 
 import (
-	"testing"
-
 	"main/internal/shared"
+	"testing"
 )
 
 func TestFilterBuilder_Build(t *testing.T) {
@@ -11,12 +10,12 @@ func TestFilterBuilder_Build(t *testing.T) {
 
 	// 准备测试目录数据
 	dirs := []*Directory{
-		FromRepository(""),
-		FromRepository("A"),
-		FromRepository("A/Subdir"),
-		FromRepository("A/Subdir-Test"),
-		FromRepository("A/subdir-test"),
-		FromRepository("B/Other"),
+		dirAt(t, ""),
+		dirAt(t, "A"),
+		dirAt(t, "A/Subdir"),
+		dirAt(t, "A/Subdir-Test"),
+		dirAt(t, "A/subdir-test"),
+		dirAt(t, "B/Other"),
 	}
 
 	t.Run("empty filters", func(t *testing.T) {
@@ -41,7 +40,7 @@ func TestFilterBuilder_Build(t *testing.T) {
 
 		for _, dir := range dirs {
 			got := filter(dir)
-			want := expectedMatches[dir.RelPath()]
+			want := expectedMatches[dir.RelPath().String()]
 			if got != want {
 				t.Errorf("for path %q, got match=%v, want=%v", dir.RelPath(), got, want)
 			}
@@ -60,7 +59,7 @@ func TestFilterBuilder_Build(t *testing.T) {
 
 		for _, dir := range dirs {
 			got := filter(dir)
-			want := expectedMatches[dir.RelPath()]
+			want := expectedMatches[dir.RelPath().String()]
 			if got != want {
 				t.Errorf("for path %q, got match=%v, want=%v", dir.RelPath(), got, want)
 			}

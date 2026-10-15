@@ -6,14 +6,6 @@ import (
 	"main/internal/scalar"
 )
 
-// FileChangedEvent 文件变更事件 - 应用层事件，包含目录ID
-type FileChangedEvent struct {
-	DirectoryID scalar.ID // 变更文件所在的目录ID
-	RelPath     string    // 文件路径
-	Action      FileAction
-	OccurredAt  time.Time
-}
-
 // PathInput 支持多种格式的路径输入
 type PathInput struct {
 	Absolute          string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 )
 
@@ -100,8 +101,9 @@ type Repository interface {
 // Runner 外部钩子执行器接口
 type Runner interface {
 	Trigger(ctx context.Context, ids []string, paths []string, hookID scalar.ID, triggerName string) error
-	OnCommitSession(ctx context.Context, dirRelPath string) error
-	TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error
+	OnCommitSession(ctx context.Context, dirRelPath relpath.Path) error
+	TriggerForNote(ctx context.Context, noteRelPath relpath.Path, hookID scalar.ID) error
+	// Autocomplete 的 noteRelPath 为空串表示「没有关联笔记」，与根目录语义冲突，故仍用裸字符串
 	Autocomplete(ctx context.Context, hookID scalar.ID, noteRelPath string, linePrefix string, query string) ([]*AutocompleteSuggestion, error)
-	CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath string) (*CopyContent, error)
+	CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath relpath.Path) (*CopyContent, error)
 }

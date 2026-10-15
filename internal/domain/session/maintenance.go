@@ -2,6 +2,7 @@ package session
 
 import (
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"time"
 )
@@ -78,7 +79,7 @@ func (s *Session) UpdateImage(img *image.Image, matchesFilter bool) (bool, error
 	return true, nil
 }
 
-func (s *Session) removeImageByRelPath(relPath string, force bool) (bool, error) {
+func (s *Session) removeImageByRelPath(relPath relpath.Path, force bool) (bool, error) {
 	var targetIndex = -1
 	var targetImgIndex = -1
 

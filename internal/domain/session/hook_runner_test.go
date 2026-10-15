@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"main/internal/domain/hook"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 )
 
@@ -14,11 +15,11 @@ func (r *FakeHookRunner) Trigger(ctx context.Context, ids []string, paths []stri
 	return nil
 }
 
-func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirRelPath string) error {
+func (r *FakeHookRunner) OnCommitSession(ctx context.Context, dirRelPath relpath.Path) error {
 	return nil
 }
 
-func (r *FakeHookRunner) TriggerForNote(ctx context.Context, noteRelPath string, hookID scalar.ID) error {
+func (r *FakeHookRunner) TriggerForNote(ctx context.Context, noteRelPath relpath.Path, hookID scalar.ID) error {
 	return nil
 }
 
@@ -26,6 +27,6 @@ func (r *FakeHookRunner) Autocomplete(ctx context.Context, hookID scalar.ID, not
 	return nil, nil
 }
 
-func (r *FakeHookRunner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath string) (*hook.CopyContent, error) {
+func (r *FakeHookRunner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath relpath.Path) (*hook.CopyContent, error) {
 	return nil, nil
 }

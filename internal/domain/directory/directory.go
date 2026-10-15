@@ -2,8 +2,8 @@ package directory
 
 import (
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"path/filepath"
 )
 
 type Stats struct {
@@ -41,21 +41,15 @@ func (s *Stats) RatingCounts() map[int]int {
 type Directory struct {
 	id       scalar.ID
 	parentID scalar.ID
-	relPath  string
+	relPath  relpath.Path
 }
 
-// FromRepository 从仓库创建目录，根据相对路径生成 ID
+// FromRepository 从仓库创建目录，根据根相对路径生成 ID
 // 不要用作构建函数
-func FromRepository(relPath string) *Directory {
-	// 统一防御性规整：如果传入的相对路径为空字符串，则规范为代表当前目录的 "."
-	if relPath == "" {
-		relPath = "."
-	}
-	relPath = filepath.ToSlash(relPath)
+func FromRepository(relPath relpath.Path) *Directory {
 	var parentID scalar.ID
-	if relPath != "." {
-		parentPath := filepath.ToSlash(filepath.Dir(relPath))
-		parentID = encodeID(parentPath)
+	if !relPath.IsRoot() {
+		parentID = encodeID(relPath.Dir())
 	}
 	return &Directory{
 		id:       encodeID(relPath),
@@ -73,9 +67,10 @@ func (d *Directory) ParentID() scalar.ID {
 }
 
 func (d *Directory) IsRoot() bool {
-	return d.relPath == "."
+	return d.relPath.IsRoot()
 }
 
-func (d *Directory) RelPath() string {
+// RelPath 返回目录的根相对路径，构造时即保证其位于根目录内
+func (d *Directory) RelPath() relpath.Path {
 	return d.relPath
 }

@@ -9,19 +9,20 @@ import (
 	"time"
 
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 )
 
 // #region Helper Structs
-
 type mockAnalyzer struct {
 	callCount int32
 	started   chan struct{}
 	release   chan struct{}
 }
 
-func (m *mockAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
+func (m *mockAnalyzer) Analyze(ctx context.Context, relPath relpath.Path) (*directory.Stats, error) {
 	atomic.AddInt32(&m.callCount, 1)
 
 	// 通知调用方，Analyze 已经接收到请求并进入处理流程
@@ -68,7 +69,7 @@ func TestSingleFlightDirectoryAnalyzer_MergeRequests(t *testing.T) {
 	// 发起第一个请求
 	go func() {
 		defer wg.Done()
-		stats1, err1 = sf.Analyze(context.Background(), "test-dir")
+		stats1, err1 = sf.Analyze(context.Background(), testutil.Rel(t, "test-dir"))
 	}()
 
 	// 明确等待第一个请求已被底层 mock.Analyze 接收并挂起
@@ -78,7 +79,7 @@ func TestSingleFlightDirectoryAnalyzer_MergeRequests(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		enter2 <- struct{}{}
-		stats2, err2 = sf.Analyze(context.Background(), "test-dir")
+		stats2, err2 = sf.Analyze(context.Background(), testutil.Rel(t, "test-dir"))
 	}()
 
 	// 等待第二个 goroutine 启动并进入 Analyze 方法过程
@@ -121,13 +122,13 @@ func TestSingleFlightDirectoryAnalyzer_DifferentPaths(t *testing.T) {
 	// 发起针对 dir-a 的请求
 	go func() {
 		defer wg.Done()
-		stats1, err1 = sf.Analyze(context.Background(), "dir-a")
+		stats1, err1 = sf.Analyze(context.Background(), testutil.Rel(t, "dir-a"))
 	}()
 
 	// 发起针对 dir-b 的请求
 	go func() {
 		defer wg.Done()
-		stats2, err2 = sf.Analyze(context.Background(), "dir-b")
+		stats2, err2 = sf.Analyze(context.Background(), testutil.Rel(t, "dir-b"))
 	}()
 
 	wg.Wait()

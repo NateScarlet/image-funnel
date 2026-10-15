@@ -3,6 +3,7 @@ package directory
 import (
 	"context"
 	"iter"
+	"main/internal/domain/directory"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"time"
@@ -14,7 +15,7 @@ func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) i
 	return func(yield func([]*shared.DirEntryDeletedDTO, error) bool) {
 		// 将 iter.Seq2 转换为 channel，以便与 select 一起实现非阻塞的批量排空
 		type eventItem struct {
-			event *shared.FileChangedEvent
+			event *directory.FileChangedEvent
 			err   error
 		}
 		eventCh := make(chan eventItem, 128)
@@ -61,7 +62,7 @@ func (h *Handler) DirEntryDeleted(ctx context.Context, directoryID *scalar.ID) i
 						return
 					}
 					batch = append(batch, &shared.DirEntryDeletedDTO{
-						RelPath: it.event.RelPath,
+						RelPath: it.event.RelPath.String(),
 					})
 				}
 

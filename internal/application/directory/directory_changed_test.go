@@ -4,9 +4,10 @@ import (
 	"context"
 	"iter"
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/shared"
-	"path/filepath"
+	"main/internal/testutil"
 	"testing"
 	"time"
 
@@ -20,10 +21,10 @@ func (w *mockWatcher) Watch(ctx context.Context, dir string) iter.Seq2[*director
 }
 
 type mockFileChangedPub struct {
-	ch chan *shared.FileChangedEvent
+	ch chan *directory.FileChangedEvent
 }
 
-func (m *mockFileChangedPub) Publish(ctx context.Context, event *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+func (m *mockFileChangedPub) Publish(ctx context.Context, event *directory.FileChangedEvent, opts ...pubsub.PublishOption) error {
 	select {
 	case m.ch <- event:
 	default:
@@ -31,8 +32,8 @@ func (m *mockFileChangedPub) Publish(ctx context.Context, event *shared.FileChan
 	return nil
 }
 
-func (m *mockFileChangedPub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
-	return func(yield func(*shared.FileChangedEvent, error) bool) {
+func (m *mockFileChangedPub) Subscribe(ctx context.Context) iter.Seq2[*directory.FileChangedEvent, error] {
+	return func(yield func(*directory.FileChangedEvent, error) bool) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -49,11 +50,20 @@ func (m *mockFileChangedPub) Subscribe(ctx context.Context) iter.Seq2[*shared.Fi
 	}
 }
 
-type mockRepository struct {
-	dirs map[string]*directory.Directory
+// testRootDir 测试用虚拟根目录，仅用于根相对路径的围栏，不实际访问磁盘
+const testRootDir = "C:/mock_root"
+
+// mustDir 构造测试用目录实体
+func mustDir(t *testing.T, relPath string) *directory.Directory {
+	t.Helper()
+	return directory.FromRepository(testutil.Rel(t, relPath))
 }
 
-func (m *mockRepository) Get(ctx context.Context, relPath string) (*directory.Directory, error) {
+type mockRepository struct {
+	dirs map[relpath.Path]*directory.Directory
+}
+
+func (m *mockRepository) Get(ctx context.Context, relPath relpath.Path) (*directory.Directory, error) {
 	dir, ok := m.dirs[relPath]
 	if !ok {
 		dir = directory.FromRepository(relPath)
@@ -62,22 +72,22 @@ func (m *mockRepository) Get(ctx context.Context, relPath string) (*directory.Di
 	return dir, nil
 }
 
-func (m *mockRepository) Find(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+func (m *mockRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*directory.Directory, error] {
 	return func(yield func(*directory.Directory, error) bool) {}
 }
 
-func (m *mockRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
+func (m *mockRepository) ReadState(ctx context.Context, relPath relpath.Path) (*shared.DirectoryStateDTO, error) {
 	return nil, nil
 }
 
-func (m *mockRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
+func (m *mockRepository) WriteState(ctx context.Context, relPath relpath.Path, state *shared.DirectoryStateDTO) error {
 	return nil
 }
 
 type mockRenamer struct{}
 
-func (m *mockRenamer) Rename(ctx context.Context, relPath string, newName string) (string, error) {
-	return filepath.ToSlash(filepath.Join(filepath.Dir(relPath), newName)), nil
+func (m *mockRenamer) Rename(ctx context.Context, relPath relpath.Path, newName string) (relpath.Path, error) {
+	return relPath.Dir().Join(testRootDir, newName)
 }
 
 func TestDirectoryChanged_NoThrottle(t *testing.T) {
@@ -85,11 +95,11 @@ func TestDirectoryChanged_NoThrottle(t *testing.T) {
 	defer cancel()
 
 	logger := zap.NewNop()
-	repo := &mockRepository{dirs: make(map[string]*directory.Directory)}
+	repo := &mockRepository{dirs: make(map[relpath.Path]*directory.Directory)}
 	watcher := &mockWatcher{}
-	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
+	pub := &mockFileChangedPub{ch: make(chan *directory.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, testRootDir, repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)
@@ -109,9 +119,9 @@ func TestDirectoryChanged_NoThrottle(t *testing.T) {
 		}
 	}()
 
-	pub.ch <- &shared.FileChangedEvent{
-		DirectoryID: directory.FromRepository("test_dir").ID(),
-		RelPath:     "test_dir/file1.png",
+	pub.ch <- &directory.FileChangedEvent{
+		DirectoryID: mustDir(t, "test_dir").ID(),
+		RelPath:     testutil.Rel(t, "test_dir/file1.png"),
 	}
 
 	select {
@@ -129,11 +139,11 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 	defer cancel()
 
 	logger := zap.NewNop()
-	repo := &mockRepository{dirs: make(map[string]*directory.Directory)}
+	repo := &mockRepository{dirs: make(map[relpath.Path]*directory.Directory)}
 	watcher := &mockWatcher{}
-	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
+	pub := &mockFileChangedPub{ch: make(chan *directory.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, testRootDir, repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)
@@ -154,13 +164,13 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 		}
 	}()
 
-	dirA_ID := directory.FromRepository("dir_a").ID()
-	dirB_ID := directory.FromRepository("dir_b").ID()
+	dirA_ID := mustDir(t, "dir_a").ID()
+	dirB_ID := mustDir(t, "dir_b").ID()
 
 	// T0: 发送目录 A. 期望：立即收到 A (Leading)
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file1.png",
+		RelPath:     testutil.Rel(t, "dir_a/file1.png"),
 	}
 
 	select {
@@ -174,9 +184,9 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 
 	// T0 + 10ms: 在冷却期内发送目录 A。期望：被缓存，不立即触发
 	time.Sleep(10 * time.Millisecond)
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file2.png",
+		RelPath:     testutil.Rel(t, "dir_a/file2.png"),
 	}
 	select {
 	case dto := <-received:
@@ -187,9 +197,9 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 
 	// T0 + 15ms: 在冷却期内发送不同的目录 B。期望：立即收到 B (Leading，因为不同目录独立节流)
 	time.Sleep(5 * time.Millisecond)
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirB_ID,
-		RelPath:     "dir_b/file1.png",
+		RelPath:     testutil.Rel(t, "dir_b/file1.png"),
 	}
 	select {
 	case dto := <-received:
@@ -202,9 +212,9 @@ func TestDirectoryChanged_WithThrottle(t *testing.T) {
 
 	// T0 + 20ms: 再次在 A 的冷却期内发送目录 A（更新挂起值）
 	time.Sleep(5 * time.Millisecond)
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file3.png",
+		RelPath:     testutil.Rel(t, "dir_a/file3.png"),
 	}
 	select {
 	case dto := <-received:

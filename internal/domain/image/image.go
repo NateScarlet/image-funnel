@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -13,7 +13,7 @@ import (
 type Image struct {
 	id          scalar.ID
 	filename    string
-	relPath     string
+	relPath     relpath.Path
 	directoryID scalar.ID
 	size        int64
 	modTime     time.Time
@@ -24,11 +24,11 @@ type Image struct {
 
 // TODO: 改为带校验 Factory 模式，不再允许外部直接构建
 // New 创建一个具有指定ID的图片对象，常用于会话中的图片重建或测试
-func New(id scalar.ID, filename, relPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
+func New(id scalar.ID, filename string, relPath relpath.Path, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{
 		id:          id,
 		filename:    filename,
-		relPath:     filepath.ToSlash(relPath),
+		relPath:     relPath,
 		directoryID: directoryID,
 		size:        size,
 		modTime:     modTime,
@@ -38,13 +38,12 @@ func New(id scalar.ID, filename, relPath string, directoryID scalar.ID, size int
 	}
 }
 
-// FromRelPath 从相对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
-func FromRelPath(filename, relPath string, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
-	normalizedPath := filepath.ToSlash(relPath)
+// FromRelPath 从根相对路径等文件系统信息创建图片，并自动基于路径和修改时间编码其ID
+func FromRelPath(filename string, relPath relpath.Path, directoryID scalar.ID, size int64, modTime time.Time, xmpData *metadata.Data, width, height int) *Image {
 	return &Image{
-		id:          encodeID(normalizedPath, modTime),
+		id:          encodeID(relPath, modTime),
 		filename:    filename,
-		relPath:     normalizedPath,
+		relPath:     relPath,
 		directoryID: directoryID,
 		size:        size,
 		modTime:     modTime,
@@ -66,7 +65,8 @@ func (i *Image) Filename() string {
 	return i.filename
 }
 
-func (i *Image) RelPath() string {
+// RelPath 返回图片的根相对路径，构造时即保证其位于根目录内
+func (i *Image) RelPath() relpath.Path {
 	return i.relPath
 }
 
@@ -111,35 +111,34 @@ func (i *Image) Height() int {
 
 // #region ID编码与解码
 
-// encodeID 将图片相对路径和修改时间转换为明文格式的 ID
-func encodeID(relPath string, modTime time.Time) scalar.ID {
-	str := fmt.Sprintf("img:%d:%s", modTime.UnixNano(), filepath.ToSlash(relPath))
-	return scalar.ToID(str)
+// encodeID 将图片根相对路径和修改时间转换为明文格式的 ID
+func encodeID(relPath relpath.Path, modTime time.Time) scalar.ID {
+	return scalar.ToID(fmt.Sprintf("img:%d:%s", modTime.UnixNano(), relPath.String()))
 }
 
-// decodeID 解析明文格式的 ID 并还原为图片的相对路径和期望修改时间
-func decodeID(id scalar.ID) (string, time.Time, error) {
+// decodeID 解析明文格式的 ID 并还原为图片的根相对路径和期望修改时间。
+// rootDir 仅用于还原时重新围栏：ID 由服务端签发，但仍是不可信输入
+func decodeID(rootDir string, id scalar.ID) (relpath.Path, time.Time, error) {
 	str := id.String()
 	if !strings.HasPrefix(str, "img:") {
-		return "", time.Time{}, errors.New("invalid image id format")
+		return relpath.Path{}, time.Time{}, errors.New("invalid image id format")
 	}
 	parts := strings.SplitN(strings.TrimPrefix(str, "img:"), ":", 2)
 	if len(parts) != 2 {
-		return "", time.Time{}, errors.New("invalid image id components")
+		return relpath.Path{}, time.Time{}, errors.New("invalid image id components")
 	}
-	nanoStr, relPath := parts[0], parts[1]
+	nanoStr, relStr := parts[0], parts[1]
 	var nano int64
-	_, err := fmt.Sscanf(nanoStr, "%d", &nano)
+	if _, err := fmt.Sscanf(nanoStr, "%d", &nano); err != nil {
+		return relpath.Path{}, time.Time{}, fmt.Errorf("invalid image id timestamp: %w", err)
+	}
+
+	rel, err := relpath.New(rootDir, relStr)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("invalid image id timestamp: %w", err)
+		return relpath.Path{}, time.Time{}, fmt.Errorf("invalid image id path: %w", err)
 	}
 
-	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
-	if filepath.IsAbs(relPath) {
-		return "", time.Time{}, fmt.Errorf("absolute path not allowed in image ID: %s", relPath)
-	}
-
-	return filepath.ToSlash(relPath), time.Unix(0, nano), nil
+	return rel, time.Unix(0, nano), nil
 }
 
 // #endregion

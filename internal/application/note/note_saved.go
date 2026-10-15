@@ -32,7 +32,7 @@ func (h *Handler) NoteSaved(ctx context.Context, filter *shared.NoteFilters) ite
 				continue
 			}
 
-			if !strings.HasSuffix(strings.ToLower(event.RelPath), ".md") {
+			if !strings.HasSuffix(strings.ToLower(event.RelPath.String()), ".md") {
 				continue
 			}
 

@@ -3,7 +3,7 @@ package image
 import (
 	"context"
 	"main/internal/apperror"
-	"main/internal/util"
+	"main/internal/domain/relpath"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -72,31 +72,29 @@ func (h *Handler) AttachFileToClipboard(
 		}, nil
 	}
 
-	// 将路径转换为绝对路径，并校验安全性
+	// 前端可能给出绝对路径或根相对路径两种形式，两种都要规整为已围栏的根相对路径
 	var absPaths []string
 	for _, p := range paths {
-		var absPath string
-		var relForValidation string
+		var relStr string
 
 		if filepath.IsAbs(p) {
-			absPath = p
 			var err error
-			relForValidation, err = filepath.Rel(h.rootDir, p)
+			relStr, err = filepath.Rel(h.rootDir, p)
 			if err != nil {
 				h.logger.Warn("Path validation failed", zap.String("path", p), zap.Error(err))
 				return nil, apperror.New("PATH_INVALID", "Path validation failed", "路径校验失败")
 			}
 		} else {
-			absPath = filepath.Join(h.rootDir, p)
-			relForValidation = p
+			relStr = p
 		}
 
-		// 校验路径不逃逸根目录
-		if err := util.EnsurePathInRoot(h.rootDir, relForValidation); err != nil {
+		// 构造即围栏：逃逸根目录的路径无法被构造出来
+		relPath, err := relpath.New(h.rootDir, relStr)
+		if err != nil {
 			h.logger.Warn("Path validation failed", zap.String("path", p), zap.Error(err))
 			return nil, apperror.New("PATH_INVALID", "Path validation failed", "路径校验失败")
 		}
-		absPaths = append(absPaths, absPath)
+		absPaths = append(absPaths, relPath.Abs(h.rootDir))
 	}
 
 	// 添加文件到剪贴板，并写回已校验的 HTML 内容（保留 nonce 数据）

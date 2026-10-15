@@ -2,11 +2,10 @@ package image
 
 import (
 	"context"
-	"fmt"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"main/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,12 +29,8 @@ func NewFactory(xmpRepo metadata.Repository, processor Processor, rootDir string
 	}
 }
 
-func (f *Factory) Create(ctx context.Context, relPath string, directoryID scalar.ID) (*Image, error) {
-	if err := util.EnsurePathInRoot(f.rootDir, relPath); err != nil {
-		return nil, err
-	}
-	absPath := filepath.Join(f.rootDir, relPath)
-	info, err := os.Stat(absPath)
+func (f *Factory) Create(ctx context.Context, relPath relpath.Path, directoryID scalar.ID) (*Image, error) {
+	info, err := os.Stat(relPath.Abs(f.rootDir))
 	if err != nil {
 		return nil, err
 	}
@@ -52,17 +47,12 @@ func (f *Factory) Create(ctx context.Context, relPath string, directoryID scalar
 }
 
 // CreateFromInfo creates an image from os.FileInfo, avoiding re-stat if caller has it.
-func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, relPath string, directoryID scalar.ID) (*Image, error) {
-	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
-	if filepath.IsAbs(relPath) {
-		return nil, fmt.Errorf("absolute path not allowed: %s", relPath)
-	}
-
+func (f *Factory) CreateFromInfo(ctx context.Context, info os.FileInfo, relPath relpath.Path, directoryID scalar.ID) (*Image, error) {
 	if info.IsDir() || !f.IsSupportedImage(info.Name()) {
 		return nil, nil
 	}
 
-	absPath := filepath.Join(f.rootDir, relPath)
+	absPath := relPath.Abs(f.rootDir)
 
 	var xmpData *metadata.Data
 	xmpData, err := f.xmpRepo.Read(absPath)

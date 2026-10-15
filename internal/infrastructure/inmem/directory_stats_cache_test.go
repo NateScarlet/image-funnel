@@ -3,7 +3,9 @@ package inmem_test
 import (
 	"context"
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/infrastructure/inmem"
+	"main/internal/testutil"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -13,7 +15,7 @@ type mockAnalyzer struct {
 	analyzeCallCount int
 }
 
-func (m *mockAnalyzer) Analyze(ctx context.Context, relPath string) (*directory.Stats, error) {
+func (m *mockAnalyzer) Analyze(ctx context.Context, relPath relpath.Path) (*directory.Stats, error) {
 	m.analyzeCallCount++
 	return directory.NewStats(10, 5, nil, map[int]int{}), nil
 }
@@ -26,7 +28,7 @@ func TestDirectoryStatsCache(t *testing.T) {
 	ctx := context.Background()
 
 	// 第一次调用应该穿透到 mock
-	stats1, err := cache.Analyze(ctx, "test/dir")
+	stats1, err := cache.Analyze(ctx, testutil.Rel(t, "test/dir"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +40,7 @@ func TestDirectoryStatsCache(t *testing.T) {
 	}
 
 	// 第二次调用应该命中缓存
-	_, err = cache.Analyze(ctx, "test/dir")
+	_, err = cache.Analyze(ctx, testutil.Rel(t, "test/dir"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,10 +49,10 @@ func TestDirectoryStatsCache(t *testing.T) {
 	}
 
 	// 手动使缓存作废
-	cache.Invalidate("test/dir")
+	cache.Invalidate(testutil.Rel(t, "test/dir"))
 
 	// 第三次调用应该重新穿透到 mock
-	_, err = cache.Analyze(ctx, "test/dir")
+	_, err = cache.Analyze(ctx, testutil.Rel(t, "test/dir"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

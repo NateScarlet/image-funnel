@@ -10,7 +10,6 @@ import (
 	"main/internal/shared"
 	"main/internal/util"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -85,10 +84,11 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		// 如果 ID 不匹配（说明文件已被外部修改），记录错误并跳过
 		if currentImg.ID() != img.ID() {
+			absPath := img.RelPath().Abs(s.rootDir)
 			errs = append(errs, apperror.New(
 				"IMAGE_MODIFIED_EXTERNALLY",
-				"image ID mismatch (file modified externally): "+filepath.Join(s.rootDir, img.RelPath()),
-				"图片 ID 不匹配（文件已被外部修改）: "+filepath.Join(s.rootDir, img.RelPath()),
+				"image ID mismatch (file modified externally): "+absPath,
+				"图片 ID 不匹配（文件已被外部修改）: "+absPath,
 			))
 			continue
 		}
@@ -101,7 +101,7 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		xmpData := metadata.NewXMPData(rating, action.String(), time.Now(), currentImg.Label())
 
-		absPath := filepath.Join(s.rootDir, img.RelPath())
+		absPath := img.RelPath().Abs(s.rootDir)
 		if err := s.metadataRepo.Write(absPath, xmpData); err != nil {
 			errs = append(errs, err)
 			continue

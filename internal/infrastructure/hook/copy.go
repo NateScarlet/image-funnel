@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"main/internal/domain/hook"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 
 	"go.uber.org/zap"
@@ -25,7 +25,7 @@ type copyContentRaw struct {
 // 全局至多一个声明 [copy] 能力的钩子：
 //   - 0 个 → 返回 nil（调用方降级为复制文件/路径）
 //   - >1 个 → 报错并列出冲突的 hook id，组合逻辑由脚本自身负责
-func (r *Runner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath string) (*hook.CopyContent, error) {
+func (r *Runner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPath relpath.Path) (*hook.CopyContent, error) {
 	hooks, err := r.loadHooks()
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (r *Runner) CopyContent(ctx context.Context, imageID scalar.ID, imageRelPat
 }
 
 // executeCopyScript 单次 spawn 复制增强脚本并按契约解析 stdout（结构复用 autocomplete 单次执行管道）
-func (r *Runner) executeCopyScript(ctx context.Context, target hookConfig, imageID scalar.ID, imageRelPath string) (*hook.CopyContent, error) {
+func (r *Runner) executeCopyScript(ctx context.Context, target hookConfig, imageID scalar.ID, imageRelPath relpath.Path) (*hook.CopyContent, error) {
 	argv, err := parseCommandArgs(target.Command)
 	if err != nil {
 		return nil, fmt.Errorf("invalid copy command: %w", err)
@@ -70,7 +70,7 @@ func (r *Runner) executeCopyScript(ctx context.Context, target hookConfig, image
 	cmd.Dir = r.hooksDir
 
 	env, err := r.buildBaseEnv(ctx, target.ID, target.Name, "image_copy",
-		[]string{imageID.String()}, []string{filepath.Join(r.rootDir, imageRelPath)},
+		[]string{imageID.String()}, []string{imageRelPath.Abs(r.rootDir)},
 		"", target.Env, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build copy env: %w", err)

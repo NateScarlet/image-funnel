@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"main/internal/application/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"main/internal/util"
 )
 
 // ImageURLPrefix 图片访问 URL 的路径前缀，形如 /image/<sig>/<relPath>?<params>。
@@ -37,17 +37,18 @@ func NewSigner(secretKey, rootDir string) *Signer {
 // 因此任何未参与生成的参数改动都会使签名失效——包括未知参数，
 // 无需维护参数白名单
 func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (scalar.URI, error) {
-	relPath, err := s.toRelativePath(absPath)
+	relStr, err := s.toRelativePath(absPath)
 	if err != nil {
 		return scalar.URI{}, err
 	}
 
-	// 只允许根目录内的文件：签名不应为越界路径提供凭据（纵深防御，与 handler 侧一致）
-	if err := util.EnsurePathInRoot(s.rootDir, relPath); err != nil {
+	// 只允许根目录内的文件：签名不应为越界路径提供凭据（纵深防御，与验签侧一致）
+	rel, err := relpath.New(s.rootDir, relStr)
+	if err != nil {
 		return scalar.URI{}, fmt.Errorf("refuse to sign path outside root: %w", err)
 	}
 
-	fileInfo, err := os.Stat(filepath.Join(s.rootDir, relPath))
+	fileInfo, err := os.Stat(rel.Abs(s.rootDir))
 	if err != nil {
 		return scalar.URI{}, fmt.Errorf("failed to get file info: %w", err)
 	}
@@ -61,7 +62,7 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (sc
 	params.Set("t", fmt.Sprintf("%d", fileInfo.ModTime().Unix()))
 	params.Set("s", fmt.Sprintf("%d", fileInfo.Size()))
 
-	payload := urlPayload(relPath, params)
+	payload := urlPayload(rel.String(), params)
 
 	return scalar.ParseURI(ImageURLPrefix + s.signatureFor(payload) + "/" + payload)
 }
@@ -90,36 +91,39 @@ func (s *Signer) signatureFor(payload string) string {
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
-// ValidateSignedURL 校验请求目标串的签名，通过后返回解码后的相对路径。
+// ValidateSignedURL 校验请求目标串的签名，通过后返回解码后的根相对路径。
+//
+// 返回值自带「该路径位于根目录内」的保证：围栏在构造时完成（relpath.New），
+// 因此调用方无需（也不应）再自行复核根目录边界。签名只证明 URL 由本服务签发。
 //
 // target 必须是线路上的原始目标串（handler 传入 r.RequestURI）。签名覆盖的是原始字形，
 // 因此此处不做 url.Values 往返（Encode 会把 %20 改写为 +、丢失 ?a 与 ?a= 的区别及参数顺序），
 // 也不用 url.URL.Path（已解码，无法区分 %2F 与 /）；仅对 absolute-form 做最小归一
-func (s *Signer) ValidateSignedURL(target string) (string, error) {
+func (s *Signer) ValidateSignedURL(target string) (relpath.Path, error) {
 	raw, err := originForm(target)
 	if err != nil {
-		return "", err
+		return relpath.Path{}, err
 	}
 
 	rest, ok := strings.CutPrefix(raw, ImageURLPrefix)
 	if !ok {
-		return "", fmt.Errorf("not an image url")
+		return relpath.Path{}, fmt.Errorf("not an image url")
 	}
 
 	// 签名是第一段，其后全部内容（含查询串）都是被签名的字符串
 	idx := strings.Index(rest, "/")
 	if idx < 0 {
-		return "", fmt.Errorf("missing relative path")
+		return relpath.Path{}, fmt.Errorf("missing relative path")
 	}
 	sig, payload := rest[:idx], rest[idx+1:]
 	if sig == "" || payload == "" {
-		return "", fmt.Errorf("missing signature or path")
+		return relpath.Path{}, fmt.Errorf("missing signature or path")
 	}
 
 	// 直接比较编码后的签名：hmac.Equal 为常量时间比较，
 	// 且避免「先解码再比较」引入多余的失败分支
 	if !hmac.Equal([]byte(s.signatureFor(payload)), []byte(sig)) {
-		return "", fmt.Errorf("invalid signature")
+		return relpath.Path{}, fmt.Errorf("invalid signature")
 	}
 
 	// 验签通过后才解码路径。载荷中查询串分隔符是首个字面 ?，
@@ -129,11 +133,17 @@ func (s *Signer) ValidateSignedURL(target string) (string, error) {
 	if i := strings.Index(payload, "?"); i >= 0 {
 		pathPart = payload[:i]
 	}
-	relPath, err := url.PathUnescape(pathPart)
+	relStr, err := url.PathUnescape(pathPart)
 	if err != nil {
-		return "", fmt.Errorf("invalid path escaping: %w", err)
+		return relpath.Path{}, fmt.Errorf("invalid path escaping: %w", err)
 	}
-	return relPath, nil
+
+	// 密钥泄漏场景下伪造的签名同样受围栏约束：越界载荷无法被构造成根相对路径
+	rel, err := relpath.New(s.rootDir, relStr)
+	if err != nil {
+		return relpath.Path{}, fmt.Errorf("path outside root: %w", err)
+	}
+	return rel, nil
 }
 
 // originForm 取得请求目标串中 origin-form 部分的起始下标。

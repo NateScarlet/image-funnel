@@ -9,6 +9,7 @@ import (
 	"main/internal/domain/session"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func TestNewSessionRepository(t *testing.T) {
 func TestSave(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := image.New(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
+	img := image.New(scalar.ToID("test-id"), "test.jpg", testutil.Rel(t, "test/test.jpg"), scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
 	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img}, image.NewFilterBuilder())
 	release, err := repo.Create(sess)
 	require.NoError(t, err)
@@ -37,7 +38,7 @@ func TestSave(t *testing.T) {
 func TestAcquire(t *testing.T) {
 	repo := NewSessionRepository()
 
-	img := image.New(scalar.ToID("test-id"), "test.jpg", "/test/test.jpg", scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
+	img := image.New(scalar.ToID("test-id"), "test.jpg", testutil.Rel(t, "test/test.jpg"), scalar.ToID("test-dir"), 1000, time.Now(), nil, 1920, 1080)
 	sess := session.New(scalar.ToID("test-id"), scalar.ToID("test-dir"), &shared.ImageFilters{Rating: nil}, 5, []*image.Image{img}, image.NewFilterBuilder())
 	release1, err := repo.Create(sess)
 	require.NoError(t, err)

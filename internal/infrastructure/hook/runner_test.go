@@ -17,9 +17,11 @@ import (
 	"main/internal/domain/device"
 	"main/internal/domain/directory"
 	domimage "main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -80,11 +82,11 @@ func (m *mockMetadataUpdatedSub) Publish(ctx context.Context, ev *shared.Metadat
 
 type mockFileChangedSub struct{}
 
-func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
-	return func(yield func(*shared.FileChangedEvent, error) bool) {}
+func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*directory.FileChangedEvent, error] {
+	return func(yield func(*directory.FileChangedEvent, error) bool) {}
 }
 
-func (m *mockFileChangedSub) Publish(ctx context.Context, ev *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+func (m *mockFileChangedSub) Publish(ctx context.Context, ev *directory.FileChangedEvent, opts ...pubsub.PublishOption) error {
 	return nil
 }
 
@@ -92,7 +94,7 @@ type mockImageRepository struct {
 	images []*domimage.Image
 }
 
-func (m *mockImageRepository) Get(ctx context.Context, relPath string) (*domimage.Image, error) {
+func (m *mockImageRepository) Get(ctx context.Context, relPath relpath.Path) (*domimage.Image, error) {
 	for _, img := range m.images {
 		if img.RelPath() == relPath {
 			return img, nil
@@ -101,7 +103,7 @@ func (m *mockImageRepository) Get(ctx context.Context, relPath string) (*domimag
 	return nil, os.ErrNotExist
 }
 
-func (m *mockImageRepository) Find(ctx context.Context, relPath string) iter.Seq2[*domimage.Image, error] {
+func (m *mockImageRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*domimage.Image, error] {
 	return func(yield func(*domimage.Image, error) bool) {
 		for _, img := range m.images {
 			if !yield(img, nil) {
@@ -113,10 +115,10 @@ func (m *mockImageRepository) Find(ctx context.Context, relPath string) iter.Seq
 
 // mockDirectoryRepository 模拟目录仓库
 type mockDirectoryRepository struct {
-	dirs map[string]*directory.Directory
+	dirs map[relpath.Path]*directory.Directory
 }
 
-func (m *mockDirectoryRepository) Get(ctx context.Context, relPath string) (*directory.Directory, error) {
+func (m *mockDirectoryRepository) Get(ctx context.Context, relPath relpath.Path) (*directory.Directory, error) {
 	if m.dirs == nil {
 		return nil, os.ErrNotExist
 	}
@@ -127,15 +129,15 @@ func (m *mockDirectoryRepository) Get(ctx context.Context, relPath string) (*dir
 	return d, nil
 }
 
-func (m *mockDirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+func (m *mockDirectoryRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*directory.Directory, error] {
 	return func(yield func(*directory.Directory, error) bool) {}
 }
 
-func (m *mockDirectoryRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
+func (m *mockDirectoryRepository) ReadState(ctx context.Context, relPath relpath.Path) (*shared.DirectoryStateDTO, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockDirectoryRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
+func (m *mockDirectoryRepository) WriteState(ctx context.Context, relPath relpath.Path, state *shared.DirectoryStateDTO) error {
 	return nil
 }
 
@@ -294,8 +296,8 @@ label = [""]
 	logger := zap.NewExample()
 
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
@@ -487,8 +489,8 @@ command = '''%s'''
 
 	// 构建 mock 目录仓库，使得路径能推导出目录信息
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
@@ -546,11 +548,11 @@ label = [""]
 	logger := zap.NewExample()
 
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
-	expectedDir := mockDirRepo.dirs["."]
+	expectedDir := mockDirRepo.dirs[relpath.Path{}]
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	runner.debouncer.duration = 10 * time.Millisecond
@@ -617,11 +619,11 @@ command = '''` + cmdStr + `'''
 	logger := zap.NewExample()
 
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			"subdir": directory.FromRepository("subdir"),
+		dirs: map[relpath.Path]*directory.Directory{
+			testutil.Rel(t, "subdir"): directory.FromRepository(testutil.Rel(t, "subdir")),
 		},
 	}
-	expectedDir := mockDirRepo.dirs["subdir"]
+	expectedDir := mockDirRepo.dirs[testutil.Rel(t, "subdir")]
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
@@ -672,7 +674,7 @@ command = 'echo "should not run" > ` + flagFile + `'
 	logger := zap.NewNop()
 
 	// 目录仓库为空，任何路径都无法解析
-	mockDirRepo := &mockDirectoryRepository{dirs: map[string]*directory.Directory{}}
+	mockDirRepo := &mockDirectoryRepository{dirs: map[relpath.Path]*directory.Directory{}}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
@@ -719,23 +721,23 @@ command = '''` + cmdStr + `'''
 	logger := zap.NewNop()
 
 	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
+	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	noteRelPath := "test.png.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test.png.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	err = os.WriteFile(noteAbsPath, []byte("Just a normal note with no slash commands"), 0644)
 	assert.NoError(t, err)
 
-	runner.handleFileChanged(&shared.FileChangedEvent{
+	runner.handleFileChanged(&directory.FileChangedEvent{
 		DirectoryID: scalar.ToID("dir:1"),
 		RelPath:     noteRelPath,
 		Action:      shared.FileActionWrite,
@@ -800,11 +802,11 @@ command = '''` + cmdScan + `'''
 	logger := zap.NewNop()
 
 	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
+	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
@@ -816,7 +818,7 @@ command = '''` + cmdScan + `'''
 	err = os.WriteFile(filepath.Join(tempDir, "test.png.md"), []byte("Hello world note"), 0644)
 	assert.NoError(t, err)
 
-	err = runner.OnCommitSession(context.Background(), ".")
+	err = runner.OnCommitSession(context.Background(), relpath.Path{})
 	assert.NoError(t, err)
 
 	assert.True(t, waitFlagFile(flagPure, 1500*time.Millisecond), "纯提交钩子应成功执行")
@@ -866,17 +868,17 @@ command = '''` + cmdStr + `'''
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 
-	expectedDir := directory.FromRepository("subdir")
+	expectedDir := directory.FromRepository(testutil.Rel(t, "subdir"))
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			"subdir": expectedDir,
+		dirs: map[relpath.Path]*directory.Directory{
+			testutil.Rel(t, "subdir"): expectedDir,
 		},
 	}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	err = runner.OnCommitSession(context.Background(), "subdir")
+	err = runner.OnCommitSession(context.Background(), testutil.Rel(t, "subdir"))
 	assert.NoError(t, err)
 
 	assert.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "纯提交钩子应成功执行并写入 flag 文件")
@@ -1002,8 +1004,8 @@ on_fail_action = "KEEP"
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
@@ -1011,8 +1013,8 @@ on_fail_action = "KEEP"
 	defer runner.Close()
 
 	// 准备笔记文件
-	noteRelPath := "test_note.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	initialContent := `Some text.
 /fork a
 /comfyui b
@@ -1021,7 +1023,7 @@ Other text.`
 	assert.NoError(t, err)
 
 	// 运行指令处理
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.Error(t, err)
 	assert.True(t, ok)
 
@@ -1125,16 +1127,16 @@ on_fail_action = "KEEP"
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	noteRelPath := "test_note.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	initialContent := `Some text.
 /del-note a
 Other text.`
@@ -1146,7 +1148,7 @@ Other text.`
 	assert.NoError(t, err)
 
 	// 笔记文件已被删除，应静默返回 (false, nil)
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.NoError(t, err)
 	assert.False(t, ok)
 }
@@ -1187,16 +1189,16 @@ on_fail_action = "REMOVE"
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	noteRelPath := "test_note.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	initialContent := `Some text.
 /remove-other-fail a
 Other text.`
@@ -1204,7 +1206,7 @@ Other text.`
 	assert.NoError(t, err)
 
 	// 非文件系统错误应传播
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository("."), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
 	assert.Error(t, err)
 	assert.True(t, ok)
 
@@ -1382,8 +1384,8 @@ command = '''%s'''
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 	notifSender := &mockNotificationSender{}
@@ -1398,7 +1400,7 @@ command = '''%s'''
 	notifs := notifSender.Notifications()
 	assert.Len(t, notifs, 1)
 	assert.Equal(t, "通知成功测试", notifs[0].Channel)
-	assert.Equal(t, ".", notifs[0].Title)
+	assert.Equal(t, "", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityLow, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "hello_success")
 }
@@ -1433,8 +1435,8 @@ command = '''%s'''
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 	notifSender := &mockNotificationSender{}
@@ -1449,7 +1451,7 @@ command = '''%s'''
 	notifs := notifSender.Notifications()
 	assert.Len(t, notifs, 1)
 	assert.Equal(t, "通知失败测试", notifs[0].Channel)
-	assert.Equal(t, ".", notifs[0].Title)
+	assert.Equal(t, "", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityHigh, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "stderr_err_msg")
 }
@@ -1485,8 +1487,8 @@ command = '''` + command + `'''
 	assert.NoError(t, err)
 
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 	notifSender := &mockNotificationSender{}
@@ -1658,15 +1660,15 @@ command = '''`+shellWrite("c", flagC)+`'''
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	err = runner.OnCommitSession(context.Background(), ".")
+	err = runner.OnCommitSession(context.Background(), relpath.Path{})
 	assert.NoError(t, err)
 
 	assert.True(t, waitFlagFile(flagC, 1500*time.Millisecond), "order=0 的 c 应最先执行")
@@ -1734,8 +1736,8 @@ order = 2
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".": directory.FromRepository("."),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}: directory.FromRepository(relpath.Path{}),
 		},
 	}
 	imgRepo := &mockImageRepository{}
@@ -1743,12 +1745,12 @@ order = 2
 	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
 	defer runner.Close()
 
-	noteRelPath := "test_note.md"
-	noteAbsPath := filepath.Join(tempDir, noteRelPath)
+	noteRelPath := testutil.Rel(t, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(tempDir)
 	err = os.WriteFile(noteAbsPath, []byte("Normal note without directives"), 0644)
 	assert.NoError(t, err)
 
-	runner.handleFileChanged(&shared.FileChangedEvent{
+	runner.handleFileChanged(&directory.FileChangedEvent{
 		DirectoryID: scalar.ToID("dir:1"),
 		RelPath:     noteRelPath,
 		Action:      shared.FileActionWrite,

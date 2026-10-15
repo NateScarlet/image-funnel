@@ -2,8 +2,8 @@ package note
 
 import (
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -13,21 +13,21 @@ const idPrefix = "note:"
 // Note 表示笔记信息
 type Note struct {
 	id         scalar.ID
-	relPath    string    // 相对路径
-	absPath    string    // 绝对路径
-	content    string    // 剥离后的正文
-	rawContent string    // 完整的原始内容
-	hidden     bool      // 是否被隐藏
-	modTime    time.Time // 最后修改时间
+	relPath    relpath.Path // 根相对路径
+	absPath    string       // 绝对路径
+	content    string       // 剥离后的正文
+	rawContent string       // 完整的原始内容
+	hidden     bool         // 是否被隐藏
+	modTime    time.Time    // 最后修改时间
 }
 
 // FromRepository 从仓库加载笔记信息，ID 由领域层根据相对路径自动生成
 // 仅由 Repository 实现调用，外部不得直接构造。此处直接通过结构体字面量实例化，信任持久层数据。
-func FromRepository(relPath string, absPath string, content string, modTime time.Time) *Note {
+func FromRepository(relPath relpath.Path, absPath string, content string, modTime time.Time) *Note {
 	hidden, parsedContent := ParseContent(content)
 	return &Note{
 		id:         encodeID(relPath),
-		relPath:    filepath.ToSlash(relPath),
+		relPath:    relPath,
 		absPath:    absPath,
 		content:    parsedContent,
 		rawContent: content,
@@ -82,8 +82,8 @@ func (n *Note) ID() scalar.ID {
 	return n.id
 }
 
-// RelPath 返回笔记相对路径
-func (n *Note) RelPath() string {
+// RelPath 返回笔记的根相对路径，构造时即保证其位于根目录内
+func (n *Note) RelPath() relpath.Path {
 	return n.relPath
 }
 
@@ -112,20 +112,25 @@ func (n *Note) ModTime() time.Time {
 	return n.modTime
 }
 
-// encodeID 根据图片相对路径生成笔记 ID
-func encodeID(relPath string) scalar.ID {
-	return scalar.ToID(idPrefix + strings.TrimSuffix(filepath.ToSlash(relPath), ".md"))
+// encodeID 根据笔记根相对路径生成笔记 ID
+func encodeID(relPath relpath.Path) scalar.ID {
+	return scalar.ToID(idPrefix + strings.TrimSuffix(relPath.String(), ".md"))
 }
 
-// decodeID 从笔记 ID 中提取图片相对路径
-func decodeID(id scalar.ID) (string, error) {
+// decodeID 从笔记 ID 中提取笔记根相对路径。
+// rootDir 仅用于还原时重新围栏：ID 由服务端签发，但仍是不可信输入
+func decodeID(rootDir string, id scalar.ID) (relpath.Path, error) {
 	idStr := id.String()
 	if idStr == "" {
-		return "", apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")
+		return relpath.Path{}, apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")
 	}
 	if !strings.HasPrefix(idStr, idPrefix) {
-		return "", apperror.New("INVALID_NOTE_ID", "invalid note ID format", "笔记 ID 格式无效")
+		return relpath.Path{}, apperror.New("INVALID_NOTE_ID", "invalid note ID format", "笔记 ID 格式无效")
 	}
 
-	return filepath.ToSlash(strings.TrimPrefix(idStr, idPrefix) + ".md"), nil
+	rel, err := relpath.New(rootDir, strings.TrimPrefix(idStr, idPrefix)+".md")
+	if err != nil {
+		return relpath.Path{}, apperror.New("INVALID_NOTE_ID", "invalid note ID path", "笔记 ID 中的路径无效")
+	}
+	return rel, nil
 }

@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,9 +99,9 @@ command = '''%s'''
 	ebus := &mockMetadataUpdatedSub{}
 	fileChangedSub := &mockFileChangedSub{}
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{
-			".":   directory.FromRepository("."),
-			"sub": directory.FromRepository("sub"),
+		dirs: map[relpath.Path]*directory.Directory{
+			relpath.Path{}:         directory.FromRepository(relpath.Path{}),
+			testutil.Rel(t, "sub"): directory.FromRepository(testutil.Rel(t, "sub")),
 		},
 	}
 	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
@@ -113,7 +115,7 @@ command = '''%s'''
 func TestCopyContent_NoConfigReturnsNil(t *testing.T) {
 	env := newCopyTestRunner(t, 0, nil)
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.NoError(t, err)
 	assert.Nil(t, content, "未配置 [copy] 钩子时应返回空以降级为复制文件")
 }
@@ -121,7 +123,7 @@ func TestCopyContent_NoConfigReturnsNil(t *testing.T) {
 func TestCopyContent_MultipleConfigsError(t *testing.T) {
 	env := newCopyTestRunner(t, 2, nil)
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.Error(t, err)
 	assert.Nil(t, content)
 	// 报错应列出所有冲突的 hook id，便于用户定位重复配置
@@ -133,7 +135,7 @@ func TestCopyContent_EnvelopeParsing(t *testing.T) {
 	envelope := `{"content":"workflow-json","description":"copied!"}`
 	env := newCopyTestRunner(t, 1, map[string]string{"IF_COPY_HELPER_STDOUT": envelope})
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "sub/test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "sub/test.png"))
 	require.NoError(t, err)
 	require.NotNil(t, content)
 	assert.Equal(t, "workflow-json", content.Content)
@@ -143,7 +145,7 @@ func TestCopyContent_EnvelopeParsing(t *testing.T) {
 func TestCopyContent_EmptyStdoutNotApplicable(t *testing.T) {
 	env := newCopyTestRunner(t, 1, map[string]string{"IF_COPY_HELPER_STDOUT": "\n"})
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.NoError(t, err)
 	assert.Nil(t, content, "空 stdout 应视为脚本声明不适用")
 }
@@ -154,7 +156,7 @@ func TestCopyContent_NonZeroExitReturnsErrorWithStderr(t *testing.T) {
 		"IF_COPY_HELPER_EXIT_CODE": "3",
 	})
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.Error(t, err)
 	assert.Nil(t, content)
 	assert.Contains(t, err.Error(), "boom")
@@ -163,7 +165,7 @@ func TestCopyContent_NonZeroExitReturnsErrorWithStderr(t *testing.T) {
 func TestCopyContent_InvalidJSONProtocolError(t *testing.T) {
 	env := newCopyTestRunner(t, 1, map[string]string{"IF_COPY_HELPER_STDOUT": "not json at all"})
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.Error(t, err)
 	assert.Nil(t, content)
 	assert.Contains(t, err.Error(), "not json at all")
@@ -173,7 +175,7 @@ func TestCopyContent_EmptyContentProtocolError(t *testing.T) {
 	envelope := `{"content":"","description":"empty"}`
 	env := newCopyTestRunner(t, 1, map[string]string{"IF_COPY_HELPER_STDOUT": envelope})
 
-	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), "test.png")
+	content, err := env.runner.CopyContent(context.Background(), scalar.ToID("img:1"), testutil.Rel(t, "test.png"))
 	require.Error(t, err)
 	assert.Nil(t, content, "信封 content 为空属于协议违约")
 }
@@ -183,7 +185,7 @@ func TestCopyContent_BaseEnvContract(t *testing.T) {
 	env := newCopyTestRunner(t, 1, map[string]string{"IF_COPY_HELPER_ECHO_ENV": "1", "IF_COPY_CUSTOM_ENV": "custom-value"})
 
 	imgID := scalar.ToID("img:test-1")
-	content, err := env.runner.CopyContent(context.Background(), imgID, "sub/test.png")
+	content, err := env.runner.CopyContent(context.Background(), imgID, testutil.Rel(t, "sub/test.png"))
 	require.NoError(t, err)
 	require.NotNil(t, content)
 

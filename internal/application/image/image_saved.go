@@ -5,7 +5,6 @@ import (
 	"iter"
 	"main/internal/shared"
 	"main/internal/util"
-	"strings"
 )
 
 // ImageSaved 订阅目录内图片新增/更新事件（CREATE/WRITE）
@@ -18,14 +17,16 @@ func (h *Handler) ImageSaved(ctx context.Context, filter *shared.ImageFilters) i
 				if err != nil {
 					return yield(nil, err)
 				}
-				isXMP := strings.HasSuffix(strings.ToLower(event.RelPath), ".xmp")
+				// XMP 是图片的配套文件，去掉后缀后即图片本体路径；
+				// 不是配套文件时原样返回事件路径。判定与裁剪同源于 TrimExtSuffix，
+				// 避免大小写不一致的后缀漏裁
+				relPath, isXMP, err := event.RelPath.TrimExtSuffix(h.rootDir, ".xmp")
+				if err != nil {
+					return yield(nil, err)
+				}
 				isTargetAction := event.Action == shared.FileActionCreate || event.Action == shared.FileActionWrite || (event.Action == shared.FileActionRemove && isXMP)
 				if !isTargetAction {
 					return true
-				}
-				relPath := event.RelPath
-				if isXMP {
-					relPath = relPath[:len(relPath)-4]
 				}
 				img, err := h.imgRepo.Get(ctx, relPath)
 				if err != nil || img == nil {

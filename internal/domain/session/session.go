@@ -3,6 +3,7 @@ package session
 import (
 	"main/internal/apperror"
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"sort"
@@ -25,10 +26,10 @@ type Session struct {
 	createdAt   time.Time            // 会话创建时间
 	updatedAt   time.Time            // 会话最后更新时间
 
-	images         []*image.Image    // 会话所有图片集合（只增不减，引用稳定）
-	indexByID      map[scalar.ID]int // ID -> images索引映射
-	indexByRelPath map[string]int    // RelPath -> images索引映射（最新版本）
-	queue          []int             // 待处理队列（存储 images 索引）
+	images         []*image.Image       // 会话所有图片集合（只增不减，引用稳定）
+	indexByID      map[scalar.ID]int    // ID -> images索引映射
+	indexByRelPath map[relpath.Path]int // RelPath -> images索引映射（最新版本）
+	queue          []int                // 待处理队列（存储 images 索引）
 
 	currentIdx int                              // 当前处理的图片在队列中的索引
 	undoStack  []func()                         // 撤销操作栈
@@ -52,7 +53,7 @@ type Session struct {
 func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targetKeep int, images []*image.Image, imageFilterBuilder *image.FilterBuilder) *Session {
 	actions := make(map[scalar.ID]shared.ImageAction)
 	indexByID := make(map[scalar.ID]int, len(images))
-	indexByRelPath := make(map[string]int, len(images))
+	indexByRelPath := make(map[relpath.Path]int, len(images))
 	queue := make([]int, len(images))
 
 	for i, img := range images {

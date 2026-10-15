@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -107,7 +108,7 @@ func NewImageMover(rootDir string, repo image.Repository, filterBuilder *image.F
 // findTargetImages 找出指定目录下所有符合过滤条件图片的映射表（以文件名作为键）
 func (s *ImageMover) findTargetImages(
 	ctx context.Context,
-	relPath string,
+	relPath relpath.Path,
 	filterBy shared.ImageFilters,
 ) (map[string]*image.Image, error) {
 	imgFilter := s.filterBuilder.Build(filterBy)
@@ -117,8 +118,7 @@ func (s *ImageMover) findTargetImages(
 			return nil, scanErr
 		}
 		if imgFilter(img) {
-			imgName := filepath.Base(img.RelPath())
-			targetImages[imgName] = img
+			targetImages[img.RelPath().Base()] = img
 		}
 	}
 	return targetImages, nil
@@ -171,23 +171,15 @@ func (s *ImageMover) matchAssociatedFiles(
 	return nil
 }
 
-// Move 移动满足过滤条件的图片及其配套文件至目标相对路径下
+// Move 移动满足过滤条件的图片及其配套文件至目标根相对路径下
 func (s *ImageMover) Move(
 	ctx context.Context,
-	relPath string,
+	relPath relpath.Path,
 	filterBy shared.ImageFilters,
-	toDirRelPath string,
+	toDirRelPath relpath.Path,
 ) (movedCount int, targetAbsDir string, err error) {
-	// 目标目录已经是相对于项目根目录的路径，进行规范化
-	finalRelPath := filepath.Clean(toDirRelPath)
-
-	// 计算目标物理目录的绝对路径，用于创建和返回
-	targetAbsDir = filepath.Join(s.rootDir, finalRelPath)
-
-	// 安全校验：确保最终目标路径在配置的根目录范围内，防止目录穿越
-	if err := util.EnsurePathInRoot(s.rootDir, finalRelPath); err != nil {
-		return 0, "", err
-	}
+	// 目标目录已是围栏过的根相对路径，可直接换算物理绝对目录
+	targetAbsDir = toDirRelPath.Abs(s.rootDir)
 
 	// 扫描符合过滤条件的图片集
 	toMoveImages, err := s.findTargetImages(ctx, relPath, filterBy)
@@ -205,7 +197,7 @@ func (s *ImageMover) Move(
 		return 0, "", fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	srcAbsDir := filepath.Join(s.rootDir, relPath)
+	srcAbsDir := relPath.Abs(s.rootDir)
 
 	// 匹配并移动匹配的文件及其伴随文件
 	err = s.matchAssociatedFiles(ctx, srcAbsDir, toMoveImages, func(entry os.DirEntry, img *image.Image, isImageBody bool) error {
@@ -236,7 +228,7 @@ func (s *ImageMover) Move(
 // Trash 将满足过滤条件的图片及其配套伴随文件移动到专属的回收站内，并保存 meta.json
 func (s *ImageMover) Trash(
 	ctx context.Context,
-	relPath string,
+	relPath relpath.Path,
 	filterBy shared.ImageFilters,
 	message string,
 ) (historyId string, totalFileCount int, err error) {
@@ -261,7 +253,7 @@ func (s *ImageMover) Trash(
 		TrashedAt:      time.Now(),
 		TotalFileCount: -1,
 		TotalFileSize:  -1,
-		SrcRelPath:     filepath.ToSlash(relPath),
+		SrcRelPath:     relPath.String(),
 		Images:         nil,
 	}
 
@@ -287,7 +279,7 @@ func (s *ImageMover) Trash(
 	var trashedImages []trashedImageMeta
 	var filesDirCreated bool
 
-	srcAbsDir := filepath.Join(s.rootDir, relPath)
+	srcAbsDir := relPath.Abs(s.rootDir)
 
 	// 2. 匹配并移动到回收暂存目录
 	err = s.matchAssociatedFiles(ctx, srcAbsDir, toDeleteImages, func(entry os.DirEntry, img *image.Image, isImageBody bool) error {
@@ -356,7 +348,7 @@ func (s *ImageMover) Trash(
 		TrashedAt:      time.Now(),
 		TotalFileCount: movedFilesCount,
 		TotalFileSize:  totalSize,
-		SrcRelPath:     filepath.ToSlash(relPath),
+		SrcRelPath:     relPath.String(),
 		Images:         trashedImages,
 		Message:        message,
 	}

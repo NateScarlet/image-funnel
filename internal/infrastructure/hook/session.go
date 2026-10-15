@@ -8,13 +8,14 @@ import (
 	"slices"
 	"strings"
 
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/util"
 
 	"go.uber.org/zap"
 )
 
-func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
+func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath relpath.Path) error {
 	// 触发异步后台任务，尽快返回给调用者
 	go func() {
 		logErr := func(msg string, err error) {
@@ -53,7 +54,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 		logErr("failed to execute pure post_commit_session hooks", pureErrB.Build())
 
 		// 2. 扫描笔记文件并处理
-		dirAbsPath := filepath.Join(r.rootDir, dirRelPath)
+		dirAbsPath := dirRelPath.Abs(r.rootDir)
 		entries, err := os.ReadDir(dirAbsPath)
 		if err != nil {
 			logErr("failed to read directory for post_commit_session note scan", err)
@@ -66,10 +67,14 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 				continue
 			}
 
-			noteRelPath := filepath.ToSlash(filepath.Join(dirRelPath, entry.Name()))
-			noteAbsPath := filepath.Join(r.rootDir, noteRelPath)
+			// 笔记项来自文件系统遍历，在此处构造根相对路径（出生点之一）并围栏
+			noteRelPath, err := dirRelPath.Join(r.rootDir, entry.Name())
+			if err != nil {
+				noteErrB.Add(fmt.Errorf("failed to resolve note path for %s: %w", entry.Name(), err))
+				continue
+			}
 
-			contentBytes, err := os.ReadFile(noteAbsPath)
+			contentBytes, err := os.ReadFile(noteRelPath.Abs(r.rootDir))
 			if err != nil {
 				noteErrB.Add(fmt.Errorf("failed to read note %s: %w", noteRelPath, err))
 				continue
@@ -100,7 +105,7 @@ func (r *Runner) OnCommitSession(ctx context.Context, dirRelPath string) error {
 				} else {
 					scanErrB := util.NewErrorsBuilder(len(noDirectiveNoteScanHooks))
 					for _, h := range noDirectiveNoteScanHooks {
-						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath, dir, "", ""); hookErr != nil {
+						if _, _, _, hookErr := r.executeHookSync(h, "post_commit_session", evs, nil, noteRelPath.String(), dir, "", ""); hookErr != nil {
 							scanErrB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 						}
 					}

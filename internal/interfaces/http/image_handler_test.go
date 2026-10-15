@@ -503,7 +503,8 @@ func TestHandleImage_MutatedParamReturns403(t *testing.T) {
 func TestHandleImage_PathTraversalReturns403(t *testing.T) {
 	// 纵深防御：签名只证明 URL 由本服务签发，不证明目标位于根目录内。
 	// 签发侧已拒绝越界路径（见 urlconv 的签名测试），此处用同一密钥手工构造
-	// 「签名有效但路径越界」的请求，验证 handler 的围栏独立生效
+	// 「签名有效但路径越界」的请求，验证验签侧返回的根相对路径自带围栏保证：
+	// 越界载荷在构造时就失败，handler 拿不到可用的路径，因此只能返回 403
 	//
 	// 说明：含 .. 的路径会被 mux 的 cleanPath 提前 301（fail-closed），
 	// 因此这里选用能真正到达 handler 的形式——UNC 与 Windows 盘符路径
@@ -517,7 +518,7 @@ func TestHandleImage_PathTraversalReturns403(t *testing.T) {
 		"UNC 路径": "//server/share/x.jpg",
 	}
 	// 盘符只在 Windows 上是卷的一部分，在其他平台它只是根目录内的普通
-	// 相对路径（EnsurePathInRoot 按 filepath 语义判定，故同理）
+	// 相对路径（根相对路径按 filepath 语义判定，故同理）
 	if runtime.GOOS == "windows" {
 		cases["Windows 盘符相对路径"] = "C:/Windows/win.ini"
 		cases["Windows 盘符反斜杠"] = "C:\\Windows\\win.ini"

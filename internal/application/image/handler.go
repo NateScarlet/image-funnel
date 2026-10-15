@@ -5,7 +5,6 @@ import (
 	"main/internal/domain/hook"
 	"main/internal/domain/image"
 	"main/internal/pubsub"
-	"main/internal/shared"
 
 	"go.uber.org/zap"
 )
@@ -22,7 +21,7 @@ type ClipboardProvider interface {
 
 type Handler struct {
 	imageService       *image.Service
-	fileChangedSub     pubsub.Topic[*shared.FileChangedEvent]
+	fileChangedSub     pubsub.Topic[*directory.FileChangedEvent]
 	imgRepo            image.Repository
 	imgMover           image.Mover
 	imgTrasher         image.Trasher
@@ -38,7 +37,7 @@ type Handler struct {
 
 func NewHandler(
 	imageService *image.Service,
-	fileChangedSub pubsub.Topic[*shared.FileChangedEvent],
+	fileChangedSub pubsub.Topic[*directory.FileChangedEvent],
 	imgRepo image.Repository,
 	imgMover image.Mover,
 	imgTrasher image.Trasher,

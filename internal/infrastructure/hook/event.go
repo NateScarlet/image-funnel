@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"main/internal/domain/directory"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/util"
@@ -14,15 +15,15 @@ import (
 	"go.uber.org/zap"
 )
 
-func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
+func (r *Runner) handleFileChanged(event *directory.FileChangedEvent) error {
 	if event.Action != shared.FileActionCreate && event.Action != shared.FileActionWrite {
 		return nil
 	}
-	if strings.ToLower(filepath.Ext(event.RelPath)) != ".md" {
+	if strings.ToLower(filepath.Ext(event.RelPath.String())) != ".md" {
 		return nil
 	}
 
-	noteAbsPath := filepath.Join(r.rootDir, event.RelPath)
+	noteAbsPath := event.RelPath.Abs(r.rootDir)
 	contentBytes, err := os.ReadFile(noteAbsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -35,11 +36,11 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 
 	// 0. 检查内容哈希防重入列表，若是自身写入触发的事件则直接忽略
 	if r.shouldIgnoreEvent(noteAbsPath, contentBytes) {
-		r.logger.Debug("ignoring change event as it was triggered by our own write", zap.String("path", event.RelPath))
+		r.logger.Debug("ignoring change event as it was triggered by our own write", zap.String("path", event.RelPath.String()))
 		return nil
 	}
 
-	dir, err := r.dirRepo.Get(r.ctx, filepath.Dir(event.RelPath))
+	dir, err := r.dirRepo.Get(r.ctx, event.RelPath.Dir())
 	if err != nil {
 		return fmt.Errorf("failed to get directory for note update: %w", err)
 	}
@@ -74,7 +75,7 @@ func (r *Runner) handleFileChanged(event *shared.FileChangedEvent) error {
 		}
 		errB := util.NewErrorsBuilder(len(noDirectiveHooks))
 		for _, h := range noDirectiveHooks {
-			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath, dir, "", ""); hookErr != nil {
+			if _, _, _, hookErr := r.executeHookSync(h, "post_update_note", evs, nil, event.RelPath.String(), dir, "", ""); hookErr != nil {
 				errB.Add(fmt.Errorf("hook %s: %w", h.ID, hookErr))
 			}
 		}

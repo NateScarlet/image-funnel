@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"iter"
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
-	"main/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// stateFileName 目录状态在磁盘上的文件名
+const stateFileName = ".io.github.natescarlet.image-funnel.state.json"
 
 func NewDirectoryRepository(rootDir string) *DirectoryRepository {
 	return &DirectoryRepository{
@@ -25,25 +28,13 @@ type DirectoryRepository struct {
 }
 
 // Get implements [directory.Repository].
-func (d *DirectoryRepository) Get(ctx context.Context, relPath string) (*directory.Directory, error) {
-	err := util.EnsurePathInRoot(d.rootDir, relPath)
-	if err != nil {
-		return nil, err
-	}
+func (d *DirectoryRepository) Get(ctx context.Context, relPath relpath.Path) (*directory.Directory, error) {
 	return directory.FromRepository(relPath), nil
 }
 
-func (d *DirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq2[*directory.Directory, error] {
+func (d *DirectoryRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*directory.Directory, error] {
 	return func(yield func(*directory.Directory, error) bool) {
-		if relPath != "" {
-			if err := util.EnsurePathInRoot(d.rootDir, relPath); err != nil {
-				yield(nil, err)
-				return
-			}
-		}
-
-		absPath := filepath.Join(d.rootDir, relPath)
-		entries, err := os.ReadDir(absPath)
+		entries, err := os.ReadDir(relPath.Abs(d.rootDir))
 		if err != nil {
 			yield(nil, fmt.Errorf("failed to read directory: %w", err))
 			return
@@ -58,7 +49,14 @@ func (d *DirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq
 				continue
 			}
 
-			subRelPath := filepath.Join(relPath, entry.Name())
+			// 子目录来自文件系统遍历，在此处构造根相对路径（出生点之一）并围栏
+			subRelPath, err := relPath.Join(d.rootDir, entry.Name())
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+				continue
+			}
 			dirInfo, err := d.Get(ctx, subRelPath)
 			if err != nil {
 				if !yield(nil, err) {
@@ -75,12 +73,8 @@ func (d *DirectoryRepository) Find(ctx context.Context, relPath string) iter.Seq
 }
 
 // ReadState implements [directory.Repository].
-func (d *DirectoryRepository) ReadState(ctx context.Context, relPath string) (*shared.DirectoryStateDTO, error) {
-	err := util.EnsurePathInRoot(d.rootDir, relPath)
-	if err != nil {
-		return nil, err
-	}
-	absPath := filepath.Join(d.rootDir, relPath, ".io.github.natescarlet.image-funnel.state.json")
+func (d *DirectoryRepository) ReadState(ctx context.Context, relPath relpath.Path) (*shared.DirectoryStateDTO, error) {
+	absPath := filepath.Join(relPath.Abs(d.rootDir), stateFileName)
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -203,12 +197,8 @@ func (d *DirectoryRepository) readStateV2(data []byte) (*shared.DirectoryStateDT
 }
 
 // WriteState implements [directory.Repository].
-func (d *DirectoryRepository) WriteState(ctx context.Context, relPath string, state *shared.DirectoryStateDTO) error {
-	err := util.EnsurePathInRoot(d.rootDir, relPath)
-	if err != nil {
-		return err
-	}
-	absPath := filepath.Join(d.rootDir, relPath, ".io.github.natescarlet.image-funnel.state.json")
+func (d *DirectoryRepository) WriteState(ctx context.Context, relPath relpath.Path, state *shared.DirectoryStateDTO) error {
+	absPath := filepath.Join(relPath.Abs(d.rootDir), stateFileName)
 
 	if state == nil {
 		if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {

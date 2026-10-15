@@ -7,6 +7,7 @@ import (
 	"iter"
 	"main/internal/domain/directory"
 	domainimage "main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"os"
@@ -44,6 +45,16 @@ func newTestContext(t *testing.T) *testContext {
 	}
 }
 
+// rel 构造测试用根相对路径，构造失败即测试用例本身有问题
+func (c *testContext) rel(t *testing.T, relPath string) relpath.Path {
+	t.Helper()
+	p, err := relpath.New(c.rootDir, relPath)
+	if err != nil {
+		t.Fatalf("构造根相对路径 %q 失败: %v", relPath, err)
+	}
+	return p
+}
+
 func TestNewRepository(t *testing.T) {
 	ctx := newTestContext(t)
 	assert.NotNil(t, ctx.imageRepo)
@@ -57,7 +68,7 @@ func TestFindImages(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	images := collectImages(ctx.imageRepo.Find(context.Background(), "."))
+	images := collectImages(ctx.imageRepo.Find(context.Background(), relpath.Path{}))
 	require.Len(t, images, 1)
 	assert.Equal(t, "test.jpg", images[0].Filename())
 }
@@ -65,7 +76,7 @@ func TestFindImages(t *testing.T) {
 func TestFindImages_EmptyDirectory(t *testing.T) {
 	ctx := newTestContext(t)
 
-	images := collectImages(ctx.imageRepo.Find(context.Background(), "."))
+	images := collectImages(ctx.imageRepo.Find(context.Background(), relpath.Path{}))
 	require.Empty(t, images)
 }
 
@@ -80,9 +91,9 @@ func TestFindDirectories(t *testing.T) {
 	err = os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	dirs := collectDirInfos(ctx.dirRepo.Find(context.Background(), "."))
+	dirs := collectDirInfos(ctx.dirRepo.Find(context.Background(), relpath.Path{}))
 	require.Len(t, dirs, 1)
-	assert.Equal(t, "subdir", dirs[0].RelPath())
+	assert.Equal(t, "subdir", dirs[0].RelPath().String())
 }
 
 func TestAnalyzeDirectory(t *testing.T) {
@@ -92,12 +103,12 @@ func TestAnalyzeDirectory(t *testing.T) {
 	err := os.WriteFile(testFile, []byte("test"), 0644)
 	require.NoError(t, err)
 
-	stats, err := ctx.dirAnalyzer.Analyze(context.Background(), ".")
+	stats, err := ctx.dirAnalyzer.Analyze(context.Background(), relpath.Path{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.ImageCount())
 	assert.Equal(t, 0, stats.SubdirectoryCount())
 	assert.NotNil(t, stats.LatestImage())
-	assert.Equal(t, testFile, filepath.Join(ctx.rootDir, stats.LatestImage().RelPath()))
+	assert.Equal(t, testFile, stats.LatestImage().RelPath().Abs(ctx.rootDir))
 	assert.Equal(t, 1, stats.RatingCounts()[0])
 }
 
@@ -154,7 +165,7 @@ func TestMoveImages(t *testing.T) {
 	}
 
 	// 移动到相对于根目录的新目录
-	moved, targetAbsDir, err := ctx.imageMover.Move(context.Background(), srcDir, filter, "target-dir")
+	moved, targetAbsDir, err := ctx.imageMover.Move(context.Background(), ctx.rel(t, srcDir), filter, ctx.rel(t, "target-dir"))
 	require.NoError(t, err)
 	assert.Equal(t, 2, moved) // 应该移动了 img1.jpg 和 img2.jpg 两张图片
 
@@ -171,38 +182,6 @@ func TestMoveImages(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg.txt"))
 	assert.NoFileExists(t, filepath.Join(ctx.rootDir, srcDir, "img1.jpg.json"))
 	assert.FileExists(t, filepath.Join(ctx.rootDir, srcDir, "other.txt"))
-
-	// 测试二：安全边界校验越界（尝试移动到根目录外部）
-	_, _, err = ctx.imageMover.Move(context.Background(), srcDir, filter, "../outside")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "escapes root directory")
-}
-
-func TestImageRepository_AbsolutePaths(t *testing.T) {
-	ctx := newTestContext(t)
-
-	// 写入测试图片
-	testFileName := "test.jpg"
-	testFileAbsPath := filepath.Join(ctx.rootDir, testFileName)
-	err := os.WriteFile(testFileAbsPath, []byte("test"), 0644)
-	require.NoError(t, err)
-
-	// 测试一：Get 接口接收绝对路径，应该返回错误
-	img, err := ctx.imageRepo.Get(context.Background(), testFileAbsPath)
-	require.Error(t, err)
-	assert.Nil(t, img)
-	assert.Contains(t, err.Error(), "absolute path not allowed")
-
-	// 测试二：Find 接口接收绝对路径，迭代器应该返回错误
-	var findErr error
-	for _, err := range ctx.imageRepo.Find(context.Background(), ctx.rootDir) {
-		if err != nil {
-			findErr = err
-			break
-		}
-	}
-	require.Error(t, findErr)
-	assert.Contains(t, findErr.Error(), "absolute path not allowed")
 }
 
 func TestTrashAndUndo(t *testing.T) {
@@ -227,7 +206,7 @@ func TestTrashAndUndo(t *testing.T) {
 	}
 
 	// 1. 测试 Trash 暂存
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), filter, "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, historyId)
 	assert.Equal(t, 3, fileCount) // img1.jpg, img1.jpg.txt, img2.jpg
@@ -288,7 +267,7 @@ func TestEmptyTrash(t *testing.T) {
 		Rating: []int{0},
 	}
 
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), filter, "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, fileCount)
 
@@ -338,7 +317,7 @@ func TestEmptyTrash_PlaceholderMetaCountsAsZero(t *testing.T) {
 	}
 
 	// 正常历史：完整写入 meta，总大小为 img1 的 4 字节
-	_, _, err = ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	_, _, err = ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), filter, "")
 	require.NoError(t, err)
 
 	// 占位历史：模拟断电残留的占位 meta（大小 -1），保留期设为过去以强制清空
@@ -388,9 +367,9 @@ func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {
 
 	// 找出 img1.png 的 ID
 	var img1PngID scalar.ID
-	for img, err := range ctx.imageRepo.Find(context.Background(), srcDir) {
+	for img, err := range ctx.imageRepo.Find(context.Background(), ctx.rel(t, srcDir)) {
 		require.NoError(t, err)
-		if filepath.Base(img.RelPath()) == "img1.png" {
+		if img.RelPath().Base() == "img1.png" {
 			img1PngID = img.ID()
 		}
 	}
@@ -402,7 +381,7 @@ func TestTrash_ExcludeSameBaseDifferentExt(t *testing.T) {
 	}
 
 	// 执行 Trash
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), filter, "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, historyId)
 	assert.Equal(t, 2, fileCount) // 仅移动 img1.png 和 img1.png.xmp
@@ -546,7 +525,7 @@ func TestUndoTrashConflict(t *testing.T) {
 	filter := shared.ImageFilters{}
 
 	// 1. 将两个图片移入回收站
-	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), srcDir, filter, "")
+	historyId, fileCount, err := ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), filter, "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, fileCount)
 
@@ -600,7 +579,7 @@ func TestEmptyTrash_Concurrent(t *testing.T) {
 		err = os.WriteFile(imgFile, []byte("test content"), 0644)
 		require.NoError(t, err)
 
-		_, _, err = ctx.imageMover.Trash(context.Background(), srcDir, shared.ImageFilters{}, "")
+		_, _, err = ctx.imageMover.Trash(context.Background(), ctx.rel(t, srcDir), shared.ImageFilters{}, "")
 		require.NoError(t, err)
 	}
 

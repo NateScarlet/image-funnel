@@ -16,7 +16,9 @@ import (
 
 	"main/internal/domain/directory"
 	domimage "main/internal/domain/image"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -240,7 +242,7 @@ command = '''%s'''
 	fileChangedSub := &mockFileChangedSub{}
 	logger := zap.NewNop()
 	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[string]*directory.Directory{".": directory.FromRepository(".")},
+		dirs: map[relpath.Path]*directory.Directory{relpath.Path{}: directory.FromRepository(relpath.Path{})},
 	}
 	if imgRepo == nil {
 		imgRepo = &mockImageRepository{}
@@ -389,7 +391,7 @@ func TestAutocomplete_JSONRPC_RequestContract(t *testing.T) {
 
 func TestAutocomplete_JSONRPC_ImageContextInParams(t *testing.T) {
 	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", "test.png", scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
+	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
 	env := newAutocompleteTestRunner(t, true, nil, &mockImageRepository{images: []*domimage.Image{img}})
 
 	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "test.png.md", "/add", "d")
@@ -403,7 +405,7 @@ func TestAutocomplete_JSONRPC_ImageContextInParams(t *testing.T) {
 	assert.Equal(t, filepath.Join(env.tempDir, "test.png.md"), echo.NotePath)
 	// 笔记位于根目录，目录上下文随请求传递
 	assert.Equal(t, env.tempDir, echo.RootDir)
-	assert.Equal(t, ".", echo.DirectoryRelPath)
+	assert.Equal(t, "", echo.DirectoryRelPath)
 }
 
 // #endregion

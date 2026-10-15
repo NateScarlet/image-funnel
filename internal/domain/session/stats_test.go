@@ -56,7 +56,7 @@ func TestStats_AfterMarkingImages(t *testing.T) {
 
 func TestStats_CurrentFilterExcludesKeptImage(t *testing.T) {
 	// 5 images with rating 1, 2, 3, 4, 5
-	images := createTestImagesWithRatings([]int{1, 2, 3, 4, 5})
+	images := createTestImagesWithRatings(t, []int{1, 2, 3, 4, 5})
 	// Target keep 1
 	session := New(scalar.ToID("s1"), scalar.ToID("d1"), nil, 1, images, image.NewFilterBuilder())
 

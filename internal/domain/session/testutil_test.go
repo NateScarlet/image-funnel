@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -20,7 +22,6 @@ import (
 )
 
 // #region Helper Functions
-
 // ActionOf returns the actual status of an image in the session (zero value = Pending/Unprocessed).
 func ActionOf(s *Session, id scalar.ID) shared.ImageAction {
 	return s.actions[id]
@@ -32,13 +33,13 @@ func ImagesOf(s *Session) []*image.Image {
 }
 
 // createTestImages creates a slice of dummy images for testing.
-func createTestImages(count int) []*image.Image {
+func createTestImages(t *testing.T, count int) []*image.Image {
 	images := make([]*image.Image, count)
 	for i := 0; i < count; i++ {
 		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
-			fmt.Sprintf("test-%d.jpg", i),
+			testutil.Rel(t, fmt.Sprintf("test-%d.jpg", i)),
 			scalar.ToID("test-dir-id"),
 			1000,
 			time.Now(),
@@ -51,14 +52,14 @@ func createTestImages(count int) []*image.Image {
 }
 
 // createTestImagesWithRatings creates a slice of images with specified ratings.
-func createTestImagesWithRatings(ratings []int) []*image.Image {
+func createTestImagesWithRatings(t *testing.T, ratings []int) []*image.Image {
 	images := make([]*image.Image, len(ratings))
 	for i, rating := range ratings {
 		xmpData := metadata.NewXMPData(rating, "", time.Time{}, "")
 		images[i] = image.New(
 			scalar.ToID(fmt.Sprintf("img-%d", i)),
 			"test.jpg",
-			fmt.Sprintf("test-%d.jpg", i),
+			testutil.Rel(t, fmt.Sprintf("test-%d.jpg", i)),
 			scalar.ToID("test-dir-id"),
 			1000,
 			time.Now(),
@@ -71,9 +72,9 @@ func createTestImagesWithRatings(ratings []int) []*image.Image {
 }
 
 // setupTestSession creates and returns a test session object.
-func setupTestSession(_ *testing.T, imageCount int, targetKeep int) *Session {
+func setupTestSession(t *testing.T, imageCount int, targetKeep int) *Session {
 	filter := &shared.ImageFilters{Rating: []int{0}}
-	images := createTestImages(imageCount)
+	images := createTestImages(t, imageCount)
 	session := New(scalar.ToID("test-id"), scalar.ToID("test-dir-id"), filter, targetKeep, images, image.NewFilterBuilder())
 	return session
 }
@@ -173,18 +174,18 @@ func (f *FakeSessionRepo) LastSession(ctx context.Context, directoryID scalar.ID
 	return latest, func() {}, nil
 }
 
-// mockFileChangedSub 实现 pubsub.Topic[*shared.FileChangedEvent]
+// mockFileChangedSub 实现 pubsub.Topic[*directory.FileChangedEvent]
 type mockFileChangedSub struct {
-	events chan *shared.FileChangedEvent
+	events chan *directory.FileChangedEvent
 }
 
-func (m *mockFileChangedSub) Publish(ctx context.Context, event *shared.FileChangedEvent, opts ...pubsub.PublishOption) error {
+func (m *mockFileChangedSub) Publish(ctx context.Context, event *directory.FileChangedEvent, opts ...pubsub.PublishOption) error {
 	m.events <- event
 	return nil
 }
 
-func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.FileChangedEvent, error] {
-	return func(yield func(*shared.FileChangedEvent, error) bool) {
+func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*directory.FileChangedEvent, error] {
+	return func(yield func(*directory.FileChangedEvent, error) bool) {
 		for {
 			select {
 			case <-ctx.Done():
@@ -227,12 +228,12 @@ func (m *mockMetadataUpdatedPub) Subscribe(ctx context.Context) iter.Seq2[*share
 type FakeImageRepo struct {
 	MetaRepo *FakeMetadataRepo
 	BaseDir  string
-	Images   map[string]*image.Image // RelPath -> Image
+	Images   map[relpath.Path]*image.Image // RelPath -> Image
 }
 
-func (s *FakeImageRepo) Get(ctx context.Context, relPath string) (*image.Image, error) {
+func (s *FakeImageRepo) Get(ctx context.Context, relPath relpath.Path) (*image.Image, error) {
 	if img, ok := s.Images[relPath]; ok {
-		fullPath := filepath.Join(s.BaseDir, relPath)
+		fullPath := relPath.Abs(s.BaseDir)
 		if xmp, _ := s.MetaRepo.Read(fullPath); xmp != nil {
 			return image.New(
 				img.ID(),
@@ -251,7 +252,7 @@ func (s *FakeImageRepo) Get(ctx context.Context, relPath string) (*image.Image, 
 	return nil, os.ErrNotExist
 }
 
-func (s *FakeImageRepo) Find(ctx context.Context, relPath string) iter.Seq2[*image.Image, error] {
+func (s *FakeImageRepo) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*image.Image, error] {
 	return func(yield func(*image.Image, error) bool) {}
 }
 

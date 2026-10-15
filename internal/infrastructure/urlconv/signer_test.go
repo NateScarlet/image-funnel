@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -82,7 +83,7 @@ func TestGenerateSignedURL_KeepsPathSeparatorsLiteral(t *testing.T) {
 
 	validated, err := signer.ValidateSignedURL(raw)
 	require.NoError(t, err)
-	assert.Equal(t, relPath, validated)
+	assert.Equal(t, relPath, validated.String())
 }
 
 func TestValidate_RoundTrip(t *testing.T) {
@@ -95,7 +96,7 @@ func TestValidate_RoundTrip(t *testing.T) {
 
 	gotPath, err := signer.ValidateSignedURL(signedURL.String())
 	require.NoError(t, err)
-	assert.Equal(t, relPath, gotPath)
+	assert.Equal(t, relPath, gotPath.String())
 }
 
 func TestValidate_SubdirectoryAndSpecialCharsRoundTrip(t *testing.T) {
@@ -109,7 +110,7 @@ func TestValidate_SubdirectoryAndSpecialCharsRoundTrip(t *testing.T) {
 
 	gotPath, err := signer.ValidateSignedURL(signedURL.String())
 	require.NoError(t, err)
-	assert.Equal(t, relPath, gotPath, "特殊字符应原样往返")
+	assert.Equal(t, relPath, gotPath.String(), "特殊字符应原样往返")
 }
 
 func TestValidate_TamperedRelPathFails(t *testing.T) {
@@ -140,7 +141,7 @@ func TestValidate_AbsoluteForm(t *testing.T) {
 	for _, prefix := range []string{"http://localhost", "https://example.com:8080"} {
 		got, err := signer.ValidateSignedURL(prefix + signedURL.String())
 		require.NoError(t, err, "absolute-form 应能验签: %s", prefix)
-		assert.Equal(t, filepath.ToSlash(relPath), got)
+		assert.Equal(t, filepath.ToSlash(relPath), got.String())
 	}
 
 	// 无法识别的目标串必须报错而不是当作路径
@@ -293,4 +294,44 @@ func TestToRelativePath_Absolute(t *testing.T) {
 	result, err := signer.toRelativePath(absPath)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result)
+}
+
+// 密钥泄漏场景下伪造的越界签名同样被拒：验签通过后仍必须构造根相对路径，
+// 越界载荷无法被构造出来，该 URL 因此无法换取任何文件内容
+func TestValidate_OutOfRootPayloadRejected(t *testing.T) {
+	signer, rootDir := newTestSigner(t)
+	writeSource(t, filepath.Join(rootDir, "photo.jpg"))
+
+	escapes := map[string]string{
+		"parent traversal": "../secret.jpg",
+		"absolute posix":   "/etc/passwd",
+		"UNC":              "//server/share/x.jpg",
+	}
+	if runtime.GOOS == "windows" {
+		escapes["drive letter"] = "C:/Windows/win.ini"
+	}
+	for name, escaped := range escapes {
+		t.Run(name, func(t *testing.T) {
+			forged := forgeSignedURL(t, signer, escaped)
+			_, err := signer.ValidateSignedURL(forged)
+			assert.Error(t, err, "越界载荷必须在验签阶段被拒: %q", escaped)
+		})
+	}
+}
+
+// 签发侧同样拒绝根目录之外的路径
+func TestGenerateSignedURL_RefusesOutOfRootPath(t *testing.T) {
+	signer, rootDir := newTestSigner(t)
+
+	_, err := signer.GenerateSignedURL(filepath.Join(rootDir, "..", "secret.jpg"))
+	assert.Error(t, err, "签发侧不得为越界路径提供凭据")
+}
+
+// forgeSignedURL 用签名器的密钥为任意载荷构造签名有效的 URL，
+// 用于模拟密钥泄漏后攻击者可自行签名
+func forgeSignedURL(t *testing.T, signer *Signer, relPath string) string {
+	t.Helper()
+
+	payload := relPath + "?s=1&t=1"
+	return ImageURLPrefix + signer.signatureFor(payload) + "/" + payload
 }

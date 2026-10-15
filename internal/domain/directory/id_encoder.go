@@ -1,38 +1,37 @@
 package directory
 
 import (
-	"fmt"
-	"path/filepath"
-	"strings"
-
 	"main/internal/apperror"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"strings"
 )
 
 const idPrefix = "dir:"
 
-func encodeID(relPath string) scalar.ID {
-	// 统一防御性规整：如果目录相对路径为空字符串，则规范为代表当前目录的 "."
-	if relPath == "" {
-		relPath = "."
+func encodeID(relPath relpath.Path) scalar.ID {
+	// 根目录的 ID 字面形式为 "dir:."，保持其与既有客户端缓存兼容
+	raw := relPath.String()
+	if raw == "" {
+		raw = "."
 	}
-	return scalar.ToID(idPrefix + filepath.ToSlash(relPath))
+	return scalar.ToID(idPrefix + raw)
 }
 
-func decodeID(id scalar.ID) (string, error) {
+// decodeID 从目录 ID 中提取根相对路径。
+// rootDir 仅用于还原时重新围栏：ID 由服务端签发，但仍是不可信输入
+func decodeID(rootDir string, id scalar.ID) (relpath.Path, error) {
 	idStr := id.String()
 	if idStr == "" {
-		return "", apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")
+		return relpath.Path{}, apperror.New("INVALID_ID", "id must not be empty", "ID 不能为空")
 	}
 	if !strings.HasPrefix(idStr, idPrefix) {
-		return "", apperror.New("INVALID_DIRECTORY_ID", "invalid directory ID format", "目录 ID 格式无效")
+		return relpath.Path{}, apperror.New("INVALID_DIRECTORY_ID", "invalid directory ID format", "目录 ID 格式无效")
 	}
 
-	relPath := strings.TrimPrefix(idStr, idPrefix)
-	// 校验以确保路径不是绝对路径，防御性拒绝绝对路径的入参
-	if filepath.IsAbs(relPath) {
-		return "", fmt.Errorf("absolute path not allowed in directory ID: %s", relPath)
+	rel, err := relpath.New(rootDir, strings.TrimPrefix(idStr, idPrefix))
+	if err != nil {
+		return relpath.Path{}, apperror.New("INVALID_DIRECTORY_ID", "invalid directory ID path", "目录 ID 中的路径无效")
 	}
-
-	return filepath.ToSlash(relPath), nil
+	return rel, nil
 }

@@ -32,16 +32,16 @@ func (h *Handler) MoveImages(
 
 	h.logger.Info("will move images",
 		zap.Stringer("directoryID", directoryID),
-		zap.String("fromDirectory", relPath),
-		zap.String("targetRelPath", targetRelPath),
+		zap.String("fromDirectory", relPath.String()),
+		zap.String("targetRelPath", targetRelPath.String()),
 	)
 
 	movedCount, targetAbsDir, err = h.imgMover.Move(ctx, relPath, filterBy, targetRelPath)
 	if err != nil {
 		h.logger.Error("move images failed",
 			zap.Stringer("directoryID", directoryID),
-			zap.String("fromDirectory", relPath),
-			zap.String("targetRelPath", targetRelPath),
+			zap.String("fromDirectory", relPath.String()),
+			zap.String("targetRelPath", targetRelPath.String()),
 			zap.Duration("duration", time.Since(startTime)),
 			zap.Error(err),
 		)
@@ -50,8 +50,8 @@ func (h *Handler) MoveImages(
 
 	h.logger.Info("did move images",
 		zap.Stringer("directoryID", directoryID),
-		zap.String("fromDirectory", relPath),
-		zap.String("targetRelPath", targetRelPath),
+		zap.String("fromDirectory", relPath.String()),
+		zap.String("targetRelPath", targetRelPath.String()),
 		zap.Int("movedCount", movedCount),
 		zap.String("targetAbsDir", targetAbsDir),
 		zap.Duration("duration", time.Since(startTime)),

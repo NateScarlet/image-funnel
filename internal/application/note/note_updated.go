@@ -19,7 +19,7 @@ func (h *Handler) NoteUpdated(ctx context.Context, id scalar.ID) iter.Seq2[*shar
 				continue
 			}
 
-			if !strings.HasSuffix(strings.ToLower(event.RelPath), ".md") {
+			if !strings.HasSuffix(strings.ToLower(event.RelPath.String()), ".md") {
 				continue
 			}
 

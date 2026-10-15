@@ -3,7 +3,9 @@ package directory
 import (
 	"context"
 	"main/internal/domain/directory"
+	"main/internal/domain/relpath"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"testing"
 	"time"
 
@@ -15,11 +17,11 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	defer cancel()
 
 	logger := zap.NewNop()
-	repo := &mockRepository{dirs: make(map[string]*directory.Directory)}
+	repo := &mockRepository{dirs: make(map[relpath.Path]*directory.Directory)}
 	watcher := &mockWatcher{}
-	pub := &mockFileChangedPub{ch: make(chan *shared.FileChangedEvent, 100)}
+	pub := &mockFileChangedPub{ch: make(chan *directory.FileChangedEvent, 100)}
 
-	dirSvc, cleanup := directory.NewService(watcher, pub, "C:/mock_root", repo, &mockRenamer{}, logger)
+	dirSvc, cleanup := directory.NewService(watcher, pub, testRootDir, repo, &mockRenamer{}, logger)
 	defer cleanup()
 
 	dtoFactory := NewDTOFactory(nil)
@@ -29,7 +31,7 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	// 将 batchWindow 缩短到 40ms 方便快速测试
 	handler.dirEntryDeletedBatchWindow = 40 * time.Millisecond
 
-	dirA_ID := directory.FromRepository("dir_a").ID()
+	dirA_ID := mustDir(t, "dir_a").ID()
 
 	results := handler.DirEntryDeleted(ctx, &dirA_ID)
 
@@ -44,9 +46,9 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	}()
 
 	// 1. 发送第 1 个删除事件。期望：立即收到，不等待。
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file1.png",
+		RelPath:     testutil.Rel(t, "dir_a/file1.png"),
 		Action:      shared.FileActionRemove,
 	}
 
@@ -60,14 +62,14 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	}
 
 	// 2. 在 40ms 窗口期内发送第 2 和第 3 个事件。期望：不立即收到（它们在睡眠限流中）。
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file2.png",
+		RelPath:     testutil.Rel(t, "dir_a/file2.png"),
 		Action:      shared.FileActionRemove,
 	}
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file3.png",
+		RelPath:     testutil.Rel(t, "dir_a/file3.png"),
 		Action:      shared.FileActionRename,
 	}
 
@@ -98,9 +100,9 @@ func TestDirEntryDeleted_Throttling(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// 5. 发送事件。因为已经恢复到空闲状态，应该又是立即收到。
-	pub.ch <- &shared.FileChangedEvent{
+	pub.ch <- &directory.FileChangedEvent{
 		DirectoryID: dirA_ID,
-		RelPath:     "dir_a/file4.png",
+		RelPath:     testutil.Rel(t, "dir_a/file4.png"),
 		Action:      shared.FileActionRemove,
 	}
 

@@ -7,13 +7,13 @@ import (
 	"maps"
 	"math/rand"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"main/internal/domain/directory"
 	domhook "main/internal/domain/hook"
+	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/util"
 
@@ -30,14 +30,14 @@ func isFileNotFoundError(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
 }
 
-func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Directory, relPath string, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
+func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Directory, relPath relpath.Path, content string, triggerType string, filterHookID scalar.ID) (bool, error) {
 	fastCheck := fastCheckReg.MatchString(content)
 	contentSummary := content
 	if len(contentSummary) > 500 {
 		contentSummary = contentSummary[:500] + "...(truncated)"
 	}
 	r.logger.Debug("executeNoteDirectives start",
-		zap.String("relPath", relPath),
+		zap.String("relPath", relPath.String()),
 		zap.String("triggerType", triggerType),
 		zap.String("filterHookID", filterHookID.String()),
 		zap.Bool("fastCheck", fastCheck),
@@ -79,7 +79,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		r.muTasks.Unlock()
 	}
 
-	noteAbsPath := filepath.Join(r.rootDir, relPath)
+	noteAbsPath := relPath.Abs(r.rootDir)
 
 	// 1a. 检查笔记文件是否存在，如果已被 retention 删除则静默跳过
 	if _, err := os.Stat(noteAbsPath); os.IsNotExist(err) {
@@ -104,12 +104,12 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		}()
 
 		if isBefore3 {
-			r.logger.Debug("associated new path with active hook-run-id", zap.String("path", relPath), zap.String("run_id", runID))
+			r.logger.Debug("associated new path with active hook-run-id", zap.String("path", relPath.String()), zap.String("run_id", runID))
 			return false, nil
 		}
 
 		// 1b2. 若步骤 3 已完毕，执行后置迟到擦除
-		r.logger.Debug("executing late path cleanup for known hook-run-id", zap.String("path", relPath), zap.String("run_id", runID))
+		r.logger.Debug("executing late path cleanup for known hook-run-id", zap.String("path", relPath.String()), zap.String("run_id", runID))
 		if err := r.postProcessNoteDirectives(ctx, noteAbsPath, runID, triggerType, hookMap, failedDirectives); err != nil {
 			return false, err
 		}
@@ -122,7 +122,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		triggerType   string
 		events        []hookEvent
 		args          []string
-		relPath       string
+		relPath       relpath.Path
 		dir           *directory.Directory
 		directiveText string    // 完整指令文本（如 "/fork --option value"）
 		action        string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
@@ -214,7 +214,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 		// 寻找配套的图片
 		evs, err := r.findAssociatedImageEvents(ctx, relPath)
 		if err != nil {
-			r.logger.Error("failed to get associated image for note directive", zap.String("note_path", relPath), zap.Error(err))
+			r.logger.Error("failed to get associated image for note directive", zap.String("note_path", relPath.String()), zap.Error(err))
 			continue
 		}
 
@@ -254,7 +254,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 	if newContent != content {
 		newContentBytes := []byte(newContent)
 		if err := r.writeFileWithIgnore(noteAbsPath, newContentBytes, 0644); err != nil {
-			r.logger.Error("failed to write hook-run-id to note", zap.String("path", relPath), zap.Error(err))
+			r.logger.Error("failed to write hook-run-id to note", zap.String("path", relPath.String()), zap.Error(err))
 			return false, err
 		}
 		content = newContent
@@ -300,7 +300,7 @@ func (r *Runner) executeNoteDirectives(ctx context.Context, dir *directory.Direc
 			continue
 		}
 
-		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath, p.dir, runID, p.directiveText)
+		action, stdout, stderr, err := r.executeHookSync(p.config, p.triggerType, p.events, p.args, p.relPath.String(), p.dir, runID, p.directiveText)
 		if err != nil {
 			// 仅当 on_fail_action 为 REMOVE 且错误与文件不存在相关时，不传播错误
 			if p.config.Directive != nil && p.config.Directive.OnFailAction == "REMOVE" && isFileNotFoundError(err) {

@@ -130,7 +130,7 @@ func main() {
 	deviceDTOFactory := appdevice.NewDTOFactory()
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
-	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*shared.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
+	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*domdirectory.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
 	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*pairing.Request](pubsub.InMemoryTopicWithCapacity(1024))
 	prResolvedTopic, _ := pubsub.NewInMemoryTopic[*pairing.RequestResolvedEvent](pubsub.InMemoryTopicWithCapacity(1024))
 	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*ddevice.Device]()
@@ -243,7 +243,7 @@ func main() {
 	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
 	noteFilterBuilder := note.NewFilterBuilder()
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
-	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir)), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
+	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
 	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
 
@@ -434,7 +434,7 @@ func (w *imageServiceWrapper) GetPaths(ctx context.Context, ids []string) ([]str
 			return nil, err
 		}
 		if img != nil {
-			paths = append(paths, filepath.Join(w.rootDir, img.RelPath()))
+			paths = append(paths, img.RelPath().Abs(w.rootDir))
 		}
 	}
 	return paths, nil

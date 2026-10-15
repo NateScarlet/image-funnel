@@ -2,11 +2,14 @@ package session
 
 import (
 	"context"
+	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
+	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"main/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -112,7 +115,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
@@ -120,7 +123,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
-		Images:   make(map[string]*image.Image),
+		Images:   make(map[relpath.Path]*image.Image),
 	}
 
 	imageFb := image.NewFilterBuilder()
@@ -129,9 +132,9 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
-	img3 := image.New(scalar.ToID("3"), "test3.jpg", "test3.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", testutil.Rel(t, "test2.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(3, "", time.Time{}, ""), 100, 100)
+	img3 := image.New(scalar.ToID("3"), "test3.jpg", testutil.Rel(t, "test3.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[img1.RelPath()] = img1
 	fakeScanner.Images[img2.RelPath()] = img2
@@ -182,7 +185,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
@@ -190,14 +193,14 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
-		Images:   make(map[string]*image.Image),
+		Images:   make(map[relpath.Path]*image.Image),
 	}
 
 	imageFb := image.NewFilterBuilder()
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 	fakeScanner.Images[img1.RelPath()] = img1
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
@@ -235,7 +238,7 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
@@ -243,15 +246,15 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
-		Images:   make(map[string]*image.Image),
+		Images:   make(map[relpath.Path]*image.Image),
 	}
 
 	imageFb := image.NewFilterBuilder()
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", testutil.Rel(t, "test2.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[img1.RelPath()] = img1
 	fakeScanner.Images[img2.RelPath()] = img2
@@ -316,7 +319,7 @@ func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
 
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
@@ -324,15 +327,15 @@ func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
 	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
-		Images:   make(map[string]*image.Image),
+		Images:   make(map[relpath.Path]*image.Image),
 	}
 
 	imageFb := image.NewFilterBuilder()
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", testutil.Rel(t, "test2.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[img1.RelPath()] = img1
 	fakeScanner.Images[img2.RelPath()] = img2
@@ -382,7 +385,7 @@ func TestService_Commit_DeletedFile_ShouldSkipWithoutError(t *testing.T) {
 
 	fakeMeta := NewFakeMetadataRepo()
 	fakeSessionRepo := NewFakeSessionRepo()
-	fileChangedSub := &mockFileChangedSub{events: make(chan *shared.FileChangedEvent, 10)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
 	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
 	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
 	defer cleanup()
@@ -390,15 +393,15 @@ func TestService_Commit_DeletedFile_ShouldSkipWithoutError(t *testing.T) {
 	fakeScanner := &FakeImageRepo{
 		MetaRepo: fakeMeta,
 		BaseDir:  tempDir,
-		Images:   make(map[string]*image.Image),
+		Images:   make(map[relpath.Path]*image.Image),
 	}
 
 	imageFb := image.NewFilterBuilder()
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
 	defer cleanupService()
 
-	img1 := image.New(scalar.ToID("1"), "test1.jpg", "test1.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
-	img2 := image.New(scalar.ToID("2"), "test2.jpg", "test2.jpg", scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", testutil.Rel(t, "test2.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
 
 	fakeScanner.Images[img1.RelPath()] = img1
 	// 不将 img2 加入 fakeScanner.Images，模拟文件已被删除
