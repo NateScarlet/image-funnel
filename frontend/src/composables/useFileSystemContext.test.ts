@@ -28,7 +28,7 @@ describe("resolveAbsPath", () => {
 
   test("Windows 风格根路径按反斜杠拼接并转换相对路径分隔符", () => {
     expect(resolveAbsPath("C:\\Pictures", "a/b/c.jpg")).toBe("C:\\Pictures\\a\\b\\c.jpg");
-    expect(resolveAbsPath("C:\\Pictures\\", "a\\b")).toBe("C:\\Pictures\\\\a\\b");
+    expect(resolveAbsPath("C:\\Pictures", "a\\b")).toBe("C:\\Pictures\\a\\b");
   });
 
   test("Unix 风格根路径按斜杠拼接并转换相对路径分隔符", () => {
@@ -40,6 +40,7 @@ describe("resolveAbsPath", () => {
 describe("resolveDisplayName", () => {
   test("根目录显示根绝对路径本身", () => {
     expect(resolveDisplayName("C:\\Pictures", "")).toBe("C:\\Pictures");
+    expect(resolveDisplayName("/mnt/pics", "")).toBe("/mnt/pics");
   });
 
   test("未加载的根相对路径显示为空串，与根目录产生不同结果", () => {

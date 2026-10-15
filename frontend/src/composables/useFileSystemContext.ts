@@ -13,7 +13,8 @@ import basename from "@/utils/basename";
  * - `relPath` 为 `undefined` → `""`，语义是「未知」，与确知为根目录的零值区分开
  * - `relPath` 为 `""` → 根绝对路径本身，即根目录
  *
- * 分隔符判定沿用既有启发式：根绝对路径含 `\` 即为 Windows 风格。
+ * 分隔符判定沿用既有启发式：根绝对路径含 `\` 即为 Windows 风格；
+ * 拼接为朴素字符串相加，不清理根绝对路径自带的尾部分隔符。
  */
 export function resolveAbsPath(
   rootAbsPath: string | undefined,
