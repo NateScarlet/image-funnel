@@ -5,7 +5,7 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT-MAP.md`** at the repo root — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in.
+- **`docs/adr/`** (Main App) and **`example_hooks/docs/adr/`** (Example Hooks) — read ADRs that touch the area you're about to work in.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
@@ -17,10 +17,15 @@ This repository is configured as a **multi-context** codebase (indicated by the 
 /
 ├── CONTEXT-MAP.md                      ← Points to context definitions
 ├── CONTEXT.md                          ← Context definition for Main App
-├── docs/adr/                           ← System-wide architectural decisions
+├── docs/adr/                           ← Main App decisions
 └── example_hooks/
-    └── CONTEXT.md                      ← Context definition for Example Hooks
+    ├── CONTEXT.md                      ← Context definition for Example Hooks
+    └── docs/adr/                       ← Example Hooks decisions
 ```
+
+## ADR conventions
+
+Numbering is **unique across the whole project**, not per context. When adding an ADR, scan every `docs/adr/` (root and per-context) and take the global maximum + 1; file the new ADR under the `docs/adr/` of its own context. Numbers are stable identifiers: moving an ADR between contexts does **not** renumber it, so gaps are expected inside a context's directory. This keeps existing references in code comments and docs valid.
 
 ## Available Contexts
 

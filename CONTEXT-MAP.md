@@ -7,3 +7,4 @@
   - 架构决策目录 / ADRs Directory: [docs/adr/](docs/adr/)
 - **外部钩子示例 / Example Hooks**: 包含与 ComfyUI 工作流、提示词标签自动补全（例如 Danbooru 搜索）、以及图片物理归类分流（Fork）相关的实现逻辑。
   - 上下文定义文件 / Context File: [example_hooks/CONTEXT.md](example_hooks/CONTEXT.md)
+  - 架构决策目录 / ADRs Directory: [example_hooks/docs/adr/](example_hooks/docs/adr/)
