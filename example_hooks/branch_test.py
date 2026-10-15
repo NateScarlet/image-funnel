@@ -10,11 +10,11 @@ import logging
 
 logging.disable(logging.CRITICAL)
 
-from fork import (
-    get_fork_autocomplete_suggestions,
+from branch import (
+    get_branch_autocomplete_suggestions,
     parse_args,
     run_autocomplete,
-    run_fork,
+    run_branch,
 )
 from graphql_utils import GraphQLClient
 
@@ -23,7 +23,7 @@ def _make_client() -> MagicMock:
     return MagicMock(spec=GraphQLClient)
 
 
-class TestForkHook(unittest.TestCase):
+class TestBranchHook(unittest.TestCase):
 
     def setUp(self):
         self.env_patcher = patch.dict(
@@ -44,20 +44,20 @@ class TestForkHook(unittest.TestCase):
         self.env_patcher.stop()
 
     def test_parse_args_with_suffix(self):
-        with patch.object(sys, "argv", ["fork.py", "custom_suffix"]):
+        with patch.object(sys, "argv", ["branch.py", "custom_suffix"]):
             args = parse_args()
             self.assertEqual(args.suffix, "custom_suffix")
 
     def test_parse_args_without_suffix(self):
-        with patch.object(sys, "argv", ["fork.py"]):
+        with patch.object(sys, "argv", ["branch.py"]):
             args = parse_args()
             self.assertEqual(args.suffix, "TODO")
 
-    def test_run_fork_with_explicit_suffix(self):
+    def test_run_branch_with_explicit_suffix(self):
         mock_client = _make_client()
-        with patch.object(sys, "argv", ["fork.py", "custom_suffix"]):
+        with patch.object(sys, "argv", ["branch.py", "custom_suffix"]):
             with self.assertRaises(SystemExit) as cm:
-                run_fork(mock_client)
+                run_branch(mock_client)
             self.assertEqual(cm.exception.code, 0)
             mock_client.move_images.assert_called_once_with(
                 "dir:test",
@@ -65,11 +65,11 @@ class TestForkHook(unittest.TestCase):
                 os.path.normpath("folder1,custom_suffix"),
             )
 
-    def test_run_fork_with_default_todo_suffix(self):
+    def test_run_branch_with_default_todo_suffix(self):
         mock_client = _make_client()
-        with patch.object(sys, "argv", ["fork.py"]):
+        with patch.object(sys, "argv", ["branch.py"]):
             with self.assertRaises(SystemExit) as cm:
-                run_fork(mock_client)
+                run_branch(mock_client)
             self.assertEqual(cm.exception.code, 0)
             mock_client.move_images.assert_called_once_with(
                 "dir:test", ["img:1", "img:2"], os.path.normpath("folder1,TODO")
@@ -82,7 +82,7 @@ class TestForkHook(unittest.TestCase):
             with open(os.path.join(temp_dir, "file1.txt"), "w") as f:
                 f.write("test")
 
-            suggestions = get_fork_autocomplete_suggestions(temp_dir, "")
+            suggestions = get_branch_autocomplete_suggestions(temp_dir, "")
             self.assertEqual(len(suggestions), 2)
             self.assertEqual(suggestions[0].text, "alpha")
             self.assertEqual(suggestions[0].description, "已存在目录：alpha")
@@ -99,7 +99,7 @@ class TestForkHook(unittest.TestCase):
             with open(os.path.join(temp_dir, "folder1,file.txt"), "w") as f:
                 f.write("file")
 
-            suggestions = get_fork_autocomplete_suggestions(temp_dir, "folder1")
+            suggestions = get_branch_autocomplete_suggestions(temp_dir, "folder1")
             self.assertEqual(len(suggestions), 2)
             self.assertEqual(suggestions[0].text, "tag_a")
             self.assertEqual(
@@ -118,7 +118,7 @@ class TestForkHook(unittest.TestCase):
             os.makedirs(os.path.join(temp_dir, "folder1,rose"))
             os.makedirs(os.path.join(temp_dir, "folder1,blue"))
 
-            suggestions = get_fork_autocomplete_suggestions(temp_dir, "folder1", "r")
+            suggestions = get_branch_autocomplete_suggestions(temp_dir, "folder1", "r")
             self.assertEqual(len(suggestions), 2)
             self.assertEqual([s.text for s in suggestions], ["red", "rose"])
 

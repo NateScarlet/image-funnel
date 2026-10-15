@@ -38,10 +38,10 @@ class AutocompleteSuggestion:
         )
 
 
-def get_fork_autocomplete_suggestions(
+def get_branch_autocomplete_suggestions(
     root_dir: str, dir_rel_path: str, query: str = ""
 ) -> List[AutocompleteSuggestion]:
-    """根据根目录路径、当前目录相对路径和用户查询生成 /fork 指令的后缀补全建议。"""
+    """根据根目录路径、当前目录相对路径和用户查询生成 /branch 指令的后缀补全建议。"""
     if not root_dir or not os.path.exists(root_dir):
         return []
 
@@ -117,7 +117,7 @@ def run_autocomplete() -> None:
     dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
     query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
 
-    suggestions = get_fork_autocomplete_suggestions(root_dir, dir_rel_path, query)
+    suggestions = get_branch_autocomplete_suggestions(root_dir, dir_rel_path, query)
     for item in suggestions:
         print(item.to_jsonl())
 
@@ -126,14 +126,14 @@ def run_autocomplete() -> None:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Image Funnel Fork Hook Script")
+    parser = argparse.ArgumentParser(description="Image Funnel Branch Hook Script")
     parser.add_argument(
         "suffix", nargs="?", default="TODO", help="Suffix for the target directory"
     )
     return parser.parse_args()
 
 
-def run_fork(client: GraphQLClient) -> None:
+def run_branch(client: GraphQLClient) -> None:
     args = parse_args()
     suffix = args.suffix.strip() if args.suffix else "TODO"
     if not suffix:
@@ -153,7 +153,7 @@ def run_fork(client: GraphQLClient) -> None:
         sys.exit(1)
 
     _LOGGER.debug(
-        "Received %d image(s) to fork with suffix: %s", len(image_ids), suffix
+        "Received %d image(s) to branch with suffix: %s", len(image_ids), suffix
     )
 
     # 确定目标相对路径
@@ -193,4 +193,4 @@ if __name__ == "__main__":
         sys.exit(0)
     else:
         client = GraphQLClient.from_env()
-        run_fork(client)
+        run_branch(client)

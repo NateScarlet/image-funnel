@@ -1,18 +1,18 @@
-id = "fork"
+id = "branch"
 name = "移动图片"
-description = "即时运行 /fork 笔记指令"
-command = "uv run runner.py fork"
+description = "即时运行 /branch 笔记指令"
+command = "uv run runner.py branch"
 
 [directive]
-name = "fork"
+name = "branch"
 usage = """
-/fork [<suffix>]
+/branch [<suffix>]
 将图片和配套文件移动到当前目录同级的目录，目录名称为 `当前目录名称,<suffix>` ，suffix 为可选（默认 TODO），根目录触发改为创建名称为 <suffix> 的子目录
 """
 on_success_action = "REMOVE" # 成功后移除当前指令避免再次触发
 
 [directive.autocomplete]
-command = "uv run runner.py fork autocomplete"
+command = "uv run runner.py branch autocomplete"
 
 
 [on.post_update_note]
