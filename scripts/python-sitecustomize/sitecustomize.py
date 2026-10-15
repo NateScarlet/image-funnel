@@ -20,8 +20,16 @@ def _sandbox_mkdtemp(suffix=None, prefix="tmp", dir=None):
     # 与原版语义一致：在目标目录下以随机名创建唯一临时目录并返回其路径，
     # 仅省略 0o700 权限参数，改用 os.makedirs 的默认权限；
     # TemporaryDirectory 可能显式传入 None 作为前缀，需回退到默认值
-    name = os.path.join(dir if dir is not None else tempfile.gettempdir(),
-                        (prefix or "tmp") + uuid.uuid4().hex + (suffix or ""))
+    base_dir = dir if dir is not None else tempfile.gettempdir()
+    # gettempdir() 的候选列表以 cwd 兜底：当环境变量指向的临时目录不可用时，
+    # 它会静默返回 cwd，致使临时目录散落在项目根目录。
+    # 临时目录不可用必须显式失败，由调用方修正环境变量，而不是悄悄污染工作区
+    if os.path.abspath(base_dir) == os.path.abspath(os.getcwd()):
+        raise RuntimeError(
+            f"拒绝在 cwd 创建临时目录（{base_dir}）："
+            "请将 TEMP/TMP 指向可用的临时目录后再运行"
+        )
+    name = os.path.join(base_dir, (prefix or "tmp") + uuid.uuid4().hex + (suffix or ""))
     os.makedirs(name)
     return name
 
