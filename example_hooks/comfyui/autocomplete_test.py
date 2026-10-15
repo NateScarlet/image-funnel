@@ -36,6 +36,7 @@ from .autocomplete import (
     NullSuggestionTextFormatter,
     PromptTarget,
     _load_workflow_data,
+    _parse_args_for_autocomplete,
 )
 from .__main__ import get_parser
 from .danbooru import DanbooruTag, SemanticLayerUnavailable
@@ -315,6 +316,26 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         provider = WorkflowPromptProvider()
         self.assertFalse(provider.can_provide(context))
 
+    def test_remove_prompt_suggestions_work_before_its_value_is_typed(self):
+        """`/remix --remove bad` 时旗标后面还没有值，argparse 会校验失败；
+        补上占位值重试后仍要能给出工作流中已有提示词的建议。"""
+        seen_prompts = {"bad hands": "节点: 2"}
+        parsed = _parse_args_for_autocomplete(
+            get_parser(), "remix", ["/remix", "--remove"]
+        )
+        context = self._make_context(
+            target_command="remix",
+            query="bad",
+            prev_word="--remove",
+            cwords=["/remix", "--remove"],
+            parsed_args=parsed,
+            seen_prompts=seen_prompts,
+        )
+        provider = WorkflowPromptProvider()
+        self.assertIsNotNone(parsed)
+        self.assertTrue(provider.can_provide(context))
+        self.assertEqual([s.text for s in provider.provide(context)], ['"bad hands"'])
+
     def test_autocomplete_remove_prompt_with_double_dash_and_option(self):
         seen_prompts = {
             "1girl, masterpiece, score_7, cute": "区域: positive",
@@ -336,6 +357,46 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertIn('"1girl, masterpiece, score_7, cute"', texts)
 
     # ---- DanbooruProvider tests ----
+
+    def test_add_flag_value_is_still_completed(self) -> None:
+        """`/remix --add blue` 的前一个词就是取值型旗标 `--add`，
+        但它的值正是要补全的标签，不能被当成「正在输入选项参数」而全部拒绝。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("blue_eyes", "蓝眼", "Blue eyes.", "General"),
+        ]
+        context = self._make_context(
+            target_command="remix",
+            query="blue",
+            prev_word="--add",
+            cwords=["/remix", "--add"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--add"]
+            ),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+        mock_provider.search.assert_called_once_with("blue")
+        self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
+
+    def test_add_flag_value_completed_on_empty_query(self) -> None:
+        """刚打完 `--add ` 还没输入时同样应进入新增标签的补全。"""
+        mock_provider = MagicMock()
+        mock_provider.related.return_value = []
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="--add",
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+        self.assertTrue(provider.can_provide(context))
 
     def test_autocomplete_add_prompt_danbooru(self) -> None:
         mock_provider = MagicMock()

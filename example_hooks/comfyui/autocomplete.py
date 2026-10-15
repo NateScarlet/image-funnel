@@ -79,6 +79,10 @@ _ACTION_FLAGS: Dict[str, str] = {
 # 接受多个位置值的旗标
 _MULTI_VALUE_ACTIONS = frozenset({ADD_ACTION, REMOVE_ACTION, LORA_ACTION})
 
+# 解析「指令还写了一半」时用来补位的占位值：它只让 argparse 通过校验，
+# 补全逻辑只读 --region / --node / --neg 等修饰选项，不会把占位值当成真实输入
+_PENDING_VALUE_PLACEHOLDER = "__pending__"
+
 
 def collect_options(
     parser: argparse.ArgumentParser, cwords: List[str]
@@ -238,7 +242,11 @@ def _parse_args_for_autocomplete(
     """按当前已输入的词解析出旗标状态，供需要区域/节点上下文的 provider 使用。
 
     cwords[0] 带前导斜杠（`/remix`），不是合法的子命令名，用去斜杠的
-    target_command 代替；解析失败（指令写了一半）时返回 None，调用方按无上下文处理。
+    target_command 代替。
+
+    补全发生在指令写了一半的状态，编辑旗标（`--add` / `--remove` / `--lora`）后面
+    的值往往还没输，argparse 会因此校验失败。补一个占位值重试一次，让 `--region` /
+    `--node` 这类修饰选项仍能被读出来；两次都失败才按无上下文处理。
     """
     # set-model-format 的 format 位置参数带 choices（anima/sdxl/disabled），缺值时
     # argparse 校验失败；该命令的补全（ModelFormatProvider）不依赖 parsed_args，
@@ -251,13 +259,15 @@ def _parse_args_for_autocomplete(
         if target_command
         else list(cleaned_cwords)
     )
-    try:
-        # 补全是「写了一半」的状态，argparse 的 usage 报错对用户无意义
-        with redirect_stderr(io.StringIO()):
-            parsed_args, _ = parser.parse_known_args(args_to_parse)
-    except SystemExit:
-        parsed_args = None
-    return parsed_args
+    for attempt in (args_to_parse, args_to_parse + [_PENDING_VALUE_PLACEHOLDER]):
+        try:
+            # 补全是「写了一半」的状态，argparse 的 usage 报错对用户无意义
+            with redirect_stderr(io.StringIO()):
+                parsed_args, _ = parser.parse_known_args(attempt)
+            return parsed_args
+        except SystemExit:
+            continue
+    return None
 
 
 @dataclass(frozen=True)
@@ -425,16 +435,22 @@ class AutocompleteContext:
         self.action: str = action
         self.action_tags: List[str] = action_tags(self.cleaned_cwords, self.action)
 
-        self.is_real_option_prev = False
-        if self.prev_word in self.option_with_args:
+        # 当前词是否落在取值型修饰选项（--region / --node）的参数位置。
+        # 编辑旗标（--add / --remove / --lora）的值正是要补全的内容，不在此列，
+        # 否则 `/remix --add blue` 会因为前一个词是取值型选项而完全不给建议。
+        self.editing_modifier_value = False
+        if (
+            self.prev_word in self.option_with_args
+            and self.prev_word not in _ACTION_FLAGS
+        ):
             try:
-                self.is_real_option_prev = (
+                self.editing_modifier_value = (
                     "--" not in self.cleaned_cwords
                     or self.cleaned_cwords.index("--")
                     > self.cleaned_cwords.index(self.prev_word)
                 )
             except ValueError:
-                self.is_real_option_prev = True
+                self.editing_modifier_value = True
 
         self._parsed_args: Optional[argparse.Namespace] = parsed_args
         self._seen_prompts: Dict[str, str] = seen_prompts or {}
@@ -540,7 +556,7 @@ class NodeProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.prev_word == "--node" and context.is_real_option_prev
+        return context.prev_word == "--node" and context.editing_modifier_value
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         if not context.prompt_meta:
@@ -633,7 +649,7 @@ class RegionProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.prev_word == "--region" and context.is_real_option_prev
+        return context.prev_word == "--region" and context.editing_modifier_value
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         regions: Iterator[str] = (
@@ -756,7 +772,7 @@ class WorkflowPromptProvider(AutocompleteProvider):
         is_option_input = (
             context.query.startswith("-") and "--" not in context.cleaned_cwords
         )
-        if is_option_input or context.is_real_option_prev:
+        if is_option_input or context.editing_modifier_value:
             return False
 
         return context.parsed_args is not None
@@ -881,15 +897,15 @@ class DanbooruProvider(AutocompleteProvider):
         if context.action != ADD_ACTION:
             return False
 
-        is_option_input = context.prev_word.startswith("-")
-        if context.prev_word in context.option_without_args:
-            is_option_input = False
+        # 正在输入 --region / --node 的值：交给它们各自的 provider
+        if context.editing_modifier_value:
+            return False
 
-        is_real_option_arg_prev = False
-        if is_option_input:
-            is_real_option_arg_prev = context.prev_word in context.option_with_args
+        # 正在输入旗标名本身（如 `--re`）：等它写完再补全
+        if context.query.startswith("-") and "--" not in context.cleaned_cwords:
+            return False
 
-        return not is_real_option_arg_prev and not is_option_input
+        return True
 
     def _format_for_target(self, context: AutocompleteContext, text: str) -> str:
         """按目标提示词节点的模型格式重排文本。
