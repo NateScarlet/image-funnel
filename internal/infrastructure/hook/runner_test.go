@@ -432,19 +432,10 @@ func TestNoteRewriter_PartialFailures(t *testing.T) {
 	lateContent := fmt.Sprintf("---\nhook-run-id: %s\n---\nSome text.\n/fork a\n/comfyui b\nOther text.", runID)
 	require.NoError(t, os.WriteFile(noteAbsPath, []byte(lateContent), 0644))
 
-	hooks, err := env.config.Load()
-	require.NoError(t, err)
-	hookMap := make(map[string]hookConfig)
-	for _, h := range hooks {
-		if h.Directive != nil && h.Directive.Name != "" {
-			hookMap[h.Directive.Name] = h
-		}
-	}
-
-	// 触发 late cleanup
-	require.NoError(t, rewriter.CleanupLate(noteAbsPath, runID, hookMap, map[string]bool{
-		"fork":    false,
-		"comfyui": true,
+	// 迟到路径按指令身份取回结果：fork 成功被 REMOVE，comfyui 失败被 KEEP
+	require.NoError(t, rewriter.CleanupLate(noteAbsPath, runID, map[directiveIdentity]directiveResult{
+		{line: "/fork a", ordinal: 0}:    {action: "REMOVE"},
+		{line: "/comfyui b", ordinal: 0}: {action: "KEEP"},
 	}))
 
 	content = readFile(t, noteAbsPath)

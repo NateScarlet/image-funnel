@@ -38,12 +38,45 @@ const (
 	phaseAfter3
 )
 
+// directiveIdentity 一条指令的身份：指令行原文 + 该原文在笔记中出现的次序。
+// 原文相同的多条指令靠出现次序区分，因此结果找回不依赖「两次正则匹配的数量与顺序一致」。
+type directiveIdentity struct {
+	line    string
+	ordinal int
+}
+
+// directiveResult 一条指令的执行结果，供擦除阶段应用动作与生成结果提示块
+type directiveResult struct {
+	action     string    // 已解析的操作（REMOVE/KEEP/COMMENT_OUT）
+	stdout     string    // 脚本标准输出
+	stderr     string    // 脚本标准错误输出
+	executedAt time.Time // 脚本执行时间
+}
+
+// identityScanner 按「原文 + 出现次序」为逐条匹配到的指令行编号。
+// 收集与擦除两个阶段共用同一口径，保证同一条指令在两个阶段得到相同身份。
+type identityScanner struct {
+	counts map[string]int
+}
+
+func newIdentityScanner() *identityScanner {
+	return &identityScanner{counts: make(map[string]int)}
+}
+
+// identify 返回指令行原文的身份，并推进该原文的出现计数
+func (s *identityScanner) identify(rawLine string) directiveIdentity {
+	line := strings.TrimSpace(rawLine)
+	ident := directiveIdentity{line: line, ordinal: s.counts[line]}
+	s.counts[line]++
+	return ident
+}
+
 // activeTask 一次指令运行的登记：run_id 关联的所有笔记路径与执行阶段，
-// 供迟到的文件变更事件做后置擦除
+// 并按指令身份保存完整执行结果，供迟到的文件变更事件做后置擦除
 type activeTask struct {
-	phase            taskPhase
-	paths            map[string]struct{}
-	failedDirectives map[string]bool
+	phase   taskPhase
+	paths   map[string]struct{}
+	results map[directiveIdentity]directiveResult
 }
 
 // #endregion
@@ -119,11 +152,6 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 		return false, nil
 	}
 
-	hookMap, err := w.directiveHooks()
-	if err != nil {
-		return false, err
-	}
-
 	// 1. 获取临时的 hook-run-id
 	runID := getHookRunID(req.Content)
 	var isKnown bool
@@ -131,6 +159,13 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 		w.mu.Lock()
 		_, isKnown = w.tasks[runID]
 		w.mu.Unlock()
+		if !isKnown {
+			// 无法识别的运行标记（崩溃后残留、用户手动重放等）按全新运行处理
+			w.logger.Debug("unrecognized hook-run-id, treating as a fresh run",
+				zap.String("run_id", runID),
+				zap.String("path", req.NoteRelPath.String()),
+			)
+		}
 	}
 
 	noteAbsPath := req.NoteRelPath.Abs(w.rootDir)
@@ -142,7 +177,7 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 
 	// 1b. 若是有已知且正在运行的 ID，则进行快速返回或执行后置迟到擦除
 	if runID != "" && isKnown {
-		isBefore3, failedDirectives := func() (bool, map[string]bool) {
+		isBefore3, results := func() (bool, map[directiveIdentity]directiveResult) {
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			task := w.tasks[runID]
@@ -150,11 +185,9 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 				task.paths[noteAbsPath] = struct{}{}
 				return true, nil
 			}
-			fd := make(map[string]bool)
-			if task.failedDirectives != nil {
-				maps.Copy(fd, task.failedDirectives)
-			}
-			return false, fd
+			copied := make(map[directiveIdentity]directiveResult, len(task.results))
+			maps.Copy(copied, task.results)
+			return false, copied
 		}()
 
 		if isBefore3 {
@@ -164,10 +197,15 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 
 		// 1b2. 若步骤 3 已完毕，执行后置迟到擦除
 		w.logger.Debug("executing late path cleanup for known hook-run-id", zap.String("path", req.NoteRelPath.String()), zap.String("run_id", runID))
-		if err := w.CleanupLate(noteAbsPath, runID, hookMap, failedDirectives); err != nil {
+		if err := w.CleanupLate(noteAbsPath, runID, results); err != nil {
 			return false, err
 		}
 		return false, nil
+	}
+
+	hookMap, err := w.directiveHooks()
+	if err != nil {
+		return false, err
 	}
 
 	// 2. 对于新启动的指令流程，我们先匹配提取 pending 任务
@@ -205,8 +243,7 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 			// 并向用户报告语法错误，避免静默吞字
 			w.notifier.Notify(ctx, w.pendingTask(p, runID), p.syntaxErr, "", p.syntaxErr.Error())
 			errB.Add(fmt.Errorf("hook %s: invalid directive args: %w", p.config.ID, p.syntaxErr))
-			pending[i].action = p.config.Directive.OnFailAction
-			pending[i].executedAt = time.Now()
+			pending[i].result = directiveResult{action: p.config.Directive.OnFailAction, executedAt: time.Now()}
 			continue
 		}
 
@@ -219,33 +256,36 @@ func (w *noteRewriter) Rewrite(ctx context.Context, req noteRewriteRequest) (boo
 				errB.Add(fmt.Errorf("hook %s: %w", p.config.ID, res.Err))
 			}
 		}
-		pending[i].action = res.Action
-		pending[i].stdout = res.Stdout
-		pending[i].stderr = res.Stderr
-		pending[i].executedAt = time.Now()
+		pending[i].result = directiveResult{
+			action:     res.Action,
+			stdout:     res.Stdout,
+			stderr:     res.Stderr,
+			executedAt: time.Now(),
+		}
 	}
 
-	// 5. 执行完成后，在 activeTask 关联的所有路径上执行擦除
-	pathsToProcess := w.finishTask(runID, pending)
-	errB.Add(w.erase(pathsToProcess, runID, pending))
+	// 5. 执行完成后，按指令身份汇总结果，在 activeTask 关联的所有路径上执行擦除
+	results := make(map[directiveIdentity]directiveResult, len(pending))
+	for _, p := range pending {
+		results[p.identity] = p.result
+	}
+	pathsToProcess := w.finishTask(runID, results)
+	errB.Add(w.erase(pathsToProcess, runID, results))
 
 	return true, errB.Build()
 }
 
 // pendingDirective 一条待执行的笔记指令
 type pendingDirective struct {
-	config        hookConfig
-	triggerName   string
-	events        []hookEvent
-	args          []string
-	relPath       relpath.Path
-	dir           *directory.Directory
-	directiveText string    // 完整指令文本（如 "/fork --option value"）
-	action        string    // 已解析的操作（COMMENT_OUT/REMOVE/KEEP），在钩子执行完成后设置
-	stdout        string    // 脚本标准输出
-	stderr        string    // 脚本标准错误输出
-	executedAt    time.Time // 脚本执行时间
-	syntaxErr     error     // 指令参数引号未闭合等语法错误，非 nil 时不执行钩子而按失败处理
+	config      hookConfig
+	triggerName string
+	events      []hookEvent
+	args        []string
+	relPath     relpath.Path
+	dir         *directory.Directory
+	identity    directiveIdentity // 指令身份：指令行原文 + 原文中的出现次序
+	result      directiveResult   // 执行结果，钩子执行完成后填充
+	syntaxErr   error             // 指令参数引号未闭合等语法错误，非 nil 时不执行钩子而按失败处理
 }
 
 // collectDirectives 从笔记文本中提取匹配当前触发器过滤条件的指令，
@@ -254,12 +294,16 @@ func (w *noteRewriter) collectDirectives(ctx context.Context, req noteRewriteReq
 	matches := directiveReg.FindAllStringSubmatch(req.Content, -1)
 	w.logger.Debug("note rewrite regexp matched lines", zap.Int("count", len(matches)))
 
+	// 身份按所有匹配到的指令行编号，与擦除阶段口径一致；原文相同的行过滤结果必然相同，
+	// 因此被过滤跳过的行不会影响其它行的出现次序
+	scanner := newIdentityScanner()
 	var pending []pendingDirective
 	for _, match := range matches {
 		if len(match) < 2 {
 			continue
 		}
 		matchedLine := match[0]
+		identity := scanner.identify(matchedLine)
 		cmdName := match[1]
 		cmdArgs := ""
 		if len(match) > 2 {
@@ -316,14 +360,14 @@ func (w *noteRewriter) collectDirectives(ctx context.Context, req noteRewriteReq
 
 		// 将此任务入队暂存，暂不执行
 		pending = append(pending, pendingDirective{
-			config:        config,
-			triggerName:   req.TriggerName,
-			events:        evs,
-			args:          args,
-			relPath:       req.NoteRelPath,
-			dir:           req.Dir,
-			directiveText: strings.TrimSpace(matchedLine),
-			syntaxErr:     syntaxErr,
+			config:      config,
+			triggerName: req.TriggerName,
+			events:      evs,
+			args:        args,
+			relPath:     req.NoteRelPath,
+			dir:         req.Dir,
+			identity:    identity,
+			syntaxErr:   syntaxErr,
 		})
 	}
 
@@ -372,7 +416,7 @@ func (w *noteRewriter) pendingTask(p pendingDirective, runID string) hookExecuti
 	task := newHookTask(p.config, p.triggerName, p.events, p.relPath.String(), p.dir)
 	task.ExtraArgs = p.args
 	task.RunID = runID
-	task.DirectiveText = p.directiveText
+	task.DirectiveText = p.identity.line
 	return task
 }
 
@@ -389,17 +433,14 @@ func (w *noteRewriter) registerTask(runID string, noteAbsPath string) {
 	task.paths[noteAbsPath] = struct{}{}
 }
 
-// finishTask 标记指令执行收尾并记录各指令的成败，返回需要擦除的笔记路径
-func (w *noteRewriter) finishTask(runID string, pending []pendingDirective) []string {
+// finishTask 标记指令执行收尾并按指令身份登记完整执行结果，返回需要擦除的笔记路径
+func (w *noteRewriter) finishTask(runID string, results map[directiveIdentity]directiveResult) []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	task := w.tasks[runID]
 	task.phase = phaseAfter3
-	task.failedDirectives = make(map[string]bool)
-	for _, p := range pending {
-		task.failedDirectives[p.config.Directive.Name] = p.action == p.config.Directive.OnFailAction
-	}
+	task.results = results
 
 	paths := make([]string, 0, len(task.paths))
 	for p := range task.paths {
@@ -408,8 +449,8 @@ func (w *noteRewriter) finishTask(runID string, pending []pendingDirective) []st
 	return paths
 }
 
-// erase 在指令运行关联的所有路径上按顺序擦除指令行并移除 run_id
-func (w *noteRewriter) erase(paths []string, runID string, pending []pendingDirective) error {
+// erase 在指令运行关联的所有路径上按指令身份擦除指令行并移除 run_id
+func (w *noteRewriter) erase(paths []string, runID string, results map[directiveIdentity]directiveResult) error {
 	errB := util.NewErrorsBuilder(len(paths))
 	for _, p := range paths {
 		contentBytes, err := os.ReadFile(p)
@@ -427,18 +468,7 @@ func (w *noteRewriter) erase(paths []string, runID string, pending []pendingDire
 			continue
 		}
 
-		idx := 0
-		finalContent := directiveReg.ReplaceAllStringFunc(fileContent, func(matchedLine string) string {
-			if idx >= len(pending) {
-				return matchedLine
-			}
-			pTask := pending[idx]
-			idx++
-
-			return applyDirectiveAction(pTask.action, matchedLine, pTask.stdout, pTask.stderr, pTask.executedAt)
-		})
-
-		finalContent = removeHookRunID(finalContent)
+		finalContent := removeHookRunID(w.eraseDirectives(fileContent, results))
 
 		if finalContent == fileContent {
 			continue
@@ -456,9 +486,30 @@ func (w *noteRewriter) erase(paths []string, runID string, pending []pendingDire
 	return errB.Build()
 }
 
+// eraseDirectives 按指令身份（原文 + 出现次序）查表替换当前文本中的指令行。
+// 查不到记录的指令行（例如脚本在执行期间改写了该行）保留当前内容，不做替换，
+// 从而避免按顺序错配到别的指令的结果上。
+func (w *noteRewriter) eraseDirectives(content string, results map[directiveIdentity]directiveResult) string {
+	scanner := newIdentityScanner()
+	return directiveReg.ReplaceAllStringFunc(content, func(matchedLine string) string {
+		identity := scanner.identify(matchedLine)
+		result, ok := results[identity]
+		if !ok {
+			// 当前内容与执行记录对不上：保留该行并留痕，便于定位脚本改写指令行的场景
+			w.logger.Debug("directive line has no recorded result, keeping current content",
+				zap.String("line", identity.line),
+				zap.Int("ordinal", identity.ordinal),
+			)
+			return matchedLine
+		}
+		return applyDirectiveAction(result.action, matchedLine, result.stdout, result.stderr, result.executedAt)
+	})
+}
+
 // CleanupLate 迟到擦除：指令执行早已收尾、但带 run_id 的文件写入此刻才到达时，
-// 按已记录的成功/失败状态擦除指令行并移除 run_id。
-func (w *noteRewriter) CleanupLate(absPath string, runID string, hookMap map[string]hookConfig, failedDirectives map[string]bool) error {
+// 按已记录的指令结果擦除指令行并移除 run_id。与主擦除路径共用同一套身份查表与动作应用，
+// 因此产出的文本（含 stdout/stderr 结果提示块）与主路径一致。
+func (w *noteRewriter) CleanupLate(absPath string, runID string, results map[directiveIdentity]directiveResult) error {
 	contentBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -472,25 +523,7 @@ func (w *noteRewriter) CleanupLate(absPath string, runID string, hookMap map[str
 		return nil
 	}
 
-	finalContent := directiveReg.ReplaceAllStringFunc(fileContent, func(matchedLine string) string {
-		matches := directiveReg.FindStringSubmatch(matchedLine)
-		if len(matches) < 2 {
-			return matchedLine
-		}
-		cmdName := matches[1]
-		config, ok := hookMap[cmdName]
-		if !ok {
-			return matchedLine
-		}
-
-		action := config.Directive.OnSuccessAction
-		if failedDirectives != nil && failedDirectives[cmdName] {
-			action = config.Directive.OnFailAction
-		}
-		return applyDirectiveAction(action, matchedLine, "", "", time.Time{})
-	})
-
-	finalContent = removeHookRunID(finalContent)
+	finalContent := removeHookRunID(w.eraseDirectives(fileContent, results))
 
 	if finalContent == fileContent {
 		return nil
