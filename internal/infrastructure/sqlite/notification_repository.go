@@ -183,8 +183,8 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	didCreate = count == 0
 
 	query := `
-	INSERT INTO notifications (id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO notifications (` + notificationColumnList + `)
+	VALUES (` + notificationInsertPlaceholders + `)
 	ON CONFLICT(tag) DO UPDATE SET
 		title = excluded.title,
 		body = excluded.body,
@@ -198,11 +198,7 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 	WHERE excluded.updated_at >= notifications.updated_at
 	`
 	po := newNotificationPO(notif)
-	res, err := tx.ExecContext(ctx, query,
-		po.ID, po.Tag, po.Channel, po.Title, po.Body, po.Priority,
-		po.ReadAt, po.DismissedAt, po.NotAfter, po.NotBefore,
-		po.CreatedAt, po.UpdatedAt, po.DetailsURL,
-	)
+	res, err := tx.ExecContext(ctx, query, po.columnValues()...)
 	if err != nil {
 		return false, err
 	}
@@ -235,10 +231,8 @@ func (r *NotificationRepository) Save(ctx context.Context, notif *notification.N
 func (r *NotificationRepository) Get(ctx context.Context, id string) (*notification.Notification, error) {
 	// EXPLAIN QUERY PLAN:
 	// SEARCH notifications USING INDEX sqlite_autoindex_notifications_1 (id=?)
-	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx, `
-		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
-		FROM notifications WHERE id = ?
-	`, id))
+	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx,
+		selectNotificationColumns("WHERE id = ?"), id))
 	if err == sql.ErrNoRows {
 		return nil, apperror.NewErrDocumentNotFound(scalar.ToID(id))
 	} else if err != nil {
@@ -251,10 +245,8 @@ func (r *NotificationRepository) Get(ctx context.Context, id string) (*notificat
 func (r *NotificationRepository) GetByTag(ctx context.Context, tag string) (*notification.Notification, error) {
 	// EXPLAIN QUERY PLAN:
 	// SEARCH notifications USING INDEX sqlite_autoindex_notifications_2 (tag=?)
-	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx, `
-		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
-		FROM notifications WHERE tag = ?
-		`, tag))
+	notif, err := scanNotificationRow(r.db.QueryRowContext(ctx,
+		selectNotificationColumns("WHERE tag = ?"), tag))
 	if err == sql.ErrNoRows {
 		return nil, apperror.New("NOT_FOUND", fmt.Sprintf("notification with tag %q not found", tag), fmt.Sprintf("未找到标签为 %q 的通知", tag))
 	} else if err != nil {
@@ -270,11 +262,7 @@ func (r *NotificationRepository) Find(ctx context.Context, options ...notificati
 	filterFunc := r.filterBuilder.Build(filter)
 
 	return func(yield func(*notification.Notification, error) bool) {
-		query := `
-		SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url
-		FROM notifications
-		WHERE 1=1
-		`
+		query := selectNotificationColumns("WHERE 1=1")
 		var args []any
 		if len(filter.Channel) > 0 {
 			query += " AND channel IN (?" + strings.Repeat(",?", len(filter.Channel)-1) + ")"
@@ -725,6 +713,34 @@ func (r *NotificationRepository) reclaim(reclaimGracePeriod time.Duration) error
 
 // #endregion
 
+// #region 通知表列清单
+
+// notificationColumns 是 notifications 表列顺序的唯一权威定义：
+// 所有 SELECT 与 INSERT 的列投影都由此派生，禁止再逐字写出列名。
+// 新增或删除一列时，持久化层的改动点是：本清单、notificationPO 的字段与
+// columnValues/scanDest 映射，以及 TestNotificationColumnMappingOrder 中的期望列表；
+// CREATE TABLE 的建表语句受 user_version 迁移控制、upsert 的 DO UPDATE SET 只覆盖需要刷新的列，
+// 二者不由本清单驱动，仅在确有对应变更时才需要改动。
+var notificationColumns = []string{
+	"id", "tag", "channel", "title", "body", "priority",
+	"read_at", "dismissed_at", "not_after", "not_before",
+	"created_at", "updated_at", "details_url",
+}
+
+var (
+	// notificationColumnList 是可直接嵌入 SQL 的逗号分隔列名
+	notificationColumnList = strings.Join(notificationColumns, ", ")
+	// notificationInsertPlaceholders 由列清单推导的占位符列表，使 VALUES 数量随列数自动跟随
+	notificationInsertPlaceholders = strings.Join(slices.Repeat([]string{"?"}, len(notificationColumns)), ", ")
+)
+
+// selectNotificationColumns 构造引用全部列的 SELECT 语句，tail 为附加的过滤与排序子句
+func selectNotificationColumns(tail string) string {
+	return "SELECT " + notificationColumnList + "\nFROM notifications " + tail
+}
+
+// #endregion
+
 // #region 辅助方法
 
 // rowScanner 用于统一 *sql.Row 与 *sql.Rows 的 Scan 方法，以便 scanNotificationRow 复用单行扫描逻辑
@@ -747,6 +763,24 @@ type notificationPO struct {
 	CreatedAt   int64
 	UpdatedAt   int64
 	DetailsURL  string
+}
+
+// columnValues 按 notificationColumns 的顺序返回列值，供 INSERT 绑定
+func (po *notificationPO) columnValues() []any {
+	return []any{
+		po.ID, po.Tag, po.Channel, po.Title, po.Body, po.Priority,
+		po.ReadAt, po.DismissedAt, po.NotAfter, po.NotBefore,
+		po.CreatedAt, po.UpdatedAt, po.DetailsURL,
+	}
+}
+
+// scanDest 按 notificationColumns 的顺序返回扫描目标，供 SELECT 逐列写入
+func (po *notificationPO) scanDest() []any {
+	return []any{
+		&po.ID, &po.Tag, &po.Channel, &po.Title, &po.Body, &po.Priority,
+		&po.ReadAt, &po.DismissedAt, &po.NotAfter, &po.NotBefore,
+		&po.CreatedAt, &po.UpdatedAt, &po.DetailsURL,
+	}
 }
 
 func newNotificationPO(n *notification.Notification) *notificationPO {
@@ -796,12 +830,7 @@ func (po *notificationPO) DomainObject() (*notification.Notification, error) {
 // scanNotificationRow 从 sql.Row 或 sql.Rows 扫描一行并构造领域对象
 func scanNotificationRow(s rowScanner) (*notification.Notification, error) {
 	var po notificationPO
-	err := s.Scan(
-		&po.ID, &po.Tag, &po.Channel, &po.Title, &po.Body, &po.Priority,
-		&po.ReadAt, &po.DismissedAt, &po.NotAfter, &po.NotBefore,
-		&po.CreatedAt, &po.UpdatedAt, &po.DetailsURL,
-	)
-	if err != nil {
+	if err := s.Scan(po.scanDest()...); err != nil {
 		return nil, err
 	}
 

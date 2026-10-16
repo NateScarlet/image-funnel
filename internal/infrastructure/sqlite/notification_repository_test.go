@@ -25,10 +25,10 @@ func TestExplainQueryPlans(t *testing.T) {
 	ctx := context.Background()
 
 	queries := map[string]string{
-		"Get":             `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE id = ?`,
-		"GetByTag":        `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE tag = ?`,
+		"Get":             `EXPLAIN QUERY PLAN SELECT ` + notificationColumnList + ` FROM notifications WHERE id = ?`,
+		"GetByTag":        `EXPLAIN QUERY PLAN SELECT ` + notificationColumnList + ` FROM notifications WHERE tag = ?`,
 		"SaveCheckTag":    `EXPLAIN QUERY PLAN SELECT COUNT(*) FROM notifications WHERE tag = ?`,
-		"Find":            `EXPLAIN QUERY PLAN SELECT id, tag, channel, title, body, priority, read_at, dismissed_at, not_after, not_before, created_at, updated_at, details_url FROM notifications WHERE 1=1 AND channel IN ('hook:test') AND not_before <= 100 AND not_after > 100 ORDER BY created_at DESC, id DESC`,
+		"Find":            `EXPLAIN QUERY PLAN SELECT ` + notificationColumnList + ` FROM notifications WHERE 1=1 AND channel IN ('hook:test') AND not_before <= 100 AND not_after > 100 ORDER BY created_at DESC, id DESC`,
 		"Channels":        `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before, expires_at FROM channel_summary ORDER BY CASE WHEN expires_at <= :now THEN 0 ELSE 1 END ASC, latest_not_before DESC, channel ASC`,
 		"freshRows":       `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before FROM channel_summary WHERE expires_at > :now AND latest_notification_id != '' ORDER BY latest_not_before DESC, channel ASC`,
 		"refreshSummary":  `EXPLAIN QUERY PLAN SELECT channel, unread_count, latest_notification_id, latest_not_before FROM channel_summary WHERE channel = ?`,
@@ -267,4 +267,129 @@ func TestNotificationRepository(t *testing.T) {
 
 	_, err = repo.Get(ctx, "notif:44444444-4444-4444-4444-444444444444")
 	assert.Error(t, err)
+}
+
+// TestNotificationColumnsMatchTableSchema 断言列清单与表结构、持久化对象三者一致。
+// 新增或删除一列时，若漏改列清单、notificationPO 字段或绑定/扫描目标序，本测试即失败。
+func TestNotificationColumnsMatchTableSchema(t *testing.T) {
+	repo, cleanup, err := NewNotificationRepository(
+		"file:notification-columns?mode=memory&cache=shared",
+		notification.NewFilterBuilder(),
+	)
+	require.NoError(t, err)
+	defer cleanup()
+
+	// 从表结构读取实际列序
+	rows, err := repo.db.QueryContext(context.Background(), "PRAGMA table_info(notifications)")
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var schemaColumns []string
+	for rows.Next() {
+		var (
+			cid          int
+			name         string
+			columnType   string
+			notNull      int
+			defaultValue sql.NullString
+			primaryKey   int
+		)
+		require.NoError(t, rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey))
+		schemaColumns = append(schemaColumns, name)
+	}
+	require.NoError(t, rows.Err())
+
+	assert.Equal(t, notificationColumns, schemaColumns)
+
+	// INSERT 绑定序与 SELECT 扫描序都必须恰好覆盖清单中的每一列
+	po := &notificationPO{}
+	assert.Len(t, po.columnValues(), len(notificationColumns))
+	assert.Len(t, po.scanDest(), len(notificationColumns))
+}
+
+// TestNotificationColumnMappingOrder 用互异的列值端到端验证列映射：
+// INSERT 的绑定序与 SELECT 的扫描序都与列清单一致，任何一处错位都会暴露，
+// 而不是静默写入或读出错误的列。
+func TestNotificationColumnMappingOrder(t *testing.T) {
+	repo, cleanup, err := NewNotificationRepository(
+		"file:notification-column-order?mode=memory&cache=shared",
+		notification.NewFilterBuilder(),
+	)
+	require.NoError(t, err)
+	defer cleanup()
+
+	const tag = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	// 每列使用互异的值，便于逐位比对
+	base := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	readAt := base.Add(1 * time.Hour)
+	dismissedAt := base.Add(2 * time.Hour)
+	notAfter := base.Add(3 * time.Hour)
+	notBefore := base.Add(4 * time.Hour)
+	createdAt := base.Add(5 * time.Hour)
+	updatedAt := base.Add(6 * time.Hour)
+
+	n, err := notification.FromRepository(
+		scalar.ToID("notif:"+tag),
+		tag,
+		"channel-value",
+		"title-value",
+		"body-value",
+		shared.NotificationPriorityHigh,
+		readAt,
+		dismissedAt,
+		notAfter,
+		notBefore,
+		createdAt,
+		updatedAt,
+		scalar.MustParseURI("open-dir://col-order/path?arg=1"),
+	)
+	require.NoError(t, err)
+
+	didCreate, err := repo.Save(context.Background(), n)
+	require.NoError(t, err)
+	require.True(t, didCreate)
+
+	// 按列清单顺序直接扫描原始行，逐位比对落库值（校验 INSERT 的绑定序）
+	row := repo.db.QueryRowContext(context.Background(),
+		"SELECT "+notificationColumnList+" FROM notifications WHERE tag = ?", tag)
+	got := make([]any, len(notificationColumns))
+	dest := make([]any, len(got))
+	for i := range got {
+		dest[i] = &got[i]
+	}
+	require.NoError(t, row.Scan(dest...))
+
+	assert.Equal(t, []any{
+		"notif:" + tag,
+		tag,
+		"channel-value",
+		"title-value",
+		"body-value",
+		shared.NotificationPriorityHigh.String(),
+		readAt.UnixMilli(),
+		dismissedAt.UnixMilli(),
+		notAfter.UnixMilli(),
+		notBefore.UnixMilli(),
+		createdAt.UnixMilli(),
+		updatedAt.UnixMilli(),
+		n.DetailsURL().String(),
+	}, got)
+
+	// 经领域仓储读回同一行，逐字段比对（校验 SELECT 的扫描序）
+	// 时间按毫秒时间戳比对：读回的是同一时刻但位于 Local 时区
+	loaded, err := repo.Get(context.Background(), "notif:"+tag)
+	require.NoError(t, err)
+	assert.Equal(t, scalar.ToID("notif:"+tag), loaded.ID())
+	assert.Equal(t, tag, loaded.Tag())
+	assert.Equal(t, "channel-value", loaded.Channel())
+	assert.Equal(t, "title-value", loaded.Title())
+	assert.Equal(t, "body-value", loaded.Body())
+	assert.Equal(t, shared.NotificationPriorityHigh, loaded.Priority())
+	assert.Equal(t, readAt.UnixMilli(), loaded.ReadAt().UnixMilli())
+	assert.Equal(t, dismissedAt.UnixMilli(), loaded.DismissedAt().UnixMilli())
+	assert.Equal(t, notAfter.UnixMilli(), loaded.NotAfter().UnixMilli())
+	assert.Equal(t, notBefore.UnixMilli(), loaded.NotBefore().UnixMilli())
+	assert.Equal(t, createdAt.UnixMilli(), loaded.CreatedAt().UnixMilli())
+	assert.Equal(t, updatedAt.UnixMilli(), loaded.UpdatedAt().UnixMilli())
+	assert.Equal(t, n.DetailsURL(), loaded.DetailsURL())
 }
