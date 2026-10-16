@@ -31,8 +31,10 @@ RUN --mount=type=cache,target=/root/.pnpm-store \
     pnpm --filter image-funnel-frontend run build && \
     rm -rf node_modules/ frontend/node_modules/
 
-# 阶段 2：构建后端
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-builder
+# 阶段 2：测试后端
+# 固定在构建平台原生执行，多平台构建时只跑一次：否则每个目标平台都会各跑一遍完整测试，
+# 其中 arm64 目标只能在 amd64 主机上经 QEMU 模拟执行，时序敏感用例会因此偶发失败
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend-test
 
 # 支持替换 Alpine 的源地址以加速 apk 包安装
 ARG ALPINE_MIRROR_URL
@@ -58,6 +60,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # 复制后端和共享逻辑的全部源码
 COPY . .
 
+# 挂载编译器缓存和模块依赖缓存执行单元测试
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    go test ./...
+
+# 阶段 3：构建后端
+# 继承测试阶段（同一构建平台）已就绪的源码与依赖，仅按目标平台交叉编译
+FROM backend-test AS backend-builder
+
 # 自动由 Docker Buildx 传入的目标操作系统和架构
 ARG TARGETOS
 ARG TARGETARCH
@@ -68,15 +79,14 @@ ENV GOOS=${TARGETOS} \
     GOARCH=${TARGETARCH} \
     CGO_ENABLED=0
 
-# 挂载编译器缓存和模块依赖缓存，执行单元测试并编译二进制文件
+# 挂载编译器缓存和模块依赖缓存，编译目标平台二进制文件
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    go test ./... && \
     go build \
     -ldflags "-X main.version=${VERSION} -s -w" \
     -o image-funnel ./cmd/server
 
-# 阶段 3：最终运行环境
+# 阶段 4：最终运行环境
 FROM alpine:3.21
 
 # 支持运行时替换 Alpine 的源地址
