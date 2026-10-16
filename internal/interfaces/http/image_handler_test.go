@@ -706,6 +706,104 @@ func TestHandleImage_DefaultToWebPWhenNoAccept(t *testing.T) {
 	}
 }
 
+func TestHandleImage_ExplicitlyRejectedSourceIsNotServed(t *testing.T) {
+	// q=0 是明文拒绝：即使通配符也在列表里，源图 MIME 也不得被判为可接受（RFC 9110 §12.5.1）
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+	handler := handleImage(logger, signer, coordinator, rootDir)
+
+	for _, accept := range []string{"image/jpeg;q=0, image/*", "image/jpeg;q=0, */*"} {
+		t.Run(accept, func(t *testing.T) {
+			// 不带 width → 无需缩放，命中的是「源图能否直出」这一判定
+			req := signedRequest(t, signer, rootDir, relPath, nil, accept)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected status 200, got %d", rr.Code)
+			}
+			// 通配符使 avif/webp 同 q 可接受，按 ADR 0010 取 AVIF
+			if got := rr.Header().Get("Content-Type"); got != "image/avif" {
+				t.Errorf("Accept %q 拒绝源图 jpeg，应转码为 image/avif，got %q", accept, got)
+			}
+		})
+	}
+}
+
+func TestHandleImage_SpecificityOverrideAppliesToBothDecisions(t *testing.T) {
+	// "image/webp;q=0, */*;q=0.9" 中 webp 的有效 q 由更 specific 的 range 决定为 0：
+	// 转码目标不得包含 webp；而源图 jpeg 未被显式提及，仍按 */* 的 q 接受
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+	handler := handleImage(logger, signer, coordinator, rootDir)
+	const accept = "image/webp;q=0, */*;q=0.9"
+
+	t.Run("转码目标不含被拒绝的 webp", func(t *testing.T) {
+		// 需要缩放才会进入转码目标选择
+		req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, accept)
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Content-Type"); got != "image/avif" {
+			t.Errorf("webp 被 q=0 拒绝，应转码为 image/avif，got %q", got)
+		}
+	})
+
+	t.Run("源图仍按通配符被接受", func(t *testing.T) {
+		req := signedRequest(t, signer, rootDir, relPath, nil, accept)
+		rr := httptest.NewRecorder()
+
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Content-Type"); got != "image/jpeg" {
+			t.Errorf("jpeg 经 */* 被接受，应直出原图，got %q", got)
+		}
+	})
+}
+
+func TestHandleImage_EqualQTieBreakIsOrderIndependent(t *testing.T) {
+	// ADR 0010：同 q 值的书写顺序不承载偏好。avif 与 webp 并列时固定取 AVIF，
+	// 因此以下四种写法必须产出同一结果
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+	handler := handleImage(logger, signer, coordinator, rootDir)
+
+	for _, accept := range []string{
+		"image/avif, image/webp",
+		"image/webp, image/avif",
+		"*/*, image/webp",
+		"image/webp, */*",
+	} {
+		t.Run(accept, func(t *testing.T) {
+			req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, accept)
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Errorf("expected status 200, got %d", rr.Code)
+			}
+			if got := rr.Header().Get("Content-Type"); got != "image/avif" {
+				t.Errorf("Accept %q 同 q 并列应取 AVIF，got %q", accept, got)
+			}
+		})
+	}
+}
+
 // #endregion
 
 // requireWriteSource 在指定路径写入一个真实源图文件（带有 JPEG 头以便 MIME 检测）

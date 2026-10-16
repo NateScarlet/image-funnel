@@ -152,37 +152,30 @@ func handleImage(
 // 返回的 formatDecision 中如果 serveOriginal=true，则 contentType 为源图 MIME
 func decideFormat(r *http.Request, absPath, filename string, width, sourceWidth int) formatDecision {
 	accept := r.Header.Get("Accept")
-	preferredFormats := util.PreferredImageFormats(accept)
 
 	// 是否需要缩放：仅当显式指定宽度且小于源图宽度时才需要。
 	// 画质不参与该判断——转码与否本质是分辨率问题，画质由编码器统一配置
 	needsResize := width > 0 && width < sourceWidth
 
-	// 无需缩放时尝试返回原图，前提是源图 MIME 在客户端接受范围内
+	// 无需缩放时尝试返回原图，前提是源图 MIME 被客户端接受（判定不限于受支持的输出格式）
 	if !needsResize {
 		// 检测源图 MIME 类型
 		file, err := os.Open(absPath)
 		if err == nil {
 			contentType, _, err := util.DetectContentType(file, filename)
 			file.Close()
-			if err == nil {
-				// 直接解析 Accept 头检查源图 MIME 是否被接受（不限于支持的输出格式）
-				acceptedTypes := util.ParseAcceptHeader(accept)
-				for _, at := range acceptedTypes {
-					if at.Type == contentType || at.Type == "image/*" || at.Type == "*/*" {
-						return formatDecision{
-							serveOriginal: true,
-							contentType:   contentType,
-							sourceWidth:   sourceWidth,
-						}
-					}
+			if err == nil && util.Accepts(accept, contentType) {
+				return formatDecision{
+					serveOriginal: true,
+					contentType:   contentType,
+					sourceWidth:   sourceWidth,
 				}
 			}
 		}
 	}
 
 	// 需要转码：根据 Accept 优先级选择格式
-	for _, pf := range preferredFormats {
+	for _, pf := range util.PreferredImageFormats(accept) {
 		switch pf {
 		case "image/avif":
 			return formatDecision{format: appimage.ImageFormatAVIF, sourceWidth: sourceWidth}

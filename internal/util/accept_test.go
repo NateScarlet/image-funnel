@@ -1,131 +1,129 @@
 package util
 
 import (
+	"slices"
 	"testing"
 )
 
-func TestParseAcceptHeader(t *testing.T) {
+func TestAccepts(t *testing.T) {
 	tests := []struct {
-		name     string
-		accept   string
-		expected []MediaType
+		name        string
+		accept      string
+		contentType string
+		want        bool
 	}{
 		{
-			name:   "empty",
-			accept: "",
-			expected: nil,
+			name:        "同名类型",
+			accept:      "image/jpeg",
+			contentType: "image/jpeg",
+			want:        true,
 		},
 		{
-			name:   "single type",
-			accept: "image/avif",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 1.0, Specificity: 2},
-			},
+			name:        "列表中命中一项",
+			accept:      "image/avif, image/jpeg, image/webp",
+			contentType: "image/jpeg",
+			want:        true,
 		},
 		{
-			name:   "multiple types",
-			accept: "image/avif, image/webp",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 1.0, Specificity: 2},
-				{Type: "image/webp", Quality: 1.0, Specificity: 2},
-			},
+			name:        "列表中未出现",
+			accept:      "image/avif, image/webp",
+			contentType: "image/jpeg",
+			want:        false,
 		},
 		{
-			name:   "with q-values",
-			accept: "image/avif;q=0.9, image/webp;q=0.8",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 0.9, Specificity: 2},
-				{Type: "image/webp", Quality: 0.8, Specificity: 2},
-			},
+			name:        "通配符覆盖",
+			accept:      "image/*, */*",
+			contentType: "image/jpeg",
+			want:        true,
 		},
 		{
-			name:   "q-values with different order",
-			accept: "image/webp;q=0.8, image/avif;q=0.9",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 0.9, Specificity: 2},
-				{Type: "image/webp", Quality: 0.8, Specificity: 2},
-			},
+			name:        "image/* 不覆盖非图片",
+			accept:      "image/*",
+			contentType: "text/plain",
+			want:        false,
+		},
+		// RFC 9110 §12.5.1：某类型的 q 值由覆盖它的最 specific 的 media-range 决定，
+		// 因此显式 q=0 不会被更宽的通配符重新「接受」回来
+		{
+			name:        "显式 q=0 不被 image/* 覆盖",
+			accept:      "image/jpeg;q=0, image/*",
+			contentType: "image/jpeg",
+			want:        false,
 		},
 		{
-			name:   "with wildcards",
-			accept: "image/avif, image/*, */*",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 1.0, Specificity: 2},
-				{Type: "image/*", Quality: 1.0, Specificity: 1},
-				{Type: "*/*", Quality: 1.0, Specificity: 0},
-			},
+			name:        "显式 q=0 不被 */* 覆盖",
+			accept:      "image/jpeg;q=0, */*",
+			contentType: "image/jpeg",
+			want:        false,
 		},
 		{
-			name:   "wildcards with q-values",
-			accept: "image/*;q=0.5, image/avif;q=0.9, */*;q=0.1",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 0.9, Specificity: 2},
-				{Type: "image/*", Quality: 0.5, Specificity: 1},
-				{Type: "*/*", Quality: 0.1, Specificity: 0},
-			},
+			name:        "显式 q=0 仅否决自身",
+			accept:      "image/jpeg;q=0, */*",
+			contentType: "image/png",
+			want:        true,
 		},
 		{
-			name:   "with extra parameters",
-			accept: "image/avif;q=0.9;foo=bar, image/webp",
-			expected: []MediaType{
-				{Type: "image/webp", Quality: 1.0, Specificity: 2},
-				{Type: "image/avif", Quality: 0.9, Specificity: 2, Params: map[string]string{"foo": "bar"}},
-			},
+			name:        "通配符 q=0 不否决被显式列出的类型",
+			accept:      "image/*;q=0, image/webp;q=0.9",
+			contentType: "image/webp",
+			want:        true,
 		},
 		{
-			name:   "Chrome-style",
-			accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 1.0, Specificity: 2},
-				{Type: "image/webp", Quality: 1.0, Specificity: 2},
-				{Type: "image/apng", Quality: 1.0, Specificity: 2},
-				{Type: "image/*", Quality: 1.0, Specificity: 1},
-				{Type: "*/*", Quality: 0.8, Specificity: 0},
-			},
+			name:        "最 specific 的 q=0 否决通配符",
+			accept:      "image/webp;q=0, */*;q=0.9",
+			contentType: "image/webp",
+			want:        false,
 		},
 		{
-			name:   "Firefox-style",
-			accept: "image/avif,image/webp,*/*;q=0.8",
-			expected: []MediaType{
-				{Type: "image/avif", Quality: 1.0, Specificity: 2},
-				{Type: "image/webp", Quality: 1.0, Specificity: 2},
-				{Type: "*/*", Quality: 0.8, Specificity: 0},
-			},
+			name:        "通配符 q=0 否决未被显式列出的类型",
+			accept:      "image/*;q=0",
+			contentType: "image/png",
+			want:        false,
 		},
 		{
-			name:   "Safari-style (no avif/webp explicit)",
-			accept: "image/*,*/*;q=0.8",
-			expected: []MediaType{
-				{Type: "image/*", Quality: 1.0, Specificity: 1},
-				{Type: "*/*", Quality: 0.8, Specificity: 0},
-			},
+			name:        "q 极低但仍大于 0 即可接受",
+			accept:      "image/jpeg;q=0.001",
+			contentType: "image/jpeg",
+			want:        true,
+		},
+		{
+			name:        "空 Accept 不可接受",
+			accept:      "",
+			contentType: "image/jpeg",
+			want:        false,
+		},
+		// 解析细节：q 缺省为 1，非 q 参数被忽略，空段被跳过
+		{
+			name:        "q 缺省为 1",
+			accept:      "image/jpeg;foo=bar",
+			contentType: "image/jpeg",
+			want:        true,
+		},
+		{
+			name:        "空段与多余空白被跳过",
+			accept:      " , image/jpeg , ",
+			contentType: "image/jpeg",
+			want:        true,
+		},
+		{
+			name:        "q 值带引号",
+			accept:      `image/jpeg;q="0"`,
+			contentType: "image/jpeg",
+			want:        false,
+		},
+		// RFC 未定义同一类型被重复书写的情形：取其中最大 q，避免判定依赖书写顺序
+		{
+			name:        "同类型重复书写取其中最大 q",
+			accept:      "image/jpeg;q=0, image/jpeg;q=1",
+			contentType: "image/jpeg",
+			want:        true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ParseAcceptHeader(tt.accept)
-			if len(result) != len(tt.expected) {
-				t.Errorf("expected %d types, got %d: %+v", len(tt.expected), len(result), result)
-				return
-			}
-			for i, exp := range tt.expected {
-				if result[i].Type != exp.Type {
-					t.Errorf("type[%d]: expected %q, got %q", i, exp.Type, result[i].Type)
-				}
-				if result[i].Quality != exp.Quality {
-					t.Errorf("quality[%d]: expected %v, got %v", i, exp.Quality, result[i].Quality)
-				}
-				if result[i].Specificity != exp.Specificity {
-					t.Errorf("specificity[%d]: expected %v, got %v", i, exp.Specificity, result[i].Specificity)
-				}
-				if exp.Params != nil {
-					for k, v := range exp.Params {
-						if result[i].Params[k] != v {
-							t.Errorf("param[%d][%s]: expected %q, got %q", i, k, v, result[i].Params[k])
-						}
-					}
-				}
+			if got := Accepts(tt.accept, tt.contentType); got != tt.want {
+				t.Errorf("Accepts(%q, %q) = %v, want %v", tt.accept, tt.contentType, got, tt.want)
 			}
 		})
 	}
@@ -133,63 +131,98 @@ func TestParseAcceptHeader(t *testing.T) {
 
 func TestPreferredImageFormats(t *testing.T) {
 	tests := []struct {
-		name     string
-		accept   string
-		expected []string
+		name   string
+		accept string
+		want   []string
 	}{
 		{
-			name:     "avif preferred",
-			accept:   "image/avif, image/webp",
-			expected: []string{"image/avif", "image/webp"},
+			name:   "avif 与 webp 同 q 时固定 AVIF 优先",
+			accept: "image/avif, image/webp",
+			want:   []string{"image/avif", "image/webp"},
 		},
 		{
-			name:     "webp preferred",
-			accept:   "image/webp, image/avif",
-			expected: []string{"image/webp", "image/avif"},
+			name:   "书写顺序不影响同 q 取舍",
+			accept: "image/webp, image/avif",
+			want:   []string{"image/avif", "image/webp"},
 		},
 		{
-			name:     "with q-values",
-			accept:   "image/avif;q=0.9, image/webp;q=0.8",
-			expected: []string{"image/avif", "image/webp"},
+			name:   "q 值不同时按 q 降序",
+			accept: "image/webp;q=0.9, image/avif;q=0.8",
+			want:   []string{"image/webp", "image/avif"},
 		},
 		{
-			name:     "only webp supported",
-			accept:   "image/webp, image/*",
-			expected: []string{"image/webp", "image/*"},
+			name:   "显式 q=0 被排除",
+			accept: "image/webp;q=0, image/avif;q=0.5",
+			want:   []string{"image/avif"},
 		},
 		{
-			name:     "only avif supported",
-			accept:   "image/avif, */*",
-			expected: []string{"image/avif", "*/*"},
+			name:   "显式 q=0 不被 */* 重新接受",
+			accept: "image/webp;q=0, */*;q=0.9",
+			want:   []string{"image/avif"},
 		},
 		{
-			name:     "no explicit image formats",
-			accept:   "image/*, */*",
-			expected: []string{"image/*", "*/*"},
+			name:   "通配符让受支持格式以通配符的 q 值入选",
+			accept: "image/*",
+			want:   []string{"image/avif", "image/webp"},
 		},
 		{
-			name:     "empty accept",
-			accept:   "",
-			expected: nil,
+			name:   "*/* 让全部受支持格式同 q 入选",
+			accept: "*/*",
+			want:   []string{"image/avif", "image/webp"},
+		},
+		// issue 验收条目：这两种写法必须产出相同结果（通配符让 avif 与 webp 同 q）
+		{
+			name:   "通配符在显式条目之前",
+			accept: "*/*, image/webp",
+			want:   []string{"image/avif", "image/webp"},
 		},
 		{
-			name:     "unsupported formats only",
-			accept:   "image/apng, image/jpeg",
-			expected: []string{}, // no supported formats, but will have wildcards if present
+			name:   "通配符在显式条目之后",
+			accept: "image/webp, */*",
+			want:   []string{"image/avif", "image/webp"},
+		},
+		{
+			name:   "通配符与显式条目的 q 值共同排序",
+			accept: "image/*, image/avif;q=0.5",
+			want:   []string{"image/webp", "image/avif"},
+		},
+		{
+			name:   "Chrome 典型头",
+			accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+			want:   []string{"image/avif", "image/webp"},
+		},
+		{
+			name:   "Firefox 典型头",
+			accept: "image/avif,image/webp,*/*;q=0.8",
+			want:   []string{"image/avif", "image/webp"},
+		},
+		{
+			name:   "仅声明受支持格式之一",
+			accept: "image/webp",
+			want:   []string{"image/webp"},
+		},
+		{
+			name:   "无所支持的格式",
+			accept: "image/apng, image/jpeg",
+			want:   nil,
+		},
+		{
+			name:   "全部受支持格式被 q=0 否决",
+			accept: "image/avif;q=0, image/webp;q=0",
+			want:   nil,
+		},
+		{
+			name:   "空 Accept 无候选",
+			accept: "",
+			want:   nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := PreferredImageFormats(tt.accept)
-			if len(result) != len(tt.expected) {
-				t.Errorf("expected %d formats, got %d: %v", len(tt.expected), len(result), result)
-				return
-			}
-			for i, exp := range tt.expected {
-				if result[i] != exp {
-					t.Errorf("format[%d]: expected %q, got %q", i, exp, result[i])
-				}
+			got := PreferredImageFormats(tt.accept)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("PreferredImageFormats(%q) = %v, want %v", tt.accept, got, tt.want)
 			}
 		})
 	}
