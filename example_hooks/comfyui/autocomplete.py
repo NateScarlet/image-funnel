@@ -24,9 +24,10 @@ from typing import (
     Generator,
     cast,
 )
-import requests
 from PIL import Image
 
+from .cancellable_http import HttpCanceledError, HttpError
+from .cancellation import CancelToken
 from .db import SQLiteContext
 from .danbooru import (
     DanbooruTagProvider,
@@ -1023,7 +1024,7 @@ class DanbooruProvider(AutocompleteProvider):
                             type="danbooru",
                         )
                     )
-            except requests.RequestException as e:
+            except HttpError as e:
                 _LOGGER.warning(
                     "Failed to provide Danbooru suggestions: %s", e, exc_info=True
                 )
@@ -1094,7 +1095,7 @@ class DanbooruProvider(AutocompleteProvider):
                         )
                         if len(suggestions) >= 20:
                             break
-                except requests.RequestException as e:
+                except HttpError as e:
                     _LOGGER.warning(
                         "Failed to provide Danbooru related suggestions: %s",
                         e,
@@ -1137,6 +1138,8 @@ class AutocompleteRequest:
     image_paths: List[str]
     root_dir: str
     directory_rel_path: str
+    # 取消令牌：入口构造，随请求一路下传到网络层；见 ADR 0011
+    cancel_token: CancelToken
 
 
 @dataclass(frozen=True)
@@ -1179,7 +1182,9 @@ def build_suggestion_text_formatter(action: str) -> SuggestionTextFormatter:
     return NodeTextFormatter(ModelFormatConfig.load())
 
 
-def build_request_from_env(target_command: str) -> AutocompleteRequest:
+def build_request_from_env(
+    target_command: str, cancel_token: CancelToken
+) -> AutocompleteRequest:
     """单次模式：入口从环境变量构造请求上下文（缺失环境变量即报错中止，快速失败）。"""
     return AutocompleteRequest(
         target_command=target_command,
@@ -1191,10 +1196,13 @@ def build_request_from_env(target_command: str) -> AutocompleteRequest:
         image_paths=cast(List[str], json.loads(os.environ["IMAGE_FUNNEL_IMAGE_PATHS"])),
         root_dir=os.environ["IMAGE_FUNNEL_ROOT_DIR"],
         directory_rel_path=os.environ["IMAGE_FUNNEL_DIRECTORY_REL_PATH"],
+        cancel_token=cancel_token,
     )
 
 
-def build_request_from_params(params: Dict[str, Any]) -> AutocompleteRequest:
+def build_request_from_params(
+    params: Dict[str, Any], cancel_token: CancelToken
+) -> AutocompleteRequest:
     """serve 模式：入口从 JSON-RPC 请求参数构造请求上下文。"""
     cwords = cast(List[str], params.get("cwords", []) or [])
     target_command = ""
@@ -1210,6 +1218,7 @@ def build_request_from_params(params: Dict[str, Any]) -> AutocompleteRequest:
         image_paths=cast(List[str], params.get("imagePaths", []) or []),
         root_dir=cast(str, params.get("rootDir", "") or ""),
         directory_rel_path=cast(str, params.get("directoryRelPath", "") or ""),
+        cancel_token=cancel_token,
     )
 
 
@@ -1271,6 +1280,7 @@ def build_providers(
                 show_nsfw=show_nsfw,
                 embedding_provider_url=embedding_provider_url,
                 cache=SQLiteDanbooruCache(db_ctx),
+                cancel_token=request.cancel_token,
             )
             if tag_provider is not None:
                 providers.append(
@@ -1316,6 +1326,9 @@ def autocomplete(
     )
 
     for provider in services.providers:
+        # 取消检查点：请求方已不需要该结果时不再进入后续 provider（含其网络调用）
+        if request.cancel_token.is_canceled():
+            return
         if provider.can_provide(context):
             has_suggestions = False
             for suggestion in provider.provide(context):
@@ -1378,7 +1391,7 @@ def _write_error_response(writer: Any, req_id: Any, message: str) -> None:
 
 
 class _AutocompleteTask:
-    """单个自动补全请求的任务：独立线程运行，支持取消标记（尽力而为中断）。"""
+    """单个自动补全请求的任务：独立线程运行，支持取消（尽力而为中断）。"""
 
     def __init__(
         self,
@@ -1403,14 +1416,13 @@ class _AutocompleteTask:
         self.active_lock = active_lock
         self.danbooru_data_dir = danbooru_data_dir
         self.embedding_provider_url = embedding_provider_url
-        self._canceled = threading.Event()
         self._thread = threading.Thread(
             target=self._run, name=f"autocomplete-{req_id}", daemon=True
         )
 
     def cancel(self) -> None:
-        """标记取消：响应写入前检查，取消后的请求不再返回结果。"""
-        self._canceled.set()
+        """取消请求：令牌置位并执行清理动作（如关闭在途 HTTP 客户端）。"""
+        self.request.cancel_token.cancel()
 
     def start(self) -> None:
         self._thread.start()
@@ -1432,6 +1444,9 @@ class _AutocompleteTask:
             ) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
+        except HttpCanceledError:
+            # 取消掐断在途调用不是失败：请求方已不需要该结果，不回报也不记错误
+            pass
         except Exception as e:
             _LOGGER.error("Autocomplete request %s failed", self.req_id, exc_info=True)
             # 失败原因随 JSON-RPC 错误回给调用方：钩子 stderr 只在 Debug 级别转发，
@@ -1445,7 +1460,7 @@ class _AutocompleteTask:
                 idle = not self.active
             if idle and self.danbooru_data_dir:
                 release_cooc_cache(self.danbooru_data_dir)
-        if self._canceled.is_set():
+        if self.request.cancel_token.is_canceled():
             return
         if failure is not None:
             _write_error_response(self.writer, self.req_id, failure)
@@ -1491,7 +1506,8 @@ def serve() -> None:
 
         req_id = msg["id"]
         params = cast(Dict[str, Any], msg.get("params", {}) or {})
-        request = build_request_from_params(params)
+        # 取消令牌每请求一个，由入口构造并随请求上下文下传网络层
+        request = build_request_from_params(params, CancelToken())
         # 依赖随请求的目录上下文构建；初始化失败在此抛出，进程退出由应用重启（快速失败）
         task = _AutocompleteTask(
             req_id,
@@ -1525,8 +1541,9 @@ def main() -> None:
         target_cmd = sys.argv[1]
 
         # 单次模式：入口从环境变量构造请求上下文与依赖（快速失败：缺失配置即报错退出）
+        # 单次模式没有取消通道：显式构造一个永不取消的令牌
         parser = get_parser()
-        request = build_request_from_env(target_cmd)
+        request = build_request_from_env(target_cmd, CancelToken())
         with build_providers(
             request,
             parser,

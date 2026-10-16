@@ -24,6 +24,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
+from comfyui.cancellation import CancelToken  # noqa: E402
 from comfyui.danbooru import FileDanbooruTagProvider  # noqa: E402
 from comfyui.danbooru_embedding import (  # noqa: E402
     NullSemanticTagSearcher,
@@ -110,7 +111,11 @@ def _build_semantic(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
     if not endpoint_url or not has_compiled_embeddings(data_dir):
         return NullSemanticTagSearcher()
     endpoint = parse_embedding_endpoint(endpoint_url)
-    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
+    # 基准脚本没有取消通道：显式构造一个永不取消的令牌
+    cancel_token = CancelToken()
+    return cached_semantic_searcher(
+        data_dir, endpoint, OpenAIEmbeddingClient(endpoint, cancel_token)
+    )
 
 
 def main() -> None:

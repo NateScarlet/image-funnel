@@ -8,9 +8,10 @@ import unittest
 from typing import Any, List, Optional, Sequence, Tuple, cast
 from unittest.mock import MagicMock, patch, PropertyMock
 import numpy as np
-import requests
 import time
 
+from .cancellable_http import HttpError
+from .cancellation import CancelToken
 from .db import SQLiteContext
 from .danbooru import (
     AkizukiDanbooruTagProvider,
@@ -595,12 +596,19 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
     def setUp(self) -> None:
         self.loader = MagicMock()
         self.loader.load.return_value = None
+        self.cancel_token = CancelToken()
 
-    @patch("comfyui.danbooru.requests.post")
+    def _provider(self, show_nsfw: bool = False) -> AkizukiDanbooruTagProvider:
+        return AkizukiDanbooruTagProvider(
+            "https://mock-api.com",
+            loader=self.loader,
+            show_nsfw=show_nsfw,
+            cancel_token=self.cancel_token,
+        )
+
+    @patch("comfyui.danbooru.post_json")
     def test_search_success(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "1girl",
@@ -616,34 +624,27 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
                 },
             ]
         }
-        mock_post.return_value = mock_response
 
-        provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
-        )
-        results = provider.search("girl")
+        results = self._provider().search("girl")
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0].tag, "1girl")
         self.assertEqual(results[0].cn_name, "女孩")
         self.assertEqual(results[0].category, "General")
         mock_post.assert_called_once()
+        # 取消令牌随请求下传到网络层（取消时可掐断该在途请求）
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], self.cancel_token)
 
-    @patch("comfyui.danbooru.requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_search_failure(self, mock_post: MagicMock) -> None:
-        mock_post.side_effect = requests.RequestException("Network Error")
+        mock_post.side_effect = HttpError("Network Error")
 
-        provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
-        )
-        with self.assertRaises(requests.RequestException):
-            provider.search("girl")
+        with self.assertRaises(HttpError):
+            self._provider().search("girl")
 
-    @patch("comfyui.danbooru.requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_related_success(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "masterpiece",
@@ -653,83 +654,61 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
                 },
             ]
         }
-        mock_post.return_value = mock_response
 
-        provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
-        )
-        results = provider.related(["1girl", "solo"])
+        results = self._provider().related(["1girl", "solo"])
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tag, "masterpiece")
         mock_post.assert_called_once()
 
-    @patch("comfyui.danbooru.requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_search_payload_and_nsfw(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"results": []}
-        mock_post.return_value = mock_response
+        mock_post.return_value = {"results": []}
 
-        # 默认情况下 NSFW 为 false
-        provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
-        )
-        provider.search("girl")
-        _, call_kwargs = mock_post.call_args
-        payload = call_kwargs.get("json", {})
+        self._provider().search("girl")
+        _, payload = mock_post.call_args.args
         self.assertEqual(payload["query"], "girl")
         self.assertEqual(payload["limit"], 20)
         self.assertFalse(payload["show_nsfw"])
 
-        # show_nsfw=True 时，应该反映在 payload 中
         mock_post.reset_mock()
-        provider_nsfw = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader, show_nsfw=True
-        )
-        provider_nsfw.search("girl")
-        _, call_kwargs = mock_post.call_args
-        payload = call_kwargs.get("json", {})
+        mock_post.return_value = {"results": []}
+        self._provider(show_nsfw=True).search("girl")
+        _, payload = mock_post.call_args.args
         self.assertTrue(payload["show_nsfw"])
 
-    @patch("comfyui.danbooru.requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_related_payload_and_nsfw(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"results": []}
-        mock_post.return_value = mock_response
+        mock_post.return_value = {"results": []}
 
-        provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
-        )
-        provider.related(["1girl"], target_categories=["General", "Artist"])
-        _, call_kwargs = mock_post.call_args
-        payload = call_kwargs.get("json", {})
+        self._provider().related(["1girl"], target_categories=["General", "Artist"])
+        _, payload = mock_post.call_args.args
         self.assertEqual(payload["tags"], ["1girl"])
         self.assertEqual(payload["limit"], 100)
         self.assertFalse(payload["show_nsfw"])
         self.assertEqual(payload["target_categories"], ["General", "Artist"])
 
         mock_post.reset_mock()
-        provider_nsfw = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader, show_nsfw=True
-        )
-        provider_nsfw.related(["1girl"])
-        _, call_kwargs = mock_post.call_args
-        payload = call_kwargs.get("json", {})
+        mock_post.return_value = {"results": []}
+        self._provider(show_nsfw=True).related(["1girl"])
+        _, payload = mock_post.call_args.args
         self.assertTrue(payload["show_nsfw"])
         self.assertNotIn("target_categories", payload)
 
     def test_from_env(self) -> None:
         with patch.dict(os.environ, {"DANBOORU_SEARCH_INCLUDE_NSFW": "true"}):
             provider = AkizukiDanbooruTagProvider.from_env(
-                "https://mock-api.com", loader=self.loader
+                "https://mock-api.com",
+                loader=self.loader,
+                cancel_token=self.cancel_token,
             )
             self.assertTrue(provider.show_nsfw)
 
         with patch.dict(os.environ, {"DANBOORU_SEARCH_INCLUDE_NSFW": "false"}):
             provider = AkizukiDanbooruTagProvider.from_env(
-                "https://mock-api.com", loader=self.loader
+                "https://mock-api.com",
+                loader=self.loader,
+                cancel_token=self.cancel_token,
             )
             self.assertFalse(provider.show_nsfw)
 
@@ -993,9 +972,14 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.loader = CachedDanbooruTagLoader(
             self.mock_inner, SQLiteDanbooruCache(self.db_ctx), ttl=3600
         )
+        self.cancel_token = CancelToken()
 
     def tearDown(self) -> None:
         self.db_ctx.close()
+
+    def _raw_loader(self) -> AkizukiDanbooruTagLoader:
+        """构造裸 loader；其持有的取消令牌即本用例的 self.cancel_token。"""
+        return AkizukiDanbooruTagLoader("https://mock-api.com", self.cancel_token)
 
     def test_load_cache_hit(self) -> None:
         now = int(time.time())
@@ -1088,10 +1072,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
             with self.assertRaises(sqlite3.Error):
                 self.loader.write_cache(DanbooruTag("solo", "单人", "Solo.", "General"))
 
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_load_success(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "solo_focus",
@@ -1107,60 +1090,45 @@ class TestDanbooruTagLoader(unittest.TestCase):
                 },
             ]
         }
-        mock_post.return_value = mock_response
 
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        raw_loader = self._raw_loader()
         res = raw_loader.load("solo")
 
         assert res is not None
         self.assertEqual(res.tag, "solo")
         self.assertEqual(res.cn_name, "单人")
         self.assertEqual(res.category, "General")
+        # 取消令牌随请求下传到网络层（取消时可掐断该在途请求）
+        self.assertIs(
+            mock_post.call_args.kwargs["cancel_token"], raw_loader.cancel_token
+        )
 
-    @patch("requests.post")
-    def test_akizuki_loader_network_failure_propagates(
+    @patch("comfyui.danbooru.post_json")
+    def test_akizuki_loader_upstream_error_propagates(
         self, mock_post: MagicMock
     ) -> None:
-        """上游网络失败不再被吞掉并返回 None：直接抛出（快速失败）。"""
-        mock_post.side_effect = requests.RequestException("Network Error")
+        """上游失败（网络/超时/非 2xx，均已由网络层归一为 HttpError）直接抛出。"""
+        mock_post.side_effect = HttpError("Network Error")
 
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
-        with self.assertRaises(requests.RequestException):
-            raw_loader.load("solo")
+        with self.assertRaises(HttpError):
+            self._raw_loader().load("solo")
 
-    @patch("requests.post")
-    def test_akizuki_loader_http_error_propagates(self, mock_post: MagicMock) -> None:
-        """HTTP 非 2xx 不再被吞掉：直接抛出。"""
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = requests.HTTPError(
-            "500 Server Error"
-        )
-        mock_post.return_value = mock_response
-
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
-        with self.assertRaises(requests.HTTPError):
-            raw_loader.load("solo")
-
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_missing_field_propagates(
         self, mock_post: MagicMock
     ) -> None:
         """结果项缺字段（编程错误）不再被吞掉：直接抛出。"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [{"cn_name": "缺 tag 字段", "category": "General"}]
         }
-        mock_post.return_value = mock_response
 
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
         with self.assertRaises(KeyError):
-            raw_loader.load("solo")
+            self._raw_loader().load("solo")
 
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_not_found_returns_none(self, mock_post: MagicMock) -> None:
         """无精确匹配视为「未找到」返回 None，而非错误。"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "solo_focus",
@@ -1170,27 +1138,23 @@ class TestDanbooruTagLoader(unittest.TestCase):
                 },
             ]
         }
-        mock_post.return_value = mock_response
 
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
-        self.assertIsNone(raw_loader.load("solo"))
+        self.assertIsNone(self._raw_loader().load("solo"))
 
     def test_akizuki_loader_blank_tag_returns_none(self) -> None:
         """空白 tag 视为「未找到」返回 None，不发起请求。"""
-        raw_loader = AkizukiDanbooruTagLoader("https://mock-api.com")
+        raw_loader = self._raw_loader()
         self.assertIsNone(raw_loader.load("   "))
         self.assertIsNone(raw_loader.load(""))
 
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_provider_related_consumes_loader(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {"tag": "solo", "cn_name": "单人", "category": "General"},
                 {"tag": "1girl", "cn_name": "女孩", "category": "General"},
             ]
         }
-        mock_post.return_value = mock_response
 
         now = int(time.time())
         with self.db_ctx.transaction() as conn:
@@ -1203,7 +1167,7 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.mock_inner.load.return_value = solo_tag
 
         provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
+            "https://mock-api.com", loader=self.loader, cancel_token=self.cancel_token
         )
         results = provider.related(["dummy"])
 
@@ -1217,10 +1181,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.assertEqual(tag_map["solo"].cn_name, "单人")
         self.assertEqual(tag_map["solo"].category, "General")
 
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_provider_prepopulates_loader_cache(self, mock_post: MagicMock) -> None:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "red_hair",
@@ -1230,10 +1193,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
                 }
             ]
         }
-        mock_post.return_value = mock_response
 
         provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader
+            "https://mock-api.com", loader=self.loader, cancel_token=self.cancel_token
         )
         results = provider.search("red")
 
@@ -1348,18 +1310,23 @@ class TestBuildSemanticSearcher(unittest.TestCase):
     def test_build_semantic_searcher_activation_matrix(self) -> None:
         """激活双条件：向量产物存在 且 端点 URL 非空，缺一即传空实现。"""
         data_dir = tempfile.mkdtemp()
+        token = CancelToken()
         try:
             self.assertIsInstance(
-                build_semantic_searcher(data_dir, ""), NullSemanticTagSearcher
+                build_semantic_searcher(data_dir, "", token), NullSemanticTagSearcher
             )
             self.assertIsInstance(
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                build_semantic_searcher(
+                    data_dir, "http://127.0.0.1:1#model=stub", token
+                ),
                 NullSemanticTagSearcher,
             )
             _write_single_tag_fixture(data_dir)
             # 语义层常驻 mmap 住向量产物（Windows 下不可删除），忽略清理错误
             self.assertIsInstance(
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
+                build_semantic_searcher(
+                    data_dir, "http://127.0.0.1:1#model=stub", token
+                ),
                 VectorSemanticTagSearcher,
             )
         finally:
@@ -1370,7 +1337,9 @@ class TestBuildSemanticSearcher(unittest.TestCase):
         with tempfile.TemporaryDirectory() as data_dir:
             _write_single_tag_fixture(data_dir)
             with self.assertRaises(ValueError):
-                build_semantic_searcher(data_dir, "http://127.0.0.1:1#timeoutMs=nope")
+                build_semantic_searcher(
+                    data_dir, "http://127.0.0.1:1#timeoutMs=nope", CancelToken()
+                )
 
 
 class TestBuildDanbooruTagProvider(unittest.TestCase):
@@ -1385,6 +1354,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="",
                 cache=NullDanbooruCache(),
+                cancel_token=CancelToken(),
             )
             self.assertIsInstance(provider, FileDanbooruTagProvider)
 
@@ -1395,6 +1365,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
+            cancel_token=CancelToken(),
         )
         self.assertIsInstance(provider, CachedDanbooruTagProvider)
 
@@ -1405,6 +1376,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
+            cancel_token=CancelToken(),
         )
         self.assertIsNone(provider)
 
@@ -1418,6 +1390,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                     show_nsfw=False,
                     embedding_provider_url="",
                     cache=NullDanbooruCache(),
+                    cancel_token=CancelToken(),
                 )
             self.assertIn("compile_danbooru_data.py", str(ctx.exception))
 
@@ -1431,6 +1404,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="http://127.0.0.1:1#model=stub",
                 cache=NullDanbooruCache(),
+                cancel_token=CancelToken(),
             )
             assert isinstance(provider, FileDanbooruTagProvider)
             self.assertIsInstance(provider.semantic, VectorSemanticTagSearcher)
@@ -1446,15 +1420,15 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="",
                 cache=NullDanbooruCache(),
+                cancel_token=CancelToken(),
             )
             assert isinstance(provider, FileDanbooruTagProvider)
             self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
 
-    @patch("requests.post")
+    @patch("comfyui.danbooru.post_json")
     def test_online_works_with_null_cache(self, mock_post: MagicMock) -> None:
         """在线链路配合 NullDanbooruCache 时不触及任何数据库，直接请求上游。"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_post.return_value = {
             "results": [
                 {
                     "tag": "1girl",
@@ -1464,7 +1438,7 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 }
             ]
         }
-        mock_post.return_value = mock_response
+        cancel_token = CancelToken()
 
         provider = build_danbooru_tag_provider(
             data_dir="",
@@ -1472,8 +1446,11 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
+            cancel_token=cancel_token,
         )
         assert provider is not None
         results = provider.search("girl")
         self.assertEqual([item.tag for item in results], ["1girl"])
         mock_post.assert_called_once()
+        # 调用者注入的令牌一路下传到网络层
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], cancel_token)

@@ -5,7 +5,7 @@
 # dependencies = [
 #   "Pillow",
 #   "numpy",
-#   "requests",
+#   "httpx",
 #   "pyarrow",
 # ]
 # ///

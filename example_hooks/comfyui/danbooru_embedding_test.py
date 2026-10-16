@@ -23,11 +23,12 @@ from typing import (
     Tuple,
     cast,
 )
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
-import requests
 
+from .cancellable_http import HttpCanceledError, HttpError
+from .cancellation import CancelToken
 from .danbooru_embedding import (
     CEILING_COSINE,
     COMPILED_EMBEDDINGS_FILENAME,
@@ -41,6 +42,8 @@ from .danbooru_embedding import (
     EmbeddingError,
     OpenAIEmbeddingClient,
     OpenAITagEmbeddingSource,
+    QUERY_VECTOR_CACHE_SIZE,
+    QueryVectorCache,
     ReusingTagEmbeddingSource,
     TagEmbeddingMatrix,
     TagVectorCache,
@@ -427,106 +430,118 @@ class TestCompileHints(unittest.TestCase):
 
 
 class TestOpenAIEmbeddingClient(unittest.TestCase):
+    def _client(self, spec: str) -> OpenAIEmbeddingClient:
+        """按端点写法构造客户端；取消令牌取全新未取消的一份。"""
+        return OpenAIEmbeddingClient(parse_embedding_endpoint(spec), CancelToken())
+
     def test_sends_model_input_and_timeout(self) -> None:
-        endpoint = parse_embedding_endpoint("http://host:9#model=bge&timeoutMs=250")
-        client = OpenAIEmbeddingClient(endpoint)
-        response = MagicMock()
-        response.json.return_value = {
-            "data": [
-                {"index": 0, "embedding": [1.0, 2.0]},
-                {"index": 1, "embedding": [3.0, 4.0]},
-            ]
-        }
+        client = self._client("http://host:9#model=bge&timeoutMs=250")
         with patch(
-            "comfyui.danbooru_embedding.requests.post", return_value=response
+            "comfyui.danbooru_embedding.post_json",
+            return_value={
+                "data": [
+                    {"index": 0, "embedding": [1.0, 2.0]},
+                    {"index": 1, "embedding": [3.0, 4.0]},
+                ]
+            },
         ) as post:
             vectors = client.embed(["a", "b"])
         self.assertEqual(vectors, [[1.0, 2.0], [3.0, 4.0]])
+        args = cast(Any, post.call_args).args
         kwargs = cast(Any, post.call_args).kwargs
-        self.assertEqual(kwargs["json"], {"model": "bge", "input": ["a", "b"]})
+        self.assertEqual(args[1], {"model": "bge", "input": ["a", "b"]})
         self.assertEqual(kwargs["timeout"], 0.25)
 
-    def test_empty_api_key_sends_no_authorization_header(self) -> None:
-        client = OpenAIEmbeddingClient(
-            parse_embedding_endpoint("http://host:9#apiKey=")
-        )
-        response = MagicMock()
-        response.json.return_value = {"data": [{"index": 0, "embedding": [1.0]}]}
+    def test_cancel_token_reaches_network_layer(self) -> None:
+        """取消令牌随请求下传到网络层（取消时可掐断该在途嵌入请求）。"""
+        token = CancelToken()
+        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"), token)
         with patch(
-            "comfyui.danbooru_embedding.requests.post", return_value=response
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": [1.0]}]},
+        ) as post:
+            client.embed(["a"])
+        self.assertIs(cast(Any, post.call_args).kwargs["cancel_token"], token)
+
+    def test_empty_api_key_sends_no_authorization_header(self) -> None:
+        client = self._client("http://host:9#apiKey=")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ) as post:
             client.embed(["a"])
         headers = cast(Any, post.call_args).kwargs["headers"]
         self.assertNotIn("Authorization", headers)
 
     def test_api_key_sends_bearer_authorization_header(self) -> None:
-        client = OpenAIEmbeddingClient(
-            parse_embedding_endpoint("http://host:9#apiKey=abc")
-        )
-        response = MagicMock()
-        response.json.return_value = {"data": [{"index": 0, "embedding": [1.0]}]}
+        client = self._client("http://host:9#apiKey=abc")
         with patch(
-            "comfyui.danbooru_embedding.requests.post", return_value=response
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ) as post:
             client.embed(["a"])
         headers = cast(Any, post.call_args).kwargs["headers"]
         self.assertEqual(headers["Authorization"], "Bearer abc")
 
     def test_empty_input_skips_request(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        with patch("comfyui.danbooru_embedding.requests.post") as post:
+        client = self._client("http://host:9")
+        with patch("comfyui.danbooru_embedding.post_json") as post:
             self.assertEqual(client.embed([]), [])
         post.assert_not_called()
 
-    def test_request_exception_wrapped(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        with patch(
-            "comfyui.danbooru_embedding.requests.post",
-            side_effect=requests.Timeout("timed out"),
-        ):
+    def test_upstream_error_wrapped_preserving_cause(self) -> None:
+        """网络层失败（网络/超时/非 2xx 已归一为 HttpError）转成 EmbeddingError 且保留原因。"""
+        client = self._client("http://host:9")
+        cause = HttpError("timed out")
+        with patch("comfyui.danbooru_embedding.post_json", side_effect=cause):
             with self.assertRaises(EmbeddingError) as ctx:
                 client.embed(["a"])
         self.assertIn("timed out", str(ctx.exception))
+        self.assertIs(ctx.exception.__cause__, cause)
 
-    def test_http_error_wrapped(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        response = MagicMock()
-        response.raise_for_status.side_effect = requests.HTTPError("500")
-        with patch("comfyui.danbooru_embedding.requests.post", return_value=response):
-            with self.assertRaises(EmbeddingError):
+    def test_cancel_propagates_without_wrapping(self) -> None:
+        """取消掐断在途请求不是嵌入接口不可用：原样传播，不包装成 EmbeddingError。"""
+        client = self._client("http://host:9")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            side_effect=HttpCanceledError("请求已取消，在途请求已被掐断"),
+        ):
+            with self.assertRaises(HttpCanceledError):
                 client.embed(["a"])
 
     def test_response_count_mismatch_rejected(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        response = MagicMock()
-        response.json.return_value = {"data": [{"index": 0, "embedding": [1.0]}]}
-        with patch("comfyui.danbooru_embedding.requests.post", return_value=response):
+        client = self._client("http://host:9")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": [1.0]}]},
+        ):
             with self.assertRaises(EmbeddingError) as ctx:
                 client.embed(["a", "b"])
         self.assertIn("条目数", str(ctx.exception))
 
     def test_missing_index_falls_back_to_position(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        response = MagicMock()
-        response.json.return_value = {
-            "data": [{"embedding": [1.0]}, {"embedding": [2.0]}]
-        }
-        with patch("comfyui.danbooru_embedding.requests.post", return_value=response):
+        client = self._client("http://host:9")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"embedding": [1.0]}, {"embedding": [2.0]}]},
+        ):
             self.assertEqual(client.embed(["a", "b"]), [[1.0], [2.0]])
 
     def test_empty_vector_rejected(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        response = MagicMock()
-        response.json.return_value = {"data": [{"index": 0, "embedding": []}]}
-        with patch("comfyui.danbooru_embedding.requests.post", return_value=response):
+        client = self._client("http://host:9")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": []}]},
+        ):
             with self.assertRaises(EmbeddingError):
                 client.embed(["a"])
 
     def test_non_numeric_vector_rejected(self) -> None:
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
-        response = MagicMock()
-        response.json.return_value = {"data": [{"index": 0, "embedding": ["x"]}]}
-        with patch("comfyui.danbooru_embedding.requests.post", return_value=response):
+        client = self._client("http://host:9")
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": ["x"]}]},
+        ):
             with self.assertRaises(EmbeddingError):
                 client.embed(["a"])
 
@@ -626,7 +641,9 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
             cn_name=_unit_vectors(4, 4),
             wiki=_unit_vectors(4, 4),
         )
-        return VectorSemanticTagSearcher(matrix, client)
+        return VectorSemanticTagSearcher(
+            matrix, client, QueryVectorCache(QUERY_VECTOR_CACHE_SIZE)
+        )
 
     def test_query_vector_uses_cache_and_skips_second_call(self) -> None:
         client = RecordingEmbeddingClient(vector_for=_VECTOR_HALF_ALWAYS)
@@ -658,7 +675,9 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
             ),
             wiki=_unit_vectors(4, 4),
         )
-        hits = VectorSemanticTagSearcher(matrix, client).search("q", 4)
+        hits = VectorSemanticTagSearcher(
+            matrix, client, QueryVectorCache(QUERY_VECTOR_CACHE_SIZE)
+        ).search("q", 4)
         self.assertEqual([hit.rec_id for hit in hits], [1])
         self.assertAlmostEqual(hits[0].score, 1.0, places=5)
 
@@ -667,7 +686,9 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
         rows = np.tile(np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32), (4, 1))
         client = RecordingEmbeddingClient(vector_for=_VECTOR_SECOND_ALWAYS)
         searcher = VectorSemanticTagSearcher(
-            TagEmbeddingMatrix(tag=rows, cn_name=rows, wiki=rows), client
+            TagEmbeddingMatrix(tag=rows, cn_name=rows, wiki=rows),
+            client,
+            QueryVectorCache(QUERY_VECTOR_CACHE_SIZE),
         )
         self.assertEqual(searcher.search("q", 4), [])
 
@@ -696,7 +717,9 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
         )
         client = RecordingEmbeddingClient(vector_for=_VECTOR_HALF_ALWAYS)
         searcher = VectorSemanticTagSearcher(
-            load_compiled_embeddings(self.path), client
+            load_compiled_embeddings(self.path),
+            client,
+            QueryVectorCache(QUERY_VECTOR_CACHE_SIZE),
         )
         searcher.search("q", 4)
         # Windows 上 mmap 常驻时覆盖写失败（Errno 22）；非 Windows 平台可正常覆盖
@@ -781,23 +804,32 @@ class TestSharedSemanticSearcher(unittest.TestCase):
     def _searcher(self, url: str) -> VectorSemanticTagSearcher:
         endpoint = parse_embedding_endpoint(url)
         return cached_semantic_searcher(
-            str(self.tmp_dir), endpoint, OpenAIEmbeddingClient(endpoint)
+            str(self.tmp_dir), endpoint, OpenAIEmbeddingClient(endpoint, CancelToken())
         )
 
-    def test_same_dir_and_endpoint_reuses_instance(self) -> None:
+    def test_same_dir_and_endpoint_shares_query_cache(self) -> None:
+        """同 (目录, 端点) 的两次请求共享查询向量 LRU：第二次同查询不再打接口。"""
+        self._write_matrix()
+        _StubEmbeddingHandler.requests_seen.clear()
+        with stub_embedding_server() as url:
+            self._searcher(url).search("q", 4)
+            self._searcher(url).search("q", 4)
+        self.assertEqual(len(_StubEmbeddingHandler.requests_seen), 1)
+
+    def test_client_stays_request_scoped(self) -> None:
+        """嵌入客户端持有取消令牌，属请求级依赖：共享矩阵但不共享客户端。"""
         self._write_matrix()
         url = "http://127.0.0.1:1#model=stub"
         first = self._searcher(url)
         second = self._searcher(url)
-        self.assertIsInstance(first, VectorSemanticTagSearcher)
-        # 同 (目录, 端点) 复用同一实例，查询向量 LRU 才能跨请求命中
-        self.assertIs(first, second)
+        self.assertIs(first.matrix, second.matrix)
+        self.assertIsNot(first.client, second.client)
 
-    def test_different_endpoint_yields_separate_instance(self) -> None:
+    def test_different_endpoint_yields_separate_state(self) -> None:
         self._write_matrix()
         first = self._searcher("http://127.0.0.1:1#model=stub")
         second = self._searcher("http://127.0.0.1:1#model=other")
-        self.assertIsNot(first, second)
+        self.assertIsNot(first.matrix, second.matrix)
 
     def test_missing_artifact_fails_fast(self) -> None:
         """激活判定已由入口完成，映射缺失属产物损坏：直接报错而非静默空结果。"""

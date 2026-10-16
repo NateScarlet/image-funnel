@@ -26,5 +26,5 @@ JSON-RPC 常驻补全（`[directive.autocomplete].protocol = "json-rpc"`）由�
 ## 后果
 
 - 取消语义在两侧一致，且由测试固定：Python 侧网络层单测（在途请求被掐断）+ serve 集成测试（取消信号传导到网络层）；Go 侧一条 typed error 单测（错误码可结构化断言）。
-- Python 侧线程模型保留，仅网络库从 `requests` 换成 `httpx`（`requests` 仍是其余路径的依赖，不全局替换）。
+- Python 侧线程模型保留，只把脚本侧的网络调用从 `requests` 换成 `httpx`，其余行为不变。
 - 未来读到取消逻辑的人不应把它当作「未真正中断」的 bug 去「修复」——不承诺中断是本 ADR 的有意取舍，要改需先推翻本 ADR。

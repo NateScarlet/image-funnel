@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Protocol, Optional, Any, Dict, Set, Tuple, cast
-import requests
 
+from .cancellable_http import post_json
+from .cancellation import CancelToken
 from .db import SQLiteContext
 from .danbooru_data import (
     COMPILE_SCRIPT_HINT,
@@ -626,12 +627,15 @@ class DanbooruTagLoader(Protocol):
 class AkizukiDanbooruTagLoader:
     """通过 Akizuki 在线接口精确匹配并加载单个 DanbooruTag 的实体。"""
 
-    def __init__(self, search_url: str) -> None:
+    def __init__(self, search_url: str, cancel_token: CancelToken) -> None:
         self.search_url = search_url
+        self.cancel_token = cancel_token
 
     @classmethod
-    def from_env(cls, search_url: str) -> "AkizukiDanbooruTagLoader":
-        return cls(search_url)
+    def from_env(
+        cls, search_url: str, cancel_token: CancelToken
+    ) -> "AkizukiDanbooruTagLoader":
+        return cls(search_url, cancel_token)
 
     def write_cache(self, item: DanbooruTag) -> None:
         """AkizukiDanbooruTagLoader 本身无缓存写操作，此处直接 pass。"""
@@ -652,9 +656,15 @@ class AkizukiDanbooruTagLoader:
         }
 
         # 快速失败：网络/HTTP/响应解析错误一律抛出，只有「未找到」返回 None
-        response = requests.post(api_url, json=payload, timeout=5.0)
-        response.raise_for_status()
-        res_json = response.json()
+        res_json = cast(
+            Dict[str, Any],
+            post_json(
+                api_url,
+                payload,
+                timeout=5.0,
+                cancel_token=self.cancel_token,
+            ),
+        )
         results = res_json.get("results", [])
 
         for item in results:
@@ -739,20 +749,26 @@ class AkizukiDanbooruTagProvider:
         search_url: str,
         loader: DanbooruTagLoader,
         show_nsfw: bool = False,
+        *,
+        cancel_token: CancelToken,
     ) -> None:
         self.search_url = search_url.rstrip("/")
         self.loader = loader
         self.show_nsfw = show_nsfw
+        self.cancel_token = cancel_token
 
     @classmethod
     def from_env(
         cls,
         search_url: str,
         loader: DanbooruTagLoader,
+        cancel_token: CancelToken,
     ) -> "AkizukiDanbooruTagProvider":
         show_nsfw_env = os.getenv("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower()
         show_nsfw = show_nsfw_env in ("true", "1", "yes", "on")
-        return cls(search_url, loader=loader, show_nsfw=show_nsfw)
+        return cls(
+            search_url, loader=loader, show_nsfw=show_nsfw, cancel_token=cancel_token
+        )
 
     def search(self, query: str, skip_semantic: bool = False) -> List[DanbooruTag]:
         # 忽略 skip_semantic：在线链路的检索在远端服务里完成，本侧没有语义层
@@ -775,29 +791,30 @@ class AkizukiDanbooruTagProvider:
             query,
             api_url,
         )
-        try:
-            response = requests.post(api_url, json=payload, timeout=5.0)
-            _LOGGER.debug("Danbooru response status: %d", response.status_code)
-            response.raise_for_status()
-            res_json = response.json()
-            results = res_json.get("results", [])
-            _LOGGER.debug("Danbooru search returned %d items", len(results))
+        res_json = cast(
+            Dict[str, Any],
+            post_json(
+                api_url,
+                payload,
+                timeout=5.0,
+                cancel_token=self.cancel_token,
+            ),
+        )
+        results = cast(List[Dict[str, Any]], res_json.get("results", []))
+        _LOGGER.debug("Danbooru search returned %d items", len(results))
 
-            tags: List[DanbooruTag] = []
-            for item in results:
-                tag = item["tag"]
-                tag_item = DanbooruTag(
-                    tag=tag,
-                    cn_name=item["cn_name"],
-                    wiki=item.get("wiki", ""),
-                    category=item["category"],
-                )
-                tags.append(tag_item)
-                self.loader.write_cache(tag_item)
-            return tags
-        except requests.RequestException as e:
-            _LOGGER.error("Failed to fetch Danbooru suggestions: %s", e, exc_info=True)
-            raise
+        tags: List[DanbooruTag] = []
+        for item in results:
+            tag = cast(str, item["tag"])
+            tag_item = DanbooruTag(
+                tag=tag,
+                cn_name=cast(str, item["cn_name"]),
+                wiki=cast(str, item.get("wiki", "")),
+                category=cast(str, item["category"]),
+            )
+            tags.append(tag_item)
+            self.loader.write_cache(tag_item)
+        return tags
 
     def related(
         self,
@@ -817,36 +834,37 @@ class AkizukiDanbooruTagProvider:
         if target_categories is not None:
             payload["target_categories"] = target_categories
 
-        try:
-            _LOGGER.debug(
-                "Fetching Danbooru related tags for: %r from URL: %r", tags, api_url
+        _LOGGER.debug(
+            "Fetching Danbooru related tags for: %r from URL: %r", tags, api_url
+        )
+        res_json = cast(
+            Dict[str, Any],
+            post_json(
+                api_url,
+                payload,
+                timeout=5.0,
+                cancel_token=self.cancel_token,
+            ),
+        )
+        results = cast(List[Dict[str, Any]], res_json.get("results", []))
+        _LOGGER.debug("Danbooru related search returned %d items", len(results))
+
+        tags_list: List[DanbooruTag] = []
+        for item in results:
+            tag = cast(str, item["tag"])
+            cn_name = cast(str, item.get("cn_name", ""))
+            wiki = cast(str, item.get("wiki", ""))
+            category = cast(str, item.get("category", ""))
+            tag_item = DanbooruTag(
+                tag=tag,
+                cn_name=cn_name,
+                wiki=wiki,
+                category=category,
             )
-            response = requests.post(api_url, json=payload, timeout=5.0)
-            _LOGGER.debug("Danbooru related response status: %d", response.status_code)
-            response.raise_for_status()
-            res_json = cast(Dict[str, Any], response.json())
-            results = cast(List[Dict[str, Any]], res_json.get("results", []))
-            _LOGGER.debug("Danbooru related search returned %d items", len(results))
+            tags_list.append(tag_item)
+            self.loader.write_cache(tag_item)
 
-            tags_list: List[DanbooruTag] = []
-            for item in results:
-                tag = cast(str, item["tag"])
-                cn_name = cast(str, item.get("cn_name", ""))
-                wiki = cast(str, item.get("wiki", ""))
-                category = cast(str, item.get("category", ""))
-                tag_item = DanbooruTag(
-                    tag=tag,
-                    cn_name=cn_name,
-                    wiki=wiki,
-                    category=category,
-                )
-                tags_list.append(tag_item)
-                self.loader.write_cache(tag_item)
-
-            return tags_list
-        except requests.RequestException as e:
-            _LOGGER.error("Failed to fetch Danbooru related tags: %s", e, exc_info=True)
-            raise
+        return tags_list
 
 
 class CachedDanbooruTagProvider:
@@ -953,11 +971,7 @@ class CachedDanbooruTagProvider:
             return cached_results
 
         # 4. 如果没有缓存，则同步请求上游（主线程阻塞）；上游错误直接抛出
-        try:
-            results = self.provider.search(query)
-        except requests.RequestException as e:
-            _LOGGER.error("Danbooru search upstream error: %s", e, exc_info=True)
-            raise
+        results = self.provider.search(query)
 
         # 5. 写入缓存并清理已过期缓存
         self.write_search_cache(query, results)
@@ -998,11 +1012,7 @@ class CachedDanbooruTagProvider:
             return cached_results
 
         # 4. 如果没有缓存，则同步请求上游；上游错误直接抛出
-        try:
-            results = self.provider.related(tags, target_categories=target_categories)
-        except requests.RequestException as e:
-            _LOGGER.error("Danbooru related upstream error: %s", e, exc_info=True)
-            raise
+        results = self.provider.related(tags, target_categories=target_categories)
 
         # 5. 写入缓存并清理已过期缓存
         self.write_related_cache(tags, results, target_categories=target_categories)
@@ -1012,7 +1022,9 @@ class CachedDanbooruTagProvider:
 # #region 裸工厂（外部消费者复用入口）
 
 
-def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
+def build_semantic_searcher(
+    data_dir: str, endpoint_url: str, cancel_token: CancelToken
+) -> SemanticTagSearcher:
     """构建本地链路的语义层；不激活时显式传空实现，不让 provider 自行降级。
 
     激活需同时满足两个条件：标签向量产物存在、嵌入服务 URL 非空。缺任一时
@@ -1021,7 +1033,9 @@ def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSear
     if not endpoint_url or not has_compiled_embeddings(data_dir):
         return NullSemanticTagSearcher()
     endpoint = parse_embedding_endpoint(endpoint_url)
-    return cached_semantic_searcher(data_dir, endpoint, OpenAIEmbeddingClient(endpoint))
+    return cached_semantic_searcher(
+        data_dir, endpoint, OpenAIEmbeddingClient(endpoint, cancel_token)
+    )
 
 
 def build_danbooru_tag_provider(
@@ -1031,6 +1045,7 @@ def build_danbooru_tag_provider(
     show_nsfw: bool,
     embedding_provider_url: str,
     cache: DanbooruCache,
+    cancel_token: CancelToken,
 ) -> Optional[DanbooruTagProvider]:
     """构建裸的 Danbooru 标签补全 provider，供外部消费者（如外部 ComfyUI 节点）复用。
 
@@ -1041,17 +1056,26 @@ def build_danbooru_tag_provider(
     cache 端口缓存；两者皆空返回 None，表示「未配置任何数据来源」，由调用方决定如何呈现。
     cache 必须由调用者显式注入（在线链路可传 SQLiteDanbooruCache，无需持久化时传
     NullDanbooruCache），本地链路不使用 cache。
+    cancel_token 由调用者注入：在线链路与语义层的网络调用据此在取消时掐断在途请求；
+    本地链路不发网络请求，仅透传给可能激活的语义层。
     """
     if data_dir:
         return FileDanbooruTagProvider(
             data_dir,
             show_nsfw=show_nsfw,
-            semantic=build_semantic_searcher(data_dir, embedding_provider_url),
+            semantic=build_semantic_searcher(
+                data_dir, embedding_provider_url, cancel_token
+            ),
         )
     if search_url:
-        loader = CachedDanbooruTagLoader(AkizukiDanbooruTagLoader(search_url), cache)
+        loader = CachedDanbooruTagLoader(
+            AkizukiDanbooruTagLoader(search_url, cancel_token), cache
+        )
         inner = AkizukiDanbooruTagProvider(
-            search_url, loader=loader, show_nsfw=show_nsfw
+            search_url,
+            loader=loader,
+            show_nsfw=show_nsfw,
+            cancel_token=cancel_token,
         )
         return CachedDanbooruTagProvider(inner, cache, search_url)
     return None
@@ -1070,10 +1094,14 @@ def update_cache(
     if db_ctx is None:
         db_ctx = SQLiteContext.from_env()
 
+    # 本进程只做一次后台回填，没有取消通道：显式构造一个永不取消的令牌
+    cancel_token = CancelToken()
     cache = SQLiteDanbooruCache(db_ctx)
-    raw_loader = AkizukiDanbooruTagLoader(search_url)
+    raw_loader = AkizukiDanbooruTagLoader(search_url, cancel_token)
     cache_loader = CachedDanbooruTagLoader(raw_loader, cache)
-    akizuki = AkizukiDanbooruTagProvider.from_env(search_url, loader=cache_loader)
+    akizuki = AkizukiDanbooruTagProvider.from_env(
+        search_url, loader=cache_loader, cancel_token=cancel_token
+    )
     provider = CachedDanbooruTagProvider(akizuki, cache, search_url)
 
     with db_ctx:

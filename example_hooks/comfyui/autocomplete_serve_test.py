@@ -4,9 +4,11 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
-from typing import Any, Dict, List, Optional
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Dict, List, Optional, Tuple, cast
 from unittest.mock import patch, MagicMock
 
 logging.disable(logging.CRITICAL)
@@ -19,6 +21,7 @@ from .autocomplete import (
     serve,
 )
 from .__main__ import get_parser
+from .cancellation import CancelToken
 
 
 def _request(
@@ -36,6 +39,7 @@ def _request(
         image_paths=[],
         root_dir=root_dir,
         directory_rel_path=directory_rel_path,
+        cancel_token=CancelToken(),
     )
 
 
@@ -206,6 +210,7 @@ class TestServe(unittest.TestCase):
             image_paths=["mock.png"],
             root_dir="",
             directory_rel_path="",
+            cancel_token=CancelToken(),
         )
         with build_providers(request, get_parser(), "", False) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
@@ -257,6 +262,116 @@ class TestServe(unittest.TestCase):
 
         fake_ctx.__enter__.assert_called_once()
         fake_ctx.__exit__.assert_called_once()
+
+
+class _BlockingSearchHandler(BaseHTTPRequestHandler):
+    """收到搜索请求后挂住不响应，用来观察取消能否掐断在途请求。
+
+    若取消没有传到网络层，调用要等 HTTP 超时（5s）才返回；测试据此把
+    「取消后是否迅速收尾」当作取消确实生效的证据。
+    """
+
+    protocol_version = "HTTP/1.1"
+    received = threading.Event()
+    release = threading.Event()
+
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler 约定命名
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        # 单次连接：客户端被取消关闭后不必再读下一个请求（否则打印异常噪音）
+        self.close_connection = True
+        _BlockingSearchHandler.received.set()
+        _BlockingSearchHandler.release.wait(timeout=30)
+        try:
+            body = b'{"results": []}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            # 客户端已因取消关闭连接：写回失败是预期结果
+            pass
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+
+class TestServeCancelIntegration(unittest.TestCase):
+    """端到端：$/cancelRequest 经 serve 传到网络层，掐断在途请求且不回响应。"""
+
+    def setUp(self) -> None:
+        _BlockingSearchHandler.received.clear()
+        _BlockingSearchHandler.release.clear()
+
+    def test_cancel_propagates_to_network_and_task_ends_promptly(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _BlockingSearchHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        host, port = cast(Tuple[str, int], server.server_address[:2])
+
+        # 用真实管道而非预填 stdin：必须等桩服务确已收到在途请求，取消才发得出去，
+        # 从而真正覆盖「废除在途 HTTP」而不是「请求还没发就被取消」
+        read_fd, write_fd = os.pipe()
+        reader = os.fdopen(read_fd, "r", encoding="utf-8")
+        writer = os.fdopen(write_fd, "w", encoding="utf-8")
+        out = io.StringIO()
+        old_stdin, old_stdout = sys.stdin, sys.stdout
+        elapsed = float("inf")
+
+        with tempfile.TemporaryDirectory() as data_dir, tempfile.TemporaryDirectory() as root_dir:
+            # IMAGE_FUNNEL_DATA_DIR 只提供模型格式配置兜底；其下无 danbooru 产物，
+            # 因此本地链路不激活，请求走 DANBOORU_SEARCH_URL 指向的桩服务
+            env = {
+                "IMAGE_FUNNEL_DATA_DIR": data_dir,
+                "DANBOORU_SEARCH_URL": f"http://{host}:{port}",
+            }
+            with patch.dict(os.environ, env):
+                os.environ.pop("DANBOORU_DATA_DIR", None)
+                serve_thread = threading.Thread(target=serve, daemon=True)
+                try:
+                    sys.stdin, sys.stdout = reader, out
+                    serve_thread.start()
+                    writer.write(
+                        _autocomplete_request(
+                            1,
+                            cwords=["/remix", "--add"],
+                            cwordIdx=2,
+                            prevWord="",
+                            linePrefix="/remix --add ",
+                            query="girl",
+                            imagePaths=[],
+                            rootDir=root_dir,
+                            directoryRelPath="",
+                        )
+                        + "\n"
+                    )
+                    writer.flush()
+                    self.assertTrue(
+                        _BlockingSearchHandler.received.wait(10),
+                        "在线链路应已发出在途请求",
+                    )
+
+                    start = time.monotonic()
+                    writer.write(_cancel_request(1) + "\n")
+                    writer.flush()
+                    # 关闭输入端：serve 的读循环结束并在收尾后返回
+                    writer.close()
+                    serve_thread.join(timeout=10)
+                    elapsed = time.monotonic() - start
+                finally:
+                    sys.stdin, sys.stdout = old_stdin, old_stdout
+                    reader.close()
+                    _BlockingSearchHandler.release.set()
+                    server.shutdown()
+                    server.server_close()
+
+        self.assertFalse(serve_thread.is_alive(), "取消后 serve 应已退出")
+        self.assertLess(
+            elapsed,
+            1.5,
+            "取消应掐断在途请求并立刻收尾，而不是等 HTTP 超时（5s）"
+            "或收尾超时（2s）自然结束",
+        )
+        self.assertEqual(out.getvalue().strip(), "", "已取消的请求不应返回响应")
 
 
 if __name__ == "__main__":

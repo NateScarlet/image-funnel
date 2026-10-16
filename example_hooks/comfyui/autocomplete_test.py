@@ -5,7 +5,6 @@ import json
 import argparse
 import shutil
 import tempfile
-import requests
 import sqlite3
 from contextlib import contextmanager
 from typing import Dict, Any, Generator, Optional, List, Set, Tuple, cast
@@ -39,6 +38,8 @@ from .autocomplete import (
     _parse_args_for_autocomplete,
 )
 from .__main__ import get_parser
+from .cancellable_http import HttpCanceledError, HttpError
+from .cancellation import CancelToken
 from .danbooru import DanbooruTag, SemanticLayerUnavailable
 from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME
 from .model_format import (
@@ -71,6 +72,7 @@ def _request(
         image_paths=[],
         root_dir="root",
         directory_rel_path="dir",
+        cancel_token=CancelToken(),
     )
 
 
@@ -807,9 +809,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_autocomplete_danbooru_search_upstream_error_yields_error_item(
         self,
     ) -> None:
-        """上游搜索网络失败（requests.RequestException）以 ⚠ 建议项呈现给用户。"""
+        """上游搜索网络失败（HttpError）以 ⚠ 建议项呈现给用户。"""
         mock_provider = MagicMock()
-        mock_provider.search.side_effect = requests.RequestException("timeout")
+        mock_provider.search.side_effect = HttpError("timeout")
 
         context = self._make_context(
             target_command="remix",
@@ -832,7 +834,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_autocomplete_danbooru_search_programming_error_propagates(
         self,
     ) -> None:
-        """上游搜索的编程错误（非 requests.RequestException）不再被吞掉：直接抛出。"""
+        """上游搜索的编程错误（非 HttpError）不再被吞掉：直接抛出。"""
         mock_provider = MagicMock()
         mock_provider.search.side_effect = KeyError("tag")
 
@@ -848,6 +850,27 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
 
         with self.assertRaises(KeyError):
+            list(provider.provide(context))
+
+    def test_autocomplete_danbooru_search_cancel_propagates(self) -> None:
+        """取消掐断在途请求（HttpCanceledError）不是上游失败：直接传播，不渲染 ⚠ 项。"""
+        mock_provider = MagicMock()
+        mock_provider.search.side_effect = HttpCanceledError(
+            "请求已取消，在途请求已被掐断"
+        )
+
+        context = self._make_context(
+            target_command="remix",
+            query="girl",
+            prev_word="",
+            cwords=["/remix", "--add"],
+            parsed_args=self._make_parsed_args(command="remix"),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+
+        with self.assertRaises(HttpCanceledError):
             list(provider.provide(context))
 
     def test_autocomplete_danbooru_semantic_unavailable_yields_error_item(
@@ -881,11 +904,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_autocomplete_danbooru_related_upstream_error_yields_error_item(
         self,
     ) -> None:
-        """上游关联联想网络失败（requests.RequestException）以 ⚠ 建议项呈现给用户。"""
+        """上游关联联想网络失败（HttpError）以 ⚠ 建议项呈现给用户。"""
         mock_provider = MagicMock()
-        mock_provider.related.side_effect = requests.RequestException(
-            "connection refused"
-        )
+        mock_provider.related.side_effect = HttpError("connection refused")
 
         context = self._make_context(
             target_command="remix",
@@ -907,7 +928,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_autocomplete_danbooru_related_internal_error_propagates(
         self,
     ) -> None:
-        """上游关联联想的内部错误（sqlite3.Error，非 requests.RequestException）不再被吞掉。"""
+        """上游关联联想的内部错误（sqlite3.Error，非 HttpError）不再被吞掉。"""
         mock_provider = MagicMock()
         mock_provider.related.side_effect = sqlite3.OperationalError(
             "database is locked"
@@ -1210,6 +1231,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
             )
             suggestions = list(autocomplete(request, services))
 
@@ -1243,6 +1265,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
             )
             suggestions = list(autocomplete(request, services))
 
@@ -1448,6 +1471,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
             )
             suggestions = list(autocomplete(request, services))
 
@@ -1907,7 +1931,8 @@ class TestModelFormatAutocomplete(unittest.TestCase):
                 "imagePaths": [path],
                 "rootDir": "/",
                 "directoryRelPath": "",
-            }
+            },
+            CancelToken(),
         )
         with build_providers(
             _request(["/set-model-format"], "set-model-format"), get_parser(), "", False
@@ -2005,6 +2030,7 @@ class TestAutocompleteTaskCoocRelease(unittest.TestCase):
             image_paths=[],
             root_dir="",
             directory_rel_path="",
+            cancel_token=CancelToken(),
         )
         active_lock = threading.Lock()
         task = task_cls(
@@ -2040,6 +2066,59 @@ class TestAutocompleteTaskCoocRelease(unittest.TestCase):
     def test_no_release_when_local_data_dir_disabled(self) -> None:
         release = self._run_task("")
         release.assert_not_called()
+
+
+class TestAutocompleteTaskFailureReporting(unittest.TestCase):
+    """取消不是失败：取消掐断的调用不记错误，与取消无关的错误必须可见。"""
+
+    def _run_task(self, error: BaseException, canceled: bool) -> Tuple[str, MagicMock]:
+        """以 serve 的方式跑一个请求任务，返回 (写出到 stdout 的内容, _LOGGER mock)。
+
+        error 代表 `autocomplete()` 抛出的异常；canceled 表示取消信号先于异常到达。
+        """
+        import io
+        import threading
+
+        from comfyui import autocomplete as autocomplete_module
+
+        task_cls = cast(Any, autocomplete_module)._AutocompleteTask
+        token = CancelToken()
+        request = AutocompleteRequest(
+            target_command="remix",
+            query="",
+            prev_word="",
+            cwords=["/remix", "--add"],
+            image_paths=[],
+            root_dir="",
+            directory_rel_path="",
+            cancel_token=token,
+        )
+        out = io.StringIO()
+        task = task_cls(
+            1, request, get_parser(), "", False, out, {}, threading.Lock(), ""
+        )
+        if canceled:
+            token.cancel()
+        with patch("comfyui.autocomplete.build_providers") as mock_build, patch(
+            "comfyui.autocomplete.autocomplete", side_effect=error
+        ), patch("comfyui.autocomplete._LOGGER") as mock_logger:
+            mock_build.return_value.__enter__.return_value = []
+            task.start()
+            task.join()
+        return out.getvalue(), cast(MagicMock, mock_logger)
+
+    def test_canceled_network_abort_is_not_logged_as_failure(self) -> None:
+        out, logger = self._run_task(
+            HttpCanceledError("请求已取消，在途请求已被掐断"), canceled=True
+        )
+        logger.error.assert_not_called()
+        self.assertEqual(out, "", "已取消的请求不应返回响应")
+
+    def test_canceled_request_still_logs_unrelated_error(self) -> None:
+        """取消只免去回传结果，不免去报错：与取消无关的错误仍要留下可排查的记录。"""
+        out, logger = self._run_task(KeyError("missing tag"), canceled=True)
+        logger.error.assert_called_once()
+        self.assertEqual(out, "", "已取消的请求不应返回响应")
 
 
 class TestAddSuggestionModelFormat(unittest.TestCase):
@@ -2366,6 +2445,7 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             image_paths=image_paths,
             root_dir="",
             directory_rel_path="",
+            cancel_token=CancelToken(),
         )
         services = AutocompleteServices(
             parser=get_parser(),

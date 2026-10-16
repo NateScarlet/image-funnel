@@ -31,7 +31,9 @@ from typing import (
 from urllib.parse import parse_qsl, urlsplit
 
 import numpy as np
-import requests
+
+from .cancellable_http import HttpError, post_json
+from .cancellation import CancelToken
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -171,8 +173,9 @@ def _parse_embeddings(payload: object, expected: int) -> List[List[float]]:
 class OpenAIEmbeddingClient:
     """调用 OpenAI 兼容 /v1/embeddings 的嵌入客户端。"""
 
-    def __init__(self, endpoint: EmbeddingEndpoint) -> None:
+    def __init__(self, endpoint: EmbeddingEndpoint, cancel_token: CancelToken) -> None:
         self.endpoint = endpoint
+        self.cancel_token = cancel_token
 
     def embed(self, texts: Sequence[str]) -> List[List[float]]:
         items = list(texts)
@@ -183,18 +186,15 @@ class OpenAIEmbeddingClient:
         if self.endpoint.api_key:
             headers["Authorization"] = f"Bearer {self.endpoint.api_key}"
         try:
-            response = requests.post(
+            payload = post_json(
                 self.endpoint.url,
-                json={"model": self.endpoint.model, "input": items},
+                {"model": self.endpoint.model, "input": items},
                 headers=headers,
                 timeout=self.endpoint.timeout,
+                cancel_token=self.cancel_token,
             )
-            response.raise_for_status()
-            payload = response.json()
-        except requests.RequestException as e:
+        except HttpError as e:
             raise EmbeddingError(f"嵌入接口不可用: {e}") from e
-        except ValueError as e:
-            raise EmbeddingError(f"嵌入接口响应不是合法 JSON: {e}") from e
         return _parse_embeddings(payload, len(items))
 
 
@@ -656,7 +656,7 @@ class NullSemanticTagSearcher:
         return []
 
 
-class _QueryVectorCache:
+class QueryVectorCache:
     """查询文本→向量的线程安全 LRU；补全为多线程常驻服务，命中即免去接口调用。"""
 
     def __init__(self, capacity: int) -> None:
@@ -683,19 +683,21 @@ class VectorSemanticTagSearcher:
     """向量召回语义层：查询向量 × 归一化标签矩阵 + BLAS 全量点积。
 
     标签矩阵在构造时 mmap 一次并常驻：每次查询都要扫全表，逐查询重新映射的
-    缺页开销（659MB 产物实测 271ms）远高于映射本身的矩阵乘（实测 26ms），
-    常驻映射把页缓存留给 OS 按需换出。
+    缺页开销（659MB 产物实测 271ms）远高于映射本身的乘（实测 26ms），
+    常驻映射把页缓存留给 OS 按需换出。矩阵与查询向量 LRU 由入口按
+    (数据目录, 端点) 缓存，跨请求复用；嵌入客户端是请求级依赖（持有取消令牌），
+    由入口每请求注入，因而不随本对象进入缓存。
     """
 
     def __init__(
         self,
         matrix: TagEmbeddingMatrix,
         client: EmbeddingClient,
-        query_cache_size: int = QUERY_VECTOR_CACHE_SIZE,
+        query_cache: QueryVectorCache,
     ) -> None:
         self.matrix = matrix
         self.client = client
-        self._cache = _QueryVectorCache(query_cache_size)
+        self._cache = query_cache
 
     def query_vector(self, query: str) -> np.ndarray:
         """查询文本→向量，走 LRU 缓存；未命中才调用嵌入接口并归一化。"""
@@ -744,9 +746,20 @@ class VectorSemanticTagSearcher:
 
 # #region 语义层实例缓存
 
-# 按 (数据目录, 端点) 缓存：常驻服务每请求重建 provider，查询向量 LRU 必须
-# 跨请求存活才能在连续输入时免去接口调用
-_SEARCHER_CACHE: Dict[Tuple[str, EmbeddingEndpoint], VectorSemanticTagSearcher] = {}
+# 按 (数据目录, 端点) 缓存跨请求复用的重资产：mmap 标签矩阵与查询向量 LRU
+# （常驻服务每请求重建 provider，LRU 必须跨请求存活才能在连续输入时免去接口调用）。
+# 嵌入客户端持有取消令牌、属请求级依赖，不进缓存，由入口每请求注入。
+
+
+@dataclass
+class _SharedSearcherState:
+    """跨请求共享的语义层状态（不含请求级依赖）。"""
+
+    matrix: TagEmbeddingMatrix
+    query_cache: QueryVectorCache
+
+
+_SEARCHER_CACHE: Dict[Tuple[str, EmbeddingEndpoint], _SharedSearcherState] = {}
 _SEARCHER_LOCK = threading.Lock()
 
 
@@ -760,16 +773,19 @@ def cached_semantic_searcher(
     endpoint: EmbeddingEndpoint,
     client: EmbeddingClient,
 ) -> VectorSemanticTagSearcher:
-    """取（或建）目录与端点对应的向量语义层，映射与 LRU 随实例跨请求复用。
+    """构建目录与端点对应的向量语义层，复用共享的矩阵映射与查询向量 LRU。
 
     激活判定（向量产物存在且端点 URL 非空）由入口完成，本函数只负责按需构建。
     """
     key = (os.path.abspath(data_dir), endpoint)
     with _SEARCHER_LOCK:
-        cached = _SEARCHER_CACHE.get(key)
-        if cached is not None:
-            return cached
-        matrix = load_compiled_embeddings(Path(data_dir) / COMPILED_EMBEDDINGS_FILENAME)
-        searcher = VectorSemanticTagSearcher(matrix, client)
-        _SEARCHER_CACHE[key] = searcher
-        return searcher
+        state = _SEARCHER_CACHE.get(key)
+        if state is None:
+            matrix = load_compiled_embeddings(
+                Path(data_dir) / COMPILED_EMBEDDINGS_FILENAME
+            )
+            state = _SharedSearcherState(
+                matrix=matrix, query_cache=QueryVectorCache(QUERY_VECTOR_CACHE_SIZE)
+            )
+            _SEARCHER_CACHE[key] = state
+    return VectorSemanticTagSearcher(state.matrix, client, state.query_cache)
