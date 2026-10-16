@@ -252,7 +252,7 @@ const items = computed(() => {
       const isSmallUnrated = stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
 
       // 判定是否本身不满足筛选（已达标或未评级图片过少），但由于有子目录而必须显示
-      const isFilteredOutButShown =
+      const isForcedShown =
         stats &&
         stats.subdirectoryCount > 0 &&
         ((!showCompletedDirectories.value && completion.isCompleted) ||
@@ -268,11 +268,11 @@ const items = computed(() => {
         keepCount: completion.keepCount,
         unratedCount,
         isSmallUnrated,
-        isFilteredOutButShown,
+        isForcedShown,
       };
     }),
     [
-      (item) => (item.isFilteredOutButShown ? 1 : 0), // 不匹配但有子目录的放到最后
+      (item) => (item.isForcedShown ? 1 : 0), // 不匹配但有子目录的放到最后
       (item) => !item.stats,
       (item) => item.stats?.imageCount === 0,
       (item) => item.stats?.latestImage?.modTime || "",
@@ -310,7 +310,7 @@ const displayedFilteredItems = computed(() => {
     .map((item) => ({
       ...item,
       // 计算每一项是否不满足当前的全局过滤筛选条件，或是不匹配本身过滤仅因为有子目录而显示
-      filteredOut: !isVisible(item) || item.isFilteredOutButShown,
+      filteredOut: !isVisible(item) || item.isForcedShown,
     }))
     .filter((item) => {
       // 搜索时忽略筛选条件（即显示所有匹配搜索的项目）
@@ -318,7 +318,7 @@ const displayedFilteredItems = computed(() => {
         return true;
       }
       // 非搜索时，隐藏真正需要隐藏的项目（!isVisible 成立且非有子目录强制显示项）
-      return isVisible(item) || item.isFilteredOutButShown;
+      return isVisible(item) || item.isForcedShown;
     });
 });
 

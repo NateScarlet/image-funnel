@@ -322,7 +322,7 @@ import useDirectories, {
   showLargeUnrated,
   showUncompletedDirectories,
 } from "@/composables/useDirectories";
-import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
+import { evaluateDirectoryVisibility } from "@/utils/directoryVisibility";
 import SubdirectoryGrid from "../components/SubdirectoryGrid.vue";
 import DirectoryBreadcrumb from "../components/DirectoryBreadcrumb.vue";
 import ImageGrid from "../components/ImageGrid.vue";
@@ -497,31 +497,23 @@ const processedSiblings = computed(() => {
 
   const items = dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
-    const completion = evaluateDirectoryCompletion(dir, stats);
-    const unratedCount =
-      stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)?.count ??
-      0;
-
-    const isFilteredOutByCompletion = !showUncompleted && !completion.isCompleted;
-    const isFilteredOutByUnrated = !showLarge && limit !== undefined && unratedCount > limit;
-    const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
-
-    // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
-    const isFilteredOutButShown = stats && stats.subdirectoryCount > 0 && isFilteredOut;
+    const { isFilteredOut, isForcedShown } = evaluateDirectoryVisibility(dir, stats, {
+      showUncompleted,
+      showLargeUnrated: showLarge,
+      unratedLimit: limit,
+    });
 
     return {
       dir,
       isFilteredOut,
-      isFilteredOutButShown,
+      isForcedShown,
     };
   });
 
-  const visibleItems = items.filter((item) => !item.isFilteredOut || item.isFilteredOutButShown);
+  const visibleItems = items.filter((item) => !item.isFilteredOut || item.isForcedShown);
 
-  // 把 isFilteredOutButShown 的排在最后，以保持与 SubdirectoryGrid 一致
-  return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]).map(
-    (item) => item.dir,
-  );
+  // 把强制显示项排在最后，以保持与 SubdirectoryGrid 一致
+  return sortBy(visibleItems, [(item) => (item.isForcedShown ? 1 : 0)]).map((item) => item.dir);
 });
 
 // 当前目录在排序后同级目录中的索引位置

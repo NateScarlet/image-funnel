@@ -69,7 +69,7 @@
         class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4"
       >
         <RouterLink
-          v-for="{ dir: subDir, isFilteredOutButShown } in processedSubdirectories"
+          v-for="{ dir: subDir, isForcedShown } in processedSubdirectories"
           :key="subDir.id"
           :to="{
             path: '/browse',
@@ -77,7 +77,7 @@
           }"
           class="p-4 bg-primary-800/40 hover:bg-primary-800/80 rounded-xl transition-all text-left group overflow-hidden block w-full hover:scale-105 hover:shadow-lg hover:shadow-black/20 no-underline text-primary-100 hover:text-white"
           :class="[
-            isFilteredOutButShown
+            isForcedShown
               ? 'border-2 border-dashed border-yellow-600 hover:border-yellow-500'
               : 'border border-primary-800 hover:border-secondary-500/50',
           ]"
@@ -191,6 +191,7 @@ import useDirectories, {
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
+import { evaluateDirectoryVisibility } from "@/utils/directoryVisibility";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{
@@ -261,36 +262,32 @@ const subdirectoryFilterItems = computed(() => {
 
   return dirs.map((dir) => {
     const stats = getCachedStats(dir.id);
-    const completion = evaluateDirectoryCompletion(dir, stats);
-    const unratedCount =
-      stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)?.count ??
-      0;
-
-    const isFilteredOutByCompletion = !showUncompleted && !completion.isCompleted;
-    const isFilteredOutByUnrated = !showLarge && limit !== undefined && unratedCount > limit;
-    const isFilteredOut = isFilteredOutByCompletion || isFilteredOutByUnrated;
-
-    // 当有筛选限制且包含子目录时，虽然本身不满足筛选，但因为有子目录而被保留显示
-    const isFilteredOutButShown =
-      stats !== undefined && stats.subdirectoryCount > 0 && isFilteredOut;
+    const { isFilteredOut, isForcedShown, isHiddenByUncompleted } = evaluateDirectoryVisibility(
+      dir,
+      stats,
+      {
+        showUncompleted,
+        showLargeUnrated: showLarge,
+        unratedLimit: limit,
+      },
+    );
 
     return {
       dir,
       isFilteredOut,
-      isFilteredOutButShown,
-      // 因「显示未达标目录」开关被真正隐藏（排除因有子目录而强制显示的项）
-      isHiddenByUncompleted: isFilteredOutByCompletion && !isFilteredOutButShown,
+      isForcedShown,
+      isHiddenByUncompleted,
     };
   });
 });
 
 const processedSubdirectories = computed(() => {
   const visibleItems = subdirectoryFilterItems.value.filter(
-    (item) => !item.isFilteredOut || item.isFilteredOutButShown,
+    (item) => !item.isFilteredOut || item.isForcedShown,
   );
 
-  // 把 isFilteredOutButShown 的排在最后
-  return sortBy(visibleItems, [(item) => (item.isFilteredOutButShown ? 1 : 0)]);
+  // 把强制显示项排在最后
+  return sortBy(visibleItems, [(item) => (item.isForcedShown ? 1 : 0)]);
 });
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
