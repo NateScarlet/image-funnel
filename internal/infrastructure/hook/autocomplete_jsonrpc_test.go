@@ -97,6 +97,19 @@ func runAutocompleteHelper() {
 		writeMu.Unlock()
 	}
 
+	// writeErrResp 写一条 JSON-RPC 错误响应；错误码与真实脚本 serve 的一致（-32000）
+	writeErrResp := func(reqID json.RawMessage, code int, message string) {
+		resp, _ := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      json.RawMessage(reqID),
+			"error":   map[string]any{"code": code, "message": message},
+		})
+		writeMu.Lock()
+		_, _ = writer.Write(append(resp, '\n'))
+		_ = writer.Flush()
+		writeMu.Unlock()
+	}
+
 	// handle 处理一次 autocomplete 请求，返回 false 表示进程应退出
 	handle := func(reqID json.RawMessage, paramsRaw []byte) bool {
 		var p helperParams
@@ -104,6 +117,12 @@ func runAutocompleteHelper() {
 
 		if strings.Contains(p.Query, "ignore") {
 			logf("ignored:%s", string(reqID))
+			return true
+		}
+
+		if strings.Contains(p.Query, "error") {
+			// 脚本业务失败：以 JSON-RPC error 上报（错误码与真实脚本 serve 一致）
+			writeErrResp(reqID, -32000, "autocomplete request failed: boom")
 			return true
 		}
 
@@ -369,6 +388,19 @@ func TestAutocomplete_JSONRPC_RequestContract(t *testing.T) {
 	// 目录上下文（rootDir / directoryRelPath）随请求参数逐请求传递
 	assert.Equal(t, env.tempDir, echo.RootDir)
 	assert.Equal(t, "", echo.DirectoryRelPath)
+}
+
+func TestAutocomplete_JSONRPC_ScriptErrorKeepsCode(t *testing.T) {
+	env := newAutocompleteTestRunner(t, true, nil, nil, nil)
+
+	_, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "error boom")
+	require.Error(t, err)
+
+	// 脚本错误码必须作为结构化事实保留（可断言），而不是拍平进错误字符串
+	var scriptErr *jsonRPCError
+	require.ErrorAs(t, err, &scriptErr)
+	assert.Equal(t, -32000, scriptErr.Code)
+	assert.Contains(t, scriptErr.Message, "boom")
 }
 
 func TestAutocomplete_JSONRPC_ImageContextInParams(t *testing.T) {

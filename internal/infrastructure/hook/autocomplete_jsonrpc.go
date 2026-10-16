@@ -36,6 +36,20 @@ var errJSONRPCProcessGone = errors.New("autocomplete jsonrpc process exited")
 // errJSONRPCTimeout 请求级超时的哨兵错误
 var errJSONRPCTimeout = errors.New("autocomplete jsonrpc request timed out")
 
+// jsonRPCError 脚本以 JSON-RPC error 回报的业务失败：保留协议里的 code 与 message。
+//
+// 只作为结构化事实承载（日志与测试可断言错误码），当前不按 code 分支处理——唯一
+// 消费者是前端文本展示，没有行为会因错误种类改变。超时与进程失效仍由
+// errJSONRPCTimeout / errJSONRPCProcessGone 两个哨兵表达。
+type jsonRPCError struct {
+	Code    int
+	Message string
+}
+
+func (e *jsonRPCError) Error() string {
+	return fmt.Sprintf("autocomplete script error (code %d): %s", e.Code, e.Message)
+}
+
 // #endregion
 
 // autocompleteJSONRPCParams 自动补全请求参数：沿用现有自动补全上下文
@@ -366,7 +380,7 @@ func (p *jsonrpcProcess) handleLine(line string) {
 
 	var resp jsonrpcResponse
 	if msg.Error != nil {
-		resp.err = fmt.Errorf("autocomplete script error (code %d): %s", msg.Error.Code, msg.Error.Message)
+		resp.err = &jsonRPCError{Code: msg.Error.Code, Message: msg.Error.Message}
 	} else {
 		suggestions, parseErr := parseJSONRPCResult(msg.Result)
 		resp = jsonrpcResponse{suggestions: suggestions, err: parseErr}
