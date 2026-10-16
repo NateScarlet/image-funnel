@@ -1,27 +1,27 @@
-import { createRequire } from 'module';
+import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const sharp = require('/root/.nvm/versions/node/v24.1.0/lib/node_modules/sharp');
-import { readFileSync, writeFileSync, copyFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+const sharp = require("/root/.nvm/versions/node/v24.1.0/lib/node_modules/sharp");
+import { readFileSync, writeFileSync, copyFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // PNG 源图：AI 生成的带渐变细节的原图
-const sourceImage = join(__dirname, '../assets/icon-design-4.jpg');
+const sourceImage = join(__dirname, "../assets/icon-design-4.jpg");
 
 // SVG 源文件：简化几何版，用于小尺寸 favicon
-const svgPath = join(__dirname, '../public/favicon.svg');
+const svgPath = join(__dirname, "../public/favicon.svg");
 
 // 输出目录
-const publicDir = join(__dirname, '../public');
+const publicDir = join(__dirname, "../public");
 
 // 大尺寸 PNG：从 AI 原图去背景往下缩
 const largePngSizes = [
-  { name: 'apple-touch-icon.png', size: 180 },
-  { name: 'pwa-192x192.png', size: 192 },
-  { name: 'pwa-512x512.png', size: 512 },
+  { name: "apple-touch-icon.png", size: 180 },
+  { name: "pwa-192x192.png", size: 192 },
+  { name: "pwa-512x512.png", size: 512 },
 ];
 
 /**
@@ -30,10 +30,15 @@ const largePngSizes = [
 async function removeWhiteBackgroundAndCrop(inputBuffer, padding = 0.1) {
   const withAlpha = await sharp(inputBuffer).ensureAlpha().toBuffer();
   const { data, info } = await sharp(withAlpha).raw().toBuffer({ resolveWithObject: true });
-  const w = info.width, h = info.height, ch = info.channels;
+  const w = info.width,
+    h = info.height,
+    ch = info.channels;
 
   // 找到非白色像素的边界框（忽略边缘 JPEG 噪点）
-  let minX = w, minY = h, maxX = 0, maxY = 0;
+  let minX = w,
+    minY = h,
+    maxX = 0,
+    maxY = 0;
   const threshold = 230;
   const edgeMargin = 20; // 忽略边缘 20px 内的噪点
 
@@ -93,26 +98,20 @@ async function generateIcons() {
   // 大尺寸 PNG：从 AI 原图去背景 + 居中 + 往下缩
   const processed = await removeWhiteBackgroundAndCrop(
     await sharp(sourceImage).resize(2048, 2048).png().toBuffer(),
-    0.05
+    0.05,
   );
 
   for (const { name, size } of largePngSizes) {
-    await sharp(processed)
-      .resize(size, size)
-      .png()
-      .toFile(join(publicDir, name));
+    await sharp(processed).resize(size, size).png().toFile(join(publicDir, name));
     console.log(`✓ Generated ${name} (${size}x${size})`);
   }
 
   // favicon.ico 从 SVG 渲染（兼容旧浏览器）
-  const svg = readFileSync(svgPath, 'utf-8');
-  await sharp(Buffer.from(svg))
-    .resize(32, 32)
-    .png()
-    .toFile(join(publicDir, 'favicon.ico'));
-  console.log('✓ Generated favicon.ico (from SVG)');
+  const svg = readFileSync(svgPath, "utf-8");
+  await sharp(Buffer.from(svg)).resize(32, 32).png().toFile(join(publicDir, "favicon.ico"));
+  console.log("✓ Generated favicon.ico (from SVG)");
 
-  console.log('✓ favicon.svg (保持手动维护的简化几何版)');
+  console.log("✓ favicon.svg (保持手动维护的简化几何版)");
 }
 
 generateIcons().catch(console.error);
