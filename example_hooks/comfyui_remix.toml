@@ -54,8 +54,6 @@ ignore_directive = false # 为 true 时忽略 [directive] 约束（即使定义�
 
 [on.note_dispatch]
 
-[on.post_update_note]
-
 [env]
 # DANBOORU_SEARCH_URL = "https://sakizuki-danboorusearch.hf.space" # Danbooru 标签在线语义搜索服务的地址，取消注释以启用智能提示词补全。接口文档：https://sakizuki-danboorusearch.hf.space/api/openapi.json
 # DANBOORU_SEARCH_INCLUDE_NSFW = "false" # Danbooru 标签搜索是否包含 NSFW 标签，默认为 false
