@@ -73,6 +73,10 @@ _避免_: Metadata file, XMP file（需明确它是"配套文件"而非"元数�
 以 Markdown 文件形式（`.md`）存储的自由文本。可关联到目录或图片，可通过 frontmatter 控制是否对用户可见。
 _避免_: Comment, annotation（Note 是独立的 Markdown 文件，不是附属于 Image 的字段）
 
+**笔记指令 / Note Directive**
+笔记中以 `/` 开头、由钩子服务解析并执行的一行指令。
+_避免_: Slash command、命令（Note Directive 特指笔记内、由 Hook 执行的行）
+
 **目录状态 / Directory State**
 目录的持久化配置数据，包含：浏览过滤条件、最后活跃的筛选会话引用（其筛选条件与保留目标）、以及默认的写入操作配置（各操作对应的 XMP 评分值）。
 _避免_: Directory config, directory settings
