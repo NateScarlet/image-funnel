@@ -1,8 +1,7 @@
 package hook
 
 import (
-	"bytes"
-	"os"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -10,21 +9,18 @@ import (
 	domhook "main/internal/domain/hook"
 	"main/internal/scalar"
 	"main/internal/shared"
-
-	"github.com/pelletier/go-toml/v2"
-	"go.uber.org/zap"
 )
 
-// imageDispatchTrigger 图片手动触发分发器定义
-type imageDispatchTrigger struct {
+// imageDispatchTriggerConfig 图片手动触发分发器定义
+type imageDispatchTriggerConfig struct {
 	// Hotkeys 在图片派发上下文中触发该钩子的快捷键声明，语法沿用前端的组合键表示（如 "ctrl+shift+k"，不区分大小写）。
 	// 后端只做透传，是否与其它快捷键冲突由前端判定，冲突的键会降级为不可用并在快捷键列表中标注。
 	Hotkeys []string `toml:"hotkeys"`
 }
 
-// copyTrigger 复制增强能力标记：声明 [copy] 即让脚本在用户复制图片时被同步调用，
+// copyTriggerConfig 复制增强能力标记：声明 [copy] 即让脚本在用户复制图片时被同步调用，
 // 由脚本自行读取图片元数据并返回应写入剪贴板的内容（请求期同步内容提供者，非事件触发器）
-type copyTrigger struct {
+type copyTriggerConfig struct {
 }
 
 // autocompleteConfig 自动完成脚本配置
@@ -44,17 +40,17 @@ type directiveConfig struct {
 
 // hookConfig 声明式 Hook 配置文件对应的 TOML 数据结构
 type hookConfig struct {
-	Filename    string           `toml:"-"` // 配置文件名（如 foo.toml），不参与 TOML 解析
-	ID          string           `toml:"id"`
-	Name        string           `toml:"name"`
-	Description string           `toml:"description"`
-	Command     string           `toml:"command"`
-	Order       int              `toml:"order"` // 执行顺序，默认 0，升序排列
-	Directive   *directiveConfig `toml:"directive"`
-	Copy        *copyTrigger     `toml:"copy"` // 复制增强能力标记
+	Filename    string             `toml:"-"` // 配置文件名（如 foo.toml），不参与 TOML 解析
+	ID          string             `toml:"id"`
+	Name        string             `toml:"name"`
+	Description string             `toml:"description"`
+	Command     string             `toml:"command"`
+	Order       int                `toml:"order"` // 执行顺序，默认 0，升序排列
+	Directive   *directiveConfig   `toml:"directive"`
+	Copy        *copyTriggerConfig `toml:"copy"` // 复制增强能力标记
 	On          struct {
-		PostUpdateImageMetadata *filters              `toml:"post_update_image_metadata"`
-		ImageDispatch           *imageDispatchTrigger `toml:"image_dispatch"`
+		PostUpdateImageMetadata *filters                    `toml:"post_update_image_metadata"`
+		ImageDispatch           *imageDispatchTriggerConfig `toml:"image_dispatch"`
 		PostUpdateNote          *struct {
 			IgnoreDirective bool `toml:"ignore_directive"`
 		} `toml:"post_update_note"`
@@ -116,65 +112,6 @@ func (f *filters) match(event *shared.MetadataUpdatedEvent) bool {
 	return true
 }
 
-func (r *Runner) loadHooks() ([]hookConfig, error) {
-	if r.hooksDir == "" {
-		return nil, nil
-	}
-	var configs []hookConfig
-
-	entries, err := os.ReadDir(r.hooksDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if entry.IsDir() || ext != ".toml" {
-			continue
-		}
-
-		path := filepath.Join(r.hooksDir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			r.logger.Warn("failed to read hook config file", zap.String("path", path), zap.Error(err))
-			continue
-		}
-
-		var cfg hookConfig
-		dec := toml.NewDecoder(bytes.NewReader(data))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&cfg); err != nil {
-			r.logger.Warn("failed to parse hook config toml", zap.String("path", path), zap.Error(err))
-			continue
-		}
-
-		if cfg.Directive != nil {
-			if cfg.Directive.OnSuccessAction == "" {
-				cfg.Directive.OnSuccessAction = "COMMENT_OUT"
-			}
-			if cfg.Directive.OnFailAction == "" {
-				cfg.Directive.OnFailAction = "COMMENT_OUT"
-			}
-		}
-
-		cfg.Filename = entry.Name()
-		if cfg.ID == "" {
-			cfg.ID = strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		}
-		if cfg.Command == "" {
-			r.logger.Warn("hook command is empty, skip loading", zap.String("id", cfg.ID))
-			continue
-		}
-
-		configs = append(configs, cfg)
-	}
-
-	return configs, nil
-}
-
 func toDomainDirective(cfg *directiveConfig) *domhook.Directive {
 	if cfg == nil {
 		return nil
@@ -187,6 +124,22 @@ func toDomainDirective(cfg *directiveConfig) *domhook.Directive {
 		OnFailAction:    cfg.OnFailAction,
 		Autocomplete:    autocomplete,
 	}
+}
+
+// domainID 构造钩子对应的领域实体并取出其 ID。
+// 钩子 ID 由领域实体编码，配置层不得自行解析，因此所有 ID 比对都经由此处。
+func domainID(h hookConfig) scalar.ID {
+	return domhook.FromRepository(h.ID, h.Name, h.Description, h.On.ImageDispatch != nil, nil, h.On.NoteDispatch != nil, nil, false, false).ID()
+}
+
+// resolveHookConfig 按领域 ID 定位钩子配置
+func resolveHookConfig(hooks []hookConfig, hookID scalar.ID) (hookConfig, error) {
+	for _, h := range hooks {
+		if domainID(h) == hookID {
+			return h, nil
+		}
+	}
+	return hookConfig{}, fmt.Errorf("hook %s not found", hookID.String())
 }
 
 // sortByOrderAndFilename 按 (order, Filename) 升序排序的比较函数，用于 SortStableFunc

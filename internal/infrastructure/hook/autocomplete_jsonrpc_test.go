@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,15 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"main/internal/domain/directory"
-	domimage "main/internal/domain/image"
-	"main/internal/domain/relpath"
 	"main/internal/scalar"
-	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // #region 假 JSON-RPC 补全服务（复用当前测试二进制作为子进程，避免依赖外部运行时）
@@ -199,15 +193,13 @@ type autocompleteTestEnv struct {
 	tempDir  string
 	hooksDir string
 	runner   *Runner
+	seams    seams
 	hookID   scalar.ID
 }
 
 // newAutocompleteTestRunner 搭建一个配置了假补全服务的测试 Runner
-func newAutocompleteTestRunner(t *testing.T, jsonrpc bool, envOverrides map[string]string, imgRepo *mockImageRepository) *autocompleteTestEnv {
+func newAutocompleteTestRunner(t *testing.T, jsonrpc bool, envOverrides map[string]string, imageRelPaths []string, seam func(*seams)) *autocompleteTestEnv {
 	t.Helper()
-	tempDir := t.TempDir()
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0755))
 
 	// autocomplete 命令：spawn 当前测试二进制，仅运行假服务辅助测试
 	helperCmd := fmt.Sprintf(`"%s" -test.run=^TestIFJSONRPCReaderHelper$`, os.Args[0])
@@ -236,36 +228,28 @@ name = "if"
 command = '''%s'''
 %s%s
 `, helperCmd, protocolLine, envSB.String())
-	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "if-autocomplete-test.toml"), []byte(tomlContent), 0644))
 
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{relpath.Path{}: directory.FromRepository(relpath.Path{})},
-	}
-	if imgRepo == nil {
-		imgRepo = &mockImageRepository{}
-	}
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
-	t.Cleanup(runner.Close)
-	return &autocompleteTestEnv{tempDir: tempDir, hooksDir: hooksDir, runner: runner, hookID: scalar.ToID("hk:if-autocomplete-test")}
-}
+	env := newTestHooks(t, testHooksOptions{
+		Hooks:         map[string]string{"if-autocomplete-test.toml": tomlContent},
+		ImageRelPaths: imageRelPaths,
+		Seam:          seam,
+	})
 
-// processAlive 判断 pid 对应的进程是否仍在运行
-func processAlive(pidStr string) bool {
-	if filepath.Separator == '\\' {
-		out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %s", pidStr)).Output()
-		return err == nil && strings.Contains(string(out), pidStr)
+	return &autocompleteTestEnv{
+		tempDir:  env.rootDir,
+		hooksDir: env.hooksDir,
+		runner:   env.runner,
+		seams:    env.seams,
+		hookID:   scalar.ToID("hk:if-autocomplete-test"),
 	}
-	return exec.Command("ps", "-p", pidStr).Run() == nil
 }
 
 // poolSize 返回进程池中存活的常驻进程数量
 func (env *autocompleteTestEnv) poolSize() int {
-	env.runner.jsonrpcPool.mu.Lock()
-	defer env.runner.jsonrpcPool.mu.Unlock()
-	return len(env.runner.jsonrpcPool.procs)
+	pool := env.runner.autocomplete.pool
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	return len(pool.procs)
 }
 
 // #endregion
@@ -273,12 +257,10 @@ func (env *autocompleteTestEnv) poolSize() int {
 // #region 配置层测试
 
 func TestAutocompleteConfig_ProtocolParsing(t *testing.T) {
-	tempDir := t.TempDir()
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0755))
-
-	// 与 example_hooks 中的实际写法一致：protocol 行带内联注释
-	tomlContent := `
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			// 与 example_hooks 中的实际写法一致：protocol 行带内联注释
+			"proto.toml": `
 id = "proto-test"
 name = "proto-test"
 command = "echo unused"
@@ -289,15 +271,11 @@ name = "proto"
 [directive.autocomplete]
 command = "uv run runner.py comfyui.autocomplete serve"
 protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输入触发脚本冷启动
-`
-	require.NoError(t, os.WriteFile(filepath.Join(hooksDir, "proto.toml"), []byte(tomlContent), 0644))
+`,
+		},
+	})
 
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	configs, err := runner.loadHooks()
+	configs, err := env.config.Load()
 	require.NoError(t, err)
 	require.Len(t, configs, 1)
 	require.NotNil(t, configs[0].Directive)
@@ -312,7 +290,7 @@ protocol = "json-rpc" # 常驻复用：进程启动后复用，避免每次输�
 
 func TestAutocomplete_JSONRPC_ResidentReuse(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "helper.pid")
-	env := newAutocompleteTestRunner(t, true, map[string]string{"IF_HELPER_PID_FILE": pidFile}, nil)
+	env := newAutocompleteTestRunner(t, true, map[string]string{"IF_HELPER_PID_FILE": pidFile}, nil, nil)
 
 	// 同一 command 的多次补全请求应复用同一常驻进程（返回相同 pid）
 	pids := make([]string, 0, 3)
@@ -333,7 +311,7 @@ func TestAutocomplete_JSONRPC_ResidentReuse(t *testing.T) {
 }
 
 func TestAutocomplete_JSONRPC_CrashRestart(t *testing.T) {
-	env := newAutocompleteTestRunner(t, true, map[string]string{"IF_HELPER_EXIT_AFTER": "1"}, nil)
+	env := newAutocompleteTestRunner(t, true, map[string]string{"IF_HELPER_EXIT_AFTER": "1"}, nil, nil)
 
 	sug1, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "a")
 	require.NoError(t, err)
@@ -350,19 +328,23 @@ func TestAutocomplete_JSONRPC_CrashRestart(t *testing.T) {
 	assert.NotEqual(t, pid1, sug2[0].Text, "进程崩溃后应自动重启为新进程")
 }
 
-func TestAutocomplete_JSONRPC_ProcessExitsOnStdinClose(t *testing.T) {
-	pidFile := filepath.Join(t.TempDir(), "helper.pid")
-	env := newAutocompleteTestRunner(t, true, map[string]string{"IF_HELPER_PID_FILE": pidFile}, nil)
+// TestAutocomplete_JSONRPC_ResidentKilledOnClose 随应用退出，常驻补全进程被终止。
+// 断言落在进程原语替身上，不再用 tasklist / ps 探测操作系统进程表。
+func TestAutocomplete_JSONRPC_ResidentKilledOnClose(t *testing.T) {
+	counter := &countingProcessRunner{}
+	env := newAutocompleteTestRunner(t, true, nil, nil, func(sm *seams) {
+		counter.inner = sm.Process
+		sm.Process = counter
+	})
 
 	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "a")
 	require.NoError(t, err)
 	require.Len(t, suggestions, 1)
-	pidStr := suggestions[0].Text
+	require.Equal(t, 1, counter.residentSpawns())
 
-	// 随应用退出：常驻进程的 stdin 关闭后进程应退出
 	env.runner.Close()
 
-	assert.Eventually(t, func() bool { return !processAlive(pidStr) }, 10*time.Second, 50*time.Millisecond)
+	assert.Equal(t, 1, counter.residentKills(), "随应用退出应终止常驻补全进程")
 }
 
 // #endregion
@@ -370,7 +352,7 @@ func TestAutocomplete_JSONRPC_ProcessExitsOnStdinClose(t *testing.T) {
 // #region JSON-RPC 契约
 
 func TestAutocomplete_JSONRPC_RequestContract(t *testing.T) {
-	env := newAutocompleteTestRunner(t, true, nil, nil)
+	env := newAutocompleteTestRunner(t, true, nil, nil, nil)
 
 	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add --region po", "po")
 	require.NoError(t, err)
@@ -390,9 +372,7 @@ func TestAutocomplete_JSONRPC_RequestContract(t *testing.T) {
 }
 
 func TestAutocomplete_JSONRPC_ImageContextInParams(t *testing.T) {
-	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
-	env := newAutocompleteTestRunner(t, true, nil, &mockImageRepository{images: []*domimage.Image{img}})
+	env := newAutocompleteTestRunner(t, true, nil, []string{"test.png"}, nil)
 
 	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "test.png.md", "/add", "d")
 	require.NoError(t, err)
@@ -400,7 +380,7 @@ func TestAutocomplete_JSONRPC_ImageContextInParams(t *testing.T) {
 
 	var echo helperParams
 	require.NoError(t, json.Unmarshal([]byte(suggestions[0].Description), &echo))
-	assert.Equal(t, []string{imgID.String()}, echo.ImageIDs)
+	assert.Equal(t, []string{"img:test.png"}, echo.ImageIDs)
 	assert.Equal(t, []string{filepath.Join(env.tempDir, "test.png")}, echo.ImagePaths)
 	assert.Equal(t, filepath.Join(env.tempDir, "test.png.md"), echo.NotePath)
 	// 笔记位于根目录，目录上下文随请求传递
@@ -417,7 +397,7 @@ func TestAutocomplete_JSONRPC_Cancel(t *testing.T) {
 	env := newAutocompleteTestRunner(t, true, map[string]string{
 		"IF_HELPER_SLEEP_MS": "5000",
 		"IF_HELPER_LOG_FILE": logFile,
-	}, nil)
+	}, nil, nil)
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	defer cancel1()
@@ -465,7 +445,7 @@ func TestAutocomplete_JSONRPC_StaleResponseDropped(t *testing.T) {
 		"IF_HELPER_SLEEP_MS":        "800",
 		"IF_HELPER_UNINTERRUPTIBLE": "1",
 		"IF_HELPER_LOG_FILE":        logFile,
-	}, nil)
+	}, nil, nil)
 
 	// 请求 1：慢请求（不可中断），独立 goroutine 执行
 	ctx1, cancel1 := context.WithCancel(context.Background())
@@ -507,30 +487,31 @@ func TestAutocomplete_JSONRPC_StaleResponseDropped(t *testing.T) {
 }
 
 func TestAutocomplete_JSONRPC_TimeoutRestartsProcess(t *testing.T) {
-	env := newAutocompleteTestRunner(t, true, nil, nil)
-	env.runner.autocompleteTimeout = 300 * time.Millisecond
+	// 超时时长经 seam 注入。计数装饰器包住真实进程原语，使「超时杀进程 → 下次请求重新
+	// spawn」可被直接观测，无需在慢速环境里赌新进程能否在 300ms 内完成冷启动。
+	counter := &countingProcessRunner{}
+	env := newAutocompleteTestRunner(t, true, nil, nil, func(sm *seams) {
+		counter.inner = sm.Process
+		sm.Process = counter
+		sm.AutocompleteTimeout = 300 * time.Millisecond
+	})
 
 	// 请求被假服务忽略（不响应）→ 应用超时丢弃该请求，返回空建议而非错误
 	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add ignore", "ignore me")
 	assert.NoError(t, err)
 	assert.Nil(t, suggestions)
+	assert.Equal(t, 1, counter.residentSpawns(), "首个请求应 spawn 一个常驻进程")
 
 	// 超时后应杀死不响应的进程并移出进程池
 	assert.Eventually(t, func() bool { return env.poolSize() == 0 }, 5*time.Second, 20*time.Millisecond)
 
-	// 恢复默认超时：新 spawn 的进程在慢速环境（如 CI 模拟架构）下启动可能超过 300ms，
-	// 避免新进程的首次请求因启动过慢被误判为超时
-	env.runner.autocompleteTimeout = autocompleteDefaultTimeout
-
-	// 下一次请求应重新 spawn 新进程正常工作
-	sug2, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "b")
-	require.NoError(t, err)
-	require.Len(t, sug2, 1)
-	assert.NotEqual(t, "", sug2[0].Text)
+	// 下一次请求应重新 spawn 新进程
+	_, _ = env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "b")
+	assert.Equal(t, 2, counter.residentSpawns(), "进程被超时杀掉后，下一个请求应重新 spawn")
 }
 
 func TestAutocomplete_JSONRPC_ConcurrentRequests(t *testing.T) {
-	env := newAutocompleteTestRunner(t, true, nil, nil)
+	env := newAutocompleteTestRunner(t, true, nil, nil, nil)
 
 	// 并发请求：各请求都应拿到自己的响应并复用同一常驻进程，且不会被较新请求误取消
 	const n = 6
@@ -566,7 +547,7 @@ func TestAutocomplete_SingleShot_BackwardCompat(t *testing.T) {
 	env := newAutocompleteTestRunner(t, false, map[string]string{
 		"IF_HELPER_PID_FILE": filepath.Join(t.TempDir(), "helper.pid"),
 		"IF_HELPER_ONESHOT":  "1",
-	}, nil)
+	}, nil, nil)
 
 	s1, err := env.runner.Autocomplete(context.Background(), env.hookID, "", "/add", "a")
 	require.NoError(t, err)

@@ -1,13 +1,11 @@
 package hook
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -74,10 +72,7 @@ type jsonrpcProcess struct {
 	pool    *jsonrpcPool
 	command string
 
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	reader *bufio.Reader
-	stderr io.ReadCloser
+	proc residentProcess
 
 	mu       sync.Mutex
 	dead     bool
@@ -86,36 +81,36 @@ type jsonrpcProcess struct {
 	lastUsed time.Time
 
 	sendMu    sync.Mutex
-	wg        sync.WaitGroup
 	closeOnce sync.Once
 }
 
-// autocompleteJSONRPC 通过常驻 JSON-RPC 进程获取自动补全建议：
+// viaJSONRPC 通过常驻 JSON-RPC 进程获取自动补全建议：
 // 首次请求 spawn 进程，后续请求复用；进程崩溃/不响应时自动重启。
-func (r *Runner) autocompleteJSONRPC(ctx context.Context, targetHook *hookConfig, linePrefix, query string, imageIDs, imagePaths []string, noteAbsPath string) ([]*hook.AutocompleteSuggestion, error) {
-	cfg := targetHook.Directive.Autocomplete
-	env, err := r.buildAutocompleteEnv(ctx, targetHook, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
+func (t *autocompleteTrigger) viaJSONRPC(ctx context.Context, target hookConfig, linePrefix, query string, imageIDs, imagePaths []string, noteAbsPath string) ([]*hook.AutocompleteSuggestion, error) {
+	cfg := target.Directive.Autocomplete
+	env, err := t.buildEnv(ctx, target, linePrefix, query, imageIDs, imagePaths, noteAbsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build autocomplete env: %w", err)
 	}
 
-	cwords, cwordIdx, prevWord := parseLineContext(linePrefix, query)
-	// 目录上下文：与 buildBaseEnv 的推导一致（单次模式注入 IMAGE_FUNNEL_DIRECTORY_REL_PATH 的来源）
+	// 目录上下文：与 buildEnv 的推导一致（单次模式注入 IMAGE_FUNNEL_DIRECTORY_REL_PATH 的来源）
 	var dirRel string
 	switch {
 	case noteAbsPath != "":
-		rel, err := r.dirRelPath(noteAbsPath)
+		rel, err := relFromAbsPath(t.rootDir, noteAbsPath)
 		if err != nil {
 			return nil, err
 		}
-		dirRel = rel.String()
+		dirRel = rel.Dir().String()
 	case len(imagePaths) > 0:
-		rel, err := r.dirRelPath(imagePaths[0])
+		rel, err := relFromAbsPath(t.rootDir, imagePaths[0])
 		if err != nil {
 			return nil, err
 		}
-		dirRel = rel.String()
+		dirRel = rel.Dir().String()
 	}
+
+	cwords, cwordIdx, prevWord := parseLineContext(linePrefix, query)
 	params := autocompleteJSONRPCParams{
 		Cwords:           cwords,
 		CwordIdx:         cwordIdx,
@@ -125,90 +120,74 @@ func (r *Runner) autocompleteJSONRPC(ctx context.Context, targetHook *hookConfig
 		ImageIDs:         imageIDs,
 		ImagePaths:       imagePaths,
 		NotePath:         noteAbsPath,
-		RootDir:          r.rootDir,
+		RootDir:          t.rootDir,
 		DirectoryRelPath: dirRel,
 	}
 
-	proc, err := r.jsonrpcPool.Acquire(cfg.Command, env)
+	proc, err := t.pool.Acquire(cfg.Command, env)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start autocomplete jsonrpc process: %w", err)
 	}
 
-	suggestions, err := proc.request(ctx, r.autocompleteTimeout, jsonRPCMethodAutocomplete, params)
+	suggestions, err := proc.request(ctx, t.timeout, jsonRPCMethodAutocomplete, params)
 	if err == nil {
 		return suggestions, nil
 	}
 	if errors.Is(err, errJSONRPCTimeout) {
 		// 请求超时兜底：丢弃该请求并重启进程，避免补全静默失效
 		proc.kill()
-		r.logger.Warn("autocomplete jsonrpc request timed out, restarting process",
-			zap.String("hook_id", targetHook.ID),
-			zap.Duration("timeout", r.autocompleteTimeout),
+		t.logger.Warn("autocomplete jsonrpc request timed out, restarting process",
+			zap.String("hook_id", target.ID),
+			zap.Duration("timeout", t.timeout),
 		)
 		return nil, nil
 	}
 	if errors.Is(err, errJSONRPCProcessGone) {
 		// 进程在请求期间崩溃/退出：重启进程后重试一次
-		proc, err = r.jsonrpcPool.Acquire(cfg.Command, env)
+		proc, err = t.pool.Acquire(cfg.Command, env)
 		if err != nil {
 			return nil, fmt.Errorf("failed to restart autocomplete jsonrpc process: %w", err)
 		}
-		return proc.request(ctx, r.autocompleteTimeout, jsonRPCMethodAutocomplete, params)
+		return proc.request(ctx, t.timeout, jsonRPCMethodAutocomplete, params)
 	}
 	return nil, err
 }
 
-// spawnJSONRPCProcess 启动一个常驻的 JSON-RPC 自动补全脚本进程。
+// spawn 启动一个常驻的 JSON-RPC 自动补全脚本进程。
 // 进程生命周期随 Runner（应用退出时统一回收），请求取消通过 $/cancelRequest 通知而非杀进程。
-func (r *Runner) spawnJSONRPCProcess(command string, env []string) (*jsonrpcProcess, error) {
+func (t *autocompleteTrigger) spawn(command string, env []string) (*jsonrpcProcess, error) {
 	argv, err := parseCommandArgs(command)
 	if err != nil {
 		return nil, fmt.Errorf("invalid autocomplete command: %w", err)
 	}
-	cmd := newHookCmd(r.ctx, argv)
-	cmd.Dir = r.hooksDir
-	cmd.Env = env
 
-	stdin, err := cmd.StdinPipe()
+	proc, err := t.process.SpawnResident(t.ctx, argv, env, t.hooksDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create stdin pipe: %w", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start autocomplete script: %w", err)
 	}
 
 	return &jsonrpcProcess{
-		logger:  r.logger,
+		logger:  t.logger,
 		command: command,
-		cmd:     cmd,
-		stdin:   stdin,
-		reader:  bufio.NewReader(stdout),
-		stderr:  stderr,
+		proc:    proc,
 		waiters: make(map[int64]chan jsonrpcResponse),
 	}, nil
 }
 
 // start 启动进程的读取 goroutine，须在 pool 将进程登记后再调用
 func (p *jsonrpcProcess) start() {
-	p.wg.Add(3)
+	var wg sync.WaitGroup
+	wg.Add(3)
 	go func() {
-		defer p.wg.Done()
+		defer wg.Done()
 		p.readLoop()
 	}()
 	go func() {
-		defer p.wg.Done()
+		defer wg.Done()
 		p.drainStderr()
 	}()
 	go func() {
-		defer p.wg.Done()
+		defer wg.Done()
 		p.waitProcess()
 	}()
 }
@@ -325,17 +304,13 @@ func (p *jsonrpcProcess) writeLine(data []byte) error {
 	if dead {
 		return errJSONRPCProcessGone
 	}
-	buf := make([]byte, 0, len(data)+1)
-	buf = append(buf, data...)
-	buf = append(buf, '\n')
-	_, err := p.stdin.Write(buf)
-	return err
+	return p.proc.WriteLine(data)
 }
 
 // readLoop 持续读取进程 stdout，按请求 id 派发响应
 func (p *jsonrpcProcess) readLoop() {
 	for {
-		line, err := p.reader.ReadString('\n')
+		line, err := p.proc.ReadLine()
 		if line != "" {
 			p.handleLine(line)
 		}
@@ -414,19 +389,17 @@ func parseJSONRPCResult(raw json.RawMessage) ([]*hook.AutocompleteSuggestion, er
 
 // drainStderr 持续消费进程 stderr 并记录日志（业务日志通道，不污染协议 stdout）
 func (p *jsonrpcProcess) drainStderr() {
-	scanner := bufio.NewScanner(p.stderr)
-	for scanner.Scan() {
+	p.proc.DrainStderr(func(line string) {
 		p.logger.Debug("autocomplete jsonrpc script stderr",
 			zap.String("command", p.command),
-			zap.String("stderr", scanner.Text()),
+			zap.String("stderr", line),
 		)
-	}
+	})
 }
 
 // waitProcess 等待进程退出并标记失效（进程崩溃/正常退出的最终信号）
 func (p *jsonrpcProcess) waitProcess() {
-	err := p.cmd.Wait()
-	p.markDead(err)
+	p.markDead(p.proc.Wait())
 }
 
 // markDead 标记进程失效：从池中移除自身，并向所有等待中的请求投递失败
@@ -459,12 +432,7 @@ func (p *jsonrpcProcess) markDead(err error) {
 // kill 关闭 stdin 并终止进程树（用于超时重启 / 空闲回收 / 应用退出）
 func (p *jsonrpcProcess) kill() {
 	p.closeOnce.Do(func() {
-		if p.stdin != nil {
-			_ = p.stdin.Close()
-		}
-		if p.cmd.Cancel != nil {
-			_ = p.cmd.Cancel()
-		}
+		p.proc.Kill()
 		p.markDead(errors.New("process killed"))
 	})
 }

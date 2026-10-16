@@ -4,226 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"iter"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"main/internal/domain/device"
 	"main/internal/domain/directory"
-	domimage "main/internal/domain/image"
 	"main/internal/domain/relpath"
-	"main/internal/pubsub"
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-// mockToken 模拟 device.Token
-type mockToken struct{}
-
-func (m *mockToken) String() string     { return "mock-token" }
-func (m *mockToken) UserID() scalar.ID  { return scalar.ToID("usr:mock") }
-func (m *mockToken) Expire() time.Time  { return time.Now().Add(time.Hour) }
-func (m *mockToken) IssueAt() time.Time { return time.Now() }
-func (m *mockToken) JTI() string        { return "mock-jti" }
-
-// mockTokenSource 模拟 device.TokenSource
-type mockTokenSource struct{}
-
-func (m *mockTokenSource) NewAccessToken(ctx context.Context, deviceID scalar.ID) (device.Token, error) {
-	return &mockToken{}, nil
-}
-func (m *mockTokenSource) NewRefreshToken(ctx context.Context, deviceID scalar.ID) (device.Token, error) {
-	return &mockToken{}, nil
-}
-func (m *mockTokenSource) VerifyAccessToken(ctx context.Context, rawToken string) (device.Token, error) {
-	return &mockToken{}, nil
-}
-func (m *mockTokenSource) VerifyRefreshToken(ctx context.Context, rawToken string) (device.Token, error) {
-	return &mockToken{}, nil
-}
-
-type mockMetadataUpdatedSub struct {
-	subscribers []chan *shared.MetadataUpdatedEvent
-}
-
-func (m *mockMetadataUpdatedSub) Subscribe(ctx context.Context) iter.Seq2[*shared.MetadataUpdatedEvent, error] {
-	ch := make(chan *shared.MetadataUpdatedEvent, 10)
-	m.subscribers = append(m.subscribers, ch)
-	return func(yield func(*shared.MetadataUpdatedEvent, error) bool) {
-		for {
-			select {
-			case ev := <-ch:
-				if !yield(ev, nil) {
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func (m *mockMetadataUpdatedSub) Publish(ctx context.Context, ev *shared.MetadataUpdatedEvent, opts ...pubsub.PublishOption) error {
-	for _, ch := range m.subscribers {
-		ch <- ev
-	}
-	return nil
-}
-
-type mockFileChangedSub struct{}
-
-func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*directory.FileChangedEvent, error] {
-	return func(yield func(*directory.FileChangedEvent, error) bool) {}
-}
-
-func (m *mockFileChangedSub) Publish(ctx context.Context, ev *directory.FileChangedEvent, opts ...pubsub.PublishOption) error {
-	return nil
-}
-
-type mockImageRepository struct {
-	images []*domimage.Image
-}
-
-func (m *mockImageRepository) Get(ctx context.Context, relPath relpath.Path) (*domimage.Image, error) {
-	for _, img := range m.images {
-		if img.RelPath() == relPath {
-			return img, nil
-		}
-	}
-	return nil, os.ErrNotExist
-}
-
-func (m *mockImageRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*domimage.Image, error] {
-	return func(yield func(*domimage.Image, error) bool) {
-		for _, img := range m.images {
-			if !yield(img, nil) {
-				return
-			}
-		}
-	}
-}
-
-// mockDirectoryRepository 模拟目录仓库
-type mockDirectoryRepository struct {
-	dirs map[relpath.Path]*directory.Directory
-}
-
-func (m *mockDirectoryRepository) Get(ctx context.Context, relPath relpath.Path) (*directory.Directory, error) {
-	if m.dirs == nil {
-		return nil, os.ErrNotExist
-	}
-	d, ok := m.dirs[relPath]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	return d, nil
-}
-
-func (m *mockDirectoryRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*directory.Directory, error] {
-	return func(yield func(*directory.Directory, error) bool) {}
-}
-
-func (m *mockDirectoryRepository) ReadState(ctx context.Context, relPath relpath.Path) (*shared.DirectoryStateDTO, error) {
-	return nil, os.ErrNotExist
-}
-
-func (m *mockDirectoryRepository) WriteState(ctx context.Context, relPath relpath.Path, state *shared.DirectoryStateDTO) error {
-	return nil
-}
-
-// mockNotificationSender 模拟 NotificationSender
-type mockNotificationSender struct {
-	mu            sync.Mutex
-	notifications []sentNotification
-	sendErr       error
-}
-
-type sentNotification struct {
-	Tag     string
-	Channel string
-	Title   string
-	Opts    *shared.SendNotificationOptions
-}
-
-func (m *mockNotificationSender) SendNotification(
-	ctx context.Context,
-	channel string,
-	title string,
-	opts ...shared.SendNotificationOption,
-) (*shared.SendNotificationResult, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.sendErr != nil {
-		return nil, m.sendErr
-	}
-	options := shared.NewSendNotificationOptions(opts...)
-	tag := options.Tag()
-	m.notifications = append(m.notifications, sentNotification{
-		Tag:     tag,
-		Channel: channel,
-		Title:   title,
-		Opts:    options,
-	})
-	return shared.NewSendNotificationResult(scalar.ToID("notify:"+tag), true), nil
-}
-
-func (m *mockNotificationSender) Notifications() []sentNotification {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	copied := make([]sentNotification, len(m.notifications))
-	copy(copied, m.notifications)
-	return copied
-}
-
+// TestRunner_TOML_Parsing 配置来源逐次读盘解析并映射为领域实体
 func TestRunner_TOML_Parsing(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"comfyui.toml": hookTOML("comfyui-test", "ComfyUI 测试", "python test.py",
+				"[on.post_update_image_metadata]\nrating = [4, 5]\nlabel = [\"\"]\n\n[on.image_dispatch]\nhotkeys = [\"F5\", \"ctrl+shift+k\"]\n"),
+		},
+	})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	tomlContent := `
-id = "comfyui-test"
-name = "ComfyUI 测试"
-description = "ComfyUI 测试说明"
-command = "python test.py"
-
-[on.post_update_image_metadata]
-rating = [4, 5]
-label = [""]
-
-[on.image_dispatch]
-hotkeys = ["F5", "ctrl+shift+k"]
-`
-	tomlPath := filepath.Join(hooksDir, "comfyui.toml")
-	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	hooks, err := runner.List(context.Background())
-	assert.NoError(t, err)
-	assert.Len(t, hooks, 1)
-
-	configs, err := runner.loadHooks()
-	assert.NoError(t, err)
-	assert.Len(t, configs, 1)
+	hooks, err := env.runner.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, hooks, 1)
 
 	h := hooks[0]
 	assert.Equal(t, "hk:comfyui-test", h.ID().String())
@@ -233,369 +44,180 @@ hotkeys = ["F5", "ctrl+shift+k"]
 }
 
 func TestRunner_TOML_Parsing_ImageDispatchWithoutHotkeys(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"no-hotkey.toml": hookTOML("no-hotkey", "无快捷键", "python test.py", "[on.image_dispatch]\n"),
+		},
+	})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	tomlContent := `
-id = "no-hotkey"
-name = "无快捷键"
-command = "python test.py"
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "no-hotkey.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	hooks, err := runner.List(context.Background())
-	assert.NoError(t, err)
-	assert.Len(t, hooks, 1)
+	hooks, err := env.runner.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, hooks, 1)
 	assert.Empty(t, hooks[0].ImageDispatchHotkeys())
 }
 
-func TestRunner_FilteringAndDebounce(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-exec-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "flag_dir")
-	// command 不再经 runner 的 shell 解析，需要 shell 重定向时显式调用 cmd/sh 作为程序
-	var cmdStr string
-	if filepath.Separator == '/' {
-		cmdStr = `sh -c 'echo 1 > ` + flagFile + `'`
-	} else {
-		cmdStr = `cmd /c "echo 1 > ` + flagFile + `"`
-	}
-
-	tomlContent := `
-id = "exec-test"
-name = "执行测试"
-command = '''` + cmdStr + `'''
-
-[on.post_update_image_metadata]
-rating = [4]
-label = [""]
-`
-	tomlPath := filepath.Join(hooksDir, "exec.toml")
-	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewExample()
-
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+// TestRunner_ConfigSource_ReloadsOnDemand 验证配置来源不缓存：改 toml 即时生效
+func TestRunner_ConfigSource_ReloadsOnDemand(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"reload-test.toml": hookTOML("reload-test", "reload-test", "python a.py", "[on.image_dispatch]\n"),
 		},
-	}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	runner.debouncer.duration = 10 * time.Millisecond // 10ms 防抖
-	defer runner.Close()
+	hooks, err := env.config.Load()
+	require.NoError(t, err)
+	require.Len(t, hooks, 1)
+	assert.Equal(t, "python a.py", hooks[0].Command)
+
+	env.writeHook("reload-test.toml", hookTOML("reload-test", "reload-test", "python b.py", "[on.image_dispatch]\n"))
+
+	hooks, err = env.config.Load()
+	require.NoError(t, err)
+	require.Len(t, hooks, 1)
+	assert.Equal(t, "python b.py", hooks[0].Command, "配置来源应逐次读盘，改 toml 即时生效")
+}
+
+// TestRunner_FilteringAndDebounce 元数据事件按筛选条件命中后防抖合批执行
+func TestRunner_FilteringAndDebounce(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{
+		Seam: func(sm *seams) { sm.DebounceDuration = 10 * time.Millisecond },
+	})
+	flagFile := filepath.Join(env.rootDir, "flag_dir")
+	env.writeHook("exec.toml", hookTOML("exec-test", "执行测试", shellRedirect("echo 1", flagFile),
+		"[on.post_update_image_metadata]\nrating = [4]\nlabel = [\"\"]\n"))
+
+	metadataSub := env.runner.deps.MetadataUpdatedSub.(*mockMetadataUpdatedSub)
 
 	// 1. 自动触发：测试发送不符合过滤条件的事件（3星）
-	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
-		ID:        scalar.ToID("img:1:a.png"),
-		Path:      filepath.Join(tempDir, "a.png"),
-		Rating:    3,
-		Label:     "",
-		Action:    "keep",
-		OldRating: 0,
-		OldLabel:  "",
-		OldAction: "",
-	})
+	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 3, ""))
 
 	time.Sleep(50 * time.Millisecond) // 等待防抖
-	_, err = os.Stat(flagFile)
-	assert.True(t, os.IsNotExist(err), "3星评级不应触发钩子运行")
+	assertNoFile(t, flagFile, "3星评级不应触发钩子运行")
 
 	// 2. 自动触发：测试发送符合过滤条件的事件（4星）且标签为 ""
-	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
-		ID:        scalar.ToID("img:1:a.png"),
-		Path:      filepath.Join(tempDir, "a.png"),
-		Rating:    4,
-		Label:     "",
-		Action:    "keep",
-		OldRating: 0,
-		OldLabel:  "",
-		OldAction: "",
-	})
+	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 4, ""))
 
 	assert.True(t, waitFlagFile(flagFile, 15*time.Second), "4星评级应触发钩子成功运行")
 	time.Sleep(50 * time.Millisecond) // 等待进程执行和日志打印完全收尾
 
-	// 清理标志文件
-	err = os.RemoveAll(flagFile)
-	assert.NoError(t, err)
+	require.NoError(t, os.RemoveAll(flagFile))
 
 	// 3. 自动触发：测试发送符合 4星但标签为 Red（不满足 label = [""] 的过滤）
-	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
+	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 4, "Red"))
+
+	time.Sleep(50 * time.Millisecond)
+	assertNoFile(t, flagFile, "由于只匹配空标签，标签为 Red 的图片应该不匹配")
+}
+
+// metadataEvent 构造一次元数据更新事件
+func metadataEvent(rootDir string, rating int, label string) *shared.MetadataUpdatedEvent {
+	return &shared.MetadataUpdatedEvent{
 		ID:        scalar.ToID("img:1:a.png"),
-		Path:      filepath.Join(tempDir, "a.png"),
-		Rating:    4,
-		Label:     "Red",
+		Path:      filepath.Join(rootDir, "a.png"),
+		Rating:    rating,
+		Label:     label,
 		Action:    "keep",
 		OldRating: 0,
 		OldLabel:  "",
 		OldAction: "",
-	})
-
-	time.Sleep(50 * time.Millisecond)
-	_, err = os.Stat(flagFile)
-	assert.True(t, os.IsNotExist(err), "由于只匹配空标签，标签为 Red 的图片应该不匹配")
-}
-
-func waitFlagFile(path string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
-	return false
 }
 
 func TestRunner_Env_Injection(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-env-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"env.toml": "id = \"env-test\"\nname = \"环境变量测试\"\ncommand = \"python test_env.py\"\n\n[env]\nTEST_VAR_ONE = \"val1\"\nTEST_VAR_TWO = \"val2\"\n",
+		},
+	})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	tomlContent := `
-id = "env-test"
-name = "环境变量测试"
-command = "python test_env.py"
-
-[env]
-TEST_VAR_ONE = "val1"
-TEST_VAR_TWO = "val2"
-`
-	tomlPath := filepath.Join(hooksDir, "env.toml")
-	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	configs, err := runner.loadHooks()
-	assert.NoError(t, err)
-	assert.Len(t, configs, 1)
+	configs, err := env.config.Load()
+	require.NoError(t, err)
+	require.Len(t, configs, 1)
 	assert.Equal(t, "val1", configs[0].Env["TEST_VAR_ONE"])
 	assert.Equal(t, "val2", configs[0].Env["TEST_VAR_TWO"])
 }
 
+// TestRunner_GraphqlURLEnv_Injection 基础环境变量注入本机 GraphQL 地址与数据目录
 func TestRunner_GraphqlURLEnv_Injection(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-loopback-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{GraphQLURL: "http://127.0.0.1:8000/graphql"})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
+	got, err := env.runner.exec.env.Build(context.Background(), envRequest{
+		HookID:      "test-id",
+		HookName:    "test-name",
+		TriggerName: "test-trigger",
+	})
+	require.NoError(t, err)
 
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "http://127.0.0.1:8000/graphql", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
+	assert.Equal(t, "http://127.0.0.1:8000/graphql", envValue(got, "IMAGE_FUNNEL_GRAPHQL_URL"))
+	assert.Equal(t, env.rootDir, envValue(got, "IMAGE_FUNNEL_DATA_DIR"))
+}
 
-	env, err := runner.buildBaseEnv(context.Background(), "test-id", "test-name", "test-trigger", nil, nil, "", nil, "", "")
-	assert.NoError(t, err)
-
-	var graphqlURL string
+// envValue 从环境变量列表中取出指定键的值
+func envValue(env []string, key string) string {
+	prefix := key + "="
 	for _, e := range env {
-		if strings.HasPrefix(e, "IMAGE_FUNNEL_GRAPHQL_URL=") {
-			graphqlURL = strings.TrimPrefix(e, "IMAGE_FUNNEL_GRAPHQL_URL=")
-			break
+		if strings.HasPrefix(e, prefix) {
+			return strings.TrimPrefix(e, prefix)
 		}
 	}
-
-	assert.Equal(t, "http://127.0.0.1:8000/graphql", graphqlURL)
-
-	// IMAGE_FUNNEL_DATA_DIR 应注入 Runner 持有的一致数据目录
-	var dataDir string
-	for _, e := range env {
-		if strings.HasPrefix(e, "IMAGE_FUNNEL_DATA_DIR=") {
-			dataDir = strings.TrimPrefix(e, "IMAGE_FUNNEL_DATA_DIR=")
-			break
-		}
-	}
-	assert.Equal(t, tempDir, dataDir)
+	return ""
 }
 
 func TestRunner_Trigger_SyncAndError(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// command 不再经 runner 的 shell 解析，需要 shell 行为时显式调用 cmd/sh 作为程序
-	var shellSuccess, shellFail string
-	if filepath.Separator == '/' {
-		shellSuccess = `sh -c 'echo hello'`
-		shellFail = `sh -c 'echo test_error_out >&2 && exit 42'`
-	} else {
-		shellSuccess = `cmd /c "echo hello"`
-		shellFail = `cmd /c "echo test_error_out >&2 && exit 42"`
-	}
-
-	// 1. 测试成功的外部钩子命令
-	successToml := fmt.Sprintf(`
-id = "success-test"
-name = "成功测试"
-command = '''%s'''
-
-[on.image_dispatch]
-`, shellSuccess)
-	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(successToml), 0644)
-	assert.NoError(t, err)
-
-	// 2. 测试失败的外部钩子命令（会返回错误，并且 stderr 中有报错）
-	failToml := fmt.Sprintf(`
-id = "fail-test"
-name = "失败测试"
-command = '''%s'''
-
-[on.image_dispatch]
-`, shellFail)
-	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(failToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-
-	// 构建 mock 目录仓库，使得路径能推导出目录信息
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"success.toml": hookTOML("success-test", "成功测试", shellPrint("echo hello"), "[on.image_dispatch]\n"),
+			"fail.toml":    hookTOML("fail-test", "失败测试", shellPrint("echo test_error_out >&2 && exit 42"), "[on.image_dispatch]\n"),
 		},
-	}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	// 使用绝对路径，使得 dirRelFromAbsPath 能正确推导目录信息
-	absPath := filepath.Join(tempDir, "a.png")
+	// 使用绝对路径，使得目录信息可推导
+	absPath := filepath.Join(env.rootDir, "a.png")
 
 	// 触发成功钩子，应该同步等待并返回 nil
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:success-test"), "image_dispatch")
+	err := env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:success-test"), "image_dispatch")
 	assert.NoError(t, err)
 
 	// 触发失败钩子，应该同步等待并返回错误，且错误信息中包含退出码和 stderr 输出
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:fail-test"), "image_dispatch")
-	assert.Error(t, err)
+	err = env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:fail-test"), "image_dispatch")
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "test_error_out")
 	assert.Contains(t, err.Error(), "exit status 42")
 }
 
 func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-direnv-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Seam: func(sm *seams) { sm.DebounceDuration = 10 * time.Millisecond },
+	})
+	flagFile := filepath.Join(env.rootDir, "dir_env_flag")
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "dir_env_flag")
-
-	// 使用 shell 命令输出目录环境变量到文件，使用 | 作为分隔符避免与目录 ID 中的 : 冲突
-	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
+	// 使用 | 作为分隔符避免与目录 ID 中的 : 冲突
 	var cmdStr string
 	if filepath.Separator == '/' {
 		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_DIRECTORY_ID|$IMAGE_FUNNEL_DIRECTORY_REL_PATH" > ` + flagFile + `'`
 	} else {
 		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile + `"`
 	}
+	env.writeHook("direnv.toml", hookTOML("direnv-test", "目录环境变量测试", cmdStr,
+		"[on.post_update_image_metadata]\nrating = [4]\nlabel = [\"\"]\n"))
+	expectedDir := env.dirRepo.dirs[relpath.Path{}]
 
-	tomlContent := `
-id = "direnv-test"
-name = "目录环境变量测试"
-command = '''` + cmdStr + `'''
+	metadataSub := env.runner.deps.MetadataUpdatedSub.(*mockMetadataUpdatedSub)
+	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 4, ""))
 
-[on.post_update_image_metadata]
-rating = [4]
-label = [""]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "direnv.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
+	require.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "应触发钩子并写入 flag 文件")
 
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewExample()
-
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-	expectedDir := mockDirRepo.dirs[relpath.Path{}]
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	runner.debouncer.duration = 10 * time.Millisecond
-	defer runner.Close()
-
-	// 等待监听器就绪
-	time.Sleep(10 * time.Millisecond)
-
-	// 发布匹配过滤条件的事件，触发 post_update_image_metadata 钩子
-	ebus.Publish(context.Background(), &shared.MetadataUpdatedEvent{
-		ID:        scalar.ToID("img:1:a.png"),
-		Path:      filepath.Join(tempDir, "a.png"),
-		Rating:    4,
-		Label:     "",
-		Action:    "keep",
-		OldRating: 0,
-		OldLabel:  "",
-		OldAction: "",
-	})
-
-	assert.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "应触发钩子并写入 flag 文件")
-
-	// 读取 flag 文件内容验证环境变量
-	contentBytes, err := os.ReadFile(flagFile)
-	assert.NoError(t, err)
-	result := strings.TrimSpace(string(contentBytes))
-
-	// 使用 | 作为分隔符避免与 ID 中的 : 冲突
-	parts := strings.SplitN(result, "|", 2)
-	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
+	parts := strings.SplitN(strings.TrimSpace(waitFlagContent(t, flagFile, 500*time.Millisecond)), "|", 2)
+	require.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
 	assert.Equal(t, expectedDir.ID().String(), parts[0], "DIRECTORY_ID 应与目录仓库返回的 ID 一致")
 }
 
 func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-trigger-direnv-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "trigger_dir_env_flag")
+	subRel := testutil.Rel(t, "subdir")
+	env := newTestHooks(t, testHooksOptions{
+		Dirs: map[relpath.Path]*directory.Directory{subRel: directory.FromRepository(subRel)},
+	})
+	flagFile := filepath.Join(env.rootDir, "trigger_dir_env_flag")
 
 	var cmdStr string
 	if filepath.Separator == '/' {
@@ -603,249 +225,105 @@ func TestRunner_Trigger_DirectoryEnvVars(t *testing.T) {
 	} else {
 		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID%^|%IMAGE_FUNNEL_DIRECTORY_REL_PATH% > ` + flagFile + `"`
 	}
-
-	tomlContent := `
-id = "trigger-direnv-test"
-name = "触发目录环境变量测试"
-command = '''` + cmdStr + `'''
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "trigger-direnv.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewExample()
-
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			testutil.Rel(t, "subdir"): directory.FromRepository(testutil.Rel(t, "subdir")),
-		},
-	}
-	expectedDir := mockDirRepo.dirs[testutil.Rel(t, "subdir")]
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
+	env.writeHook("trigger-direnv.toml", hookTOML("trigger-direnv-test", "触发目录环境变量测试", cmdStr, "[on.image_dispatch]\n"))
+	expectedDir := env.dirRepo.dirs[subRel]
 
 	// 创建一个位于子目录中的文件，确保目录信息可推导
-	subDir := filepath.Join(tempDir, "subdir")
-	err = os.MkdirAll(subDir, 0755)
-	assert.NoError(t, err)
+	subDir := filepath.Join(env.rootDir, "subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0755))
 	absPath := filepath.Join(subDir, "test.png")
 
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:trigger-direnv-test"), "image_dispatch")
-	assert.NoError(t, err)
+	require.NoError(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:trigger-direnv-test"), "image_dispatch"))
+	require.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "Trigger 应成功执行钩子并写入 flag 文件")
 
-	assert.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "Trigger 应成功执行钩子并写入 flag 文件")
-
-	contentBytes, err := os.ReadFile(flagFile)
-	assert.NoError(t, err)
-	result := strings.TrimSpace(string(contentBytes))
-
-	parts := strings.SplitN(result, "|", 2)
-	assert.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
+	parts := strings.SplitN(strings.TrimSpace(waitFlagContent(t, flagFile, 500*time.Millisecond)), "|", 2)
+	require.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
 	assert.Equal(t, expectedDir.ID().String(), parts[0], "DIRECTORY_ID 应与目录仓库返回的 ID 一致")
 	assert.Equal(t, "subdir", parts[1], "DIRECTORY_REL_PATH 应为 subdir")
 }
 
 func TestRunner_Trigger_DirectoryResolveFailure(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-dir-fail-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Dirs: map[relpath.Path]*directory.Directory{},
+	})
+	flagFile := filepath.Join(env.rootDir, "should_not_exist")
+	env.writeHook("dir-fail.toml", hookTOML("dir-fail-test", "目录解析失败测试", shellRedirect("echo should_not_run", flagFile), "[on.image_dispatch]\n"))
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "should_not_exist")
-	tomlContent := `
-id = "dir-fail-test"
-name = "目录解析失败测试"
-command = 'echo "should not run" > ` + flagFile + `'
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "dir-fail.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-
-	// 目录仓库为空，任何路径都无法解析
-	mockDirRepo := &mockDirectoryRepository{dirs: map[relpath.Path]*directory.Directory{}}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	absPath := filepath.Join(tempDir, "unknown_subdir", "a.png")
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:dir-fail-test"), "image_dispatch")
-	assert.Error(t, err, "目录解析失败时应返回错误")
+	absPath := filepath.Join(env.rootDir, "unknown_subdir", "a.png")
+	err := env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:dir-fail-test"), "image_dispatch")
+	require.Error(t, err, "目录解析失败时应返回错误")
 	assert.Contains(t, err.Error(), "failed to resolve directory")
 
-	// 验证钩子没有被执行
-	_, err = os.Stat(flagFile)
-	assert.True(t, os.IsNotExist(err), "目录解析失败时不应执行钩子")
+	assertNoFile(t, flagFile, "目录解析失败时不应执行钩子")
 }
 
 func TestRunner_NoDirective_PostUpdateNote(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "no-dir-update-note-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "update_flag")
+	env := newTestHooks(t, testHooksOptions{ImageRelPaths: []string{"test.png"}})
+	flagFile := filepath.Join(env.rootDir, "update_flag")
 	var cmdStr string
 	if filepath.Separator == '/' {
 		cmdStr = `sh -c 'echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagFile + `'`
 	} else {
 		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagFile + `"`
 	}
+	env.writeHook("no-dir-update.toml", hookTOML("no-dir-update", "无指令更新测试", cmdStr, "[on.post_update_note]\n"))
 
-	tomlContent := `
-id = "no-dir-update"
-name = "无指令更新测试"
-command = '''` + cmdStr + `'''
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test.png.md")
+	noteAbsPath := noteRelPath.Abs(env.rootDir)
+	require.NoError(t, os.WriteFile(noteAbsPath, []byte("Just a normal note with no slash commands"), 0644))
 
-[on.post_update_note]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "no-dir-update.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-
-	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
-	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	noteRelPath := testutil.Rel(t, "test.png.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
-	err = os.WriteFile(noteAbsPath, []byte("Just a normal note with no slash commands"), 0644)
-	assert.NoError(t, err)
-
-	runner.handleFileChanged(&directory.FileChangedEvent{
+	require.NoError(t, env.runner.noteUpdate.HandleFileChanged(&directory.FileChangedEvent{
 		DirectoryID: scalar.ToID("dir:1"),
 		RelPath:     noteRelPath,
 		Action:      shared.FileActionWrite,
 		OccurredAt:  time.Now(),
-	})
+	}))
 
-	assert.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "应该无指令直接触发并创建 flag 文件")
-	contentBytes, err := os.ReadFile(flagFile)
-	assert.NoError(t, err)
+	require.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "应该无指令直接触发并创建 flag 文件")
 
-	result := strings.TrimSpace(string(contentBytes))
 	var mPaths []string
-	err = json.Unmarshal([]byte(result), &mPaths)
-	assert.NoError(t, err)
-	assert.Len(t, mPaths, 1)
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(waitFlagContent(t, flagFile, 500*time.Millisecond))), &mPaths))
+	require.Len(t, mPaths, 1)
 	assert.Equal(t, noteAbsPath, mPaths[0], "环境变量 IMAGE_FUNNEL_NOTE_PATHS 应该注入正确")
 }
 
 func TestRunner_NoDirective_PostCommitSession(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "no-dir-commit-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagPure := filepath.Join(tempDir, "pure_flag")
-	flagScan := filepath.Join(tempDir, "scan_flag")
+	env := newTestHooks(t, testHooksOptions{ImageRelPaths: []string{"test.png"}})
+	flagPure := filepath.Join(env.rootDir, "pure_flag")
+	flagScan := filepath.Join(env.rootDir, "scan_flag")
 
 	var cmdPure, cmdScan string
 	if filepath.Separator == '/' {
-		cmdPure = `sh -c 'echo "pure" > ` + flagPure + `'`
+		cmdPure = shellRedirect("echo pure", flagPure)
 		cmdScan = `sh -c 'echo "$IMAGE_FUNNEL_NOTE_PATHS" > ` + flagScan + `'`
 	} else {
-		cmdPure = `cmd /c "echo pure > ` + flagPure + `"`
+		cmdPure = shellRedirect("echo pure", flagPure)
 		cmdScan = `cmd /c "echo %IMAGE_FUNNEL_NOTE_PATHS% > ` + flagScan + `"`
 	}
+	env.writeHook("pure.toml", hookTOML("pure-commit", "纯会话提交测试", cmdPure, "[on.post_commit_session]\n"))
+	env.writeHook("scan.toml", hookTOML("scan-commit", "笔记扫描提交测试", cmdScan, "[on.post_commit_session.note_scan]\n"))
 
-	tomlPure := `
-id = "pure-commit"
-name = "纯会话提交测试"
-command = '''` + cmdPure + `'''
+	require.NoError(t, os.WriteFile(filepath.Join(env.rootDir, "test.png.md"), []byte("Hello world note"), 0644))
+	require.NoError(t, env.runner.OnCommitSession(context.Background(), relpath.Path{}))
 
-[on.post_commit_session]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "pure.toml"), []byte(tomlPure), 0644)
-	assert.NoError(t, err)
+	require.True(t, waitFlagFile(flagPure, 1500*time.Millisecond), "纯提交钩子应成功执行")
+	require.True(t, waitFlagFile(flagScan, 1500*time.Millisecond), "无指令扫描提交钩子应成功执行")
 
-	tomlScan := `
-id = "scan-commit"
-name = "笔记扫描提交测试"
-command = '''` + cmdScan + `'''
-
-[on.post_commit_session.note_scan]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "scan.toml"), []byte(tomlScan), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-
-	imgID := scalar.ToID("img:1")
-	img := domimage.New(imgID, "test.png", testutil.Rel(t, "test.png"), scalar.ToID("dir:1"), 100, time.Now(), nil, 0, 0)
-	imgRepo := &mockImageRepository{images: []*domimage.Image{img}}
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	// 等待...
-
-	err = os.WriteFile(filepath.Join(tempDir, "test.png.md"), []byte("Hello world note"), 0644)
-	assert.NoError(t, err)
-
-	err = runner.OnCommitSession(context.Background(), relpath.Path{})
-	assert.NoError(t, err)
-
-	assert.True(t, waitFlagFile(flagPure, 1500*time.Millisecond), "纯提交钩子应成功执行")
-	assert.True(t, waitFlagFile(flagScan, 1500*time.Millisecond), "无指令扫描提交钩子应成功执行")
-
-	contentBytes, err := os.ReadFile(flagScan)
-	assert.NoError(t, err)
-	result := strings.TrimSpace(string(contentBytes))
 	var mPaths []string
-	err = json.Unmarshal([]byte(result), &mPaths)
-	assert.NoError(t, err)
-	assert.Len(t, mPaths, 1)
-	assert.Equal(t, filepath.Join(tempDir, "test.png.md"), mPaths[0], "无指令笔记扫描钩子的 NotePaths 应正确携带")
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(waitFlagContent(t, flagScan, 500*time.Millisecond))), &mPaths))
+	require.Len(t, mPaths, 1)
+	assert.Equal(t, filepath.Join(env.rootDir, "test.png.md"), mPaths[0], "无指令笔记扫描钩子的 NotePaths 应正确携带")
 }
 
 // TestRunner_PostCommitSession_DirectoryID 验证 post_commit_session 纯提交钩子
 // 在没有图片路径和笔记路径时，IMAGE_FUNNEL_DIRECTORY_ID 仍能正确注入
 func TestRunner_PostCommitSession_DirectoryID(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "post-commit-dir-id-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "dir_id_flag")
+	subRel := testutil.Rel(t, "subdir")
+	expectedDir := directory.FromRepository(subRel)
+	env := newTestHooks(t, testHooksOptions{
+		Dirs: map[relpath.Path]*directory.Directory{subRel: expectedDir},
+	})
+	flagFile := filepath.Join(env.rootDir, "dir_id_flag")
 
 	var cmdStr string
 	if filepath.Separator == '/' {
@@ -853,42 +331,13 @@ func TestRunner_PostCommitSession_DirectoryID(t *testing.T) {
 	} else {
 		cmdStr = `cmd /c "echo %IMAGE_FUNNEL_DIRECTORY_ID% > ` + flagFile + `"`
 	}
+	env.writeHook("dirid.toml", hookTOML("post-commit-dir-id", "提交时目录ID注入测试", cmdStr, "[on.post_commit_session]\n"))
 
-	tomlContent := `
-id = "post-commit-dir-id"
-name = "提交时目录ID注入测试"
-command = '''` + cmdStr + `'''
-
-[on.post_commit_session]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "dirid.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-
-	expectedDir := directory.FromRepository(testutil.Rel(t, "subdir"))
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			testutil.Rel(t, "subdir"): expectedDir,
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	err = runner.OnCommitSession(context.Background(), testutil.Rel(t, "subdir"))
-	assert.NoError(t, err)
-
-	assert.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "纯提交钩子应成功执行并写入 flag 文件")
-
-	contentBytes, err := os.ReadFile(flagFile)
-	assert.NoError(t, err)
-	result := strings.TrimSpace(string(contentBytes))
+	require.NoError(t, env.runner.OnCommitSession(context.Background(), subRel))
+	require.True(t, waitFlagFile(flagFile, 1500*time.Millisecond), "纯提交钩子应成功执行并写入 flag 文件")
 
 	// 验证回退机制：即使没有图片路径或笔记路径，DIRECTORY_ID 也能正确注入
-	assert.Equal(t, expectedDir.ID().String(), result,
+	assert.Equal(t, expectedDir.ID().String(), strings.TrimSpace(waitFlagContent(t, flagFile, 500*time.Millisecond)),
 		"post_commit_session 纯提交钩子应正确注入 IMAGE_FUNNEL_DIRECTORY_ID（回退到调用者传入的目录信息）")
 }
 
@@ -950,117 +399,41 @@ func mustSplitArgs(t *testing.T, s string) []string {
 	return args
 }
 
-func TestRunner_ExecuteNoteDirectives_PartialFailures(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-note-partial-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+// TestNoteRewriter_PartialFailures 指令部分失败时按各指令自身的成败动作擦除，
+// 迟到的文件写入走按指令名配对的后置擦除
+func TestNoteRewriter_PartialFailures(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{})
+	env.writeHook("fork.toml", noteHookTOML("fork-test", shellPrint("echo fork success"), "fork", "REMOVE", "KEEP", "[on.post_update_note]\n"))
+	env.writeHook("comfyui.toml", noteHookTOML("comfyui-test", shellPrint("echo fail_output >&2 && exit 1"), "comfyui", "REMOVE", "KEEP", "[on.post_update_note]\n"))
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(env.rootDir)
+	initialContent := "Some text.\n/fork a\n/comfyui b\nOther text."
+	require.NoError(t, os.WriteFile(noteAbsPath, []byte(initialContent), 0644))
 
-	// 1. 成功钩子定义，指令为 "fork"
-	var shellFork, shellFail string
-	if filepath.Separator == '/' {
-		shellFork = `sh -c 'echo fork success'`
-		shellFail = `sh -c 'echo fail_output >&2 && exit 1'`
-	} else {
-		shellFork = `cmd /c "echo fork success"`
-		shellFail = `cmd /c "echo fail_output >&2 && exit 1"`
-	}
-
-	forkToml := fmt.Sprintf(`
-id = "fork-test"
-name = "fork-test"
-command = '''%s'''
-
-[directive]
-name = "fork"
-on_success_action = "REMOVE"
-on_fail_action = "KEEP"
-
-[on.post_update_note]
-`, shellFork)
-	err = os.WriteFile(filepath.Join(hooksDir, "fork.toml"), []byte(forkToml), 0644)
-	assert.NoError(t, err)
-
-	// 2. 失败钩子定义，指令为 "comfyui"
-	comfyuiToml := fmt.Sprintf(`
-id = "comfyui-test"
-name = "comfyui-test"
-command = '''%s'''
-
-[directive]
-name = "comfyui"
-on_success_action = "REMOVE"
-on_fail_action = "KEEP"
-
-[on.post_update_note]
-`, shellFail)
-	err = os.WriteFile(filepath.Join(hooksDir, "comfyui.toml"), []byte(comfyuiToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	// 准备笔记文件
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
-	initialContent := `Some text.
-/fork a
-/comfyui b
-Other text.`
-	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-	assert.NoError(t, err)
-
-	// 运行指令处理
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
-	assert.Error(t, err)
+	rewriter := env.runner.rewrite
+	ok, err := rewriter.Rewrite(context.Background(), noteRewriteRequest{
+		Dir:         directory.FromRepository(relpath.Path{}),
+		NoteRelPath: noteRelPath,
+		Content:     initialContent,
+		TriggerName: "post_update_note",
+	})
+	require.Error(t, err)
 	assert.True(t, ok)
 
-	// 检查同步清理后的内容：
-	// fork 成功应被 REMOVE 变成空行（正则替换后可能留空，或者去掉）
-	// comfyui 失败应被 KEEP 保留
-	contentBytes, err := os.ReadFile(noteAbsPath)
-	assert.NoError(t, err)
-	content := string(contentBytes)
-
-	// 期望 fork 行被移除，comfyui 行被保留，并且 run-id 标签已擦除
+	// fork 成功应被 REMOVE，comfyui 失败应被 KEEP，且 run-id 标签已擦除
+	content := readFile(t, noteAbsPath)
 	assert.NotContains(t, content, "/fork")
 	assert.Contains(t, content, "/comfyui b")
 	assert.NotContains(t, content, "hook-run-id")
 
-	// 3. 测试迟到清理的分支：
-	// 写回一个带未清理指令和 run-id 的文本，模拟迟到写入
+	// 测试迟到清理的分支：写回一个带未清理指令和 run-id 的文本，模拟迟到写入
 	runID := "run_test_12345"
 	lateContent := fmt.Sprintf("---\nhook-run-id: %s\n---\nSome text.\n/fork a\n/comfyui b\nOther text.", runID)
-	err = os.WriteFile(noteAbsPath, []byte(lateContent), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(noteAbsPath, []byte(lateContent), 0644))
 
-	// 在 runner.activeTasks 中预设这个 runID
-	runner.muTasks.Lock()
-	runner.activeTasks[runID] = &activeTask{
-		phase: phaseAfter3,
-		paths: map[string]struct{}{noteAbsPath: {}},
-		failedDirectives: map[string]bool{
-			"fork":    false, // 成功
-			"comfyui": true,  // 失败
-		},
-	}
-	runner.muTasks.Unlock()
-
-	// 获取 hookMap
-	hooks, err := runner.loadHooks()
-	assert.NoError(t, err)
+	hooks, err := env.config.Load()
+	require.NoError(t, err)
 	hookMap := make(map[string]hookConfig)
 	for _, h := range hooks {
 		if h.Directive != nil && h.Directive.Name != "" {
@@ -1069,17 +442,12 @@ Other text.`
 	}
 
 	// 触发 late cleanup
-	err = runner.postProcessNoteDirectives(context.Background(), noteAbsPath, runID, "post_update_note", hookMap, map[string]bool{
+	require.NoError(t, rewriter.CleanupLate(noteAbsPath, runID, hookMap, map[string]bool{
 		"fork":    false,
 		"comfyui": true,
-	})
-	assert.NoError(t, err)
+	}))
 
-	// 再次检查迟到清理后的文件内容
-	contentBytes, err = os.ReadFile(noteAbsPath)
-	assert.NoError(t, err)
-	content = string(contentBytes)
-
+	content = readFile(t, noteAbsPath)
 	assert.NotContains(t, content, "/fork")
 	assert.Contains(t, content, "/comfyui b")
 	assert.NotContains(t, content, "hook-run-id")
@@ -1099,306 +467,85 @@ func TestIsFileNotFoundError(t *testing.T) {
 	assert.False(t, isFileNotFoundError(&exec.ExitError{ProcessState: &os.ProcessState{}}))
 }
 
-func TestRunner_ExecuteNoteDirectives_NoteFileDeleted(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-note-deleted-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	hookToml := `
-id = "deleted-note-test"
-name = "deleted-note-test"
-command = "echo success"
-
-[directive]
-name = "del-note"
-on_success_action = "REMOVE"
-on_fail_action = "KEEP"
-
-[on.post_update_note]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "deleted-note.toml"), []byte(hookToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+// TestNoteRewriter_NoteFileDeleted 笔记已被 retention 删除时静默跳过
+func TestNoteRewriter_NoteFileDeleted(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"deleted-note.toml": noteHookTOML("deleted-note-test", "echo success", "del-note", "REMOVE", "KEEP", "[on.post_update_note]\n"),
 		},
-	}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
-	initialContent := `Some text.
-/del-note a
-Other text.`
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(env.rootDir)
+	initialContent := "Some text.\n/del-note a\nOther text."
 
 	// 模拟 retention 删除笔记文件：先写入再删除
-	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-	assert.NoError(t, err)
-	err = os.Remove(noteAbsPath)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(noteAbsPath, []byte(initialContent), 0644))
+	require.NoError(t, os.Remove(noteAbsPath))
 
-	// 笔记文件已被删除，应静默返回 (false, nil)
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
+	ok, err := env.runner.rewrite.Rewrite(context.Background(), noteRewriteRequest{
+		Dir:         directory.FromRepository(relpath.Path{}),
+		NoteRelPath: noteRelPath,
+		Content:     initialContent,
+		TriggerName: "post_update_note",
+	})
 	assert.NoError(t, err)
 	assert.False(t, ok)
 }
 
-func TestRunner_ExecuteNoteDirectives_OnFailRemove_OtherError_Propagates(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-remove-other-err-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// 钩子因非文件系统错误失败，on_fail_action = "REMOVE"
-	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序以真正退出码 1 失败
-	var exitCmd string
-	if filepath.Separator == '/' {
-		exitCmd = `sh -c 'exit 1'`
-	} else {
-		exitCmd = `cmd /c "exit 1"`
-	}
-	removeToml := fmt.Sprintf(`
-id = "remove-other-fail-test"
-name = "remove-other-fail-test"
-command = '''%s'''
-
-[directive]
-name = "remove-other-fail"
-on_success_action = "KEEP"
-on_fail_action = "REMOVE"
-
-[on.post_update_note]
-`, exitCmd)
-	err = os.WriteFile(filepath.Join(hooksDir, "remove-other-fail.toml"), []byte(removeToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+// TestNoteRewriter_OnFailRemove_OtherError_Propagates on_fail_action=REMOVE 但失败原因与文件无关时仍应上报
+func TestNoteRewriter_OnFailRemove_OtherError_Propagates(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"remove-other-fail.toml": noteHookTOML("remove-other-fail-test", shellPrint("exit 1"), "remove-other-fail", "KEEP", "REMOVE", "[on.post_update_note]\n"),
 		},
-	}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+	initialContent := "Some text.\n/remove-other-fail a\nOther text."
+	require.NoError(t, os.WriteFile(noteRelPath.Abs(env.rootDir), []byte(initialContent), 0644))
 
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
-	initialContent := `Some text.
-/remove-other-fail a
-Other text.`
-	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-	assert.NoError(t, err)
-
-	// 非文件系统错误应传播
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
-	assert.Error(t, err)
+	ok, err := env.runner.rewrite.Rewrite(context.Background(), noteRewriteRequest{
+		Dir:         directory.FromRepository(relpath.Path{}),
+		NoteRelPath: noteRelPath,
+		Content:     initialContent,
+		TriggerName: "post_update_note",
+	})
+	require.Error(t, err)
 	assert.True(t, ok)
 
-	// 指令行仍被移除
-	contentBytes, err := os.ReadFile(noteAbsPath)
-	assert.NoError(t, err)
-	content := string(contentBytes)
-	assert.NotContains(t, content, "/remove-other-fail")
+	assert.NotContains(t, readFile(t, noteRelPath.Abs(env.rootDir)), "/remove-other-fail", "指令行仍应被移除")
 }
 
+// TestRunner_loadHooks_StrictParsing 未知字段视为拼写错误，严格解析下整份配置被跳过
 func TestRunner_loadHooks_StrictParsing(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-strict-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"invalid.toml": "id = \"strict-test\"\nname = \"strict-test\"\ncommand = \"echo success\"\nunknown_key_here = \"oops\"\n\n[directive]\nname = \"strict\"\n",
+		},
+	})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
+	configs, err := env.config.Load()
+	require.NoError(t, err)
 
-	// 写一个包含未知 Key（拼写错误）的 TOML 配置文件
-	invalidToml := `
-id = "strict-test"
-name = "strict-test"
-command = "echo success"
-unknown_key_here = "oops"
-
-[directive]
-name = "strict"
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "invalid.toml"), []byte(invalidToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	configs, err := runner.loadHooks()
-	assert.NoError(t, err)
-
-	// configs 不应该包含 strict-test，因为解析由于未知字段而报错被跳过
 	for _, c := range configs {
 		assert.NotEqual(t, "strict-test", c.ID)
 	}
 }
 
-func TestRunner_Autocomplete_Cancel(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-auto-cancel-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	pidFile := filepath.Join(tempDir, "pid.txt")
-
-	// 根据操作系统，指定一个能将 PID 写入文件并延迟退出的命令
-	var cmdStr string
-	if filepath.Separator == '\\' {
-		// Windows: 使用 powershell 写入当前 PID 并休眠 5 秒（-NoProfile 加快冷启动）
-		cmdStr = fmt.Sprintf(`powershell -NoProfile -Command "$PID | Out-File -FilePath '%s' -Encoding utf8; Start-Sleep -Seconds 5"`, strings.ReplaceAll(pidFile, "\\", "\\\\"))
-	} else {
-		// Unix: 写入当前 PID 到文件并休眠 5 秒
-		cmdStr = fmt.Sprintf(`sh -c "echo $$ > '%s' && sleep 5"`, pidFile)
-	}
-
-	tomlContent := fmt.Sprintf(`
-id = "auto-cancel-test"
-name = "自动补全取消测试"
-command = "echo fallback"
-
-[directive]
-name = "test"
-
-[directive.autocomplete]
-command = '''%s'''
-`, cmdStr)
-
-	tomlPath := filepath.Join(hooksDir, "autocomplete_cancel.toml")
-	err = os.WriteFile(tomlPath, []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	// 启动一个会被取消的 context
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// 模拟在运行一小段时间后 cancel 掉（等子进程起来并把 PID 写入文件）
-	// 不采用固定延时：Windows PowerShell 5.1 冷启动较慢，改为等待 PID 文件写入完成再触发取消
-	go func() {
-		waitFlagFile(pidFile, 10*time.Second)
-		cancel()
-	}()
-
-	hookID := scalar.ToID("hk:auto-cancel-test")
-	start := time.Now()
-	suggestions, err := runner.Autocomplete(ctx, hookID, "", "", "")
-	duration := time.Since(start)
-
-	// 验证：
-	// 1. 应该返回 context.Canceled 错误
-	assert.ErrorIs(t, err, context.Canceled)
-	assert.Nil(t, suggestions)
-
-	// 2. 应当在取消后立即返回（因为异步 Cancel），整个耗时应在 15 秒内完成
-	assert.Less(t, duration, 15*time.Second, "cancellation should stop execution within graceful period")
-
-	// 3. 验证进程是否已经被真的关闭了
-	pidBytes, err := os.ReadFile(pidFile)
-	assert.NoError(t, err)
-	pidStr := strings.TrimSpace(string(pidBytes))
-	pidStr = strings.TrimPrefix(pidStr, "\ufeff") // 剔除可能存在的 UTF-8 BOM 头
-	var pid int
-	_, err = fmt.Sscanf(pidStr, "%d", &pid)
-	assert.NoError(t, err)
-	assert.Greater(t, pid, 0)
-
-	// 等待 1.2 秒（因为优雅期为 1.0 秒，强杀是异步触发的，所以 1.2 秒后子进程树必须全部死亡）
-	time.Sleep(1200 * time.Millisecond)
-
-	// 检测这个 PID 是否已在系统上消失
-	var exists bool
-	if filepath.Separator == '\\' {
-		// Windows: 使用 tasklist /FI "PID eq <pid>" 检测
-		chkCmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
-		output, err := chkCmd.Output()
-		if err == nil && strings.Contains(string(output), pidStr) {
-			exists = true
-		}
-	} else {
-		// Unix: 使用 ps -p <pid> 检测
-		chkCmd := exec.Command("ps", "-p", pidStr)
-		if err := chkCmd.Run(); err == nil {
-			exists = true
-		}
-	}
-
-	assert.False(t, exists, "spawned process should be terminated after cancel")
-}
-
 func TestRunner_NotificationOnSuccess(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-notif-success-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// 不使用裸 echo：Windows 上会从 PATH 解析到第三方 echo 实现（如 msys），在受限环境中可能无法启动
-	var cmdStr string
-	if filepath.Separator == '/' {
-		cmdStr = `sh -c 'echo hello_success'`
-	} else {
-		cmdStr = `cmd /c "echo hello_success"`
-	}
-
-	tomlContent := fmt.Sprintf(`
-id = "notif-success-test"
-name = "通知成功测试"
-command = '''%s'''
-
-[on.image_dispatch]
-`, cmdStr)
-	err = os.WriteFile(filepath.Join(hooksDir, "success.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			// 不使用裸 echo：Windows 上会从 PATH 解析到第三方 echo 实现（如 msys），在受限环境中可能无法启动
+			"success.toml": hookTOML("notif-success-test", "通知成功测试", shellPrint("echo hello_success"), "[on.image_dispatch]\n"),
 		},
-	}
-	notifSender := &mockNotificationSender{}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
-	defer runner.Close()
+	absPath := filepath.Join(env.rootDir, "a.png")
+	require.NoError(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:notif-success-test"), "image_dispatch"))
 
-	absPath := filepath.Join(tempDir, "a.png")
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:notif-success-test"), "image_dispatch")
-	assert.NoError(t, err)
-
-	notifs := notifSender.Notifications()
-	assert.Len(t, notifs, 1)
+	notifs := env.notifier.Notifications()
+	require.Len(t, notifs, 1)
 	assert.Equal(t, "通知成功测试", notifs[0].Channel)
 	assert.Equal(t, "", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityLow, notifs[0].Opts.Priority())
@@ -1406,50 +553,17 @@ command = '''%s'''
 }
 
 func TestRunner_NotificationOnFailure(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-notif-fail-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	var cmdStr string
-	if filepath.Separator == '/' {
-		cmdStr = `sh -c 'echo stderr_err_msg >&2 && exit 1'`
-	} else {
-		cmdStr = `cmd /c "echo stderr_err_msg >&2 && exit 1"`
-	}
-
-	tomlContent := fmt.Sprintf(`
-id = "notif-fail-test"
-name = "通知失败测试"
-command = '''%s'''
-
-[on.image_dispatch]
-`, cmdStr)
-	err = os.WriteFile(filepath.Join(hooksDir, "fail.toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"fail.toml": hookTOML("notif-fail-test", "通知失败测试", shellPrint("echo stderr_err_msg >&2 && exit 1"), "[on.image_dispatch]\n"),
 		},
-	}
-	notifSender := &mockNotificationSender{}
+	})
 
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
-	defer runner.Close()
+	absPath := filepath.Join(env.rootDir, "a.png")
+	require.Error(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:notif-fail-test"), "image_dispatch"))
 
-	absPath := filepath.Join(tempDir, "a.png")
-	err = runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:notif-fail-test"), "image_dispatch")
-	assert.Error(t, err)
-
-	notifs := notifSender.Notifications()
-	assert.Len(t, notifs, 1)
+	notifs := env.notifier.Notifications()
+	require.Len(t, notifs, 1)
 	assert.Equal(t, "通知失败测试", notifs[0].Channel)
 	assert.Equal(t, "", notifs[0].Title)
 	assert.Equal(t, shared.NotificationPriorityHigh, notifs[0].Opts.Priority())
@@ -1464,125 +578,59 @@ func keepWriterCmd(content string) string {
 	return `cmd /c "echo ` + content + ` > %IMAGE_FUNNEL_ACTION%"`
 }
 
-func newNotificationTestRunner(t *testing.T, hookID string, command string) (*Runner, *mockNotificationSender, string) {
-	t.Helper()
-
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-notif-test")
-	assert.NoError(t, err)
-	t.Cleanup(func() { os.RemoveAll(tempDir) })
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
-	tomlContent := `
-id = "` + hookID + `"
-name = "通知测试"
-command = '''` + command + `'''
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, hookID+".toml"), []byte(tomlContent), 0644)
-	assert.NoError(t, err)
-
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-	notifSender := &mockNotificationSender{}
-	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, nil, nil, mockDirRepo, notifSender)
-	t.Cleanup(runner.Close)
-	return runner, notifSender, tempDir
-}
-
 func TestRunner_SilentKeepRun_ShouldNotNotify(t *testing.T) {
-	runner, notifSender, tempDir := newNotificationTestRunner(t, "silent-keep-test", keepWriterCmd("KEEP"))
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"silent-keep-test.toml": hookTOML("silent-keep-test", "silent-keep-test", keepWriterCmd("KEEP"), "[on.image_dispatch]\n"),
+		},
+	})
 
-	absPath := filepath.Join(tempDir, "a.png")
-	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-keep-test"), "image_dispatch")
-	assert.NoError(t, err)
+	absPath := filepath.Join(env.rootDir, "a.png")
+	require.NoError(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-keep-test"), "image_dispatch"))
 
-	assert.Empty(t, notifSender.Notifications(), "脚本覆盖 KEEP 且无输出时应跳过成功通知")
+	assert.Empty(t, env.notifier.Notifications(), "脚本覆盖 KEEP 且无输出时应跳过成功通知")
 }
 
 func TestRunner_KeepRunWithOutput_ShouldNotify(t *testing.T) {
-	var cmdStr string
-	if filepath.Separator == '/' {
-		cmdStr = `sh -c 'echo KEEP > "$IMAGE_FUNNEL_ACTION" && echo kept_result_msg'`
-	} else {
-		cmdStr = `cmd /c "echo KEEP > %IMAGE_FUNNEL_ACTION% && echo kept_result_msg"`
-	}
-	runner, notifSender, tempDir := newNotificationTestRunner(t, "keep-output-test", cmdStr)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"keep-output-test.toml": hookTOML("keep-output-test", "keep-output-test", shellKeepThenPrint("kept_result_msg"), "[on.image_dispatch]\n"),
+		},
+	})
 
-	absPath := filepath.Join(tempDir, "a.png")
-	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:keep-output-test"), "image_dispatch")
-	assert.NoError(t, err)
+	absPath := filepath.Join(env.rootDir, "a.png")
+	require.NoError(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:keep-output-test"), "image_dispatch"))
 
-	notifs := notifSender.Notifications()
-	assert.Len(t, notifs, 1, "KEEP 但有输出时仍应照常通知")
+	notifs := env.notifier.Notifications()
+	require.Len(t, notifs, 1, "KEEP 但有输出时仍应照常通知")
 	assert.Equal(t, shared.NotificationPriorityLow, notifs[0].Opts.Priority())
 	assert.Contains(t, notifs[0].Opts.Body(), "kept_result_msg")
 }
 
 func TestRunner_SilentSuccessWithoutKeep_ShouldNotify(t *testing.T) {
-	var cmdStr string
-	if filepath.Separator == '/' {
-		cmdStr = `sh -c 'exit 0'`
-	} else {
-		cmdStr = `cmd /c "exit 0"`
-	}
-	runner, notifSender, tempDir := newNotificationTestRunner(t, "silent-no-keep-test", cmdStr)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"silent-no-keep-test.toml": hookTOML("silent-no-keep-test", "silent-no-keep-test", shellPrint("exit 0"), "[on.image_dispatch]\n"),
+		},
+	})
 
-	absPath := filepath.Join(tempDir, "a.png")
-	err := runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-no-keep-test"), "image_dispatch")
-	assert.NoError(t, err)
+	absPath := filepath.Join(env.rootDir, "a.png")
+	require.NoError(t, env.runner.Trigger(context.Background(), []string{"img:1"}, []string{absPath}, scalar.ToID("hk:silent-no-keep-test"), "image_dispatch"))
 
-	assert.Len(t, notifSender.Notifications(), 1, "未写 KEEP 的静默成功不属于跳过，仍应照常通知")
+	assert.Len(t, env.notifier.Notifications(), 1, "未写 KEEP 的静默成功不属于跳过，仍应照常通知")
 }
 
 func TestRunner_Order_Parsing(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-parse-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: map[string]string{
+			"with-order.toml": "id = \"with-order\"\nname = \"有顺序测试\"\ncommand = \"echo 1\"\norder = 5\n\n[on.image_dispatch]\n",
+			"no-order.toml":   "id = \"no-order\"\nname = \"无顺序测试\"\ncommand = \"echo 2\"\n\n[on.image_dispatch]\n",
+		},
+	})
 
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// 1. 有 order 字段的配置
-	withOrderToml := `
-id = "with-order"
-name = "有顺序测试"
-command = "echo 1"
-order = 5
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "with-order.toml"), []byte(withOrderToml), 0644)
-	assert.NoError(t, err)
-
-	// 2. 无 order 字段的配置（默认 0）
-	noOrderToml := `
-id = "no-order"
-name = "无顺序测试"
-command = "echo 2"
-
-[on.image_dispatch]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "no-order.toml"), []byte(noOrderToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, nil, &mockNotificationSender{})
-	defer runner.Close()
-
-	configs, err := runner.loadHooks()
-	assert.NoError(t, err)
-	assert.Len(t, configs, 2)
+	configs, err := env.config.Load()
+	require.NoError(t, err)
+	require.Len(t, configs, 2)
 
 	for _, c := range configs {
 		switch c.ID {
@@ -1608,163 +656,123 @@ func TestRunner_sortByOrderAndFilename(t *testing.T) {
 	assert.Equal(t, "03_baz.toml", hooks[2].Filename, "order 较大（2），应排在最后")
 }
 
+// TestRunner_Order_PostCommitSession 纯提交钩子按 order 升序执行
 func TestRunner_Order_PostCommitSession(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-commit-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	// 三个纯提交钩子，使用不同的 flag 文件避免 Windows shell 重定向问题
-	flagA := filepath.Join(tempDir, "order_flag_a")
-	flagB := filepath.Join(tempDir, "order_flag_b")
-	flagC := filepath.Join(tempDir, "order_flag_c")
-
-	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
-	writeOrder := func(id, content string) {
-		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
-		assert.NoError(t, err)
+	env := newTestHooks(t, testHooksOptions{})
+	flags := map[string]string{
+		"a": filepath.Join(env.rootDir, "order_flag_a"),
+		"b": filepath.Join(env.rootDir, "order_flag_b"),
+		"c": filepath.Join(env.rootDir, "order_flag_c"),
 	}
-	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
-	shellWrite := func(content, flag string) string {
-		if filepath.Separator == '/' {
-			return `sh -c 'echo ` + content + ` > ` + flag + `'`
-		}
-		return `cmd /c "echo ` + content + ` > ` + flag + `"`
+	orders := map[string]string{"a": "order = 2\n", "b": "order = 1\n", "c": ""}
+	for id, flag := range flags {
+		env.writeHook(id+".toml", fmt.Sprintf("id = %q\ncommand = '''%s'''\n%s\n[on.post_commit_session]\n",
+			id, shellRedirect("echo "+id, flag), orders[id]))
 	}
 
-	writeOrder("a", `
-id = "a"
-command = '''`+shellWrite("a", flagA)+`'''
-order = 2
+	require.NoError(t, env.runner.OnCommitSession(context.Background(), relpath.Path{}))
 
-[on.post_commit_session]
-`)
-	writeOrder("b", `
-id = "b"
-command = '''`+shellWrite("b", flagB)+`'''
-order = 1
-
-[on.post_commit_session]
-`)
-	writeOrder("c", `
-id = "c"
-command = '''`+shellWrite("c", flagC)+`'''
-
-[on.post_commit_session]
-`)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, nil, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	err = runner.OnCommitSession(context.Background(), relpath.Path{})
-	assert.NoError(t, err)
-
-	assert.True(t, waitFlagFile(flagC, 1500*time.Millisecond), "order=0 的 c 应最先执行")
-	assert.True(t, waitFlagFile(flagB, 1500*time.Millisecond), "order=1 的 b 应第二个执行")
-	assert.True(t, waitFlagFile(flagA, 1500*time.Millisecond), "order=2 的 a 应最后执行")
+	require.True(t, waitFlagFile(flags["c"], 1500*time.Millisecond), "order=0 的 c 应最先执行")
+	require.True(t, waitFlagFile(flags["b"], 1500*time.Millisecond), "order=1 的 b 应第二个执行")
+	require.True(t, waitFlagFile(flags["a"], 1500*time.Millisecond), "order=2 的 a 应最后执行")
 
 	// 验证文件创建时间顺序（c 最早，a 最晚）
-	infoC, _ := os.Stat(flagC)
-	infoB, _ := os.Stat(flagB)
-	infoA, _ := os.Stat(flagA)
+	infoC := fileInfo(t, flags["c"])
+	infoB := fileInfo(t, flags["b"])
+	infoA := fileInfo(t, flags["a"])
 	assert.True(t, infoC.ModTime().Before(infoB.ModTime()) || infoC.ModTime().Equal(infoB.ModTime()), "c 应早于或等于 b 执行")
 	assert.True(t, infoB.ModTime().Before(infoA.ModTime()) || infoB.ModTime().Equal(infoA.ModTime()), "b 应早于或等于 a 执行")
 }
 
+// TestRunner_Order_PostUpdateNote 无指令的笔记钩子按 order 升序执行
 func TestRunner_Order_PostUpdateNote(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-order-note-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagX := filepath.Join(tempDir, "order_flag_x")
-	flagY := filepath.Join(tempDir, "order_flag_y")
-	flagZ := filepath.Join(tempDir, "order_flag_z")
-
-	writeOrder := func(id, content string) {
-		err := os.WriteFile(filepath.Join(hooksDir, id+".toml"), []byte(content), 0644)
-		assert.NoError(t, err)
+	env := newTestHooks(t, testHooksOptions{})
+	flags := map[string]string{
+		"x": filepath.Join(env.rootDir, "order_flag_x"),
+		"y": filepath.Join(env.rootDir, "order_flag_y"),
+		"z": filepath.Join(env.rootDir, "order_flag_z"),
 	}
-	// command 不再经 runner 的 shell 解析，显式调用 cmd/sh 作为程序
-	shellWrite := func(content, flag string) string {
-		if filepath.Separator == '/' {
-			return `sh -c 'echo ` + content + ` > ` + flag + `'`
-		}
-		return `cmd /c "echo ` + content + ` > ` + flag + `"`
+	orders := map[string]string{"x": "order = 3\n", "y": "order = 1\n", "z": "order = 2\n"}
+	for id, flag := range flags {
+		env.writeHook(id+".toml", fmt.Sprintf("id = %q\ncommand = '''%s'''\n%s\n[on.post_update_note]\n",
+			id, shellRedirect("echo "+id, flag), orders[id]))
 	}
 
-	// 三个无指令的 post_update_note 钩子
-	// 注意：使用单引号 TOML 字符串避免 Windows 路径中的反斜杠被当作转义序列
-	writeOrder("x", `
-id = "x"
-command = '''`+shellWrite("x", flagX)+`'''
-order = 3
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+	require.NoError(t, os.WriteFile(noteRelPath.Abs(env.rootDir), []byte("Normal note without directives"), 0644))
 
-[on.post_update_note]
-`)
-	writeOrder("y", `
-id = "y"
-command = '''`+shellWrite("y", flagY)+`'''
-order = 1
-
-[on.post_update_note]
-`)
-	writeOrder("z", `
-id = "z"
-command = '''`+shellWrite("z", flagZ)+`'''
-order = 2
-
-[on.post_update_note]
-`)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-	imgRepo := &mockImageRepository{}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, imgRepo, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
-	err = os.WriteFile(noteAbsPath, []byte("Normal note without directives"), 0644)
-	assert.NoError(t, err)
-
-	runner.handleFileChanged(&directory.FileChangedEvent{
+	require.NoError(t, env.runner.noteUpdate.HandleFileChanged(&directory.FileChangedEvent{
 		DirectoryID: scalar.ToID("dir:1"),
 		RelPath:     noteRelPath,
 		Action:      shared.FileActionWrite,
 		OccurredAt:  time.Now(),
-	})
+	}))
 
-	assert.True(t, waitFlagFile(flagY, 1500*time.Millisecond), "order=1 的 y 应最先执行")
-	assert.True(t, waitFlagFile(flagZ, 1500*time.Millisecond), "order=2 的 z 应第二个执行")
-	assert.True(t, waitFlagFile(flagX, 1500*time.Millisecond), "order=3 的 x 应最后执行")
+	require.True(t, waitFlagFile(flags["y"], 1500*time.Millisecond), "order=1 的 y 应最先执行")
+	require.True(t, waitFlagFile(flags["z"], 1500*time.Millisecond), "order=2 的 z 应第二个执行")
+	require.True(t, waitFlagFile(flags["x"], 1500*time.Millisecond), "order=3 的 x 应最后执行")
 
 	// 验证文件创建时间顺序（y 最早，x 最晚）
-	infoY, _ := os.Stat(flagY)
-	infoZ, _ := os.Stat(flagZ)
-	infoX, _ := os.Stat(flagX)
+	infoY := fileInfo(t, flags["y"])
+	infoZ := fileInfo(t, flags["z"])
+	infoX := fileInfo(t, flags["x"])
 	assert.True(t, infoY.ModTime().Before(infoZ.ModTime()) || infoY.ModTime().Equal(infoZ.ModTime()), "y 应早于或等于 z 执行")
 	assert.True(t, infoZ.ModTime().Before(infoX.ModTime()) || infoZ.ModTime().Equal(infoX.ModTime()), "z 应早于或等于 x 执行")
+}
+
+// TestNewRunner_MissingDependencyPanics 任一依赖缺失都在构造期失败，
+// 而不是等到某条触发路径被走到时才退化为静默无输出
+func TestNewRunner_MissingDependencyPanics(t *testing.T) {
+	tempDir := t.TempDir()
+	full := Deps{
+		RootDir:            tempDir,
+		HooksDir:           tempDir,
+		DataDir:            tempDir,
+		GraphQLURL:         "http://127.0.0.1:0/graphql",
+		Logger:             zap.NewNop(),
+		MetadataUpdatedSub: &mockMetadataUpdatedSub{},
+		FileChangedSub:     &mockFileChangedSub{},
+		TokenSource:        &mockTokenSource{},
+		ImageRepo:          &mockImageRepository{},
+		DirRepo:            &mockDirectoryRepository{},
+		NotificationSender: &mockNotificationSender{},
+	}
+
+	missing := map[string]func(*Deps){
+		"RootDir":            func(d *Deps) { d.RootDir = "" },
+		"HooksDir":           func(d *Deps) { d.HooksDir = "" },
+		"DataDir":            func(d *Deps) { d.DataDir = "" },
+		"GraphQLURL":         func(d *Deps) { d.GraphQLURL = "" },
+		"Logger":             func(d *Deps) { d.Logger = nil },
+		"MetadataUpdatedSub": func(d *Deps) { d.MetadataUpdatedSub = nil },
+		"FileChangedSub":     func(d *Deps) { d.FileChangedSub = nil },
+		"TokenSource":        func(d *Deps) { d.TokenSource = nil },
+		"ImageRepo":          func(d *Deps) { d.ImageRepo = nil },
+		"DirRepo":            func(d *Deps) { d.DirRepo = nil },
+		"NotificationSender": func(d *Deps) { d.NotificationSender = nil },
+	}
+
+	for name, drop := range missing {
+		t.Run(name, func(t *testing.T) {
+			deps := full
+			drop(&deps)
+			assert.PanicsWithValue(t, "hook.Deps."+name+" is required", func() { NewRunner(deps) })
+		})
+	}
+}
+
+// readFile 读取文件内容
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return string(data)
+}
+
+// fileInfo 读取文件元信息
+func fileInfo(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	return info
 }

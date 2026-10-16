@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-func newHookCmd(ctx context.Context, argv []string) *exec.Cmd {
+// newProcessCmd 构造一次性/常驻进程，argv 不经过 shell 直接启动，
+// 并注册"先友好中止、宽限期后强杀整棵进程组"的取消逻辑。
+func newProcessCmd(ctx context.Context, argv []string) *exec.Cmd {
 	// 不经过 shell（sh -c）直接以 argv 启动，避免指令参数中的 >、|、& 等
 	// 元字符被 shell 解释。
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)

@@ -16,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // TestIFCopyContentHelper 当环境变量 IF_COPY_HELPER=1 时，作为复制增强脚本的假实现运行：
@@ -56,19 +55,17 @@ func atoiDefault(s string, fallback int) int {
 
 // #region 测试基础设施
 
+// copyTestEnv 一套配置了 n 个 [copy] 假脚本钩子的测试环境
 type copyTestEnv struct {
-	tempDir  string
+	t        *testing.T
+	rootDir  string
 	hooksDir string
 	runner   *Runner
-	hookIDs  []scalar.ID
 }
 
 // newCopyTestRunner 搭建一个配置了 n 个 [copy] 假脚本钩子的测试 Runner
 func newCopyTestRunner(t *testing.T, n int, envOverrides map[string]string) *copyTestEnv {
 	t.Helper()
-	tempDir := t.TempDir()
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	require.NoError(t, os.MkdirAll(hooksDir, 0755))
 
 	helperCmd := fmt.Sprintf(`"%s" -test.run=^TestIFCopyContentHelper$`, os.Args[0])
 
@@ -80,9 +77,9 @@ func newCopyTestRunner(t *testing.T, n int, envOverrides map[string]string) *cop
 	}
 	envSection := envSB.String()
 
-	env := &copyTestEnv{tempDir: tempDir, hooksDir: hooksDir}
+	hooks := make(map[string]string, n)
 	for i := 0; i < n; i++ {
-		tomlContent := fmt.Sprintf(`
+		hooks[fmt.Sprintf("copy-%d.toml", i)] = fmt.Sprintf(`
 id = "copy-hook-%d"
 name = "copy-hook-%d"
 command = '''%s'''
@@ -91,23 +88,16 @@ command = '''%s'''
 
 %s
 `, i, i, helperCmd, envSection)
-		path := filepath.Join(hooksDir, fmt.Sprintf("copy-%d.toml", i))
-		require.NoError(t, os.WriteFile(path, []byte(tomlContent), 0644))
-		env.hookIDs = append(env.hookIDs, scalar.ToID(fmt.Sprintf("hk:copy-hook-%d", i)))
 	}
 
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
+	env := newTestHooks(t, testHooksOptions{
+		Hooks: hooks,
+		Dirs: map[relpath.Path]*directory.Directory{
 			relpath.Path{}:         directory.FromRepository(relpath.Path{}),
 			testutil.Rel(t, "sub"): directory.FromRepository(testutil.Rel(t, "sub")),
 		},
-	}
-	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	t.Cleanup(runner.Close)
-	env.runner = runner
-	return env
+	})
+	return &copyTestEnv{t: t, rootDir: env.rootDir, hooksDir: env.hooksDir, runner: env.runner}
 }
 
 // #endregion
@@ -204,7 +194,7 @@ func TestCopyContent_BaseEnvContract(t *testing.T) {
 	var imagePaths []string
 	require.NoError(t, json.Unmarshal([]byte(echo.ImagePaths), &imagePaths))
 	assert.Equal(t,
-		[]string{filepath.Join(env.tempDir, "sub", "test.png")},
+		[]string{filepath.Join(env.rootDir, "sub", "test.png")},
 		imagePaths)
 	assert.Equal(t, "custom-value", echo.Custom)
 }

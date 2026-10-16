@@ -12,11 +12,10 @@ import (
 
 	"main/internal/domain/directory"
 	"main/internal/domain/relpath"
-	"main/internal/scalar"
 	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/zap"
+	"github.com/stretchr/testify/require"
 )
 
 // TestApplyDirectiveAction_Keep_NoTrailingNewline 指令行位于笔记最后一行且无尾换行时，
@@ -181,22 +180,14 @@ func TestRunner_ExecuteNoteDirectives_LiteralArgChars(t *testing.T) {
 	if _, err := exec.LookPath("python"); err != nil {
 		t.Skip("python not found, skipping")
 	}
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-literal-arg-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
-
-	flagFile := filepath.Join(tempDir, "args_flag.txt")
+	env := newTestHooks(t, testHooksOptions{})
+	flagFile := filepath.Join(env.rootDir, "args_flag.txt")
 
 	// 钩子脚本：把收到的所有参数用 "|" 连接后写入 flag 文件，argv[0] 是脚本路径本身
 	script := fmt.Sprintf("import sys\nwith open(r'%s', 'w') as f:\n    f.write('|'.join(sys.argv[1:]))\n", flagFile)
-	err = os.WriteFile(filepath.Join(hooksDir, "echo_args.py"), []byte(script), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(env.hooksDir, "echo_args.py"), []byte(script), 0644))
 
-	hookToml := `
+	env.writeHook("literal-arg.toml", `
 id = "literal-arg-test"
 name = "literal-arg-test"
 command = "python echo_args.py"
@@ -207,47 +198,35 @@ on_success_action = "REMOVE"
 on_fail_action = "KEEP"
 
 [on.post_update_note]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "literal-arg.toml"), []byte(hookToml), 0644)
-	assert.NoError(t, err)
-
-	ebus := &mockMetadataUpdatedSub{}
-	fileChangedSub := &mockFileChangedSub{}
-	logger := zap.NewNop()
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-
-	runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
+`)
 
 	// 复现用户上报的畸形指令：alert 块被粘到指令行末尾后，参数中出现 ">" 特殊字符
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+	noteAbsPath := noteRelPath.Abs(env.rootDir)
 	literalArg := "x:x-0.6:0.2>[!stdout]2026-07-31T13:21:15"
 	initialContent := fmt.Sprintf("/literal-arg %s\n", literalArg)
-	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(noteAbsPath, []byte(initialContent), 0644))
 
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
-	assert.NoError(t, err)
+	ok, err := env.runner.rewrite.Rewrite(context.Background(), noteRewriteRequest{
+		Dir:         directory.FromRepository(relpath.Path{}),
+		NoteRelPath: noteRelPath,
+		Content:     initialContent,
+		TriggerName: "post_update_note",
+	})
+	require.NoError(t, err)
 	assert.True(t, ok)
 
 	// 脚本应收到完整字面参数（含 ">"），而不是被 shell 解释为重定向
-	contentBytes, err := os.ReadFile(flagFile)
-	assert.NoError(t, err)
-	assert.Equal(t, literalArg, strings.TrimSpace(string(contentBytes)))
+	assert.Equal(t, literalArg, strings.TrimSpace(readFile(t, flagFile)))
 
 	// 指令执行成功后 on_success_action=REMOVE 将指令行移除，笔记内容为空时文件被删除
 	_, err = os.Stat(noteAbsPath)
 	assert.True(t, os.IsNotExist(err), "指令成功后笔记应为空并被删除")
 }
 
-// TestRunner_ExecuteNoteDirectives_SyntaxError_OnFailAction 指令参数引号未闭合等语法错误时，
+// TestNoteRewriter_SyntaxError_OnFailAction 指令参数引号未闭合等语法错误时，
 // 不执行钩子、向用户报告语法错误，并按 on_fail_action 处理指令行（而不是静默吞字）
-func TestRunner_ExecuteNoteDirectives_SyntaxError_OnFailAction(t *testing.T) {
+func TestNoteRewriter_SyntaxError_OnFailAction(t *testing.T) {
 	tests := []struct {
 		name     string
 		onFail   string
@@ -258,15 +237,8 @@ func TestRunner_ExecuteNoteDirectives_SyntaxError_OnFailAction(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir, err := os.MkdirTemp("", "image-funnel-hook-syntax-err-test")
-			assert.NoError(t, err)
-			defer os.RemoveAll(tempDir)
-
-			hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-			err = os.MkdirAll(hooksDir, 0755)
-			assert.NoError(t, err)
-
-			hookToml := fmt.Sprintf(`
+			env := newTestHooks(t, testHooksOptions{})
+			env.writeHook("syntax-err.toml", fmt.Sprintf(`
 id = "syntax-err-test"
 name = "syntax-err-test"
 command = "python test.py"
@@ -277,67 +249,51 @@ on_success_action = "KEEP"
 on_fail_action = "%s"
 
 [on.post_update_note]
-`, tt.onFail)
-			err = os.WriteFile(filepath.Join(hooksDir, "syntax-err.toml"), []byte(hookToml), 0644)
-			assert.NoError(t, err)
+`, tt.onFail))
 
-			ebus := &mockMetadataUpdatedSub{}
-			fileChangedSub := &mockFileChangedSub{}
-			logger := zap.NewNop()
-			mockDirRepo := &mockDirectoryRepository{
-				dirs: map[relpath.Path]*directory.Directory{
-					relpath.Path{}: directory.FromRepository(relpath.Path{}),
-				},
-			}
-			notifSender := &mockNotificationSender{}
-			runner := NewRunner(tempDir, hooksDir, tempDir, logger, ebus, fileChangedSub, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, notifSender)
-			defer runner.Close()
-
-			noteRelPath := testutil.Rel(t, "test_note.md")
-			noteAbsPath := noteRelPath.Abs(tempDir)
+			noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
+			noteAbsPath := noteRelPath.Abs(env.rootDir)
 			directiveLine := "/t it's a"
 			initialContent := directiveLine + "\n"
-			err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-			assert.NoError(t, err)
+			require.NoError(t, os.WriteFile(noteAbsPath, []byte(initialContent), 0644))
 
 			// 未闭合单引号 → 语法错误：不执行钩子，返回错误并通知用户
-			ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
-			assert.Error(t, err)
+			ok, err := env.runner.rewrite.Rewrite(context.Background(), noteRewriteRequest{
+				Dir:         directory.FromRepository(relpath.Path{}),
+				NoteRelPath: noteRelPath,
+				Content:     initialContent,
+				TriggerName: "post_update_note",
+			})
+			require.Error(t, err)
 			assert.True(t, ok)
 			assert.Contains(t, err.Error(), "unterminated single quote")
 
 			// 通知应报告该指令行的语法错误
-			notifs := notifSender.Notifications()
-			assert.Len(t, notifs, 1)
+			notifs := env.notifier.Notifications()
+			require.Len(t, notifs, 1)
 			assert.Equal(t, directiveLine, notifs[0].Title)
 			assert.Contains(t, notifs[0].Opts.Body(), "unterminated single quote")
 
 			// 按 on_fail_action 处理指令行
-			contentBytes, err := os.ReadFile(noteAbsPath)
+			contentBytes, readErr := os.ReadFile(noteAbsPath)
 			if tt.wantLine {
-				assert.NoError(t, err)
+				assert.NoError(t, readErr)
 				assert.Contains(t, string(contentBytes), "/t it's a")
 			} else {
-				assert.True(t, os.IsNotExist(err), "REMOVE 后笔记应为空并被删除")
+				assert.True(t, os.IsNotExist(readErr), "REMOVE 后笔记应为空并被删除")
 			}
 		})
 	}
 }
 
-// TestRunner_ExecuteNoteDirectives_ScriptActionOverridesOnFail 脚本执行失败时，
+// TestNoteRewriter_ScriptActionOverridesOnFail 脚本执行失败时，
 // 通过 IMAGE_FUNNEL_ACTION 写入的操作覆盖应优先于 on_fail_action：脚本比配置更清楚
 // 本次执行是否已经产生了对外可见的结果（例如提交过工作流）
-func TestRunner_ExecuteNoteDirectives_ScriptActionOverridesOnFail(t *testing.T) {
+func TestNoteRewriter_ScriptActionOverridesOnFail(t *testing.T) {
 	if _, err := exec.LookPath("python"); err != nil {
 		t.Skip("python not found, skipping")
 	}
-	tempDir, err := os.MkdirTemp("", "image-funnel-hook-fail-override-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	hooksDir := filepath.Join(tempDir, ".image-funnel", "hooks")
-	err = os.MkdirAll(hooksDir, 0755)
-	assert.NoError(t, err)
+	env := newTestHooks(t, testHooksOptions{})
 
 	// 钩子脚本：声明本次没有任何结果（KEEP）后以非零码退出
 	script := `import os
@@ -345,10 +301,9 @@ with open(os.environ["IMAGE_FUNNEL_ACTION"], "w") as f:
     f.write("KEEP")
 raise SystemExit(1)
 `
-	err = os.WriteFile(filepath.Join(hooksDir, "fail_keep.py"), []byte(script), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(env.hooksDir, "fail_keep.py"), []byte(script), 0644))
 
-	hookToml := `
+	env.writeHook("fail-keep.toml", `
 id = "fail-keep-test"
 name = "fail-keep-test"
 command = "python fail_keep.py"
@@ -358,30 +313,21 @@ name = "t"
 on_fail_action = "COMMENT_OUT"
 
 [on.post_update_note]
-`
-	err = os.WriteFile(filepath.Join(hooksDir, "fail-keep.toml"), []byte(hookToml), 0644)
-	assert.NoError(t, err)
+`)
 
-	mockDirRepo := &mockDirectoryRepository{
-		dirs: map[relpath.Path]*directory.Directory{
-			relpath.Path{}: directory.FromRepository(relpath.Path{}),
-		},
-	}
-	runner := NewRunner(tempDir, hooksDir, tempDir, zap.NewNop(), &mockMetadataUpdatedSub{}, &mockFileChangedSub{}, "", &mockTokenSource{}, &mockImageRepository{}, nil, mockDirRepo, &mockNotificationSender{})
-	defer runner.Close()
-
-	noteRelPath := testutil.Rel(t, "test_note.md")
-	noteAbsPath := noteRelPath.Abs(tempDir)
+	noteRelPath := testutil.RelIn(t, env.rootDir, "test_note.md")
 	initialContent := "/t do it\n"
-	err = os.WriteFile(noteAbsPath, []byte(initialContent), 0644)
-	assert.NoError(t, err)
+	require.NoError(t, os.WriteFile(noteRelPath.Abs(env.rootDir), []byte(initialContent), 0644))
 
-	ok, err := runner.executeNoteDirectives(context.Background(), directory.FromRepository(relpath.Path{}), noteRelPath, initialContent, "post_update_note", scalar.ID{})
-	assert.Error(t, err, "脚本失败仍应向上报错")
+	ok, err := env.runner.rewrite.Rewrite(context.Background(), noteRewriteRequest{
+		Dir:         directory.FromRepository(relpath.Path{}),
+		NoteRelPath: noteRelPath,
+		Content:     initialContent,
+		TriggerName: "post_update_note",
+	})
+	require.Error(t, err, "脚本失败仍应向上报错")
 	assert.True(t, ok)
 
 	// 脚本声明「没有产生任何结果」→ 指令行保留，而不是按 on_fail_action 注释掉
-	contentBytes, err := os.ReadFile(noteAbsPath)
-	assert.NoError(t, err)
-	assert.Contains(t, string(contentBytes), "/t do it")
+	assert.Contains(t, readFile(t, noteRelPath.Abs(env.rootDir)), "/t do it")
 }
