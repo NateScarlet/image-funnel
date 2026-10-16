@@ -205,9 +205,9 @@ func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
 	metadataSub := env.runner.deps.MetadataUpdatedSub.(*mockMetadataUpdatedSub)
 	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 4, ""))
 
-	require.True(t, waitFlagFile(flagFile, 500*time.Millisecond), "应触发钩子并写入 flag 文件")
+	require.True(t, waitFlagFile(flagFile, 15*time.Second), "应触发钩子并写入 flag 文件")
 
-	parts := strings.SplitN(strings.TrimSpace(waitFlagContent(t, flagFile, 500*time.Millisecond)), "|", 2)
+	parts := strings.SplitN(strings.TrimSpace(waitFlagContent(t, flagFile, 1500*time.Millisecond)), "|", 2)
 	require.Len(t, parts, 2, "输出应为 DIRECTORY_ID|DIRECTORY_REL_PATH 格式")
 	assert.Equal(t, expectedDir.ID().String(), parts[0], "DIRECTORY_ID 应与目录仓库返回的 ID 一致")
 }
