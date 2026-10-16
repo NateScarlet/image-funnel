@@ -1,8 +1,11 @@
 package hook
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+
+	"main/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,4 +23,16 @@ func TestWriteGuard_SuppressesOwnWriteEvent(t *testing.T) {
 
 	assert.True(t, guard.ShouldIgnore(noteAbs, []byte("body")), "自身写入且内容一致的事件应被抑制")
 	assert.False(t, guard.ShouldIgnore(noteAbs, []byte("other")), "内容与自身写入不一致的事件不应被抑制")
+}
+
+// TestWriteGuard_WritesAtomically 守卫委托的写入是原子落位：
+// 旧文件不会被就地截断，读者手中的旧文件始终保持旧全文
+func TestWriteGuard_WritesAtomically(t *testing.T) {
+	guard := newWriteGuard()
+	noteAbs := filepath.Join(t.TempDir(), "note.md")
+
+	require.NoError(t, os.WriteFile(noteAbs, []byte("old"), 0644))
+	testutil.AssertAtomicReplace(t, noteAbs, "old", "new", func() error {
+		return guard.Write(noteAbs, []byte("new"), 0644)
+	})
 }

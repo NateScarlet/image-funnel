@@ -34,7 +34,8 @@ func AtomicSave(name string, write func(file *os.File) (err error), options ...A
 			// truncate filename if too long
 			tmpPattern = string([]rune(tmpPattern)[:16])
 		}
-		tmpPattern += "~*" + opts.tmpSuffix
+		// 加 `.` 前缀，避免 Obsidian 实时监控把未写完的临时文件当作快照读取造成写入冲突
+		tmpPattern = "." + tmpPattern + "~*" + opts.tmpSuffix
 		f, err := os.CreateTemp(dir, tmpPattern)
 		if err != nil {
 			return
@@ -44,6 +45,11 @@ func AtomicSave(name string, write func(file *os.File) (err error), options ...A
 		err = write(f)
 		if err != nil {
 			return
+		}
+		if opts.perm != 0 {
+			// 内容写完后再设定权限：临时文件默认以 0600 创建，
+			// 落位前显式 chmod 才能让目标文件保持调用方期望的可读性，且不会阻塞写入本身
+			err = f.Chmod(opts.perm)
 		}
 		return
 	}()
@@ -75,8 +81,9 @@ func AtomicSave(name string, write func(file *os.File) (err error), options ...A
 		// 单元测试中需要强制出错
 		return opts.forceRenameErrorForTest
 	}
-	// 重命名
-	err = os.Rename(tempName, name)
+	// 重命名。目标文件可能被外部程序短暂持有（目录监视器对新文件做 stat、杀毒扫描刚写出的
+	// 字节），故经 RenameWithRetry 跨过瞬时占用窗口；非瞬时错误仍立即上抛。
+	err = RenameWithRetry(tempName, name)
 	if err != nil {
 		return err
 	}
@@ -104,6 +111,7 @@ func newAtomicSaveOptions(options ...AtomicOption) *AtomicSaveOptions {
 type AtomicSaveOptions struct {
 	tmpSuffix               string
 	backupSuffix            string
+	perm                    os.FileMode
 	forceRenameErrorForTest error
 }
 
@@ -112,5 +120,13 @@ type AtomicOption func(opts *AtomicSaveOptions)
 func AtomicSaveWithBackupSuffix(v string) AtomicOption {
 	return func(opts *AtomicSaveOptions) {
 		opts.backupSuffix = v
+	}
+}
+
+// AtomicSaveWithPerm 指定落位文件的权限。
+// 不指定（零值 0）时沿用临时文件自身的默认权限，不做额外 chmod。
+func AtomicSaveWithPerm(perm os.FileMode) AtomicOption {
+	return func(opts *AtomicSaveOptions) {
+		opts.perm = perm
 	}
 }

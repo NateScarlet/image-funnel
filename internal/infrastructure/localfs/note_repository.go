@@ -7,6 +7,7 @@ import (
 	"main/internal/apperror"
 	"main/internal/domain/note"
 	"main/internal/domain/relpath"
+	"main/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,6 +64,9 @@ func (r *NoteRepository) Read(ctx context.Context, relPath relpath.Path) (*note.
 	return note.FromRepository(relPath, absPath, string(content), info.ModTime()), nil
 }
 
+// Write 写入笔记内容；内容为空表示删除笔记文件。
+// 非空内容先写临时文件再原子重命名落位，使并发读者（用户编辑器、索引工具）
+// 任何时刻从该路径读到的都是完整内容，要么是旧全文、要么是新全文。
 func (r *NoteRepository) Write(ctx context.Context, relPath relpath.Path, content string) error {
 	absPath := relPath.Abs(r.rootDir)
 	if content == "" {
@@ -72,7 +76,10 @@ func (r *NoteRepository) Write(ctx context.Context, relPath relpath.Path, conten
 		}
 		return nil
 	}
-	return os.WriteFile(absPath, []byte(content), 0644)
+	return util.AtomicSave(absPath, func(file *os.File) error {
+		_, err := file.WriteString(content)
+		return err
+	}, util.AtomicSaveWithPerm(0644))
 }
 
 func (r *NoteRepository) Find(ctx context.Context, relPath relpath.Path) iter.Seq2[*note.Note, error] {

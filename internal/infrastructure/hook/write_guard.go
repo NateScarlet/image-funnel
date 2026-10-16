@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"main/internal/util"
+
 	"github.com/cespare/xxhash/v2"
 )
 
@@ -29,7 +31,12 @@ func newWriteGuard() *writeGuard {
 	return &writeGuard{entries: make(map[string]writeIgnoreItem)}
 }
 
-// Write 写入文件前登记内容哈希，使由这次写入触发的文件变更事件被识别为自身回环
+// Write 登记内容哈希后再原子落位写入。
+// 登记使由这次写入触发的变更事件被识别为自身回环：原子落位最终发生在目标路径上，
+// 其内容与登记哈希一致而被抑制。落位过程还会产生另外两个路径的变更事件——
+// 临时文件（带 .tmp 后缀）与备份硬链接（目标名加 ~），前者已被文件监听层过滤，
+// 后者扩展名不再是 .md 而被笔记变更路径忽略，因此都不会重新进入本守卫。
+// 原子落位同时保证写入期间同一路径的并发读者只会读到旧全文或新全文。
 func (g *writeGuard) Write(absPath string, content []byte, perm os.FileMode) error {
 	g.mu.Lock()
 	g.entries[absPath] = writeIgnoreItem{
@@ -45,7 +52,10 @@ func (g *writeGuard) Write(absPath string, content []byte, perm os.FileMode) err
 	}
 	g.mu.Unlock()
 
-	return os.WriteFile(absPath, content, perm)
+	return util.AtomicSave(absPath, func(file *os.File) error {
+		_, err := file.Write(content)
+		return err
+	}, util.AtomicSaveWithPerm(perm))
 }
 
 // ShouldIgnore 事件侧查询：内容与最近一次自身写入完全一致则忽略该事件
