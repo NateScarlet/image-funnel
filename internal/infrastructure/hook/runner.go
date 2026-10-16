@@ -168,11 +168,13 @@ func validateDeps(deps Deps) {
 	}
 }
 
-// Close 结束监听与后台 worker，终止常驻进程与正在运行的钩子脚本
+// Close 结束监听与后台 worker，终止常驻进程与正在运行的钩子脚本。
+// 必须先回收常驻补全进程再取消 bgCtx：常驻进程以 bgCtx 为生命周期，取消它会先一步
+// 让进程退出并向进程池注销，池的回收路径就再也看不到它们（是否被显式终止变成竞态）。
 func (r *Runner) Close() {
 	r.closeOnce.Do(func() {
-		r.cancel()
 		r.autocomplete.Close()
+		r.cancel()
 		r.exec.Close()
 		r.wg.Wait()
 	})
