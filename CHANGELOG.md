@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.9.0](https://github.com/NateScarlet/image-funnel/compare/v1.8.0...v1.9.0) (2026-10-17)
+
+
+### Features
+
+* **example-hooks/comfyui:** merge comfyui edit directives into /remix ([3620ad6](https://github.com/NateScarlet/image-funnel/commit/3620ad61531106dc686f7245ffe50bb5ead6e9cd)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+
+
+### Bug Fixes
+
+* **example-hooks/comfyui:** should abort in-flight HTTP when the autocomplete request is canceled ([ba71a0a](https://github.com/NateScarlet/image-funnel/commit/ba71a0a9bbca5f4575fe83d0d101b09ebacc7ab2)), closes [#138](https://github.com/NateScarlet/image-funnel/issues/138)
+* **example-hooks/comfyui:** should carry the cancel token on each call ([4809ddd](https://github.com/NateScarlet/image-funnel/commit/4809dddd561a93e334c092dfbb88ce6fbd8357e5)), closes [#149](https://github.com/NateScarlet/image-funnel/issues/149)
+* **example-hooks/comfyui:** should complete tags and prompts in /remix ([855fe6a](https://github.com/NateScarlet/image-funnel/commit/855fe6a2d67b3a2f674e5ec9cfb041ea9912d5f8)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+* **example-hooks/comfyui:** should not complete prompts in the weight position ([b9db224](https://github.com/NateScarlet/image-funnel/commit/b9db224802ddfb3cfedc4b931bbe506d1b9a6f09)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+* **frontend:** should resolve sibling directory navigation across pages ([47bf3e0](https://github.com/NateScarlet/image-funnel/commit/47bf3e00c4f2424d35c9ca09d6d3ec0e6f80b525)), closes [#125](https://github.com/NateScarlet/image-funnel/issues/125)
+* **hook:** should pair directive results by directive identity, not by regex match order ([3faf3b1](https://github.com/NateScarlet/image-funnel/commit/3faf3b15bb1705dc40ff2cb5e00a538d593099fc)), closes [#140](https://github.com/NateScarlet/image-funnel/issues/140)
+* **image:** should honor q=0 and RFC specificity in Accept negotiation ([d0eb3f2](https://github.com/NateScarlet/image-funnel/commit/d0eb3f23d6f8575e6e4bed2cc216cfbb41a935fe)), closes [#129](https://github.com/NateScarlet/image-funnel/issues/129)
+* **note:** should write notes atomically so readers never see partial content ([568164a](https://github.com/NateScarlet/image-funnel/commit/568164a2c4a5e859c95b8e57f99bbdf7cae6edb5)), closes [#148](https://github.com/NateScarlet/image-funnel/issues/148)
+* **scripts:** should keep python temp dirs usable when tests clear the env ([7ba7e6a](https://github.com/NateScarlet/image-funnel/commit/7ba7e6a8c617598c3deac408be55e1bd3868542e))
+* **scripts:** should not leave tmp dirs in the project root when checking python ([de20862](https://github.com/NateScarlet/image-funnel/commit/de20862f85eb2d647ed3b0474eb40c53b3757496))
+
 ## [1.8.0](https://github.com/NateScarlet/image-funnel/compare/v1.7.0...v1.8.0) (2026-10-13)
 
 
