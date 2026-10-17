@@ -55,7 +55,6 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from comfyui.cancellation import CancelToken  # noqa: E402
 from comfyui.danbooru_data import (  # noqa: E402
     COMPILED_COOC_FILENAME,
     COMPILED_EMBEDDINGS_FILENAME,
@@ -178,19 +177,17 @@ def main() -> None:
             else parsed
         )
         print(f"嵌入端点: {endpoint.url}（model={endpoint.model}）")
-        # 编译是一次性的前台流程，没有取消通道：显式构造一个永不取消的令牌
-        cancel_token = CancelToken()
         # 已有产物即缓存：探测确认当前端点能复现旧向量后，未变文本直接搬旧向量，
         # 只把新增/改动的文本发给接口
         cache = open_vector_cache(output_dir)
         if cache is None:
             embedding_source: TagEmbeddingSource = OpenAITagEmbeddingSource(
-                OpenAIEmbeddingClient(endpoint, cancel_token),
+                OpenAIEmbeddingClient(endpoint),
                 batch_size=args.embedding_batch_size,
             )
         else:
             embedding_source = ReusingTagEmbeddingSource(
-                OpenAIEmbeddingClient(endpoint, cancel_token),
+                OpenAIEmbeddingClient(endpoint),
                 cache,
                 batch_size=args.embedding_batch_size,
             )

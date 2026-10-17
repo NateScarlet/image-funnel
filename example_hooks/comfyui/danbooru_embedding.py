@@ -33,7 +33,7 @@ from urllib.parse import parse_qsl, urlsplit
 import numpy as np
 
 from .cancellable_http import HttpError, post_json
-from .cancellation import CancelToken
+from .cancellation import CancelToken, never_canceled_token
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,8 +132,14 @@ class EmbeddingError(Exception):
 class EmbeddingClient(Protocol):
     """把文本批量转换为向量的接口。"""
 
-    def embed(self, texts: Sequence[str]) -> List[List[float]]:
-        """返回与 texts 等长同序的向量列表；失败一律抛 EmbeddingError。"""
+    def embed(
+        self, texts: Sequence[str], *, cancel_token: CancelToken
+    ) -> List[List[float]]:
+        """返回与 texts 等长同序的向量列表；失败一律抛 EmbeddingError。
+
+        ``cancel_token`` 是本次调用的取消令牌：客户端不持有令牌，因此可跨请求
+        复用，取消能力由每次调用各自携带。
+        """
         ...
 
 
@@ -173,11 +179,12 @@ def _parse_embeddings(payload: object, expected: int) -> List[List[float]]:
 class OpenAIEmbeddingClient:
     """调用 OpenAI 兼容 /v1/embeddings 的嵌入客户端。"""
 
-    def __init__(self, endpoint: EmbeddingEndpoint, cancel_token: CancelToken) -> None:
+    def __init__(self, endpoint: EmbeddingEndpoint) -> None:
         self.endpoint = endpoint
-        self.cancel_token = cancel_token
 
-    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed(
+        self, texts: Sequence[str], *, cancel_token: CancelToken
+    ) -> List[List[float]]:
         items = list(texts)
         if not items:
             return []
@@ -191,7 +198,7 @@ class OpenAIEmbeddingClient:
                 {"model": self.endpoint.model, "input": items},
                 headers=headers,
                 timeout=self.endpoint.timeout,
-                cancel_token=self.cancel_token,
+                cancel_token=cancel_token,
             )
         except HttpError as e:
             raise EmbeddingError(f"嵌入接口不可用: {e}") from e
@@ -407,7 +414,9 @@ class OpenAITagEmbeddingSource:
             texts = [row[view_index] for row in views]
             for start in range(0, n_rows, self.batch_size):
                 chunk = texts[start : start + self.batch_size]
-                block = _normalized(self.client.embed(chunk))
+                block = _normalized(
+                    self.client.embed(chunk, cancel_token=never_canceled_token())
+                )
                 if stacked is None:
                     stacked = _allocate_stack(n_rows, block.shape[1])
                 stacked[start : start + len(chunk), view_index, :] = block
@@ -501,7 +510,9 @@ class TagVectorCache:
             return False, "旧产物没有可用于探测的文本"
         texts = [self.views[row][view_index] for view_index, row in picks]
         try:
-            fresh = _normalized(client.embed(texts))
+            fresh = _normalized(
+                client.embed(texts, cancel_token=never_canceled_token())
+            )
         except EmbeddingError as e:
             return False, f"探测请求失败: {e}"
         if fresh.shape[1] != matrix.dim:
@@ -588,7 +599,9 @@ class ReusingTagEmbeddingSource:
                 ]
             for start in range(0, len(missing_texts), self.batch_size):
                 chunk = missing_texts[start : start + self.batch_size]
-                block = _normalized(self.client.embed(chunk))
+                block = _normalized(
+                    self.client.embed(chunk, cancel_token=never_canceled_token())
+                )
                 if stacked is None:
                     stacked = _allocate_stack(n_rows, block.shape[1])
                 rows = missing_rows[start : start + len(chunk)]
@@ -644,15 +657,23 @@ QUERY_VECTOR_CACHE_SIZE = 128
 class SemanticTagSearcher(Protocol):
     """语义层召回接口；向量产物与嵌入服务缺失时由空实现顶替。"""
 
-    def search(self, query: str, top_k: int) -> List[SemanticHit]:
-        """返回按余弦相似度降序的命中；接口不可用时抛 EmbeddingError。"""
+    def search(
+        self, query: str, top_k: int, *, cancel_token: CancelToken
+    ) -> List[SemanticHit]:
+        """返回按余弦相似度降序的命中；接口不可用时抛 EmbeddingError。
+
+        ``cancel_token`` 是本次调用的取消令牌：语义层实例可跨请求复用，
+        取消能力由每次调用各自携带。
+        """
         ...
 
 
 class NullSemanticTagSearcher:
     """语义层未激活时的空实现：缺向量产物或未配置嵌入服务端点。"""
 
-    def search(self, query: str, top_k: int) -> List[SemanticHit]:
+    def search(
+        self, query: str, top_k: int, *, cancel_token: CancelToken
+    ) -> List[SemanticHit]:
         return []
 
 
@@ -684,9 +705,9 @@ class VectorSemanticTagSearcher:
 
     标签矩阵在构造时 mmap 一次并常驻：每次查询都要扫全表，逐查询重新映射的
     缺页开销（659MB 产物实测 271ms）远高于映射本身的乘（实测 26ms），
-    常驻映射把页缓存留给 OS 按需换出。矩阵与查询向量 LRU 由入口按
-    (数据目录, 端点) 缓存，跨请求复用；嵌入客户端是请求级依赖（持有取消令牌），
-    由入口每请求注入，因而不随本对象进入缓存。
+    常驻映射把页缓存留给 OS 按需换出。矩阵、查询向量 LRU 与嵌入客户端都由
+    入口按 (数据目录, 端点) 缓存，跨请求复用；取消令牌是调用期参数
+    （见 search / EmbeddingClient.embed），本对象不持有。
     """
 
     def __init__(
@@ -699,17 +720,19 @@ class VectorSemanticTagSearcher:
         self.client = client
         self._cache = query_cache
 
-    def query_vector(self, query: str) -> np.ndarray:
+    def query_vector(self, query: str, *, cancel_token: CancelToken) -> np.ndarray:
         """查询文本→向量，走 LRU 缓存；未命中才调用嵌入接口并归一化。"""
         cached = self._cache.get(query)
         if cached is not None:
             return cached
-        vector = _normalized(self.client.embed([query]))[0]
+        vector = _normalized(self.client.embed([query], cancel_token=cancel_token))[0]
         self._cache.put(query, vector)
         return vector
 
-    def search(self, query: str, top_k: int) -> List[SemanticHit]:
-        vector = self.query_vector(query)
+    def search(
+        self, query: str, top_k: int, *, cancel_token: CancelToken
+    ) -> List[SemanticHit]:
+        vector = self.query_vector(query, cancel_token=cancel_token)
         # 三视图各取本地 top_k 后按标签取最大相似度（同一标签跨视图只出一条）
         best: Dict[int, float] = {}
         for view_name, view in self.matrix.views():
@@ -748,14 +771,15 @@ class VectorSemanticTagSearcher:
 
 # 按 (数据目录, 端点) 缓存跨请求复用的重资产：mmap 标签矩阵与查询向量 LRU
 # （常驻服务每请求重建 provider，LRU 必须跨请求存活才能在连续输入时免去接口调用）。
-# 嵌入客户端持有取消令牌、属请求级依赖，不进缓存，由入口每请求注入。
+# 嵌入客户端无状态（取消令牌已改为调用期参数），因此同端点可一并复用。
 
 
 @dataclass
 class _SharedSearcherState:
-    """跨请求共享的语义层状态（不含请求级依赖）。"""
+    """跨请求共享的语义层状态（全部无请求级依赖，可安全复用）。"""
 
     matrix: TagEmbeddingMatrix
+    client: EmbeddingClient
     query_cache: QueryVectorCache
 
 
@@ -771,9 +795,8 @@ def has_compiled_embeddings(data_dir: str | Path) -> bool:
 def cached_semantic_searcher(
     data_dir: str,
     endpoint: EmbeddingEndpoint,
-    client: EmbeddingClient,
 ) -> VectorSemanticTagSearcher:
-    """构建目录与端点对应的向量语义层，复用共享的矩阵映射与查询向量 LRU。
+    """构建目录与端点对应的向量语义层，复用共享的矩阵映射、客户端与查询向量 LRU。
 
     激活判定（向量产物存在且端点 URL 非空）由入口完成，本函数只负责按需构建。
     """
@@ -785,7 +808,9 @@ def cached_semantic_searcher(
                 Path(data_dir) / COMPILED_EMBEDDINGS_FILENAME
             )
             state = _SharedSearcherState(
-                matrix=matrix, query_cache=QueryVectorCache(QUERY_VECTOR_CACHE_SIZE)
+                matrix=matrix,
+                client=OpenAIEmbeddingClient(endpoint),
+                query_cache=QueryVectorCache(QUERY_VECTOR_CACHE_SIZE),
             )
             _SEARCHER_CACHE[key] = state
-    return VectorSemanticTagSearcher(state.matrix, client, state.query_cache)
+    return VectorSemanticTagSearcher(state.matrix, state.client, state.query_cache)

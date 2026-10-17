@@ -407,6 +407,7 @@ class AutocompleteContext:
         prompt_target: Optional[PromptTarget] = None,
         parser: argparse.ArgumentParser,
         action: str,
+        cancel_token: CancelToken,
     ):
         self.target_command: str = target_command
         self.query: str = query
@@ -414,6 +415,8 @@ class AutocompleteContext:
         self.cwords: List[str] = cwords or []
         self.image_paths: List[str] = image_paths or []
         self.cleaned_cwords: List[str] = _cleaned_cwords(self.cwords)
+        # 本次请求的取消令牌：随上下文下传给 provider，由它们在调用期交给网络层
+        self.cancel_token: CancelToken = cancel_token
 
         # 动态解析选项参数（解析器由入口注入）
         (
@@ -1002,7 +1005,9 @@ class DanbooruProvider(AutocompleteProvider):
         if context.query.strip():
             # 用户正在打字，执行前缀语义搜索
             try:
-                tags = self.provider.search(context.query)
+                tags = self.provider.search(
+                    context.query, cancel_token=context.cancel_token
+                )
                 # 语义层降级提示项与标签分流：错误以建议项展示，字面结果照常返回
                 unavailable = [
                     item for item in tags if isinstance(item, SemanticLayerUnavailable)
@@ -1076,7 +1081,9 @@ class DanbooruProvider(AutocompleteProvider):
                 try:
                     target_categories = ["General", "Artist", "Meta"]
                     tags = self.provider.related(
-                        prompt_tags, target_categories=target_categories
+                        prompt_tags,
+                        target_categories=target_categories,
+                        cancel_token=context.cancel_token,
                     )
                     suggestions: List[AutocompleteSuggestion] = []
                     for item in tags:
@@ -1280,7 +1287,6 @@ def build_providers(
                 show_nsfw=show_nsfw,
                 embedding_provider_url=embedding_provider_url,
                 cache=SQLiteDanbooruCache(db_ctx),
-                cancel_token=request.cancel_token,
             )
             if tag_provider is not None:
                 providers.append(
@@ -1323,6 +1329,7 @@ def autocomplete(
         prompt_target=target,
         parser=services.parser,
         action=action,
+        cancel_token=request.cancel_token,
     )
 
     for provider in services.providers:

@@ -49,3 +49,12 @@ class CancelToken:
         # 在锁外执行，避免清理动作再次注册或取消时死锁
         for callback in callbacks:
             callback()
+
+
+def never_canceled_token() -> CancelToken:
+    """给没有取消通道的入口（编译、离线回填、基准脚本）用：一个永不取消的令牌。
+
+    每次调用都新建，不要共享单例：注册到令牌上的清理动作只有取消才会被取走并
+    执行（本函数不会有取消事件），共享实例会让它们随调用次数一直累积。
+    """
+    return CancelToken()

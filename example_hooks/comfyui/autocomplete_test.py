@@ -8,7 +8,7 @@ import tempfile
 import sqlite3
 from contextlib import contextmanager
 from typing import Dict, Any, Generator, Optional, List, Set, Tuple, cast
-from unittest.mock import patch, MagicMock
+from unittest.mock import ANY, patch, MagicMock
 
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
@@ -91,6 +91,8 @@ def _make_context_with(**kwargs: Any) -> AutocompleteContext:
         workflow=None,
         prompt_meta=None,
         parser=parser,
+        # 用例默认令牌：仅满足调用期签名；断言令牌透传的用例显式传入自己的令牌
+        cancel_token=CancelToken(),
         action=classify_action(
             [w for w in cwords if not (w.startswith("<") and w.endswith(">"))],
             collect_options(parser, cwords)[0],
@@ -312,7 +314,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertTrue(provider.can_provide(context))
         list(provider.provide(context))
         mock_provider.related.assert_called_once_with(
-            ["masterpiece"], target_categories=["General", "Artist", "Meta"]
+            ["masterpiece"],
+            target_categories=["General", "Artist", "Meta"],
+            cancel_token=context.cancel_token,
         )
 
     def test_remove_prompt_suggestions_work_before_its_value_is_typed(self):
@@ -378,7 +382,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         )
         self.assertTrue(provider.can_provide(context))
         suggestions = list(provider.provide(context))
-        mock_provider.search.assert_called_once_with("blue")
+        mock_provider.search.assert_called_once_with(
+            "blue", cancel_token=context.cancel_token
+        )
         self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
 
     def test_add_flag_value_completed_on_empty_query(self) -> None:
@@ -420,7 +426,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         suggestions = list(provider.provide(context))
 
-        mock_provider.search.assert_called_once_with("girl")
+        mock_provider.search.assert_called_once_with(
+            "girl", cancel_token=context.cancel_token
+        )
 
         self.assertEqual(len(suggestions), 2)
         self.assertEqual(suggestions[0].text, "1girl")
@@ -468,6 +476,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_provider.related.assert_called_once_with(
             ["masterpiece", "1girl"],
             target_categories=["General", "Artist", "Meta"],
+            cancel_token=context.cancel_token,
         )
 
         self.assertEqual(len(suggestions), 2)
@@ -501,6 +510,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_provider.related.assert_called_once_with(
             ["1girl", "masterpiece"],
             target_categories=["General", "Artist", "Meta"],
+            cancel_token=context.cancel_token,
         )
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "solo")
@@ -720,7 +730,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         suggestions = list(provider.provide(context))
 
-        mock_provider.search.assert_called_once_with("girl")
+        mock_provider.search.assert_called_once_with(
+            "girl", cancel_token=context.cancel_token
+        )
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0].text, "1girl")
 
@@ -1405,7 +1417,13 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                     )
                     self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
                     self.assertEqual(
-                        [r.tag for r in provider.search("1girl")], ["1girl"]
+                        [
+                            r.tag
+                            for r in provider.search(
+                                "1girl", cancel_token=CancelToken()
+                            )
+                        ],
+                        ["1girl"],
                     )
 
     def test_build_providers_semantic_inactive_without_endpoint_url(self) -> None:
@@ -1461,6 +1479,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ]
         }
 
+        # 本次请求的令牌：断言它随请求一路传到 provider
+        token = CancelToken()
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_path = self._write_workflow_sample(workflow, tmp_dir)
             request = AutocompleteRequest(
@@ -1471,12 +1491,14 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
-                cancel_token=CancelToken(),
+                cancel_token=token,
             )
             suggestions = list(autocomplete(request, services))
 
         mock_danbooru.related.assert_called_once_with(
-            ["1girl"], target_categories=["General", "Artist", "Meta"]
+            ["1girl"],
+            target_categories=["General", "Artist", "Meta"],
+            cancel_token=token,
         )
         self.assertEqual([s.text for s in suggestions], ["cute"])
 
@@ -1763,9 +1785,11 @@ class TestAutocompleteIntegration(unittest.TestCase):
         ]
 
         mock_sqlite_provider_class.assert_called_once()
+        # 单次 main() 调用没有外部取消通道：令牌由入口自建，这里只断言它被一路传下来
         mock_provider.related.assert_called_once_with(
             ["masterpiece", "1girl"],
             target_categories=["General", "Artist", "Meta"],
+            cancel_token=ANY,
         )
 
         tags = [item["text"] for item in lines]

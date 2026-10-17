@@ -3,7 +3,7 @@
 import threading
 import unittest
 
-from .cancellation import CancelToken
+from .cancellation import CancelToken, never_canceled_token
 
 
 class TestCancelToken(unittest.TestCase):
@@ -50,6 +50,17 @@ class TestCancelToken(unittest.TestCase):
         token.on_cancel(canceled_in_worker.set)
         threading.Thread(target=token.cancel).start()
         self.assertTrue(canceled_in_worker.wait(5))
+
+
+class TestNeverCanceledToken(unittest.TestCase):
+    """没有取消通道的入口用的令牌：不会取消，且每次调用都是新实例。"""
+
+    def test_token_is_not_canceled(self) -> None:
+        self.assertFalse(never_canceled_token().is_canceled())
+
+    def test_each_call_yields_a_fresh_instance(self) -> None:
+        """共享单例会让注册上去的清理动作永远累积（无取消事件把它们取走）。"""
+        self.assertIsNot(never_canceled_token(), never_canceled_token())
 
 
 if __name__ == "__main__":

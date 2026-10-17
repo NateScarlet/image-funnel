@@ -56,6 +56,10 @@ from .danbooru_embedding import (
     write_compiled_embeddings,
 )
 
+# 调用期令牌：本文件的多数调用只关心向量语义，令牌提供一个满足签名的默认值；
+# 要断言令牌透传或跨请求互不影响的用例自带令牌。
+_TOKEN = CancelToken()
+
 # 固定维度的可预测向量：让测试显式表达「相似度 = 与该向量夹角」而非依赖随机数
 _VECTOR_HALF: List[float] = [1.0, 0.0, 0.0, 0.0]
 _VECTOR_SECOND: List[float] = [0.0, 1.0, 0.0, 0.0]
@@ -74,17 +78,22 @@ _VECTOR_DIAGONAL_ALWAYS: Callable[[str], List[float]] = lambda text: list(
 
 
 class RecordingEmbeddingClient:
-    """测试用嵌入客户端：记录收到的文本批次，按固定映射返回向量。"""
+    """测试用嵌入客户端：记录收到的文本批次与每次调用的令牌，按固定映射返回向量。"""
 
     def __init__(
         self, vector_for: Optional[Callable[[str], Sequence[float]]] = None
     ) -> None:
         self.batches: List[List[str]] = []
+        # 逐次调用收到的令牌：用于断言查询向量缓存命中时不再调用接口
+        self.tokens: List[CancelToken] = []
         self._vector_for = vector_for
 
-    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed(
+        self, texts: Sequence[str], *, cancel_token: CancelToken
+    ) -> List[List[float]]:
         batch = list(texts)
         self.batches.append(batch)
+        self.tokens.append(cancel_token)
         if self._vector_for is not None:
             return [
                 [float(value) for value in self._vector_for(text)] for text in batch
@@ -99,7 +108,9 @@ class FailingEmbeddingClient:
         self.message = message
         self.calls = 0
 
-    def embed(self, texts: Sequence[str]) -> List[List[float]]:
+    def embed(
+        self, texts: Sequence[str], *, cancel_token: CancelToken
+    ) -> List[List[float]]:
         self.calls += 1
         raise EmbeddingError(self.message)
 
@@ -431,8 +442,8 @@ class TestCompileHints(unittest.TestCase):
 
 class TestOpenAIEmbeddingClient(unittest.TestCase):
     def _client(self, spec: str) -> OpenAIEmbeddingClient:
-        """按端点写法构造客户端；取消令牌取全新未取消的一份。"""
-        return OpenAIEmbeddingClient(parse_embedding_endpoint(spec), CancelToken())
+        """按端点写法构造客户端；取消令牌是调用期参数，构造时不涉及。"""
+        return OpenAIEmbeddingClient(parse_embedding_endpoint(spec))
 
     def test_sends_model_input_and_timeout(self) -> None:
         client = self._client("http://host:9#model=bge&timeoutMs=250")
@@ -445,7 +456,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
                 ]
             },
         ) as post:
-            vectors = client.embed(["a", "b"])
+            vectors = client.embed(["a", "b"], cancel_token=_TOKEN)
         self.assertEqual(vectors, [[1.0, 2.0], [3.0, 4.0]])
         args = cast(Any, post.call_args).args
         kwargs = cast(Any, post.call_args).kwargs
@@ -453,15 +464,28 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
         self.assertEqual(kwargs["timeout"], 0.25)
 
     def test_cancel_token_reaches_network_layer(self) -> None:
-        """取消令牌随请求下传到网络层（取消时可掐断该在途嵌入请求）。"""
+        """取消令牌随本次调用下传到网络层（取消时可掐断该在途嵌入请求）。"""
         token = CancelToken()
-        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"), token)
+        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
         with patch(
             "comfyui.danbooru_embedding.post_json",
             return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ) as post:
-            client.embed(["a"])
+            client.embed(["a"], cancel_token=token)
         self.assertIs(cast(Any, post.call_args).kwargs["cancel_token"], token)
+
+    def test_reused_client_keeps_tokens_apart(self) -> None:
+        """同一客户端连续服务两次请求：两次调用各自的令牌互不串台。"""
+        client = OpenAIEmbeddingClient(parse_embedding_endpoint("http://host:9"))
+        with patch(
+            "comfyui.danbooru_embedding.post_json",
+            return_value={"data": [{"index": 0, "embedding": [1.0]}]},
+        ) as post:
+            first, second = CancelToken(), CancelToken()
+            client.embed(["a"], cancel_token=first)
+            self.assertIs(cast(Any, post.call_args).kwargs["cancel_token"], first)
+            client.embed(["b"], cancel_token=second)
+            self.assertIs(cast(Any, post.call_args).kwargs["cancel_token"], second)
 
     def test_empty_api_key_sends_no_authorization_header(self) -> None:
         client = self._client("http://host:9#apiKey=")
@@ -469,7 +493,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             "comfyui.danbooru_embedding.post_json",
             return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ) as post:
-            client.embed(["a"])
+            client.embed(["a"], cancel_token=_TOKEN)
         headers = cast(Any, post.call_args).kwargs["headers"]
         self.assertNotIn("Authorization", headers)
 
@@ -479,14 +503,14 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             "comfyui.danbooru_embedding.post_json",
             return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ) as post:
-            client.embed(["a"])
+            client.embed(["a"], cancel_token=_TOKEN)
         headers = cast(Any, post.call_args).kwargs["headers"]
         self.assertEqual(headers["Authorization"], "Bearer abc")
 
     def test_empty_input_skips_request(self) -> None:
         client = self._client("http://host:9")
         with patch("comfyui.danbooru_embedding.post_json") as post:
-            self.assertEqual(client.embed([]), [])
+            self.assertEqual(client.embed([], cancel_token=_TOKEN), [])
         post.assert_not_called()
 
     def test_upstream_error_wrapped_preserving_cause(self) -> None:
@@ -495,7 +519,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
         cause = HttpError("timed out")
         with patch("comfyui.danbooru_embedding.post_json", side_effect=cause):
             with self.assertRaises(EmbeddingError) as ctx:
-                client.embed(["a"])
+                client.embed(["a"], cancel_token=_TOKEN)
         self.assertIn("timed out", str(ctx.exception))
         self.assertIs(ctx.exception.__cause__, cause)
 
@@ -507,7 +531,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             side_effect=HttpCanceledError("请求已取消，在途请求已被掐断"),
         ):
             with self.assertRaises(HttpCanceledError):
-                client.embed(["a"])
+                client.embed(["a"], cancel_token=_TOKEN)
 
     def test_response_count_mismatch_rejected(self) -> None:
         client = self._client("http://host:9")
@@ -516,7 +540,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             return_value={"data": [{"index": 0, "embedding": [1.0]}]},
         ):
             with self.assertRaises(EmbeddingError) as ctx:
-                client.embed(["a", "b"])
+                client.embed(["a", "b"], cancel_token=_TOKEN)
         self.assertIn("条目数", str(ctx.exception))
 
     def test_missing_index_falls_back_to_position(self) -> None:
@@ -525,7 +549,9 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             "comfyui.danbooru_embedding.post_json",
             return_value={"data": [{"embedding": [1.0]}, {"embedding": [2.0]}]},
         ):
-            self.assertEqual(client.embed(["a", "b"]), [[1.0], [2.0]])
+            self.assertEqual(
+                client.embed(["a", "b"], cancel_token=_TOKEN), [[1.0], [2.0]]
+            )
 
     def test_empty_vector_rejected(self) -> None:
         client = self._client("http://host:9")
@@ -534,7 +560,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             return_value={"data": [{"index": 0, "embedding": []}]},
         ):
             with self.assertRaises(EmbeddingError):
-                client.embed(["a"])
+                client.embed(["a"], cancel_token=_TOKEN)
 
     def test_non_numeric_vector_rejected(self) -> None:
         client = self._client("http://host:9")
@@ -543,7 +569,7 @@ class TestOpenAIEmbeddingClient(unittest.TestCase):
             return_value={"data": [{"index": 0, "embedding": ["x"]}]},
         ):
             with self.assertRaises(EmbeddingError):
-                client.embed(["a"])
+                client.embed(["a"], cancel_token=_TOKEN)
 
 
 class TestEmbeddingArtifact(unittest.TestCase):
@@ -646,17 +672,21 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
         )
 
     def test_query_vector_uses_cache_and_skips_second_call(self) -> None:
+        """跨请求复用同一语义层：查询向量 LRU 命中时第二次请求不再调用嵌入接口。"""
         client = RecordingEmbeddingClient(vector_for=_VECTOR_HALF_ALWAYS)
         searcher = self._searcher(client)
-        searcher.search("blue hair", 4)
-        searcher.search("blue hair", 4)
+        first, second = CancelToken(), CancelToken()
+        searcher.search("blue hair", 4, cancel_token=first)
+        searcher.search("blue hair", 4, cancel_token=second)
         self.assertEqual(len(client.batches), 1)
+        # 只有第一次请求真的打到接口，第二次命中缓存、令牌也就没往下传
+        self.assertEqual(client.tokens, [first])
 
     def test_different_queries_each_call_interface(self) -> None:
         client = RecordingEmbeddingClient(vector_for=_VECTOR_HALF_ALWAYS)
         searcher = self._searcher(client)
-        searcher.search("blue hair", 4)
-        searcher.search("red hair", 4)
+        searcher.search("blue hair", 4, cancel_token=_TOKEN)
+        searcher.search("red hair", 4, cancel_token=_TOKEN)
         self.assertEqual(len(client.batches), 2)
 
     def test_cosine_ranking_uses_max_across_views(self) -> None:
@@ -677,7 +707,7 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
         )
         hits = VectorSemanticTagSearcher(
             matrix, client, QueryVectorCache(QUERY_VECTOR_CACHE_SIZE)
-        ).search("q", 4)
+        ).search("q", 4, cancel_token=_TOKEN)
         self.assertEqual([hit.rec_id for hit in hits], [1])
         self.assertAlmostEqual(hits[0].score, 1.0, places=5)
 
@@ -690,12 +720,12 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
             client,
             QueryVectorCache(QUERY_VECTOR_CACHE_SIZE),
         )
-        self.assertEqual(searcher.search("q", 4), [])
+        self.assertEqual(searcher.search("q", 4, cancel_token=_TOKEN), [])
 
     def test_top_k_limits_results_per_view(self) -> None:
         client = RecordingEmbeddingClient(vector_for=_VECTOR_DIAGONAL_ALWAYS)
         searcher = self._searcher(client)
-        hits = searcher.search("q", 1)
+        hits = searcher.search("q", 1, cancel_token=_TOKEN)
         # 每视图只取 top1；三视图 top1 同为第 0 行 → 去重后一条
         self.assertEqual([hit.rec_id for hit in hits], [0])
 
@@ -703,7 +733,7 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
         client = FailingEmbeddingClient("嵌入接口不可用: 超时")
         searcher = self._searcher(client)
         with self.assertRaises(EmbeddingError) as ctx:
-            searcher.search("q", 4)
+            searcher.search("q", 4, cancel_token=_TOKEN)
         self.assertIn("超时", str(ctx.exception))
 
     def test_loaded_mapping_stays_held_after_search(self) -> None:
@@ -721,7 +751,7 @@ class TestVectorSemanticTagSearcher(unittest.TestCase):
             client,
             QueryVectorCache(QUERY_VECTOR_CACHE_SIZE),
         )
-        searcher.search("q", 4)
+        searcher.search("q", 4, cancel_token=_TOKEN)
         # Windows 上 mmap 常驻时覆盖写失败（Errno 22）；非 Windows 平台可正常覆盖
         if os.name == "nt":
             with self.assertRaises(OSError):
@@ -802,9 +832,8 @@ class TestSharedSemanticSearcher(unittest.TestCase):
         )
 
     def _searcher(self, url: str) -> VectorSemanticTagSearcher:
-        endpoint = parse_embedding_endpoint(url)
         return cached_semantic_searcher(
-            str(self.tmp_dir), endpoint, OpenAIEmbeddingClient(endpoint, CancelToken())
+            str(self.tmp_dir), parse_embedding_endpoint(url)
         )
 
     def test_same_dir_and_endpoint_shares_query_cache(self) -> None:
@@ -812,18 +841,18 @@ class TestSharedSemanticSearcher(unittest.TestCase):
         self._write_matrix()
         _StubEmbeddingHandler.requests_seen.clear()
         with stub_embedding_server() as url:
-            self._searcher(url).search("q", 4)
-            self._searcher(url).search("q", 4)
+            self._searcher(url).search("q", 4, cancel_token=CancelToken())
+            self._searcher(url).search("q", 4, cancel_token=CancelToken())
         self.assertEqual(len(_StubEmbeddingHandler.requests_seen), 1)
 
-    def test_client_stays_request_scoped(self) -> None:
-        """嵌入客户端持有取消令牌，属请求级依赖：共享矩阵但不共享客户端。"""
+    def test_client_is_shared_within_endpoint(self) -> None:
+        """嵌入客户端不再持有令牌：与矩阵、查询 LRU 一起整体跨请求复用。"""
         self._write_matrix()
         url = "http://127.0.0.1:1#model=stub"
         first = self._searcher(url)
         second = self._searcher(url)
         self.assertIs(first.matrix, second.matrix)
-        self.assertIsNot(first.client, second.client)
+        self.assertIs(first.client, second.client)
 
     def test_different_endpoint_yields_separate_state(self) -> None:
         self._write_matrix()
@@ -841,8 +870,8 @@ class TestSharedSemanticSearcher(unittest.TestCase):
         _StubEmbeddingHandler.requests_seen.clear()
         with stub_embedding_server() as url:
             searcher = self._searcher(url)
-            hits = searcher.search("q", 4)
-            searcher.search("q", 4)
+            hits = searcher.search("q", 4, cancel_token=CancelToken())
+            searcher.search("q", 4, cancel_token=CancelToken())
         self.assertEqual([hit.rec_id for hit in hits], [0])
         # 第二次同查询命中 LRU，未再发出请求
         self.assertEqual(len(_StubEmbeddingHandler.requests_seen), 1)

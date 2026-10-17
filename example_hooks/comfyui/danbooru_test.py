@@ -44,6 +44,10 @@ from .danbooru_embedding import (
 
 _FAKE_EMBEDDING_DIM = 8
 
+# 用例默认的调用期令牌：本文件大多数调用走的是字面匹配、本地文件或缓存链路，
+# 不发网络请求，只需一个满足调用期签名的令牌。要断言令牌透传的用例自带令牌。
+_TOKEN = CancelToken()
+
 
 def _char_count_vector(text: str, dim: int) -> np.ndarray:
     """把文本按字符码哈希成固定维度的计数向量（夹具用，替代真实嵌入服务）。"""
@@ -77,10 +81,13 @@ class StubSemanticTagSearcher:
     ) -> None:
         self.hits = [SemanticHit(rec_id=rec_id, score=score) for rec_id, score in hits]
         self.error = error
-        self.calls: List[Tuple[str, int]] = []
+        # 逐次调用记录（query, top_k, 本次请求的令牌），便于断言令牌不串台
+        self.calls: List[Tuple[str, int, CancelToken]] = []
 
-    def search(self, query: str, top_k: int) -> list[SemanticHit]:
-        self.calls.append((query, top_k))
+    def search(
+        self, query: str, top_k: int, *, cancel_token: CancelToken
+    ) -> list[SemanticHit]:
+        self.calls.append((query, top_k, cancel_token))
         if self.error is not None:
             raise self.error
         return list(self.hits)
@@ -249,14 +256,14 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_search_lazy_loads_tags_only(self) -> None:
         provider = self._provider()
-        provider.search("solo")
+        provider.search("solo", cancel_token=_TOKEN)
         dataset = cast(Any, provider)._dataset
         self.assertIsNotNone(dataset._tag_index)
         self.assertIsNone(dataset._cooc_index)
 
     def test_related_lazy_loads_tags_and_cooc(self) -> None:
         provider = self._provider(show_nsfw=True)
-        provider.related(["1girl"])
+        provider.related(["1girl"], cancel_token=_TOKEN)
         dataset = cast(Any, provider)._dataset
         self.assertIsNotNone(dataset._tag_index)
         self.assertIsNotNone(dataset._cooc_index)
@@ -265,7 +272,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_release_cooc_cache_unloads_then_related_reloads(self) -> None:
         provider = self._provider(show_nsfw=True)
-        first = provider.related(["1girl"])
+        first = provider.related(["1girl"], cancel_token=_TOKEN)
         dataset = cast(Any, provider)._dataset
 
         release_cooc_cache(self.tmp_dir)
@@ -273,7 +280,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         # 只释放 cooc，tags 索引仍常驻（search 热路径不受影响）
         self.assertIsNotNone(dataset._tag_index)
 
-        again = provider.related(["1girl"])
+        again = provider.related(["1girl"], cancel_token=_TOKEN)
         self.assertEqual(again, first)
         self.assertIsNotNone(dataset._cooc_index)
 
@@ -290,7 +297,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_search_exact_match_ranks_first(self) -> None:
         provider = self._provider()
-        results = provider.search("solo")
+        results = provider.search("solo", cancel_token=_TOKEN)
         self.assertGreaterEqual(len(results), 1)
         self.assertEqual(results[0].tag, "solo")
         self.assertEqual(results[0].cn_name, "单人")
@@ -298,67 +305,69 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_search_prefix_match(self) -> None:
         provider = self._provider()
-        results = provider.search("white")
+        results = provider.search("white", cancel_token=_TOKEN)
         tags = [r.tag for r in results]
         self.assertIn("white_hair", tags)
         self.assertNotIn("red_hair", tags)
 
     def test_search_substring_match_underscore_or_space(self) -> None:
         provider = self._provider()
-        by_space = {r.tag for r in provider.search("white hair")}
-        by_underscore = {r.tag for r in provider.search("white_hair")}
+        by_space = {r.tag for r in provider.search("white hair", cancel_token=_TOKEN)}
+        by_underscore = {
+            r.tag for r in provider.search("white_hair", cancel_token=_TOKEN)
+        }
         self.assertIn("white_hair", by_space)
         self.assertIn("white_hair", by_underscore)
 
     def test_search_tolerates_typo(self) -> None:
         provider = self._provider()
-        results = provider.search("solo")  # 精确
+        results = provider.search("solo", cancel_token=_TOKEN)  # 精确
         self.assertEqual(results[0].tag, "solo")
         # 一处笔误仍应命中
-        typo_results = provider.search("solo ")
+        typo_results = provider.search("solo ", cancel_token=_TOKEN)
         self.assertTrue(any(r.tag == "solo" for r in typo_results))
-        fuzzy = provider.search("whit hair")  # 缺 e + 空格
+        fuzzy = provider.search("whit hair", cancel_token=_TOKEN)  # 缺 e + 空格
         self.assertTrue(any(r.tag == "white_hair" for r in fuzzy))
 
     def test_search_chinese_via_cn_name(self) -> None:
         provider = self._provider()
-        results = provider.search("白发")
+        results = provider.search("白发", cancel_token=_TOKEN)
         self.assertGreaterEqual(len(results), 1)
         self.assertEqual(results[0].tag, "white_hair")
 
     def test_search_chinese_second_alias(self) -> None:
         provider = self._provider()
-        results = provider.search("女孩")
+        results = provider.search("女孩", cancel_token=_TOKEN)
         tags = [r.tag for r in results]
         self.assertIn("1girl", tags)
 
     def test_search_filters_nsfw_by_default(self) -> None:
         provider = self._provider(show_nsfw=False)
-        tags = [r.tag for r in provider.search("hentai")]
+        tags = [r.tag for r in provider.search("hentai", cancel_token=_TOKEN)]
         self.assertNotIn("hentai", tags)
 
     def test_search_includes_nsfw_when_enabled(self) -> None:
         provider = self._provider(show_nsfw=True)
-        tags = [r.tag for r in provider.search("hentai")]
+        tags = [r.tag for r in provider.search("hentai", cancel_token=_TOKEN)]
         self.assertIn("hentai", tags)
 
     def test_search_empty_query_returns_empty(self) -> None:
         provider = self._provider()
-        self.assertEqual(provider.search(""), [])
-        self.assertEqual(provider.search("   "), [])
+        self.assertEqual(provider.search("", cancel_token=_TOKEN), [])
+        self.assertEqual(provider.search("   ", cancel_token=_TOKEN), [])
 
     def test_search_maps_numeric_category(self) -> None:
         provider = self._provider()
-        results = provider.search("hatsune_miku")
+        results = provider.search("hatsune_miku", cancel_token=_TOKEN)
         self.assertEqual(results[0].tag, "hatsune_miku")
         self.assertEqual(results[0].category, "Character")
-        artist = provider.search("some_artist")
+        artist = provider.search("some_artist", cancel_token=_TOKEN)
         self.assertEqual(artist[0].category, "Artist")
 
     def test_search_rank_popularity_tiebreak(self) -> None:
         """同层匹配按 post_count 降序：1girl 应排在同为 General 的低热度前缀前。"""
         provider = self._provider()
-        results = provider.search("g")
+        results = provider.search("g", cancel_token=_TOKEN)
         # 前缀含 g 的：1girl / solo? 无；至少 1girl 命中
         tags = [r.tag for r in results]
         self.assertIn("1girl", tags)
@@ -383,7 +392,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
                 csv_encoding="gbk",
             )
             provider = self._provider(gbk_dir)
-            results = provider.search("1girl")
+            results = provider.search("1girl", cancel_token=_TOKEN)
             self.assertEqual(results[0].cn_name, "一个女孩")
         finally:
             shutil.rmtree(gbk_dir, ignore_errors=True)
@@ -394,7 +403,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """强匹配 = 查询精确等于标签名；此时不触发语义层。"""
         semantic = StubSemanticTagSearcher([(1, 0.9)])
         provider = self._provider(semantic=semantic)
-        results = provider.search("solo")
+        results = provider.search("solo", cancel_token=_TOKEN)
         self.assertEqual(semantic.calls, [])
         self.assertEqual([r.tag for r in results], ["solo"])
 
@@ -402,21 +411,21 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """强匹配 = 查询精确等于某个中文别名；此时不触发语义层。"""
         semantic = StubSemanticTagSearcher([(1, 0.9)])
         provider = self._provider(semantic=semantic)
-        results = provider.search("白发")
+        results = provider.search("白发", cancel_token=_TOKEN)
         self.assertEqual(semantic.calls, [])
         self.assertEqual(results[0].tag, "white_hair")
 
     def test_semantic_skipped_on_empty_query(self) -> None:
         semantic = StubSemanticTagSearcher([(1, 0.9)])
         provider = self._provider(semantic=semantic)
-        self.assertEqual(provider.search("   "), [])
+        self.assertEqual(provider.search("   ", cancel_token=_TOKEN), [])
         self.assertEqual(semantic.calls, [])
 
     def test_semantic_appended_when_no_strong_match(self) -> None:
         """查询无任何强匹配（字面层只有子串命中）时追加语义召回并合并。"""
         semantic = StubSemanticTagSearcher([(5, 0.65)])
         provider = self._provider(semantic=semantic)
-        results = provider.search("hair")
+        results = provider.search("hair", cancel_token=_TOKEN)
         self.assertEqual(len(semantic.calls), 1)
         self.assertEqual(semantic.calls[0][0], "hair")
         tags = [r.tag for r in results]
@@ -428,36 +437,40 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """字面层完全没有命中时，语义层是唯一结果来源。"""
         semantic = StubSemanticTagSearcher([(0, 0.9), (1, 0.7)])
         provider = self._provider(semantic=semantic)
-        tags = [r.tag for r in provider.search("蓝色")]
+        tags = [r.tag for r in provider.search("蓝色", cancel_token=_TOKEN)]
         self.assertEqual(tags, ["1girl", "solo"])
 
     def test_semantic_high_similarity_outranks_literal_substring(self) -> None:
         """近乎完全命中的语义结果应排到字面子串层之上。"""
         semantic = StubSemanticTagSearcher([(5, 0.95)])
         provider = self._provider(semantic=semantic)
-        tags = [r.tag for r in provider.search("hair")]
+        tags = [r.tag for r in provider.search("hair", cancel_token=_TOKEN)]
         self.assertEqual(tags[0], "hatsune_miku")
 
     def test_semantic_hits_weighted_by_post_count(self) -> None:
         """同余弦相似度时按 post_count 加权：热度高的排前。"""
         semantic = StubSemanticTagSearcher([(3, 0.6), (1, 0.6)])
         provider = self._provider(semantic=semantic)
-        tags = [r.tag for r in provider.search("蓝色")]
+        tags = [r.tag for r in provider.search("蓝色", cancel_token=_TOKEN)]
         self.assertEqual(tags, ["solo", "red_hair"])
 
     def test_semantic_hits_filtered_by_nsfw(self) -> None:
         semantic = StubSemanticTagSearcher([(4, 0.9)])
         provider = self._provider(semantic=semantic)
-        self.assertNotIn("hentai", [r.tag for r in provider.search("蓝色")])
+        self.assertNotIn(
+            "hentai", [r.tag for r in provider.search("蓝色", cancel_token=_TOKEN)]
+        )
 
         provider_nsfw = self._provider(show_nsfw=True, semantic=semantic)
-        self.assertIn("hentai", [r.tag for r in provider_nsfw.search("蓝色")])
+        self.assertIn(
+            "hentai", [r.tag for r in provider_nsfw.search("蓝色", cancel_token=_TOKEN)]
+        )
 
     def test_semantic_does_not_duplicate_literal_hits(self) -> None:
         """字面层已命中的标签不因语义层重复出现。"""
         semantic = StubSemanticTagSearcher([(2, 0.9), (3, 0.9)])
         provider = self._provider(semantic=semantic)
-        tags = [r.tag for r in provider.search("hair")]
+        tags = [r.tag for r in provider.search("hair", cancel_token=_TOKEN)]
         self.assertEqual(tags.count("white_hair"), 1)
         self.assertEqual(tags.count("red_hair"), 1)
 
@@ -465,13 +478,15 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """加权后映射到 0 分的语义命中不进结果（热度分无法抬升到下限之上）。"""
         semantic = StubSemanticTagSearcher([(0, 0.0)])
         provider = self._provider(semantic=semantic)
-        self.assertEqual([r.tag for r in provider.search("蓝色")], [])
+        self.assertEqual(
+            [r.tag for r in provider.search("蓝色", cancel_token=_TOKEN)], []
+        )
 
     def test_embedding_error_degrades_to_literal_plus_hint_item(self) -> None:
         """嵌入接口失败：字面结果照常返回，并附加一条明确错误提示项。"""
         semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
         provider = self._provider(semantic=semantic)
-        results = provider.search("hair")
+        results = provider.search("hair", cancel_token=_TOKEN)
         self.assertEqual([r.tag for r in results[:2]], ["white_hair", "red_hair"])
         hint = results[-1]
         self.assertIsInstance(hint, SemanticLayerUnavailable)
@@ -480,7 +495,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     def test_embedding_error_on_literal_empty_query_only_yields_hint(self) -> None:
         semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
         provider = self._provider(semantic=semantic)
-        results = provider.search("蓝色")
+        results = provider.search("蓝色", cancel_token=_TOKEN)
         self.assertEqual(len(results), 1)
         self.assertIsInstance(results[0], SemanticLayerUnavailable)
 
@@ -488,7 +503,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """有强匹配时语义层不执行，接口故障不影响精确命中结果。"""
         semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
         provider = self._provider(semantic=semantic)
-        results = provider.search("solo")
+        results = provider.search("solo", cancel_token=_TOKEN)
         self.assertEqual(semantic.calls, [])
         self.assertEqual([r.tag for r in results], ["solo"])
 
@@ -497,16 +512,16 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         semantic = StubSemanticTagSearcher([(999, 0.9)])
         provider = self._provider(semantic=semantic)
         with self.assertRaises(ValueError):
-            provider.search("蓝色")
+            provider.search("蓝色", cancel_token=_TOKEN)
 
     def test_without_semantic_layer_results_match_pure_literal(self) -> None:
         """语义层未激活（空实现）时行为与纯字面一致：无提示项、无重复、无越界。"""
         provider = self._provider(semantic=NullSemanticTagSearcher())
-        results = provider.search("hair")
+        results = provider.search("hair", cancel_token=_TOKEN)
         self.assertTrue(
             all(not isinstance(r, SemanticLayerUnavailable) for r in results)
         )
-        baseline = [r.tag for r in provider.search("hair")]
+        baseline = [r.tag for r in provider.search("hair", cancel_token=_TOKEN)]
         self.assertEqual([r.tag for r in results], baseline)
         self.assertEqual(baseline[:2], ["white_hair", "red_hair"])
 
@@ -516,15 +531,18 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """显式跳过语义层时，语义入口一次都不被调用。"""
         semantic = StubSemanticTagSearcher([(5, 0.9)])
         provider = self._provider(semantic=semantic)
-        provider.search("hair", skip_semantic=True)
+        provider.search("hair", skip_semantic=True, cancel_token=_TOKEN)
         self.assertEqual(semantic.calls, [])
 
     def test_skip_semantic_returns_literal_layer_only(self) -> None:
         """跳过语义层的结果等于纯字面层结果（同一查询、同一夹具）。"""
         semantic = StubSemanticTagSearcher([(5, 0.9)])
         provider = self._provider(semantic=semantic)
-        literal_only = [r.tag for r in provider.search("hair", skip_semantic=True)]
-        baseline = [r.tag for r in self._provider().search("hair")]
+        literal_only = [
+            r.tag
+            for r in provider.search("hair", skip_semantic=True, cancel_token=_TOKEN)
+        ]
+        baseline = [r.tag for r in self._provider().search("hair", cancel_token=_TOKEN)]
         self.assertEqual(literal_only, baseline)
         self.assertEqual(literal_only[:2], ["white_hair", "red_hair"])
 
@@ -532,15 +550,29 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         """语义层本会降级成提示项，跳过时既不调用也不产出提示项。"""
         semantic = StubSemanticTagSearcher(error=EmbeddingError("嵌入接口不可用: 超时"))
         provider = self._provider(semantic=semantic)
-        results = provider.search("蓝色", skip_semantic=True)
+        results = provider.search("蓝色", skip_semantic=True, cancel_token=_TOKEN)
         self.assertEqual(semantic.calls, [])
         self.assertEqual(results, [])
+
+    def test_reused_instance_keeps_tokens_apart(self) -> None:
+        """同一实例连续服务两次请求：两次的令牌各自独立，不串台。"""
+        semantic = StubSemanticTagSearcher([(5, 0.9)])
+        provider = self._provider(semantic=semantic)
+        first, second = CancelToken(), CancelToken()
+
+        provider.search("hair", cancel_token=first)
+        provider.search("hair", cancel_token=second)
+
+        self.assertEqual([call[2] for call in semantic.calls], [first, second])
+        # 第一次请求被取消不影响第二次请求的令牌
+        first.cancel()
+        self.assertFalse(second.is_canceled())
 
     # ---- related：共现计数联想 ----
 
     def test_related_aggregates_cooccurrence(self) -> None:
         provider = self._provider(show_nsfw=True)
-        results = provider.related(["1girl"])
+        results = provider.related(["1girl"], cancel_token=_TOKEN)
         tags = [r.tag for r in results]
         self.assertIn("white_hair", tags)
         self.assertIn("solo", tags)
@@ -549,7 +581,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_related_excludes_seed_tags(self) -> None:
         provider = self._provider(show_nsfw=True)
-        results = provider.related(["1girl", "white_hair"])
+        results = provider.related(["1girl", "white_hair"], cancel_token=_TOKEN)
         tags = {r.tag for r in results}
         self.assertNotIn("1girl", tags)
         self.assertNotIn("white_hair", tags)
@@ -557,7 +589,9 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
     def test_related_filters_target_categories(self) -> None:
         provider = self._provider(show_nsfw=True)
         results = provider.related(
-            ["1girl"], target_categories=["General", "Artist", "Meta"]
+            ["1girl"],
+            target_categories=["General", "Artist", "Meta"],
+            cancel_token=_TOKEN,
         )
         tags = {r.tag for r in results}
         self.assertIn("white_hair", tags)  # General
@@ -566,25 +600,25 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
 
     def test_related_filters_nsfw(self) -> None:
         provider = self._provider(show_nsfw=False)
-        results = provider.related(["1girl"])
+        results = provider.related(["1girl"], cancel_token=_TOKEN)
         tags = {r.tag for r in results}
         self.assertNotIn("hentai", tags)
 
         provider_nsfw = self._provider(show_nsfw=True)
-        results_nsfw = provider_nsfw.related(["1girl"])
+        results_nsfw = provider_nsfw.related(["1girl"], cancel_token=_TOKEN)
         self.assertIn("hentai", {r.tag for r in results_nsfw})
 
     def test_related_empty_tags_returns_empty(self) -> None:
         provider = self._provider()
-        self.assertEqual(provider.related([]), [])
+        self.assertEqual(provider.related([], cancel_token=_TOKEN), [])
 
     def test_related_unknown_seed_returns_empty(self) -> None:
         provider = self._provider()
-        self.assertEqual(provider.related(["no_such_tag_xyz"]), [])
+        self.assertEqual(provider.related(["no_such_tag_xyz"], cancel_token=_TOKEN), [])
 
     def test_related_returns_danbooru_tag_fields(self) -> None:
         provider = self._provider(show_nsfw=True)
-        results = provider.related(["1girl"])
+        results = provider.related(["1girl"], cancel_token=_TOKEN)
         white = next(r for r in results if r.tag == "white_hair")
         self.assertEqual(white.cn_name, "白发")
         self.assertEqual(white.wiki, "White hair.")
@@ -596,14 +630,12 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
     def setUp(self) -> None:
         self.loader = MagicMock()
         self.loader.load.return_value = None
-        self.cancel_token = CancelToken()
 
     def _provider(self, show_nsfw: bool = False) -> AkizukiDanbooruTagProvider:
         return AkizukiDanbooruTagProvider(
             "https://mock-api.com",
             loader=self.loader,
             show_nsfw=show_nsfw,
-            cancel_token=self.cancel_token,
         )
 
     @patch("comfyui.danbooru.post_json")
@@ -625,22 +657,24 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
             ]
         }
 
-        results = self._provider().search("girl")
+        # 本次请求的令牌：断言它一路下传到网络层
+        token = CancelToken()
+        results = self._provider().search("girl", cancel_token=token)
 
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0].tag, "1girl")
         self.assertEqual(results[0].cn_name, "女孩")
         self.assertEqual(results[0].category, "General")
         mock_post.assert_called_once()
-        # 取消令牌随请求下传到网络层（取消时可掐断该在途请求）
-        self.assertIs(mock_post.call_args.kwargs["cancel_token"], self.cancel_token)
+        # 取消令牌随本次调用下传到网络层（取消时可掐断该在途请求）
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], token)
 
     @patch("comfyui.danbooru.post_json")
     def test_search_failure(self, mock_post: MagicMock) -> None:
         mock_post.side_effect = HttpError("Network Error")
 
         with self.assertRaises(HttpError):
-            self._provider().search("girl")
+            self._provider().search("girl", cancel_token=_TOKEN)
 
     @patch("comfyui.danbooru.post_json")
     def test_related_success(self, mock_post: MagicMock) -> None:
@@ -655,7 +689,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
             ]
         }
 
-        results = self._provider().related(["1girl", "solo"])
+        results = self._provider().related(["1girl", "solo"], cancel_token=_TOKEN)
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tag, "masterpiece")
@@ -665,7 +699,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
     def test_search_payload_and_nsfw(self, mock_post: MagicMock) -> None:
         mock_post.return_value = {"results": []}
 
-        self._provider().search("girl")
+        self._provider().search("girl", cancel_token=_TOKEN)
         _, payload = mock_post.call_args.args
         self.assertEqual(payload["query"], "girl")
         self.assertEqual(payload["limit"], 20)
@@ -673,7 +707,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
 
         mock_post.reset_mock()
         mock_post.return_value = {"results": []}
-        self._provider(show_nsfw=True).search("girl")
+        self._provider(show_nsfw=True).search("girl", cancel_token=_TOKEN)
         _, payload = mock_post.call_args.args
         self.assertTrue(payload["show_nsfw"])
 
@@ -681,7 +715,9 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
     def test_related_payload_and_nsfw(self, mock_post: MagicMock) -> None:
         mock_post.return_value = {"results": []}
 
-        self._provider().related(["1girl"], target_categories=["General", "Artist"])
+        self._provider().related(
+            ["1girl"], target_categories=["General", "Artist"], cancel_token=_TOKEN
+        )
         _, payload = mock_post.call_args.args
         self.assertEqual(payload["tags"], ["1girl"])
         self.assertEqual(payload["limit"], 100)
@@ -690,7 +726,7 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
 
         mock_post.reset_mock()
         mock_post.return_value = {"results": []}
-        self._provider(show_nsfw=True).related(["1girl"])
+        self._provider(show_nsfw=True).related(["1girl"], cancel_token=_TOKEN)
         _, payload = mock_post.call_args.args
         self.assertTrue(payload["show_nsfw"])
         self.assertNotIn("target_categories", payload)
@@ -700,7 +736,6 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
             provider = AkizukiDanbooruTagProvider.from_env(
                 "https://mock-api.com",
                 loader=self.loader,
-                cancel_token=self.cancel_token,
             )
             self.assertTrue(provider.show_nsfw)
 
@@ -708,9 +743,26 @@ class TestAkizukiDanbooruTagProvider(unittest.TestCase):
             provider = AkizukiDanbooruTagProvider.from_env(
                 "https://mock-api.com",
                 loader=self.loader,
-                cancel_token=self.cancel_token,
             )
             self.assertFalse(provider.show_nsfw)
+
+    @patch("comfyui.danbooru.post_json")
+    def test_reused_instance_keeps_tokens_apart(self, mock_post: MagicMock) -> None:
+        """同一实例连续服务两次请求：两次调用各自的令牌互不串台。"""
+        mock_post.return_value = {"results": []}
+        provider = self._provider()
+        first, second = CancelToken(), CancelToken()
+
+        provider.search("girl", cancel_token=first)
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], first)
+
+        provider.search("solo", cancel_token=second)
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], second)
+
+        # 第一次请求被取消不影响第二次请求的令牌
+        first.cancel()
+        self.assertTrue(first.is_canceled())
+        self.assertFalse(second.is_canceled())
 
 
 class TestCachedDanbooruTagProvider(unittest.TestCase):
@@ -738,9 +790,9 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
         self.mock_inner.search.return_value = tags
 
         # 首次查询，无缓存，应该同步拉取
-        results = self.provider.search("girl")
+        results = self.provider.search("girl", cancel_token=_TOKEN)
         self.assertEqual(results, tags)
-        self.mock_inner.search.assert_called_once_with("girl")
+        self.mock_inner.search.assert_called_once_with("girl", cancel_token=_TOKEN)
 
         # 验证是否写入了缓存
         row = self.db_ctx.connection.execute(
@@ -764,7 +816,7 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
                 ("solo", data_str, now - 10),
             )
 
-        results = self.provider.search("solo")
+        results = self.provider.search("solo", cancel_token=_TOKEN)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tag, "solo")
         self.mock_inner.search.assert_not_called()
@@ -785,7 +837,7 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
                 ("solo", data_str, now - 200),
             )
 
-        results = self.provider.search("solo")
+        results = self.provider.search("solo", cancel_token=_TOKEN)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tag, "solo")
         self.mock_inner.search.assert_not_called()
@@ -819,10 +871,10 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
             new_callable=PropertyMock,
             return_value=_FlakyReadConn(),
         ):
-            results = self.provider.search("girl")
+            results = self.provider.search("girl", cancel_token=_TOKEN)
 
         self.assertEqual(results, tags)
-        self.mock_inner.search.assert_called_once_with("girl")
+        self.mock_inner.search.assert_called_once_with("girl", cancel_token=_TOKEN)
 
     def test_search_cache_corrupt_json_falls_back_to_upstream(self) -> None:
         """缓存数据损坏（JSONDecodeError）回退上游（SWR 语义）。"""
@@ -837,9 +889,9 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
         ]
         self.mock_inner.search.return_value = tags
 
-        results = self.provider.search("solo")
+        results = self.provider.search("solo", cancel_token=_TOKEN)
         self.assertEqual(results, tags)
-        self.mock_inner.search.assert_called_once_with("solo")
+        self.mock_inner.search.assert_called_once_with("solo", cancel_token=_TOKEN)
 
     def test_search_cache_wrong_shape_propagates(self) -> None:
         """缓存数据形状错误（TypeError）不再被吞掉：直接抛出。"""
@@ -851,7 +903,7 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
             )
 
         with self.assertRaises(TypeError):
-            self.provider.search("solo")
+            self.provider.search("solo", cancel_token=_TOKEN)
 
     def test_related_cache_corrupt_json_falls_back_to_upstream(self) -> None:
         """related 缓存数据损坏（JSONDecodeError）回退上游（SWR 语义）。"""
@@ -865,10 +917,10 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
         mock_res = [DanbooruTag("solo", "单人", "Solo.", "General")]
         self.mock_inner.related.return_value = mock_res
 
-        results = self.provider.related(["1girl"])
+        results = self.provider.related(["1girl"], cancel_token=_TOKEN)
         self.assertEqual(results, mock_res)
         self.mock_inner.related.assert_called_once_with(
-            ["1girl"], target_categories=None
+            ["1girl"], target_categories=None, cancel_token=_TOKEN
         )
 
     def test_related_preserves_order(self) -> None:
@@ -880,8 +932,8 @@ class TestCachedDanbooruTagProvider(unittest.TestCase):
 
         self.mock_inner.related.side_effect = [mock_res1, mock_res2]
 
-        res1 = self.provider.related(tags1)
-        res2 = self.provider.related(tags2)
+        res1 = self.provider.related(tags1, cancel_token=_TOKEN)
+        res2 = self.provider.related(tags2, cancel_token=_TOKEN)
 
         self.assertEqual(res1, mock_res1)
         self.assertEqual(res2, mock_res2)
@@ -972,14 +1024,13 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.loader = CachedDanbooruTagLoader(
             self.mock_inner, SQLiteDanbooruCache(self.db_ctx), ttl=3600
         )
-        self.cancel_token = CancelToken()
 
     def tearDown(self) -> None:
         self.db_ctx.close()
 
     def _raw_loader(self) -> AkizukiDanbooruTagLoader:
-        """构造裸 loader；其持有的取消令牌即本用例的 self.cancel_token。"""
-        return AkizukiDanbooruTagLoader("https://mock-api.com", self.cancel_token)
+        """构造裸 loader；取消令牌是调用期参数，由各用例自行传入。"""
+        return AkizukiDanbooruTagLoader("https://mock-api.com")
 
     def test_load_cache_hit(self) -> None:
         now = int(time.time())
@@ -989,7 +1040,7 @@ class TestDanbooruTagLoader(unittest.TestCase):
                 ("1girl", "女孩", "A girl.", "General", now),
             )
 
-        res = self.loader.load("1girl")
+        res = self.loader.load("1girl", cancel_token=_TOKEN)
         assert res is not None
         self.assertEqual(res.tag, "1girl")
         self.assertEqual(res.cn_name, "女孩")
@@ -1000,9 +1051,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         mock_tag = DanbooruTag("solo", "单人", "Solo.", "General")
         self.mock_inner.load.return_value = mock_tag
 
-        res = self.loader.load("solo")
+        res = self.loader.load("solo", cancel_token=_TOKEN)
         self.assertEqual(res, mock_tag)
-        self.mock_inner.load.assert_called_once_with("solo")
+        self.mock_inner.load.assert_called_once_with("solo", cancel_token=_TOKEN)
 
         row = self.db_ctx.connection.execute(
             "SELECT cn_name, wiki, category FROM danbooru_tag_cache WHERE tag = ?",
@@ -1023,9 +1074,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         mock_tag = DanbooruTag("1girl", "女孩新", "A girl.", "General")
         self.mock_inner.load.return_value = mock_tag
 
-        res = self.loader.load("1girl")
+        res = self.loader.load("1girl", cancel_token=_TOKEN)
         self.assertEqual(res, mock_tag)
-        self.mock_inner.load.assert_called_once_with("1girl")
+        self.mock_inner.load.assert_called_once_with("1girl", cancel_token=_TOKEN)
 
     def test_load_cache_read_error_falls_back_to_inner(self) -> None:
         """缓存读取失败（sqlite3.Error）回退到 inner loader（SWR 语义）。"""
@@ -1039,10 +1090,10 @@ class TestDanbooruTagLoader(unittest.TestCase):
             new_callable=PropertyMock,
             return_value=broken_conn,
         ):
-            res = self.loader.load("solo")
+            res = self.loader.load("solo", cancel_token=_TOKEN)
 
         self.assertIsNone(res)
-        self.mock_inner.load.assert_called_once_with("solo")
+        self.mock_inner.load.assert_called_once_with("solo", cancel_token=_TOKEN)
 
     def test_load_cache_read_unexpected_error_propagates(self) -> None:
         """缓存读取的意外错误（非 sqlite3.Error）不再被吞掉：直接抛出。"""
@@ -1056,7 +1107,7 @@ class TestDanbooruTagLoader(unittest.TestCase):
             return_value=broken_conn,
         ):
             with self.assertRaises(KeyError):
-                self.loader.load("solo")
+                self.loader.load("solo", cancel_token=_TOKEN)
 
     def test_write_cache_error_propagates(self) -> None:
         """缓存写入失败不再静默吞掉：直接抛出（快速失败）。"""
@@ -1092,16 +1143,15 @@ class TestDanbooruTagLoader(unittest.TestCase):
         }
 
         raw_loader = self._raw_loader()
-        res = raw_loader.load("solo")
+        token = CancelToken()
+        res = raw_loader.load("solo", cancel_token=token)
 
         assert res is not None
         self.assertEqual(res.tag, "solo")
         self.assertEqual(res.cn_name, "单人")
         self.assertEqual(res.category, "General")
-        # 取消令牌随请求下传到网络层（取消时可掐断该在途请求）
-        self.assertIs(
-            mock_post.call_args.kwargs["cancel_token"], raw_loader.cancel_token
-        )
+        # 取消令牌随本次调用下传到网络层（取消时可掐断该在途请求）
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], token)
 
     @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_upstream_error_propagates(
@@ -1111,7 +1161,7 @@ class TestDanbooruTagLoader(unittest.TestCase):
         mock_post.side_effect = HttpError("Network Error")
 
         with self.assertRaises(HttpError):
-            self._raw_loader().load("solo")
+            self._raw_loader().load("solo", cancel_token=_TOKEN)
 
     @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_missing_field_propagates(
@@ -1123,7 +1173,7 @@ class TestDanbooruTagLoader(unittest.TestCase):
         }
 
         with self.assertRaises(KeyError):
-            self._raw_loader().load("solo")
+            self._raw_loader().load("solo", cancel_token=_TOKEN)
 
     @patch("comfyui.danbooru.post_json")
     def test_akizuki_loader_not_found_returns_none(self, mock_post: MagicMock) -> None:
@@ -1139,13 +1189,13 @@ class TestDanbooruTagLoader(unittest.TestCase):
             ]
         }
 
-        self.assertIsNone(self._raw_loader().load("solo"))
+        self.assertIsNone(self._raw_loader().load("solo", cancel_token=_TOKEN))
 
     def test_akizuki_loader_blank_tag_returns_none(self) -> None:
         """空白 tag 视为「未找到」返回 None，不发起请求。"""
         raw_loader = self._raw_loader()
-        self.assertIsNone(raw_loader.load("   "))
-        self.assertIsNone(raw_loader.load(""))
+        self.assertIsNone(raw_loader.load("   ", cancel_token=_TOKEN))
+        self.assertIsNone(raw_loader.load("", cancel_token=_TOKEN))
 
     @patch("comfyui.danbooru.post_json")
     def test_provider_related_consumes_loader(self, mock_post: MagicMock) -> None:
@@ -1167,9 +1217,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         self.mock_inner.load.return_value = solo_tag
 
         provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader, cancel_token=self.cancel_token
+            "https://mock-api.com", loader=self.loader
         )
-        results = provider.related(["dummy"])
+        results = provider.related(["dummy"], cancel_token=_TOKEN)
 
         self.assertEqual(len(results), 2)
         tag_map = {item.tag: item for item in results}
@@ -1195,9 +1245,9 @@ class TestDanbooruTagLoader(unittest.TestCase):
         }
 
         provider = AkizukiDanbooruTagProvider(
-            "https://mock-api.com", loader=self.loader, cancel_token=self.cancel_token
+            "https://mock-api.com", loader=self.loader
         )
-        results = provider.search("red")
+        results = provider.search("red", cancel_token=_TOKEN)
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tag, "red_hair")
@@ -1310,23 +1360,18 @@ class TestBuildSemanticSearcher(unittest.TestCase):
     def test_build_semantic_searcher_activation_matrix(self) -> None:
         """激活双条件：向量产物存在 且 端点 URL 非空，缺一即传空实现。"""
         data_dir = tempfile.mkdtemp()
-        token = CancelToken()
         try:
             self.assertIsInstance(
-                build_semantic_searcher(data_dir, "", token), NullSemanticTagSearcher
+                build_semantic_searcher(data_dir, ""), NullSemanticTagSearcher
             )
             self.assertIsInstance(
-                build_semantic_searcher(
-                    data_dir, "http://127.0.0.1:1#model=stub", token
-                ),
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
                 NullSemanticTagSearcher,
             )
             _write_single_tag_fixture(data_dir)
             # 语义层常驻 mmap 住向量产物（Windows 下不可删除），忽略清理错误
             self.assertIsInstance(
-                build_semantic_searcher(
-                    data_dir, "http://127.0.0.1:1#model=stub", token
-                ),
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#model=stub"),
                 VectorSemanticTagSearcher,
             )
         finally:
@@ -1337,9 +1382,7 @@ class TestBuildSemanticSearcher(unittest.TestCase):
         with tempfile.TemporaryDirectory() as data_dir:
             _write_single_tag_fixture(data_dir)
             with self.assertRaises(ValueError):
-                build_semantic_searcher(
-                    data_dir, "http://127.0.0.1:1#timeoutMs=nope", CancelToken()
-                )
+                build_semantic_searcher(data_dir, "http://127.0.0.1:1#timeoutMs=nope")
 
 
 class TestBuildDanbooruTagProvider(unittest.TestCase):
@@ -1354,7 +1397,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="",
                 cache=NullDanbooruCache(),
-                cancel_token=CancelToken(),
             )
             self.assertIsInstance(provider, FileDanbooruTagProvider)
 
@@ -1365,7 +1407,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
-            cancel_token=CancelToken(),
         )
         self.assertIsInstance(provider, CachedDanbooruTagProvider)
 
@@ -1376,7 +1417,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
-            cancel_token=CancelToken(),
         )
         self.assertIsNone(provider)
 
@@ -1390,7 +1430,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                     show_nsfw=False,
                     embedding_provider_url="",
                     cache=NullDanbooruCache(),
-                    cancel_token=CancelToken(),
                 )
             self.assertIn("compile_danbooru_data.py", str(ctx.exception))
 
@@ -1404,7 +1443,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="http://127.0.0.1:1#model=stub",
                 cache=NullDanbooruCache(),
-                cancel_token=CancelToken(),
             )
             assert isinstance(provider, FileDanbooruTagProvider)
             self.assertIsInstance(provider.semantic, VectorSemanticTagSearcher)
@@ -1420,7 +1458,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 show_nsfw=False,
                 embedding_provider_url="",
                 cache=NullDanbooruCache(),
-                cancel_token=CancelToken(),
             )
             assert isinstance(provider, FileDanbooruTagProvider)
             self.assertIsInstance(provider.semantic, NullSemanticTagSearcher)
@@ -1438,7 +1475,6 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
                 }
             ]
         }
-        cancel_token = CancelToken()
 
         provider = build_danbooru_tag_provider(
             data_dir="",
@@ -1446,11 +1482,12 @@ class TestBuildDanbooruTagProvider(unittest.TestCase):
             show_nsfw=False,
             embedding_provider_url="",
             cache=NullDanbooruCache(),
-            cancel_token=cancel_token,
         )
         assert provider is not None
-        results = provider.search("girl")
+        # 工厂构建出的 provider 可跨请求复用：令牌由本次调用携带
+        token = CancelToken()
+        results = provider.search("girl", cancel_token=token)
         self.assertEqual([item.tag for item in results], ["1girl"])
         mock_post.assert_called_once()
-        # 调用者注入的令牌一路下传到网络层
-        self.assertIs(mock_post.call_args.kwargs["cancel_token"], cancel_token)
+        # 调用者传入的令牌一路下传到网络层
+        self.assertIs(mock_post.call_args.kwargs["cancel_token"], token)

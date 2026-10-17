@@ -24,11 +24,10 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 
-from comfyui.cancellation import CancelToken  # noqa: E402
+from comfyui.cancellation import never_canceled_token  # noqa: E402
 from comfyui.danbooru import FileDanbooruTagProvider  # noqa: E402
 from comfyui.danbooru_embedding import (  # noqa: E402
     NullSemanticTagSearcher,
-    OpenAIEmbeddingClient,
     SemanticTagSearcher,
     cached_semantic_searcher,
     has_compiled_embeddings,
@@ -110,12 +109,7 @@ def _build_semantic(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:
     """与补全入口同一套激活判定：向量产物存在且端点非空才启用语义层。"""
     if not endpoint_url or not has_compiled_embeddings(data_dir):
         return NullSemanticTagSearcher()
-    endpoint = parse_embedding_endpoint(endpoint_url)
-    # 基准脚本没有取消通道：显式构造一个永不取消的令牌
-    cancel_token = CancelToken()
-    return cached_semantic_searcher(
-        data_dir, endpoint, OpenAIEmbeddingClient(endpoint, cancel_token)
-    )
+    return cached_semantic_searcher(data_dir, parse_embedding_endpoint(endpoint_url))
 
 
 def main() -> None:
@@ -164,12 +158,18 @@ def main() -> None:
     result["semantic_layer"] = type(semantic).__name__
     result["stages"].append(_mem("after_construct", True))
 
-    first_search_ms = _time_one(lambda: provider.search("1girl"))
+    first_search_ms = _time_one(
+        lambda: provider.search("1girl", cancel_token=never_canceled_token())
+    )
     result["first_search_ms"] = round(first_search_ms, 1)
     result["stages"].append(_mem("after_first_search", True))
 
     first_related_tags = related_cases[0][1]
-    first_related_ms = _time_one(lambda: provider.related(list(first_related_tags)))
+    first_related_ms = _time_one(
+        lambda: provider.related(
+            list(first_related_tags), cancel_token=never_canceled_token()
+        )
+    )
     result["first_related_ms"] = round(first_related_ms, 1)
     result["stages"].append(_mem("after_first_related", True))
     tracemalloc.stop()
@@ -178,7 +178,13 @@ def main() -> None:
     search_lat: Dict[str, float] = {}
     for name, q in search_queries:
         search_lat[name] = round(
-            _time_median(lambda query=q: provider.search(query), args.rounds), 1
+            _time_median(
+                lambda query=q: provider.search(
+                    query, cancel_token=never_canceled_token()
+                ),
+                args.rounds,
+            ),
+            1,
         )
     result["search_median_ms"] = search_lat
     result["search_max_ms"] = max(search_lat.values())
@@ -187,14 +193,24 @@ def main() -> None:
     related_lat: Dict[str, float] = {}
     for name, tags in related_cases:
         related_lat[name] = round(
-            _time_median(lambda t=tags: provider.related(list(t)), args.rounds), 1
+            _time_median(
+                lambda t=tags: provider.related(
+                    list(t), cancel_token=never_canceled_token()
+                ),
+                args.rounds,
+            ),
+            1,
         )
     result["related_median_ms"] = related_lat
     result["related_max_ms"] = max(related_lat.values())
 
     # 正确性抽查（不参与计时）
-    result["sample_search_count"] = len(provider.search("1girl"))
-    result["sample_related_count"] = len(provider.related(["1girl"]))
+    result["sample_search_count"] = len(
+        provider.search("1girl", cancel_token=never_canceled_token())
+    )
+    result["sample_related_count"] = len(
+        provider.related(["1girl"], cancel_token=never_canceled_token())
+    )
     result["final_rss_mb"] = round(_rss_mb(), 1)
 
     out_path = Path(args.out)
