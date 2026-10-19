@@ -129,16 +129,20 @@ const { session } = defineProps<{
 defineEmits<(e: "undo") => void>();
 
 const router = useRouter();
-const { getNextDirectory } = useDirectoryProgress();
+// 自动切换场景下的下一个目录：同父目录中当前目录之后第一个未完成目录
+const { nextDirectoryId, resolveNextDirectory } = useDirectoryProgress(
+  () => session.directory.parentId ?? "",
+  () => session.directory.id,
+);
 
-const nextDirectoryId = computed(() => {
-  return getNextDirectory(session.directory.parentId ?? "", session.directory.id);
-});
+// 提交时解析出的目标目录优先于预览值：预览未就绪时解析结果仍能作为创建会话的目标
+const resolvedTargetId = ref<string>();
+const targetDirectoryId = computed(() => resolvedTargetId.value ?? nextDirectoryId.value ?? "");
 
 // 使用共享 composable 自动推导下一目录的配置并创建会话
 // CompletedView 仅合并 rating，不合并 label/query（保持原有行为）
 const { autoCreateSession } = useAutoCreateSession(
-  () => nextDirectoryId.value ?? "",
+  () => targetDirectoryId.value,
   () => session.filter,
   () => session.targetKeep,
   { mergeAllFilterFields: false },
@@ -187,29 +191,32 @@ async function handleCommitted() {
   if (navigating) return;
   navigating = true;
 
-  const nextDirectoryIdValue = nextDirectoryId.value;
+  try {
+    const nextDirectoryIdValue = await resolveNextDirectory();
 
-  if (nextDirectoryIdValue) {
-    try {
-      const nextSession = await autoCreateSession();
+    if (!nextDirectoryIdValue) {
+      // 同父目录内已没有待筛选目录：回到首页，不跨父目录继续查找
+      await router.push("/");
+      return;
+    }
 
-      if (nextSession) {
-        await router.push({
-          name: "session",
-          params: {
-            id: nextSession.id,
-          },
-        });
-      } else {
-        // 下一会话创建失败时允许用户重试
-        navigating = false;
-      }
-    } catch {
-      // 创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
+    resolvedTargetId.value = nextDirectoryIdValue;
+    const nextSession = await autoCreateSession();
+
+    if (nextSession) {
+      await router.push({
+        name: "session",
+        params: {
+          id: nextSession.id,
+        },
+      });
+    } else {
+      // 下一会话创建失败时允许用户重试
       navigating = false;
     }
-  } else {
-    await router.push("/");
+  } catch {
+    // 创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
+    navigating = false;
   }
 }
 </script>

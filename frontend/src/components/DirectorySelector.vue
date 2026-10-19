@@ -168,7 +168,6 @@ import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
 import useStorage from "../composables/useStorage";
-import useDirectoryProgress from "../composables/useDirectoryProgress";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import useDirectories from "../composables/useDirectories";
@@ -212,9 +211,6 @@ const searchQuery = computed({
   },
 });
 
-const { recordDirectoryOrder } = useDirectoryProgress();
-
-// 从缓存中获取统计信息
 const { getCachedStats } = useDirectoryStats();
 
 const backgroundLoadingCount = ref(0);
@@ -381,22 +377,6 @@ const smallUnratedHiddenCount = computed(
 // 被客户端筛选隐藏的子目录总数（去重并集，与列表实际隐藏数量一致）
 const hiddenDirectoryCount = computed(
   () => hiddenStates.value.filter((s) => s.isCompletedHidden || s.isSmallUnratedHidden).length,
-);
-// #endregion
-
-// #region 目录访问顺序与导航控制
-watch(
-  filteredItems,
-  (newItems) => {
-    const navigableDirectoryIds = newItems
-      .filter((item) => !item.isCompleted)
-      .map((item) => item.dir.id);
-
-    if (currentDirectory.value) {
-      recordDirectoryOrder(currentDirectory.value.id, navigableDirectoryIds);
-    }
-  },
-  { immediate: true },
 );
 // #endregion
 
