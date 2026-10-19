@@ -9,6 +9,7 @@ workflow_prompt_pair.py 的单元测试。
 # pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportCallIssue=false
 
 import unittest
+import datetime
 import os
 import json
 import socket
@@ -33,6 +34,9 @@ from .weight_manager import WeightManager
 from . import variant_engine
 from .model_format import ModelFormatConfig
 from .submission import submit as _submit_fn
+
+# 注入的时间依赖：日期模板求值必须是确定值，测试才能断言稳定的 filename_prefix
+_NOW = datetime.datetime(2026, 6, 1, 12, 0, 0)
 
 
 def _apply_prompt_weight_steps(
@@ -640,7 +644,10 @@ class TestFilenameUpdate(unittest.TestCase):
         self, workflow: Dict[str, Any], prompt: Dict[str, Any]
     ) -> tuple[FilenameManager, WorkflowPromptPair]:
         pair = WorkflowPromptPair(workflow, prompt)
-        return FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node), pair
+        return (
+            FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node, _NOW),
+            pair,
+        )
 
     def test_update_output_filenames_basic(self):
         workflow = {
@@ -748,7 +755,7 @@ class TestFilenameUpdate(unittest.TestCase):
         }
         prompt = {}
         pair = WorkflowPromptPair(workflow, prompt)
-        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
+        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node, _NOW)
         with self.assertRaises(ValueError):
             mgr.update_output_filenames()
 
@@ -2091,7 +2098,7 @@ class TestCoverageGaps(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).update_output_filenames()
         self.assertEqual(prompt["1"]["inputs"]["filename_prefix"], "output_old")
 
@@ -2467,7 +2474,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("sub1/sub2")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
@@ -2491,7 +2498,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("sub")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub/ComfyUI")
@@ -2515,7 +2522,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("A/B")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__image_")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__image_")
@@ -2539,7 +2546,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("A/B")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__D__image_")
@@ -2563,7 +2570,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("A/B")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
 
@@ -2586,7 +2593,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("X")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "X/a____b")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "X/a____b")
@@ -2610,7 +2617,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("A/B")
         self.assertEqual(
             prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__E__image_"
@@ -2638,7 +2645,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("A/B")
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
@@ -2667,7 +2674,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
             }
         }
         pair = WorkflowPromptPair(workflow, prompt)
-        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node)
+        mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node, _NOW)
         mgr.adjust_output_directory("A/B")
         first = prompt["9"]["inputs"]["filename_prefix"]
         mgr.adjust_output_directory("A/B")
@@ -2690,7 +2697,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("sub1/sub2")
         self.assertEqual(prompt["2"]["inputs"]["value"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "sub1/sub2/ComfyUI")
@@ -2737,7 +2744,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewProject/NewTitle")
 
         # 源节点在 prompt 中的 input 值被更新
@@ -2789,7 +2796,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("MyProj/MyTitle")
         # 值不变
         self.assertEqual(prompt["2"]["inputs"]["value"], "MyProj")
@@ -2836,7 +2843,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
 
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("SingleDir")
         # prompt 中简单模板求值，空变量（Title 为空）残留连续 __
         self.assertRegex(
@@ -2885,7 +2892,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("TODO")
 
         # 已直接落在目标目录：prompt、workflow、源节点值均不修改
@@ -2919,7 +2926,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewProj")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
@@ -2962,7 +2969,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewProj/NewTitle")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
@@ -3018,7 +3025,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewProj/NewTitle")
         # 源节点得到 rel_dir + 拍平后的静态前缀（无模板可用，走简单回退）
         self.assertEqual(
@@ -3085,7 +3092,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("MyProj/MyTitle")
         # 模板变量被更新
         self.assertEqual(prompt["6"]["inputs"]["value"], "MyTitle")
@@ -3148,7 +3155,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
 
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).update_output_filenames()
 
         # 验证 workflow 节点仍保留模板变量语法
@@ -3208,7 +3215,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
 
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewTitle")
 
         # 1. 验证 prompt 被更新
@@ -3290,7 +3297,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
 
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
         ).adjust_output_directory("NewProject/NewTitle")
 
         # 验证主图 Node 309 实例 widgets_values 被扩展填充，且前置默认值与目标值正确设置
@@ -3360,7 +3367,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         with self.assertRaises(ValueError):
             FilenameManager(
-                pair, pair.date_filename_nodes, pair.title_to_node
+                pair, pair.date_filename_nodes, pair.title_to_node, _NOW
             ).adjust_output_directory("NewTitle")
 
 

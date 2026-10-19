@@ -80,7 +80,7 @@ class RemixRequest:
 
     @property
     def has_edits(self) -> bool:
-        """是否含任何编辑项。不含编辑项的重混等价于直接入列生成。"""
+        """是否含任何编辑项。不含编辑项时是否入列仍由提交边界按内容是否变化判定。"""
         return bool(
             self.add_tags
             or self.remove_tags

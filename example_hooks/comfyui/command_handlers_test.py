@@ -8,6 +8,7 @@ command_handlers.py 的单元测试。
 # pyright: reportPrivateUsage=false, reportUnknownArgumentType=false, reportUnknownVariableType=false, reportArgumentType=false, reportIndexIssue=false, reportAttributeAccessIssue=false, reportUnknownMemberType=false, reportOptionalMemberAccess=false, reportCallIssue=false, reportMissingParameterType=false, reportUnknownParameterType=false
 
 import copy
+import datetime
 import os
 import tempfile
 import unittest
@@ -16,10 +17,15 @@ from unittest.mock import MagicMock, patch
 from argparse import Namespace
 
 from .__main__ import get_parser
-from .command_handlers import RemixHandler, CommandContext
+from .command_handlers import RemixHandler, CommandContext, _submit_jobs
+from .filename_manager import FilenameManager
 from .model_format import ModelFormatConfig
 from .prompt_locator import get_workflow_node_text
 from .remix import RemixRequest, from_args
+from .workflow_prompt_pair import WorkflowPromptPair
+
+# 注入的时间依赖：日期模板求值必须是确定值，测试才能断言稳定的 filename_prefix
+_NOW = datetime.datetime(2026, 6, 1, 12, 0, 0)
 
 
 def _request(argv: List[str]) -> RemixRequest:
@@ -45,6 +51,9 @@ def _context(
         history=history or MagicMock(),
         client=MagicMock(),
         hook_name="test_hook",
+        # 基线在预处理完成之后、编辑之前取：测试里预处理只涉及日期求值，需先执行
+        baseline_prompt=copy.deepcopy(prompt),
+        now=_NOW,
     )
 
 
@@ -85,6 +94,48 @@ def _submissions(patcher: Any) -> List[tuple[Dict[str, Any], Dict[str, Any]]]:
 
     patcher.side_effect = capture
     return captured
+
+
+def _date_workflow_and_prompt(
+    seed_strategy: str = "fixed",
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """带日期文件名模板与种子节点的最小工作流，用于验证预处理阶段的日期求值。"""
+    workflow: Dict[str, Any] = {
+        "nodes": [
+            {"id": "1", "type": "CLIPTextEncode", "widgets_values": ["masterpiece,"]},
+            {
+                "id": "4",
+                "type": "KSampler",
+                "widgets_values": [12345, seed_strategy, 20, 8.0],
+            },
+            {
+                "id": "9",
+                "type": "SaveImage",
+                "widgets_values": ["C/D/%date:yyyyMMdd_hhmmss%"],
+            },
+        ]
+    }
+    prompt: Dict[str, Any] = {
+        "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece,"}},
+        "4": {"class_type": "KSampler", "inputs": {"seed": 12345, "cfg": 8.0}},
+        "9": {
+            "class_type": "SaveImage",
+            # 预置一个过期快照：预处理阶段应把日期模板重新求值为 _NOW 对应的时间
+            "inputs": {"filename_prefix": "C/D/20260601_000000"},
+        },
+    }
+    return workflow, prompt
+
+
+def _refresh_filenames(prompt: Dict[str, Any], workflow: Dict[str, Any]) -> None:
+    """模拟 __main__ 的预处理阶段：按统一时间把日期模板求值进 prompt。
+
+    必须在 `_context` 之前调用，基线才会是预处理完成后的快照（与生产一致）。
+    """
+    pair = WorkflowPromptPair(workflow, prompt)
+    FilenameManager(
+        pair, pair.date_filename_nodes, pair.title_to_node, _NOW
+    ).update_output_filenames()
 
 
 class TestRemixHandlerAdd(unittest.TestCase):
@@ -275,9 +326,11 @@ class TestRemixHandlerVariants(unittest.TestCase):
             [5.0, 5.0, 6.0, 6.0, 7.0, 7.0],
         )
 
-    def test_no_edit_flags_submits_once(self) -> None:
-        """无编辑旗标的重混等价于直接入列。"""
-        workflow, prompt = _workflow_and_prompt("masterpiece,")
+    def test_no_edit_flags_submits_when_seed_changes(self) -> None:
+        """无编辑旗标但种子策略随机化：种子更新使提交内容与基线不同，照常提交。"""
+        workflow, prompt = _workflow_and_prompt(
+            "masterpiece,", seed_strategy="randomize"
+        )
         ctx = _context(prompt, workflow, _request([]))
         with patch("comfyui.command_handlers._submit_fn") as submit:
             RemixHandler().run(ctx)
@@ -294,6 +347,94 @@ class TestRemixHandlerVariants(unittest.TestCase):
         text = captured[0][0]["1"]["inputs"]["text"]
         self.assertIn("(masterpiece:0.5)", text)
         self.assertNotIn("masterpiece,\nmasterpiece", text)
+
+
+class TestRemixSkipWithoutChange(unittest.TestCase):
+    """空转保护：即将提交的 prompt 与基线完全一致时跳过入列，`--no-skip` 例外。"""
+
+    def test_no_edit_with_fixed_seed_is_skipped(self) -> None:
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request([]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_not_called()
+        self.assertTrue(ctx.skipped)
+        self.assertEqual(ctx.skip_reason, "重混未产生任何改动")
+
+    def test_queue_with_fixed_seed_is_skipped(self) -> None:
+        """queue 与无编辑项的 remix 共用同一处理器，判定一致。"""
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, RemixRequest())
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_not_called()
+        self.assertTrue(ctx.skipped)
+
+    def test_no_skip_flag_submits_anyway(self) -> None:
+        """`--no-skip` 语义不变：比较结果相等也照常提交。"""
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request(["--no-skip"]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_called_once()
+        self.assertFalse(ctx.skipped)
+
+    def test_edit_writing_current_value_is_skipped(self) -> None:
+        """--cfg 写回与现值相同的值不构成有意义的改动，不再因编辑动作本身而提交。"""
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request(["--cfg", "8"]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_not_called()
+        self.assertTrue(ctx.skipped)
+
+    def test_effective_edit_submits(self) -> None:
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request(["--cfg", "6"]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            captured = _submissions(submit)
+            RemixHandler().run(ctx)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][0]["4"]["inputs"]["cfg"], 6.0)
+        self.assertFalse(ctx.skipped)
+
+    def test_workflow_only_change_is_skipped(self) -> None:
+        """只比较 prompt：workflow 侧变化（如禁用节点的计数器自增）不构成有意义的改动。"""
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, RemixRequest())
+        changed_workflow = copy.deepcopy(workflow)
+        changed_workflow["nodes"].append(
+            {"id": "99", "type": "Note", "widgets_values": [1]}
+        )
+        pair = WorkflowPromptPair(changed_workflow, copy.deepcopy(prompt))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            submitted = _submit_jobs(ctx, pair, None)
+        self.assertFalse(submitted)
+        submit.assert_not_called()
+
+    def test_date_template_with_fixed_seed_is_skipped(self) -> None:
+        """日期模板在预处理阶段求值一次并进入基线，无编辑项 + fixed 仍能正确跳过。"""
+        workflow, prompt = _date_workflow_and_prompt()
+        _refresh_filenames(prompt, workflow)
+        ctx = _context(prompt, workflow, _request([]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_not_called()
+        self.assertTrue(ctx.skipped)
+
+    def test_date_template_jobs_share_filename_prefix(self) -> None:
+        """日期求值只发生在预处理阶段：同一张图的多次 job 得到相同的 filename_prefix。"""
+        workflow, prompt = _date_workflow_and_prompt(seed_strategy="randomize")
+        _refresh_filenames(prompt, workflow)
+        ctx = _context(prompt, workflow, _request([]), jobs=2)
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            captured = _submissions(submit)
+            RemixHandler().run(ctx)
+        self.assertEqual(len(captured), 2)
+        self.assertEqual(
+            [p["9"]["inputs"]["filename_prefix"] for p, _ in captured],
+            ["C/D/20260601_120000", "C/D/20260601_120000"],
+        )
 
 
 class TestRemixSeedPolicy(unittest.TestCase):

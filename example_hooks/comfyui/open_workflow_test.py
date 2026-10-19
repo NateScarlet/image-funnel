@@ -1,6 +1,7 @@
 # 只允许使用项目测试脚本运行测试
 
 import io
+import datetime
 import json
 import logging
 import os
@@ -26,6 +27,9 @@ from .open_workflow import (
     open_workflow,
     send_workflow,
 )
+
+# 注入的时间依赖：日期模板求值必须是确定值
+_NOW = datetime.datetime(2026, 6, 1, 12, 0, 0)
 
 
 def _make_loader(
@@ -90,6 +94,7 @@ class TestOpenWorkflow(unittest.TestCase):
             _make_request(r"C:\output\sub1\sub2\image.png"),
             _make_loader(prompt, workflow),
             send,
+            _NOW,
         )
 
         self.assertIn("打开", result)
@@ -109,6 +114,7 @@ class TestOpenWorkflow(unittest.TestCase):
             _make_request(r"C:\anywhere\image.png", ":inherit:"),
             _make_loader(prompt, workflow),
             send,
+            _NOW,
         )
 
         self.assertEqual(sent[0][1]["nodes"][0]["widgets_values"][0], "ComfyUI")
@@ -153,6 +159,7 @@ class TestOpenWorkflow(unittest.TestCase):
                 _make_request(r"C:\output\sub\image.png"),
                 _make_loader(prompt, workflow),
                 send,
+                _NOW,
             )
 
         self.assertEqual(
@@ -167,6 +174,7 @@ class TestOpenWorkflow(unittest.TestCase):
                 _make_request(r"C:\out\image.png"),
                 _make_loader(None, None),
                 send,
+                _NOW,
             )
         self.assertEqual(sent, [])
 
@@ -185,11 +193,13 @@ class TestOpenWorkflow(unittest.TestCase):
                 hook_output_dir="",
             ),
             _make_loader(prompt_copy, wf_copy),
+            _NOW,
         )
         open_workflow(
             _make_request(r"C:\output\sub\image.png"),
             _make_loader(prompt_open, wf_open),
             send,
+            _NOW,
         )
 
         assert copy_result is not None

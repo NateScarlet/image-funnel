@@ -10,6 +10,7 @@
 加载器 + 发送函数）由最外层入口构建并注入。
 """
 
+import datetime
 import json
 import os
 import urllib.error
@@ -92,7 +93,10 @@ def send_workflow(request: OpenRequest, workflow: Dict[str, Any]) -> None:
 
 
 def open_workflow(
-    request: OpenRequest, load_metadata: MetadataLoader, send: SendWorkflow
+    request: OpenRequest,
+    load_metadata: MetadataLoader,
+    send: SendWorkflow,
+    now: datetime.datetime,
 ) -> str:
     """把选中图片的工作流送达网页端打开，返回一句给用户看的结果描述。
 
@@ -111,6 +115,7 @@ def open_workflow(
         workflow,
         request.comfyui_output_dir,
         request.hook_output_dir,
+        now,
     )
     send(request, adjusted)
     return "已在 ComfyUI 页面打开该图片的工作流"
@@ -143,7 +148,12 @@ def build_request_from_env() -> OpenRequest:
 
 def main() -> None:
     request = build_request_from_env()
-    result = open_workflow(request, load_prompt_and_workflow, send_workflow)
+    result = open_workflow(
+        request,
+        load_prompt_and_workflow,
+        send_workflow,
+        datetime.datetime.now(),
+    )
     print(result)
 
 

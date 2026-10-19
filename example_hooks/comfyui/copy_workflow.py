@@ -9,6 +9,7 @@
 依赖（请求上下文 + 元数据加载器）由最外层入口构建并注入。
 """
 
+import datetime
 import json
 import os
 from dataclasses import dataclass
@@ -49,6 +50,7 @@ def prepare_workflow(
     workflow: Dict[str, Any],
     comfyui_output_dir: str,
     hook_output_dir: str,
+    now: datetime.datetime,
 ) -> Dict[str, Any]:
     """把图片内置工作流调整为「就地复用」版本并返回调整后的工作流。
 
@@ -64,7 +66,7 @@ def prepare_workflow(
             image_path, comfyui_output_dir, hook_output_dir
         )
         FilenameManager(
-            pair, pair.date_filename_nodes, pair.title_to_node
+            pair, pair.date_filename_nodes, pair.title_to_node, now
         ).adjust_output_directory(rel_dir)
 
     # 所有输出路径统一按节点模型格式重排提示词（与入列、复制一致）
@@ -73,7 +75,9 @@ def prepare_workflow(
 
 
 def build_copy_content(
-    request: CopyRequest, load_metadata: MetadataLoader
+    request: CopyRequest,
+    load_metadata: MetadataLoader,
+    now: datetime.datetime,
 ) -> Optional[CopyResult]:
     """构建复制增强内容。
 
@@ -103,6 +107,7 @@ def build_copy_content(
         workflow,
         request.comfyui_output_dir,
         request.hook_output_dir,
+        now,
     )
 
     return CopyResult(
@@ -134,7 +139,9 @@ def build_request_from_env() -> CopyRequest:
 
 def main() -> None:
     request = build_request_from_env()
-    result = build_copy_content(request, load_prompt_and_workflow)
+    result = build_copy_content(
+        request, load_prompt_and_workflow, datetime.datetime.now()
+    )
     if result is None:
         # 不适用：stdout 保持为空，服务端视为「无增强内容」，前端降级复制文件本体
         return

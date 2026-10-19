@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import copy
+import datetime
 import os
 import sys
 import uuid
@@ -183,6 +185,8 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     has_errors = False
     success_count = 0
     skip_reasons: list[str] = []
+    # 一次 hook 执行内只取一次时间：日期文件名模板据此在各张图上求值出稳定的快照
+    now = datetime.datetime.now()
 
     with progress_notification(client, progress_tag, channel, title) as update:
         for idx, (img_id, path) in enumerate(targets):
@@ -226,6 +230,11 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
             try:
                 pair = WorkflowPromptPair(workflow, prompt)
+                # 一次 hook 执行内只取一次时间并全程复用：日期文件名模板在预处理阶段
+                # 求值一次，基线与提交侧因此天然一致，比较无需排除任何字段
+                filename_mgr = FilenameManager(
+                    pair, pair.date_filename_nodes, pair.title_to_node, now
+                )
                 if config.hook_output_dir == ":inherit:":
                     _LOGGER.debug(
                         "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
@@ -234,15 +243,21 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                     rel_dir = get_relative_output_dir(
                         path, config.comfyui_output_dir, config.hook_output_dir
                     )
-                    FilenameManager(
-                        pair, pair.date_filename_nodes, pair.title_to_node
-                    ).adjust_output_directory(rel_dir)
+                    filename_mgr.adjust_output_directory(rel_dir)
 
                 # 所有输出路径统一按节点模型格式重排提示词（与 adjust_output_dir 同位置、全命令覆盖）
                 format_workflow_prompt_pair(pair)
+
+                # 文件名求值与目录调整、格式重排同层：每张图预处理时刷新一次即可，
+                # 提交循环不再重新求值，同一张图的多次 job 得到相同的 filename_prefix
+                filename_mgr.update_output_filenames()
+
+                # 预处理完成、尚未应用任何编辑：此快照是判定本次提交是否产生有意义改动的基线
+                baseline_prompt = copy.deepcopy(prompt)
             except (ValueError, OSError) as e:
                 _LOGGER.error(
-                    f"Failed to adjust output directory or format prompt text: {e}"
+                    f"Failed to preprocess image workflow/prompt (output directory, "
+                    f"prompt format, filename): {e}"
                 )
                 has_errors = True
                 continue
@@ -262,6 +277,8 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 client=client,
                 history=op_history,
                 hook_name=config.hook_name,
+                baseline_prompt=baseline_prompt,
+                now=now,
             )
             handler.run(ctx)
             if not ctx.skipped:

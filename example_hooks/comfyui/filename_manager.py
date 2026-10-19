@@ -30,10 +30,14 @@ class FilenameManager:
         accessor: NodeAccessor,
         date_filename_nodes: List[NodeInfo],
         title_to_node: Dict[str, str],
+        now: datetime.datetime,
     ):
         self._accessor = accessor
         self._date_filename_nodes = date_filename_nodes
         self._title_to_node = title_to_node
+        # 统一的时间取值：一次执行内的全部日期求值共用同一时刻，否则基线与提交侧
+        # 可能跨秒求值出不同的 filename_prefix
+        self._now = now
 
     def _evaluate_template_for_prompt(
         self,
@@ -46,7 +50,7 @@ class FilenameManager:
         将模板展开求值为发给 API 的静态 filename_prefix 字符串（prompt 不保留 % 模板语法）。
         """
         result = wf_template
-        now = datetime.datetime.now()
+        now = self._now
 
         # 1. 替换非日期变量 %NodeTitle.input_key% 或 %NodeTitle%
         for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
@@ -111,7 +115,7 @@ class FilenameManager:
         if not date_patterns:
             return
 
-        now = datetime.datetime.now()
+        now = self._now
         prompt = self._accessor.prompt
 
         for node_info in self._date_filename_nodes:

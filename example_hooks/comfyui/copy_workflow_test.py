@@ -1,6 +1,7 @@
 # 只允许使用项目测试脚本运行测试
 
 import io
+import datetime
 import json
 import logging
 import os
@@ -19,6 +20,9 @@ from .copy_workflow import (
     main,
 )
 from .model_format import ModelFormatConfig
+
+# 注入的时间依赖：日期模板求值必须是确定值
+_NOW = datetime.datetime(2026, 6, 1, 12, 0, 0)
 
 
 def _make_loader(
@@ -62,7 +66,7 @@ class TestBuildCopyContent(unittest.TestCase):
             comfyui_output_dir="",
             hook_output_dir="",
         )
-        result = build_copy_content(request, _make_loader(prompt, workflow))
+        result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
 
         self.assertIsNotNone(result)
         assert result is not None
@@ -79,7 +83,7 @@ class TestBuildCopyContent(unittest.TestCase):
             comfyui_output_dir="",
             hook_output_dir="",
         )
-        result = build_copy_content(request, _make_loader(prompt, workflow))
+        result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
 
         self.assertIsNotNone(result)
         assert result is not None
@@ -98,7 +102,7 @@ class TestBuildCopyContent(unittest.TestCase):
             comfyui_output_dir="",
             hook_output_dir=":inherit:",
         )
-        result = build_copy_content(request, _make_loader(prompt, workflow))
+        result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
 
         self.assertIsNotNone(result)
         assert result is not None
@@ -145,7 +149,7 @@ class TestBuildCopyContent(unittest.TestCase):
             config = ModelFormatConfig.load()
             config.models["animaPencilXL_v10.safetensors"] = "anima"
             config.save()
-            result = build_copy_content(request, _make_loader(prompt, workflow))
+            result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
 
         assert result is not None
         content = json.loads(result.content)
@@ -161,8 +165,10 @@ class TestBuildCopyContent(unittest.TestCase):
             comfyui_output_dir="",
             hook_output_dir="",
         )
-        self.assertIsNone(build_copy_content(request, _make_loader(None, None)))
-        self.assertIsNone(build_copy_content(request, _make_loader({"9": {}}, None)))
+        self.assertIsNone(build_copy_content(request, _make_loader(None, None), _NOW))
+        self.assertIsNone(
+            build_copy_content(request, _make_loader({"9": {}}, None), _NOW)
+        )
 
     def test_multiple_images_raises_error(self):
         """复制上下文必须恰好一张图片，多值应快速失败"""
@@ -172,7 +178,7 @@ class TestBuildCopyContent(unittest.TestCase):
             hook_output_dir="",
         )
         with self.assertRaises(ValueError):
-            build_copy_content(request, _make_loader(None, None))
+            build_copy_content(request, _make_loader(None, None), _NOW)
 
 
 class TestMainEntrypoint(unittest.TestCase):
