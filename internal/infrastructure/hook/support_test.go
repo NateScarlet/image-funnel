@@ -76,6 +76,27 @@ func (m *mockMetadataUpdatedSub) Subscribe(ctx context.Context) iter.Seq2[*share
 	}
 }
 
+// subscriberCount 已建立的订阅数量
+func (m *mockMetadataUpdatedSub) subscriberCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.subscribers)
+}
+
+// waitSubscriber 等待订阅建立。
+// 事件总线不重放订阅前的事件（与生产 pubsub.InMemoryTopic 语义一致），
+// 订阅建立前发布的事件会静默丢失，测试必须等到订阅就绪后再发布
+func (m *mockMetadataUpdatedSub) waitSubscriber(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for m.subscriberCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("等待元数据事件订阅建立超时")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func (m *mockMetadataUpdatedSub) Publish(ctx context.Context, ev *shared.MetadataUpdatedEvent, opts ...pubsub.PublishOption) error {
 	m.mu.Lock()
 	subs := make([]chan *shared.MetadataUpdatedEvent, len(m.subscribers))
@@ -214,14 +235,15 @@ type testHooksOptions struct {
 
 // testHooks 一套测试用 Runner 及其外部可观测面
 type testHooks struct {
-	t        *testing.T
-	rootDir  string
-	hooksDir string
-	config   configSource
-	dirRepo  *mockDirectoryRepository
-	notifier *mockNotificationSender
-	seams    seams
-	runner   *Runner
+	t           *testing.T
+	rootDir     string
+	hooksDir    string
+	config      configSource
+	dirRepo     *mockDirectoryRepository
+	notifier    *mockNotificationSender
+	metadataSub *mockMetadataUpdatedSub
+	seams       seams
+	runner      *Runner
 }
 
 // newTestHooks 构造测试用 Runner：依赖与 seam 都按具名字段给定，
@@ -249,6 +271,8 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 		notifier = &mockNotificationSender{}
 	}
 
+	metadataSub := &mockMetadataUpdatedSub{}
+
 	graphqlURL := opts.GraphQLURL
 	if graphqlURL == "" {
 		graphqlURL = "http://127.0.0.1:0/graphql"
@@ -268,7 +292,7 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 		DataDir:            rootDir,
 		GraphQLURL:         graphqlURL,
 		Logger:             zap.NewNop(),
-		MetadataUpdatedSub: &mockMetadataUpdatedSub{},
+		MetadataUpdatedSub: metadataSub,
 		FileChangedSub:     &mockFileChangedSub{},
 		TokenSource:        &mockTokenSource{},
 		ImageRepo:          &mockImageRepository{images: images},
@@ -284,15 +308,20 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 	runner := newRunner(deps, sm)
 	t.Cleanup(runner.Close)
 
+	// Runner 在后台 goroutine 中建立事件订阅，订阅建立前发布的事件会被丢弃，
+	// 因此这里等到订阅就绪再交给测试，避免用例与启动过程竞态偶发失败
+	metadataSub.waitSubscriber(t, 5*time.Second)
+
 	return &testHooks{
-		t:        t,
-		rootDir:  rootDir,
-		hooksDir: hooksDir,
-		config:   sm.Config,
-		dirRepo:  dirRepo,
-		notifier: notifier,
-		seams:    sm,
-		runner:   runner,
+		t:           t,
+		rootDir:     rootDir,
+		hooksDir:    hooksDir,
+		config:      sm.Config,
+		dirRepo:     dirRepo,
+		notifier:    notifier,
+		metadataSub: metadataSub,
+		seams:       sm,
+		runner:      runner,
 	}
 }
 

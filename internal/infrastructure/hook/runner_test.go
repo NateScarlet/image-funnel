@@ -23,6 +23,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// TestNewTestHooks_MetadataSubscriptionEstablished 事件总线不重放订阅前的事件：
+// 测试环境构造完成时订阅必须已建立，否则构造后立即发布的事件会被静默丢弃
+func TestNewTestHooks_MetadataSubscriptionEstablished(t *testing.T) {
+	env := newTestHooks(t, testHooksOptions{})
+
+	require.NotZero(t, env.metadataSub.subscriberCount(), "测试环境构造完成时元数据订阅应已建立")
+}
+
 // TestRunner_TOML_Parsing 配置来源逐次读盘解析并映射为领域实体
 func TestRunner_TOML_Parsing(t *testing.T) {
 	env := newTestHooks(t, testHooksOptions{
@@ -86,7 +94,7 @@ func TestRunner_FilteringAndDebounce(t *testing.T) {
 	env.writeHook("exec.toml", hookTOML("exec-test", "执行测试", shellRedirect("echo 1", flagFile),
 		"[on.post_update_image_metadata]\nrating = [4]\nlabel = [\"\"]\n"))
 
-	metadataSub := env.runner.deps.MetadataUpdatedSub.(*mockMetadataUpdatedSub)
+	metadataSub := env.metadataSub
 
 	// 1. 自动触发：测试发送不符合过滤条件的事件（3星）
 	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 3, ""))
@@ -202,7 +210,7 @@ func TestRunner_DirectoryEnvVars_Injection(t *testing.T) {
 		"[on.post_update_image_metadata]\nrating = [4]\nlabel = [\"\"]\n"))
 	expectedDir := env.dirRepo.dirs[relpath.Path{}]
 
-	metadataSub := env.runner.deps.MetadataUpdatedSub.(*mockMetadataUpdatedSub)
+	metadataSub := env.metadataSub
 	metadataSub.Publish(context.Background(), metadataEvent(env.rootDir, 4, ""))
 
 	require.True(t, waitFlagFile(flagFile, 15*time.Second), "应触发钩子并写入 flag 文件")
