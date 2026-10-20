@@ -13,6 +13,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
 from .model_format import MissingDataDirError, ModelFormatConfig

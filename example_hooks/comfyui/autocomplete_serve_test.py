@@ -11,6 +11,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple, cast
 from unittest.mock import patch, MagicMock
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 logging.disable(logging.CRITICAL)
 from .autocomplete import (
     AutocompleteRequest,
@@ -69,6 +73,22 @@ def _cancel_request(req_id: Any) -> str:
 
 
 class TestServe(unittest.TestCase):
+
+    def setUp(self) -> None:
+        # serve 会用进程环境构建真实 provider：外部 shell 的 Danbooru 数据配置
+        # 会让请求加载本机数据集（慢且与断言无关），收尾超时后残留任务还会
+        # 落到下一个测试的 mock 上。这里建立最小环境基线，个别测试按需覆盖。
+        self._env_patcher = patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DATA_DIR": "",
+                "DANBOORU_DATA_DIR": "",
+                "DANBOORU_SEARCH_URL": "",
+                "DANBOORU_SEARCH_INCLUDE_NSFW": "",
+            },
+        )
+        self._env_patcher.start()
+        self.addCleanup(self._env_patcher.stop)
 
     def test_serve_responds_with_suggestions(self) -> None:
         suggestions = [

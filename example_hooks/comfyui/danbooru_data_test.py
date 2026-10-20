@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any, Generator, List, Optional, Sequence, Tuple, cast
 from unittest.mock import patch
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .danbooru_data import (
     COMPILED_COOC_FILENAME,
     COMPILED_TAGS_FILENAME,

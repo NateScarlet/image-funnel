@@ -10,6 +10,10 @@ from unittest.mock import MagicMock, patch, PropertyMock
 import numpy as np
 import time
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .cancellable_http import HttpError
 from .cancellation import CancelToken
 from .db import SQLiteContext

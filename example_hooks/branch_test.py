@@ -1,9 +1,15 @@
+import contextlib
 import io
 import os
 import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+
+# 在 clear=True 的环境补丁生效前定格临时目录基准，避免临时目录落到 cwd
+from test_support import pin_tempdir
+
+pin_tempdir()
 
 logging_disabled = False
 import logging
@@ -43,6 +49,15 @@ class TestBranchHook(unittest.TestCase):
     def tearDown(self):
         self.env_patcher.stop()
 
+    def _run_branch_captured(self, client: GraphQLClient, argv: list[str]) -> str:
+        """运行 run_branch 并捕获 stdout，断言正常退出，避免污染测试输出。"""
+        buf = io.StringIO()
+        with patch.object(sys, "argv", argv), contextlib.redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as cm:
+                run_branch(client)
+        self.assertEqual(cm.exception.code, 0)
+        return buf.getvalue()
+
     def test_parse_args_with_suffix(self):
         with patch.object(sys, "argv", ["branch.py", "custom_suffix"]):
             args = parse_args()
@@ -55,25 +70,22 @@ class TestBranchHook(unittest.TestCase):
 
     def test_run_branch_with_explicit_suffix(self):
         mock_client = _make_client()
-        with patch.object(sys, "argv", ["branch.py", "custom_suffix"]):
-            with self.assertRaises(SystemExit) as cm:
-                run_branch(mock_client)
-            self.assertEqual(cm.exception.code, 0)
-            mock_client.move_images.assert_called_once_with(
-                "dir:test",
-                ["img:1", "img:2"],
-                os.path.normpath("folder1,custom_suffix"),
-            )
+        output = self._run_branch_captured(mock_client, ["branch.py", "custom_suffix"])
+        mock_client.move_images.assert_called_once_with(
+            "dir:test",
+            ["img:1", "img:2"],
+            os.path.normpath("folder1,custom_suffix"),
+        )
+        # 分支成功的用户可见反馈必须指向实际目标目录
+        self.assertIn("folder1,custom_suffix", output)
 
     def test_run_branch_with_default_todo_suffix(self):
         mock_client = _make_client()
-        with patch.object(sys, "argv", ["branch.py"]):
-            with self.assertRaises(SystemExit) as cm:
-                run_branch(mock_client)
-            self.assertEqual(cm.exception.code, 0)
-            mock_client.move_images.assert_called_once_with(
-                "dir:test", ["img:1", "img:2"], os.path.normpath("folder1,TODO")
-            )
+        output = self._run_branch_captured(mock_client, ["branch.py"])
+        mock_client.move_images.assert_called_once_with(
+            "dir:test", ["img:1", "img:2"], os.path.normpath("folder1,TODO")
+        )
+        self.assertIn("folder1,TODO", output)
 
     def test_autocomplete_in_root_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:

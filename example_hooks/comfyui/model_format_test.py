@@ -5,6 +5,10 @@ import unittest
 from typing import Any, Dict, Tuple
 from unittest.mock import patch
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .model_format import (
     ModelFormatConfig,
     MissingDataDirError,

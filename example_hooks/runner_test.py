@@ -6,6 +6,10 @@ import sys
 import tempfile
 import unittest
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 # runner.py 是独立部署的单文件入口，测试通过子进程以真实命令行方式调用它，
 # 覆盖「模块解析 + 进程退出码 + stderr 内容」这整条对外接缝。
 RUNNER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runner.py")

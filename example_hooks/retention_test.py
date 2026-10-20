@@ -191,9 +191,7 @@ class TestRetentionMain(unittest.TestCase):
 
         mock_client.execute.side_effect = side_effect
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        self._run_retention_captured(mock_client)
         self.assertEqual(len(call_log), 2)
 
     def test_zero_max_retain(self):
@@ -221,9 +219,8 @@ class TestRetentionMain(unittest.TestCase):
         ]
 
         with patch.dict(os.environ, {"HOOK_MAX_RETAIN": "0"}, clear=False):
-            with self.assertRaises(SystemExit) as cm:
-                run_retention(mock_client)
-            self.assertEqual(cm.exception.code, 0)
+            output = self._run_retention_captured(mock_client)
+            self.assertIn("保留最新 0 张", output)
             mock_client.execute.assert_called()
             # 实际执行了移除：不应写入操作覆盖
             self.assertIsNone(self._read_action_override())
@@ -321,9 +318,7 @@ class TestRetentionMain(unittest.TestCase):
 
         mock_client.execute.side_effect = side_effect
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        self._run_retention_captured(mock_client)
         self.assertEqual(trash_ids, ["img:1", "img:2"])
 
     def test_trash_filter_includes_rating(self):
@@ -355,9 +350,7 @@ class TestRetentionMain(unittest.TestCase):
 
         mock_client.execute.side_effect = side_effect
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        self._run_retention_captured(mock_client)
 
         filter_by: Dict[str, Any] = trash_variables[0]["input"]["filterBy"]
         self.assertIn("id", filter_by)
@@ -488,9 +481,7 @@ class TestRetentionMain(unittest.TestCase):
 
         mock_client.execute.side_effect = side_effect
 
-        with self.assertRaises(SystemExit) as cm:
-            run_retention(mock_client)
-        self.assertEqual(cm.exception.code, 0)
+        self._run_retention_captured(mock_client)
         # 应该获取了所有3页的数据
         self.assertEqual(calls, [1, 2, 3])
 

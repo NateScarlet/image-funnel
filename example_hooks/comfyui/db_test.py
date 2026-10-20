@@ -4,6 +4,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .db import SQLiteContext
 
 

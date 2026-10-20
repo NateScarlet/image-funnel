@@ -97,7 +97,6 @@ class TestComfyUIHook(unittest.TestCase):
                             pr_lines,
                             f"Equivalence failed for node {nid} in {png_path}.\nWorkflow stripped:\n{wf_lines}\nPrompt actual:\n{pr_lines}",
                         )
-        print("Equivalence tests successfully verified on all sample PNG files!")
 
     def test_get_target_clip_node_no_locator(self):
         # 模拟没有 KSampler 连线（即没有定位符）的情况，测试通过关键词匹配查找最佳 CLIPTextEncode

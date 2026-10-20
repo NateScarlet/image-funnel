@@ -5,6 +5,10 @@ import sqlite3
 import tempfile
 import unittest
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .db import SQLiteContext
 from .operation_history import OperationHistory
 from .remix import RemixRequest, LoraEdit, PromptWeightEdit

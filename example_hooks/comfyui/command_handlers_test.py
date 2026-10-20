@@ -9,12 +9,18 @@ command_handlers.py 的单元测试。
 
 import copy
 import datetime
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from typing import Any, Dict, List, cast
 from unittest.mock import MagicMock, patch
 from argparse import Namespace
+
+from test_support import pin_tempdir
+
+pin_tempdir()
 
 from .__main__ import get_parser
 from .command_handlers import RemixHandler, CommandContext, _submit_jobs
@@ -478,16 +484,20 @@ class TestRemixSeedPolicy(unittest.TestCase):
 class TestSetModelFormatCommand(unittest.TestCase):
     def test_set_model_format_persists_disabled(self) -> None:
         """`/set-model-format <model> disabled` 应写入全局配置并保留 disabled 值。"""
-        tmp_dir = tempfile.mkdtemp()
-
         args = Namespace(model="someModel.safetensors", format="disabled")
-        with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tmp_dir}):
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": tmp_dir}
+        ):
             from .command_handlers import handle_set_model_format_cmd
 
-            handle_set_model_format_cmd(args)
+            with redirect_stdout(stdout):
+                handle_set_model_format_cmd(args)
 
             reloaded = ModelFormatConfig.load()
             self.assertEqual(reloaded.models.get("someModel.safetensors"), "disabled")
+        # 命令的用户可见反馈：报告写入的模型与保存位置
+        self.assertIn("someModel.safetensors", stdout.getvalue())
 
     def test_set_model_format_requires_both_arguments(self) -> None:
         """缺少 model 或 format 参数时快速失败。"""

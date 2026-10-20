@@ -11,6 +11,10 @@ from contextlib import redirect_stdout
 from typing import Any, Dict, Optional, Tuple
 from unittest.mock import patch
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 logging.disable(logging.CRITICAL)
 
 from .copy_workflow import (

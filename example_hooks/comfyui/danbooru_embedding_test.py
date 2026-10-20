@@ -27,6 +27,10 @@ from unittest.mock import patch
 
 import numpy as np
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 from .cancellable_http import HttpCanceledError, HttpError
 from .cancellation import CancelToken
 from .danbooru_embedding import (

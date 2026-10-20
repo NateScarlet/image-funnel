@@ -13,6 +13,10 @@ from unittest.mock import ANY, patch, MagicMock
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 logging.disable(logging.CRITICAL)
 # _load_workflow_data 是已见提示词收集的唯一入口，测试直接覆盖该内部接缝
 # pyright: reportPrivateUsage=false
@@ -54,9 +58,16 @@ from .workflow_prompt_pair import WorkflowPromptPair
 
 @contextmanager
 def _data_dir_env() -> Generator[str, None, None]:
-    """把 IMAGE_FUNNEL_DATA_DIR 临时指向空目录（新增标签补全按需加载模型格式配置）。"""
+    """把数据目录临时指向空目录（新增标签补全按需加载模型格式配置）。
+
+    同时清空 DANBOORU_DATA_DIR：外部 shell 若指向真实编译产物，本地链路会
+    绕过这里的空目录直接加载数据集，使断言依赖本机数据。
+    """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tmp_dir}):
+        with patch.dict(
+            os.environ,
+            {"IMAGE_FUNNEL_DATA_DIR": tmp_dir, "DANBOORU_DATA_DIR": ""},
+        ):
             yield tmp_dir
 
 

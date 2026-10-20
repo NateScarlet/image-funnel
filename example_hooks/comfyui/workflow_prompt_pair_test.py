@@ -20,6 +20,10 @@ from typing import Any, Dict, List, Optional, cast, Type
 from unittest.mock import patch
 from PIL import Image
 
+from test_support import pin_tempdir
+
+pin_tempdir()
+
 
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_comment import strip_comments
