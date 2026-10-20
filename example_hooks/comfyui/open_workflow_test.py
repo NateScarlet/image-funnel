@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 logging.disable(logging.CRITICAL)
 
+from .focus import FocusOutcome
 from .model_format import ModelFormatConfig
 from .open_workflow import (
     OPEN_ROUTE_PATH,
@@ -64,14 +65,29 @@ def _make_pair_fixture(prefix: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 def _make_sender() -> Tuple[List[Tuple[OpenRequest, Dict[str, Any]]], Any]:
-    """构造注入的发送函数 mock：记录 (request, workflow) 调用"""
+    """构造注入的发送函数 mock：记录 (request, workflow) 调用并返回目标 sid"""
 
     sent: List[Tuple[OpenRequest, Dict[str, Any]]] = []
 
-    def _send(request: OpenRequest, workflow: Dict[str, Any]) -> None:
+    def _send(request: OpenRequest, workflow: Dict[str, Any]) -> Optional[str]:
         sent.append((request, workflow))
+        return "target-sid"
 
     return sent, _send
+
+
+def _make_activation(
+    outcome: FocusOutcome = FocusOutcome.CONFIRMED,
+) -> Tuple[List[Optional[str]], Any]:
+    """构造注入的激活确认入口 mock：记录传入的 sid 并给出固定结果"""
+
+    calls: List[Optional[str]] = []
+
+    def _activate(sid: Optional[str]) -> FocusOutcome:
+        calls.append(sid)
+        return outcome
+
+    return calls, _activate
 
 
 def _make_request(image_path: str, hook_output_dir: str = "") -> OpenRequest:
@@ -89,11 +105,13 @@ class TestOpenWorkflow(unittest.TestCase):
         """正常路径：送达的工作流已把输出目录调整为图片所在目录"""
         workflow, prompt = _make_pair_fixture("ComfyUI")
         sent, send = _make_sender()
+        _, activate = _make_activation()
 
         result = open_workflow(
             _make_request(r"C:\output\sub1\sub2\image.png"),
             _make_loader(prompt, workflow),
             send,
+            activate,
             _NOW,
         )
 
@@ -109,11 +127,13 @@ class TestOpenWorkflow(unittest.TestCase):
         """:inherit: 时完全关闭目录调整，原样送达工作流"""
         workflow, prompt = _make_pair_fixture("ComfyUI")
         sent, send = _make_sender()
+        _, activate = _make_activation()
 
         open_workflow(
             _make_request(r"C:\anywhere\image.png", ":inherit:"),
             _make_loader(prompt, workflow),
             send,
+            activate,
             _NOW,
         )
 
@@ -150,6 +170,7 @@ class TestOpenWorkflow(unittest.TestCase):
             },
         }
         sent, send = _make_sender()
+        _, activate = _make_activation()
 
         with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": tempfile.mkdtemp()}):
             config = ModelFormatConfig.load()
@@ -159,6 +180,7 @@ class TestOpenWorkflow(unittest.TestCase):
                 _make_request(r"C:\output\sub\image.png"),
                 _make_loader(prompt, workflow),
                 send,
+                activate,
                 _NOW,
             )
 
@@ -169,11 +191,13 @@ class TestOpenWorkflow(unittest.TestCase):
     def test_missing_metadata_raises_error(self):
         """无内嵌工作流的图片不适用：快速失败，不静默降级"""
         sent, send = _make_sender()
+        _, activate = _make_activation()
         with self.assertRaises(ValueError):
             open_workflow(
                 _make_request(r"C:\out\image.png"),
                 _make_loader(None, None),
                 send,
+                activate,
                 _NOW,
             )
         self.assertEqual(sent, [])
@@ -183,6 +207,7 @@ class TestOpenWorkflow(unittest.TestCase):
         wf_copy, prompt_copy = _make_pair_fixture("ComfyUI")
         wf_open, prompt_open = _make_pair_fixture("ComfyUI")
         sent, send = _make_sender()
+        _, activate = _make_activation()
 
         from .copy_workflow import CopyRequest, build_copy_content
 
@@ -199,11 +224,46 @@ class TestOpenWorkflow(unittest.TestCase):
             _make_request(r"C:\output\sub\image.png"),
             _make_loader(prompt_open, wf_open),
             send,
+            activate,
             _NOW,
         )
 
         assert copy_result is not None
         self.assertEqual(json.loads(copy_result.content), sent[0][1])
+
+    def test_activates_target_window_after_delivery(self):
+        """送达后把响应里的 sid 交给与 focus 相同的激活确认入口"""
+        workflow, prompt = _make_pair_fixture("ComfyUI")
+        _, send = _make_sender()
+        calls, activate = _make_activation()
+
+        result = open_workflow(
+            _make_request(r"C:\output\sub\image.png"),
+            _make_loader(prompt, workflow),
+            send,
+            activate,
+            _NOW,
+        )
+
+        self.assertEqual(calls, ["target-sid"])
+        self.assertIn("确认", result)
+
+    def test_unconfirmed_focus_does_not_fail_delivery(self):
+        """确认失败不影响「工作流已送达」这一事实，仍按成功输出"""
+        workflow, prompt = _make_pair_fixture("ComfyUI")
+        _, send = _make_sender()
+        _, activate = _make_activation(FocusOutcome.UNCONFIRMED)
+
+        result = open_workflow(
+            _make_request(r"C:\output\sub\image.png"),
+            _make_loader(prompt, workflow),
+            send,
+            activate,
+            _NOW,
+        )
+
+        self.assertIn("打开", result)
+        self.assertIn("无法确认", result)
 
 
 class TestBuildWorkflowName(unittest.TestCase):
@@ -228,8 +288,11 @@ class TestBuildWorkflowName(unittest.TestCase):
 class _FakeResponse:
     """urlopen 的最小响应替身：只需支持上下文管理器与 read。"""
 
+    def __init__(self, body: bytes = b"{}") -> None:
+        self._body = body
+
     def read(self) -> bytes:
-        return b"{}"
+        return self._body
 
     def __enter__(self) -> "_FakeResponse":
         return self
@@ -282,6 +345,30 @@ class TestSendWorkflow(unittest.TestCase):
 
         with patch("urllib.request.urlopen", _urlopen):
             send_workflow(_make_request(r"C:\output\sub\image.png"), {"nodes": []})
+
+    def test_returns_target_sid_from_response(self):
+        """打开路由在响应里给出本次送达的目标 sid"""
+        with patch(
+            "urllib.request.urlopen",
+            return_value=_FakeResponse(b'{"sid": "target-sid"}'),
+        ):
+            sid = send_workflow(_make_request(r"C:\out\image.png"), {"nodes": []})
+
+        self.assertEqual(sid, "target-sid")
+
+    def test_legacy_response_without_sid_returns_none(self):
+        """旧版扩展返回空响应：送达仍然成功，只是拿不到 sid 无法确认"""
+        with patch("urllib.request.urlopen", return_value=_FakeResponse(b"")):
+            sid = send_workflow(_make_request(r"C:\out\image.png"), {"nodes": []})
+
+        self.assertIsNone(sid)
+
+    def test_malformed_response_degrades_to_no_sid(self):
+        """响应体不符合契约：工作流已送达，按拿不到 sid 降级而不是改判失败"""
+        with patch("urllib.request.urlopen", return_value=_FakeResponse(b"not json")):
+            sid = send_workflow(_make_request(r"C:\out\image.png"), {"nodes": []})
+
+        self.assertIsNone(sid)
 
     def test_404_raises_route_missing_error(self):
         """目标返回 404：提示 comfyui-nodes 扩展未安装/未启用"""
@@ -354,7 +441,13 @@ class TestMainEntrypoint(unittest.TestCase):
         with patch.dict(os.environ, env), patch(
             "comfyui.open_workflow.load_prompt_and_workflow",
             return_value=(prompt, workflow),
-        ), patch("comfyui.open_workflow.send_workflow"):
+        ), patch(
+            "comfyui.open_workflow.send_workflow",
+            return_value="target-sid",
+        ), patch(
+            "comfyui.open_workflow.build_activation",
+            return_value=_make_activation()[1],
+        ):
             stdout = io.StringIO()
             with redirect_stdout(stdout):
                 main()

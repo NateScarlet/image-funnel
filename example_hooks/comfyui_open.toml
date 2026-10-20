@@ -1,6 +1,6 @@
 id = "comfyui-open"
 name = "在 ComfyUI 页面打开"
-description = "把图片内嵌工作流直接送达最近打开的 ComfyUI 页面并打开，输出目录会调整为图片当前所在目录，无需复制粘贴"
+description = "把图片内嵌工作流直接送达最近打开的 ComfyUI 页面并打开，输出目录会调整为图片当前所在目录；送达后自动切换到目标 ComfyUI 窗口，无需复制粘贴"
 command = "uv run runner.py comfyui.open_workflow"
 
 [on.image_dispatch] # 手动派发：用户右键选中图片时触发

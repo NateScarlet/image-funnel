@@ -1,0 +1,7 @@
+id = "comfyui-focus"
+name = "切回 ComfyUI 窗口"
+description = "只做激活与确认：把 ComfyUI 窗口带到前台，并按 sid 确认接收页面已在前台；不读取图片、不发送工作流。由调用方（如 Krita 导出脚本）传入 sid 调用"
+command = "uv run runner.py comfyui.focus <sid>"
+
+[env]
+# COMFYUI_URL = ""        # ComfyUI 服务地址。默认 http://127.0.0.1:8188
