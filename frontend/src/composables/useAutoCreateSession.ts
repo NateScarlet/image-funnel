@@ -1,8 +1,39 @@
 import { toValue, type MaybeRefOrGetter } from "vue";
-import { useDirectoryState } from "./useDirectoryState";
 import useSession from "./domain/useSession";
-import type { ImageFiltersInput } from "@/graphql/generated";
+import query from "@/graphql/utils/query";
+import {
+  DirectoryLastSessionDocument,
+  DirectoryStateDocument,
+  type ImageFiltersInput,
+} from "@/graphql/generated";
 import optionalArray from "@/utils/optionalArray";
+
+// #region 目录配置读取
+/**
+ * 命令式读取目录的状态快照与上次会话配置。
+ * 目标目录可能在调用前一刻才确定（如完成会话后自动切换），此时响应式查询尚未返回，
+ * 不能依赖 useDirectoryState 的缓存，必须直接查询并等待结果。
+ */
+async function fetchDirectorySessionConfig(directoryId: string) {
+  const [stateResult, lastSessionResult] = await Promise.all([
+    query(DirectoryStateDocument, { variables: { id: directoryId } }),
+    query(DirectoryLastSessionDocument, { variables: { id: directoryId } }),
+  ]);
+
+  const stateNode = stateResult.data?.node;
+  const lastSessionNode = lastSessionResult.data?.node;
+  const serverState = stateNode?.__typename === "Directory" ? stateNode.state : undefined;
+
+  return {
+    lastSession:
+      lastSessionNode?.__typename === "Directory"
+        ? (lastSessionNode.lastSession ?? undefined)
+        : undefined,
+    lastSessionState: serverState?.lastSession,
+    defaultState: serverState?.default,
+  };
+}
+// #endregion
 
 // #region useAutoCreateSession Composable
 /**
@@ -19,9 +50,6 @@ export function useAutoCreateSession(
   fallbackTargetKeep: MaybeRefOrGetter<number>,
   options?: { mergeAllFilterFields?: boolean },
 ) {
-  const { lastSession, lastSessionState, defaultState } = useDirectoryState(() =>
-    toValue(directoryId),
-  );
   const { createSession } = useSession("");
 
   /**
@@ -31,12 +59,14 @@ export function useAutoCreateSession(
     const dirId = toValue(directoryId);
     if (!dirId) return undefined;
 
+    const { lastSession, lastSessionState, defaultState } =
+      await fetchDirectorySessionConfig(dirId);
     const filter = toValue(fallbackFilter);
     const targetKeep = toValue(fallbackTargetKeep);
     const mergeAll = options?.mergeAllFilterFields !== false;
 
     // 以目录 active lastSession 或 state 中的 lastSession 快照为准，缺失项回退到传入的 fallback，应用最小参数原则（不透传空切片）
-    const lastFilter = lastSession.value?.filter ?? lastSessionState.value?.filter;
+    const lastFilter = lastSession?.filter ?? lastSessionState?.filter;
     const finalFilter: ImageFiltersInput = {
       rating: optionalArray(lastFilter?.rating)?.slice() ?? optionalArray(filter.rating)?.slice(),
     };
@@ -47,14 +77,13 @@ export function useAutoCreateSession(
         optionalArray(lastFilter?.label)?.slice() ?? optionalArray(filter.label)?.slice();
       finalFilter.query = lastFilter?.query || filter.query || undefined;
     }
-    const finalTargetKeep =
-      lastSession.value?.targetKeep ?? lastSessionState.value?.targetKeep ?? targetKeep;
+    const finalTargetKeep = lastSession?.targetKeep ?? lastSessionState?.targetKeep ?? targetKeep;
 
     return await createSession({
       directoryId: dirId,
       filter: finalFilter,
       targetKeep: finalTargetKeep,
-      createActions: defaultState.value?.writeActions ?? undefined,
+      createActions: defaultState?.writeActions ?? undefined,
     });
   }
 
