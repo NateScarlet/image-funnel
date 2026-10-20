@@ -111,6 +111,32 @@ class TestModelFormat(unittest.TestCase):
         self.assertIsNone(infer_format_from_prompt("score_7, score_8"))
         self.assertIsNone(infer_format_from_prompt("// only comments"))
 
+    def test_infer_format_ignores_whitespace_outside_tags(self) -> None:
+        """标签之间、行首行尾与权重写法周围的空白不算证据，只有标签名内部的词间分隔算。"""
+        # 每个标签后面留一个空格、每组标签各占一行的 sdxl 提示词：排版空格远多于下划线，
+        # 按全文数空格会把它读成 anima
+        prompt = (
+            "first_tag, second_tag, \n\n"
+            "(third_tag, fourth_tag:0.2), \n\n"
+            "fifth_tag, sixth_tag, seventh_tag, \n"
+            "eighth_tag, \n"
+        )
+        self.assertEqual(infer_format_from_prompt(prompt), "sdxl")
+        # 权重括号与权重后缀周围的同理
+        self.assertEqual(infer_format_from_prompt("( blue_eyes:1.2 ), 1girl"), "sdxl")
+        self.assertEqual(infer_format_from_prompt("( blue eyes:1.2 ), 1girl"), "anima")
+
+    def test_infer_format_without_word_separator_returns_none(self) -> None:
+        """纯单词标签的提示词两个方向都没有证据，不猜格式。"""
+        self.assertIsNone(infer_format_from_prompt("1girl, solo"))
+        self.assertIsNone(infer_format_from_prompt("  alpha, \n\tbeta  "))
+        # 全角逗号两侧的空白同理
+        self.assertIsNone(infer_format_from_prompt("one, 1girl， two"))
+
+    def test_infer_format_tie_is_sdxl(self) -> None:
+        """空格与下划线一样多时取 sdxl，与既有行为一致。"""
+        self.assertEqual(infer_format_from_prompt("blue eyes, red_hair"), "sdxl")
+
     def test_infer_format_ignores_inline_line_comments(self) -> None:
         """行内 // 到行尾都算注释：1girl//blue_eyes 只剩 1girl，推不出格式。"""
         self.assertIsNone(infer_format_from_prompt("1girl//blue_eyes"))

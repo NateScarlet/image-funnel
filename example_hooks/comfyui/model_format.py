@@ -8,6 +8,7 @@ from typing import (
     Any,
     Dict,
     Iterable,
+    Iterator,
     List,
     Optional,
     Set,
@@ -16,7 +17,7 @@ from typing import (
 )
 
 from .node_accessor import NodeAccessor
-from .prompt_comment import iter_prompt_segments, strip_comments
+from .prompt_comment import iter_prompt_segments
 
 _SCORE_TAG_PATTERN = re.compile(r"\bscore_[0-9]+(?:_[a-z0-9]+)*\b", re.IGNORECASE)
 
@@ -127,28 +128,98 @@ class ModelFormatConfig:
         return fmt
 
 
+# #region 格式推理
+
+# 标签分隔符：ComfyUI 提示词按逗号（半角与全角）与换行断标签
+_TAG_SEPARATORS = frozenset({",", "，", "\r", "\n"})
+# 权重分组的括号与权重后缀：标签名在这些位置结束
+_TAG_OPEN_BRACKETS = frozenset("([{")
+_TAG_CLOSE_BRACKETS = frozenset(")]}")
+_WEIGHT_SUFFIX_PATTERN = re.compile(r":-?\d+(?:\.\d+)?")
+# <lora:...> 之类加载指令不是 Danbooru 标签，名字里的下划线不能当格式依据
+_LOAD_DIRECTIVE_PATTERN = re.compile(r"<[^>]*>")
+
+
+def _iter_tag_names(text: str) -> Iterator[str]:
+    """按提示词词法交出标签名，供格式推理统计词间分隔。
+
+    标签名在两处断开：标签分隔符（逗号与换行）与权重写法（分组括号、`:1.2` 后缀）。
+    `:1.2` 只在分组括号内部才算权重，与 ComfyUI 的 EditAttention 一致。注释整段不参与，
+    断开处两端的空白随之丢掉——因此夹在分隔符、注释或权重写法旁边的排版空白不会进入
+    标签名，也不会被当成词间分隔。
+    """
+    run: List[str] = []
+
+    def flush() -> Iterator[str]:
+        name = "".join(run).strip()
+        run.clear()
+        if name:
+            yield name
+
+    depth = 0
+    for segment in iter_prompt_segments(text):
+        if segment.is_comment:
+            yield from flush()
+            continue
+        pos = 0
+        while pos < len(segment.text):
+            ch = segment.text[pos]
+            weight = (
+                _WEIGHT_SUFFIX_PATTERN.match(segment.text, pos) if depth > 0 else None
+            )
+            if weight is not None:
+                yield from flush()
+                pos = weight.end()
+            elif ch in _TAG_SEPARATORS:
+                # 括号深度按行重置，与前端词法一致：换行之后另起一个分组
+                if ch in "\r\n":
+                    depth = 0
+                yield from flush()
+                pos += 1
+            elif ch in _TAG_OPEN_BRACKETS:
+                depth += 1
+                yield from flush()
+                pos += 1
+            elif ch in _TAG_CLOSE_BRACKETS:
+                depth = max(depth - 1, 0)
+                yield from flush()
+                pos += 1
+            else:
+                run.append(ch)
+                pos += 1
+    yield from flush()
+
+
 def infer_format_from_prompt(prompt_text: str) -> Optional[str]:
     """基于提示词文本推理模型期望的标签格式。
 
-    先剔除注释区段与 score_* 评分标签（评分标签是唯一在 anima/sdxl 下都保留下划线的
-    标签，不能作为判断依据），再比较空格与下划线数量：空格多于下划线 → anima；
-    否则 → sdxl。若空格与下划线均为 0（空文本或仅含评分标签），无法判断，返回 None。
+    证据只取自标签名内部的词间分隔：anima 把标签名里的词间空白写成空格（`blue eyes`），
+    sdxl 写成下划线（`blue_eyes`）。标签之间、行首行尾以及权重写法周围的空白都不算——
+    那些空白跟着排版走，与格式无关：每个标签后面留一个空格、每组标签各占一行的 sdxl
+    提示词能堆出成片的空格，按全文数空格会把它读成 anima。
+
+    注释区段与 `score_*` 评分标签不参与（评分标签是唯一在 anima/sdxl 下都保留下划线的
+    标签，不能作为判断依据），`<lora:...>` 之类加载指令同样不参与。空格多于下划线 →
+    anima，否则 → sdxl；两个方向都没有证据（空文本、仅含评分标签，或全是单词标签）时
+    无法判断，返回 None。
     """
-    if not prompt_text:
-        return None
-
-    masked = _SCORE_TAG_PATTERN.sub("", strip_comments(prompt_text))
-    # 若剔除评分标签后已无任何标签内容（如仅剩 ", " 等分隔符），无法判断
-    if not re.search(r"[A-Za-z0-9\u4e00-\u9fff]", masked):
-        return None
-
-    space_count = masked.count(" ")
-    underscore_count = masked.count("_")
+    space_count = 0
+    underscore_count = 0
+    for name in _iter_tag_names(prompt_text):
+        if _SCORE_TAG_PATTERN.fullmatch(name) or _LOAD_DIRECTIVE_PATTERN.fullmatch(
+            name
+        ):
+            continue
+        space_count += name.count(" ")
+        underscore_count += name.count("_")
 
     if space_count == 0 and underscore_count == 0:
         return None
 
     return "anima" if space_count > underscore_count else "sdxl"
+
+
+# #endregion
 
 
 # 格式键：提示词标签格式属于检查点/模型架构（Anima vs SDXL），只接受
