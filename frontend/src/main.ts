@@ -14,6 +14,10 @@ import { createVersionCheck } from "./utils/versionCheck";
 import query from "./graphql/utils/query";
 import { MetaDocument } from "./graphql/generated";
 import { websocketConnected } from "./events";
+import { migrate } from "./migration";
+
+// 游标导航上线前清理旧的目录顺序记录，避免遗留数据无限期占用 localStorage
+migrate();
 
 const routes: RouteRecordRaw[] = [
   { path: "/", component: HomeView },

@@ -300,7 +300,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, useTemplateRef } from "vue";
+import { ref, computed, nextTick, shallowRef, useTemplateRef, watch, watchEffect } from "vue";
 import { useHotkeys } from "@/composables/useHotkeys";
 import { useDirectoryState } from "../composables/useDirectoryState";
 import { useRoute, useRouter } from "vue-router";
@@ -334,7 +334,13 @@ import NotificationCenterButton from "../components/NotificationCenterButton.vue
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
-import { sortBy } from "es-toolkit";
+import {
+  createDirectoryCursor,
+  findNextDirectory,
+  findPreviousDirectory,
+  sortDirectoryOrder,
+} from "@/utils/directoryOrder";
+import { getBrowseCursor, setBrowseCursor } from "@/composables/useDirectoryCursor";
 
 const { pairingRequests } = useDevices();
 const moreMenuDialog = useModalDialog();
@@ -488,56 +494,82 @@ useAsyncTask({
 
 const { getCachedStats } = useDirectoryStats();
 
-// 对同级目录进行与子目录列表一致的过滤和额外排序
-const processedSiblings = computed(() => {
+// 对同级目录进行与子目录列表一致的过滤和排序
+const siblingEntries = computed(() => {
   const dirs = sortedSiblings.value;
-  const limit = maxUnratedCount.value;
-  const showLarge = showLargeUnrated.value;
-  const showUncompleted = showUncompletedDirectories.value;
+  const visibility = {
+    showUncompleted: showUncompletedDirectories.value,
+    showLargeUnrated: showLargeUnrated.value,
+    unratedLimit: maxUnratedCount.value,
+  };
 
-  const items = dirs.map((dir) => {
-    const stats = getCachedStats(dir.id);
-    const { isFilteredOut, isForcedShown } = evaluateDirectoryVisibility(dir, stats, {
-      showUncompleted,
-      showLargeUnrated: showLarge,
-      unratedLimit: limit,
-    });
+  return sortDirectoryOrder(
+    dirs.map((dir) => {
+      const stats = getCachedStats(dir.id);
+      const { isFilteredOut, isForcedShown } = evaluateDirectoryVisibility(dir, stats, visibility);
 
-    return {
-      dir,
-      isFilteredOut,
-      isForcedShown,
-    };
-  });
-
-  const visibleItems = items.filter((item) => !item.isFilteredOut || item.isForcedShown);
-
-  // 把强制显示项排在最后，以保持与 SubdirectoryGrid 一致
-  return sortBy(visibleItems, [(item) => (item.isForcedShown ? 1 : 0)]).map((item) => item.dir);
+      return {
+        id: dir.id,
+        dir,
+        stats,
+        isFilteredOut,
+        isForcedShown,
+      };
+    }),
+  );
 });
 
-// 当前目录在排序后同级目录中的索引位置
-const currentSiblingIndex = computed(() => {
-  return processedSiblings.value.findIndex((dir) => dir.id === currentDirectoryId.value);
+const processedSiblings = computed(() =>
+  siblingEntries.value.filter((item) => !item.isFilteredOut || item.isForcedShown),
+);
+
+// #region 游标锚定的同级导航
+// 进入目录或筛选开关变化时重新生成游标；分页加载更多与统计数据更新不改变已锚定的位置
+const browseCursor = shallowRef(getBrowseCursor());
+const cursorRevision = ref(0);
+const frozenCursorRevision = ref(-1);
+
+watch(
+  [currentDirectoryId, maxUnratedCount, showLargeUnrated, showUncompletedDirectories],
+  () => {
+    cursorRevision.value += 1;
+    browseCursor.value = undefined;
+    setBrowseCursor(undefined);
+  },
+  { immediate: true },
+);
+
+watchEffect(() => {
+  const revision = cursorRevision.value;
+  if (frozenCursorRevision.value === revision) return;
+
+  const currentEntry = processedSiblings.value.find((item) => item.id === currentDirectoryId.value);
+  if (!currentEntry) return;
+
+  const cursor = createDirectoryCursor(currentEntry);
+  browseCursor.value = cursor;
+  setBrowseCursor(cursor);
+
+  // 统计信息到达后重新生成一次排序键，随后冻结，避免筛选期间目录状态变化导致位置漂移
+  if (currentEntry.stats) {
+    frozenCursorRevision.value = revision;
+  }
 });
 
 // 上一个同级目录
 const prevSibling = computed(() => {
-  const idx = currentSiblingIndex.value;
-  if (idx > 0) {
-    return processedSiblings.value[idx - 1];
-  }
-  return undefined;
+  const cursor = browseCursor.value;
+  if (!cursor) return undefined;
+  return findPreviousDirectory(processedSiblings.value, cursor, currentDirectoryId.value)?.dir;
 });
 
 // 下一个同级目录
 const nextSibling = computed(() => {
-  const idx = currentSiblingIndex.value;
-  if (idx !== -1 && idx < processedSiblings.value.length - 1) {
-    return processedSiblings.value[idx + 1];
-  }
-  return undefined;
+  const cursor = browseCursor.value;
+  if (!cursor) return undefined;
+  return findNextDirectory(processedSiblings.value, cursor, currentDirectoryId.value)?.dir;
 });
+// #endregion
 
 // 提取目录名用于 UI 展示
 function getDirName(relPath: string): string {

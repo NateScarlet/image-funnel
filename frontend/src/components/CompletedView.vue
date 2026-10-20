@@ -113,32 +113,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, useTemplateRef } from "vue";
+import { ref, useTemplateRef } from "vue";
 import { useRouter } from "vue-router";
 import { type SessionFragment } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
-import useDirectoryProgress from "../composables/useDirectoryProgress";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
 import { useAutoCreateSession } from "../composables/useAutoCreateSession";
-const { session } = defineProps<{
+const { session, nextDirectoryId, resolveNextDirectory } = defineProps<{
   session: SessionFragment;
+  nextDirectoryId: string | undefined;
+  resolveNextDirectory: () => Promise<string | undefined>;
 }>();
 
 defineEmits<(e: "undo") => void>();
 
 const router = useRouter();
-const { getNextDirectory } = useDirectoryProgress();
 
-const nextDirectoryId = computed(() => {
-  return getNextDirectory(session.directory.parentId ?? "", session.directory.id);
-});
+// 提交后使用 resolveNextDirectory 的返回值创建会话；props 更新到本组件前不能依赖其响应式刷新
+const targetDirectoryId = ref<string | undefined>();
 
 // 使用共享 composable 自动推导下一目录的配置并创建会话
 // CompletedView 仅合并 rating，不合并 label/query（保持原有行为）
 const { autoCreateSession } = useAutoCreateSession(
-  () => nextDirectoryId.value ?? "",
+  () => targetDirectoryId.value ?? "",
   () => session.filter,
   () => session.targetKeep,
   { mergeAllFilterFields: false },
@@ -187,10 +186,12 @@ async function handleCommitted() {
   if (navigating) return;
   navigating = true;
 
-  const nextDirectoryIdValue = nextDirectoryId.value;
+  try {
+    // 提交完成后再决定目标：导航前补齐分页与统计信息，并按当前状态重新判定完成度
+    const nextDirectoryIdValue = await resolveNextDirectory();
 
-  if (nextDirectoryIdValue) {
-    try {
+    if (nextDirectoryIdValue) {
+      targetDirectoryId.value = nextDirectoryIdValue;
       const nextSession = await autoCreateSession();
 
       if (nextSession) {
@@ -204,12 +205,12 @@ async function handleCommitted() {
         // 下一会话创建失败时允许用户重试
         navigating = false;
       }
-    } catch {
-      // 创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
-      navigating = false;
+    } else {
+      await router.push("/");
     }
-  } else {
-    await router.push("/");
+  } catch {
+    // 解析下一目录或创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
+    navigating = false;
   }
 }
 </script>

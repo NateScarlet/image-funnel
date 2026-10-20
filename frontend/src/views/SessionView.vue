@@ -170,7 +170,13 @@
           </div>
         </template>
         <template v-else>
-          <CompletedView ref="completedView" :session @undo="undo" />
+          <CompletedView
+            ref="completedView"
+            :session="session"
+            :next-directory-id="nextDirectoryId"
+            :resolve-next-directory="resolveNextDirectory"
+            @undo="undo"
+          />
         </template>
       </div>
     </main>
@@ -308,6 +314,7 @@ import { formatDate } from "../utils/date";
 import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/domain/useSession";
+import useSessionNextDirectory from "../composables/useSessionNextDirectory";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
 import useGestureTarget, { type ImageLoadedEvent } from "@/composables/useGestureTarget";
@@ -373,6 +380,13 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 });
 
 const { session } = useSession(sessionId, { loadingCount });
+
+// 会话入口即生成导航游标：完成视图挂载时当前目录往往已被筛成完成态，
+// 不能再依赖挂载时的列表重新生成。
+const { nextDirectoryId, resolveNextDirectory } = useSessionNextDirectory(
+  () => sessionId.value,
+  () => session.value?.directory,
+);
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 

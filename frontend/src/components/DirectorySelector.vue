@@ -162,42 +162,27 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, useTemplateRef } from "vue";
-import { sortBy } from "es-toolkit";
 import { mdiEyeOff } from "@mdi/js";
 import DirectoryItem from "./DirectoryItem.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
-import useStorage from "../composables/useStorage";
-import useDirectoryProgress from "../composables/useDirectoryProgress";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
+import {
+  minUnratedCount,
+  showCompletedDirectories,
+  showSmallUnrated,
+} from "@/composables/useDirectorySelectionFilters";
+import { sortDirectoryOrder } from "@/utils/directoryOrder";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import useDirectories from "../composables/useDirectories";
 import useInfiniteScroll from "../composables/useInfiniteScroll";
-import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
+import { evaluateDirectorySelectionVisibility } from "@/utils/directorySelection";
 
 defineProps<{
   rootPath: string;
 }>();
 
 const selectedId = defineModel<string>();
-
-const { model: showCompletedDirectories } = useStorage<boolean>(
-  localStorage,
-  "showCompletedDirectories@6309f070-f3fd-42a0-85e5-e75d9ff38d6d",
-  () => false,
-);
-
-const { model: minUnratedCount } = useStorage<number>(
-  localStorage,
-  "minUnratedCount@fab36720-bc2d-4876-8800-47b85f20658f",
-  () => 1,
-);
-
-const { model: showSmallUnrated } = useStorage<boolean>(
-  localStorage,
-  "showSmallUnrated@5918e244-67ad-4971-8608-f404494c25f4",
-  () => false,
-);
 
 const searchState = ref({ query: "", directoryId: "" });
 
@@ -211,8 +196,6 @@ const searchQuery = computed({
     };
   },
 });
-
-const { recordDirectoryOrder } = useDirectoryProgress();
 
 // 从缓存中获取统计信息
 const { getCachedStats } = useDirectoryStats();
@@ -240,25 +223,18 @@ const {
 const loading = computed(() => backgroundLoadingCount.value > 0);
 
 const items = computed(() => {
-  return sortBy(
+  return sortDirectoryOrder(
     directories.value.map((dir) => {
       const stats = getCachedStats(dir.id);
-      const completion = evaluateDirectoryCompletion(dir, stats);
-
-      const unratedCount =
-        stats?.ratingCounts.find((rc: { rating: number; count: number }) => rc.rating === 0)
-          ?.count ?? 0;
-
-      const isSmallUnrated = stats?.subdirectoryCount === 0 && unratedCount < minUnratedCount.value;
-
-      // 判定是否本身不满足筛选（已达标或未评级图片过少），但由于有子目录而必须显示
-      const isForcedShown =
-        stats &&
-        stats.subdirectoryCount > 0 &&
-        ((!showCompletedDirectories.value && completion.isCompleted) ||
-          (!showSmallUnrated.value && unratedCount < minUnratedCount.value));
+      const visibility = evaluateDirectorySelectionVisibility(dir, stats, {
+        showCompleted: showCompletedDirectories.value,
+        showSmallUnrated: showSmallUnrated.value,
+        minUnratedCount: minUnratedCount.value,
+      });
+      const { completion } = visibility;
 
       return {
+        id: dir.id,
         key: dir.id,
         dir,
         stats,
@@ -266,30 +242,17 @@ const items = computed(() => {
         filterRating: completion.filterRating,
         targetKeep: completion.targetKeep,
         keepCount: completion.keepCount,
-        unratedCount,
-        isSmallUnrated,
-        isForcedShown,
+        unratedCount: visibility.unratedCount,
+        isSmallUnrated: visibility.isSmallUnrated,
+        isForcedShown: visibility.isForcedShown,
+        passesFilter: visibility.passesFilter,
       };
     }),
-    [
-      (item) => (item.isForcedShown ? 1 : 0), // 不匹配但有子目录的放到最后
-      (item) => !item.stats,
-      (item) => item.stats?.imageCount === 0,
-      (item) => item.stats?.latestImage?.modTime || "",
-    ],
   );
 });
 
 /** 判定目录是否应该根据当前筛选设置显示 */
-const isVisible = (item: (typeof items.value)[number]) => {
-  if (!showCompletedDirectories.value && item.isCompleted) {
-    return false;
-  }
-  if (!showSmallUnrated.value && item.isSmallUnrated) {
-    return false;
-  }
-  return true;
-};
+const isVisible = (item: (typeof items.value)[number]) => item.passesFilter;
 
 const searchableItems = computed(() => {
   return items.value.filter(isVisible);
@@ -381,22 +344,6 @@ const smallUnratedHiddenCount = computed(
 // 被客户端筛选隐藏的子目录总数（去重并集，与列表实际隐藏数量一致）
 const hiddenDirectoryCount = computed(
   () => hiddenStates.value.filter((s) => s.isCompletedHidden || s.isSmallUnratedHidden).length,
-);
-// #endregion
-
-// #region 目录访问顺序与导航控制
-watch(
-  filteredItems,
-  (newItems) => {
-    const navigableDirectoryIds = newItems
-      .filter((item) => !item.isCompleted)
-      .map((item) => item.dir.id);
-
-    if (currentDirectory.value) {
-      recordDirectoryOrder(currentDirectory.value.id, navigableDirectoryIds);
-    }
-  },
-  { immediate: true },
 );
 // #endregion
 

@@ -20,10 +20,10 @@ import { onScopeDispose, shallowReactive } from "vue";
 import toStableValue from "@/utils/toStableValue";
 
 export default function useDirectoryBrowse(
-  variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables>,
+  variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables | undefined>,
   options?: { loadingCount?: Ref<number> },
 ) {
-  const directoryId = computed(() => toValue(variables).id);
+  const directoryId = computed(() => toValue(variables)?.id);
   const loadingCount = options?.loadingCount;
 
   const { data: directoriesData, query: directoriesQuery } = useQuery(BrowseDirectoriesDocument, {
@@ -67,9 +67,7 @@ export default function useDirectoryBrowse(
   });
 
   useSubscription(DirectoryChangedDocument, {
-    variables: () => ({
-      id: directoryId.value ? [directoryId.value] : undefined,
-    }),
+    variables: () => (directoryId.value ? { id: [directoryId.value] } : undefined),
     onNext: (result) => {
       const savedDir = result.data?.directoryChanged;
       if (savedDir) {
@@ -101,7 +99,7 @@ export default function useDirectoryBrowse(
   });
 
   useSubscription(DirEntryDeletedDocument, {
-    variables: () => ({ directoryId: directoryId.value }),
+    variables: () => (directoryId.value ? { directoryId: directoryId.value } : undefined),
     onNext: (result) => {
       const deletedEntries = result.data?.dirEntryDeleted;
       if (deletedEntries && deletedEntries.length > 0) {

@@ -179,7 +179,6 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from "vue";
 import { mdiFolder, mdiMagnify, mdiClose, mdiLoading, mdiEyeOff } from "@mdi/js";
-import { sortBy } from "es-toolkit";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import ToggleSwitch from "./ToggleSwitch.vue";
 import NumberInput from "./NumberInput.vue";
@@ -192,6 +191,7 @@ import useInfiniteScroll from "@/composables/useInfiniteScroll";
 import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
 import { evaluateDirectoryVisibility } from "@/utils/directoryVisibility";
+import { sortDirectoryOrder } from "@/utils/directoryOrder";
 
 // #region 属性与事件定义
 const { directoryId, filterRating } = defineProps<{
@@ -273,7 +273,9 @@ const subdirectoryFilterItems = computed(() => {
     );
 
     return {
+      id: dir.id,
       dir,
+      stats,
       isFilteredOut,
       isForcedShown,
       isHiddenByUncompleted,
@@ -286,8 +288,8 @@ const processedSubdirectories = computed(() => {
     (item) => !item.isFilteredOut || item.isForcedShown,
   );
 
-  // 把强制显示项排在最后
-  return sortBy(visibleItems, [(item) => (item.isForcedShown ? 1 : 0)]);
+  // 与浏览视图、目录选择器共用同一套排序键
+  return sortDirectoryOrder(visibleItems);
 });
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");
