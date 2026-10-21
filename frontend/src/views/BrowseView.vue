@@ -333,9 +333,7 @@ import DeviceManagerButton from "../components/DeviceManagerButton.vue";
 import NotificationCenterButton from "../components/NotificationCenterButton.vue";
 import TrashHistoryButton from "../components/TrashHistoryButton.vue";
 import { useDevices } from "@/composables/useDevices.ts";
-import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import {
-  createDirectoryCursor,
   findNextDirectory,
   findPreviousDirectory,
   sortDirectoryOrder,
@@ -441,11 +439,11 @@ const parentDirectoryId = computed(() => {
   return currentDirectory.value?.parentId || "";
 });
 
-// 查询并排序的同级目录列表（当 parentDirectoryId 为空或 undefined 时跳过）
+// 查询父目录的子目录列表（当 parentDirectoryId 为空或 undefined 时跳过）
 const {
-  sortedDirectories: sortedSiblings,
-  liveDirectories: siblingDirectories,
+  directories: siblingCandidates,
   hasNextPage: siblingsHasNextPage,
+  hasPreviousPage: siblingsHasPreviousPage,
   fetchMore: fetchMoreSiblings,
 } = useDirectories(
   () => {
@@ -460,22 +458,24 @@ const {
   },
 );
 
-// 父目录的子目录可能超过单页大小，此时当前目录落在后续页上，
-// 只消费首页会找不到它的相邻目录（索引为 -1），与子目录网格的无限滚动结果不一致，
-// 因此把父目录的剩余分页全部加载完。
-// 以父目录 id 为键单飞串行：并发加载会被 useRelayConnection 的重入保护直接跳过而空转，
-// 换目录或组件卸载时随任务作用域中止。
+// #region 同级目录分页
+// 进入目录时只需加载到它所在页为止；之后按导航方向一次取一页，不做全量加载。
+// 以父目录 id 为键单飞串行：并发加载会被 useRelayConnection 的重入保护直接跳过而空转。
 const siblingsFlight = new SingleFlightGroup();
 
-async function fetchAllSiblings(parentId: string, signal: AbortSignal): Promise<void> {
+async function loadSiblingsUntilCurrent(parentId: string, signal: AbortSignal): Promise<void> {
   await siblingsFlight.do(
     parentId,
     async (flightSignal) => {
-      while (!flightSignal.aborted && siblingsHasNextPage.value) {
-        const loadedCount = siblingDirectories.value.length;
-        await fetchMoreSiblings();
+      while (
+        !flightSignal.aborted &&
+        !siblingCandidates.value.some((entry) => entry.dir.id === currentDirectoryId.value) &&
+        siblingsHasNextPage.value
+      ) {
+        const loadedCount = siblingCandidates.value.length;
+        await fetchMoreSiblings("forward");
         // 已加载数量没有增长说明分页已无法推进，避免变成无上限的请求循环
-        if (siblingDirectories.value.length <= loadedCount) return;
+        if (siblingCandidates.value.length <= loadedCount) return;
       }
     },
     signal,
@@ -484,19 +484,23 @@ async function fetchAllSiblings(parentId: string, signal: AbortSignal): Promise<
 
 // 无父目录（位于根目录）时不加载，父目录连接不存在时也不会发起额外请求
 useAsyncTask({
-  // 已加载数量只用于让任务在分页推进后重新就绪，实际加载由上面的循环串行完成
+  // 已加载数量只用于让任务在分页推进后重新就绪，实际加载由循环串行完成
   args: () =>
     parentDirectoryId.value
-      ? [parentDirectoryId.value, siblingDirectories.value.length]
+      ? [parentDirectoryId.value, currentDirectoryId.value, siblingCandidates.value.length]
       : undefined,
-  task: (parentId, _loadedCount, ctx) => fetchAllSiblings(parentId, ctx.signal()),
+  task: (parentId, _currentId, _loadedCount, ctx) =>
+    loadSiblingsUntilCurrent(parentId, ctx.signal()),
 });
 
-const { getCachedStats } = useDirectoryStats();
+/** 相邻目录不在已加载页时，按方向只取一页 */
+async function loadSiblingPage(direction: "forward" | "backward"): Promise<void> {
+  await fetchMoreSiblings(direction);
+  await nextTick();
+}
 
-// 对同级目录进行与子目录列表一致的过滤和排序
+// 对同级目录进行与子目录列表一致的过滤和排序；所在页尚未加载的目录没有位置
 const siblingEntries = computed(() => {
-  const dirs = sortedSiblings.value;
   const visibility = {
     showUncompleted: showUncompletedDirectories.value,
     showLargeUnrated: showLargeUnrated.value,
@@ -504,8 +508,7 @@ const siblingEntries = computed(() => {
   };
 
   return sortDirectoryOrder(
-    dirs.map((dir) => {
-      const stats = getCachedStats(dir.id);
+    siblingCandidates.value.map(({ dir, stats, pageAnchor, serverCursor }) => {
       const { isFilteredOut, isForcedShown } = evaluateDirectoryVisibility(dir, stats, visibility);
 
       return {
@@ -514,8 +517,12 @@ const siblingEntries = computed(() => {
         stats,
         isFilteredOut,
         isForcedShown,
+        pageAnchor,
+        serverCursor,
       };
     }),
+    // 浏览视图保持原有顺序：最新图片时间越晚越靠前
+    "newest-first",
   );
 });
 
@@ -546,9 +553,9 @@ watchEffect(() => {
   const currentEntry = processedSiblings.value.find((item) => item.id === currentDirectoryId.value);
   if (!currentEntry) return;
 
-  const cursor = createDirectoryCursor(currentEntry);
-  browseCursor.value = cursor;
-  setBrowseCursor(cursor);
+  // 直接使用列表渲染该目录所用的排序键，不重新计算
+  browseCursor.value = currentEntry.sortKey;
+  setBrowseCursor(currentEntry.sortKey);
 
   // 统计信息到达后重新生成一次排序键，随后冻结，避免筛选期间目录状态变化导致位置漂移
   if (currentEntry.stats) {
@@ -556,18 +563,42 @@ watchEffect(() => {
   }
 });
 
+// 当前目录位于已加载列表边界、且该方向仍有页时，取一页让相邻项可见；
+// 其余情况保持「推进页数等于实际需要的页数」。
+useAsyncTask<void, [boolean, boolean, number]>({
+  args: () => {
+    const cursor = browseCursor.value;
+    const list = processedSiblings.value;
+    if (!cursor || list.length === 0) return undefined;
+
+    const index = list.findIndex((item) => item.id === currentDirectoryId.value);
+    if (index < 0) return undefined;
+
+    const needPrevious = index === 0 && Boolean(siblingsHasPreviousPage.value);
+    const needNext = index === list.length - 1 && Boolean(siblingsHasNextPage.value);
+    if (!needPrevious && !needNext) return undefined;
+
+    return [needPrevious, needNext, list.length];
+  },
+  async task(needPrevious, needNext, _listLength, ctx) {
+    if (needPrevious) await loadSiblingPage("backward");
+    if (ctx.signal().aborted) return;
+    if (needNext) await loadSiblingPage("forward");
+  },
+});
+
 // 上一个同级目录
 const prevSibling = computed(() => {
   const cursor = browseCursor.value;
   if (!cursor) return undefined;
-  return findPreviousDirectory(processedSiblings.value, cursor, currentDirectoryId.value)?.dir;
+  return findPreviousDirectory(processedSiblings.value, cursor)?.dir;
 });
 
 // 下一个同级目录
 const nextSibling = computed(() => {
   const cursor = browseCursor.value;
   if (!cursor) return undefined;
-  return findNextDirectory(processedSiblings.value, cursor, currentDirectoryId.value)?.dir;
+  return findNextDirectory(processedSiblings.value, cursor)?.dir;
 });
 // #endregion
 

@@ -152,7 +152,7 @@
         <button
           :disabled="loading"
           class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          @click="fetchMore"
+          @click="fetchMore()"
         >
           <!-- 加载中动画 -->
           <svg
@@ -188,7 +188,6 @@ import useDirectories, {
   showUncompletedDirectories,
 } from "@/composables/useDirectories";
 import useInfiniteScroll from "@/composables/useInfiniteScroll";
-import { useDirectoryStats } from "@/composables/domain/useDirectoryBrowse";
 import { evaluateDirectoryCompletion } from "@/utils/directoryCompletion";
 import { evaluateDirectoryVisibility } from "@/utils/directoryVisibility";
 import { sortDirectoryOrder } from "@/utils/directoryOrder";
@@ -215,8 +214,8 @@ const searchQuery = computed({
 
 const subdirectoryLoadingCount = ref(0);
 
-// 使用 useDirectories，共享子目录过滤与排序状态，实现内部数据拉取与 Relay 分页
-const { largeUnratedCount, largeUnratedHiddenCount, sortedDirectories, hasNextPage, fetchMore } =
+// 使用 useDirectories，共享子目录过滤状态，实现内部数据拉取与 Relay 分页
+const { largeUnratedCount, largeUnratedHiddenCount, directories, hasNextPage, fetchMore } =
   useDirectories(
     () => ({
       id: directoryId,
@@ -233,11 +232,8 @@ const { largeUnratedCount, largeUnratedHiddenCount, sortedDirectories, hasNextPa
 
 const loading = computed(() => subdirectoryLoadingCount.value > 0);
 
-const { getCachedStats } = useDirectoryStats();
-
 const uncompletedCount = computed(() => {
-  return sortedDirectories.value.filter((dir) => {
-    const stats = getCachedStats(dir.id);
+  return directories.value.filter(({ dir, stats }) => {
     const completion = evaluateDirectoryCompletion(dir, stats);
     return !completion.isCompleted;
   }).length;
@@ -255,13 +251,11 @@ const hiddenSubdirectoryCount = computed(
 
 // 每个子目录相对当前客户端筛选的隐藏判定，供列表渲染与隐藏计数共同消费
 const subdirectoryFilterItems = computed(() => {
-  const dirs = sortedDirectories.value;
   const limit = maxUnratedCount.value;
   const showLarge = showLargeUnrated.value;
   const showUncompleted = showUncompletedDirectories.value;
 
-  return dirs.map((dir) => {
-    const stats = getCachedStats(dir.id);
+  return directories.value.map(({ dir, stats, pageAnchor, serverCursor }) => {
     const { isFilteredOut, isForcedShown, isHiddenByUncompleted } = evaluateDirectoryVisibility(
       dir,
       stats,
@@ -279,6 +273,8 @@ const subdirectoryFilterItems = computed(() => {
       isFilteredOut,
       isForcedShown,
       isHiddenByUncompleted,
+      pageAnchor,
+      serverCursor,
     };
   });
 });
@@ -288,8 +284,8 @@ const processedSubdirectories = computed(() => {
     (item) => !item.isFilteredOut || item.isForcedShown,
   );
 
-  // 与浏览视图、目录选择器共用同一套排序键
-  return sortDirectoryOrder(visibleItems);
+  // 与浏览视图共用同一套排序键：最新图片时间越晚越靠前
+  return sortDirectoryOrder(visibleItems, "newest-first");
 });
 
 const containerRef = useTemplateRef<HTMLElement>("containerRef");

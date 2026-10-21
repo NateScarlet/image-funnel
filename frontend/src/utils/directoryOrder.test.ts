@@ -1,170 +1,160 @@
 import { describe, expect, test } from "vitest";
 import {
-  createDirectoryCursor,
+  compareDirectorySortKeys,
+  createDirectorySortKey,
   findNextDirectory,
   findPreviousDirectory,
   sortDirectoryOrder,
   type DirectoryOrderEntry,
-  type DirectoryOrderStats,
 } from "./directoryOrder";
 
 // #region 测试夹具
-function makeStats(overrides: Partial<DirectoryOrderStats> = {}): DirectoryOrderStats {
-  return {
-    imageCount: 2,
-    latestImage: { modTime: "2024-01-02T00:00:00.000Z" },
-    ...overrides,
-  };
-}
-
 function makeEntry(
   id: string,
   overrides: Partial<Omit<DirectoryOrderEntry, "id">> = {},
 ): DirectoryOrderEntry {
   return {
     id,
-    stats: makeStats(),
+    pageAnchor: "page-1",
+    serverCursor: `cursor-${id}`,
+    stats: {
+      imageCount: 2,
+      latestImage: { modTime: "2024-01-02T00:00:00.000Z" },
+    },
     isForcedShown: false,
     ...overrides,
   };
 }
+
+function modTimeEntry(id: string, modTime: string, overrides?: Partial<DirectoryOrderEntry>) {
+  return makeEntry(id, {
+    stats: { imageCount: 2, latestImage: { modTime } },
+    ...overrides,
+  });
+}
 // #endregion
 
-describe("createDirectoryCursor", () => {
-  test("游标由强制显示、统计数据、空目录与最新图片时间组成", () => {
-    const cursor = createDirectoryCursor(
-      makeEntry("dir-a", {
-        isForcedShown: true,
-        stats: makeStats({ imageCount: 0, latestImage: null }),
-      }),
+describe("createDirectorySortKey", () => {
+  test("排序键是单个字符串，页锚点位于最前", () => {
+    const key = createDirectorySortKey(
+      makeEntry("dir-a", { pageAnchor: "page-2", serverCursor: "cursor-a" }),
+      "oldest-first",
     );
 
-    expect(cursor).toEqual({
-      isForcedShown: true,
-      hasStats: true,
-      isEmpty: true,
-      modTime: "",
-    });
+    expect(typeof key).toBe("string");
+    expect(key.startsWith("page-2\x00")).toBe(true);
+    expect(key.endsWith("\x00cursor-a")).toBe(true);
   });
 
-  test("stats 缺失时游标记录无统计数据", () => {
-    const cursor = createDirectoryCursor(makeEntry("dir-a", { stats: undefined }));
+  test("页锚点决定页序，优先于页内各维度", () => {
+    const page1 = modTimeEntry("dir-a", "2024-12-31T00:00:00.000Z", { pageAnchor: "page-1" });
+    const page2 = modTimeEntry("dir-b", "2024-01-01T00:00:00.000Z", { pageAnchor: "page-2" });
 
-    expect(cursor).toEqual({
-      isForcedShown: false,
-      hasStats: false,
-      isEmpty: false,
-      modTime: "",
-    });
+    expect(
+      compareDirectorySortKeys(
+        createDirectorySortKey(page1, "oldest-first"),
+        createDirectorySortKey(page2, "oldest-first"),
+      ),
+    ).toBeLessThan(0);
+  });
+
+  test("页内按最新图片时间排序：两个方向各自编码", () => {
+    const older = modTimeEntry("dir-older", "2024-01-01T00:00:00.000Z");
+    const newer = modTimeEntry("dir-newer", "2024-01-03T00:00:00.000Z");
+
+    expect(
+      compareDirectorySortKeys(
+        createDirectorySortKey(older, "oldest-first"),
+        createDirectorySortKey(newer, "oldest-first"),
+      ),
+    ).toBeLessThan(0);
+    expect(
+      compareDirectorySortKeys(
+        createDirectorySortKey(older, "newest-first"),
+        createDirectorySortKey(newer, "newest-first"),
+      ),
+    ).toBeGreaterThan(0);
+  });
+
+  test("可见维度相同时按服务端游标形成全序", () => {
+    const a = modTimeEntry("dir-a", "2024-01-01T00:00:00.000Z", { serverCursor: "01" });
+    const b = modTimeEntry("dir-b", "2024-01-01T00:00:00.000Z", { serverCursor: "02" });
+
+    expect(
+      compareDirectorySortKeys(
+        createDirectorySortKey(a, "oldest-first"),
+        createDirectorySortKey(b, "oldest-first"),
+      ),
+    ).toBeLessThan(0);
+  });
+
+  test("强制显示项与无统计数据的目录排在后面", () => {
+    const normal = makeEntry("dir-a");
+    const forced = makeEntry("dir-b", { isForcedShown: true });
+    const withoutStats = makeEntry("dir-c", { stats: undefined });
+
+    const order = sortDirectoryOrder([forced, withoutStats, normal], "oldest-first").map(
+      (entry) => entry.id,
+    );
+    expect(order).toEqual(["dir-a", "dir-c", "dir-b"]);
   });
 });
 
 describe("sortDirectoryOrder", () => {
-  test("依次按强制显示、是否有 stats、是否空目录、最新图片时间倒序排列", () => {
+  test("页序优先、页内排序，不跨页重排", () => {
+    // 服务端页 1：[p3(03), p1(01)]，页 2：[p2(02), p0(00)]
     const entries = [
-      makeEntry("no-stats", { stats: undefined }),
-      makeEntry("empty", {
-        stats: makeStats({ imageCount: 0, latestImage: null }),
-      }),
-      makeEntry("older", {
-        stats: makeStats({ latestImage: { modTime: "2024-01-01T00:00:00.000Z" } }),
-      }),
-      makeEntry("newer", {
-        stats: makeStats({ latestImage: { modTime: "2024-01-03T00:00:00.000Z" } }),
-      }),
-      makeEntry("forced", { isForcedShown: true }),
+      modTimeEntry("p3", "2024-01-03T00:00:00.000Z", { pageAnchor: "page-1" }),
+      modTimeEntry("p1", "2024-01-01T00:00:00.000Z", { pageAnchor: "page-1" }),
+      modTimeEntry("p2", "2024-01-02T00:00:00.000Z", { pageAnchor: "page-2" }),
+      modTimeEntry("p0", "2024-01-01T00:00:00.000Z", { pageAnchor: "page-2" }),
     ];
 
-    expect(sortDirectoryOrder(entries).map((entry) => entry.id)).toEqual([
-      "newer",
-      "older",
-      "empty",
-      "no-stats",
-      "forced",
+    expect(sortDirectoryOrder(entries, "oldest-first").map((entry) => entry.id)).toEqual([
+      "p1",
+      "p3",
+      "p0",
+      "p2",
+    ]);
+    expect(sortDirectoryOrder(entries, "newest-first").map((entry) => entry.id)).toEqual([
+      "p3",
+      "p1",
+      "p2",
+      "p0",
     ]);
   });
 
-  test("排序键完全相同时保持输入顺序，不再用 id 重排列表", () => {
-    const entries = [makeEntry("dir-2"), makeEntry("dir-10"), makeEntry("dir-1")];
-
-    expect(sortDirectoryOrder(entries).map((entry) => entry.id)).toEqual([
-      "dir-2",
-      "dir-10",
-      "dir-1",
-    ]);
+  test("每个条目附带渲染时使用的排序键", () => {
+    const [entry] = sortDirectoryOrder([makeEntry("dir-a")], "oldest-first");
+    if (!entry) throw new Error("missing entry");
+    expect(entry.sortKey).toBe(createDirectorySortKey(entry, "oldest-first"));
   });
 });
 
-describe("findNextDirectory", () => {
-  test("当前目录不在列表中时仍按游标定位下一项", () => {
-    const cursor = createDirectoryCursor(makeEntry("removed"));
-    const entries = [makeEntry("dir-a"), makeEntry("forced", { isForcedShown: true })];
+describe("findNextDirectory / findPreviousDirectory", () => {
+  const entries = sortDirectoryOrder(
+    [
+      modTimeEntry("dir-a", "2024-01-01T00:00:00.000Z"),
+      modTimeEntry("dir-b", "2024-01-02T00:00:00.000Z"),
+      modTimeEntry("dir-c", "2024-01-03T00:00:00.000Z"),
+    ],
+    "oldest-first",
+  );
 
-    expect(findNextDirectory(entries, cursor, "removed")?.id).toBe("forced");
+  test("按排序键直接定位下一项与上一项", () => {
+    const middle = entries.find((entry) => entry.id === "dir-b");
+    if (!middle) throw new Error("missing fixture");
+
+    expect(findNextDirectory(entries, middle.sortKey)?.id).toBe("dir-c");
+    expect(findPreviousDirectory(entries, middle.sortKey)?.id).toBe("dir-a");
   });
 
-  test("排序键并列时按当前目录 id 比较", () => {
-    const cursor = createDirectoryCursor(makeEntry("dir-b"));
-    const entries = [makeEntry("dir-c"), makeEntry("dir-a"), makeEntry("dir-d")];
+  test("序列两端返回空", () => {
+    const first = entries[0];
+    const last = entries.at(-1);
+    if (!first || !last) throw new Error("missing fixture");
 
-    expect(findNextDirectory(entries, cursor, "dir-b")?.id).toBe("dir-c");
-  });
-
-  test("目录被重命名后使用新 id 定位到新列表中的正确位置", () => {
-    // 目录移动/重命名后排序键不变，id 变成 new-name，但仍应取其后的一项
-    const cursor = createDirectoryCursor(makeEntry("old-name"));
-    const entries = [makeEntry("next"), makeEntry("new-name")];
-
-    expect(findNextDirectory(entries, cursor, "new-name")?.id).toBe("next");
-  });
-
-  test("调用方预先过滤候选后，导航只在过滤后的列表中查找", () => {
-    const cursor = createDirectoryCursor(makeEntry("dir-b", { stats: undefined }));
-    // dir-c 已完成，被调用方提前过滤掉
-    const entries = [
-      makeEntry("dir-d", { stats: undefined }),
-      makeEntry("dir-e", { stats: undefined }),
-    ];
-
-    expect(findNextDirectory(entries, cursor, "dir-b")?.id).toBe("dir-d");
-  });
-
-  test("当前位置之后没有候选时返回 undefined", () => {
-    const cursor = createDirectoryCursor(makeEntry("dir-d"));
-    const entries = [makeEntry("dir-a"), makeEntry("dir-b")];
-
-    expect(findNextDirectory(entries, cursor, "dir-d")).toBeUndefined();
-  });
-});
-
-describe("findPreviousDirectory", () => {
-  test("当前目录不在列表中时仍按游标定位上一项", () => {
-    const cursor = createDirectoryCursor(
-      makeEntry("removed", {
-        stats: makeStats({ latestImage: { modTime: "2024-01-01T00:00:00.000Z" } }),
-      }),
-    );
-    const entries = [
-      makeEntry("dir-a", {
-        stats: makeStats({ latestImage: { modTime: "2024-01-03T00:00:00.000Z" } }),
-      }),
-      makeEntry("empty", { stats: makeStats({ imageCount: 0, latestImage: null }) }),
-    ];
-
-    expect(findPreviousDirectory(entries, cursor, "removed")?.id).toBe("dir-a");
-  });
-
-  test("排序键并列时按当前目录 id 比较", () => {
-    const cursor = createDirectoryCursor(makeEntry("dir-b"));
-    const entries = [makeEntry("dir-c"), makeEntry("dir-a"), makeEntry("dir-d")];
-
-    expect(findPreviousDirectory(entries, cursor, "dir-b")?.id).toBe("dir-a");
-  });
-
-  test("目录被重命名后使用新 id 定位到新列表中的正确位置", () => {
-    const cursor = createDirectoryCursor(makeEntry("old-name"));
-    const entries = [makeEntry("new-name"), makeEntry("earlier")];
-
-    expect(findPreviousDirectory(entries, cursor, "new-name")?.id).toBe("earlier");
+    expect(findPreviousDirectory(entries, first.sortKey)).toBeUndefined();
+    expect(findNextDirectory(entries, last.sortKey)).toBeUndefined();
   });
 });

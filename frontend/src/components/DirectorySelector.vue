@@ -68,12 +68,13 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <template v-for="item in visibleFilteredItems" :key="item.key">
             <DirectoryItem
-              v-model="selectedId"
+              :model-value="selectedId"
               :directory="item.dir"
               :filter-rating="item.filterRating"
               :target-keep="item.targetKeep"
               :is-completed="item.isCompleted"
               :filtered-out="item.filteredOut"
+              @update:model-value="selectDirectory(item)"
             />
           </template>
         </div>
@@ -113,7 +114,7 @@
           <button
             :disabled="loading"
             class="px-4 py-1.5 bg-primary-800 hover:bg-primary-600 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-600 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-            @click="fetchMore"
+            @click="fetchMore()"
           >
             <!-- 加载中动画 -->
             <svg
@@ -173,10 +174,12 @@ import {
   showSmallUnrated,
 } from "@/composables/useDirectorySelectionFilters";
 import { sortDirectoryOrder } from "@/utils/directoryOrder";
+import { setDirectoryCursor } from "@/composables/useDirectoryCursor";
 import ExactSearchMatcher from "../utils/ExactSearchMatcher";
 import useDirectories from "../composables/useDirectories";
 import useInfiniteScroll from "../composables/useInfiniteScroll";
 import { evaluateDirectorySelectionVisibility } from "@/utils/directorySelection";
+import type { DirectoryFragment } from "@/graphql/generated";
 
 defineProps<{
   rootPath: string;
@@ -203,12 +206,7 @@ const { getCachedStats } = useDirectoryStats();
 const backgroundLoadingCount = ref(0);
 
 // 使用 useDirectories，自治地实现内部数据拉取与 Relay 分页，在 variables 中传递 searchQuery 以在后端进行搜索过滤
-const {
-  sortedDirectories: directories,
-  currentDirectory,
-  hasNextPage,
-  fetchMore,
-} = useDirectories(
+const { currentDirectory, directories, hasNextPage, fetchMore } = useDirectories(
   () => ({
     id: selectedId.value || "",
     filterBy: {
@@ -222,34 +220,68 @@ const {
 
 const loading = computed(() => backgroundLoadingCount.value > 0);
 
-const items = computed(() => {
-  return sortDirectoryOrder(
-    directories.value.map((dir) => {
-      const stats = getCachedStats(dir.id);
-      const visibility = evaluateDirectorySelectionVisibility(dir, stats, {
-        showCompleted: showCompletedDirectories.value,
-        showSmallUnrated: showSmallUnrated.value,
-        minUnratedCount: minUnratedCount.value,
-      });
-      const { completion } = visibility;
+function toItem(dir: DirectoryFragment) {
+  const stats = getCachedStats(dir.id);
+  const visibility = evaluateDirectorySelectionVisibility(dir, stats, {
+    showCompleted: showCompletedDirectories.value,
+    showSmallUnrated: showSmallUnrated.value,
+    minUnratedCount: minUnratedCount.value,
+  });
+  const { completion } = visibility;
 
-      return {
-        id: dir.id,
-        key: dir.id,
-        dir,
-        stats,
-        isCompleted: completion.isCompleted,
-        filterRating: completion.filterRating,
-        targetKeep: completion.targetKeep,
-        keepCount: completion.keepCount,
-        unratedCount: visibility.unratedCount,
-        isSmallUnrated: visibility.isSmallUnrated,
-        isForcedShown: visibility.isForcedShown,
-        passesFilter: visibility.passesFilter,
-      };
-    }),
-  );
-});
+  return {
+    id: dir.id,
+    key: dir.id,
+    dir,
+    stats,
+    isCompleted: completion.isCompleted,
+    filterRating: completion.filterRating,
+    targetKeep: completion.targetKeep,
+    keepCount: completion.keepCount,
+    unratedCount: visibility.unratedCount,
+    isSmallUnrated: visibility.isSmallUnrated,
+    isForcedShown: visibility.isForcedShown,
+    passesFilter: visibility.passesFilter,
+  };
+}
+
+/**
+ * 列表顺序 = 页按服务端分页顺序拼接、页内 oldest-first。
+ * 排序键以页锚点开头，因此一次全局排序即得到该顺序；自动切换使用同一顺序。
+ * 所在页尚未加载的目录没有位置，不显示。
+ */
+const items = computed(() =>
+  sortDirectoryOrder(
+    directories.value.map(({ dir, pageAfter, pageAnchor, serverCursor }) => ({
+      ...toItem(dir),
+      pageAfter,
+      pageAnchor,
+      serverCursor,
+    })),
+    "oldest-first",
+  ),
+);
+
+/**
+ * 选中子目录并记录进入位置。必须先记录再切换 selectedId：
+ * 切换后搜索词会按目录隔离重置，无法再取到本列表的搜索词。
+ */
+function selectDirectory(item: (typeof items.value)[number]) {
+  rememberEntry(item);
+  selectedId.value = item.id;
+}
+
+/**
+ * 记录进入位置：直接使用列表渲染该目录所用的排序键，与页锚点、当前搜索词一起写入游标。
+ * 会话页只读取，不重新计算、不覆写。
+ */
+function rememberEntry(item: (typeof items.value)[number]) {
+  setDirectoryCursor(item.id, {
+    after: item.pageAfter,
+    sortKey: item.sortKey,
+    query: searchQuery.value.trim() || null,
+  });
+}
 
 /** 判定目录是否应该根据当前筛选设置显示 */
 const isVisible = (item: (typeof items.value)[number]) => item.passesFilter;

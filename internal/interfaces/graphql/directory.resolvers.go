@@ -24,7 +24,7 @@ func (r *directoryResolver) Stats(ctx context.Context, obj *shared.DirectoryDTO)
 
 // Directories is the resolver for the directories field.
 func (r *directoryResolver) Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error) {
-	conn, err := r.app.Directories(ctx, obj.ID, shared.DirectoryFilters{}, &pagination.MaxPageSize, nil)
+	conn, err := r.app.Directories(ctx, obj.ID, shared.DirectoryFilters{}, &pagination.MaxPageSize, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +32,8 @@ func (r *directoryResolver) Directories(ctx context.Context, obj *shared.Directo
 }
 
 // DirectoriesV2 is the resolver for the directoriesV2 field.
-func (r *directoryResolver) DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string) (*shared.DirectoryConnectionDTO, error) {
-	return r.app.Directories(ctx, obj.ID, util.UnwrapPointer(filterBy), first, after)
+func (r *directoryResolver) DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string, last *int, before *string) (*shared.DirectoryConnectionDTO, error) {
+	return r.app.Directories(ctx, obj.ID, util.UnwrapPointer(filterBy), first, after, last, before)
 }
 
 // Images is the resolver for the images field.

@@ -22,9 +22,14 @@ type Directory implements Node
   "子目录列表，支持筛选与分页"
   directoriesV2(
     filterBy: DirectoryFilters
-    "每页条目数，默认 100"
-    first: Int = 100
+    "正向分页时每页条目数"
+    first: Int
+    "正向分页时从该游标之后取页"
     after: String
+    "反向分页时每页条目数；与 first 互斥"
+    last: Int
+    "反向分页时从该游标之前取页"
+    before: String
   ): DirectoryConnection! @goField(forceResolver: true)
   "目录下的图片列表，支持筛选与分页"
   images(

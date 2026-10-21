@@ -105,7 +105,7 @@
         <button
           :disabled="loading"
           class="px-4 py-1.5 bg-primary-800 hover:bg-primary-700 rounded-lg text-xs text-primary-300 hover:text-white border border-primary-700 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          @click="fetchMore"
+          @click="fetchMore()"
         >
           <!-- 加载中动画 -->
           <svg

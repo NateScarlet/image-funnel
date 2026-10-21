@@ -1,9 +1,11 @@
 import { computed, toValue, type MaybeRefOrGetter, type Ref } from "vue";
-import useDirectoryBrowse, { useDirectoryStats } from "./domain/useDirectoryBrowse";
+import useDirectoryBrowse, {
+  useDirectoryStats,
+  type PositionedDirectory,
+} from "./domain/useDirectoryBrowse";
 import useAsyncTask from "@/composables/useAsyncTask";
 import useStorage from "@/composables/useStorage";
-import { sortBy } from "es-toolkit";
-import type { BrowseDirectoriesQueryVariables } from "@/graphql/generated";
+import type { BrowseDirectoriesQueryVariables, DirectoryStatsFragment } from "@/graphql/generated";
 
 // #region 筛选开关全局响应式状态
 export const { model: maxUnratedCount } = useStorage<number>(
@@ -25,6 +27,11 @@ export const { model: showUncompletedDirectories } = useStorage<boolean>(
 );
 // #endregion
 
+/**
+ * 目录列表的数据源：只负责取数与现有统计，不做排序。
+ * 排序由消费者用 `createDirectorySortKey` 完成——排序键以页锚点开头，
+ * 一次全局排序即得到「页序优先、页内排序」。
+ */
 export default function useDirectories(
   variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables>,
   options?: {
@@ -35,10 +42,16 @@ export default function useDirectories(
 ) {
   const maxUnratedCountVal = computed(() => toValue(options?.maxUnratedCount));
 
-  const { currentDirectory, liveDirectories, hasNextPage, fetchMore } = useDirectoryBrowse(
-    variables,
-    { loadingCount: options?.loadingCount },
-  );
+  const {
+    currentDirectory,
+    liveDirectories,
+    directories: loadedDirectories,
+    edges,
+    pageInfo,
+    hasNextPage,
+    hasPreviousPage,
+    fetchMore,
+  } = useDirectoryBrowse(variables, { loadingCount: options?.loadingCount });
   const { getCachedStats, refetchStats } = useDirectoryStats();
 
   const largeUnratedCount = computed(() => {
@@ -64,18 +77,17 @@ export default function useDirectories(
     },
   });
 
-  // 每个目录与其"大未评级"判定结果，供隐藏计数与排序共同消费
+  // 每个已加载目录与其"大未评级"判定结果，供隐藏计数与列表消费
   const directoryStates = computed(() => {
-    const dirs = liveDirectories.value;
     const limit = maxUnratedCountVal.value;
     const showLarge = toValue(options?.showLargeUnrated) ?? false;
 
-    return dirs.map((dir) => {
-      const stats = getCachedStats(dir.id);
+    return loadedDirectories.value.map((entry) => {
+      const stats = getCachedStats(entry.dir.id);
       const unratedCount = stats?.ratingCounts.find((rc) => rc.rating === 0)?.count ?? 0;
       const isLargeUnrated =
         !showLarge && limit !== undefined && stats?.subdirectoryCount === 0 && unratedCount > limit;
-      return { dir, stats, isLargeUnrated };
+      return { ...entry, stats, isLargeUnrated };
     });
   });
 
@@ -84,26 +96,27 @@ export default function useDirectories(
     return directoryStates.value.filter((item) => item.isLargeUnrated).length;
   });
 
-  const sortedDirectories = computed(() => {
-    const visibleItems = directoryStates.value.filter((item) => !item.isLargeUnrated);
-
-    return sortBy(visibleItems, [
-      (item) => !item.stats,
-      (item) => item.stats?.imageCount === 0,
-      (item) => {
-        const modTime = item.stats?.latestImage?.modTime;
-        return modTime ? -new Date(modTime).getTime() : 0;
-      },
-    ]).map((item) => item.dir);
-  });
+  /** 未被「未评级图片过多」隐藏的目录及其位置；顺序交给消费者的排序键 */
+  const directories = computed<PositionedDirectoryWithStats[]>(() =>
+    directoryStates.value
+      .filter((item) => !item.isLargeUnrated)
+      .map(({ isLargeUnrated: _isLargeUnrated, ...entry }) => entry),
+  );
 
   return {
     currentDirectory,
     liveDirectories,
+    directories,
+    edges,
+    pageInfo,
+    hasNextPage,
+    hasPreviousPage,
+    fetchMore,
     largeUnratedCount,
     largeUnratedHiddenCount,
-    sortedDirectories,
-    hasNextPage,
-    fetchMore,
   };
 }
+
+export type PositionedDirectoryWithStats = PositionedDirectory & {
+  stats: DirectoryStatsFragment | undefined;
+};

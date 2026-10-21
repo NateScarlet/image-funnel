@@ -19,6 +19,17 @@ import { throttle, debounce } from "es-toolkit";
 import { onScopeDispose, shallowReactive } from "vue";
 import toStableValue from "@/utils/toStableValue";
 
+/** 已加载目录及其位置：排序键所需的页锚点、页请求锚点与目录自身游标 */
+export interface PositionedDirectory {
+  dir: DirectoryFragment;
+  /** 页锚点：该目录所在页首条目录的服务端游标，其字符串序等于页序 */
+  pageAnchor: string;
+  /** 该页的 forward 请求锚点（首页为 null） */
+  pageAfter: string | null;
+  /** 目录自身的服务端游标，用作排序键的最后一级 */
+  serverCursor: string;
+}
+
 export default function useDirectoryBrowse(
   variables: MaybeRefOrGetter<BrowseDirectoriesQueryVariables | undefined>,
   options?: { loadingCount?: Ref<number> },
@@ -26,8 +37,17 @@ export default function useDirectoryBrowse(
   const directoryId = computed(() => toValue(variables)?.id);
   const loadingCount = options?.loadingCount;
 
+  const DEFAULT_PAGE_SIZE = 100;
+
+  // schema 不再为 first 提供默认值：正向取页必须显式给出页大小，反向取页则不带 first
+  const queryVariables = computed<BrowseDirectoriesQueryVariables | undefined>(() => {
+    const value = toValue(variables);
+    if (!value || value.last != null) return value;
+    return { ...value, first: value.first ?? DEFAULT_PAGE_SIZE };
+  });
+
   const { data: directoriesData, query: directoriesQuery } = useQuery(BrowseDirectoriesDocument, {
-    variables,
+    variables: queryVariables,
     loadingCount,
   });
 
@@ -36,12 +56,19 @@ export default function useDirectoryBrowse(
     return node?.__typename === "Directory" ? node : undefined;
   });
 
+  // 原始分页边：保留服务端顺序与每条边的游标，供上层计算页锚点
+  const directoryEdges = computed(() => currentDirectory.value?.directoriesV2.edges ?? []);
+
   const directoryConnection = useRelayConnection(
     () =>
       directoriesData.value?.node?.__typename === "Directory"
         ? directoriesData.value.node.directoriesV2
         : undefined,
     () => directoriesQuery,
+    {
+      // before 需与 last 搭配，页大小沿用查询的 first
+      backwardPageSize: () => queryVariables.value?.first ?? DEFAULT_PAGE_SIZE,
+    },
   );
 
   const {
@@ -111,12 +138,52 @@ export default function useDirectoryBrowse(
     },
   });
 
+  // #region 目录位置
+  // 每次取页的页大小固定（查询的 first，默认 100），已加载的边因此按页大小连续分页：
+  // 页锚点就是该页首条边的游标，不需要额外记录页边界。
+  const pageSize = computed(() => queryVariables.value?.first ?? DEFAULT_PAGE_SIZE);
+
+  /** 第 index 条边所在页的首条边下标 */
+  function pageStartAt(index: number): number {
+    return Math.floor(index / pageSize.value) * pageSize.value;
+  }
+
+  /** 第 index 条边所在页的页锚点：该页首条边的游标 */
+  function pageAnchorAt(index: number): string | undefined {
+    return directoryEdges.value[pageStartAt(index)]?.cursor;
+  }
+
+  /** 第 index 条边所在页的 forward 请求锚点 */
+  function pageAfterAt(index: number): string | null {
+    const start = pageStartAt(index);
+    if (start === 0) return queryVariables.value?.after ?? null;
+    return directoryEdges.value[start - 1]?.cursor ?? null;
+  }
+
+  /** 已加载目录及其位置，按服务端顺序排列；不在 edges 中的实时新增目录没有位置 */
+  const directories = computed<PositionedDirectory[]>(() => {
+    const liveById = new Map(liveDirectories.value.map((dir) => [dir.id, dir]));
+
+    return directoryEdges.value.flatMap((edge, index) => {
+      const dir = liveById.get(edge.node.id);
+      const pageAnchor = pageAnchorAt(index);
+      if (!dir || pageAnchor === undefined) return [];
+
+      return [{ dir, pageAnchor, pageAfter: pageAfterAt(index), serverCursor: edge.cursor }];
+    });
+  });
+  // #endregion
+
   return {
     currentDirectory,
     liveDirectories,
+    directories,
+    edges: directoryEdges,
     query: directoriesQuery,
     data: directoriesData,
+    pageInfo: directoryConnection.pageInfo,
     hasNextPage: computed(() => directoryConnection.pageInfo.value.hasNextPage),
+    hasPreviousPage: computed(() => directoryConnection.pageInfo.value.hasPreviousPage),
     fetchMore: directoryConnection.fetchMore,
   };
 }

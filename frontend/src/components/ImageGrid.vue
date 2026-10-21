@@ -80,7 +80,7 @@
           <button
             :disabled="loading"
             class="px-6 py-2 bg-primary-800 hover:bg-primary-700 border border-primary-700 hover:border-primary-600 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 text-primary-200 hover:text-white"
-            @click="fetchMore"
+            @click="fetchMore()"
           >
             <svg
               v-if="loading"

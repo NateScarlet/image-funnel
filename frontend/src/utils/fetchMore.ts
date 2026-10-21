@@ -34,6 +34,13 @@ function mergeResultDeep<T extends object>(
   ) as unknown as T;
 }
 
+export interface FetchMoreOptions {
+  /** 指定取页方向；缺省时优先向后，没有后续页再向前 */
+  direction?: "forward" | "backward";
+  /** 反向分页的页大小：before 需要与 last 搭配才取紧邻游标之前的一页 */
+  backwardPageSize?: number;
+}
+
 export default async function fetchMore<
   T extends object,
   V extends {
@@ -42,9 +49,15 @@ export default async function fetchMore<
     last?: number | null;
     before?: string | null;
   },
->(query: Pick<ObservableQuery<T, V>, "fetchMore">, pageInfo: PageInfo): Promise<void> {
+>(
+  query: Pick<ObservableQuery<T, V>, "fetchMore">,
+  pageInfo: PageInfo,
+  options?: FetchMoreOptions,
+): Promise<void> {
+  const direction = options?.direction ?? (pageInfo.hasNextPage ? "forward" : "backward");
   try {
-    if (pageInfo.hasNextPage) {
+    if (direction === "forward") {
+      if (!pageInfo.hasNextPage) return;
       await query.fetchMore({
         variables: {
           after: pageInfo.endCursor,
@@ -54,10 +67,14 @@ export default async function fetchMore<
           return mergeResultDeep(previousResult, fetchMoreResult, false);
         },
       });
-    } else if (pageInfo.hasPreviousPage) {
+    } else {
+      if (!pageInfo.hasPreviousPage) return;
+      const pageSize = options?.backwardPageSize;
       await query.fetchMore({
         variables: {
           before: pageInfo.startCursor,
+          // 反向取页不带 first，避免与 last 同时出现
+          ...(pageSize === undefined ? {} : { last: pageSize, first: undefined }),
         } as unknown as Partial<V>,
         updateQuery(previousResult, { fetchMoreResult }) {
           return mergeResultDeep(previousResult, fetchMoreResult, true);

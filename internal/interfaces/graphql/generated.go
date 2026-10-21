@@ -143,7 +143,7 @@ type ComplexityRoot struct {
 
 	Directory struct {
 		Directories   func(childComplexity int) int
-		DirectoriesV2 func(childComplexity int, filterBy *shared.DirectoryFilters, first *int, after *string) int
+		DirectoriesV2 func(childComplexity int, filterBy *shared.DirectoryFilters, first *int, after *string, last *int, before *string) int
 		ID            func(childComplexity int) int
 		Images        func(childComplexity int, filterBy *shared.ImageFilters, first *int, after *string) int
 		LastSession   func(childComplexity int) int
@@ -600,7 +600,7 @@ type DirectoryResolver interface {
 	State(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStateDTO, error)
 	Stats(ctx context.Context, obj *shared.DirectoryDTO) (*shared.DirectoryStatsDTO, error)
 	Directories(ctx context.Context, obj *shared.DirectoryDTO) ([]*shared.DirectoryDTO, error)
-	DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string) (*shared.DirectoryConnectionDTO, error)
+	DirectoriesV2(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.DirectoryFilters, first *int, after *string, last *int, before *string) (*shared.DirectoryConnectionDTO, error)
 	Images(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.ImageFilters, first *int, after *string) (*shared.ImageConnectionDTO, error)
 	Notes(ctx context.Context, obj *shared.DirectoryDTO, filterBy *shared.NoteFilters, first *int, after *string) (*shared.NoteConnectionDTO, error)
 	LastSession(ctx context.Context, obj *shared.DirectoryDTO) (*shared.SessionDTO, error)
@@ -977,7 +977,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Directory.DirectoriesV2(childComplexity, args["filterBy"].(*shared.DirectoryFilters), args["first"].(*int), args["after"].(*string)), true
+		return e.complexity.Directory.DirectoriesV2(childComplexity, args["filterBy"].(*shared.DirectoryFilters), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Directory.id":
 		if e.complexity.Directory.ID == nil {
 			break
@@ -3203,9 +3203,14 @@ type Directory implements Node
   "子目录列表，支持筛选与分页"
   directoriesV2(
     filterBy: DirectoryFilters
-    "每页条目数，默认 100"
-    first: Int = 100
+    "正向分页时每页条目数"
+    first: Int
+    "正向分页时从该游标之后取页"
     after: String
+    "反向分页时每页条目数；与 first 互斥"
+    last: Int
+    "反向分页时从该游标之前取页"
+    before: String
   ): DirectoryConnection! @goField(forceResolver: true)
   "目录下的图片列表，支持筛选与分页"
   images(
@@ -4677,6 +4682,16 @@ func (ec *executionContext) field_Directory_directoriesV2_args(ctx context.Conte
 		return nil, err
 	}
 	args["after"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
 	return args, nil
 }
 
@@ -6790,7 +6805,7 @@ func (ec *executionContext) _Directory_directoriesV2(ctx context.Context, field 
 		ec.fieldContext_Directory_directoriesV2,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Directory().DirectoriesV2(ctx, obj, fc.Args["filterBy"].(*shared.DirectoryFilters), fc.Args["first"].(*int), fc.Args["after"].(*string))
+			return ec.resolvers.Directory().DirectoriesV2(ctx, obj, fc.Args["filterBy"].(*shared.DirectoryFilters), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		nil,
 		ec.marshalNDirectoryConnection2ᚖmainᚋinternalᚋsharedᚐDirectoryConnectionDTO,
@@ -26318,13 +26333,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 

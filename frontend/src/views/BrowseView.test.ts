@@ -110,7 +110,7 @@ function createPagedSource(
   const hasNext = ref(false);
   /** 受控模式下由用例决定何时放行 fetchMore，用于观察加载过程中的中断 */
   let release: (() => void) | undefined;
-  const fetchMore = vi.fn(async () => {
+  const fetchMore = vi.fn(async (_direction?: "forward" | "backward") => {
     if (mode.stalled) return;
     if (mode.controlled) await new Promise<void>((resolve) => (release = resolve));
     nodes.value = [
@@ -166,13 +166,45 @@ function setupBrowse(options: {
     });
     const otherFetchMore = vi.fn();
     otherFetchMores.push(otherFetchMore);
+    // 模拟服务端页：每页 100 条，页锚点取该页首条目录的服务端游标
+    const directories = computed(() => {
+      if (!isParent.value) return [];
+
+      const nodes = parentSource.nodes.value;
+      const pageSize = 100;
+      return nodes.map((node, index) => {
+        const start = Math.floor(index / pageSize) * pageSize;
+        return {
+          dir: node,
+          pageAnchor: nodes[start]?.relPath ?? node.relPath,
+          pageAfter: start === 0 ? null : (nodes[start - 1]?.relPath ?? null),
+          serverCursor: node.relPath,
+        };
+      });
+    });
+
     return {
       currentDirectory: computed(() =>
         isParent.value ? parentDirectory.value : currentDirectory.value,
       ),
       liveDirectories: computed(() => (isParent.value ? parentSource.nodes.value : [])),
+      directories,
+      edges: computed(() =>
+        isParent.value
+          ? parentSource.nodes.value.map((node) => ({ cursor: node.relPath, node }))
+          : [],
+      ),
+      pageInfo: computed(() => ({
+        __typename: "PageInfo" as const,
+        hasNextPage: isParent.value && parentSource.hasNext.value,
+        hasPreviousPage: false,
+        startCursor: null,
+        endCursor: isParent.value ? (parentSource.nodes.value.at(-1)?.relPath ?? null) : null,
+      })),
       hasNextPage: computed(() => isParent.value && parentSource.hasNext.value),
-      fetchMore: () => (isParent.value ? parentSource.fetchMore() : otherFetchMore()),
+      hasPreviousPage: computed(() => false),
+      fetchMore: (direction?: "forward" | "backward") =>
+        isParent.value ? parentSource.fetchMore(direction) : otherFetchMore(),
     };
   });
 
@@ -256,7 +288,8 @@ describe("BrowseView 同级目录导航补齐父目录分页", () => {
     await browse.settle();
 
     expect(browse.parentSource.nodes.value).toHaveLength(120);
-    expect(navTitle(wrapper, "上一个目录")).toContain("dir-100");
+    // 服务端顺序按目录名比较，"dir-100" 排在 "dir-99" 之前
+    expect(navTitle(wrapper, "上一个目录")).toContain("dir-99");
     expect(navTitle(wrapper, "下一个目录")).toContain("dir-102");
   });
 
@@ -284,7 +317,7 @@ describe("BrowseView 同级目录导航补齐父目录分页", () => {
     const wrapper = await mountBrowse("dir-102");
     await browse.settle();
 
-    expect(navTitle(wrapper, "上一个目录")).toContain("dir-100");
+    expect(navTitle(wrapper, "上一个目录")).toContain("dir-99");
     expect(navTitle(wrapper, "下一个目录")).toContain("dir-104");
   });
 

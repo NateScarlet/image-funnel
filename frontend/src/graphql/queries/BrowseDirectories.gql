@@ -1,9 +1,22 @@
-query BrowseDirectories($id: ID!, $filterBy: DirectoryFilters, $first: Int, $after: String) {
+query BrowseDirectories(
+  $id: ID!
+  $filterBy: DirectoryFilters
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
   node(id: $id) {
     id
     ... on Directory {
       ...Directory
-      directoriesV2(filterBy: $filterBy, first: $first, after: $after) {
+      directoriesV2(
+        filterBy: $filterBy
+        first: $first
+        after: $after
+        last: $last
+        before: $before
+      ) {
         edges {
           cursor
           node {

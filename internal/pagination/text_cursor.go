@@ -1,5 +1,15 @@
 package pagination
 
+import "encoding/hex"
+
+// TextToCursor 把文本键编码为不透明游标。
+//
+// 采用十六进制编码：与原文保持相同的字典序（因此跨页可直接比较），
+// 同时对前端不透明，调用方不应依赖具体编码。
+func TextToCursor(v string) string {
+	return hex.EncodeToString([]byte(v))
+}
+
 // Deprecated: use `ByTextV2` instead
 func ByText(options ...Option) (
 	newInfo func(
@@ -88,7 +98,8 @@ func ByTextV2[T any](
 					}
 					return
 				}
-				if before >= i.cursor {
+				// 游标有序：遇到不小于 before 的项后，后面都不属于本页
+				if before <= i.cursor {
 					w.WriteHasNextPage(true)
 					return
 				}
@@ -108,7 +119,8 @@ func ByTextV2[T any](
 					}
 					return
 				}
-				if after <= i.cursor {
+				// 跳过游标自身及之前的所有项，只返回严格位于其后的项
+				if i.cursor <= after {
 					w.WriteHasPreviousPage(true)
 					continue
 				}
