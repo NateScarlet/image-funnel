@@ -26,6 +26,7 @@ from .autocomplete import (
     DanbooruProvider,
     NodeProvider,
     LoraProvider,
+    RegionProvider,
     RegionOptionProvider,
     ModelFormatProvider,
     AutocompleteRequest,
@@ -1076,11 +1077,12 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual(seen_prompts, {"masterpiece": "区域: positive"})
 
     def test_region_option_provider_suggests_all_regions_on_empty_input(self):
+        """`/remix ` 空位尚未进入任何编辑动作，给出完整形式的区域选项。"""
         context = self._make_context(
             target_command="remix",
             query="",
-            prev_word="",
-            cwords=["/remix", "--add"],
+            prev_word="/remix",
+            cwords=["/remix"],
             parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1102,8 +1104,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context = self._make_context(
             target_command="remix",
             query="g",
-            prev_word="",
-            cwords=["/remix", "--add"],
+            prev_word="/remix",
+            cwords=["/remix"],
             parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1111,25 +1113,38 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         provider = RegionOptionProvider()
         self.assertFalse(provider.can_provide(context))
 
-    def test_region_option_provider_skips_when_prompt_words_typed(self):
+    def test_region_option_provider_skips_after_add_flag(self):
+        """`/remix --add ` 是标签位置：跟 `--region` 会让 argparse 拒绝整条指令。"""
         context = self._make_context(
             target_command="remix",
             query="",
-            prev_word="1girl,",
-            cwords=["/remix", "--add", "1girl,"],
+            prev_word="--add",
+            cwords=["/remix", "--add"],
             parsed_args=self._make_parsed_args(command="remix"),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
-        provider = RegionOptionProvider()
-        self.assertFalse(provider.can_provide(context))
+        self.assertFalse(RegionOptionProvider().can_provide(context))
+
+    def test_region_option_provider_skips_in_option_value_position(self):
+        """取值型选项的参数位（如 `-j `）只接受值，此处不能建议 `--region`。"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="-j",
+            cwords=["/remix", "-j"],
+            parsed_args=None,
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        self.assertFalse(RegionOptionProvider().can_provide(context))
 
     def test_region_option_provider_skips_when_region_specified(self):
         context = self._make_context(
             target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/remix", "--add", "--region", "positive"],
+            cwords=["/remix", "--region", "positive"],
             parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1142,7 +1157,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             target_command="remix",
             query="",
             prev_word="5",
-            cwords=["/remix", "--add", "--node", "5"],
+            cwords=["/remix", "--node", "5"],
             parsed_args=self._make_parsed_args(command="remix", node=["5"]),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1154,8 +1169,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context = self._make_context(
             target_command="remix",
             query="",
-            prev_word="",
-            cwords=["/remix", "--add"],
+            prev_word="/remix",
+            cwords=["/remix"],
             parsed_args=self._make_parsed_args(command="remix"),
         )
         provider = RegionOptionProvider()
@@ -1165,8 +1180,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context = self._make_context(
             target_command="remix",
             query="",
-            prev_word="",
-            cwords=["/remix", "--add"],
+            prev_word="/remix",
+            cwords=["/remix"],
             parsed_args=self._make_parsed_args(command="remix"),
             workflow={"nodes": []},
             prompt_meta={},
@@ -1180,7 +1195,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             target_command="remix",
             query="",
             prev_word="--neg",
-            cwords=["/remix", "--add", "--neg"],
+            cwords=["/remix", "--neg"],
             parsed_args=self._make_parsed_args(command="remix", neg=True),
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1196,8 +1211,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         context_plain = self._make_context(
             target_command="remix",
             query="",
-            prev_word="",
-            cwords=["/remix", "--add"],
+            prev_word="/remix",
+            cwords=["/remix"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
@@ -1209,26 +1224,26 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             target_command="remix",
             query="",
             prev_word="positive",
-            cwords=["/remix", "--add", "--region", "positive"],
+            cwords=["/remix", "--region", "positive"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
         self.assertFalse(provider.can_provide(context_targeted))
 
-    def test_region_option_provider_target_scan_respects_end_of_options(self):
-        """结束标记 -- 之后的 --region 属于提示词文本，不算指定目标。"""
+    def test_region_option_provider_skips_after_end_of_options(self):
+        """`--` 之后写入的是位置值而非旗标，不能再建议区域选项。"""
         context = self._make_context(
             target_command="remix",
             query="",
             prev_word="--region",
-            cwords=["/remix", "--add", "--", "--region"],
+            cwords=["/remix", "--", "--region"],
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
         )
         provider = RegionOptionProvider()
-        self.assertTrue(provider.can_provide(context))
+        self.assertFalse(provider.can_provide(context))
 
     def test_autocomplete_prefers_region_options_over_danbooru_related(self) -> None:
         """空输入且有可用区域时，区域选项独占建议，关联联想与历史回退均不执行。"""
@@ -1249,8 +1264,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             request = AutocompleteRequest(
                 target_command="remix",
                 query="",
-                prev_word="",
-                cwords=["/remix", "--add"],
+                prev_word="/remix",
+                cwords=["/remix"],
                 image_paths=[sample_path],
                 root_dir="mock_root",
                 directory_rel_path="mock_rel",
@@ -1265,6 +1280,188 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_danbooru.search.assert_not_called()
         mock_danbooru.related.assert_not_called()
         history.get_all_added_prompts.assert_not_called()
+
+    def test_autocomplete_empty_input_without_regions_yields_nothing(self) -> None:
+        """`/remix ` 空位在没有区域标记时为空：该位置不产出其他类型的建议。"""
+        mock_danbooru = MagicMock()
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                DanbooruProvider(
+                    mock_danbooru, self._make_history(), NullSuggestionTextFormatter()
+                ),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample({"nodes": []}, tmp_dir)
+            request = AutocompleteRequest(
+                target_command="remix",
+                query="",
+                prev_word="/remix",
+                cwords=["/remix"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertEqual(suggestions, [])
+        mock_danbooru.related.assert_not_called()
+
+    def test_autocomplete_add_related_from_real_region_text(self) -> None:
+        """真实链路：区域文本 → 本地共现 → 关联联想，且关联结果排在历史补充之前。"""
+        from .danbooru import FileDanbooruTagProvider, NullSemanticTagSearcher
+        from .danbooru_test import write_file_fixture
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            write_file_fixture(
+                data_dir,
+                [
+                    {
+                        "name": "1girl",
+                        "cn_name": "女孩",
+                        "wiki": "A girl.",
+                        "post_count": "100",
+                        "category": "0",
+                        "nsfw": "0",
+                    },
+                    {
+                        "name": "pink_hair",
+                        "cn_name": "粉发",
+                        "wiki": "Pink hair.",
+                        "post_count": "90",
+                        "category": "0",
+                        "nsfw": "0",
+                    },
+                ],
+                [("1girl", "pink_hair", 100)],
+            )
+            real_provider = FileDanbooruTagProvider(
+                data_dir, False, semantic=NullSemanticTagSearcher()
+            )
+            services = AutocompleteServices(
+                parser=get_parser(),
+                providers=[
+                    RegionOptionProvider(),
+                    DanbooruProvider(
+                        real_provider,
+                        self._make_history(
+                            all_added=[("history_only", "2026-08-07T10:00:00")]
+                        ),
+                        NullSuggestionTextFormatter(),
+                    ),
+                ],
+            )
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                sample_path = self._write_workflow_sample(
+                    self._get_mock_region_workflow(), tmp_dir
+                )
+                request = AutocompleteRequest(
+                    target_command="remix",
+                    query="",
+                    prev_word="--add",
+                    cwords=["/remix", "--region", "positive", "--add"],
+                    image_paths=[sample_path],
+                    root_dir="mock_root",
+                    directory_rel_path="mock_rel",
+                    cancel_token=CancelToken(),
+                )
+                suggestions = list(autocomplete(request, services))
+
+        texts = [s.text for s in suggestions]
+        self.assertIn("pink_hair", texts)
+        self.assertLess(texts.index("pink_hair"), texts.index("history_only"))
+
+    def test_autocomplete_add_position_never_suggests_region(self) -> None:
+        """`/remix --add ` 是标签位置：区域选项不得抢占，关联联想照常产出。"""
+        mock_danbooru = MagicMock()
+        mock_danbooru.related.return_value = [
+            DanbooruTag("cute", "可爱", "Cute character.", "General")
+        ]
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                DanbooruProvider(
+                    mock_danbooru, self._make_history(), NullSuggestionTextFormatter()
+                ),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample(
+                self._get_mock_region_workflow(), tmp_dir
+            )
+            request = AutocompleteRequest(
+                target_command="remix",
+                query="",
+                prev_word="--add",
+                cwords=["/remix", "--add"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertEqual([s.text for s in suggestions], ["cute"])
+        mock_danbooru.related.assert_called_once()
+
+    def test_autocomplete_modifier_value_positions_ignore_editing_action(self) -> None:
+        """`--region` / `--node` 的值位置只看选项位置，不因当前编辑动作收窄。"""
+        workflow = self._get_mock_region_workflow()
+        prompt_meta: Dict[str, Any] = {
+            "node_1": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl"}},
+            "node_2": {"class_type": "KSampler", "inputs": {"cfg": 7.0}},
+        }
+
+        region_positions = [
+            ["/remix", "--region"],
+            ["/remix", "--remove", "foo", "--region"],
+            ["/remix", "--add", "blue", "--region"],
+        ]
+        for cwords in region_positions:
+            with self.subTest(cwords=cwords):
+                context = self._make_context(
+                    target_command="remix",
+                    query="",
+                    prev_word="--region",
+                    cwords=cwords,
+                    parsed_args=None,
+                    workflow=workflow,
+                    prompt_meta=prompt_meta,
+                )
+                provider = RegionProvider()
+                self.assertTrue(provider.can_provide(context))
+                self.assertEqual(
+                    [s.text for s in provider.provide(context)],
+                    ["positive", "negative"],
+                )
+
+        node_positions = [
+            ["/remix", "--node"],
+            ["/remix", "--cfg", "--node"],
+            ["/remix", "--remove", "foo", "--node"],
+        ]
+        expected_nodes = [["node_1"], ["node_2"], ["node_1"]]
+        for cwords, expected in zip(node_positions, expected_nodes):
+            with self.subTest(cwords=cwords):
+                context = self._make_context(
+                    target_command="remix",
+                    query="",
+                    prev_word="--node",
+                    cwords=cwords,
+                    parsed_args=None,
+                    workflow=workflow,
+                    prompt_meta=prompt_meta,
+                )
+                provider = NodeProvider()
+                self.assertTrue(provider.can_provide(context))
+                self.assertEqual([s.text for s in provider.provide(context)], expected)
 
     def test_autocomplete_falls_back_to_danbooru_related_without_regions(self) -> None:
         """无区域标记时回落到 Danbooru 提供者（历史回退路径照常执行）。"""

@@ -111,11 +111,25 @@ def get_branch_autocomplete_suggestions(
     return suggestions
 
 
+def _at_first_positional_arg(cwords: List[str]) -> bool:
+    """判断光标是否处于第一个位置参数位（suffix）。
+
+    `/branch` 只有 suffix 一个可选位置参数：已完成词里除指令名与 `<>` 占位符之外
+    还有词，说明 suffix 已经填过，之后的位置没有可补全的内容。
+    """
+    tokens = [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
+    return len(tokens) <= 1
+
+
 def run_autocomplete() -> None:
     """自动完成执行入口，从环境变量读取上下文参数并输出 JSONL 建议项目。"""
     root_dir = os.getenv("IMAGE_FUNNEL_ROOT_DIR", "")
     dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
     query = os.getenv("IMAGE_FUNNEL_AUTOCOMPLETE_QUERY", "")
+    cwords: List[str] = json.loads(os.environ["IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS"])
+
+    if not _at_first_positional_arg(cwords):
+        return
 
     suggestions = get_branch_autocomplete_suggestions(root_dir, dir_rel_path, query)
     for item in suggestions:

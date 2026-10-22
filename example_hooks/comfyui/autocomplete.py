@@ -788,32 +788,33 @@ def _has_explicit_target(context: AutocompleteContext) -> bool:
         return bool(getattr(parsed, "region", None)) or bool(
             getattr(parsed, "node", None)
         )
-    # 解析失败时回退扫描结束标记 -- 之前的选项 token
-    for w in context.cleaned_cwords[1:]:
-        if w == "--":
-            break
-        if w in ("--region", "--node"):
-            return True
-    return False
+    # 解析失败时回退扫描已完成词列表中的选项 token
+    return any(w in ("--region", "--node") for w in context.cleaned_cwords[1:])
 
 
 class RegionOptionProvider(AutocompleteProvider):
-    """目标区域选项建议提供者：未指定插入目标时优先建议可用的 --region 选项"""
+    """目标区域选项建议提供者：尚未进入任何编辑动作时优先建议可用的 --region 选项"""
 
     @property
     def is_exclusive(self) -> bool:
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if context.action != ADD_ACTION:
+        # 区域选项只在指令空位（尚未进入任何编辑动作）产出：`--add` 之后是标签位置，
+        # 此时跟 `--region` 会被 argparse 当成 `--add` 的值而拒绝整条指令
+        if context.action != NO_ACTION:
+            return False
+
+        # `--` 是选项结束标记，之后写入的都是位置值而非旗标
+        if "--" in context.cleaned_cwords:
             return False
 
         # 正在输入查询词时交给语义搜索补全
         if context.query.strip():
             return False
 
-        # 已键入提示词时不建议区域，保持基于已输入标签的关联联想
-        if context.action_tags:
+        # 取值型选项的参数位（如 `-j `）只接受值，旗标建议同样会让指令非法
+        if context.editing_modifier_value:
             return False
 
         # 目标已确定（--region/--node）或工作流无可用区域时，直接进入关联联想

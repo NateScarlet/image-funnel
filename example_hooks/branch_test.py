@@ -146,6 +146,8 @@ class TestBranchHook(unittest.TestCase):
                     "IMAGE_FUNNEL_ROOT_DIR": temp_dir,
                     "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "folder1",
                     "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                    "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": '["/branch"]',
+                    "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": "/branch",
                 },
             ):
                 captured_stdout = io.StringIO()
@@ -155,6 +157,39 @@ class TestBranchHook(unittest.TestCase):
                 output = captured_stdout.getvalue().strip()
                 self.assertIn('"text": "tag_1"', output)
                 self.assertIn('"description": "已存在同级目录：folder1,tag_1"', output)
+
+    def test_run_autocomplete_only_suggests_on_first_positional(self):
+        """usage 只有一个可选位置参数：`/branch foo ` 之后的位置一律不给建议。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(os.path.join(temp_dir, "alpha"))
+
+            cases: list[tuple[str, str, bool]] = [
+                ('["/branch"]', "/branch", True),
+                # 指令模板插入后尚未改写占位符：仍处于第一个位置参数位
+                ('["/branch", "<suffix>"]', "<suffix>", True),
+                ('["/branch", "foo"]', "foo", False),
+                ('["/branch", "foo", "bar"]', "bar", False),
+            ]
+            for cwords, prev_word, expects_suggestions in cases:
+                with self.subTest(cwords=cwords):
+                    with patch.dict(
+                        os.environ,
+                        {
+                            "IMAGE_FUNNEL_ROOT_DIR": temp_dir,
+                            "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "",
+                            "IMAGE_FUNNEL_AUTOCOMPLETE_QUERY": "",
+                            "IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS": cwords,
+                            "IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD": prev_word,
+                        },
+                    ):
+                        captured_stdout = io.StringIO()
+                        with patch.object(sys, "stdout", captured_stdout):
+                            run_autocomplete()
+
+                    output = captured_stdout.getvalue()
+                    self.assertEqual(bool(output.strip()), expects_suggestions)
+                    if expects_suggestions:
+                        self.assertIn('"text": "alpha"', output)
 
 
 if __name__ == "__main__":
