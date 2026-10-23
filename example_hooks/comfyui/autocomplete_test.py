@@ -1311,34 +1311,56 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual(suggestions, [])
         mock_danbooru.related.assert_not_called()
 
-    def test_autocomplete_add_related_from_real_region_text(self) -> None:
-        """真实链路：区域文本 → 本地共现 → 关联联想，且关联结果排在历史补充之前。"""
-        from .danbooru import FileDanbooruTagProvider, NullSemanticTagSearcher
+    def _write_related_data_dir(self, data_dir: str) -> None:
+        """写入真实数据构成的共现产物：只有多词标签，共现边也只连接多词标签。
+
+        真实共现数据不含 ``1girl`` / ``solo`` 这类覆盖过广的标签，因此夹具里不提供
+        单词标签作为种子，避免掩盖「多词标签命中不了」的问题。
+        """
         from .danbooru_test import write_file_fixture
 
+        write_file_fixture(
+            data_dir,
+            [
+                {
+                    "name": "pink_hair",
+                    "cn_name": "粉发",
+                    "wiki": "Pink hair.",
+                    "post_count": "90",
+                    "category": "0",
+                    "nsfw": "0",
+                },
+                {
+                    "name": "very_long_hair",
+                    "cn_name": "超长发",
+                    "wiki": "Very long hair.",
+                    "post_count": "80",
+                    "category": "0",
+                    "nsfw": "0",
+                },
+                {
+                    "name": "floating_hair",
+                    "cn_name": "飘发",
+                    "wiki": "Floating hair.",
+                    "post_count": "70",
+                    "category": "0",
+                    "nsfw": "0",
+                },
+            ],
+            [("pink_hair", "floating_hair", 100)],
+        )
+
+    def test_autocomplete_add_related_from_real_region_text(self) -> None:
+        """真实链路：区域文本 → 本地共现 → 关联联想，且关联结果排在历史补充之前。
+
+        夹具按真实数据构成只保留多词标签：共现索引按标签名（下划线）建表，而
+        anima 提示词用空格分隔标签，命中必须依赖调用前的归一化；sdxl 提示词本来
+        就是标签名形态，同一断言保证归一化对它幂等。
+        """
+        from .danbooru import FileDanbooruTagProvider, NullSemanticTagSearcher
+
         with tempfile.TemporaryDirectory() as data_dir:
-            write_file_fixture(
-                data_dir,
-                [
-                    {
-                        "name": "1girl",
-                        "cn_name": "女孩",
-                        "wiki": "A girl.",
-                        "post_count": "100",
-                        "category": "0",
-                        "nsfw": "0",
-                    },
-                    {
-                        "name": "pink_hair",
-                        "cn_name": "粉发",
-                        "wiki": "Pink hair.",
-                        "post_count": "90",
-                        "category": "0",
-                        "nsfw": "0",
-                    },
-                ],
-                [("1girl", "pink_hair", 100)],
-            )
+            self._write_related_data_dir(data_dir)
             real_provider = FileDanbooruTagProvider(
                 data_dir, False, semantic=NullSemanticTagSearcher()
             )
@@ -1356,25 +1378,79 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 ],
             )
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                sample_path = self._write_workflow_sample(
-                    self._get_mock_region_workflow(), tmp_dir
-                )
-                request = AutocompleteRequest(
-                    target_command="remix",
-                    query="",
-                    prev_word="--add",
-                    cwords=["/remix", "--region", "positive", "--add"],
-                    image_paths=[sample_path],
-                    root_dir="mock_root",
-                    directory_rel_path="mock_rel",
-                    cancel_token=CancelToken(),
-                )
-                suggestions = list(autocomplete(request, services))
+            for region_text in (
+                "pink hair, very long hair",
+                "pink_hair, very_long_hair",
+            ):
+                with self.subTest(region_text=region_text):
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        sample_path = self._write_workflow_sample(
+                            {
+                                "nodes": [
+                                    {
+                                        "id": "node_1",
+                                        "type": "CLIPTextEncode",
+                                        "title": "Prompt",
+                                        "widgets_values": [
+                                            "// #region positive\n"
+                                            f"{region_text}\n"
+                                            "// #endregion"
+                                        ],
+                                    }
+                                ]
+                            },
+                            tmp_dir,
+                        )
+                        request = AutocompleteRequest(
+                            target_command="remix",
+                            query="",
+                            prev_word="--add",
+                            cwords=["/remix", "--region", "positive", "--add"],
+                            image_paths=[sample_path],
+                            root_dir="mock_root",
+                            directory_rel_path="mock_rel",
+                            cancel_token=CancelToken(),
+                        )
+                        suggestions = list(autocomplete(request, services))
 
-        texts = [s.text for s in suggestions]
-        self.assertIn("pink_hair", texts)
-        self.assertLess(texts.index("pink_hair"), texts.index("history_only"))
+                    texts = [s.text for s in suggestions]
+                    self.assertIn("floating_hair", texts)
+                    self.assertLess(
+                        texts.index("floating_hair"), texts.index("history_only")
+                    )
+
+    def test_autocomplete_add_related_normalizes_typed_uppercase_seed(self) -> None:
+        """用户键入的 `--add` 值可能带大写：种子同样要归一化成小写标签名才能命中共现索引。"""
+        from .danbooru import FileDanbooruTagProvider, NullSemanticTagSearcher
+
+        with tempfile.TemporaryDirectory() as data_dir:
+            self._write_related_data_dir(data_dir)
+            services = AutocompleteServices(
+                parser=get_parser(),
+                providers=[
+                    RegionOptionProvider(),
+                    DanbooruProvider(
+                        FileDanbooruTagProvider(
+                            data_dir, False, semantic=NullSemanticTagSearcher()
+                        ),
+                        self._make_history(),
+                        NullSuggestionTextFormatter(),
+                    ),
+                ],
+            )
+            request = AutocompleteRequest(
+                target_command="remix",
+                query="",
+                prev_word="Pink Hair,",
+                cwords=["/remix", "--add", "Pink Hair,"],
+                image_paths=[],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertIn("floating_hair", [s.text for s in suggestions])
 
     def test_autocomplete_add_position_never_suggests_region(self) -> None:
         """`/remix --add ` 是标签位置：区域选项不得抢占，关联联想照常产出。"""

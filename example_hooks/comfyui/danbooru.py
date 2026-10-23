@@ -756,7 +756,10 @@ class DanbooruTagProvider(Protocol):
         *,
         cancel_token: CancelToken,
     ) -> List[DanbooruTag]:
-        """联想与指定 tags 列表相关的提示词。"""
+        """联想与指定 tags 列表相关的提示词。
+
+        ``tags`` 为标签名形态（下划线、小写）：调用方负责把提示词形态转成该形态。
+        """
         ...
 
 

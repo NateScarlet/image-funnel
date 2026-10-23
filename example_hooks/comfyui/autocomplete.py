@@ -873,6 +873,16 @@ def _build_seen_lower(seen_prompts: dict[str, str]) -> set[str]:
     }
 
 
+def _seed_tag_names(tags: List[str]) -> List[str]:
+    """把种子标签从提示词形态转成标签名形态：词间空白并成下划线，并转小写。
+
+    共现索引按标签名建表，而 anima 提示词用空格分隔标签（``pink hair``），不归一化
+    一条都命中不了；sdxl 提示词本来就是标签名形态，转换对它幂等。``action_tags``
+    来源是用户原样键入，可能含大写，而索引里的标签名全小写，因此还需要小写化。
+    """
+    return ["_".join(tag.lower().split()) for tag in tags]
+
+
 class DanbooruProvider(AutocompleteProvider):
     """Danbooru 语义与关联补全推荐"""
 
@@ -1082,7 +1092,7 @@ class DanbooruProvider(AutocompleteProvider):
                 try:
                     target_categories = ["General", "Artist", "Meta"]
                     tags = self.provider.related(
-                        prompt_tags,
+                        _seed_tag_names(prompt_tags),
                         target_categories=target_categories,
                         cancel_token=context.cancel_token,
                     )
