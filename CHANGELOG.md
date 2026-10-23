@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.9.0](https://github.com/NateScarlet/image-funnel/compare/v1.8.0...v1.9.0) (2026-10-23)
+
+
+### Features
+
+* **example-hooks/comfyui:** activate the target ComfyUI window after delivery ([ab2ef43](https://github.com/NateScarlet/image-funnel/commit/ab2ef4305c33fd0fb92aa19246f4cd97cce75b21)), closes [#153](https://github.com/NateScarlet/image-funnel/issues/153)
+* **example-hooks/comfyui:** merge comfyui edit directives into /remix ([3620ad6](https://github.com/NateScarlet/image-funnel/commit/3620ad61531106dc686f7245ffe50bb5ead6e9cd)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+* **example-hooks/comfyui:** should skip enqueue when remix produces no change ([8c67622](https://github.com/NateScarlet/image-funnel/commit/8c67622f9409ff3ec4ce75afcf71bf09fbeaf7a0)), closes [#150](https://github.com/NateScarlet/image-funnel/issues/150)
+
+
+### Bug Fixes
+
+* **example-hooks/comfyui:** related seeds should use tag-name form ([1c7dcb7](https://github.com/NateScarlet/image-funnel/commit/1c7dcb737fe7ade0abf768835b8fbaf21b15209d)), closes [#160](https://github.com/NateScarlet/image-funnel/issues/160)
+* **example-hooks/comfyui:** should abort in-flight HTTP when the autocomplete request is canceled ([ba71a0a](https://github.com/NateScarlet/image-funnel/commit/ba71a0a9bbca5f4575fe83d0d101b09ebacc7ab2)), closes [#138](https://github.com/NateScarlet/image-funnel/issues/138)
+* **example-hooks/comfyui:** should carry the cancel token on each call ([4809ddd](https://github.com/NateScarlet/image-funnel/commit/4809dddd561a93e334c092dfbb88ce6fbd8357e5)), closes [#149](https://github.com/NateScarlet/image-funnel/issues/149)
+* **example-hooks/comfyui:** should complete tags and prompts in /remix ([855fe6a](https://github.com/NateScarlet/image-funnel/commit/855fe6a2d67b3a2f674e5ec9cfb041ea9912d5f8)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+* **example-hooks/comfyui:** should infer format from tag-internal separators only ([2e5edd2](https://github.com/NateScarlet/image-funnel/commit/2e5edd27f8bbc9a8d8260f126b6c205cbecda425))
+* **example-hooks/comfyui:** should not complete prompts in the weight position ([b9db224](https://github.com/NateScarlet/image-funnel/commit/b9db224802ddfb3cfedc4b931bbe506d1b9a6f09)), closes [#146](https://github.com/NateScarlet/image-funnel/issues/146)
+* **example-hooks/comfyui:** should skip semantic layer on prefix hits and separator variants ([7bab518](https://github.com/NateScarlet/image-funnel/commit/7bab51876c9bbf529d848ebbd36067997232afc0)), closes [#161](https://github.com/NateScarlet/image-funnel/issues/161)
+* **example-hooks:** should only suggest completions at syntactically valid positions ([7df2f68](https://github.com/NateScarlet/image-funnel/commit/7df2f6827ad5626eadde4eb7232fbfa67ab94d5c)), closes [#159](https://github.com/NateScarlet/image-funnel/issues/159)
+* **frontend:** should inherit the target directory's own session config ([7404a01](https://github.com/NateScarlet/image-funnel/commit/7404a01ba633b0a2d0600a417caf370394dd8730))
+* **frontend:** should only auto-enter an uncompleted sibling directory ([333076f](https://github.com/NateScarlet/image-funnel/commit/333076f7e23829d1fe6ae730a9503d416ce404a3)), closes [#151](https://github.com/NateScarlet/image-funnel/issues/151)
+* **frontend:** should resolve sibling directory navigation across pages ([47bf3e0](https://github.com/NateScarlet/image-funnel/commit/47bf3e00c4f2424d35c9ca09d6d3ec0e6f80b525)), closes [#125](https://github.com/NateScarlet/image-funnel/issues/125)
+* **hook:** should pair directive results by directive identity, not by regex match order ([3faf3b1](https://github.com/NateScarlet/image-funnel/commit/3faf3b15bb1705dc40ff2cb5e00a538d593099fc)), closes [#140](https://github.com/NateScarlet/image-funnel/issues/140)
+* **image:** should honor q=0 and RFC specificity in Accept negotiation ([d0eb3f2](https://github.com/NateScarlet/image-funnel/commit/d0eb3f23d6f8575e6e4bed2cc216cfbb41a935fe)), closes [#129](https://github.com/NateScarlet/image-funnel/issues/129)
+* **note:** should write notes atomically so readers never see partial content ([568164a](https://github.com/NateScarlet/image-funnel/commit/568164a2c4a5e859c95b8e57f99bbdf7cae6edb5)), closes [#148](https://github.com/NateScarlet/image-funnel/issues/148)
+* **scripts:** should keep python temp dirs usable when tests clear the env ([7ba7e6a](https://github.com/NateScarlet/image-funnel/commit/7ba7e6a8c617598c3deac408be55e1bd3868542e))
+* **scripts:** should not leave tmp dirs in the project root when checking python ([de20862](https://github.com/NateScarlet/image-funnel/commit/de20862f85eb2d647ed3b0474eb40c53b3757496))
+* should follow the list order when advancing to the next directory ([b4aea0d](https://github.com/NateScarlet/image-funnel/commit/b4aea0da13899dca8e21075916c1c247abb63ddf)), closes [#158](https://github.com/NateScarlet/image-funnel/issues/158)
+* should navigate directories by entry-time sort cursor ([dc046ec](https://github.com/NateScarlet/image-funnel/commit/dc046ec361a768f175ec05e073899e4f8e9a0a53)), closes [#151](https://github.com/NateScarlet/image-funnel/issues/151)
+
+
+### Reverts
+
+* fix(frontend): should only auto-enter an uncompleted sibling directory ([f628165](https://github.com/NateScarlet/image-funnel/commit/f62816591f564f10b0e9c77e7c313b36f9349acc))
+
 ## [1.8.0](https://github.com/NateScarlet/image-funnel/compare/v1.7.0...v1.8.0) (2026-10-13)
 
 
