@@ -869,7 +869,8 @@ class DanbooruTagProvider(Protocol):
     ) -> List[DanbooruTag]:
         """联想与指定 tags 列表相关的提示词。
 
-        ``tags`` 为标签名形态（下划线、小写）：调用方负责把提示词形态转成该形态。
+        ``tags`` 为标签名形态（下划线、小写）：用 ``normalize_related_seeds``
+        把提示词形态转成该形态。
         """
         ...
 
@@ -1165,6 +1166,17 @@ class CachedDanbooruTagProvider:
 
 
 # #region 裸工厂（外部消费者复用入口）
+
+
+def normalize_related_seeds(tags: List[str]) -> List[str]:
+    """把关联种子从提示词形态转成标签名形态：词间空白并成下划线，并转小写。
+
+    共现索引按标签名建表，而 anima 提示词用空格分隔标签（``pink hair``），不归一化
+    一条都命中不了；sdxl 提示词本来就是标签名形态，转换对它幂等。种子的两个来源
+    大小写状态不同：编辑器里已格式化的文本是合法标签形态，用户正在键入的文本可能
+    含大写，而索引里的标签名全小写，因此还需要小写化。
+    """
+    return ["_".join(tag.lower().split()) for tag in tags]
 
 
 def build_semantic_searcher(data_dir: str, endpoint_url: str) -> SemanticTagSearcher:

@@ -30,6 +30,7 @@ from .danbooru import (
     AkizukiDanbooruTagLoader,
     build_danbooru_tag_provider,
     build_semantic_searcher,
+    normalize_related_seeds,
     release_cooc_cache,
 )
 from .danbooru_data import (
@@ -1475,6 +1476,27 @@ class TestSQLiteDanbooruCache(unittest.TestCase):
             return_value=broken_conn,
         ):
             self.assertIsNone(self.cache.tag_detail("1girl"))
+
+
+class TestNormalizeRelatedSeeds(unittest.TestCase):
+    """关联种子归一：调用方给提示词形态，共现索引按标签名精确匹配。"""
+
+    def test_prompt_form_seeds_become_tag_names(self) -> None:
+        """anima 的空格形态、词间多余空白与大写键入都归到标签名形态。"""
+        self.assertEqual(
+            normalize_related_seeds(["Pink Hair", "very   long hair", "1girl"]),
+            ["pink_hair", "very_long_hair", "1girl"],
+        )
+
+    def test_tag_name_form_is_idempotent(self) -> None:
+        """sdxl 提示词本来就是标签名形态，转换一次不改变它。"""
+        self.assertEqual(
+            normalize_related_seeds(["pink_hair"]),
+            ["pink_hair"],
+        )
+
+    def test_empty_seeds_stay_empty(self) -> None:
+        self.assertEqual(normalize_related_seeds([]), [])
 
 
 class TestBuildSemanticSearcher(unittest.TestCase):
