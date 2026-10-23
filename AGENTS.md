@@ -95,6 +95,9 @@ pwsh scripts/check-python.ps1    # unittest + pyright + black，统一使用根�
 uv run example_hooks/runner.py   # hook 部署运行方式：依赖由各脚本头部 PEP 723 inline metadata 声明，
                                  # 经 uv run 提供；开发环境（根 .venv）与部署运行互不影响
 
+# 临时/调试用 Python 脚本（已内置受限沙箱适配，见下文「运行临时 Python 脚本」）
+pwsh -NoProfile -File scripts/python.ps1 .scratch/demo/script.py
+
 # 前端测试
 pnpm -C frontend exec vitest run # 仅运行前端测试（net use 沙箱兼容内置于 vite.config.mts，scripts 均已带 --configLoader native）
 
@@ -111,6 +114,28 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 ## Example Hook 包开发
 
 使用 `scripts/check-python.ps1` 运行测试，不要尝试让测试支持直接运行或用框架运行。
+
+### 运行临时 Python 脚本
+
+写调试脚本、一次性验证脚本时，用 `pwsh -NoProfile -File scripts/python.ps1 <脚本路径> [参数...]`，
+不要直接 `& .venv/Scripts/python.exe`，也不要用 `uv run`：
+
+- **必须带 `-NoProfile`**：本仓库的受限沙箱是 PowerShell ConstrainedLanguage 模式，
+  用户 profile 里的 dot-source 会在每次启动时失败并往 stderr 打一条报错，
+  污染脚本输出。`-NoProfile` 跳过 profile 加载。
+
+- **`uv run` 不可用**：uv 的缓存目录在受限沙箱外，会直接报「拒绝访问」。
+- **裸 `.venv` 解释器会踩两个坑**：
+  1. 系统临时目录（`$env:TEMP`）下动态创建的子目录在沙箱内不可访问，
+     `tempfile.mkdtemp()` 出来的目录后续 sqlite 打开与 listdir 都会被拒；
+  2. `mkdtemp` 固定以 `0o700` 创建目录，该权限在沙箱内同样不可访问。
+
+`scripts/python.ps1` 已把这两个问题一并处理：把 `TEMP`/`TMP` 重定向到 `.scratch/tmp`，
+并把 `PYTHONPATH` 指向 `scripts/python-sitecustomize`（`sitecustomize` 兼容层把
+`mkdtemp` 改为默认权限创建）。`scripts/check-python.ps1` 用的是同一套设置。
+
+脚本里需要 `import example_hooks.*` 时，记得把仓库根或 `example_hooks` 目录加进
+`sys.path`（测试模块还会再依赖 `example_hooks` 层的 `test_support`）。
 
 ## Agent skills
 
