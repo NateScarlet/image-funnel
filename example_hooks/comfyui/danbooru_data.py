@@ -21,10 +21,11 @@ from __future__ import annotations
 import csv
 import io
 import os
+import re
 import struct
 import sys
 from array import array
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any,
@@ -194,6 +195,16 @@ class SourceTagRow:
 def normalize_literal(text: str) -> str:
     """字面匹配用归一化：小写、下划线转空格、折叠空白。"""
     return " ".join(text.replace("_", " ").lower().split())
+
+
+# 剥离分隔符号：只保留 Unicode 字母与数字。预编译正则供索引加载期一次性使用，
+# 逐字符 isalnum 实测约慢一倍（见 issue #161 的基准）。
+_NON_ALNUM_RE = re.compile(r"[\W_]+", re.UNICODE)
+
+
+def strip_symbols(text: str) -> str:
+    """去掉除 Unicode 字母与数字以外的字符并小写，用于识别分隔写法不同的同一标签。"""
+    return _NON_ALNUM_RE.sub("", text).lower()
 
 
 def split_cn_aliases(cn_name: str) -> List[str]:
@@ -539,6 +550,18 @@ class CompiledTagRecord:
     nsfw: bool
     name_norm: str
     cn_aliases_norm: Tuple[str, ...]
+    # 剥离分隔符号后的标签名与中文别名。由 __post_init__ 在构造时算出，
+    # 保证任何构造路径都不会产出「存在但未剥离」的非法记录
+    name_stripped: str = field(init=False)
+    cn_aliases_stripped: Tuple[str, ...] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name_stripped", strip_symbols(self.name_norm))
+        object.__setattr__(
+            self,
+            "cn_aliases_stripped",
+            tuple(strip_symbols(alias) for alias in self.cn_aliases_norm),
+        )
 
 
 class CompiledCoocIndex:

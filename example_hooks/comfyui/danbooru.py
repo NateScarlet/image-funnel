@@ -25,6 +25,7 @@ from .danbooru_data import (
     load_compiled_cooc,
     load_compiled_tags,
     normalize_literal,
+    strip_symbols,
 )
 from .danbooru_embedding import (
     CEILING_COSINE,
@@ -84,6 +85,10 @@ class _FileTagIndex:
     by_name: Dict[str, CompiledTagRecord]
     # length(name_norm) -> 该长度的记录列表（模糊匹配只扫长度邻域）
     by_norm_len: Dict[int, List[CompiledTagRecord]]
+    # 剥离分隔符号后的标签名/别名，与 records 平行；查询期在此做紧凑的 startswith 扫描
+    stripped_names: List[str]
+    # (剥离后的中文别名, rec_id)；别名散落在各记录里，摊平成一份列表才能一次扫完
+    stripped_aliases: List[Tuple[str, int]]
     # 语义层热度分（log1p(post_count) 归一化），仅在语义层激活时惰性计算
     _pop_scores: Optional[List[float]] = None
 
@@ -134,14 +139,29 @@ class _FileDataset:
 
 
 def _load_tag_index(tags_path: Path) -> _FileTagIndex:
-    """加载编译 tags 产物并建立 by_name / 长度分桶索引。"""
+    """加载编译 tags 产物并建立 by_name / 长度分桶索引。
+
+    剥离分隔符号的形式随记录在加载期一次性算好并常驻：剥离需要正则全表扫描，
+    放进查询路径会随每次按键重复付出（基准数据见 issue #161）。
+    """
     records = load_compiled_tags(tags_path)
     by_name: Dict[str, CompiledTagRecord] = {}
     by_norm_len: Dict[int, List[CompiledTagRecord]] = {}
+    stripped_names: List[str] = []
+    stripped_aliases: List[Tuple[str, int]] = []
     for record in records:
         by_name[record.tag] = record
         by_norm_len.setdefault(len(record.name_norm), []).append(record)
-    return _FileTagIndex(records=records, by_name=by_name, by_norm_len=by_norm_len)
+        stripped_names.append(record.name_stripped)
+        for alias_stripped in record.cn_aliases_stripped:
+            stripped_aliases.append((alias_stripped, record.rec_id))
+    return _FileTagIndex(
+        records=records,
+        by_name=by_name,
+        by_norm_len=by_norm_len,
+        stripped_names=stripped_names,
+        stripped_aliases=stripped_aliases,
+    )
 
 
 def _get_or_create_dataset(data_dir: str) -> _FileDataset:
@@ -189,37 +209,68 @@ def _normalize_literal(text: str) -> str:
     return normalize_literal(text)
 
 
+@dataclass(frozen=True)
+class _LiteralMatch:
+    """字面匹配结果：排序分 + 命中档次标记。
+
+    档次标记独立于分数，调用方不得再从分数反推：
+    - strong：查询与标签名或中文别名精确相等（含剥离符号后相等）
+    - prefix_hit：查询是标签名或中文别名的前缀（含剥离符号后构成前缀）
+    两者都表示用户意图已足够明确，语义层据此让路。
+    """
+
+    score: float
+    strong: bool
+    prefix_hit: bool
+
+
+_NO_MATCH = _LiteralMatch(0.0, False, False)
+
+# 字面匹配各档分数；剥后相等/前缀分别沿用对应档，同分按标签热度排序
+_SCORE_NAME_EXACT = 100.0
+_SCORE_CN_EXACT = 90.0
+_SCORE_NAME_PREFIX = 80.0
+_SCORE_CN_PREFIX = 75.0
+_SCORE_NAME_SUBSTRING = 70.0
+_SCORE_CN_SUBSTRING = 65.0
+
+
 def _score_literal_match(
-    query_norm: str, record: _FileTagRecord, *, allow_fuzzy: bool = True
-) -> float:
-    """分层打分：精确 > 中文精确 > 前缀 > 子串 > 模糊；不匹配返回 0。
+    query_norm: str,
+    record: _FileTagRecord,
+    *,
+    allow_fuzzy: bool = True,
+) -> _LiteralMatch:
+    """分层打分：精确 > 中文精确 > 前缀 > 子串 > 模糊；不匹配返回 0 分。
 
     allow_fuzzy=False 时只跑无 SequenceMatcher 的分层（search 热路径第一趟）。
     首字符快速拒绝：子串/别名层先查 query[0] 是否出现，避免对 5 万条全量扫长别名。
+    剥离分隔符号后再比较的一层不在这里：它需要一次独立的预计算列表扫描
+    （见 search 中的剥后层），塞进逐条函数会明显拖慢热路径。
     """
     if not query_norm:
-        return 0.0
+        return _NO_MATCH
     q0 = query_norm[0]
     name = record.name_norm
     if name == query_norm:
-        return 100.0
+        return _LiteralMatch(_SCORE_NAME_EXACT, True, False)
     if query_norm in record.cn_aliases_norm:
-        return 90.0
+        return _LiteralMatch(_SCORE_CN_EXACT, True, False)
     if name.startswith(query_norm):
-        return 80.0
+        return _LiteralMatch(_SCORE_NAME_PREFIX, False, True)
     for alias in record.cn_aliases_norm:
         if alias.startswith(query_norm):
-            return 75.0
+            return _LiteralMatch(_SCORE_CN_PREFIX, False, True)
     if q0 in name and query_norm in name:
-        return 70.0
+        return _LiteralMatch(_SCORE_NAME_SUBSTRING, False, False)
     for alias in record.cn_aliases_norm:
         if q0 in alias and query_norm in alias:
-            return 65.0
+            return _LiteralMatch(_SCORE_CN_SUBSTRING, False, False)
     if not allow_fuzzy:
-        return 0.0
+        return _NO_MATCH
     if len(query_norm) > _FUZZY_MAX_QUERY_LEN:
-        return 0.0
-    return _score_fuzzy_match(query_norm, record)
+        return _NO_MATCH
+    return _LiteralMatch(_score_fuzzy_match(query_norm, record), False, False)
 
 
 def _fuzzy_ratio(query: str, candidate: str) -> float:
@@ -317,6 +368,7 @@ class FileDanbooruTagProvider:
         query_norm = _normalize_literal(query)
         if not query_norm:
             return []
+        query_stripped = strip_symbols(query_norm)
 
         index = self._dataset.tag_index()
         show_nsfw = self.show_nsfw
@@ -324,26 +376,85 @@ class FileDanbooruTagProvider:
         # 第一趟：无模糊（精确/前缀/子串/中文别名），避免全表 SequenceMatcher
         scored: List[Tuple[float, int, _FileTagRecord]] = []
         matched_ids: Set[int] = set()
-        strong_count = 0
-        has_top = False
+        # rec_id -> scored 下标；剥后层命中同一记录时用于升级分数而不是重复入列
+        scored_pos: Dict[int, int] = {}
+        candidate_count = 0
+        has_strong_match = False
+        has_prefix_hit = False
         for record in index.records:
             if record.nsfw and not show_nsfw:
                 continue
-            score = _score_literal_match(query_norm, record, allow_fuzzy=False)
-            if score > 0:
-                scored.append((-score, -record.post_count, record))
+            match = _score_literal_match(query_norm, record, allow_fuzzy=False)
+            if match.score > 0:
+                scored_pos[record.rec_id] = len(scored)
+                scored.append((-match.score, -record.post_count, record))
                 matched_ids.add(record.rec_id)
                 # 模糊分 <=65，子串(65)及以上已能占满 top20 时无需模糊
-                if score >= 65:
-                    strong_count += 1
-                # 精确/中文别名精确已到顶，再补模糊无益于排序
-                if score >= 90:
-                    has_top = True
+                if match.score >= 65:
+                    candidate_count += 1
+                if match.strong:
+                    has_strong_match = True
+                if match.prefix_hit:
+                    has_prefix_hit = True
 
-        # 第二趟：仅当强匹配不足且非精确命中、查询足够短时，在长度邻域补模糊
+        def merge_stripped(rec_id: int, hit: _LiteralMatch) -> None:
+            """合并剥后层命中：新记录直接入列，已命中记录仅在层级更高时升级。"""
+            nonlocal candidate_count, has_strong_match, has_prefix_hit
+            pos = scored_pos.get(rec_id)
+            if pos is not None:
+                if -hit.score >= scored[pos][0]:
+                    return
+                record = index.records[rec_id]
+                scored[pos] = (-hit.score, -record.post_count, record)
+            else:
+                record = index.records[rec_id]
+                scored_pos[rec_id] = len(scored)
+                scored.append((-hit.score, -record.post_count, record))
+                matched_ids.add(rec_id)
+                # 剥后层最低 75 分，必然计入「已占满候选」的判定
+                candidate_count += 1
+            if hit.strong:
+                has_strong_match = True
+            if hit.prefix_hit:
+                has_prefix_hit = True
+
+        # 剥后层：在预计算列表上做紧凑 startswith 扫描（50k 条约 2ms），
+        # 不逐条塞进上面的打分函数，否则每次查询都会多出十几毫秒解释器开销。
+        # 剥后相等与精确同级，剥后前缀与前缀同级；**不做**剥后子串匹配。
+        if query_stripped:
+            for rec_id, stripped in enumerate(index.stripped_names):
+                if not stripped.startswith(query_stripped):
+                    continue
+                if index.records[rec_id].nsfw and not show_nsfw:
+                    continue
+                is_exact = stripped == query_stripped
+                merge_stripped(
+                    rec_id,
+                    _LiteralMatch(
+                        _SCORE_NAME_EXACT if is_exact else _SCORE_NAME_PREFIX,
+                        is_exact,
+                        not is_exact,
+                    ),
+                )
+            for stripped, rec_id in index.stripped_aliases:
+                if not stripped.startswith(query_stripped):
+                    continue
+                if index.records[rec_id].nsfw and not show_nsfw:
+                    continue
+                is_exact = stripped == query_stripped
+                merge_stripped(
+                    rec_id,
+                    _LiteralMatch(
+                        _SCORE_CN_EXACT if is_exact else _SCORE_CN_PREFIX,
+                        is_exact,
+                        not is_exact,
+                    ),
+                )
+
+        # 第二趟：仅当没有精确命中、候选不足且查询足够短时，在长度邻域补模糊
         if (
-            strong_count < 20
-            and not has_top
+            candidate_count < 20
+            and not has_strong_match
             and len(query_norm) <= _FUZZY_MAX_QUERY_LEN
         ):
             max_delta = max(3, len(query_norm) // 2)
@@ -361,12 +472,12 @@ class FileDanbooruTagProvider:
                         scored.append((-fuzzy, -record.post_count, record))
                         matched_ids.add(record.rec_id)
 
-        # 语义层：仅当字面层无强匹配（精确等于标签名或中文别名）时追加；
+        # 语义层：仅当字面层没有强匹配（精确）也没有前缀命中时追加；
         # 接口超时或失败时降级为「字面结果 + 明确错误提示项」，补全不中断。
         # skip_semantic 由调用方按耗时预算决定（如前端先上屏字面候选再补语义），
         # 跳过时整段不执行：不发嵌入请求，也不产出降级提示项
         semantic_unavailable: Optional[str] = None
-        if not has_top and not skip_semantic:
+        if not has_strong_match and not has_prefix_hit and not skip_semantic:
             try:
                 hits = self.semantic.search(
                     query.strip(), _SEMANTIC_TOP_K, cancel_token=cancel_token

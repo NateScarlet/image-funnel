@@ -193,6 +193,22 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
                 "category": "1",
                 "nsfw": "0",
             },
+            {
+                "name": "blue_eyes",
+                "cn_name": "蓝 眼睛",
+                "wiki": "Blue eyes.",
+                "post_count": "600000",
+                "category": "0",
+                "nsfw": "0",
+            },
+            {
+                "name": "hatsune_miku_(vocaloid)",
+                "cn_name": "初音未来（VOCALOID）",
+                "wiki": "Miku variant.",
+                "post_count": "150000",
+                "category": "4",
+                "nsfw": "0",
+            },
         ]
         self.cooc = [
             ("1girl", "white_hair", 100),
@@ -401,7 +417,7 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         finally:
             shutil.rmtree(gbk_dir, ignore_errors=True)
 
-    # ---- search：语义层（无强匹配时追加） ----
+    # ---- search：语义层（无强匹配且无前缀命中时追加） ----
 
     def test_semantic_skipped_on_exact_name_match(self) -> None:
         """强匹配 = 查询精确等于标签名；此时不触发语义层。"""
@@ -528,6 +544,109 @@ class TestFileDanbooruTagProvider(unittest.TestCase):
         baseline = [r.tag for r in provider.search("hair", cancel_token=_TOKEN)]
         self.assertEqual([r.tag for r in results], baseline)
         self.assertEqual(baseline[:2], ["white_hair", "red_hair"])
+
+    # ---- search：分隔符号差异与强匹配判定（issue #161） ----
+
+    def test_search_matches_separator_variant_of_same_tag(self) -> None:
+        """剥离分隔符号后相等视为精确：blueeyes 字面命中 blue_eyes 且不追加语义层。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        results = provider.search("blueeyes", cancel_token=_TOKEN)
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(results[0].tag, "blue_eyes")
+
+    def test_stripped_equality_ranks_like_exact(self) -> None:
+        """剥后相等与精确同级：即使热度远低于字面子串命中，也应排在前面。"""
+        data_dir = tempfile.mkdtemp()
+        try:
+            write_file_fixture(
+                data_dir,
+                [
+                    {
+                        "name": "x_blueeyes_alt",
+                        "cn_name": "",
+                        "wiki": "",
+                        "post_count": "9000000",
+                        "category": "0",
+                        "nsfw": "0",
+                    },
+                    {
+                        "name": "blue_eyes",
+                        "cn_name": "",
+                        "wiki": "",
+                        "post_count": "1",
+                        "category": "0",
+                        "nsfw": "0",
+                    },
+                ],
+                [],
+            )
+            provider = self._provider(data_dir)
+            results = provider.search("blueeyes", cancel_token=_TOKEN)
+            self.assertEqual(
+                [r.tag for r in results][:2], ["blue_eyes", "x_blueeyes_alt"]
+            )
+        finally:
+            shutil.rmtree(data_dir, ignore_errors=True)
+
+    def test_stripped_substring_is_not_a_match(self) -> None:
+        """剥后构成子串但非前缀不算命中，仍应追加语义层。"""
+        semantic = StubSemanticTagSearcher()
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("ueeye", cancel_token=_TOKEN)]
+        self.assertEqual(len(semantic.calls), 1)
+        self.assertNotIn("blue_eyes", tags)
+
+    def test_semantic_skipped_on_exact_name_with_separator(self) -> None:
+        """分隔符号写法与标签原样一致（blue_eyes）时仍是精确命中，行为不变。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("blue_eyes", cancel_token=_TOKEN)]
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(tags[0], "blue_eyes")
+
+    def test_semantic_skipped_on_prefix_hit(self) -> None:
+        """前缀命中说明用户已在朝具体标签输入，不追加语义层。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("blue ey", cancel_token=_TOKEN)]
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(tags[0], "blue_eyes")
+
+    def test_semantic_skipped_on_stripped_prefix_hit(self) -> None:
+        """分隔写法不同的前缀（blueeye）同样不追加语义层。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("blueeye", cancel_token=_TOKEN)]
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(tags[0], "blue_eyes")
+
+    def test_search_stripped_prefix_matches_parenthesised_name(self) -> None:
+        """剥后前缀能跨过括号等符号命中带限定的标签名。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [
+            r.tag for r in provider.search("hatsunemikuvocaloid", cancel_token=_TOKEN)
+        ]
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(tags[0], "hatsune_miku_(vocaloid)")
+
+    def test_semantic_skipped_on_stripped_cn_alias_prefix(self) -> None:
+        """中文别名剥离分隔符号后构成前缀时同样让语义层让路。"""
+        semantic = StubSemanticTagSearcher([(0, 0.9)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("蓝眼", cancel_token=_TOKEN)]
+        self.assertEqual(semantic.calls, [])
+        self.assertEqual(tags[0], "blue_eyes")
+
+    def test_semantic_appended_on_substring_match(self) -> None:
+        """剥后子串不算前缀：子串命中仍然追加语义层。"""
+        semantic = StubSemanticTagSearcher([(0, 0.65)])
+        provider = self._provider(semantic=semantic)
+        tags = [r.tag for r in provider.search("eyes", cancel_token=_TOKEN)]
+        self.assertEqual(len(semantic.calls), 1)
+        self.assertEqual(tags[0], "blue_eyes")
+        self.assertIn("1girl", tags)
 
     # ---- search：skip_semantic opt-out（调用方只要字面层） ----
 
