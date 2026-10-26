@@ -22,9 +22,11 @@ logging.disable(logging.CRITICAL)
 # pyright: reportPrivateUsage=false
 from .autocomplete import (
     AutocompleteContext,
+    NO_ACTION,
     WorkflowPromptProvider,
     DanbooruProvider,
     NodeProvider,
+    NodeOptionProvider,
     LoraProvider,
     RegionProvider,
     RegionOptionProvider,
@@ -1092,9 +1094,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         suggestions = list(provider.provide(context))
 
+        # 命令中尚无 `--add`：选项直接带上它，选中后光标落在新增标签的值位置
         self.assertEqual(
             [s.text for s in suggestions],
-            ["--region positive", "--region negative"],
+            ["--region positive --add", "--region negative --add"],
         )
         self.assertEqual([s.displayText for s in suggestions], ["positive", "negative"])
         self.assertEqual(suggestions[0].type, "region")
@@ -1245,8 +1248,116 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         provider = RegionOptionProvider()
         self.assertFalse(provider.can_provide(context))
 
+    def test_region_option_provider_is_not_exclusive(self):
+        """空位还要给出节点选项：区域选项产出后不能中断后续 provider。"""
+        self.assertFalse(RegionOptionProvider().is_exclusive)
+
+    # ---- NodeOptionProvider tests ----
+
+    def test_node_option_provider_suggests_clip_nodes_on_empty_input(self):
+        """`/remix ` 空位给出节点选项，集合同 `--node` 值补全的默认（CLIPTextEncode）集合。"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="/remix",
+            cwords=["/remix"],
+            parsed_args=self._make_parsed_args(command="remix"),
+            workflow=self._get_mock_node_workflow(),
+            prompt_meta=self._get_mock_node_prompt_meta(),
+        )
+        provider = NodeOptionProvider()
+        self.assertTrue(provider.can_provide(context))
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual(
+            [s.text for s in suggestions],
+            ["--node node_1 --add", "--node node_4:child_1 --add"],
+        )
+        self.assertEqual(
+            suggestions[0].displayText,
+            "#node_1 Positive Prompt (CLIPTextEncode)",
+        )
+        self.assertEqual(suggestions[0].type, "node")
+
+        # 与 `--node` 值补全（未进入 --cfg / --aspect 动作）的节点集合一致
+        value_context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="--node",
+            cwords=["/remix", "--add", "--node"],
+            parsed_args=self._make_parsed_args(command="remix"),
+            workflow=self._get_mock_node_workflow(),
+            prompt_meta=self._get_mock_node_prompt_meta(),
+        )
+        value_texts = [s.text for s in NodeProvider().provide(value_context)]
+        self.assertEqual(
+            [f"--node {t} --add" for t in value_texts],
+            [s.text for s in suggestions],
+        )
+
+    def test_node_option_provider_skips_when_region_specified(self):
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="positive",
+            cwords=["/remix", "--region", "positive"],
+            parsed_args=self._make_parsed_args(command="remix", region=["positive"]),
+            workflow=self._get_mock_node_workflow(),
+            prompt_meta=self._get_mock_node_prompt_meta(),
+        )
+        self.assertFalse(NodeOptionProvider().can_provide(context))
+
+    def test_node_option_provider_skips_without_workflow(self):
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="/remix",
+            cwords=["/remix"],
+            parsed_args=self._make_parsed_args(command="remix"),
+        )
+        self.assertFalse(NodeOptionProvider().can_provide(context))
+
+    def test_target_option_providers_skip_outside_remix(self):
+        """`--region` / `--node` 只定义在 remix 上，其他指令的空位不能给出这些旗标。"""
+        for target_command in ("queue", "set-model-format"):
+            with self.subTest(target_command=target_command):
+                context = self._make_context(
+                    target_command=target_command,
+                    query="",
+                    prev_word=f"/{target_command}",
+                    cwords=[f"/{target_command}"],
+                    parsed_args=None,
+                    workflow=self._get_mock_region_workflow(),
+                    prompt_meta=self._get_mock_region_prompt_meta(),
+                )
+                self.assertFalse(RegionOptionProvider().can_provide(context))
+                self.assertFalse(NodeOptionProvider().can_provide(context))
+
+    def test_target_option_providers_omit_add_flag_when_already_present(self):
+        """已完成词里已有 `--add` 时只给目标选项本身：判定扫词列表，不看最后动作。"""
+        cwords = ["/remix", "--add", "blue", "--remove", "x"]
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="/remix",
+            cwords=cwords,
+            parsed_args=None,
+            workflow=self._get_mock_region_workflow(),
+            prompt_meta=self._get_mock_region_prompt_meta(),
+            action=NO_ACTION,
+        )
+        self.assertEqual(
+            [s.text for s in RegionOptionProvider().provide(context)],
+            ["--region positive", "--region negative"],
+        )
+        self.assertEqual(
+            [s.text for s in NodeOptionProvider().provide(context)],
+            ["--node node_1"],
+        )
+
     def test_autocomplete_prefers_region_options_over_danbooru_related(self) -> None:
-        """空输入且有可用区域时，区域选项独占建议，关联联想与历史回退均不执行。"""
+        """空输入且有可用区域时先给出区域选项，关联联想与历史回退均不执行。"""
         mock_danbooru = MagicMock()
         history = self._make_history(all_added=[("history_tag", "2026-08-07T10:00:00")])
         services = AutocompleteServices(
@@ -1275,7 +1386,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         self.assertEqual(
             [s.text for s in suggestions],
-            ["--region positive", "--region negative"],
+            ["--region positive --add", "--region negative --add"],
         )
         mock_danbooru.search.assert_not_called()
         mock_danbooru.related.assert_not_called()
@@ -1310,6 +1421,85 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         self.assertEqual(suggestions, [])
         mock_danbooru.related.assert_not_called()
+
+    def test_autocomplete_empty_input_suggests_regions_and_nodes_together(self) -> None:
+        """`/remix ` 空位：区域与节点选项同批产出，互不遮蔽。"""
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                NodeOptionProvider(),
+                DanbooruProvider(
+                    MagicMock(),
+                    self._make_history(),
+                    NullSuggestionTextFormatter(),
+                ),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample(
+                self._get_mock_region_workflow(), tmp_dir
+            )
+            request = AutocompleteRequest(
+                target_command="remix",
+                query="",
+                prev_word="/remix",
+                cwords=["/remix"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertEqual(
+            [s.text for s in suggestions],
+            [
+                "--region positive --add",
+                "--region negative --add",
+                "--node node_1 --add",
+            ],
+        )
+
+    def test_autocomplete_after_inserting_target_option_enters_add_action(self) -> None:
+        """选中带 `--add` 的目标选项后，下一次补全按新增动作产出标签建议。"""
+        mock_danbooru = MagicMock()
+        mock_danbooru.related.return_value = [
+            DanbooruTag("cute", "可爱", "Cute character.", "General")
+        ]
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                RegionOptionProvider(),
+                NodeOptionProvider(),
+                DanbooruProvider(
+                    mock_danbooru,
+                    self._make_history(),
+                    NullSuggestionTextFormatter(),
+                ),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_path = self._write_workflow_sample(
+                self._get_mock_region_workflow(), tmp_dir
+            )
+            # 模拟插入 `--region positive --add ` 后的命令行状态
+            request = AutocompleteRequest(
+                target_command="remix",
+                query="",
+                prev_word="--add",
+                cwords=["/remix", "--region", "positive", "--add"],
+                image_paths=[sample_path],
+                root_dir="mock_root",
+                directory_rel_path="mock_rel",
+                cancel_token=CancelToken(),
+            )
+            suggestions = list(autocomplete(request, services))
+
+        self.assertEqual([s.text for s in suggestions], ["cute"])
+        mock_danbooru.related.assert_called_once()
 
     def _write_related_data_dir(self, data_dir: str) -> None:
         """写入真实数据构成的共现产物：只有多词标签，共现边也只连接多词标签。
@@ -1572,14 +1762,17 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         history.get_all_added_prompts.assert_called_once()
 
     def test_build_providers_registers_region_option_before_danbooru(self) -> None:
-        """真实 provider 链中区域选项提供者必须注册在 Danbooru 提供者之前。"""
+        """真实 provider 链中目标选项提供者必须注册在 Danbooru 提供者之前。"""
         with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
                 _request(), get_parser(), "http://localhost", False
             ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertLess(
-            names.index("RegionOptionProvider"), names.index("DanbooruProvider")
+            names.index("RegionOptionProvider"), names.index("NodeOptionProvider")
+        )
+        self.assertLess(
+            names.index("NodeOptionProvider"), names.index("DanbooruProvider")
         )
 
     def test_build_providers_file_mode_when_data_dir_set(self) -> None:

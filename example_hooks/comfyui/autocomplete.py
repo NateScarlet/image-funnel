@@ -553,86 +553,98 @@ class NodeProvider(AutocompleteProvider):
         return context.prev_word == "--node" and context.editing_modifier_value
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
-        if not context.prompt_meta:
-            return
+        yield from _iter_node_suggestions(context)
 
-        # 找出之前已经用过的节点 ID
-        seen_nodes: Set[str] = set()
-        if context.parsed_args:
-            nodes_val = cast(
-                Optional[List[Any]], getattr(context.parsed_args, "node", None)
-            )
-            if isinstance(nodes_val, list):
-                for val in nodes_val:
-                    if val:
-                        seen_nodes.add(str(val))
 
-        # 兜底：直接从 cleaned_cwords 中提取
-        for idx, w in enumerate(context.cleaned_cwords):
-            if w == "--node":
-                if idx + 1 < len(context.cleaned_cwords):
-                    val = context.cleaned_cwords[idx + 1]
-                    if val and not val.startswith("-"):
-                        seen_nodes.add(val)
+def _iter_node_suggestions(
+    context: AutocompleteContext,
+    *,
+    text_prefix: str = "",
+    text_suffix: str = "",
+) -> Iterator[AutocompleteSuggestion]:
+    """按当前动作筛选可作用节点并产出建议。
 
-        # 确定当前命令支持 of node 类型的过滤逻辑
-        is_cfg = context.action == CFG_ACTION
-        is_aspect = context.action == ASPECT_ACTION
+    建议文本由 text_prefix/text_suffix 拼装：`--node` 的值位置只给裸节点 ID，
+    空位选项则额外带上 `--node` 前缀与可选的 `--add`。
+    """
+    if not context.prompt_meta:
+        return
 
-        for node_id, node_data in sorted(
-            context.prompt_meta.items(), key=lambda x: x[0]
-        ):
-            class_type = node_data.get("class_type", "")
-            inputs = node_data.get("inputs", {})
+    # 找出之前已经用过的节点 ID
+    seen_nodes: Set[str] = set()
+    if context.parsed_args:
+        nodes_val = cast(
+            Optional[List[Any]], getattr(context.parsed_args, "node", None)
+        )
+        if isinstance(nodes_val, list):
+            for val in nodes_val:
+                if val:
+                    seen_nodes.add(str(val))
 
-            # 校验是否为 comfyui.py 脚本所支持类型的节点
-            supported = False
-            if is_cfg:
-                supported = "KSampler" in class_type and "cfg" in inputs
-            elif is_aspect:
-                supported = "width" in inputs and "height" in inputs
-            else:
-                supported = class_type == "CLIPTextEncode"
+    # 兜底：直接从 cleaned_cwords 中提取
+    for idx, w in enumerate(context.cleaned_cwords):
+        if w == "--node":
+            if idx + 1 < len(context.cleaned_cwords):
+                val = context.cleaned_cwords[idx + 1]
+                if val and not val.startswith("-"):
+                    seen_nodes.add(val)
 
-            if not supported:
-                continue
+    # 确定当前命令支持 of node 类型的过滤逻辑
+    is_cfg = context.action == CFG_ACTION
+    is_aspect = context.action == ASPECT_ACTION
 
-            # 如果有 query，需要前缀或子串过滤
-            if context.query and context.query.lower() not in node_id.lower():
-                continue
+    for node_id, node_data in sorted(context.prompt_meta.items(), key=lambda x: x[0]):
+        class_type = node_data.get("class_type", "")
+        inputs = node_data.get("inputs", {})
 
-            # 获取节点标题和类型
-            title, _ = get_node_title_and_type(
-                node_id, context.prompt_meta, context.workflow
-            )
+        # 校验是否为 comfyui.py 脚本所支持类型的节点
+        supported = False
+        if is_cfg:
+            supported = "KSampler" in class_type and "cfg" in inputs
+        elif is_aspect:
+            supported = "width" in inputs and "height" in inputs
+        else:
+            supported = class_type == "CLIPTextEncode"
 
-            # 优先使用 workflow 节点文本（含注释），fallback 到 prompt 文本
-            description = ""
-            if context.workflow:
-                wf_text = get_workflow_node_text(context.workflow, node_id)
-                if wf_text:
-                    description = wf_text
-            if not description:
-                if isinstance(inputs, dict):
-                    text_val = cast(Dict[str, Any], inputs).get("text")
-                    if isinstance(text_val, str):
-                        description = text_val
-                    elif text_val is not None:
-                        description = str(cast(object, text_val))
+        if not supported:
+            continue
 
-            display_name = f"#{node_id} {title} ({class_type})"
+        # 如果有 query，需要前缀或子串过滤
+        if context.query and context.query.lower() not in node_id.lower():
+            continue
 
-            style = ""
-            if node_id in seen_nodes:
-                style = "muted"
+        # 获取节点标题和类型
+        title, _ = get_node_title_and_type(
+            node_id, context.prompt_meta, context.workflow
+        )
 
-            yield AutocompleteSuggestion(
-                text=node_id,
-                displayText=display_name,
-                description=description,
-                type="node",
-                style=style,
-            )
+        # 优先使用 workflow 节点文本（含注释），fallback 到 prompt 文本
+        description = ""
+        if context.workflow:
+            wf_text = get_workflow_node_text(context.workflow, node_id)
+            if wf_text:
+                description = wf_text
+        if not description:
+            if isinstance(inputs, dict):
+                text_val = cast(Dict[str, Any], inputs).get("text")
+                if isinstance(text_val, str):
+                    description = text_val
+                elif text_val is not None:
+                    description = str(cast(object, text_val))
+
+        display_name = f"#{node_id} {title} ({class_type})"
+
+        style = ""
+        if node_id in seen_nodes:
+            style = "muted"
+
+        yield AutocompleteSuggestion(
+            text=f"{text_prefix}{node_id}{text_suffix}",
+            displayText=display_name,
+            description=description,
+            type="node",
+            style=style,
+        )
 
 
 class RegionProvider(AutocompleteProvider):
@@ -793,52 +805,103 @@ def _has_explicit_target(context: AutocompleteContext) -> bool:
     return any(w in ("--region", "--node") for w in context.cleaned_cwords[1:])
 
 
-class RegionOptionProvider(AutocompleteProvider):
-    """目标区域选项建议提供者：尚未进入任何编辑动作时优先建议可用的 --region 选项"""
+def _has_add_flag(context: AutocompleteContext) -> bool:
+    """扫描光标之前的已完成词，判断命令行里是否已出现过 `--add`。
 
-    @property
-    def is_exclusive(self) -> bool:
-        return True
+    不能只看 context.action：classify_action 只返回最后一个编辑旗标，
+    `/remix --add blue --remove x` 的 action 是移除，但用户已经进入了新增动作，
+    目标选项不应再附带 `--add`（需要多个标签时会在同一个 `--add` 后连续写）。
+    `--` 之后写入的是位置值而非旗标，扫描到此为止。
+    """
+    for word in context.cleaned_cwords[1:]:
+        if word == "--":
+            return False
+        if word == "--add":
+            return True
+    return False
+
+
+def _target_option_text(base: str, context: AutocompleteContext) -> str:
+    """目标选项的插入文本：尚未添加过标签时顺带进入新增动作。
+
+    前端会在建议文本后补空格，因此这里的 `--add` 之后即为标签值位置。
+    """
+    if _has_add_flag(context):
+        return base
+    return f"{base} --add"
+
+
+def _in_target_option_position(context: AutocompleteContext) -> bool:
+    """判断光标是否位于尚未指定目标的 `/remix ` 空位。
+
+    只有空位才允许写 `--region` / `--node`：编辑动作（`--add` 等）之后跟旗标
+    会被 argparse 当成该动作的值而拒绝整条指令。这两个旗标只定义在 remix 上，
+    其他指令的空位不能给出。
+    """
+    if context.target_command != "remix" or context.action != NO_ACTION:
+        return False
+
+    # `--` 是选项结束标记，之后写入的都是位置值而非旗标
+    if "--" in context.cleaned_cwords:
+        return False
+
+    # 正在输入查询词时交给语义搜索补全
+    if context.query.strip():
+        return False
+
+    # 取值型选项的参数位（如 `-j `）只接受值，旗标建议同样会让指令非法
+    if context.editing_modifier_value:
+        return False
+
+    # 目标已确定（--region/--node）后，该位置交给关联联想
+    if _has_explicit_target(context):
+        return False
+
+    return context.workflow_loaded
+
+
+class RegionOptionProvider(AutocompleteProvider):
+    """目标区域选项建议提供者：尚未进入任何编辑动作时建议可用的 --region 选项"""
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        # 区域选项只在指令空位（尚未进入任何编辑动作）产出：`--add` 之后是标签位置，
-        # 此时跟 `--region` 会被 argparse 当成 `--add` 的值而拒绝整条指令
-        if context.action != NO_ACTION:
+        # 非独占：节点选项由 NodeOptionProvider 在同一次请求中继续产出
+        if not _in_target_option_position(context):
             return False
 
-        # `--` 是选项结束标记，之后写入的都是位置值而非旗标
-        if "--" in context.cleaned_cwords:
-            return False
-
-        # 正在输入查询词时交给语义搜索补全
-        if context.query.strip():
-            return False
-
-        # 取值型选项的参数位（如 `-j `）只接受值，旗标建议同样会让指令非法
-        if context.editing_modifier_value:
-            return False
-
-        # 目标已确定（--region/--node）或工作流无可用区域时，直接进入关联联想
-        if _has_explicit_target(context):
-            return False
-
+        # 位置判定已保证工作流加载
         workflow = context.workflow
-        if not context.workflow_loaded or workflow is None:
-            return False
-
-        regions = list(extract_region_names([workflow]))
-        return len(regions) > 0
+        assert workflow is not None
+        return len(list(extract_region_names([workflow]))) > 0
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         # can_provide 已保证工作流加载且存在可用区域
         assert context.workflow is not None
         for r in extract_region_names([context.workflow]):
             yield AutocompleteSuggestion(
-                text=f"--region {r}",
+                text=_target_option_text(f"--region {r}", context),
                 displayText=r,
                 description=f"区域: {r}",
                 type="region",
             )
+
+
+class NodeOptionProvider(AutocompleteProvider):
+    """目标节点选项建议提供者：与区域选项在同一次空位补全中出现。"""
+
+    @property
+    def is_exclusive(self) -> bool:
+        # 区域选项已由前面的 RegionOptionProvider 产出，节点选项是空位的最后一批候选
+        return True
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        return _in_target_option_position(context)
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        # 未添加过标签时顺带进入新增动作；前端会在建议文本后补空格
+        suffix = "" if _has_add_flag(context) else " --add"
+        yield from _iter_node_suggestions(
+            context, text_prefix="--node ", text_suffix=suffix
+        )
 
 
 def _format_relative_time(created_at: str) -> str:
@@ -1276,6 +1339,7 @@ def build_providers(
                 NodeProvider(),
                 WorkflowPromptProvider(),
                 RegionOptionProvider(),
+                NodeOptionProvider(),
             ]
         )
         if danbooru_data_dir or danbooru_url:
