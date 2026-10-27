@@ -134,8 +134,9 @@ pwsh scripts/generate-graphql.ps1 # 重新生成 GraphQL 代码 (Go + TypeScript
 并把 `PYTHONPATH` 指向 `scripts/python-sitecustomize`（`sitecustomize` 兼容层把
 `mkdtemp` 改为默认权限创建）。`scripts/check-python.ps1` 用的是同一套设置。
 
-脚本里需要 `import example_hooks.*` 时，记得把仓库根或 `example_hooks` 目录加进
-`sys.path`（测试模块还会再依赖 `example_hooks` 层的 `test_support`）。
+脚本里需要 `import example_hooks.*` 时，记得把仓库根和 `example_hooks` 目录都加进
+`sys.path`（前者供 `import example_hooks.*`，后者供 `example_hooks/` 下平铺的
+`graphql_utils` 等模块；测试模块还会再依赖 `example_hooks` 层的 `test_support`）。
 
 ## Agent skills
 
