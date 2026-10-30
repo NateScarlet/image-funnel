@@ -28,7 +28,7 @@
         "cwd": "${workspaceFolder}",
         "preLaunchTask": "serve:web",
         "dlvFlags": ["--check-go-version=false"],
-        "output": "${workspaceFolder}/main_debug.exe",
+        "output": "${env:TEMP}/io.github.natescarlet.image-funnel.main_debug.exe",
         "env": {
           "IMAGE_FUNNEL_ROOT_DIR": "${workspaceFolder}/data.local",
           "IMAGE_FUNNEL_DATA_DIR": "${workspaceFolder}/config.local",

@@ -138,6 +138,20 @@ function Test-NeedsBuild {
     }
     return $false
 }
+
+# 判断路径是否带 Low 完整性标签。Windows 以「令牌级别与文件标签中较低者」作为新进程的
+# 完整性级别，Low 标签的二进制会让整个服务降级为 Low 进程，无法写入全局 Medium 缓存
+# （例如 uv cache），hook 里的 uv 调用会直接报 Access denied。
+# icacls 的输出随系统语言本地化，因此同时匹配 SID 与中英文级别名。
+function Test-LowIntegrity {
+    param([string]$Path)
+    $output = @(icacls $Path 2>&1 | ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "无法读取完整性标签: $Path"
+        return $false
+    }
+    return (($output -join "`n") -match 'S-1-16-4096\b|Low Mandatory Level|低强制级别|低完整性')
+}
 # #endregion
 
 # 进程清理钩子：确保关闭窗口或强制退出时也能结束子进程
@@ -168,7 +182,15 @@ while ($true) {
     # #endregion
 
     # #region 运行
-    $RUN_DIR = Join-Path $ROOT_DIR "build/run"
+    # 运行目录必须不带 Low 标签：Low 的二进制会让服务整体降级为 Low 进程，
+    # 无法写入全局 Medium 缓存。build 目录若继承了工作区的 Low 标签，
+    # 就改用系统临时目录下的专属运行目录——复制到无标签目录会按目标重设标签。
+    $BUILD_PARENT_DIR = Join-Path $ROOT_DIR "build"
+    $RUN_DIR = Join-Path $BUILD_PARENT_DIR "run"
+    if (Test-LowIntegrity $BUILD_PARENT_DIR) {
+        $RUN_DIR = Join-Path $env:TEMP "image-funnel-run"
+        Write-Warning "build 目录带 Low 完整性标签，改用运行目录: $RUN_DIR"
+    }
 
     # 确保运行目录干净
     if (Test-Path $RUN_DIR) {
@@ -189,7 +211,13 @@ while ($true) {
         New-Item -ItemType File -Path $rebuildFlagFile -Force | Out-Null
 
         $runBinary = Join-Path $RUN_DIR "image-funnel.exe"
-        
+
+        # 启动前确认二进制不再是 Low：这里失败说明运行目录本身带了 Low 标签，
+        # 继续启动只会让 hook 里的外部工具在运行时才报 Access denied。
+        if (Test-LowIntegrity $runBinary) {
+            throw "运行目录仍带 Low 完整性标签，无法启动: $RUN_DIR"
+        }
+
         Write-Host "--- 开始运行 ---" -ForegroundColor Green
         
         # 共享状态对象，用于事件与主线程通信
