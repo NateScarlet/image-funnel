@@ -5,7 +5,7 @@ import unittest
 from typing import Any, Dict, List, cast
 
 from .__main__ import get_parser
-from .remix import RemixRequest, VariantMatrix, build_matrix, from_args
+from .remix import RemixRequest, VariantMatrix, build_matrix, describe, from_args
 from .variant_engine import CfgStep
 from .workflow_prompt_pair import WorkflowPromptPair
 
@@ -137,6 +137,60 @@ class TestRemixRequestParsing(unittest.TestCase):
         ):
             with self.subTest(argv=argv):
                 self.assertTrue(_parse(argv).has_edits)
+
+
+class TestRemixBranch(unittest.TestCase):
+    """`--branch` 只决定落盘目录，不算编辑项。"""
+
+    def test_branch_value_is_parsed(self) -> None:
+        self.assertEqual(_parse(["--branch", "b1"]).branch, "b1")
+
+    def test_branch_is_not_an_edit(self) -> None:
+        self.assertFalse(_parse(["--branch", "b1"]).has_edits)
+
+    def test_branch_value_is_kept_verbatim(self) -> None:
+        """手输的分支名原样保留：空格与引号形式不做归一化。"""
+        self.assertEqual(_parse(["--branch", "long hair"]).branch, "long hair")
+
+    def test_branch_without_value_errors(self) -> None:
+        with self.assertRaises(ValueError):
+            _parse(["--branch"])
+
+    def test_branch_empty_value_errors(self) -> None:
+        with self.assertRaises(ValueError):
+            _parse(["--branch", ""])
+
+    def test_branch_value_with_path_separator_errors(self) -> None:
+        for suffix in ("a/b", "a\\b"):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    _parse(["--branch", suffix])
+
+    def test_branch_relative_traversal_errors(self) -> None:
+        """`.` / `..` 会表达目录层级，可能把产物写到输出根目录之外。"""
+        for suffix in (".", ".."):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    _parse(["--branch", suffix])
+
+    def test_branch_drive_relative_suffix_errors(self) -> None:
+        """`C:` / `C:foo` 是盘符相对路径，会绕过目录层级校验落到输出根目录之外。"""
+        for suffix in ("C:", "C:foo"):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    _parse(["--branch", suffix])
+
+    def test_branch_dotted_version_is_still_allowed(self) -> None:
+        """普通带点后缀（如版本号）不受盘符校验影响。"""
+        self.assertEqual(_parse(["--branch", "v1.0"]).branch, "v1.0")
+
+    def test_describe_puts_branch_before_edits(self) -> None:
+        """分支项排在最前，长编辑项摘要被截断时仍能看到「分支」。"""
+        self.assertEqual(describe(_parse(["--branch", "b1"])), "分支 b1")
+        self.assertEqual(
+            describe(_parse(["--add", "a", "--branch", "b1"])),
+            "分支 b1，新增「a」",
+        )
 
 
 class TestRemixVariantMatrix(unittest.TestCase):

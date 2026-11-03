@@ -26,6 +26,7 @@ from typing import (
 )
 from PIL import Image
 
+from branch_directory import branch_directory_exists
 from .cancellable_http import HttpCanceledError, HttpError
 from .cancellation import CancelToken
 from .db import SQLiteContext
@@ -56,6 +57,7 @@ from .model_format import (
     NodeTextFormatter,
     collect_inference_texts,
     existing_tags,
+    format_prompt_text,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,6 +69,7 @@ REMOVE_ACTION = "remove"
 LORA_ACTION = "lora"
 CFG_ACTION = "cfg"
 ASPECT_ACTION = "aspect"
+BRANCH_ACTION = "branch"
 
 # 每个旗标把补全上下文切到哪个动作；`--cfg` / `--aspect` 只取一个值，其余多值
 _ACTION_FLAGS: Dict[str, str] = {
@@ -75,6 +78,7 @@ _ACTION_FLAGS: Dict[str, str] = {
     "--lora": LORA_ACTION,
     "--cfg": CFG_ACTION,
     "--aspect": ASPECT_ACTION,
+    "--branch": BRANCH_ACTION,
 }
 
 # 解析「指令还写了一半」时用来补位的占位值：它只让 argparse 通过校验，
@@ -401,6 +405,9 @@ class AutocompleteContext:
         prev_word: str = "",
         cwords: Optional[List[str]] = None,
         image_paths: Optional[List[str]] = None,
+        # 当前目录上下文：`--branch` 的「已存在」标记需要据此定位分支目录
+        root_dir: str,
+        directory_rel_path: str,
         parsed_args: Optional[argparse.Namespace] = None,
         seen_prompts: Optional[Dict[str, str]] = None,
         workflow: Optional[Dict[str, Any]] = None,
@@ -415,6 +422,8 @@ class AutocompleteContext:
         self.prev_word: str = prev_word
         self.cwords: List[str] = cwords or []
         self.image_paths: List[str] = image_paths or []
+        self.root_dir: str = root_dir
+        self.directory_rel_path: str = directory_rel_path
         self.cleaned_cwords: List[str] = _cleaned_cwords(self.cwords)
         # 本次请求的取消令牌：随上下文下传给 provider，由它们在调用期交给网络层
         self.cancel_token: CancelToken = cancel_token
@@ -952,7 +961,11 @@ class DanbooruProvider(AutocompleteProvider):
         self.text_formatter = text_formatter
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if context.action != ADD_ACTION:
+        if context.action == BRANCH_ACTION:
+            # `--branch` 只有一个值位置：分支名写完后再给候选会诱导写入非法参数
+            if context.prev_word != "--branch":
+                return False
+        elif context.action != ADD_ACTION:
             return False
 
         # 正在输入 --region / --node 的值：交给它们各自的 provider
@@ -969,8 +982,12 @@ class DanbooruProvider(AutocompleteProvider):
         """按目标提示词节点的模型格式重排文本。
 
         未解析出目标节点（如图片无 ComfyUI 元数据、或区域定位不到节点）时无法追溯
-        模型格式，原样返回。
+        模型格式，原样返回。分支名不落到任何提示词节点，固定使用 sdxl 形态，
+        因此不依赖当前图片的工作流。
         """
+        if context.action == BRANCH_ACTION:
+            return format_prompt_text(text, "sdxl")
+
         prompt_meta = context.prompt_meta
         target = context.prompt_target
         if prompt_meta is None or target is None:
@@ -979,12 +996,37 @@ class DanbooruProvider(AutocompleteProvider):
             prompt_meta, target.node_id, text, target.inference_text
         )
 
+    def _mark_existing_branch_dir(
+        self, context: AutocompleteContext, suggestion: AutocompleteSuggestion
+    ) -> None:
+        """候选与已存在的分支目录同名时加「已存在」标记。
+
+        分支名插入时已重排为下划线形态，直接拿它当后缀推算目录即可。
+        """
+        suffix = suggestion.text.strip().strip('"').strip("'")
+        if branch_directory_exists(
+            context.root_dir, context.directory_rel_path, suffix
+        ):
+            suggestion.style = "muted"
+            suggestion.description = f"(已存在) {suggestion.description}"
+
     def _suggestion_text(self, context: AutocompleteContext, tag: str) -> str:
         """把标签转成可直接插入的补全文本。
 
         格式化必须先于引号包裹：anima 会把下划线换成空格，从而新增引号需求。
         """
         return quote_if_needed(self._format_for_target(context, tag))
+
+    def _tag_insert_text(self, context: AutocompleteContext, tag: str) -> str:
+        """候选标签的插入文本。
+
+        提示词里的括号需要反斜杠转义（避免被当成权重语法），但分支名是目录名，
+        转义符会成为非法路径分隔符，因此分支补全保留标签原样形态。
+        """
+        escaped = tag
+        if context.action != BRANCH_ACTION:
+            escaped = tag.replace("(", r"\(").replace(")", r"\)")
+        return self._suggestion_text(context, escaped)
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         # 已见提示词同样重排到目标格式后再比对：建议文本已经过格式化，拿它去比对
@@ -998,6 +1040,13 @@ class DanbooruProvider(AutocompleteProvider):
             added: Set[str],
             added_times: dict[str, str],
         ) -> Iterator[AutocompleteSuggestion]:
+            if context.action == BRANCH_ACTION:
+                # 分支名与提示词内容无关：只标记目标目录是否已存在
+                for s in suggestions:
+                    self._mark_existing_branch_dir(context, s)
+                    yield s
+                return
+
             # 提示词侧已按目标格式重排，再规范化是幂等的；候选侧只需剥掉引号与括号转义，
             # 因此传空格式让 format_prompt_text 原样比对。
             already_existing = existing_tags(
@@ -1047,13 +1096,16 @@ class DanbooruProvider(AutocompleteProvider):
                     relative = (
                         _format_relative_time(created_at) if created_at else "之前"
                     )
-                    yield AutocompleteSuggestion(
+                    suggestion = AutocompleteSuggestion(
                         text=self._suggestion_text(context, prompt),
                         displayText=prompt,
                         description=f"({relative}历史添加) {prompt}",
                         type="danbooru",
                         style="muted",
                     )
+                    if context.action == BRANCH_ACTION:
+                        self._mark_existing_branch_dir(context, suggestion)
+                    yield suggestion
                     count += 1
                     if count >= 20:
                         break
@@ -1085,10 +1137,9 @@ class DanbooruProvider(AutocompleteProvider):
                         f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
                     )
                     desc = item.wiki if item.wiki else "Danbooru 标签"
-                    escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
                     suggestions.append(
                         AutocompleteSuggestion(
-                            text=self._suggestion_text(context, escaped_tag),
+                            text=self._tag_insert_text(context, item.tag),
                             displayText=display,
                             description=desc,
                             type="danbooru",
@@ -1156,10 +1207,9 @@ class DanbooruProvider(AutocompleteProvider):
                             f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
                         )
                         desc = item.wiki if item.wiki else "Danbooru 关联标签"
-                        escaped_tag = item.tag.replace("(", r"\(").replace(")", r"\)")
                         suggestions.append(
                             AutocompleteSuggestion(
-                                text=self._suggestion_text(context, escaped_tag),
+                                text=self._tag_insert_text(context, item.tag),
                                 displayText=display,
                                 description=desc,
                                 type="danbooru",
@@ -1388,6 +1438,8 @@ def autocomplete(
         prev_word=request.prev_word,
         cwords=request.cwords,
         image_paths=request.image_paths,
+        root_dir=request.root_dir,
+        directory_rel_path=request.directory_rel_path,
         parsed_args=parsed_args,
         seen_prompts=seen_prompts,
         workflow=workflow,

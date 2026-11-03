@@ -13,6 +13,7 @@ remix 模块：把单条 /remix 指令的旗标解析为一次重混请求，并
 
 import argparse
 import itertools
+import os
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -77,6 +78,8 @@ class RemixRequest:
     keep: bool = False
     raw: bool = False
     hard: bool = False
+    # 新分支目录的后缀：只决定生成结果落到哪里，不改变提示词，因此不计入编辑项
+    branch: Optional[str] = None
 
     @property
     def has_edits(self) -> bool:
@@ -137,6 +140,37 @@ def _parse_lora_occurrence(tokens: Sequence[str]) -> LoraEdit:
     return LoraEdit(name=name, weight_expr=weight_expr)
 
 
+# `--branch` 写了却没带值时由 argparse 存入的占位值，与「完全没写」的 None 区分
+BRANCH_VALUE_MISSING = "\0"
+
+
+def _parse_branch_suffix(raw: Optional[str]) -> Optional[str]:
+    """校验 `--branch` 的取值：缺值、空串或含路径分隔符时立即报错。
+
+    值本身原样保留（手输的空格形式不做归一化），只是不允许它表达目录层级。
+    """
+    if raw is None:
+        return None
+    if raw == BRANCH_VALUE_MISSING:
+        raise ValueError("--branch requires a suffix")
+    suffix = raw.strip()
+    if not suffix:
+        raise ValueError("--branch requires a non-empty suffix")
+    if "/" in suffix or "\\" in suffix:
+        raise ValueError(
+            f"--branch suffix must not contain path separators, got '{suffix}'"
+        )
+    # `.` / `..` 会表达目录层级，可能把产物写到输出根目录之外
+    if os.path.normpath(suffix) in (".", ".."):
+        raise ValueError(
+            f"--branch suffix must not be a relative traversal, got '{suffix}'"
+        )
+    # 冒号会构成盘符相对路径（如 `C:` / `C:foo`）或 Windows 数据流名，均不是普通目录名
+    if ":" in suffix:
+        raise ValueError(f"--branch suffix must not contain ':', got '{suffix}'")
+    return suffix
+
+
 def from_args(args: argparse.Namespace) -> RemixRequest:
     """把 argparse 解析结果归类为一次重混请求；旗标组合非法时立即报错中止。"""
     add_occurrences = cast("List[List[str]]", args.add or [])
@@ -173,12 +207,16 @@ def from_args(args: argparse.Namespace) -> RemixRequest:
         keep=args.keep,
         raw=args.raw,
         hard=args.hard,
+        branch=_parse_branch_suffix(cast("Optional[str]", args.branch)),
     )
 
 
 def describe(request: RemixRequest) -> str:
     """把重混请求描述为一句人类可读的摘要，用于进度标题与跳过原因。"""
     parts: List[str] = []
+    # 分支项排在最前：摘要过长被截断时仍能保留落盘位置这一关键信息
+    if request.branch:
+        parts.append(f"分支 {request.branch}")
     if request.replay_removals:
         parts.append("重放历史移除")
     for tag in request.remove_tags:

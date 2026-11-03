@@ -9,6 +9,7 @@ import argparse
 from dataclasses import dataclass
 from typing import List, Optional
 
+from branch_directory import branch_directory_rel_path
 from graphql_utils import GraphQLClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -170,17 +171,10 @@ def run_branch(client: GraphQLClient) -> None:
         "Received %d image(s) to branch with suffix: %s", len(image_ids), suffix
     )
 
-    # 确定目标相对路径
-    dir_rel_path = os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", "")
-    if not dir_rel_path.strip():
-        # 根目录下触发，在当前目录下新建子目录
-        dest_dir = suffix
-    else:
-        # 子目录下触发，创建同级目录
-        dir_name = os.path.basename(dir_rel_path)
-        parent_dir_rel_path = os.path.dirname(dir_rel_path)
-        dest_dir = os.path.join(parent_dir_rel_path, f"{dir_name},{suffix}")
-    dest_dir = os.path.normpath(dest_dir)
+    # 确定目标相对路径：命名规则与 ComfyUI `--branch` 共用同一份实现
+    dest_dir = branch_directory_rel_path(
+        os.getenv("IMAGE_FUNNEL_DIRECTORY_REL_PATH", ""), suffix
+    )
 
     if label_to_set:
         for img_id in image_ids:

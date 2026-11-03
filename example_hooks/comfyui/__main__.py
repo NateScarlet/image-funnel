@@ -13,7 +13,7 @@ import logging
 import argparse
 
 from graphql_utils import GraphQLClient, progress_notification
-from .output_directory import get_relative_output_dir
+from .output_directory import resolve_output_rel_dir
 from .png_metadata import load_prompt_and_workflow
 from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
@@ -235,14 +235,17 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 filename_mgr = FilenameManager(
                     pair, pair.date_filename_nodes, pair.title_to_node, now
                 )
-                if config.hook_output_dir == ":inherit:":
+                rel_dir = resolve_output_rel_dir(
+                    path,
+                    config.comfyui_output_dir,
+                    config.hook_output_dir,
+                    request.branch,
+                )
+                if rel_dir is None:
                     _LOGGER.debug(
                         "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
                     )
                 else:
-                    rel_dir = get_relative_output_dir(
-                        path, config.comfyui_output_dir, config.hook_output_dir
-                    )
                     filename_mgr.adjust_output_directory(rel_dir)
 
                 # 所有输出路径统一按节点模型格式重排提示词（与 adjust_output_dir 同位置、全命令覆盖）
@@ -295,9 +298,10 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     # 重混可能同时含多项编辑，逐项罗列会超出可读长度，只截断整体摘要
     def describe_request() -> str:
-        if not request.has_edits:
-            return "重新入列"
         summary = remix.describe(request)
+        if not request.has_edits:
+            # 无编辑项时仍要带上 `--branch`：它不改变 prompt，但决定了落盘位置
+            summary = "，".join(part for part in ("重新入列", summary) if part)
         return summary if len(summary) <= 40 else summary[:40] + "…"
 
     action = describe_request()
@@ -363,6 +367,15 @@ def get_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="tag",
         help="移除提示词，可多次指定；从所有 CLIPTextEncode 节点中移除",
+    )
+    remix_parser.add_argument(
+        "--branch",
+        nargs="?",
+        const=remix.BRANCH_VALUE_MISSING,
+        default=None,
+        metavar="suffix",
+        help="生成结果落到按 /branch 规则命名的新目录（根目录 <suffix>，子目录 <当前目录名>,<suffix>）；"
+        "优先于 HOOK_OUTPUT_DIR，不计入编辑项",
     )
     remix_parser.add_argument(
         "--remove-again",

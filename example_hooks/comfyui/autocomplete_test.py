@@ -22,6 +22,7 @@ logging.disable(logging.CRITICAL)
 # pyright: reportPrivateUsage=false
 from .autocomplete import (
     AutocompleteContext,
+    BRANCH_ACTION,
     NO_ACTION,
     WorkflowPromptProvider,
     DanbooruProvider,
@@ -100,6 +101,8 @@ def _make_context_with(**kwargs: Any) -> AutocompleteContext:
         prev_word="",
         cwords=cwords,
         image_paths=[],
+        root_dir="root",
+        directory_rel_path="dir",
         parsed_args=None,
         seen_prompts={},
         workflow=None,
@@ -1018,6 +1021,159 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             list(provider.provide(context))
+
+    # ---- `--branch` 值的 Danbooru 补全 ----
+
+    def test_branch_value_uses_sdxl_format_without_workflow(self) -> None:
+        """`--branch` 值位置给出 Danbooru 候选，插入文本固定为 sdxl 形式，且不依赖工作流。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("long hair", "长发", "Long hair.", "General")
+        ]
+        context = self._make_context(
+            target_command="remix",
+            query="long",
+            prev_word="--branch",
+            cwords=["/remix", "--branch"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch"]
+            ),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+
+        self.assertEqual(context.action, BRANCH_ACTION)
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+
+        mock_provider.search.assert_called_once_with(
+            "long", cancel_token=context.cancel_token
+        )
+        self.assertEqual([s.text for s in suggestions], ["long_hair"])
+        self.assertEqual(suggestions[0].displayText, "long hair (长发)")
+        self.assertEqual(suggestions[0].description, "Long hair.")
+        self.assertEqual({s.type for s in suggestions}, {"danbooru"})
+
+    def test_branch_value_keeps_parentheses_unescaped(self) -> None:
+        """分支名是目录名：括号不转义，否则反斜杠会成为非法路径分隔符。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag(
+                "dunyarzad_(genshin_impact)", "迪娜泽黛", "A noble girl.", "General"
+            )
+        ]
+        context = self._make_context(
+            target_command="remix",
+            query="dunyarzad",
+            prev_word="--branch",
+            cwords=["/remix", "--branch"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch"]
+            ),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["dunyarzad_(genshin_impact)"])
+
+    def test_branch_suggestion_marks_existing_sibling_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(os.path.join(temp_dir, "folder1,blue_eyes"))
+            mock_provider = MagicMock()
+            mock_provider.search.return_value = [
+                DanbooruTag("blue_eyes", "蓝眼", "Blue eyes.", "General")
+            ]
+            context = self._make_context(
+                target_command="remix",
+                query="blue",
+                prev_word="--branch",
+                cwords=["/remix", "--branch"],
+                root_dir=temp_dir,
+                directory_rel_path="folder1",
+                parsed_args=_parse_args_for_autocomplete(
+                    get_parser(), "remix", ["/remix", "--branch"]
+                ),
+            )
+            provider = DanbooruProvider(
+                mock_provider, self._make_history(), NullSuggestionTextFormatter()
+            )
+
+            suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
+        self.assertEqual(suggestions[0].style, "muted")
+        self.assertTrue(suggestions[0].description.startswith("(已存在)"))
+
+    def test_branch_suggestion_marks_existing_root_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(os.path.join(temp_dir, "blue_eyes"))
+            mock_provider = MagicMock()
+            mock_provider.search.return_value = [
+                DanbooruTag("blue_eyes", "蓝眼", "Blue eyes.", "General")
+            ]
+            context = self._make_context(
+                target_command="remix",
+                query="blue",
+                prev_word="--branch",
+                cwords=["/remix", "--branch"],
+                root_dir=temp_dir,
+                directory_rel_path="",
+                parsed_args=_parse_args_for_autocomplete(
+                    get_parser(), "remix", ["/remix", "--branch"]
+                ),
+            )
+            provider = DanbooruProvider(
+                mock_provider, self._make_history(), NullSuggestionTextFormatter()
+            )
+
+            suggestions = list(provider.provide(context))
+
+        self.assertEqual(suggestions[0].style, "muted")
+        self.assertTrue(suggestions[0].description.startswith("(已存在)"))
+
+    def test_branch_empty_query_falls_back_to_history_without_workflow(self) -> None:
+        """`/remix --branch <Tab>` 在无当前图片工作流时仍由历史标签给出候选。"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="--branch",
+            cwords=["/remix", "--branch"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch"]
+            ),
+        )
+        provider = DanbooruProvider(
+            MagicMock(),
+            self._make_history(all_added=[("blue_eyes", "2026-01-01T00:00:00+00:00")]),
+            NullSuggestionTextFormatter(),
+        )
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["blue_eyes"])
+        self.assertEqual({s.type for s in suggestions}, {"danbooru"})
+
+    def test_branch_stops_completion_after_value(self) -> None:
+        """`--branch` 只有一个值位置：分支名写完后再给候选会诱导写入非法参数。"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="b1",
+            cwords=["/remix", "--branch", "b1"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch", "b1"]
+            ),
+        )
+        provider = DanbooruProvider(
+            MagicMock(), self._make_history(), NullSuggestionTextFormatter()
+        )
+
+        self.assertEqual(context.action, BRANCH_ACTION)
+        self.assertFalse(provider.can_provide(context))
 
     # ---- RegionOptionProvider tests ----
 

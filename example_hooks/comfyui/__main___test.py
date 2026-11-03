@@ -1,6 +1,7 @@
 # 只允许使用项目测试脚本运行测试
 
 import logging
+import tempfile
 import unittest
 import os
 import json
@@ -8,7 +9,7 @@ from PIL import Image
 
 logging.disable(logging.CRITICAL)
 
-from .output_directory import get_relative_output_dir
+from .output_directory import get_relative_output_dir, resolve_output_rel_dir
 from .prompt_comment import strip_comments
 from .prompt_locator import (
     get_workflow_node_text,
@@ -367,6 +368,113 @@ class TestComfyUIHook(unittest.TestCase):
 
         mock_override.assert_called_once_with("KEEP", "dummy_action_path")
 
+    def test_branch_missing_value_keeps_directive_line(self):
+        """`--branch` 缺值在 sys.argv 级别同样报错并保留指令行。"""
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+        )
+        mock_client = MagicMock(spec=GraphQLClient)
+        with patch("sys.argv", ["comfyui/__main__.py", "remix", "--branch"]), patch(
+            "comfyui.__main__._write_action_override"
+        ) as mock_override:
+            with self.assertRaises(ValueError):
+                run_comfyui(mock_client, config)
+
+        mock_override.assert_called_once_with("KEEP", "dummy_action_path")
+
+    def test_branch_is_wired_to_output_adjustment_and_keeps_summary(self):
+        """`--branch` 真正传给目录调整（`:inherit:` 也被覆盖），且摘要截断仍保留分支。"""
+        import contextlib
+        import io
+        from typing import Any
+        from unittest.mock import patch, MagicMock
+        from PIL.PngImagePlugin import PngInfo
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\nmasterpiece,\n// #endregion"
+                    ],
+                },
+                {
+                    "id": "4",
+                    "type": "KSampler",
+                    "widgets_values": [12345, "fixed", 20, 8.0],
+                },
+            ]
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece,"}},
+            "4": {"class_type": "KSampler", "inputs": {"seed": 12345, "cfg": 8.0}},
+        }
+
+        def exit_side_effect(code: Any = 0) -> None:
+            raise SystemExit(code)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            os.makedirs(output_root)
+            image_path = os.path.join(output_root, "img.png")
+            info = PngInfo()
+            info.add_text("prompt", json.dumps(prompt))
+            info.add_text("workflow", json.dumps(workflow))
+            Image.new("RGB", (1, 1)).save(image_path, pnginfo=info)
+
+            config = ComfyUIConfig(
+                image_paths=[],
+                image_ids=[],
+                action_path="dummy_action_path",
+                trigger="",
+                hook_output_dir=":inherit:",
+                jobs=1,
+            )
+            mock_client = MagicMock(spec=GraphQLClient)
+            mock_client.fetch_images.return_value = [("img:1", image_path)]
+            fake_filename_mgr = MagicMock()
+            # 足够长的编辑项，确保摘要超过 40 字而被截断
+            long_tag = "very_long_tag_" * 5
+            stdout = io.StringIO()
+
+            with patch(
+                "sys.argv",
+                ["comfyui/__main__.py", "remix", "--branch", "b1", "--add", long_tag],
+            ), patch("sys.exit", side_effect=exit_side_effect), patch(
+                "comfyui.__main__.FilenameManager", return_value=fake_filename_mgr
+            ), patch(
+                "comfyui.command_handlers._submit_fn"
+            ), patch(
+                "comfyui.__main__.operation_history.OperationHistory"
+            ), patch.dict(
+                os.environ,
+                {
+                    "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                    "IMAGE_FUNNEL_ROOT_DIR": temp_dir,
+                    "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "",
+                },
+            ), contextlib.redirect_stdout(
+                stdout
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    run_comfyui(mock_client, config)
+                self.assertEqual(cm.exception.code, 0)
+
+            fake_filename_mgr.adjust_output_directory.assert_called_once_with("b1")
+            self.assertIn("分支 b1", stdout.getvalue())
+
     def test_queue_post_commit_session_fetches_unlabeled_images(self):
         from unittest.mock import patch, MagicMock
         from .__main__ import run_comfyui
@@ -475,6 +583,95 @@ class TestComfyUIOutputDirectory(unittest.TestCase):
         img_path = os.path.normpath("C:/project/output/sub1/image.png")
         rel_dir = get_relative_output_dir(img_path, "", "relative_override/sub")
         self.assertEqual(rel_dir, "relative_override/sub")
+
+    # #region --branch 落盘目录
+
+    def test_branch_root_image_goes_into_suffix_dir(self):
+        img_path = os.path.normpath("C:/project/output/image.png")
+        self.assertEqual(resolve_output_rel_dir(img_path, "", "", "b1"), "b1")
+
+    def test_branch_sub_directory_gets_sibling_named_dir(self):
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertEqual(resolve_output_rel_dir(img_path, "", "", "b1"), "sub,b1")
+
+    def test_branch_nested_directory_keeps_parent(self):
+        img_path = os.path.normpath("C:/project/output/sub1/sub2/image.png")
+        self.assertEqual(resolve_output_rel_dir(img_path, "", "", "b1"), "sub1/sub2,b1")
+
+    def test_branch_respects_explicit_comfyui_output_dir(self):
+        img_path = os.path.normpath("C:/custom_output/my_project/image.png")
+        self.assertEqual(
+            resolve_output_rel_dir(
+                img_path, os.path.normpath("C:/custom_output"), "", "b1"
+            ),
+            "my_project,b1",
+        )
+
+    def test_branch_overrides_relative_hook_output_dir(self):
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertEqual(
+            resolve_output_rel_dir(img_path, "", "relative_override/sub", "b1"),
+            "sub,b1",
+        )
+
+    def test_branch_overrides_inherit_hook_output_dir(self):
+        """`:inherit:` 只关闭 HOOK_OUTPUT_DIR 的调整，`--branch` 仍然生效。"""
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertEqual(
+            resolve_output_rel_dir(img_path, "", ":inherit:", "b1"), "sub,b1"
+        )
+
+    def test_branch_overrides_absolute_hook_output_dir_outside_root(self):
+        """`--branch` 优先于 HOOK_OUTPUT_DIR，不再因后者非法而报错。"""
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertEqual(
+            resolve_output_rel_dir(
+                img_path, "", os.path.normpath("C:/other/override"), "b1"
+            ),
+            "sub,b1",
+        )
+
+    def test_branch_target_may_already_exist(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            os.makedirs(os.path.join(output_root, "sub,b1"))
+            img_path = os.path.join(output_root, "sub", "image.png")
+            self.assertEqual(
+                resolve_output_rel_dir(img_path, output_root, "", "b1"), "sub,b1"
+            )
+
+    def test_branch_requires_resolvable_output_root(self):
+        img_path = os.path.normpath("C:/project/no_out_dir/image.png")
+        with self.assertRaises(ValueError):
+            resolve_output_rel_dir(img_path, "", "", "b1")
+
+    def test_branch_relative_traversal_is_rejected(self):
+        """`--branch ..` 不得让产物逃逸 ComfyUI 输出根目录。"""
+        img_path = os.path.normpath("C:/project/output/image.png")
+        with self.assertRaises(ValueError):
+            resolve_output_rel_dir(img_path, "", "", "..")
+
+    def test_branch_drive_relative_suffix_is_rejected(self):
+        """盘符相对路径会替换 join 的基路径，必须在计算落盘目录时拒绝。"""
+        img_path = os.path.normpath("C:/project/output/image.png")
+        for suffix in ("C:", "C:foo"):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    resolve_output_rel_dir(img_path, "", "", suffix)
+
+    def test_branch_dotted_suffix_is_kept(self):
+        img_path = os.path.normpath("C:/project/output/image.png")
+        self.assertEqual(resolve_output_rel_dir(img_path, "", "", "v1.0"), "v1.0")
+
+    def test_inherit_without_branch_skips_output_adjustment(self):
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertIsNone(resolve_output_rel_dir(img_path, "", ":inherit:", None))
+
+    def test_queue_without_branch_uses_image_directory(self):
+        img_path = os.path.normpath("C:/project/output/sub/image.png")
+        self.assertEqual(resolve_output_rel_dir(img_path, "", "", None), "sub")
+
+    # #endregion
 
 
 if __name__ == "__main__":

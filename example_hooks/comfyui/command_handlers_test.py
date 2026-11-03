@@ -788,6 +788,24 @@ class TestRemixSkipWithoutChange(unittest.TestCase):
         submit.assert_called_once()
         self.assertFalse(ctx.skipped)
 
+    def test_branch_only_with_fixed_seed_is_skipped(self) -> None:
+        """`--branch` 不算编辑项：prompt 未变化时仍受空转保护约束。"""
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request(["--branch", "b1"]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_not_called()
+        self.assertTrue(ctx.skipped)
+        self.assertEqual(ctx.skip_reason, "重混未产生任何改动")
+
+    def test_branch_only_with_no_skip_submits(self) -> None:
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        ctx = _context(prompt, workflow, _request(["--branch", "b1", "--no-skip"]))
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            RemixHandler().run(ctx)
+        submit.assert_called_once()
+        self.assertFalse(ctx.skipped)
+
     def test_edit_writing_current_value_is_skipped(self) -> None:
         """--cfg 写回与现值相同的值不构成有意义的改动，不再因编辑动作本身而提交。"""
         workflow, prompt = _workflow_and_prompt("masterpiece,")

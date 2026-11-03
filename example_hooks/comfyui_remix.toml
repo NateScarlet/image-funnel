@@ -6,7 +6,7 @@ command = "uv run runner.py comfyui remix"
 [directive]
 name = "remix"
 usage = """
-/remix [--add <tag>...] [--remove <tag>...] [--remove-again] [--lora <name> <weight>] [--cfg <weight>]... [--aspect <ratio>]... [--neg] [--region <region>]... [--node <node-id>]... [-S] [--keep] [--raw] [--hard] [--skip-add] [-u] [-j <N>]
+/remix [--add <tag>...] [--remove <tag>...] [--remove-again] [--branch <suffix>] [--lora <name> <weight>] [--cfg <weight>]... [--aspect <ratio>]... [--neg] [--region <region>]... [--node <node-id>]... [-S] [--keep] [--raw] [--hard] [--skip-add] [-u] [-j <N>]
 给当前目录所有 4 星图片的 ComfyUI 工作流应用全部编辑后入列生成。不带任何编辑项时等价于直接重新入列。
 在会话提交后触发，写入笔记时也触发，还可以手动通过笔记触发。
 
@@ -27,6 +27,9 @@ usage = """
 交换宽高（swap / exchange）、精确值（16:9）与常见比例序列。
 
 选项：
+--branch <suffix>    生成结果落到按 /branch 规则命名的新目录：根目录下为 <suffix>，子目录下为同级 <当前目录名>,<suffix>。
+                     优先于 HOOK_OUTPUT_DIR（含 :inherit:）；目标目录已存在时正常写入。它不算编辑项：
+                     仅带 --branch 而无其它编辑时仍受无改动跳过约束，需搭配 -S 才会重出
 --neg                当没有 region 或 node 匹配时，提示词新增与调权匹配负向区域而不是正向
 --region <region>    指定提示词目标区域，可多次指定；优先匹配 node
 --node <node-id>     指定目标节点，可多次指定；优先匹配 node。CFG 与长宽比同样作用于这些节点
