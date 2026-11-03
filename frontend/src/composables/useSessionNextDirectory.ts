@@ -242,10 +242,16 @@ export default function useSessionNextDirectory(
 
     while (hasNextPage.value) {
       const loadedCount = loadedDirectories.value.length;
+      // 取页返回时合并结果已可见，之后读取的目录就是新页内容
       await fetchMore("forward");
-      await nextTick();
-      // 分页无法推进时停止，避免无上限请求循环
-      if (loadedDirectories.value.length <= loadedCount) return undefined;
+
+      if (loadedDirectories.value.length <= loadedCount) {
+        // 结果已可见却没有新增目录：服务端仍声称有下一页即为游标失效，
+        // 必须作为真实错误暴露，不能解释成「没有下一个目录而回主页」
+        if (hasNextPage.value) throw new Error("目录分页未能推进：已取页但没有新增目录");
+        // 后续页不存在，序列到此耗尽
+        break;
+      }
 
       await loadUnknownStats(loadedDirectories.value.map((entry) => entry.dir.id));
 

@@ -1,19 +1,19 @@
 // #region 说明
-// 复现「筛选完成后自动切换回主页、第二页的待筛选目录被跳过」(#170)。
+// 覆盖「筛选完成后自动切换回主页、第二页的待筛选目录被跳过」(#170)。
 //
 // 接缝选在假 GraphQL 服务端（ApolloLink），其余全部走真实实现——useQuery、
-// useRelayConnection、utils/fetchMore 的合并、useDirectoryBrowse 的页锚点推算、
-// useDirectoryStats 的缓存、useSessionNextDirectory 的游标导航。
+// useRelayConnection、utils/fetchMore 的合并、useDirectoryBrowse 的页锚点推算与
+// 取页可见性等待、useDirectoryStats 的缓存、useSessionNextDirectory 的游标导航。
 // 此前的同类测试都 mock 掉 useDirectoryBrowse 并手工填写 pageAnchor/pageAfter，
 // 页锚点推算与真实分页合并从未被执行，因此「测试通过、实测失败」无法被发现。
 //
-// 已确认的缺陷：`utils/fetchMore` 的 promise resolve 时，合并后的第二页尚未广播到
-// ObservableQuery（Apollo 4 在宏任务中才推送），`resolveNextDirectory` 里
-// 「边数没增长就放弃」的判断因此命中，直接返回 undefined，CompletedView 便回到主页。
+// 关键时序：`utils/fetchMore` 的 promise 在缓存合并之后、ObservableQuery 广播之前
+// resolve（Apollo 4 在宏任务中才推送）。useDirectoryBrowse 对外暴露的 fetchMore
+// 会等到合并结果在响应式数据中可见后才返回，因此取页返回即代表新页可读。
 // #endregion
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { effectScope, nextTick, type EffectScope } from "vue";
+import { effectScope, ref, type EffectScope } from "vue";
 
 // #region 假服务端装配
 interface FakeServer {
@@ -47,10 +47,17 @@ vi.mock("@/graphql/client", async () => {
           operationName,
           variables: { ...operation.variables },
         });
-        const data = handler({
-          operationName,
-          variables: operation.variables as Record<string, unknown>,
-        });
+        let data: unknown;
+        try {
+          data = handler({
+            operationName,
+            variables: operation.variables as Record<string, unknown>,
+          });
+        } catch (err) {
+          // 模拟服务端/分页请求失败
+          queueMicrotask(() => observer.error(err));
+          return () => {};
+        }
         // 订阅：不推送任何事件，模拟「期间没有实时变更」
         if (data === null) return () => {};
         queueMicrotask(() => {
@@ -73,11 +80,17 @@ vi.mock("@/graphql/client", async () => {
 // #endregion
 
 import { client } from "@/graphql/client";
-import type { DirectoryFragment } from "@/graphql/generated";
+import {
+  DirectoryStatsDocument,
+  type BrowseDirectoriesQueryVariables,
+  type DirectoryFragment,
+  type DirectoryStatsFragment,
+} from "@/graphql/generated";
 import useDirectories from "./useDirectories";
 import useDirectoryBrowse from "./domain/useDirectoryBrowse";
 import useSessionNextDirectory from "./useSessionNextDirectory";
 import { directoryCursorKey } from "./useDirectoryCursor";
+import { isDirectoryPageWaitCancelled } from "@/utils/directoryPageWaitCancelled";
 import { sortDirectoryOrder, type DirectoryOrdered } from "@/utils/directoryOrder";
 
 // #region 假数据：父目录下 250 个子目录，服务端按目录名分页
@@ -119,7 +132,7 @@ function directoryIndexById(id: string): number {
   return Number(match[1]);
 }
 
-function statsDto(index: number, fixture: Fixture) {
+function statsDto(index: number, fixture: Fixture): DirectoryStatsFragment {
   const imageCount = fixture.completed(index) ? 1 : 2;
   return {
     __typename: "DirectoryStats",
@@ -171,10 +184,13 @@ function browseDirectoriesPage(variables: Record<string, unknown>, total: number
   };
 }
 
-function installServer(options: { total: number; fixture: Fixture }) {
+function installServer(options: { total: number; fixture: Fixture; failForwardPage?: boolean }) {
   server.handle = (operation) => {
     switch (operation.operationName) {
       case "BrowseDirectories":
+        if (options.failForwardPage && operation.variables.after != null) {
+          throw new Error("目录分页请求失败");
+        }
         return browseDirectoriesPage(operation.variables, options.total);
       case "DirectoryStats": {
         const index = directoryIndexById(String(operation.variables.id));
@@ -252,9 +268,25 @@ function createNavigator(directoryId: string) {
   );
 }
 
-/** 让出一个宏任务，等待 Apollo 广播 fetchMore 的合并结果 */
-function settleBroadcast(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+/** 已发起的正向分页请求数，用于断言「没有多余请求」 */
+function forwardRequestCount(): number {
+  return server.requests.filter(
+    (request) => request.operationName === "BrowseDirectories" && request.variables.after != null,
+  ).length;
+}
+
+/** 预先把统计写入缓存：完成度判定只认已缓存的统计，避免用例依赖 refetchStats 的广播时机 */
+function seedStats(indexes: number[], fixture: Fixture): void {
+  for (const index of indexes) {
+    client.writeQuery({
+      query: DirectoryStatsDocument,
+      variables: { id: directoryName(index) },
+      data: {
+        __typename: "Query",
+        node: { ...directoryDto(index), stats: statsDto(index, fixture) },
+      },
+    });
+  }
 }
 // #endregion
 
@@ -267,9 +299,8 @@ beforeEach(async () => {
 });
 
 describe("筛选完成后自动切换到下一个目录（真实分页接缝）", () => {
-  // 复现 #170：第二页有待筛选目录时，自动切换应进入它。
-  // 用 test.fails 标记：缺陷存在期间用例以「预期失败」留在测试集中，修复后改为 test。
-  test.fails("第一页全部达标时，应继续取第二页并进入其中第一个未达标目录", async () => {
+  // #170 回归：第二页有待筛选目录时，自动切换应进入它。
+  test("第一页全部达标时，应继续取第二页并进入其中第一个未达标目录", async () => {
     installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
 
     const entry = await readListEntry(directoryName(0));
@@ -303,8 +334,8 @@ describe("筛选完成后自动切换到下一个目录（真实分页接缝）"
     expect(nextDirectoryId).toBe(directoryName(1));
   }, 30_000);
 
-  // 定位缺陷位置：页锚点推算本身正确，问题只在「fetchMore 结果何时可见」的判断上。
-  test("让出宏任务后，同一导航状态能算出 dir-100", async () => {
+  // 取页可见性接缝：fetchMore 返回时新页已可读，消费无需再额外等待广播。
+  test("fetchMore 返回时，合并后的下一页已在已加载目录中可见", async () => {
     installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
 
     const { scope, value } = runInScope(() => useDirectoryBrowse(() => ({ id: PARENT_ID })));
@@ -313,11 +344,6 @@ describe("筛选完成后自动切换到下一个目录（真实分页接缝）"
     });
 
     await value.fetchMore("forward");
-    // 微任务阶段仍是旧数据：正是 resolveNextDirectory 放弃的时刻
-    await nextTick();
-    expect(value.directories.value.length).toBe(PAGE_SIZE);
-
-    await settleBroadcast();
     expect(value.directories.value.length).toBe(PAGE_SIZE * 2);
 
     // 第二页首条的页锚点严格大于第一页首条，页序比较成立
@@ -325,16 +351,143 @@ describe("筛选完成后自动切换到下一个目录（真实分页接缝）"
       value.directories.value[PAGE_SIZE].pageAnchor > value.directories.value[0].pageAnchor,
     ).toBe(true);
     scope.stop();
+  }, 30_000);
+
+  // 序列耗尽：只有所有后续页都没有候选时才返回空（此时回主页才是正确行为）
+  test("后续页都没有候选时，取完所有页后才返回空", async () => {
+    const fixture: Fixture = { completed: () => true };
+    installServer({ total: 250, fixture });
+    seedStats(
+      Array.from({ length: 250 }, (_, index) => index),
+      fixture,
+    );
 
     const entry = await readListEntry(directoryName(0));
     enterDirectory(entry);
 
-    const navigator = createNavigator(directoryName(0));
-    // 缺陷：此时返回 undefined，CompletedView 因此回到主页
-    expect(await navigator.value.resolveNextDirectory()).toBeUndefined();
-    // 分页已经推进，只是合并结果在宏任务后才可见；可见后候选选择是正确的
-    await settleBroadcast();
-    expect(navigator.value.nextDirectoryId.value).toBe(directoryName(PAGE_SIZE));
-    navigator.scope.stop();
+    const { scope, value } = createNavigator(directoryName(0));
+    const nextDirectoryId = await value.resolveNextDirectory();
+    scope.stop();
+
+    expect(nextDirectoryId).toBeUndefined();
+    // 三页（100 + 100 + 50）都被取过，而不是在第一页无候选时就放弃
+    expect(
+      server.requests.filter(
+        (request) =>
+          request.operationName === "BrowseDirectories" && request.variables.after != null,
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
   }, 30_000);
+
+  // 真实错误必须向上暴露，不能当作「没有下一个目录」而回主页
+  test("分页请求失败时向上抛出，而不是返回空", async () => {
+    installServer({
+      total: 250,
+      fixture: { completed: (index) => index < PAGE_SIZE },
+      failForwardPage: true,
+    });
+
+    const entry = await readListEntry(directoryName(0));
+    enterDirectory(entry);
+
+    const { scope, value } = createNavigator(directoryName(0));
+    try {
+      await expect(value.resolveNextDirectory()).rejects.toThrow("目录分页请求失败");
+    } finally {
+      scope.stop();
+    }
+  }, 30_000);
+
+  // #region 取页等待的生命周期与读取失败
+  // 作用域销毁后没有消费者：等待必须结束，不能因为广播不会再来而永久悬挂
+  test("取页等待期间作用域销毁时，fetchMore 以取消错误结束而不是悬挂", async () => {
+    installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
+
+    const { scope, value } = runInScope(() => useDirectoryBrowse(() => ({ id: PARENT_ID })));
+    await vi.waitFor(() => {
+      expect(value.directories.value.length).toBe(PAGE_SIZE);
+    });
+
+    const pending = value.fetchMore("forward");
+    scope.stop();
+
+    await expect(pending.catch((error: unknown) => error)).resolves.toSatisfy(
+      isDirectoryPageWaitCancelled,
+    );
+  }, 30_000);
+
+  // 作用域销毁后不应再发起请求（卸载期间的滚动回调不能触发网络请求）
+  test("作用域销毁后再调用 fetchMore 不会发起请求", async () => {
+    installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
+
+    const { scope, value } = runInScope(() => useDirectoryBrowse(() => ({ id: PARENT_ID })));
+    await vi.waitFor(() => {
+      expect(value.directories.value.length).toBe(PAGE_SIZE);
+    });
+
+    scope.stop();
+    const requestsBefore = forwardRequestCount();
+
+    await expect(value.fetchMore("forward").catch((error: unknown) => error)).resolves.toSatisfy(
+      isDirectoryPageWaitCancelled,
+    );
+    expect(forwardRequestCount()).toBe(requestsBefore);
+  }, 30_000);
+
+  // 变量切换后旧变量的合并目标不会再出现在新数据里，等待必须以取消错误结束
+  test("取页期间查询变量切换时，fetchMore 以取消错误结束", async () => {
+    installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
+
+    const variables = ref<BrowseDirectoriesQueryVariables>({ id: PARENT_ID });
+    const { scope, value } = runInScope(() => useDirectoryBrowse(variables));
+    await vi.waitFor(() => {
+      expect(value.directories.value.length).toBe(PAGE_SIZE);
+    });
+
+    const pending = value.fetchMore("forward");
+    // 变量引用切换即视为旧合并目标失效；内容保持相同，避免 Apollo 换用另一组缓存字段
+    variables.value = { id: PARENT_ID };
+
+    await expect(pending.catch((error: unknown) => error)).resolves.toSatisfy(
+      isDirectoryPageWaitCancelled,
+    );
+    scope.stop();
+  }, 30_000);
+
+  // 列表侧（浏览视图 / 目录选择器 / 子目录网格）的取页取消必须静默结束，
+  // 否则滚动回调会留下未处理的 Promise 拒绝，且与既有分页行为不一致
+  test("目录列表在取页在途时切换变量，fetchMore 静默结束", async () => {
+    installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
+
+    const variables = ref<BrowseDirectoriesQueryVariables>({ id: PARENT_ID });
+    const { scope, value } = runInScope(() => useDirectories(variables));
+    await vi.waitFor(() => {
+      expect(value.directories.value.length).toBe(PAGE_SIZE);
+    });
+
+    const pending = value.fetchMore("forward");
+    variables.value = { id: PARENT_ID };
+
+    await expect(pending).resolves.toBeUndefined();
+    scope.stop();
+  }, 30_000);
+
+  // 缓存读不到合并结果时无法判断新页是否可见，必须暴露而不是按旧页静默返回
+  test("缓存无法读取合并结果时，fetchMore 抛出而不是按旧页返回", async () => {
+    installServer({ total: 250, fixture: { completed: (index) => index < PAGE_SIZE } });
+
+    const { scope, value } = runInScope(() => useDirectoryBrowse(() => ({ id: PARENT_ID })));
+    await vi.waitFor(() => {
+      expect(value.directories.value.length).toBe(PAGE_SIZE);
+    });
+
+    const readQuery = vi.spyOn(client, "readQuery").mockImplementation(() => null);
+    try {
+      await expect(value.fetchMore("forward")).rejects.toThrow("无法从缓存读取");
+    } finally {
+      readQuery.mockRestore();
+      scope.stop();
+    }
+  }, 30_000);
+  // #endregion
 });

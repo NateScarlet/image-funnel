@@ -121,6 +121,9 @@ import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
 import { useAutoCreateSession } from "../composables/useAutoCreateSession";
+import useNotification from "../composables/useNotification";
+import { CombinedGraphQLErrors, LinkError } from "@apollo/client/errors";
+import { isDirectoryPageWaitCancelled } from "../utils/directoryPageWaitCancelled";
 const { session, nextDirectoryId, resolveNextDirectory } = defineProps<{
   session: SessionFragment;
   nextDirectoryId: string | undefined;
@@ -130,6 +133,7 @@ const { session, nextDirectoryId, resolveNextDirectory } = defineProps<{
 defineEmits<(e: "undo") => void>();
 
 const router = useRouter();
+const { showError } = useNotification();
 
 // 提交后使用 resolveNextDirectory 的返回值创建会话；props 更新到本组件前不能依赖其响应式刷新
 const targetDirectoryId = ref<string | undefined>();
@@ -208,9 +212,16 @@ async function handleCommitted() {
     } else {
       await router.push("/");
     }
-  } catch {
-    // 解析下一目录或创建下一会话报错：释放导航锁，错误交由全局处理，用户可重试
+  } catch (error) {
+    // 释放导航锁允许用户重试
     navigating = false;
+    // 取页等待被取消（切换目录/卸载）不是失败，静默中止，不打扰用户
+    if (isDirectoryPageWaitCancelled(error)) return;
+    // Apollo 请求错误已由全局 ErrorLink 提示；此处只补充未被其覆盖的本地错误，
+    // 否则「分页游标未推进」之类的失败会停留在完成视图且没有任何反馈
+    if (!CombinedGraphQLErrors.is(error) && !LinkError.is(error)) {
+      showError(error instanceof Error ? error.message : String(error));
+    }
   }
 }
 </script>

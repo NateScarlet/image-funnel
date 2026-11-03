@@ -6,6 +6,7 @@ import useDirectoryBrowse, {
 import useAsyncTask from "@/composables/useAsyncTask";
 import useStorage from "@/composables/useStorage";
 import type { BrowseDirectoriesQueryVariables, DirectoryStatsFragment } from "@/graphql/generated";
+import { isDirectoryPageWaitCancelled } from "@/utils/directoryPageWaitCancelled";
 
 // #region 筛选开关全局响应式状态
 export const { model: maxUnratedCount } = useStorage<number>(
@@ -50,9 +51,21 @@ export default function useDirectories(
     pageInfo,
     hasNextPage,
     hasPreviousPage,
-    fetchMore,
+    fetchMore: browseFetchMore,
   } = useDirectoryBrowse(variables, { loadingCount: options?.loadingCount });
   const { getCachedStats, refetchStats } = useDirectoryStats();
+
+  /**
+   * 列表侧取页：变量切换或作用域销毁导致的取消不是分页失败，
+   * 按正常结束处理，避免 UI 滚动回调产生未处理的 Promise 拒绝。
+   */
+  async function fetchMore(direction?: "forward" | "backward"): Promise<void> {
+    try {
+      await browseFetchMore(direction);
+    } catch (error) {
+      if (!isDirectoryPageWaitCancelled(error)) throw error;
+    }
+  }
 
   const largeUnratedCount = computed(() => {
     const dirs = liveDirectories.value;

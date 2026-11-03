@@ -10,14 +10,17 @@ import {
   DirEntryDeletedDocument,
   DirectoryFragmentDoc,
   DirectoryStatsDocument,
+  type BrowseDirectoriesQuery,
   type BrowseDirectoriesQueryVariables,
   type DirectoryFragment,
   type DirectoryStatsFragment,
   type DirectoryStatsQuery,
 } from "@/graphql/generated";
-import { throttle, debounce } from "es-toolkit";
-import { onScopeDispose, shallowReactive } from "vue";
+import { isEqual, throttle, debounce } from "es-toolkit";
+import { onScopeDispose, shallowReactive, watch } from "vue";
 import toStableValue from "@/utils/toStableValue";
+import type { RelayConnection } from "@/utils/isRelayConnection";
+import { DirectoryPageWaitCancelledError } from "@/utils/directoryPageWaitCancelled";
 
 /** 已加载目录及其位置：排序键所需的页锚点、页请求锚点与目录自身游标 */
 export interface PositionedDirectory {
@@ -174,6 +177,105 @@ export default function useDirectoryBrowse(
   });
   // #endregion
 
+  // #region 取页结果可见性
+  // fetchMore 的 promise 在合并结果写入缓存之后、ObservableQuery 广播之前 resolve，
+  // 此刻响应式数据仍是旧页。消费者若在取页返回时立刻读取已加载目录，
+  // 会把「结果尚未广播」误判成「分页没有推进」。
+  // 因此以缓存中已合并的连接为目标，等响应式数据追平后才让 fetchMore 返回。
+
+  /** 进行中的取页等待的结束函数；等待期间作用域销毁或变量切换必须把它们结束掉 */
+  const pendingPageWaitEnds = new Set<(reason?: Error) => void>();
+  /** 查询变量每切换一次就失效一批等待：旧的合并目标属于旧变量，不再适用 */
+  let pageWaitVariablesVersion = 0;
+  /** 作用域已销毁：此后不再依赖广播，也不应继续等待 */
+  let pageScopeDisposed = false;
+
+  function endPendingPageWaits(reason?: Error): void {
+    for (const end of pendingPageWaitEnds) end(reason);
+    pendingPageWaitEnds.clear();
+  }
+
+  onScopeDispose(() => {
+    pageScopeDisposed = true;
+    // 作用域销毁后没有消费者，结束等待而不是让 promise 永久悬挂
+    endPendingPageWaits(new DirectoryPageWaitCancelledError("目录取页等待已取消：作用域已销毁"));
+  });
+
+  // 变量切换后，旧变量的合并目标永远不会出现在新数据里，必须结束等待
+  watch(queryVariables, () => {
+    pageWaitVariablesVersion += 1;
+    endPendingPageWaits(new DirectoryPageWaitCancelledError("目录取页等待已取消：查询变量已切换"));
+  });
+
+  /** 读取缓存中当前查询的连接；fetchMore 返回时缓存已包含合并后的页 */
+  function readMergedConnection(): RelayConnection<DirectoryFragment> | undefined {
+    const data = client.readQuery<BrowseDirectoriesQuery>({
+      query: BrowseDirectoriesDocument,
+      variables: directoriesQuery.variables as BrowseDirectoriesQueryVariables,
+    });
+    const node = data?.node;
+    return node?.__typename === "Directory" ? node.directoriesV2 : undefined;
+  }
+
+  /** 已合并的连接是否已经在响应式数据中可见：边数与页边界必须一致 */
+  function isMergedConnectionVisible(expected: RelayConnection<DirectoryFragment>): boolean {
+    const visible = currentDirectory.value?.directoriesV2;
+    if (!visible) return false;
+
+    return (
+      (expected.edges?.length ?? 0) === (visible.edges?.length ?? 0) &&
+      isEqual(expected.pageInfo ?? null, visible.pageInfo ?? null)
+    );
+  }
+
+  /** 取一页，并在合并结果对消费者可见后返回 */
+  async function fetchVisiblePage(direction?: "forward" | "backward"): Promise<void> {
+    // 作用域销毁后没有消费者，也不应再发起请求
+    if (pageScopeDisposed)
+      throw new DirectoryPageWaitCancelledError("目录取页等待已取消：作用域已销毁");
+
+    const variablesVersion = pageWaitVariablesVersion;
+    await directoryConnection.fetchMore(direction);
+
+    // 取页期间变量切换：本次合并结果属于旧变量，不能报告为「新页可见」
+    if (variablesVersion !== pageWaitVariablesVersion) {
+      throw new DirectoryPageWaitCancelledError("目录取页等待已取消：查询变量已切换");
+    }
+    // 取页期间作用域销毁：同样属于取消，等待目标已无人消费
+    if (pageScopeDisposed) {
+      throw new DirectoryPageWaitCancelledError("目录取页等待已取消：作用域已销毁");
+    }
+
+    const merged = readMergedConnection();
+    // 缓存读不到合并结果说明无法判断新页是否可见，不能按旧页静默返回
+    if (!merged) throw new Error("目录分页的合并结果无法从缓存读取");
+    if (isMergedConnectionVisible(merged)) return;
+
+    // 等 Apollo 广播把合并结果推送到响应式数据；不依赖固定延时
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      function finish(reason?: Error): void {
+        if (settled) return;
+        settled = true;
+        stopWatch();
+        pendingPageWaitEnds.delete(cancel);
+        if (reason) reject(reason);
+        else resolve();
+      }
+      const cancel = (reason?: Error) => finish(reason);
+      const stopWatch = watch(
+        () => currentDirectory.value?.directoriesV2,
+        () => {
+          if (isMergedConnectionVisible(merged)) finish();
+        },
+      );
+      pendingPageWaitEnds.add(cancel);
+      // 注册后再复查一次：广播可能恰好在创建 watcher 之前落地
+      if (isMergedConnectionVisible(merged)) finish();
+    });
+  }
+  // #endregion
+
   return {
     currentDirectory,
     liveDirectories,
@@ -184,7 +286,7 @@ export default function useDirectoryBrowse(
     pageInfo: directoryConnection.pageInfo,
     hasNextPage: computed(() => directoryConnection.pageInfo.value.hasNextPage),
     hasPreviousPage: computed(() => directoryConnection.pageInfo.value.hasPreviousPage),
-    fetchMore: directoryConnection.fetchMore,
+    fetchMore: fetchVisiblePage,
   };
 }
 
