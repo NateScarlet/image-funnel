@@ -34,7 +34,11 @@ export default function useMarkImage(
     return Duration.fromMilliseconds(now.sub(start));
   }
 
-  async function mark(imageId: string, action: ImageAction) {
+  async function mark(imageId: string | undefined, action: ImageAction) {
+    // 没有显示中的图片即没有目标：直接丢弃，不进入标记中状态也不发请求
+    if (!imageId) {
+      return;
+    }
     if (marking.value) {
       return;
     }

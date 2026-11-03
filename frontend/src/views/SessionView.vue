@@ -83,7 +83,7 @@
           <template #control-bg>
             <div
               v-if="isAutoRejectActive && currentImage && !swiping"
-              :key="`${currentImageId}-${autoRejectTimeoutSeconds}`"
+              :key="`${displayedId}-${autoRejectTimeoutSeconds}`"
               class="absolute inset-y-0 left-0 bg-secondary-500/50 pointer-events-none countdown-progress"
               :style="{
                 animationDuration: `${autoRejectTimeoutSeconds}s`,
@@ -145,7 +145,7 @@
           v-if="!didUseGesture"
           class="hidden md:flex gap-4 w-full max-w-md mb-4"
           :marking="marking"
-          @mark="markImage(currentImageId!, $event)"
+          @mark="markImage(displayedId, $event)"
         />
       </template>
 
@@ -292,7 +292,7 @@ const { model: autoRejectTimeoutSeconds } = useStorage<number>(
 
 <script setup lang="ts">
 import "core-js/actual/disposable-stack";
-import { ref, shallowRef, computed, useTemplateRef, watch } from "vue";
+import { ref, computed, useTemplateRef, watch } from "vue";
 
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument, ImageAction } from "../graphql/generated";
@@ -317,7 +317,7 @@ import useSession from "../composables/domain/useSession";
 import useSessionNextDirectory from "../composables/useSessionNextDirectory";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
-import useGestureTarget, { type ImageLoadedEvent } from "@/composables/useGestureTarget";
+import useDisplayedImage from "@/composables/useDisplayedImage";
 import useRatedRejectFlash from "@/composables/useRatedRejectFlash";
 import { getStarColorVar } from "@/utils/starConfig";
 
@@ -390,8 +390,10 @@ const { nextDirectoryId, resolveNextDirectory } = useSessionNextDirectory(
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
-// 优先使用已加载完成的图片 id，避免在图片切换瞬间使用错误的 id
-const currentImageId = computed(() => lastImageLoadedEvent.value?.id ?? currentImage.value?.id);
+// 显示中的图片（标记与手势的目标）按会话作用域隔离：
+// SessionView 在路由参数变化时复用，上一会话残留的加载状态不得被新会话继承
+const { displayedId, loadedAt, gestureTargetId, handleImageLoaded, recordGestureEnd } =
+  useDisplayedImage(sessionId, () => currentImage.value?.id);
 
 const swipeEl = useTemplateRef("swipeEl");
 
@@ -401,28 +403,16 @@ const isSessionImageActive = computed(() => !!currentImage.value);
 useHotkeys(
   {
     ArrowDown: () => {
-      const imageId = currentImageId.value;
-      if (imageId) {
-        markImage(imageId, ImageAction.REJECT);
-      }
+      markImage(displayedId.value, ImageAction.REJECT);
     },
     ArrowUp: () => {
-      const imageId = currentImageId.value;
-      if (imageId) {
-        markImage(imageId, ImageAction.SHELVE);
-      }
+      markImage(displayedId.value, ImageAction.SHELVE);
     },
     ArrowRight: () => {
-      const imageId = currentImageId.value;
-      if (imageId) {
-        markImage(imageId, ImageAction.KEEP);
-      }
+      markImage(displayedId.value, ImageAction.KEEP);
     },
     ArrowLeft: () => {
-      const imageId = currentImageId.value;
-      if (imageId) {
-        undo();
-      }
+      undo();
     },
   },
   {
@@ -542,31 +532,19 @@ useEventListeners(window, ({ on }) => {
   });
 });
 
-const lastImageLoadedEvent = shallowRef<ImageLoadedEvent>();
-const activeImageId = computed(() => currentImage.value?.id);
-const gestureTarget = useGestureTarget(activeImageId);
-const { gestureTargetId, recordGestureEnd } = gestureTarget;
-
-function handleImageLoaded(e: ImageLoadedEvent) {
-  lastImageLoadedEvent.value = e;
-  gestureTarget.handleImageLoaded(e);
-}
-
-const imageLoadedAt = computed(() => {
-  const event = lastImageLoadedEvent.value;
-  if (event && event.id === currentImage.value?.id) {
-    return event.time;
-  }
-  return undefined;
-});
-const { marking, mark: originalMarkImage } = useMarkImage(sessionId, imageLoadedAt);
+const { marking, mark: originalMarkImage } = useMarkImage(sessionId, loadedAt);
 // flash 信号按会话作用域隔离，防止提交后切换到下一目录会话时重放残留动画
 const {
   signal: ratedRejectSignal,
   flash: ratedRejectFlash,
   clear: clearRatedRejectFlash,
 } = useRatedRejectFlash(sessionId);
-async function markImage(id: string, action: ImageAction) {
+async function markImage(id: string | undefined, action: ImageAction) {
+  // 视图侧副作用（自动排除运行态、星级扫过动画）需要有显示中的图片，
+  // 无目标时由 mark 静默丢弃请求
+  if (!id) {
+    return;
+  }
   if (autoRejectEnabled.value) {
     autoRejectRunning.value = true;
   }
@@ -662,7 +640,8 @@ function handleAllowPan(e: PointerEvent) {
 
 const didUseGesture = ref(false);
 function handleGesture() {
-  const imageId = gestureTargetId.value ?? currentImageId.value;
+  // 没有显示中的图片就没有手势目标：整段手势（含撤销）都不生效
+  const imageId = gestureTargetId.value;
   if (!imageId) {
     return;
   }
@@ -701,27 +680,21 @@ const isAutoRejectActive = computed(() => {
 
 // 监听图片加载、超时时长、实际是否生效，内联控制定时器启动与清理
 watch(
-  [isAutoRejectActive, autoRejectTimeoutSeconds, lastImageLoadedEvent, swiping, marking],
-  ([active, timeout, loadedEvent, isSwiping], _, onCleanup) => {
-    if (
-      !active ||
-      !loadedEvent ||
-      !currentImage.value ||
-      loadedEvent.id !== currentImage.value.id ||
-      isSwiping
-    ) {
+  [isAutoRejectActive, autoRejectTimeoutSeconds, loadedAt, swiping, marking],
+  ([active, timeout, imageLoadedAt, isSwiping], _, onCleanup) => {
+    // loadedAt 仅在会话队列的当前图片加载完成时给出，视图不再自行比对图片 id
+    if (!active || !imageLoadedAt || isSwiping) {
       return;
     }
 
-    const imageId = currentImageId.value;
+    const imageId = displayedId.value;
     const timeoutMs = (timeout ?? 1) * 1000;
 
     // 使用词法作用域局部常量存储定时器 ID，由每个 watch 实例自己负责清理自己
     const timer = window.setTimeout(async () => {
-      const currentId = currentImageId.value;
-      // 触发时检验：确认图片未被手动切换，未处于标记中，且自动排除依旧生效
-      if (currentId && currentId === imageId && !marking.value && isAutoRejectActive.value) {
-        await markImage(currentId, ImageAction.REJECT);
+      // 触发时检验：确认显示中的图片未被手动切换，未处于标记中，且自动排除依旧生效
+      if (imageId && displayedId.value === imageId && !marking.value && isAutoRejectActive.value) {
+        await markImage(imageId, ImageAction.REJECT);
       }
     }, timeoutMs);
 

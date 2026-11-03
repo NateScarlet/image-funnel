@@ -869,15 +869,18 @@ const isSlowLoading = computed(
     currentTime.value.sub(lastLoading.value.startAt) > slowLoadingTimeoutMs,
 );
 
-watch(
-  () => image.id,
-  () => {
+// 图片 ID 或会话变化时重新上报加载状态。
+// 会话切换会复用本组件（SessionView 的 KeepAlive + 路由参数变化），
+// 同一目录的下一会话首图可能与上一会话图片 ID 相同，此时 src 与 data-image-id 都不变，
+// 浏览器不会再次触发 load，只能由会话变化补发一次，否则新会话没有显示中的图片。
+watch([() => image.id, () => sessionId], ([nextImageId], [previousImageId]) => {
+  if (nextImageId !== previousImageId) {
     lastLoading.value = { image, startAt: Time.now() };
-    nextTick(() => {
-      updateLoaded();
-    });
-  },
-);
+  }
+  nextTick(() => {
+    updateLoaded();
+  });
+});
 
 function onLoadStart() {
   if (lastLoading.value.image.id !== image.id) {
