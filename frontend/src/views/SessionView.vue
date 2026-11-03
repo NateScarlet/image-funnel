@@ -1,6 +1,10 @@
 <template>
-  <div class="h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden">
+  <div
+    class="session-root round-flash-surface h-screen bg-primary-900 text-primary-100 flex flex-col overflow-hidden"
+    :data-round-flash="roundFlashPhase"
+  >
     <SessionHeader
+      class="round-flash-surface"
       :session
       :undoing="undoing"
       @show-update-session-modal="updateSessionDialog.open()"
@@ -63,7 +67,7 @@
       <KeepAlive>
         <ImageViewer
           v-if="currentImage"
-          class="relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
+          class="round-flash-surface relative w-full flex-1 bg-primary-800 rounded-lg overflow-hidden"
           :image="currentImage"
           :session-id="sessionId"
           :preload-images="session?.nextImages ?? []"
@@ -183,7 +187,7 @@
 
     <footer
       v-if="currentImage"
-      class="bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0 flex flex-col md:flex-row justify-center items-center gap-2 select-none"
+      class="round-flash-surface bg-primary-800 border-t border-primary-700 p-2 text-center text-xs text-primary-400 shrink-0 flex flex-col md:flex-row justify-center items-center gap-2 select-none"
       :class="didUseGesture ? 'hidden' : ''"
     >
       <div class="flex items-center gap-2 flex-wrap justify-center">
@@ -317,8 +321,9 @@ import useSession from "../composables/domain/useSession";
 import useSessionNextDirectory from "../composables/useSessionNextDirectory";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
-import useDisplayedImage from "@/composables/useDisplayedImage";
+import useDisplayedImage, { type ImageLoadedEvent } from "@/composables/useDisplayedImage";
 import useRatedRejectFlash from "@/composables/useRatedRejectFlash";
+import useRoundChangeFlash from "@/composables/useRoundChangeFlash";
 import { getStarColorVar } from "@/utils/starConfig";
 
 const props = defineProps<{
@@ -392,8 +397,31 @@ const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
 // 显示中的图片（标记与手势的目标）按会话作用域隔离：
 // SessionView 在路由参数变化时复用，上一会话残留的加载状态不得被新会话继承
-const { displayedId, loadedAt, gestureTargetId, handleImageLoaded, recordGestureEnd } =
-  useDisplayedImage(sessionId, () => currentImage.value?.id);
+const {
+  displayedId,
+  loadedAt,
+  gestureTargetId,
+  handleImageLoaded: handleDisplayedImageLoaded,
+  recordGestureEnd,
+} = useDisplayedImage(sessionId, () => currentImage.value?.id);
+
+// #region 换轮提示
+// 同一会话内轮次增大后，等下一轮首图真正加载完成再触发背景变色。
+// 会话 ID 与轮次都取自同一份会话数据，切换会话时二者原子更新，不会误判为换轮。
+const { phase: roundFlashPhase, handleImageLoaded: handleRoundChangeLoaded } = useRoundChangeFlash(
+  () => session.value?.id,
+  () => session.value?.currentRound,
+);
+
+// image-loaded 是"图片真正显示出来"的唯一信号：先交给 useDisplayedImage 记录加载状态，
+// 再由 loadedAt 确认它是会话队列的当前图，避免旧的加载事件提前播放提示
+function handleImageLoaded(event: ImageLoadedEvent | null | undefined) {
+  handleDisplayedImageLoaded(event);
+  if (loadedAt.value) {
+    handleRoundChangeLoaded();
+  }
+}
+// #endregion
 
 const swipeEl = useTemplateRef("swipeEl");
 
@@ -709,6 +737,51 @@ watch(
 </script>
 
 <style scoped>
+/* #region 换轮背景提示 */
+/* 让自定义属性可被过渡，从而只需在会话根元素上维护一份透明度状态，
+   所有深色背景面通过继承与 background-image 统一响应 */
+@property --round-flash-opacity {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.session-root {
+  --round-flash-opacity: 0;
+  transition: --round-flash-opacity 200ms ease-out;
+}
+
+/* 淡入与保持阶段处于变色状态；淡出阶段移除变量，由过渡完成 200ms 淡回 */
+.session-root[data-round-flash="fade-in"],
+.session-root[data-round-flash="hold"] {
+  --round-flash-opacity: 0.18;
+}
+
+/* 减少动效：全局样式已把过渡压成瞬时，这里让变色状态延续到完整时长结束，
+   使恢复时刻仍为 1.0 秒末尾，而不是提前 200ms 消失 */
+@media (prefers-reduced-motion: reduce) {
+  .session-root[data-round-flash="fade-out"] {
+    --round-flash-opacity: 0.18;
+  }
+}
+
+/* 只给深色背景面叠加蓝色背景层：图片本身与图片上的叠加反馈不是变色面 */
+.round-flash-surface {
+  background-image: linear-gradient(
+    rgb(59 130 246 / var(--round-flash-opacity)),
+    rgb(59 130 246 / var(--round-flash-opacity))
+  );
+}
+
+/* 图片容器内的控制栏位于 ImageViewer 内部，需经 :deep 纳入同一份共享状态 */
+:deep(.round-flash-surface) {
+  background-image: linear-gradient(
+    rgb(59 130 246 / var(--round-flash-opacity)),
+    rgb(59 130 246 / var(--round-flash-opacity))
+  );
+}
+/* #endregion */
+
 .countdown-progress {
   animation: shrinkWidth linear forwards;
 }

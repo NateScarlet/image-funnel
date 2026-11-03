@@ -66,7 +66,7 @@
     <!-- 图片尺寸和缩放操作 -->
     <div
       data-no-gesture
-      class="relative flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
+      class="round-flash-surface relative flex-none flex items-center justify-center flex-wrap gap-2 bg-black/70 text-white text-xs px-2 py-1"
     >
       <div class="absolute inset-0 overflow-hidden pointer-events-none">
         <slot name="control-bg"></slot>
