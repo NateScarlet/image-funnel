@@ -50,6 +50,7 @@ from .cancellable_http import HttpCanceledError, HttpError
 from .cancellation import CancelToken
 from .danbooru import DanbooruTag, SemanticLayerUnavailable
 from .danbooru_embedding import COMPILED_EMBEDDINGS_FILENAME
+from .danbooru_env import DanbooruEnv
 from .model_format import (
     MissingDataDirError,
     ModelFormatConfig,
@@ -1921,7 +1922,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """真实 provider 链中目标选项提供者必须注册在 Danbooru 提供者之前。"""
         with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                _request(), get_parser(), "http://localhost", False
+                _request(), get_parser(), DanbooruEnv(search_url="http://localhost")
             ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertLess(
@@ -1955,9 +1956,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 with build_providers(
                     _request(),
                     get_parser(),
-                    "http://should-be-ignored",
-                    False,
-                    data_dir,
+                    DanbooruEnv(
+                        search_url="http://should-be-ignored", data_dir=data_dir
+                    ),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -1972,7 +1973,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with self.assertRaises(FileNotFoundError) as ctx:
                     with build_providers(
-                        _request(), get_parser(), "http://localhost", False, data_dir
+                        _request(),
+                        get_parser(),
+                        DanbooruEnv(search_url="http://localhost", data_dir=data_dir),
                     ):
                         pass
                 self.assertIn("compile_danbooru_data.py", str(ctx.exception))
@@ -2010,10 +2013,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 with build_providers(
                     _request(),
                     get_parser(),
-                    "",
-                    False,
-                    data_dir,
-                    "http://127.0.0.1:1#model=stub",
+                    DanbooruEnv(
+                        data_dir=data_dir,
+                        embedding_provider_url="http://127.0.0.1:1#model=stub",
+                    ),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2037,10 +2040,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 with build_providers(
                     _request(),
                     get_parser(),
-                    "",
-                    False,
-                    data_dir,
-                    "http://127.0.0.1:1#model=stub",
+                    DanbooruEnv(
+                        data_dir=data_dir,
+                        embedding_provider_url="http://127.0.0.1:1#model=stub",
+                    ),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2068,7 +2071,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self._write_single_tag_fixture(data_dir)
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    _request(), get_parser(), "", False, data_dir
+                    _request(), get_parser(), DanbooruEnv(data_dir=data_dir)
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2081,7 +2084,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
         """URL 与数据目录均为空时不注册 DanbooruProvider。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
-            with build_providers(_request(), get_parser(), "", False) as providers:
+            with build_providers(_request(), get_parser(), DanbooruEnv()) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertNotIn("DanbooruProvider", names)
 
@@ -2592,7 +2595,9 @@ class TestModelFormatAutocomplete(unittest.TestCase):
             CancelToken(),
         )
         with build_providers(
-            _request(["/set-model-format"], "set-model-format"), get_parser(), "", False
+            _request(["/set-model-format"], "set-model-format"),
+            get_parser(),
+            DanbooruEnv(),
         ) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             suggestions = list(autocomplete(request, services))
@@ -2694,12 +2699,10 @@ class TestAutocompleteTaskCoocRelease(unittest.TestCase):
             1,
             request,
             get_parser(),
-            "",
-            False,
+            DanbooruEnv(data_dir=data_dir),
             io.StringIO(),
             active,
             active_lock,
-            data_dir,
         )
         active[1] = task
         if extra_active is not None:
@@ -2752,7 +2755,7 @@ class TestAutocompleteTaskFailureReporting(unittest.TestCase):
         )
         out = io.StringIO()
         task = task_cls(
-            1, request, get_parser(), "", False, out, {}, threading.Lock(), ""
+            1, request, get_parser(), DanbooruEnv(), out, {}, threading.Lock()
         )
         if canceled:
             token.cancel()
@@ -3241,13 +3244,12 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         """格式化依赖仅注入 /add；其余指令显式注入空实现。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                _request(), get_parser(), "http://localhost", False
+                _request(), get_parser(), DanbooruEnv(search_url="http://localhost")
             ) as add_providers:
                 with build_providers(
                     _request(cwords=["/remix", "--remove"]),
                     get_parser(),
-                    "http://localhost",
-                    False,
+                    DanbooruEnv(search_url="http://localhost"),
                 ) as remove_providers:
                     add_formatter = cast(
                         Any,
@@ -3272,7 +3274,9 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
                 with self.assertRaises(MissingDataDirError):
                     with build_providers(
-                        _request(), get_parser(), "http://localhost", False
+                        _request(),
+                        get_parser(),
+                        DanbooruEnv(search_url="http://localhost"),
                     ):
                         pass
 

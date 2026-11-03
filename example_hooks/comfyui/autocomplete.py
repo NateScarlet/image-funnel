@@ -33,13 +33,15 @@ from .db import SQLiteContext
 from .danbooru import (
     DanbooruTagProvider,
     SemanticLayerUnavailable,
-    SQLiteDanbooruCache,
-    build_danbooru_tag_provider,
     normalize_related_seeds,
     release_cooc_cache,
 )
-from .danbooru_data import resolve_danbooru_data_dir
-from .danbooru_embedding import EMBEDDING_PROVIDER_URL_ENV
+from .danbooru_env import (
+    DanbooruEnv,
+    build_tag_provider,
+    danbooru_env_from_env,
+    hook_db_path,
+)
 
 # 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
 from .__main__ import (
@@ -1272,26 +1274,6 @@ class AutocompleteServices:
     providers: List[AutocompleteProvider]
 
 
-def _db_path(root_dir: str, directory_rel_path: str) -> str:
-    """目录级 SQLite 数据库文件路径（与 SQLiteContext.from_env 的推导一致）。"""
-    return os.path.join(root_dir, directory_rel_path, ".io.github.natescarlet.hook.db")
-
-
-def _show_nsfw_from_env() -> bool:
-    """从 spawn 注入的环境变量读取 Danbooru 是否包含 NSFW 的静态配置（入口职责）。"""
-    return os.environ.get("DANBOORU_SEARCH_INCLUDE_NSFW", "false").lower() in (
-        "true",
-        "1",
-        "yes",
-        "on",
-    )
-
-
-def _embedding_provider_url_from_env() -> str:
-    """从环境变量读取语义层嵌入服务端点；空串表示语义层不激活（入口职责）。"""
-    return os.environ.get(EMBEDDING_PROVIDER_URL_ENV, "").strip()
-
-
 def build_suggestion_text_formatter(action: str) -> SuggestionTextFormatter:
     """入口构建建议文本格式化依赖。
 
@@ -1360,19 +1342,13 @@ def _cleaned_cwords(cwords: List[str]) -> List[str]:
 def build_providers(
     request: AutocompleteRequest,
     parser: argparse.ArgumentParser,
-    danbooru_url: str,
-    show_nsfw: bool,
-    danbooru_data_dir: str = "",
-    embedding_provider_url: str = "",
+    danbooru: DanbooruEnv,
 ) -> Generator[List[AutocompleteProvider], None, None]:
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
 
-    Danbooru 提供者委托裸工厂 build_danbooru_tag_provider 统一构建：danbooru_data_dir
-    非空时优先启用本地编译产物（字面匹配不依赖在线服务），否则在 danbooru_url 非空时
-    启用在线链路（结果经 SQLiteDanbooruCache 缓存），两者皆空时不注册。
-    目录解析见 resolve_danbooru_data_dir：DANBOORU_DATA_DIR 显式优先，
-    否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当编译产物存在时启用。
-    embedding_provider_url 非空且标签向量产物存在时，本地链路的 search 追加语义层。
+    danbooru 由最外层入口通过 danbooru_env 模块解析/构建：本地编译产物目录非空时
+    优先启用本地链路（字面匹配不依赖在线服务），否则搜索地址非空时启用在线链路
+    （结果经目录级 SQLite 缓存），两者皆空时不注册 Danbooru 提供者。
     request 与 parser 用于按需构建轻量依赖：仅 /set-model-format 需要加载模型格式
     配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；仅新增
     标签（--add）的 Danbooru 建议需要按模型格式重排建议文本（见
@@ -1392,18 +1368,14 @@ def build_providers(
                 NodeOptionProvider(),
             ]
         )
-        if danbooru_data_dir or danbooru_url:
+        if danbooru.enabled:
             db_ctx = stack.enter_context(
-                SQLiteContext(_db_path(request.root_dir, request.directory_rel_path))
+                SQLiteContext(
+                    hook_db_path(request.root_dir, request.directory_rel_path)
+                )
             )
             history = OperationHistory(db_ctx)
-            tag_provider = build_danbooru_tag_provider(
-                data_dir=danbooru_data_dir,
-                search_url=danbooru_url,
-                show_nsfw=show_nsfw,
-                embedding_provider_url=embedding_provider_url,
-                cache=SQLiteDanbooruCache(db_ctx),
-            )
+            tag_provider = build_tag_provider(danbooru, db_ctx)
             if tag_provider is not None:
                 providers.append(
                     DanbooruProvider(
@@ -1523,24 +1495,18 @@ class _AutocompleteTask:
         req_id: Any,
         request: AutocompleteRequest,
         parser: argparse.ArgumentParser,
-        danbooru_url: str,
-        show_nsfw: bool,
+        danbooru: DanbooruEnv,
         writer: Any,
         active: Dict[Any, "_AutocompleteTask"],
         active_lock: threading.Lock,
-        danbooru_data_dir: str = "",
-        embedding_provider_url: str = "",
     ) -> None:
         self.req_id = req_id
         self.request = request
         self.parser = parser
-        self.danbooru_url = danbooru_url
-        self.show_nsfw = show_nsfw
+        self.danbooru = danbooru
         self.writer = writer
         self.active = active
         self.active_lock = active_lock
-        self.danbooru_data_dir = danbooru_data_dir
-        self.embedding_provider_url = embedding_provider_url
         self._thread = threading.Thread(
             target=self._run, name=f"autocomplete-{req_id}", daemon=True
         )
@@ -1559,14 +1525,7 @@ class _AutocompleteTask:
         suggestions: List[AutocompleteSuggestion] = []
         failure: Optional[str] = None
         try:
-            with build_providers(
-                self.request,
-                self.parser,
-                self.danbooru_url,
-                self.show_nsfw,
-                self.danbooru_data_dir,
-                self.embedding_provider_url,
-            ) as providers:
+            with build_providers(self.request, self.parser, self.danbooru) as providers:
                 services = AutocompleteServices(parser=self.parser, providers=providers)
                 suggestions = list(autocomplete(self.request, services))
         except HttpCanceledError:
@@ -1583,8 +1542,8 @@ class _AutocompleteTask:
                 # 自己离开后队列为空 = 无待处理请求：立即释放 cooc 归还内存
                 # （下次 related 按需重载约 24ms）；排队中的请求继续复用索引
                 idle = not self.active
-            if idle and self.danbooru_data_dir:
-                release_cooc_cache(self.danbooru_data_dir)
+            if idle and self.danbooru.data_dir:
+                release_cooc_cache(self.danbooru.data_dir)
         if self.request.cancel_token.is_canceled():
             return
         if failure is not None:
@@ -1600,13 +1559,7 @@ def serve() -> None:
 
     # 进程级静态配置：从 spawn 注入的环境变量读取一次（最外层入口的职责）
     parser = get_parser()
-    danbooru_url = os.environ.get("DANBOORU_SEARCH_URL", "").strip()
-    # 本地编译产物目录优先于在线 URL（resolve 见 danbooru_data：显式 DANBOORU_DATA_DIR
-    # 优先；否则默认 ${IMAGE_FUNNEL_DATA_DIR}/danbooru 且仅当产物存在时启用）
-    danbooru_data_dir = resolve_danbooru_data_dir()
-    show_nsfw = _show_nsfw_from_env()
-    # 语义层嵌入端点：非空且向量产物存在时，本地链路 search 追加语义召回
-    embedding_provider_url = _embedding_provider_url_from_env()
+    danbooru = danbooru_env_from_env()
 
     for raw_line in sys.stdin:
         line = raw_line.strip()
@@ -1638,13 +1591,10 @@ def serve() -> None:
             req_id,
             request,
             parser,
-            danbooru_url,
-            show_nsfw,
+            danbooru,
             sys.stdout,
             active,
             active_lock,
-            danbooru_data_dir,
-            embedding_provider_url,
         )
         with active_lock:
             active[req_id] = task
@@ -1669,14 +1619,7 @@ def main() -> None:
         # 单次模式没有取消通道：显式构造一个永不取消的令牌
         parser = get_parser()
         request = build_request_from_env(target_cmd, CancelToken())
-        with build_providers(
-            request,
-            parser,
-            os.environ.get("DANBOORU_SEARCH_URL", "").strip(),
-            _show_nsfw_from_env(),
-            resolve_danbooru_data_dir(),
-            _embedding_provider_url_from_env(),
-        ) as providers:
+        with build_providers(request, parser, danbooru_env_from_env()) as providers:
             services = AutocompleteServices(parser=parser, providers=providers)
             for s in autocomplete(request, services):
                 print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))

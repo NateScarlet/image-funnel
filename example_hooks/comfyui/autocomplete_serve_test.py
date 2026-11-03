@@ -26,6 +26,7 @@ from .autocomplete import (
 )
 from .__main__ import get_parser
 from .cancellation import CancelToken
+from .danbooru_env import DanbooruEnv
 
 
 def _request(
@@ -232,7 +233,7 @@ class TestServe(unittest.TestCase):
             directory_rel_path="",
             cancel_token=CancelToken(),
         )
-        with build_providers(request, get_parser(), "", False) as providers:
+        with build_providers(request, get_parser(), DanbooruEnv()) as providers:
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
@@ -256,8 +257,7 @@ class TestServe(unittest.TestCase):
             with build_providers(
                 _request(root_dir="root", directory_rel_path="dir"),
                 get_parser(),
-                "http://localhost",
-                False,
+                DanbooruEnv(search_url="http://localhost"),
             ) as providers:
                 self.assertEqual(len(providers), 7)
                 fake_ctx.__enter__.assert_called_once()
