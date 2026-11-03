@@ -1546,7 +1546,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         args_raw,
                         args_no_skip,
                         False,
-                    )
+                    ).executed
                 )
 
                 wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
@@ -1573,7 +1573,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         args_raw,
                         args_no_skip,
                         False,
-                    )
+                    ).executed
                 )
 
                 wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
@@ -1601,7 +1601,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         args_raw,
                         args_no_skip,
                         True,
-                    )
+                    ).executed
                 )
 
                 wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)
@@ -1629,7 +1629,7 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                         args_raw,
                         args_no_skip,
                         False,
-                    )
+                    ).executed
                 )
 
                 wf_text_got = get_workflow_node_text(pair.workflow, target_node_id)

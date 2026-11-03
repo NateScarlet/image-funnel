@@ -38,7 +38,8 @@ usage = """
 -u --update-seed     强制启用随机种子更新（多档变体或多次 job 时会自动启用）
 -j --jobs <N>        每个变体发送工作流次数，默认使用 HOOK_JOBS 环境变量值
 移除动作没有范围概念：总是作用于所有 CLIPTextEncode 节点，--neg / --region / --node 对移除无效。
-未指定 --region 和 --node 时，新增与调权默认使用 positive 区域（指定 --neg 时使用 negative 区域）。
+未指定 --region 和 --node 时，新增优先插到本次移除唯一命中的那一行之后（原地替换），
+没有唯一命中时与调权一样默认使用 positive 区域（指定 --neg 时使用 negative 区域）。
 """
 on_success_action = "COMMENT_OUT" # 成功后把当前指令用 %% /remix ... %% 注释掉避免再次触发
 # 失败时同样注释掉：脚本在「整次执行一张都没发送」时通过 IMAGE_FUNNEL_ACTION 覆盖为 KEEP，

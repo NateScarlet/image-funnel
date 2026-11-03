@@ -155,6 +155,43 @@ def get_region_content(text: str, region_name: str) -> Optional[str]:
     return content
 
 
+def get_region_at_line(text: str, line_index: int) -> str:
+    """
+    返回指定行所处的 region 名称；该行不在任何 region 内时返回空字符串。
+    按行扫描 region 标记的开闭状态，行号越界时同样视为不在 region 内。
+    """
+    current = ""
+    for index, line in enumerate(text.split("\n")):
+        start_match = REGION_START_RE.match(line)
+        if start_match:
+            current = start_match.group(1)
+            continue
+        if REGION_END_RE.match(line):
+            current = ""
+            continue
+        if index == line_index:
+            return current
+    return ""
+
+
+def get_region_at_position(text: str, position: int) -> str:
+    """
+    返回第 position 行之前（即插入位置）所处的 region 名称；
+    该位置不在任何 region 内时返回空字符串。
+    """
+    current = ""
+    for index, line in enumerate(text.split("\n")):
+        if index >= position:
+            break
+        start_match = REGION_START_RE.match(line)
+        if start_match:
+            current = start_match.group(1)
+            continue
+        if REGION_END_RE.match(line):
+            current = ""
+    return current
+
+
 def get_region_markers(region_name: str) -> Tuple[str, str]:
     """
     返回标准 region 标记字符串。

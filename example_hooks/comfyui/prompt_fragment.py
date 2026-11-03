@@ -10,12 +10,17 @@ prompt_fragment 模块：封装提示词片段的增删改查操作。
 
 import logging
 import re
-from typing import List, Optional, Tuple
-
+from dataclasses import dataclass
+from typing import List, Optional, Sequence, Tuple
 
 from .node_accessor import NodeAccessor
 from .prompt_comment import is_comment_only, iter_prompt_segments, strip_comments
-from .prompt_locator import get_region_content, find_region_boundaries
+from .prompt_locator import (
+    find_region_boundaries,
+    get_region_at_line,
+    get_region_at_position,
+    get_region_content,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,26 +41,154 @@ def _blank_lines_at_end(text: str) -> int:
     return max(newline_count - 1, 0) if newline_count else 0
 
 
+def _line_matches(line: str, targets: Sequence[str]) -> bool:
+    """
+    单行是否会被移除命中。命中判定只看非注释内容：注释里提到目标词不算命中，
+    整行本就是注释的行保持原样（不算被移除）。
+    """
+    if is_comment_only(line):
+        return False
+    plain = strip_comments(line).lower()
+    return any(target in plain for target in targets)
+
+
+def matching_line_indices(text: str, targets: Sequence[str]) -> Tuple[int, ...]:
+    """返回会被移除命中的行号；同一行命中多个目标只记一次。"""
+    lowered = [target.lower() for target in targets]
+    return tuple(
+        index
+        for index, line in enumerate(text.split("\n"))
+        if _line_matches(line, lowered)
+    )
+
+
 def _comment_out_matching_lines(text: str, target_lower: str, hard: bool) -> str:
     """
     把命中 target_lower 的整行注释掉；hard 为真时直接删掉该行。
-
-    命中判定只看非注释内容：注释里提到目标词不算命中，整行本就是注释的保持原样。
     """
     new_lines: List[str] = []
     for line in text.split("\n"):
-        if target_lower not in strip_comments(line).lower():
+        if not _line_matches(line, (target_lower,)):
             new_lines.append(line)
             continue
         if hard:
             # hard 语义：命中行整行删除，不产出
             continue
-        if is_comment_only(line):
-            new_lines.append(line)
-            continue
         indent = line[: len(line) - len(line.lstrip())]
         new_lines.append(f"{indent}// {line.lstrip()}")
     return "\n".join(new_lines)
+
+
+def _insert_lines(text: str, index: int, new_lines: Sequence[str]) -> str:
+    """在文本第 index 行之前插入若干行（index 等于行数时追加到末尾）。"""
+    lines = text.split("\n")
+    if not 0 <= index <= len(lines):
+        raise ValueError(
+            f"Insert line index {index} is out of range for text with {len(lines)} lines"
+        )
+    lines[index:index] = list(new_lines)
+    return "\n".join(lines)
+
+
+def _contains_prompt(area: str, prompt_str: str, raw: bool) -> bool:
+    """目标提示词是否已存在于指定文本：注释不是提示词，先剔除注释区段再判断。"""
+    target_lower = prompt_str.strip().lower()
+    plain_area = strip_comments(area).lower()
+    if raw:
+        return target_lower in plain_area
+    return any(target_lower in line for line in plain_area.splitlines())
+
+
+# #region 移除结果
+
+
+@dataclass(frozen=True)
+class InsertAnchor:
+    """原地插入的位置锚点。
+
+    line 是插入位置依附的整行文本：after 为 True 时插在它之后，False 时插在它之前；
+    line 为 None 表示没有可依附的行，直接追加到文本末尾。index_hint 仅在同内容行出现
+    多次时用于选择最接近的候选，不单独作为插入位置依据。
+    """
+
+    line: Optional[str]
+    after: bool
+    index_hint: int
+
+
+@dataclass(frozen=True)
+class RemovalHit:
+    """移除实际命中的一行：新提示词行插在该行处。
+
+    region 为空表示命中行位于所有 region 之外。anchor 携带依附行内容，插入时据此在
+    当前文本中重新定位，因此移除与插入之间的编辑增删行也不会让位置漂移。
+    """
+
+    node_id: str
+    region: str
+    anchor: InsertAnchor
+
+
+@dataclass(frozen=True)
+class RemovalResult:
+    """一次移除的结果。executed 表示未跳过；hits 是实际被注释或删除的提示词行。"""
+
+    executed: bool
+    hits: Tuple[RemovalHit, ...] = ()
+
+
+def _locate_insert_index(text: str, anchor: InsertAnchor, region: str) -> Optional[int]:
+    """按依附行重新定位插入位置，且位置必须落在 region 内；否则返回 None。
+
+    同一内容行可能出现在多个 region（各 region 的同名标签、空行尤其常见），只保留
+    落在期望 region 的候选，避免把标签插到别的 region。
+    """
+    lines = text.split("\n")
+    if anchor.line is None:
+        # 没有可依附的行：追加到末尾，文本以换行结尾时插在结尾空行之前
+        position = len(lines) - 1 if lines[-1] == "" else len(lines)
+        return position if get_region_at_position(text, position) == region else None
+
+    candidates: List[int] = []
+    for index, line in enumerate(lines):
+        if line != anchor.line:
+            continue
+        position = index + 1 if anchor.after else index
+        if get_region_at_position(text, position) == region:
+            candidates.append(position)
+    if not candidates:
+        return None
+    # 同一 region 内仍有同内容行：优先取最接近原始位置的一处
+    return min(candidates, key=lambda pos: (abs(pos - anchor.index_hint), pos))
+
+
+def _removal_hits(
+    node_id: str,
+    new_workflow_text: str,
+    matched_offsets: Sequence[Tuple[int, str]],
+    hard: bool,
+) -> Tuple[RemovalHit, ...]:
+    """按移除后文本中的命中行位置构造插入锚点。
+
+    非 hard 时命中行已被注释，取该行作为依附行、新行插在它之后；hard 时命中行已删除，
+    取紧随其后的一行作为依附行、新行插在它之前；没有后续行时追加到末尾。
+    """
+    lines = new_workflow_text.split("\n")
+    hits: List[RemovalHit] = []
+    for offset, region in matched_offsets:
+        if offset >= len(lines):
+            anchor = InsertAnchor(line=None, after=True, index_hint=offset)
+        else:
+            anchor = InsertAnchor(
+                line=lines[offset],
+                after=not hard,
+                index_hint=offset if hard else offset + 1,
+            )
+        hits.append(RemovalHit(node_id=node_id, region=region, anchor=anchor))
+    return tuple(hits)
+
+
+# #endregion
 
 
 def _region_separators(before: str, after: str) -> Tuple[str, str]:
@@ -105,7 +238,12 @@ class PromptFragment:
                 return content
         return workflow_text
 
-    def add(self, prompt_str: str, raw: bool = False, no_skip: bool = False) -> bool:
+    def add(
+        self,
+        prompt_str: str,
+        raw: bool = False,
+        no_skip: bool = False,
+    ) -> bool:
         """
         往该片段追加提示词，支持双轨道同步更新。
         返回 True 表示执行了操作，False 表示跳过。
@@ -118,7 +256,74 @@ class PromptFragment:
             raw,
             no_skip,
             hard=False,
+        ).executed
+
+    def insert(
+        self,
+        prompts: Sequence[str],
+        anchor: InsertAnchor,
+        raw: bool = False,
+        no_skip: bool = False,
+    ) -> Optional[int]:
+        """
+        把多个提示词按序插在锚点处，返回实际插入的条数。
+
+        锚点依附的行在当前文本中重新定位（移除与插入之间的编辑可能增删行），因此
+        插入位置不会漂移；该行已不存在时返回 None，由调用方回落默认目标。多条提示词
+        共用同一次行插入，去重范围与 add 一致，prompt 轨道按剔除注释的工作流文本重建。
+        """
+        workflow_text = self.accessor.get_workflow_node_text(self.node_id)
+        if workflow_text is None:
+            return None
+        prompt_text = self.accessor.get_prompt_input(self.node_id, "text")
+        if not isinstance(prompt_text, str):
+            prompt_text = ""
+
+        # 与 add/remove 一致：先按节点相连模型的格式重排标签与全文
+        from .model_format import format_text_for_node
+
+        formatted_prompts = [
+            format_text_for_node(
+                self.accessor.prompt, self.node_id, prompt, prompt_text
+            )
+            for prompt in prompts
+        ]
+        workflow_text = format_text_for_node(
+            self.accessor.prompt, self.node_id, workflow_text, prompt_text
         )
+
+        insert_at = _locate_insert_index(workflow_text, anchor, self.region)
+        if insert_at is None:
+            return None
+
+        if self.region:
+            content = get_region_content(workflow_text, self.region)
+            target_area = content if content is not None else workflow_text
+        else:
+            target_area = workflow_text
+
+        inserted: List[str] = []
+        seen_area = target_area
+        for prompt_str in formatted_prompts:
+            if not no_skip and _contains_prompt(seen_area, prompt_str, raw):
+                _LOGGER.debug(
+                    "Prompt '%s' already exists at the insert target, skipping.",
+                    prompt_str,
+                )
+                continue
+            inserted.append(prompt_str)
+            # 本批前面已插入的标签同样参与去重，避免同一次 --add 内重复写入
+            seen_area = f"{seen_area}\n{prompt_str}"
+        if not inserted:
+            return 0
+
+        new_lines = [prompt_str if raw else f"{prompt_str}," for prompt_str in inserted]
+        new_workflow_text = _insert_lines(workflow_text, insert_at, new_lines)
+        self.accessor.set_prompt_input(
+            self.node_id, "text", strip_comments(new_workflow_text)
+        )
+        self.accessor.update_workflow_node_text(self.node_id, new_workflow_text)
+        return len(inserted)
 
     def remove(
         self,
@@ -126,10 +331,10 @@ class PromptFragment:
         raw: bool = False,
         hard: bool = False,
         no_skip: bool = False,
-    ) -> bool:
+    ) -> RemovalResult:
         """
         从该片段中移除提示词，支持双轨道同步更新。
-        返回 True 表示执行了操作，False 表示跳过。
+        返回实际被注释或删除的提示词行位置，供同一变体内的新增原地插入。
         """
         return self._process_double_track(
             self.node_id,
@@ -265,15 +470,16 @@ class PromptFragment:
         raw: bool,
         no_skip: bool,
         hard: bool,
-    ) -> bool:
+    ) -> RemovalResult:
         """
         对指定节点执行 add/remove 操作，原地修改 prompt 和 workflow 文本。
         region 非空时操作限定在对应 region 内部；为空时操作全部文本。
-        返回 True 表示执行了操作，False 表示跳过。
+        返回 executed 表示是否执行或按 no_skip 继续，hits 为移除实际命中的行位置
+        （add 时为空）。
         """
         workflow_text = self.accessor.get_workflow_node_text(node_id)
         if workflow_text is None:
-            return False
+            return RemovalResult(executed=False)
         prompt_text = self.accessor.get_prompt_input(node_id, "text")
         if not isinstance(prompt_text, str):
             prompt_text = ""
@@ -308,27 +514,23 @@ class PromptFragment:
         if region:
             region_parts = self._split_region(workflow_text, region)
 
-        def contains_prompt(area: str) -> bool:
-            target_lower = prompt_str_arg.strip().lower()
-            # 注释不是提示词：先剔除注释区段再判断，否则注释里提到的词会被当成已存在
-            plain_area = strip_comments(area).lower()
-            if raw:
-                return target_lower in plain_area
-            return any(target_lower in line for line in plain_area.splitlines())
-
         new_workflow_text = None
         new_prompt_text = None
+        hits: Tuple[RemovalHit, ...] = ()
 
         if command == "add":
             if region_parts:
                 before, region_line, marker_content, end_line, after = region_parts
 
-                if contains_prompt(marker_content) and not no_skip:
+                if (
+                    _contains_prompt(marker_content, prompt_str_arg, raw)
+                    and not no_skip
+                ):
                     _LOGGER.debug(
                         "Prompt '%s' already exists in marker region, skipping.",
                         prompt_str_arg,
                     )
-                    return False
+                    return RemovalResult(executed=False)
 
                 stripped = marker_content.strip()
                 if stripped:
@@ -378,12 +580,12 @@ class PromptFragment:
                                 prompt_text.rstrip() + f"\n{prompt_str_arg},"
                             )
             else:
-                if contains_prompt(workflow_text) and not no_skip:
+                if _contains_prompt(workflow_text, prompt_str_arg, raw) and not no_skip:
                     _LOGGER.debug(
                         "Prompt '%s' already exists in text, skipping.",
                         prompt_str_arg,
                     )
-                    return False
+                    return RemovalResult(executed=False)
 
                 if raw:
                     new_content_prompt = prompt_str_arg
@@ -410,8 +612,9 @@ class PromptFragment:
             effective_hard = hard or raw
             if region_parts:
                 before, region_line, marker_content, end_line, after = region_parts
+                matched: Tuple[int, ...] = ()
 
-                if not contains_prompt(marker_content):
+                if not _contains_prompt(marker_content, prompt_str_arg, raw):
                     _LOGGER.debug(
                         "remove: prompt '%s' not found in marker region (has_marker=True)",
                         prompt_str_arg,
@@ -421,27 +624,49 @@ class PromptFragment:
                             "Prompt '%s' not found in marker region, skipping.",
                             prompt_str_arg,
                         )
-                        return False
-                    new_content_prompt = marker_content
+                        return RemovalResult(executed=False)
+                    # 未命中且 no_skip：没有需要改写的行，保持原文不动，
+                    # 避免无谓的 region 重排改变原有空行
+                    return RemovalResult(executed=True)
                 elif raw:
                     new_content_prompt = marker_content.replace(prompt_str_arg, "")
                 else:
+                    target_lower = prompt_str_arg.strip().lower()
+                    matched = matching_line_indices(marker_content, (target_lower,))
                     new_content_prompt = _comment_out_matching_lines(
-                        marker_content, prompt_str_arg.strip().lower(), effective_hard
+                        marker_content, target_lower, effective_hard
                     )
 
+                # 内容非空但没有结尾换行（raw 吃掉了换行）时补回，保证标记独占一行
+                content_block = new_content_prompt
+                if content_block and not content_block.endswith("\n"):
+                    content_block += "\n"
+
                 sep_before, sep_after = _region_separators(before, after)
+                # 移除只按行改写 region 内容，内容自带的换行结构原样保留，
+                # 因此标记行直接衔接内容，不额外插入换行
                 new_workflow_text = (
                     before.rstrip()
                     + sep_before
                     + region_line
                     + "\n"
-                    + new_content_prompt
-                    + "\n"
+                    + content_block
                     + end_line
                     + sep_after
                     + after.lstrip()
                 )
+
+                if matched:
+                    # region 内容在重建后文本中的起始行：标记行之后的那一行
+                    content_start = (before.rstrip() + sep_before + region_line).count(
+                        "\n"
+                    ) + 1
+                    hits = _removal_hits(
+                        node_id,
+                        new_workflow_text,
+                        [(content_start + index, region) for index in matched],
+                        effective_hard,
+                    )
 
                 if is_equivalent:
                     # prompt 轨道无 region 标记，保持紧凑（单换行）拼接，
@@ -463,7 +688,8 @@ class PromptFragment:
                     else:
                         new_prompt_text = prompt_text
             else:
-                if not contains_prompt(workflow_text):
+                matched: Tuple[int, ...] = ()
+                if not _contains_prompt(workflow_text, prompt_str_arg, raw):
                     _LOGGER.debug(
                         "remove: prompt '%s' not found in full text (has_marker=False)",
                         prompt_str_arg,
@@ -472,26 +698,39 @@ class PromptFragment:
                         _LOGGER.debug(
                             "Prompt '%s' not found, skipping.", prompt_str_arg
                         )
-                        return False
+                        return RemovalResult(executed=False)
                     new_content_prompt = workflow_text
                 else:
                     if raw:
                         new_content_prompt = workflow_text.replace(prompt_str_arg, "")
                     else:
+                        target_lower = prompt_str_arg.strip().lower()
+                        matched = matching_line_indices(workflow_text, (target_lower,))
                         new_content_prompt = _comment_out_matching_lines(
                             workflow_text,
-                            prompt_str_arg.strip().lower(),
+                            target_lower,
                             effective_hard,
                         )
 
                 new_workflow_text = new_content_prompt
                 new_prompt_text = new_content_prompt
 
+                if matched:
+                    hits = _removal_hits(
+                        node_id,
+                        new_workflow_text,
+                        [
+                            (index, get_region_at_line(workflow_text, index))
+                            for index in matched
+                        ],
+                        effective_hard,
+                    )
+
         new_prompt_text = strip_comments(new_prompt_text)
 
         self.accessor.set_prompt_input(node_id, "text", new_prompt_text)
         self.accessor.update_workflow_node_text(node_id, new_workflow_text)
-        return True
+        return RemovalResult(executed=True, hits=hits)
 
     @staticmethod
     def _adjust_prompt_weight_in_text(

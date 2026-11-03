@@ -24,7 +24,7 @@ from typing import (
 )
 
 from graphql_utils import GraphQLClient, ProgressUpdate, progress_notification
-from .prompt_fragment import PromptFragment
+from .prompt_fragment import PromptFragment, RemovalHit
 from .seed_manager import SeedManager
 from .weight_manager import WeightManager
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -215,8 +215,14 @@ def _apply_edits(
     """
     if request.replay_removals:
         _replay_history_removals(pair, history, request)
+
+    anchor: Optional[RemovalHit] = None
     if request.remove_tags:
-        _remove_tags(pair, request)
+        # 移除本身产出唯一命中行的位置，供同一变体内的新增原地插入
+        anchor = _remove_tags(pair, request)
+        if request.regions or request.nodes:
+            # 显式 --region / --node 始终优先于锚点
+            anchor = None
 
     # 片段在移除之后才定位：移除会改动文本，目标区域可能因此消失
     fragments = locate_fragments(pair, request)
@@ -231,7 +237,7 @@ def _apply_edits(
         )
 
     if request.add_tags:
-        _add_tags(pair, fragments, request)
+        _add_tags(pair, fragments, request, anchor)
 
     for dimension, step in node_edits:
         if dimension.kind == LORA_KIND:
@@ -279,8 +285,11 @@ def _replay_history_removals(
         )
 
 
-def _remove_tags(pair: WorkflowPromptPair, request: RemixRequest) -> None:
-    _remove_from_clip_nodes(
+def _remove_tags(
+    pair: WorkflowPromptPair, request: RemixRequest
+) -> Optional[RemovalHit]:
+    """按请求参数全局移除提示词，返回本次唯一命中行的原地插入锚点。"""
+    return _remove_from_clip_nodes(
         pair,
         list(request.remove_tags),
         raw=request.raw,
@@ -305,20 +314,53 @@ def _remove_from_clip_nodes(
     raw: bool,
     hard: bool,
     no_skip: bool,
-) -> None:
-    """从工作流所有 CLIPTextEncode 节点移除给定提示词。"""
+) -> Optional[RemovalHit]:
+    """从工作流所有 CLIPTextEncode 节点移除给定提示词。
+
+    返回本次移除唯一命中的那一行（供同一变体内的新增原地插入）；未命中或命中多行
+    返回 None。命中位置由移除本身产出，与移除共用同一份文本快照，不再单独预扫描。
+    """
+    hits: List[RemovalHit] = []
     for node_id in _clip_text_encode_nodes(pair.prompt):
         fragment = PromptFragment(pair, node_id)
         for spelling in _spellings(prompts):
-            fragment.remove(spelling, raw=raw, hard=hard, no_skip=no_skip)
+            hits.extend(
+                fragment.remove(spelling, raw=raw, hard=hard, no_skip=no_skip).hits
+            )
+    if len(hits) != 1:
+        return None
+    return hits[0]
 
 
 def _add_tags(
     pair: WorkflowPromptPair,
     fragments: List[PromptFragment],
     request: RemixRequest,
+    anchor: Optional[RemovalHit],
 ) -> None:
-    """把标签追加到首个目标片段，默认同时清理其他区域中的同名提示词（--keep 保留）。"""
+    """把标签追加到首个目标片段，默认同时清理其他区域中的同名提示词（--keep 保留）。
+
+    存在移除锚点（本次唯一被移除的行）时改为从该行之后原地插入：锚点优先于默认
+    positive/negative 区域，但显式 --region / --node 已排除锚点。多条标签一次性
+    写入后再清理其它区域，避免插入之间文本被重排导致行号漂移。
+    """
+    if anchor is not None:
+        fragment = PromptFragment(pair, anchor.node_id, region=anchor.region)
+        inserted = fragment.insert(
+            request.add_tags,
+            anchor.anchor,
+            raw=request.raw,
+            no_skip=request.no_skip,
+        )
+        if inserted is not None:
+            if not request.keep:
+                for tag in request.add_tags:
+                    _remove_from_other_regions(
+                        pair, tag, anchor.node_id, anchor.region, request
+                    )
+            return
+        # 锚点依附行在中间编辑后已不存在：回落默认目标
+
     fragment = next(iter(fragments), None)
     if fragment is None:
         return

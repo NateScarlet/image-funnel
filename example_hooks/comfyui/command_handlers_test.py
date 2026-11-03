@@ -26,6 +26,7 @@ from .__main__ import get_parser
 from .command_handlers import RemixHandler, CommandContext, _submit_jobs
 from .filename_manager import FilenameManager
 from .model_format import ModelFormatConfig
+from .prompt_comment import strip_comments
 from .prompt_locator import get_workflow_node_text
 from .remix import RemixRequest, from_args
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -289,6 +290,408 @@ def _remove_record(prompt: str, raw: bool = False, hard: bool = False) -> Any:
     from .operation_history import RemoveRecord
 
     return RemoveRecord(prompt=prompt, raw=raw, hard=hard)
+
+
+class TestRemixHandlerAddAfterRemovedLine(unittest.TestCase):
+    """无显式目标时，`--add` 默认插到本次唯一被移除的那一行之后（原地替换）。"""
+
+    def _run(self, ctx: CommandContext) -> List[tuple[Dict[str, Any], Dict[str, Any]]]:
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            captured = _submissions(submit)
+            RemixHandler().run(ctx)
+        return captured
+
+    def _sent_texts(self, ctx: CommandContext) -> tuple[str, Any]:
+        sent_prompt, sent_workflow = self._run(ctx)[0]
+        wf_text = get_workflow_node_text(sent_workflow, "1")
+        assert wf_text is not None
+        return wf_text, sent_prompt["1"]["inputs"]["text"]
+
+    def _assert_tracks_in_sync(self, wf_text: str, pr_text: Any) -> None:
+        """两条轨道同步：prompt 是剔除注释与 region 标记后的工作流文本（忽略空行布局）。"""
+        self.assertEqual(
+            [line for line in strip_comments(wf_text).splitlines() if line.strip()],
+            [line for line in str(pr_text).splitlines() if line.strip()],
+        )
+
+    def test_add_lands_after_removed_line_outside_regions(self) -> None:
+        """region 外的旧词被注释掉后，新标签紧跟该注释行，positive 区域内容不变。"""
+        text = (
+            "// #region positive\n"
+            "masterpiece,\n"
+            "// #endregion positive\n"
+            "old tag,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt, workflow, _request(["--remove", "old tag", "--add", "new tag"])
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\n// #endregion positive\n"
+            "// old tag,\nnew tag,\n",
+        )
+        # 双轨道同步：prompt 轨道是剔除注释与 region 标记后的工作流文本
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_add_lands_inside_custom_region_after_removed_line(self) -> None:
+        """自定义 region 内的旧词被注释掉后，新标签插在该 region 内而不是落到 positive。"""
+        text = (
+            "masterpiece,\n"
+            "// #region custom\n"
+            "old tag,\n"
+            "// #endregion custom\n"
+            "best quality,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt, workflow, _request(["--remove", "old tag", "--add", "new tag"])
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "masterpiece,\n// #region custom\n// old tag,\nnew tag,\n"
+            "// #endregion custom\nbest quality,\n",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_hard_remove_leaves_added_line_in_place(self) -> None:
+        """`--hard` 删除该行时，新标签占据原行位置，其余行序不变。"""
+        text = (
+            "masterpiece,\n"
+            "// #region custom\n"
+            "old tag,\n"
+            "// #endregion custom\n"
+            "best quality,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "old tag", "--add", "new tag", "--hard"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "masterpiece,\n// #region custom\nnew tag,\n"
+            "// #endregion custom\nbest quality,\n",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_multiple_adds_inserted_in_order_after_anchor(self) -> None:
+        """一次多个 --add 按给出顺序依次插在同一锚点之后。"""
+        workflow, prompt = _workflow_and_prompt(
+            "masterpiece,\nold tag,\nbest quality,\n"
+        )
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "old tag", "--add", "first", "--add", "second"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "masterpiece,\n// old tag,\nfirst,\nsecond,\nbest quality,\n",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_multiple_matches_fall_back_to_default_region(self) -> None:
+        """命中多行时没有唯一锚点，回落默认 positive 区域。"""
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\nmasterpiece,\n"
+                        "// #endregion positive\nold tag,\n"
+                    ],
+                },
+                {"id": "2", "type": "CLIPTextEncode", "widgets_values": ["old tag,\n"]},
+                {
+                    "id": "4",
+                    "type": "KSampler",
+                    "widgets_values": [12345, "fixed", 20, 8.0],
+                },
+            ]
+        }
+        prompt: Dict[str, Any] = {
+            "1": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "masterpiece,\nold tag,\n"},
+            },
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "old tag,\n"}},
+            "4": {"class_type": "KSampler", "inputs": {"seed": 12345, "cfg": 8.0}},
+        }
+        ctx = _context(
+            prompt, workflow, _request(["--remove", "old tag", "--add", "new tag"])
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\nnew tag,\n// #endregion positive\n"
+            "// old tag,\n",
+        )
+        self._assert_tracks_in_sync(wf_text, pr_text)
+
+    def test_multiple_adds_stay_inside_anchor_region_when_other_region_is_rebuilt(
+        self,
+    ) -> None:
+        """插入之间若有其它 region 被重建（空行折叠），后续标签仍留在锚点 region 内。"""
+        text = (
+            "// #region a\n"
+            "new tag,\n"
+            "// #endregion a\n"
+            "\n"
+            "\n"
+            "// #region b\n"
+            "anchor line,\n"
+            "// #endregion b"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(
+                ["--remove", "anchor line", "--add", "new tag", "--add", "second"]
+            ),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region a\n// new tag,\n// #endregion a\n\n"
+            "// #region b\n// anchor line,\nnew tag,\nsecond,\n// #endregion b",
+        )
+        # 第一条标签已存在于 region a，清理后两条轨道都只保留 region b 内的一份
+        self.assertEqual(str(pr_text).count("new tag"), 1)
+        self.assertEqual(str(pr_text).count("second"), 1)
+        self.assertNotIn("anchor line", str(pr_text))
+        self._assert_tracks_in_sync(wf_text, pr_text)
+
+    def test_add_stays_at_anchor_when_weight_edit_appends_line_above_it(self) -> None:
+        """移除后调权向上追加一行，新标签仍紧跟被注释的锚点行。"""
+        text = (
+            "// #region positive\n"
+            "masterpiece,\n"
+            "// #endregion positive\n"
+            "old tag,\n"
+            "tail,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(
+                [
+                    "--remove",
+                    "old tag",
+                    "--add",
+                    "new tag",
+                    "--add",
+                    "missing_tag",
+                    "1.5",
+                ]
+            ),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\n(missing_tag:1.5),\n"
+            "// #endregion positive\n// old tag,\nnew tag,\ntail,\n",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_add_stays_at_anchor_when_weight_edit_collapses_lines_above_it(
+        self,
+    ) -> None:
+        """移除后调权折叠上方空行（行数 -1），新标签仍紧跟被注释的锚点行。"""
+        text = (
+            "// #region positive\n"
+            "masterpiece,\n"
+            "\n"
+            "\n"
+            "// #endregion positive\n"
+            "old tag,\n"
+            "tail,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(
+                [
+                    "--remove",
+                    "old tag",
+                    "--add",
+                    "new tag",
+                    "--add",
+                    "missing_tag",
+                    "1.5",
+                ]
+            ),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\n(missing_tag:1.5),\n"
+            "// #endregion positive\n// old tag,\nnew tag,\ntail,\n",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_hard_add_ignores_same_content_line_in_other_region(self) -> None:
+        """hard 移除后依附行在另一 region 有同名行时，仍插在锚点所在 region 内。"""
+        text = (
+            "// #region positive\n"
+            "masterpiece,\n"
+            "// #endregion positive\n"
+            "// #region negative\n"
+            "target,\n"
+            "masterpiece,\n"
+            "// #endregion negative"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(
+                [
+                    "--remove",
+                    "target",
+                    "--hard",
+                    "--add",
+                    "new tag",
+                    "--add",
+                    "a1",
+                    "1.5",
+                    "--add",
+                    "a2",
+                    "1.5",
+                    "--add",
+                    "a3",
+                    "1.5",
+                ]
+            ),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\n(a1:1.5),\n(a2:1.5),\n(a3:1.5),\n"
+            "// #endregion positive\n// #region negative\nnew tag,\nmasterpiece,\n"
+            "// #endregion negative",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_hard_add_ignores_blank_anchor_outside_its_region(self) -> None:
+        """hard 移除后依附行为空行时，不能匹配到其它 region 的空行。"""
+        text = (
+            "// #region positive\n"
+            "masterpiece,\n"
+            "// #endregion positive\n"
+            "\n"
+            "// #region negative\n"
+            "target,\n"
+            "\n"
+            "// #endregion negative"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(
+                [
+                    "--remove",
+                    "target",
+                    "--hard",
+                    "--add",
+                    "new tag",
+                    "--add",
+                    "a1",
+                    "1.5",
+                    "--add",
+                    "a2",
+                    "1.5",
+                    "--add",
+                    "a3",
+                    "1.5",
+                ]
+            ),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\n(a1:1.5),\n(a2:1.5),\n(a3:1.5),\n"
+            "// #endregion positive\n\n// #region negative\nnew tag,\n\n"
+            "// #endregion negative",
+        )
+        self.assertEqual(pr_text, strip_comments(wf_text))
+
+    def test_not_found_remove_falls_back_to_default_region(self) -> None:
+        """未命中任何行时没有锚点，回落默认 positive 区域。"""
+        text = "// #region positive\nmasterpiece,\n// #endregion positive\n"
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "missing tag", "--add", "new tag"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\nnew tag,\n// #endregion positive",
+        )
+        self._assert_tracks_in_sync(wf_text, pr_text)
+
+    def test_raw_remove_falls_back_to_default_region(self) -> None:
+        """`--raw` 精确子串移除不产生锚点，新增仍落到默认 positive 区域。"""
+        text = "// #region positive\nmasterpiece,\n// #endregion positive\nold tag,\n"
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "old tag", "--raw", "--add", "new tag"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "// #region positive\nmasterpiece,\nnew tag,\n// #endregion positive\n,\n",
+        )
+        self._assert_tracks_in_sync(wf_text, pr_text)
+
+    def test_explicit_region_overrides_anchor(self) -> None:
+        """显式 --region 始终优先于锚点。"""
+        text = (
+            "masterpiece,\n"
+            "// #region custom\n"
+            "best quality,\n"
+            "// #endregion custom\n"
+            "old tag,\n"
+        )
+        workflow, prompt = _workflow_and_prompt(text)
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "old tag", "--add", "new tag", "--region", "custom"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(
+            wf_text,
+            "masterpiece,\n// #region custom\nbest quality,\nnew tag,\n"
+            "// #endregion custom\n// old tag,\n",
+        )
+        self._assert_tracks_in_sync(wf_text, pr_text)
+
+    def test_explicit_node_overrides_anchor(self) -> None:
+        """显式 --node 始终优先于锚点：仍追加到目标节点末尾。"""
+        workflow, prompt = _workflow_and_prompt("old tag,\nmasterpiece,\n")
+        ctx = _context(
+            prompt,
+            workflow,
+            _request(["--remove", "old tag", "--add", "new tag", "--node", "1"]),
+        )
+        wf_text, pr_text = self._sent_texts(ctx)
+        self.assertEqual(wf_text, "// old tag,\nmasterpiece,\nnew tag,")
+        self._assert_tracks_in_sync(wf_text, pr_text)
 
 
 class TestRemixHandlerVariants(unittest.TestCase):

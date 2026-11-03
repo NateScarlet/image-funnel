@@ -18,7 +18,8 @@ from test_support import pin_tempdir
 pin_tempdir()
 
 from .workflow_prompt_pair import WorkflowPromptPair
-from .prompt_fragment import PromptFragment
+from .prompt_fragment import InsertAnchor, PromptFragment, RemovalResult
+from .prompt_comment import strip_comments
 from .model_format import MissingDataDirError, ModelFormatConfig
 
 
@@ -244,7 +245,7 @@ class TestFragmentTextAndModify(unittest.TestCase):
 
         # 5. 移除提示词
         removed = fragment.remove("beautiful scenery")
-        self.assertTrue(removed)
+        self.assertTrue(removed.executed)
         self.assertIsNone(fragment.get_weight("beautiful scenery"))
 
 
@@ -284,7 +285,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "beautiful scenery", "", False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
         self.assertNotIn("// #region", workflow["nodes"][0]["widgets_values"][0])
 
@@ -303,7 +304,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "raw text here", self.REGION, True, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("raw text here", workflow["nodes"][0]["widgets_values"][0])
 
     def test_add_no_skip(self):
@@ -330,7 +331,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "beautiful scenery", self.REGION, False, True, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
 
     def test_add_skip_existing(self):
         """已存在且 no_skip=False 时跳过"""
@@ -356,7 +357,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "beautiful scenery", self.REGION, False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
 
     def test_add_existing_no_marker_skip(self):
         """无 marker 时已存在跳过"""
@@ -380,7 +381,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "beautiful scenery", "", False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
 
     def test_remove_hard(self):
         """hard=True 时直接删除"""
@@ -406,7 +407,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "beautiful scenery", self.REGION, False, False, True
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
     def test_remove_comment_out(self):
@@ -433,7 +434,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "beautiful scenery", self.REGION, False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
         self.assertNotIn("beautiful scenery", prompt["1"]["inputs"]["text"])
 
@@ -459,7 +460,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "beautiful scenery", "", False, False, True
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertNotIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
     def test_remove_no_marker_comment_out(self):
@@ -484,7 +485,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "beautiful scenery", "", False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("// beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
     def test_remove_raw(self):
@@ -511,7 +512,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "raw text", self.REGION, True, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertNotIn("raw text", workflow["nodes"][0]["widgets_values"][0])
 
     def test_remove_no_skip(self):
@@ -538,7 +539,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "nonexistent_prompt", self.REGION, False, True, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
 
     def test_remove_skip_not_found(self):
         """没找到且 no_skip=False 时跳过"""
@@ -561,7 +562,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "nonexistent", self.REGION, False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
 
     def test_nonexistent_node(self):
         """节点不存在时返回 False"""
@@ -572,7 +573,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "999", "add", "test", "", False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
 
     def test_modify_weight_ignores_commented_out_prompts(self):
         """modify_weight 不应修改注释行中的提示词"""
@@ -625,7 +626,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "beautiful scenery", self.REGION, False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("beautiful scenery", workflow["nodes"][0]["widgets_values"][0])
 
     def test_add_is_not_skipped_for_prompt_mentioned_only_in_comment(self):
@@ -637,7 +638,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "scenery", self.REGION, False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertIn("scenery,", workflow["nodes"][0]["widgets_values"][0])
 
     def test_add_is_skipped_for_prompt_before_inline_comment(self):
@@ -647,7 +648,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "add", "scenery", self.REGION, False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
 
     def test_remove_comments_out_line_holding_inline_comment(self):
         """remove 命中同一行的提示词时整行注释掉，行内注释随之一起被注释"""
@@ -658,7 +659,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "scenery", "", False, False, False
         )
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
             "masterpiece,\n// scenery // wide shot\n",
@@ -673,7 +674,7 @@ class TestDoubleTrack(unittest.TestCase):
         result = fragment._process_double_track(
             "1", "remove", "scenery", "", False, False, False
         )
-        self.assertFalse(result)
+        self.assertFalse(result.executed)
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
             "masterpiece, // drop scenery\n",
@@ -740,6 +741,159 @@ class TestRegionBlankLines(unittest.TestCase):
         )
 
 
+class TestInsertAtLine(unittest.TestCase):
+    """`insert(...)`：按锚点依附行重新定位并一次插入多个标签，两条轨道保持同步。"""
+
+    def _make_pair(self, node_text: str):
+        workflow = {
+            "nodes": [
+                {"id": "1", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ],
+        }
+        prompt = {"1": {"class_type": "CLIPTextEncode", "inputs": {"text": node_text}}}
+        return WorkflowPromptPair(workflow, prompt), workflow, prompt
+
+    def test_insert_after_removed_line_keeps_tracks_in_sync(self):
+        """移除留下的注释行之后插入新标签，prompt 轨道同步剔除注释。"""
+        pair, workflow, prompt = self._make_pair("a,\nold,\nb,")
+        fragment = PromptFragment(pair, "1")
+        result = fragment.remove("old")
+        self.assertTrue(result.executed)
+        self.assertEqual(fragment.insert(["new"], result.hits[0].anchor), 1)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0], "a,\n// old,\nnew,\nb,"
+        )
+        self.assertEqual(
+            prompt["1"]["inputs"]["text"], strip_comments("a,\n// old,\nnew,\nb,")
+        )
+
+    def test_insert_multiple_prompts_in_order(self):
+        """多个标签一次写入，按给出顺序紧挨着排列。"""
+        pair, workflow, prompt = self._make_pair("a,\nb,")
+        fragment = PromptFragment(pair, "1")
+        anchor = InsertAnchor(line="a,", after=True, index_hint=1)
+        self.assertEqual(fragment.insert(["one", "two"], anchor), 2)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0], "a,\none,\ntwo,\nb,"
+        )
+        self.assertEqual(
+            prompt["1"]["inputs"]["text"], strip_comments("a,\none,\ntwo,\nb,")
+        )
+
+    def test_insert_inside_region(self):
+        """锚点行位于 region 内时，新标签插在 region 内而不是 region 外。"""
+        pair, workflow, prompt = self._make_pair(
+            "// #region custom\na,\nx,\n// #endregion custom\nb,"
+        )
+        fragment = PromptFragment(pair, "1", region="custom")
+        anchor = InsertAnchor(line="a,", after=True, index_hint=2)
+        self.assertEqual(fragment.insert(["new"], anchor), 1)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "// #region custom\na,\nnew,\nx,\n// #endregion custom\nb,",
+        )
+        self.assertEqual(
+            prompt["1"]["inputs"]["text"],
+            strip_comments("// #region custom\na,\nnew,\nx,\n// #endregion custom\nb,"),
+        )
+
+    def test_insert_relocates_anchor_after_intermediate_line_insertion(self):
+        """锚点上方被插入一行后，仍按依附行重新定位，不依赖旧行号。"""
+        pair, workflow, prompt = self._make_pair("a,\nold,\nb,")
+        fragment = PromptFragment(pair, "1")
+        hit = fragment.remove("old").hits[0]
+        pair.update_workflow_node_text(
+            "1", "top,\n" + (pair.get_workflow_node_text("1") or "")
+        )
+        self.assertEqual(fragment.insert(["new"], hit.anchor), 1)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "top,\na,\n// old,\nnew,\nb,",
+        )
+        self.assertEqual(
+            prompt["1"]["inputs"]["text"],
+            strip_comments("top,\na,\n// old,\nnew,\nb,"),
+        )
+
+    def test_insert_returns_none_when_anchor_line_is_gone(self):
+        """依附行在中间编辑后已不存在时返回 None，由调用方回落默认目标。"""
+        pair, workflow, _prompt = self._make_pair("a,\nold,\nb,")
+        fragment = PromptFragment(pair, "1")
+        hit = fragment.remove("old").hits[0]
+        pair.update_workflow_node_text("1", "a,\nb,")
+        self.assertIsNone(fragment.insert(["new"], hit.anchor))
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "a,\nb,")
+
+
+class TestRegionRemoveLayout(unittest.TestCase):
+    """region 移除只改写内容行：标记行紧贴内容，未命中时原文保持不变。"""
+
+    def _make_pair(self, node_text: str, prompt_text: str):
+        workflow = {
+            "nodes": [
+                {"id": "1", "type": "CLIPTextEncode", "widgets_values": [node_text]}
+            ],
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt_text}}
+        }
+        return WorkflowPromptPair(workflow, prompt), workflow
+
+    def test_comment_out_keeps_markers_tight(self):
+        """注释式移除后 // #endregion 紧跟内容行，不多出空行。"""
+        pair, workflow = self._make_pair(
+            "// #region positive\ncat,\ndog,\n// #endregion positive\nbest quality,",
+            "cat,\ndog,\nbest quality,",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        result = fragment.remove("dog")
+        self.assertTrue(result.executed)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "// #region positive\ncat,\n// dog,\n// #endregion positive\nbest quality,",
+        )
+
+    def test_hard_remove_keeps_markers_tight(self):
+        """hard 删除内容行后 // #endregion 紧跟剩余内容，不残留空行。"""
+        pair, workflow = self._make_pair(
+            "// #region positive\ncat,\ndog,\n// #endregion positive\nbest quality,",
+            "cat,\ndog,\nbest quality,",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        result = fragment.remove("cat", hard=True)
+        self.assertTrue(result.executed)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "// #region positive\ndog,\n// #endregion positive\nbest quality,",
+        )
+
+    def test_not_found_with_no_skip_keeps_text_verbatim(self):
+        """未命中且 no_skip 时不重排 region，原有空行结构保持不变。"""
+        node_text = (
+            "// #region positive\ncat,\n// #endregion positive\n\n\nbest quality,"
+        )
+        pair, workflow = self._make_pair(node_text, "cat,\nbest quality,")
+        fragment = PromptFragment(pair, "1", region="positive")
+        result = fragment.remove("missing", no_skip=True)
+        self.assertTrue(result.executed)
+        self.assertFalse(result.hits)
+        self.assertEqual(workflow["nodes"][0]["widgets_values"][0], node_text)
+
+    def test_raw_remove_consuming_trailing_newline_keeps_end_marker_on_own_line(self):
+        """raw 命中并吃掉内容末尾换行时，// #endregion 仍独占一行。"""
+        pair, workflow = self._make_pair(
+            "// #region positive\ncat,\n// #endregion positive",
+            "cat,",
+        )
+        fragment = PromptFragment(pair, "1", region="positive")
+        result = fragment.remove(",\n", raw=True)
+        self.assertTrue(result.executed)
+        self.assertEqual(
+            workflow["nodes"][0]["widgets_values"][0],
+            "// #region positive\ncat\n// #endregion positive",
+        )
+
+
 class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
     """自动格式化（总是重排已有提示词）：add/remove 时对整段已有提示词重排，disabled 作为 opt-out。"""
 
@@ -787,7 +941,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
         raw: bool = False,
         no_skip: bool = False,
         hard: bool = False,
-    ) -> bool:
+    ) -> RemovalResult:
         fragment = PromptFragment(pair, node_id, region)
         return fragment._process_double_track(
             node_id, command, arg, region, raw, no_skip, hard
@@ -800,7 +954,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
             "animaPencilXL_v10.safetensors", "masterpiece, Blue_Hair"
         )
         result = self._process(pair, "6", "add", "Cat_Ears")
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         workflow_text = workflow["nodes"][0]["widgets_values"][0]
         prompt_text = prompt["6"]["inputs"]["text"]
         # 已有提示词被重排
@@ -819,7 +973,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
             "animaPencilXL_v10.safetensors", "masterpiece, Blue_Hair"
         )
         result = self._process(pair, "6", "add", "Cat_Ears")
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         workflow_text = workflow["nodes"][0]["widgets_values"][0]
         prompt_text = prompt["6"]["inputs"]["text"]
         self.assertIn("Blue_Hair", workflow_text)
@@ -833,7 +987,7 @@ class TestAutoFormatReformatsExistingPrompt(unittest.TestCase):
         node_text = "blue hair\ncat ears\nmasterpiece"
         pair, workflow, prompt = self._make_pair("sdxlModel.safetensors", node_text)
         result = self._process(pair, "6", "remove", "cat ears")
-        self.assertTrue(result)
+        self.assertTrue(result.executed)
         workflow_text = workflow["nodes"][0]["widgets_values"][0]
         self.assertIn("blue_hair", workflow_text)
         self.assertNotIn("blue hair", workflow_text)
