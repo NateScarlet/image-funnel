@@ -362,7 +362,36 @@ export function useDirectoryStats() {
     return statsCache.get(directoryId);
   }
 
-  async function refetchStats(directoryIds: string[], signal?: AbortSignal): Promise<void> {
+  /**
+   * 拉取单个目录的最新统计，并同步进响应式统计缓存。
+   *
+   * 必须先调用 getCachedStats 建立缓存订阅，否则后续来自订阅的统计变化不会进入 statsCache。
+   * 网络结果直接写入缓存：缓存广播是异步的，只 await 请求本身会让消费者在返回后仍读到刷新前的统计。
+   */
+  async function refreshStats(directoryId: string): Promise<void> {
+    getCachedStats(directoryId);
+
+    const { data } = await client.query({
+      query: DirectoryStatsDocument,
+      variables: { id: directoryId },
+      fetchPolicy: "network-only",
+      context: { transport: "batch-http:direcotry-stats" },
+    });
+
+    const node = data?.node;
+    const fresh = node?.__typename === "Directory" ? node.stats : undefined;
+    statsCache.set(directoryId, toStableValue(fresh || undefined, statsCache.get(directoryId)));
+  }
+
+  /**
+   * 刷新指定目录的统计，返回未能刷新的原因。
+   *
+   * 失败不在这里吞掉：调用方需要把失败与「目录已达标」区分开
+   * （完成视图的自动切换既不能把失败当成未完成，也不能当成没有下一个目录）。
+   */
+  async function refetchStats(directoryIds: string[], signal?: AbortSignal): Promise<unknown[]> {
+    const failures: unknown[] = [];
+
     directoryIds.forEach((id) => {
       loadingStates[id] = (loadingStates[id] || 0) + 1;
     });
@@ -375,24 +404,24 @@ export function useDirectoryStats() {
     });
 
     while (queue.length > 0) {
-      if (signal?.aborted) return;
+      if (signal?.aborted) return failures;
       const batch = queue.splice(0, 5);
 
-      await Promise.allSettled(
+      const settled = await Promise.allSettled(
         batch.map(async (id) => {
           try {
-            await client.query({
-              query: DirectoryStatsDocument,
-              variables: { id },
-              fetchPolicy: "network-only",
-              context: { transport: "batch-http:direcotry-stats" },
-            });
+            await refreshStats(id);
           } finally {
             loadingStates[id] = (loadingStates[id] || 0) - 1;
           }
         }),
       );
+      for (const result of settled) {
+        if (result.status === "rejected") failures.push(result.reason);
+      }
     }
+
+    return failures;
   }
 
   return { useStats, getCachedStats, refetchStats, isStatsLoading };

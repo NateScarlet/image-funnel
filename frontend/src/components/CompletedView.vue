@@ -198,17 +198,15 @@ async function handleCommitted() {
       targetDirectoryId.value = nextDirectoryIdValue;
       const nextSession = await autoCreateSession();
 
-      if (nextSession) {
-        await router.push({
-          name: "session",
-          params: {
-            id: nextSession.id,
-          },
-        });
-      } else {
-        // 下一会话创建失败时允许用户重试
-        navigating = false;
-      }
+      // 创建下一会话没有返回结果同样是失败：必须提示并允许重试，不能停在完成视图且毫无反馈
+      if (!nextSession) throw new Error("无法创建下一个筛选会话");
+
+      await router.push({
+        name: "session",
+        params: {
+          id: nextSession.id,
+        },
+      });
     } else {
       await router.push("/");
     }

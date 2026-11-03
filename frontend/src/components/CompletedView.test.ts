@@ -15,6 +15,7 @@ import { DirectoryPageWaitCancelledError } from "../utils/directoryPageWaitCance
 
 // #region Mock Setup
 const notificationMocks = vi.hoisted(() => ({ showError: vi.fn() }));
+const autoCreateMocks = vi.hoisted(() => ({ autoCreateSession: vi.fn() }));
 
 vi.mock("../composables/useNotification", () => ({
   default: () => ({
@@ -37,7 +38,7 @@ vi.mock("idb-keyval", () => ({
 
 // 自动创建会话涉及真实 GraphQL，本用例只关心失败反馈
 vi.mock("../composables/useAutoCreateSession", () => ({
-  useAutoCreateSession: () => ({ autoCreateSession: vi.fn(async () => undefined) }),
+  useAutoCreateSession: () => ({ autoCreateSession: autoCreateMocks.autoCreateSession }),
 }));
 
 // 真实 CommitForm 依赖写入操作设置与 GraphQL，替换为「触发 committed 即完成提交」的桩
@@ -152,6 +153,9 @@ async function submitAndSettle(wrapper: VueWrapper): Promise<void> {
 
 beforeEach(() => {
   notificationMocks.showError.mockClear();
+  autoCreateMocks.autoCreateSession.mockReset();
+  // 默认创建失败（返回空），需要成功进入下一目录会话的用例自行覆盖
+  autoCreateMocks.autoCreateSession.mockResolvedValue(undefined);
 });
 
 describe("CompletedView 自动切换失败反馈", () => {
@@ -192,6 +196,28 @@ describe("CompletedView 自动切换失败反馈", () => {
     await submitAndSettle(wrapper);
     expect(notificationMocks.showError).not.toHaveBeenCalled();
     expect(pushSpy).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  test("下一个会话创建没有返回结果时提示并允许重试", async () => {
+    const resolveNextDirectory = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValue("dir-2");
+
+    const { wrapper, router } = mountCompleted(resolveNextDirectory);
+    const pushSpy = vi.spyOn(router, "push");
+
+    // 第一次：创建下一会话返回空，必须提示，不能停在完成视图且毫无反馈
+    await submitAndSettle(wrapper);
+    expect(notificationMocks.showError).toHaveBeenCalledWith("无法创建下一个筛选会话");
+    expect(pushSpy).not.toHaveBeenCalled();
+
+    // 重试：创建成功则进入目标目录会话
+    autoCreateMocks.autoCreateSession.mockResolvedValueOnce({ id: "session-2" });
+    await submitAndSettle(wrapper);
+    expect(resolveNextDirectory).toHaveBeenCalledTimes(2);
+    expect(pushSpy).toHaveBeenCalledWith({ name: "session", params: { id: "session-2" } });
 
     wrapper.unmount();
   });

@@ -1,4 +1,4 @@
-import { computed, nextTick, toValue, type ComputedRef, type MaybeRefOrGetter } from "vue";
+import { computed, nextTick, ref, toValue, type ComputedRef, type MaybeRefOrGetter } from "vue";
 import useDirectoryBrowse, { useDirectoryStats } from "./domain/useDirectoryBrowse";
 import {
   minUnratedCount,
@@ -139,7 +139,23 @@ export default function useSessionNextDirectory(
 
   const nextDirectory: ComputedRef<NextDirectoryItem | undefined> = computed(firstCandidate);
 
-  const nextDirectoryId = computed(() => nextDirectory.value?.dir.id);
+  // #region 导航预览
+  // 导航决策会刷新统计，统计更新会驱动预览重算：不冻结就会出现卡片消失/复现或目标来回变化，
+  // 最终展示的预览也可能与实际跳转目标不一致。决策期间冻结预览，决策完成后一次性切到判定结果。
+  //
+  // 冻结值带上产生它的会话。SessionView 在路由参数变化时复用，同一实例跨会话存活：
+  // 上一会话冻结到即将进入的目录后，该值对新会话必须不可见，否则新会话的完成页会把
+  // 「刚完成的当前目录」当成下一个目录展示，并在决策窗口内保持旧目标后才跳到真实候选。
+  const navigationPreview = ref<{ sessionId: string; id: string | undefined }>();
+
+  const frozenPreview = computed(() => {
+    const preview = navigationPreview.value;
+    return preview !== undefined && preview.sessionId === toValue(sessionId) ? preview : undefined;
+  });
+
+  const nextDirectoryId = computed(() =>
+    frozenPreview.value ? frozenPreview.value.id : nextDirectory.value?.dir.id,
+  );
   // #endregion
 
   // #region 数据准备
@@ -171,37 +187,46 @@ export default function useSessionNextDirectory(
     });
   }
 
-  /** 补拉未知的目录统计信息；拉取失败时保持未知，按未完成处理 */
-  async function loadUnknownStats(
+  /**
+   * 加载目录统计。
+   *
+   * 导航决策必须基于最新统计（提交会改变目录的完成度），因此决策时刷新全部已加载目录；
+   * 挂载与翻页只需要补齐缺失项。刷新结果返回时已同步进响应式缓存，消费者可以立即读取。
+   * 刷新失败必须向上抛出：既不能被当成「这些目录未完成」，也不能被当成「没有下一个目录」。
+   */
+  async function loadStats(
     directoryIds: string[],
-    abortSignal?: AbortSignal,
+    abortSignal: AbortSignal | undefined,
+    refreshAll: boolean,
   ): Promise<void> {
-    const unknownIds = directoryIds.filter((id) => !getCachedStats(id));
-    if (unknownIds.length === 0) return;
+    const ids = refreshAll ? directoryIds : directoryIds.filter((id) => !getCachedStats(id));
+    if (ids.length === 0) return;
 
-    await refetchStats(unknownIds, abortSignal);
-    // 等待 Apollo 缓存订阅把结果同步到 statsCache
-    await nextTick();
+    const failures = await refetchStats(ids, abortSignal);
+    if (failures.length > 0) throw failures[0];
   }
 
   async function prepare(
     abortSignal?: AbortSignal,
     targetDirectoryId: string = currentId.value,
+    refreshAllStats = false,
   ): Promise<void> {
     const currentParentId = parentId.value;
     if (!currentParentId || !targetDirectoryId) return;
 
+    // 统计刷新范围不同必须分开：否则导航会复用到只补齐缺失项的挂载准备，读到提交前的统计
+    const statsMode = refreshAllStats ? "all-stats" : "missing-stats";
     await prepareFlights.do(
-      `${toValue(sessionId)}:${currentParentId}:${targetDirectoryId}`,
+      `${toValue(sessionId)}:${currentParentId}:${targetDirectoryId}:${statsMode}`,
       async (signal) => {
         await waitForDirectoriesLoaded();
         await nextTick();
         if (signal.aborted || !directoriesData.value) return;
 
-        // 导航只需已加载目录的统计信息；缺失的目录按未完成处理
-        await loadUnknownStats(
+        await loadStats(
           loadedDirectories.value.map((entry) => entry.dir.id),
           signal,
+          refreshAllStats,
         );
       },
       abortSignal,
@@ -226,13 +251,47 @@ export default function useSessionNextDirectory(
   }
 
   /**
-   * 解析导航目标：先在已加载目录中按排序键推进；
-   * 没有候选时用页尾游标只取下一页，继续寻找，直到找到或序列耗尽。
+   * 解析导航目标。
+   *
+   * 决策前后预览冻结在同一次判定结果上：决策会刷新统计，统计更新会驱动预览重算，
+   * 不冻结就会出现卡片消失/复现或目标来回变化，且最终展示的预览可能不是实际跳转目标。
+   * 任何失败都必须向上抛出，空返回值只表示序列真正耗尽。
    */
   async function resolveNextDirectory(): Promise<string | undefined> {
     if (!parentId.value) return undefined;
 
-    await prepare();
+    // 冻结与回写都记在发起决策的会话名下：决策期间若已切换到新会话，
+    // 结果对新会话不可见，不会被误当成新会话的预览
+    const scope = toValue(sessionId);
+
+    // 冻结当前预览；重试时沿用上次冻结的目标，避免重试瞬间预览跳回旧候选
+    navigationPreview.value = {
+      sessionId: scope,
+      id: frozenPreview.value?.id ?? nextDirectory.value?.dir.id,
+    };
+
+    try {
+      const target = await decideNextDirectory();
+      // 预览与决策使用同一次判定结果
+      navigationPreview.value = { sessionId: scope, id: target };
+      return target;
+    } catch (error) {
+      // 决策失败：解除冻结，让预览回到实时候选，用户可在提示后重试；
+      // 只清除本会话的冻结，不误清其他会话决策窗口内已冻结的预览
+      if (navigationPreview.value?.sessionId === scope) {
+        navigationPreview.value = undefined;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 判定导航目标：先在已加载目录中按排序键推进；
+   * 没有候选时用页尾游标只取下一页，继续寻找，直到找到或序列耗尽。
+   */
+  async function decideNextDirectory(): Promise<string | undefined> {
+    // 提交会改变目录统计，决策前按最新统计重新判定，而不是沿用挂载时的缓存
+    await prepare(undefined, currentId.value, true);
 
     const immediate = nextDirectory.value;
     if (immediate) {
@@ -253,7 +312,11 @@ export default function useSessionNextDirectory(
         break;
       }
 
-      await loadUnknownStats(loadedDirectories.value.map((entry) => entry.dir.id));
+      await loadStats(
+        loadedDirectories.value.map((entry) => entry.dir.id),
+        undefined,
+        false,
+      );
 
       const found = firstCandidate();
       if (found) {

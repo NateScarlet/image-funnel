@@ -146,7 +146,8 @@ beforeEach(() => {
     };
   });
   mocks.refetchStatsMock.mockReset();
-  mocks.refetchStatsMock.mockResolvedValue(undefined);
+  // 刷新统计返回未能刷新的原因；默认全部成功
+  mocks.refetchStatsMock.mockResolvedValue([]);
   mocks.statsRefs.clear();
   mocks.observedVariables.current = undefined;
   sessionStorage.clear();
@@ -548,6 +549,7 @@ describe("useSessionNextDirectory", () => {
     mocks.refetchStatsMock.mockImplementation(async (ids: string[]) => {
       // 只补拉成功的目录进入缓存；未返回的目录按未完成处理
       if (ids.includes("dir-b")) setStats("dir-b", completedStats());
+      return [];
     });
 
     const { scope, resolveNextDirectory } = setup("session-1", current);
@@ -569,7 +571,7 @@ describe("useSessionNextDirectory", () => {
     setStats("dir-a", statsA);
     enter("dir-a", statsA);
 
-    mocks.refetchStatsMock.mockResolvedValue(undefined);
+    mocks.refetchStatsMock.mockResolvedValue([]);
 
     const { scope, resolveNextDirectory } = setup("session-1", current);
     try {
