@@ -1,12 +1,14 @@
 package urlconv
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"main/internal/application/image"
 
@@ -266,6 +268,126 @@ func TestValidate_TamperedTimestampFails(t *testing.T) {
 	_, err = signer.ValidateSignedURL(u.String())
 	assert.Error(t, err, "篡改时间戳必须导致签名失效")
 }
+
+// #region 图片身份（t/s）与磁盘现状比对
+
+// realIdentityQuery 构造与文件当前状态一致的 t/s 查询串（秒级修改时间 + 字节大小）
+func realIdentityQuery(t *testing.T, path string) (tStr, sStr string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	return fmt.Sprintf("%d", info.ModTime().Unix()), fmt.Sprintf("%d", info.Size())
+}
+
+// forgeSignedPayload 用签名器的密钥为任意载荷构造签名有效的目标串
+func forgeSignedPayload(signer *Signer, payload string) string {
+	return ImageURLPrefix + signer.signatureFor(payload) + "/" + payload
+}
+
+// 同路径文件被替换后，旧 URL 仍能通过签名校验，但其声明的图片身份已失效：
+// 修改时间或大小任一不一致都必须被拒绝，否则旧授权会返回未经验证的新文件
+func TestValidate_StaleIdentityFails(t *testing.T) {
+	t.Run("修改时间变化（大小不变）", func(t *testing.T) {
+		signer, rootDir := newTestSigner(t)
+		path := filepath.Join(rootDir, "photo.jpg")
+		writeSource(t, path)
+
+		signedURL, err := signer.GenerateSignedURL(path)
+		require.NoError(t, err)
+
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		// 只推后修改时间，内容与大小保持不变
+		require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime().Add(2*time.Second)))
+
+		_, err = signer.ValidateSignedURL(signedURL.String())
+		require.ErrorIs(t, err, ErrStaleIdentity)
+	})
+
+	t.Run("大小变化（修改时间秒级不变）", func(t *testing.T) {
+		signer, rootDir := newTestSigner(t)
+		path := filepath.Join(rootDir, "photo.jpg")
+		writeSource(t, path)
+
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		signedURL, err := signer.GenerateSignedURL(path)
+		require.NoError(t, err)
+
+		// 写入不同长度的内容后把修改时间恢复到签发时的值，
+		// 使差异只体现在大小上（秒级修改时间仍是同一个）
+		require.NoError(t, os.WriteFile(path, []byte("changed-image-bytes"), 0o644))
+		require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+
+		_, err = signer.ValidateSignedURL(signedURL.String())
+		require.ErrorIs(t, err, ErrStaleIdentity)
+	})
+
+	t.Run("签名有效但 t 与磁盘不符", func(t *testing.T) {
+		signer, rootDir := newTestSigner(t)
+		path := filepath.Join(rootDir, "photo.jpg")
+		writeSource(t, path)
+
+		tStr, sStr := realIdentityQuery(t, path)
+		// 直接构造「签名正确、身份已过期」的 URL，排除签名失败这一可能
+		payload := fmt.Sprintf("photo.jpg?t=%s0&s=%s", tStr, sStr)
+
+		_, err := signer.ValidateSignedURL(forgeSignedPayload(signer, payload))
+		require.ErrorIs(t, err, ErrStaleIdentity)
+	})
+}
+
+// t/s 缺失、空串或非整数都按不一致处理（fail closed）：
+// 这类 URL 不可能由签发侧生成，但不得因此退化为「跳过身份校验」
+func TestValidate_MissingOrMalformedIdentityFails(t *testing.T) {
+	signer, rootDir := newTestSigner(t)
+	relPath := "photo.jpg"
+	path := filepath.Join(rootDir, relPath)
+	writeSource(t, path)
+
+	tStr, sStr := realIdentityQuery(t, path)
+
+	cases := map[string]string{
+		"缺少 t 与 s": relPath,
+		"缺少 t":     relPath + "?s=" + sStr,
+		"缺少 s":     relPath + "?t=" + tStr,
+		"t 为空串":    relPath + "?t=&s=" + sStr,
+		"s 为空串":    relPath + "?t=" + tStr + "&s=",
+		"t 非整数":    relPath + "?t=abc&s=" + sStr,
+		"s 非整数":    relPath + "?t=" + tStr + "&s=abc",
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := signer.ValidateSignedURL(forgeSignedPayload(signer, payload))
+			require.ErrorIs(t, err, ErrStaleIdentity)
+		})
+	}
+
+	t.Run("身份一致时放行", func(t *testing.T) {
+		payload := relPath + "?t=" + tStr + "&s=" + sStr
+		got, err := signer.ValidateSignedURL(forgeSignedPayload(signer, payload))
+		require.NoError(t, err)
+		assert.Equal(t, relPath, got.String())
+	})
+}
+
+// 文件不存在与身份不一致虽然内部语义不同，对调用方都是「该版本已不存在」，
+// 但必须与「stat 的其他内部错误」区分：后者不得伪装成 404
+func TestValidate_MissingFileIsNotStaleIdentity(t *testing.T) {
+	signer, rootDir := newTestSigner(t)
+	path := filepath.Join(rootDir, "gone.jpg")
+	writeSource(t, path)
+
+	signedURL, err := signer.GenerateSignedURL(path)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(path))
+
+	_, err = signer.ValidateSignedURL(signedURL.String())
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NotErrorIs(t, err, ErrStaleIdentity)
+}
+
+// #endregion
 
 func TestToRelativePath(t *testing.T) {
 	signer, _ := newTestSigner(t)

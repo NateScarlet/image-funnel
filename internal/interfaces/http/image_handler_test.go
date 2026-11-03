@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
@@ -34,6 +35,7 @@ import (
 // stubProcessor 模拟纯转码处理器（供 coordinator 使用）
 type stubProcessor struct {
 	processFunc func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error
+	metaCalls   int
 }
 
 func (m *stubProcessor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
@@ -41,14 +43,16 @@ func (m *stubProcessor) Process(ctx context.Context, srcPath string, spec appima
 }
 
 func (m *stubProcessor) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
+	m.metaCalls++
 	// 返回固定尺寸用于测试
 	return &shared.ImageMeta{Width: 2048, Height: 1536}, nil
 }
 
 // stubCache 模拟缓存：可预设已存在条目
 type stubCache struct {
-	mu    sync.Mutex
-	files map[string]appimage.File
+	mu      sync.Mutex
+	files   map[string]appimage.File
+	lookups int
 }
 
 func newStubCache() *stubCache {
@@ -58,10 +62,18 @@ func newStubCache() *stubCache {
 func (c *stubCache) Lookup(_ context.Context, key string) (appimage.File, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.lookups++
 	if f, ok := c.files[key]; ok {
 		return f, nil
 	}
 	return nil, nil
+}
+
+// lookupCount 已发生的变体缓存查询次数
+func (c *stubCache) lookupCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lookups
 }
 
 func (c *stubCache) Save(_ context.Context, key string, r io.Reader) error {
@@ -78,9 +90,11 @@ func (c *stubCache) Save(_ context.Context, key string, r io.Reader) error {
 // stubQueue 模拟队列：Enqueue 即同步执行并 resolve（模拟 worker 立即处理）
 type stubQueue struct {
 	processFunc func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error
+	enqueues    int
 }
 
 func (q *stubQueue) Enqueue(ctx context.Context, item appimage.TranscodeItem) (appimage.TranscodeWaiter, error) {
+	q.enqueues++
 	w := &stubWaiter{done: make(chan struct{})}
 	var buf bytes.Buffer
 	err := q.processFunc(ctx, item.SrcPath(), item.Spec(), &buf)
@@ -129,6 +143,19 @@ type stubReadSeekCloser struct {
 }
 
 func (m *stubReadSeekCloser) Close() error { return nil }
+
+// newCountingCoordinator 构造挂接可计数 stub 的 coordinator，
+// 用于断言「请求未查询变体缓存、未登记转码」
+func newCountingCoordinator() (coordinator *appimage.TranscodeCoordinator, cache *stubCache, queue *stubQueue, processor *stubProcessor) {
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		_, err := w.Write([]byte("fake-image"))
+		return err
+	}
+	cache = newStubCache()
+	queue = &stubQueue{processFunc: processFn}
+	processor = &stubProcessor{processFunc: processFn}
+	return appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil), cache, queue, processor
+}
 
 // newTestCoordinator 构造挂接 stub 依赖的 coordinator（缓存为空、队列同步执行）
 func newTestCoordinator(processErr error) *appimage.TranscodeCoordinator {
@@ -1043,7 +1070,11 @@ func TestHandleImage_InvalidWidthReturns400(t *testing.T) {
 	signer, rootDir, relPath := testSetup(t, logger, coordinator)
 	handler := testHandler(logger, signer, coordinator, rootDir)
 
-	for _, rawQuery := range []string{"w=abc&t=1&s=1", "w=0&t=1&s=1", "w=-1&t=1&s=1"} {
+	// 身份参数必须与磁盘一致，否则请求会先被 404 拒绝，无法验证 w 的校验分支
+	tStr, sStr := requireIdentityQuery(t, filepath.Join(rootDir, relPath))
+
+	for _, widthParam := range []string{"w=abc", "w=0", "w=-1"} {
+		rawQuery := widthParam + "&t=" + tStr + "&s=" + sStr
 		t.Run(rawQuery, func(t *testing.T) {
 			req := forgeQueryRequest(t, "test-secret", relPath, rawQuery)
 			rr := httptest.NewRecorder()
@@ -1194,6 +1225,197 @@ func TestHandleImage_NonDecodableSourceUsesMetaFallbackForRedirect(t *testing.T)
 }
 
 // #endregion
+
+// #region 过期图片身份
+
+// assertNoWork 断言过期身份请求既未读取源图，也未查询变体缓存或登记转码，
+// 且错误响应不携带 immutable 缓存头
+func assertNoWork(t *testing.T, rr *httptest.ResponseRecorder, probe *countingProbe, cache *stubCache, queue *stubQueue, processor *stubProcessor) {
+	t.Helper()
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rr.Code)
+	}
+	if probe.opens != 0 || probe.probes != 0 {
+		t.Errorf("过期身份不得打开源图，open=%d probe=%d", probe.opens, probe.probes)
+	}
+	if cache.lookupCount() != 0 {
+		t.Errorf("过期身份不得查询变体缓存，lookup=%d", cache.lookupCount())
+	}
+	if queue.enqueues != 0 {
+		t.Errorf("过期身份不得登记转码，enqueue=%d", queue.enqueues)
+	}
+	if processor.metaCalls != 0 {
+		t.Errorf("过期身份不得读取源图元数据，meta=%d", processor.metaCalls)
+	}
+	for _, header := range []string{"Cache-Control", "ETag"} {
+		if got := rr.Header().Get(header); got != "" {
+			t.Errorf("过期身份的错误响应不得带 %s, got %q", header, got)
+		}
+	}
+}
+
+func TestHandleImage_StaleIdentityReturns404(t *testing.T) {
+	logger := zap.NewNop()
+
+	t.Run("raw 请求（修改时间变化）", func(t *testing.T) {
+		coordinator, cache, queue, processor := newCountingCoordinator()
+		signer, rootDir, relPath := testSetup(t, logger, coordinator)
+		probe := newCountingProbe()
+		handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+		req := rawURLRequest(t, signer, rootDir, relPath, "")
+		requireBumpModTime(t, filepath.Join(rootDir, relPath), 2*time.Second)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assertNoWork(t, rr, probe, cache, queue, processor)
+	})
+
+	t.Run("变体请求（大小变化）", func(t *testing.T) {
+		coordinator, cache, queue, processor := newCountingCoordinator()
+		signer, rootDir, relPath := testSetup(t, logger, coordinator)
+		probe := newCountingProbe()
+		handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+		req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, "image/jpeg")
+		requireChangeSizeKeepModTime(t, filepath.Join(rootDir, relPath))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assertNoWork(t, rr, probe, cache, queue, processor)
+	})
+
+	t.Run("HEAD 请求", func(t *testing.T) {
+		coordinator, cache, queue, processor := newCountingCoordinator()
+		signer, rootDir, relPath := testSetup(t, logger, coordinator)
+		probe := newCountingProbe()
+		handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+		req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(256)}, "image/webp")
+		req.Method = http.MethodHead
+		requireBumpModTime(t, filepath.Join(rootDir, relPath), 2*time.Second)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assertNoWork(t, rr, probe, cache, queue, processor)
+	})
+
+	t.Run("If-None-Match 不绕过身份校验", func(t *testing.T) {
+		// 若过期身份先命中 304，浏览器会继续使用旧内容的本地缓存，
+		// 因此身份比对必须先于 304 短路
+		coordinator, cache, queue, processor := newCountingCoordinator()
+		signer, rootDir, relPath := testSetup(t, logger, coordinator)
+		probe := newCountingProbe()
+		handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+		req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, "image/jpeg")
+		req.Header.Set("If-None-Match", `"immutable"`)
+		requireBumpModTime(t, filepath.Join(rootDir, relPath), 2*time.Second)
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assertNoWork(t, rr, probe, cache, queue, processor)
+	})
+
+	t.Run("文件已删除", func(t *testing.T) {
+		// 签名仍有效，但文件不存在：与身份不一致同为 404，且同样不产生转码工作
+		coordinator, cache, queue, processor := newCountingCoordinator()
+		signer, rootDir, relPath := testSetup(t, logger, coordinator)
+		probe := newCountingProbe()
+		handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+		req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, "image/jpeg")
+		require.NoError(t, os.Remove(filepath.Join(rootDir, relPath)))
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assertNoWork(t, rr, probe, cache, queue, processor)
+	})
+
+	t.Run("t/s 缺失或非法", func(t *testing.T) {
+		// 这类 URL 不可能由签发侧生成，但不得因此退化为「跳过身份校验」
+		cases := map[string]func(tStr, sStr string) string{
+			"缺少 t 与 s": func(_, _ string) string { return "w=1024" },
+			"缺少 t":     func(_, s string) string { return "w=1024&s=" + s },
+			"缺少 s":     func(t, _ string) string { return "w=1024&t=" + t },
+			"t 为空串":    func(_, s string) string { return "w=1024&t=&s=" + s },
+			"s 为空串":    func(t, _ string) string { return "w=1024&t=" + t + "&s=" },
+			"t 非整数":    func(_, s string) string { return "w=1024&t=abc&s=" + s },
+			"s 非整数":    func(t, _ string) string { return "w=1024&t=" + t + "&s=abc" },
+		}
+		for name, rawQueryFor := range cases {
+			t.Run(name, func(t *testing.T) {
+				coordinator, cache, queue, processor := newCountingCoordinator()
+				signer, rootDir, relPath := testSetup(t, logger, coordinator)
+				probe := newCountingProbe()
+				handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+				tStr, sStr := requireIdentityQuery(t, filepath.Join(rootDir, relPath))
+				req := forgeQueryRequest(t, "test-secret", relPath, rawQueryFor(tStr, sStr))
+
+				rr := httptest.NewRecorder()
+				handler.ServeHTTP(rr, req)
+
+				assertNoWork(t, rr, probe, cache, queue, processor)
+			})
+		}
+	})
+}
+
+// 对照组：身份未变更时行为不变，合法请求仍正常转码
+func TestHandleImage_MatchingIdentityStillServes(t *testing.T) {
+	logger := zap.NewNop()
+
+	coordinator, _, queue, _ := newCountingCoordinator()
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+	handler := testHandler(logger, signer, coordinator, rootDir)
+
+	tStr, sStr := requireIdentityQuery(t, filepath.Join(rootDir, relPath))
+	req := forgeQueryRequest(t, "test-secret", relPath, "w=1024&t="+tStr+"&s="+sStr)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200 for matching identity, got %d", rr.Code)
+	}
+	if queue.enqueues != 1 {
+		t.Errorf("身份一致时可变体请求应登记 1 次转码，got %d", queue.enqueues)
+	}
+}
+
+// #endregion
+
+// requireIdentityQuery 返回与文件当前状态一致的 t/s 查询值
+func requireIdentityQuery(t *testing.T, path string) (tStr, sStr string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	return fmt.Sprintf("%d", info.ModTime().Unix()), fmt.Sprintf("%d", info.Size())
+}
+
+// requireBumpModTime 只推后文件的修改时间（内容与大小不变），模拟文件被替换
+func requireBumpModTime(t *testing.T, path string, d time.Duration) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime().Add(d)))
+}
+
+// requireChangeSizeKeepModTime 写入不同长度的内容后恢复修改时间，
+// 模拟「大小变化而秒级修改时间不变」
+func requireChangeSizeKeepModTime(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("replaced-image-bytes"), 0o644))
+	require.NoError(t, os.Chtimes(path, info.ModTime(), info.ModTime()))
+}
 
 // requireReadFile 读取文件字节，用于断言响应体与源文件一致
 func requireReadFile(t *testing.T, path string) []byte {

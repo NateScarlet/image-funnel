@@ -46,10 +46,23 @@ func handleImage(
 		//
 		// 返回的根相对路径自带「位于根目录内」的保证（围栏在验签时由返回类型构造完成），
 		// 故此处无需再自行复核，越界载荷在验签阶段即已失败。
+		//
+		// 验签同时核对 URL 声明的图片身份（t/s）与磁盘现状：授权绑定的是签发时的
+		// 那个文件版本，同路径文件被替换后旧 URL 即失效。该比对先于 304 短路、
+		// 源图读取、变体缓存查询与转码登记，过期身份不会产生任何转码工作。
 		relPath, err := signer.ValidateSignedURL(r.RequestURI)
 		if err != nil {
-			// 不向客户端回显失败原因：细分原因会给探测者反馈，且具体错误对排障无价值
-			http.Error(w, "invalid signature", http.StatusForbidden)
+			switch {
+			// 过期身份与文件不存在对客户端同为 404：不透露「该路径曾经有效」
+			case errors.Is(err, urlconv.ErrStaleIdentity), errors.Is(err, os.ErrNotExist):
+				http.Error(w, "image not found", http.StatusNotFound)
+			case errors.Is(err, urlconv.ErrInvalidSignature):
+				// 不向客户端回显失败原因：细分原因会给探测者反馈，且具体错误对排障无价值
+				http.Error(w, "invalid signature", http.StatusForbidden)
+			default:
+				// stat 的其他内部错误走既有映射，不得伪装成 404
+				handleAcquireError(w, logger, err)
+			}
 			return
 		}
 
