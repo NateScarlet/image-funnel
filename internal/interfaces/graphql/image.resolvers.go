@@ -7,6 +7,7 @@ package graphql
 
 import (
 	"context"
+	"fmt"
 	"main/internal/application/image"
 	"main/internal/domain/relpath"
 	"main/internal/scalar"
@@ -15,8 +16,12 @@ import (
 
 // URL is the resolver for the url field.
 func (r *imageResolver) URL(ctx context.Context, obj *shared.ImageDTO, width *int) (*scalar.URI, error) {
+	// 盲签：只表达客户端需求，不读取源图宽度来改变 URL 形状
 	var opts []image.SignOption
-	if width != nil && *width < obj.Width {
+	if width != nil {
+		if *width <= 0 {
+			return nil, fmt.Errorf("width must be positive, got %d", *width)
+		}
 		opts = append(opts, image.WithWidth(*width))
 	}
 	uri, err := r.signer.GenerateSignedURL(obj.AbsPath, opts...)

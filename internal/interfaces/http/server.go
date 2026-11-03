@@ -20,6 +20,7 @@ type Server struct {
 	logger         *zap.Logger
 	signer         *urlconv.Signer
 	coordinator    *appimage.TranscodeCoordinator
+	sourceProbe    appimage.SourceProbe
 	graphqlHandler http.Handler
 	playground     http.Handler
 	absRootDir     string
@@ -33,6 +34,7 @@ func NewServer(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
 	coordinator *appimage.TranscodeCoordinator,
+	sourceProbe appimage.SourceProbe,
 	graphqlHandler http.Handler,
 	playground http.Handler,
 	absRootDir string,
@@ -45,6 +47,7 @@ func NewServer(
 		logger:         logger,
 		signer:         signer,
 		coordinator:    coordinator,
+		sourceProbe:    sourceProbe,
 		graphqlHandler: graphqlHandler,
 		playground:     playground,
 		absRootDir:     absRootDir,
@@ -75,7 +78,7 @@ func (s *Server) Serve(addr string) error {
 	//
 	// 裸 /image 也交给同一 handler：前缀路由不匹配它，若不注册会落入 SPA catch-all
 	// 得到 200 HTML；交给 handler 则按「格式残缺」统一返回 403
-	imageHandler := handleImage(s.logger, s.signer, s.coordinator, s.absRootDir)
+	imageHandler := handleImage(s.logger, s.signer, s.coordinator, s.sourceProbe, s.absRootDir)
 	r.HandleFunc("/image", imageHandler)
 	r.PathPrefix(urlconv.ImageURLPrefix).HandlerFunc(imageHandler)
 

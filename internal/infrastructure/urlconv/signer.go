@@ -62,8 +62,16 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (sc
 	params.Set("t", fmt.Sprintf("%d", fileInfo.ModTime().Unix()))
 	params.Set("s", fmt.Sprintf("%d", fileInfo.Size()))
 
-	payload := urlPayload(rel.String(), params)
+	return s.SignURL(rel, params)
+}
 
+// SignURL 为一组已经确定的参数签名，不读取磁盘。
+//
+// 与 GenerateSignedURL 的差别仅在 t/s 的来源：这里由调用方提供（例如从已验签的
+// 请求中原样取回），从而允许 handler 现场签发指向同一图片身份的重定向 URL，
+// 而不把磁盘现状混入 URL
+func (s *Signer) SignURL(rel relpath.Path, params url.Values) (scalar.URI, error) {
+	payload := urlPayload(rel.String(), params)
 	return scalar.ParseURI(ImageURLPrefix + s.signatureFor(payload) + "/" + payload)
 }
 

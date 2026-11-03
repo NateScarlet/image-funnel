@@ -7,10 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"os"
-	"time"
 	"main/internal/shared"
+	"os"
 	"path/filepath"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -66,16 +66,21 @@ func VariantKey(absPath string, spec Spec, encoder string) (string, error) {
 	return base64.URLEncoding.EncodeToString(hash.Sum(nil)), nil
 }
 
+// CachedVariant 只查变体缓存：仅 stat 缓存文件，不打开源图、不入队。
+// 返回 (nil, nil) 表示缓存未命中。用于在决定直出/重定向之前免去一次源图打开
+func (c *TranscodeCoordinator) CachedVariant(ctx context.Context, absPath string, spec Spec) (File, error) {
+	key, err := VariantKey(absPath, spec, c.encoderID)
+	if err != nil {
+		return nil, err
+	}
+	return c.cache.Lookup(ctx, key)
+}
+
 // Acquire 获取一个图片变体：缓存命中直接返回；未命中入队等待转码完成。
 // priority 表达本次需求类别（用户查看=High，预载=Low）。
 // ctx 结束（客户端断开/请求放弃）时自动撤回需求登记——「撤回淘汰未启动任务」
 // 的语义由此保证，调用方无需手动 Cancel
 func (c *TranscodeCoordinator) Acquire(ctx context.Context, absPath string, spec Spec, priority Prio) (File, error) {
-	// WebP 且无缩放参数时返回原始文件（向后兼容）；AVIF 全分辨率也需要转码
-	if spec.Width() == 0 && spec.Format() == ImageFormatWebP {
-		return &rawFile{path: absPath}, nil
-	}
-
 	key, err := VariantKey(absPath, spec, c.encoderID)
 	if err != nil {
 		return nil, err
@@ -218,14 +223,4 @@ func (s *seeker) Close() error { return nil }
 // Meta 委托给底层处理链（domain Factory 也依赖 Meta 读取图片尺寸）
 func (c *TranscodeCoordinator) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, error) {
 	return c.processor.Meta(ctx, srcPath)
-}
-
-// rawFile 原始文件直通句柄（webp 无参捷径）
-type rawFile struct {
-	path string
-}
-
-// Open 实现 File 接口，直接打开源文件
-func (f *rawFile) Open() (io.ReadSeekCloser, error) {
-	return os.Open(f.path)
 }

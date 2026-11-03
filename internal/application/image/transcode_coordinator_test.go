@@ -26,8 +26,6 @@ func (f *mockFile) Open() (io.ReadSeekCloser, error) {
 	return &seeker{Reader: bytes.NewReader(f.data)}, nil
 }
 
-
-
 type mockCache struct {
 	mu     sync.Mutex
 	files  map[string]File
@@ -220,8 +218,9 @@ func TestAcquireVariant_MissingSource(t *testing.T) {
 	assert.True(t, errors.Is(err, os.ErrNotExist), "error should wrap os.ErrNotExist, got %v", err)
 }
 
-func TestAcquireVariant_RawPassthrough(t *testing.T) {
-	// webp + 无宽度参数 → 直接返回原始文件（现状行为原样搬移）
+func TestAcquireVariant_ZeroWidthWebPStillTranscodes(t *testing.T) {
+	// width=0 且格式为 WebP 时也必须真正转码：源图可能不是 WebP，
+	// 直接返回源文件会把非 WebP 字节标成 image/webp
 	processor := &fakeProcessor{result: []byte("out")}
 	c := newTestCoordinator(processor)
 	stop := startWorkers(t, c)
@@ -237,7 +236,38 @@ func TestAcquireVariant_RawPassthrough(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, file)
 
-	assert.Empty(t, processor.calls, "raw passthrough must not invoke processor")
+	assert.Equal(t, 1, len(processor.calls), "zero-width webp must invoke processor")
+}
+
+func TestCachedVariant_DoesNotProcessSource(t *testing.T) {
+	// 只查缓存：命中返回缓存句柄，未命中返回 nil，两者都不得触发转码
+	processor := &fakeProcessor{result: []byte("out")}
+	c := newTestCoordinator(processor)
+	stop := startWorkers(t, c)
+	defer stop()
+
+	src := filepath.Join(t.TempDir(), "a.png")
+	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
+
+	spec, err := NewSpec(1024, ImageFormatAVIF)
+	require.NoError(t, err)
+
+	// 未命中
+	cached, err := c.CachedVariant(context.Background(), src, spec)
+	require.NoError(t, err)
+	assert.Nil(t, cached, "empty cache should miss")
+	assert.Empty(t, processor.calls, "cache lookup must not transcode")
+
+	// 预热后命中
+	file, err := c.Acquire(context.Background(), src, spec, PrioLow)
+	require.NoError(t, err)
+	require.NotNil(t, file)
+	require.Equal(t, 1, len(processor.calls))
+
+	cached, err = c.CachedVariant(context.Background(), src, spec)
+	require.NoError(t, err)
+	require.NotNil(t, cached, "warmed cache should hit")
+	assert.Equal(t, 1, len(processor.calls), "cache lookup must not transcode")
 }
 
 func TestVariantKey_StableAndDistinct(t *testing.T) {

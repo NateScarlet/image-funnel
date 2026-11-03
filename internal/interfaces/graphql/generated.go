@@ -3385,7 +3385,7 @@ type Image implements Node @goModel(model: "main/internal/shared.ImageDTO") {
   filename: String!
   "文件大小（字节）"
   size: Int!
-  "带签名的缩略图URL，可选参数 width（仅当小于原图宽度时生效），格式由 Accept 头协商，画质由服务端编码器配置决定"
+  "带签名的缩略图URL。可选参数 width 表示期望的最大宽度（不会放大）；格式由 Accept 头协商，画质由服务端编码器配置决定"
   url(width: Int): URI!
   "带签名的原始图片URL（无缩放）"
   rawURL: URI!
@@ -26333,13 +26333,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
-	var res enum.Enum[shared.ImageActionMeta]
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
+	var res shared.ImageAction
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
 	return v
 }
 

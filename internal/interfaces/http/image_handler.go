@@ -6,11 +6,13 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
 
 	appimage "main/internal/application/image"
+	"main/internal/domain/relpath"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/util"
 
@@ -21,24 +23,20 @@ import (
 // GET 取回内容；两者共用同一签名 URL
 func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 
-// formatDecision 格式决策结果
+// formatDecision 一次请求的响应形态：要么重定向到 raw URL，要么转码为本字段指定的格式
 type formatDecision struct {
-	format        appimage.ImageFormat // 0 表示返回原图
-	serveOriginal bool
-	contentType   string // 原图的 MIME 类型（仅当 serveOriginal=true 时有效）
-	sourceWidth   int    // 源图宽度（用于缓存键计算）
+	redirectToRaw bool
+	format        appimage.ImageFormat
 }
 
 func handleImage(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
 	coordinator *appimage.TranscodeCoordinator,
+	probe appimage.SourceProbe,
 	absRootDir string,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// 所有响应都加上 Vary: Accept，保证缓存正确性（含错误响应）
-		w.Header().Set("Vary", "Accept")
-
 		// 验签先于一切响应分支：签名是 /image 的唯一信任边界（该端点无登录态），
 		// 包括 304 短路在内都不得绕过它。
 		//
@@ -55,72 +53,102 @@ func handleImage(
 			return
 		}
 
+		// 参数解析必须先于 304 短路：Vary 是否设置取决于 raw 是否出现
+		query := r.URL.Query()
+		raw := query.Has("raw")
+		hasWidth := query.Has("w")
+
+		// raw 直接返回源文件，内容与 Accept 无关，因此不参与内容协商缓存的分叉
+		if !raw {
+			w.Header().Set("Vary", "Accept")
+		}
+
 		const etag = `"immutable"`
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
 
-		query := r.URL.Query()
-		widthStr := query.Get("w")
-		raw := query.Has("raw")
-
-		// 未知/多余参数无需校验：签名覆盖签名之后的整个原始字符串，
-		// 任何未参与生成的参数（含 fmt、q）在验签阶段即已失败
-
 		// raw 与 width 是两个已签名参数的语义矛盾（宽高变体 vs 原图），
 		// 属生成侧错误，静默取舍会掩盖 bug
-		if raw && widthStr != "" {
+		if raw && hasWidth {
 			http.Error(w, "raw parameter cannot be combined with width", http.StatusBadRequest)
 			return
 		}
 
 		absPath := relPath.Abs(absRootDir)
 
-		// 读取源图元数据（宽度、高度），用于决定是否需要缩放
-		meta, err := coordinator.Meta(r.Context(), absPath)
+		// raw 是唯一直接返回全尺寸字节的入口：一次打开并嗅探 MIME 即可服务，
+		// 不读取宽度（源图尺寸能否解码与 raw 无关）
+		if raw {
+			source, err := probe.Open(absPath)
+			if err != nil {
+				handleAcquireError(w, logger, err)
+				return
+			}
+			defer source.Reader.Close()
+			serveOriginal(w, r, source.ContentType, relPath.Base(), source.Reader)
+			return
+		}
+
+		// 未指定 w 表示全尺寸诉求（width=0）；显式的 0、负数与非数字都是错误，
+		// 不得像旧实现那样静默退化为「返回原图」
+		width := 0
+		if hasWidth {
+			width, err = strconv.Atoi(query.Get("w"))
+			if err != nil || width <= 0 {
+				http.Error(w, "width parameter must be a positive integer", http.StatusBadRequest)
+				return
+			}
+		}
+
+		accept := r.Header.Get("Accept")
+		format := negotiateFormat(accept)
+
+		// w>0 时先只查变体缓存：命中即服务，整个过程不打开源图
+		if width > 0 {
+			spec, err := appimage.NewSpec(width, format)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			file, err := coordinator.CachedVariant(r.Context(), absPath, spec)
+			if err != nil {
+				handleAcquireError(w, logger, err)
+				return
+			}
+			if file != nil {
+				if err := serveVariantFile(w, r, format, relPath.Base(), file); err != nil {
+					handleAcquireError(w, logger, err)
+				}
+				return
+			}
+		}
+
+		// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
+		source, err := probe.Probe(r.Context(), absPath)
 		if err != nil {
 			handleAcquireError(w, logger, err)
 			return
 		}
-		sourceWidth := meta.Width
+		defer source.Reader.Close()
 
-		width := 0
-		if widthStr != "" {
-			if w, err := strconv.Atoi(widthStr); err == nil {
-				width = w
-			}
-		}
-
-		// 根据 Accept 头决定格式
-		decision := decideFormat(r, absPath, relPath.Base(), width, sourceWidth)
-
-		if decision.serveOriginal || raw {
-			// 直接返回原图（raw=true 或 无需转码时）
-			file, err := os.Open(absPath)
-			if err != nil {
+		decision := decideFormat(accept, width, source.Width, util.Accepts(accept, source.ContentType))
+		if decision.redirectToRaw {
+			if err := redirectToRaw(w, signer, relPath, query); err != nil {
 				handleAcquireError(w, logger, err)
-				return
 			}
-			defer file.Close()
-
-			// 使用共享读取器检测 MIME 类型（读取前 512 字节）
-			contentType, _, err := util.DetectContentType(file, relPath.Base())
-			if err != nil {
-				handleAcquireError(w, logger, err)
-				return
-			}
-			// 回退到文件开头用于服务
-			if _, err := file.Seek(0, io.SeekStart); err != nil {
-				handleAcquireError(w, logger, err)
-				return
-			}
-			serveOriginal(w, r, contentType, relPath.Base(), file)
 			return
 		}
 
-		// 需要转码：创建 Spec 并获取变体
-		spec, err := appimage.NewSpec(width, decision.format)
+		// 有效宽度取 min(w, 源宽)：源图更窄时不放大，也让所有 w >= 源宽的请求
+		// 收敛到同一份缓存产物。宽度未知（0）时保持 w，由编码器自身的上限保证不放大
+		effectiveWidth := width
+		if width > 0 && source.Width > 0 && width > source.Width {
+			effectiveWidth = source.Width
+		}
+
+		spec, err := appimage.NewSpec(effectiveWidth, decision.format)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -138,54 +166,60 @@ func handleImage(
 			handleAcquireError(w, logger, err)
 			return
 		}
-		reader, err := file.Open()
-		if err != nil {
+		if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
 			handleAcquireError(w, logger, err)
-			return
 		}
-		defer reader.Close()
-		serveVariant(w, r, decision.format, relPath.Base(), reader)
 	}
 }
 
-// decideFormat 根据 Accept 头、请求参数和源图信息决定返回格式
-// 返回的 formatDecision 中如果 serveOriginal=true，则 contentType 为源图 MIME
-func decideFormat(r *http.Request, absPath, filename string, width, sourceWidth int) formatDecision {
-	accept := r.Header.Get("Accept")
-
-	// 是否需要缩放：仅当显式指定宽度且小于源图宽度时才需要。
-	// 画质不参与该判断——转码与否本质是分辨率问题，画质由编码器统一配置
-	needsResize := width > 0 && width < sourceWidth
-
-	// 无需缩放时尝试返回原图，前提是源图 MIME 被客户端接受（判定不限于受支持的输出格式）
-	if !needsResize {
-		// 检测源图 MIME 类型
-		file, err := os.Open(absPath)
-		if err == nil {
-			contentType, _, err := util.DetectContentType(file, filename)
-			file.Close()
-			if err == nil && util.Accepts(accept, contentType) {
-				return formatDecision{
-					serveOriginal: true,
-					contentType:   contentType,
-					sourceWidth:   sourceWidth,
-				}
-			}
-		}
+// decideFormat 根据请求宽度、源图宽度与源图 MIME 是否被接受，决定响应形态。
+// width=0 表示未指定宽度（全尺寸诉求）；sourceWidth=0 表示源图宽度不可知，
+// 此时无法证明请求已覆盖全尺寸，只能转码
+func decideFormat(accept string, width, sourceWidth int, sourceAcceptable bool) formatDecision {
+	fullSize := width == 0 || (sourceWidth > 0 && width >= sourceWidth)
+	if fullSize && sourceAcceptable {
+		return formatDecision{redirectToRaw: true}
 	}
+	return formatDecision{format: negotiateFormat(accept)}
+}
 
-	// 需要转码：根据 Accept 优先级选择格式
+// negotiateFormat 根据 Accept 优先级选择转码目标格式
+func negotiateFormat(accept string) appimage.ImageFormat {
 	for _, pf := range util.PreferredImageFormats(accept) {
 		switch pf {
 		case "image/avif":
-			return formatDecision{format: appimage.ImageFormatAVIF, sourceWidth: sourceWidth}
+			return appimage.ImageFormatAVIF
 		case "image/webp":
-			return formatDecision{format: appimage.ImageFormatWebP, sourceWidth: sourceWidth}
+			return appimage.ImageFormatWebP
 		}
 	}
 
 	// 默认 WebP
-	return formatDecision{format: appimage.ImageFormatWebP, sourceWidth: sourceWidth}
+	return appimage.ImageFormatWebP
+}
+
+// redirectToRaw 让全尺寸诉求指向 raw URL：用请求自带的 t/s 现场签名，
+// 从而不会把磁盘现状（文件可能已变更）混入重定向目标
+func redirectToRaw(w http.ResponseWriter, signer *urlconv.Signer, relPath relpath.Path, query url.Values) error {
+	params := url.Values{}
+	params.Set("raw", "")
+	for _, key := range []string{"t", "s"} {
+		if value := query.Get(key); value != "" {
+			params.Set(key, value)
+		}
+	}
+
+	target, err := signer.SignURL(relPath, params)
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"immutable"`)
+	w.Header().Set("Location", target.String())
+	// 302 不写 body；HEAD 走同一分支同样只有响应头
+	w.WriteHeader(http.StatusFound)
+	return nil
 }
 
 // serveOriginal 返回原始图片文件
@@ -200,6 +234,17 @@ func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, filename
 	w.Header().Set("Content-Disposition", cd)
 
 	http.ServeContent(w, r, "", time.Now(), reader)
+}
+
+// serveVariantFile 打开缓存句柄并写出变体响应
+func serveVariantFile(w http.ResponseWriter, r *http.Request, format appimage.ImageFormat, filename string, file appimage.File) error {
+	reader, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	serveVariant(w, r, format, filename, reader)
+	return nil
 }
 
 // serveVariant 写出变体产物响应头与内容

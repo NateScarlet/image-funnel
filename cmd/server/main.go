@@ -110,6 +110,7 @@ func main() {
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor, avifProcessor)
 	retryProcessor := appimage.NewRetryProcessor(hybridProcessor, logger)
 	imageProcessor := appimage.NewTranscodeCoordinator(imageCache, retryProcessor, transcodeQueue, avifEncoderID, logger)
+	sourceProbe := appimage.NewSourceProbe(imageProcessor)
 	transcodeCtx, stopTranscodeWorkers := context.WithCancel(context.Background())
 	defer stopTranscodeWorkers()
 	imageProcessor.StartWorkers(transcodeCtx, int(cfg.MagickConcurrency))
@@ -417,6 +418,7 @@ func main() {
 		logger,
 		signer,
 		imageProcessor,
+		sourceProbe,
 		graphqlHandler,
 		gui,
 		cfg.AbsRootDir,
