@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from .filename_manager import FilenameManager
 from .model_format import format_workflow_prompt_pair
-from .output_directory import get_relative_output_dir
+from .output_directory import get_relative_output_dir, get_source_rel_dir
 from .png_metadata import load_prompt_and_workflow
 from .workflow_prompt_pair import WorkflowPromptPair
 
@@ -65,9 +65,10 @@ def prepare_workflow(
         rel_dir = get_relative_output_dir(
             image_path, comfyui_output_dir, hook_output_dir
         )
+        source_rel_dir = get_source_rel_dir(image_path, comfyui_output_dir)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, now
-        ).adjust_output_directory(rel_dir)
+        ).adjust_output_directory(rel_dir, source_rel_dir)
 
     # 所有输出路径统一按节点模型格式重排提示词（与入列、复制一致）
     format_workflow_prompt_pair(pair)

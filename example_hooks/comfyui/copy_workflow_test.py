@@ -98,6 +98,21 @@ class TestBuildCopyContent(unittest.TestCase):
             "A/B/C__D__%date:yyyyMMdd%image_",
         )
 
+    def test_strips_previous_output_directory_before_applying_target(self):
+        """目标目录与源图当前目录不同时，先剥离源图所在目录再拼新目标目录"""
+        workflow, prompt = _make_pair_fixture("A/B/C__D__image_")
+        request = CopyRequest(
+            image_paths=[r"C:\output\A\B\image.png"],
+            comfyui_output_dir="",
+            hook_output_dir="Z",
+        )
+        result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        content = json.loads(result.content)
+        self.assertEqual(content["nodes"][0]["widgets_values"][0], "Z/C__D__image_")
+
     def test_inherit_passthrough_original_workflow(self):
         """:inherit: 时完全关闭目录调整，复制原始未调整的工作流"""
         workflow, prompt = _make_pair_fixture("ComfyUI")

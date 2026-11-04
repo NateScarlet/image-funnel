@@ -9,7 +9,11 @@ from PIL import Image
 
 logging.disable(logging.CRITICAL)
 
-from .output_directory import get_relative_output_dir, resolve_output_rel_dir
+from .output_directory import (
+    get_relative_output_dir,
+    get_source_rel_dir,
+    resolve_output_rel_dir,
+)
 from .prompt_comment import strip_comments
 from .prompt_locator import (
     get_workflow_node_text,
@@ -472,7 +476,7 @@ class TestComfyUIHook(unittest.TestCase):
                     run_comfyui(mock_client, config)
                 self.assertEqual(cm.exception.code, 0)
 
-            fake_filename_mgr.adjust_output_directory.assert_called_once_with("b1")
+            fake_filename_mgr.adjust_output_directory.assert_called_once_with("b1", ".")
             self.assertIn("分支 b1", stdout.getvalue())
 
     def test_queue_post_commit_session_fetches_unlabeled_images(self):
@@ -583,6 +587,30 @@ class TestComfyUIOutputDirectory(unittest.TestCase):
         img_path = os.path.normpath("C:/project/output/sub1/image.png")
         rel_dir = get_relative_output_dir(img_path, "", "relative_override/sub")
         self.assertEqual(rel_dir, "relative_override/sub")
+
+    # #region 源图当前目录
+
+    def test_source_rel_dir_auto_find_output_dir(self):
+        img_path = os.path.normpath("C:/project/output/sub1/sub2/image.png")
+        self.assertEqual(get_source_rel_dir(img_path, ""), "sub1/sub2")
+
+    def test_source_rel_dir_image_at_output_root(self):
+        img_path = os.path.normpath("C:/project/output/image.png")
+        self.assertEqual(get_source_rel_dir(img_path, ""), ".")
+
+    def test_source_rel_dir_respects_explicit_output_dir(self):
+        img_path = os.path.normpath("C:/custom_output/my_project/image.png")
+        self.assertEqual(
+            get_source_rel_dir(img_path, os.path.normpath("C:/custom_output")),
+            "my_project",
+        )
+
+    def test_source_rel_dir_missing_output_dir_raises(self):
+        img_path = os.path.normpath("C:/project/no_out_dir/image.png")
+        with self.assertRaises(ValueError):
+            get_source_rel_dir(img_path, "")
+
+    # #endregion
 
     # #region --branch 落盘目录
 

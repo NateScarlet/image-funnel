@@ -16,7 +16,7 @@ import socket
 import tempfile
 import http.server
 import threading
-from typing import Any, Dict, List, Optional, cast, Type
+from typing import Any, Dict, List, Optional, Tuple, cast, Type
 from unittest.mock import patch
 from PIL import Image
 
@@ -2479,7 +2479,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("sub1/sub2")
+        ).adjust_output_directory("sub1/sub2", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
@@ -2503,7 +2503,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("sub")
+        ).adjust_output_directory("sub", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "sub/ComfyUI")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "sub/ComfyUI")
 
@@ -2527,7 +2527,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("A/B")
+        ).adjust_output_directory("A/B", "A/B")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__image_")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__image_")
 
@@ -2551,7 +2551,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("A/B")
+        ).adjust_output_directory("A/B", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "A/B/C__D__image_")
 
@@ -2575,7 +2575,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("A/B")
+        ).adjust_output_directory("A/B", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__image_")
 
     def test_adjust_output_directory_preserves_literal_double_underscore(self):
@@ -2598,7 +2598,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("X")
+        ).adjust_output_directory("X", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], "X/a____b")
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], "X/a____b")
 
@@ -2622,7 +2622,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("A/B")
+        ).adjust_output_directory("A/B", "")
         self.assertEqual(
             prompt["9"]["inputs"]["filename_prefix"], "A/B/C__D__E__image_"
         )
@@ -2650,7 +2650,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("A/B")
+        ).adjust_output_directory("A/B", "")
         self.assertEqual(
             workflow["nodes"][0]["widgets_values"][0],
             "A/B/C__D__%date:yyyyMMdd_hhmmss%",
@@ -2679,11 +2679,127 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         }
         pair = WorkflowPromptPair(workflow, prompt)
         mgr = FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node, _NOW)
-        mgr.adjust_output_directory("A/B")
+        mgr.adjust_output_directory("A/B", "")
         first = prompt["9"]["inputs"]["filename_prefix"]
-        mgr.adjust_output_directory("A/B")
+        mgr.adjust_output_directory("A/B", "")
         self.assertEqual(prompt["9"]["inputs"]["filename_prefix"], first)
         self.assertEqual(workflow["nodes"][0]["widgets_values"][0], first)
+
+    # #region 上一代目标目录剥离与扁平主体长度上限
+
+    def _adjust_prefix(
+        self, prefix: str, rel_dir: str, source_rel_dir: str
+    ) -> Tuple[str, str]:
+        """用单节点 SaveImage 执行一次目录调整，返回 (workflow 前缀, prompt 前缀)"""
+        workflow = {
+            "nodes": [
+                {"id": "9", "type": "SaveImage", "widgets_values": [prefix]},
+            ]
+        }
+        prompt = {
+            "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": prefix}}
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        FilenameManager(
+            pair, pair.date_filename_nodes, pair.title_to_node, _NOW
+        ).adjust_output_directory(rel_dir, source_rel_dir)
+        return (
+            workflow["nodes"][0]["widgets_values"][0],
+            prompt["9"]["inputs"]["filename_prefix"],
+        )
+
+    def test_adjust_output_directory_branch_chain_strips_previous_target(self):
+        """连续 branch 时主体恒为最原始数据，不累积上一代目标目录"""
+        cases = [
+            ("C/D/image_", "A/B", "A/B", "A/B/C__D__image_"),
+            ("A/B/C__D__image_", "A/B,b1", "A/B", "A/B,b1/C__D__image_"),
+            (
+                "A/B,b1/C__D__image_",
+                "A/B,b1,b2",
+                "A/B,b1",
+                "A/B,b1,b2/C__D__image_",
+            ),
+            (
+                "A/B,b1,b2/C__D__image_",
+                "A/B,b1,b2,b3",
+                "A/B,b1,b2",
+                "A/B,b1,b2,b3/C__D__image_",
+            ),
+        ]
+        for prefix, rel_dir, source_rel_dir, expected in cases:
+            with self.subTest(rel_dir=rel_dir):
+                wf_prefix, prompt_prefix = self._adjust_prefix(
+                    prefix, rel_dir, source_rel_dir
+                )
+                self.assertEqual(prompt_prefix, expected)
+                self.assertEqual(wf_prefix, expected)
+
+    def test_adjust_output_directory_manual_move_keeps_old_directory(self):
+        """图片被手工移走后旧目录并入主体而非被丢弃；再次入列保持稳定"""
+        wf_prefix, prompt_prefix = self._adjust_prefix("A/B/C__D__image_", "Z", "Z")
+        expected = "Z/A__B__C__D__image_"
+        self.assertEqual(prompt_prefix, expected)
+        self.assertEqual(wf_prefix, expected)
+        # 紧接着再次入列：前缀已是上一次结果，不应继续增长
+        wf_prefix, prompt_prefix = self._adjust_prefix(expected, "Z", "Z")
+        self.assertEqual(prompt_prefix, expected)
+        self.assertEqual(wf_prefix, expected)
+
+    def test_adjust_output_directory_only_strips_source_dir(self):
+        """只有源图当前目录可被剥离：源图在输出根或目录不匹配时保留全部原有层级"""
+        for source_rel_dir in (".", "A/B"):
+            with self.subTest(source_rel_dir=source_rel_dir):
+                wf_prefix, prompt_prefix = self._adjust_prefix(
+                    "Z/C/D/image_", "Z", source_rel_dir
+                )
+                self.assertEqual(prompt_prefix, "Z/Z__C__D__image_")
+                self.assertEqual(wf_prefix, "Z/Z__C__D__image_")
+
+    @unittest.skipUnless(os.name == "nt", "目录比较不区分大小写只在 Windows 生效")
+    def test_adjust_output_directory_source_dir_compare_is_case_insensitive(self):
+        """Windows 下源目录比较不区分大小写，剩余部分的原始大小写保留"""
+        wf_prefix, prompt_prefix = self._adjust_prefix("A/B/C__D__image_", "a/b", "A/B")
+        self.assertEqual(prompt_prefix, "a/b/C__D__image_")
+        self.assertEqual(wf_prefix, "a/b/C__D__image_")
+
+    def test_adjust_output_directory_flat_body_at_limit_is_kept(self):
+        """扁平主体恰好达到上限时不截断"""
+        body = "x" * 50 + "__" + "y" * 48
+        self.assertEqual(len(body), 100)
+        wf_prefix, prompt_prefix = self._adjust_prefix(body, "A", "")
+        self.assertEqual(prompt_prefix, f"A/{body}")
+        self.assertEqual(wf_prefix, f"A/{body}")
+
+    def test_adjust_output_directory_truncates_head_segments(self):
+        """超过上限时按 __ 段从头部整段丢弃，保留尾部信息"""
+        body = "a" * 10 + "__" + "b" * 60 + "__" + "c" * 60
+        wf_prefix, prompt_prefix = self._adjust_prefix(body, "A", "")
+        self.assertEqual(prompt_prefix, "A/" + "c" * 60)
+        self.assertEqual(wf_prefix, "A/" + "c" * 60)
+
+    def test_adjust_output_directory_truncates_long_last_segment_keeping_tail(self):
+        """最后一段自身超过上限时按字符截头保尾"""
+        wf_prefix, prompt_prefix = self._adjust_prefix("x" * 150, "A", "")
+        self.assertEqual(prompt_prefix, "A/" + "x" * 100)
+        self.assertEqual(wf_prefix, "A/" + "x" * 100)
+
+    def test_adjust_output_directory_does_not_split_placeholder_on_segment_drop(self):
+        """占位符内部的 __ 不是段界：丢弃头部段时不会留下残缺的 %...%"""
+        body = "a" * 10 + "__" + "%date:yyyy__MMdd%" + "__" + "b" * 90
+        wf_prefix, prompt_prefix = self._adjust_prefix(body, "A", "")
+        self.assertEqual(wf_prefix, "A/" + "b" * 90)
+        self.assertEqual(prompt_prefix, "A/" + "b" * 90)
+
+    def test_adjust_output_directory_never_cuts_template_placeholder(self):
+        """字符截断点落在占位符内部时保留原样，宁可超长"""
+        body = "x" * 41 + "%date:yyyyMMdd_hhmmss%" + "y" * 85
+        wf_prefix, prompt_prefix = self._adjust_prefix(body, "A", "")
+        # workflow 保留完整模板（未截断），prompt 为同一模板的求值快照
+        self.assertEqual(wf_prefix, f"A/{body}")
+        self.assertGreater(len(wf_prefix), 100)
+        self.assertRegex(prompt_prefix, r"^A/x{41}20260601_120000y{85}$")
+
+    # #endregion
 
     def test_adjust_output_directory_primitive_connection(self):
         workflow = {
@@ -2702,7 +2818,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("sub1/sub2")
+        ).adjust_output_directory("sub1/sub2", "")
         self.assertEqual(prompt["2"]["inputs"]["value"], "sub1/sub2/ComfyUI")
         self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "sub1/sub2/ComfyUI")
 
@@ -2749,7 +2865,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewProject/NewTitle")
+        ).adjust_output_directory("NewProject/NewTitle", "")
 
         # 源节点在 prompt 中的 input 值被更新
         self.assertEqual(prompt["2"]["inputs"]["value"], "NewProject")
@@ -2801,7 +2917,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("MyProj/MyTitle")
+        ).adjust_output_directory("MyProj/MyTitle", "")
         # 值不变
         self.assertEqual(prompt["2"]["inputs"]["value"], "MyProj")
         self.assertEqual(prompt["3"]["inputs"]["value"], "MyTitle")
@@ -2848,7 +2964,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
 
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("SingleDir")
+        ).adjust_output_directory("SingleDir", "")
         # prompt 中简单模板求值，空变量（Title 为空）残留连续 __
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
@@ -2897,7 +3013,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("TODO")
+        ).adjust_output_directory("TODO", "")
 
         # 已直接落在目标目录：prompt、workflow、源节点值均不修改
         self.assertEqual(
@@ -2931,7 +3047,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewProj")
+        ).adjust_output_directory("NewProj", "")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
             r"NewProj/%Project\.value%__\d{8}_\d{6}",
@@ -2974,7 +3090,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewProj/NewTitle")
+        ).adjust_output_directory("NewProj/NewTitle", "")
         self.assertRegex(
             prompt["1"]["inputs"]["filename_prefix"],
             r"NewProj/NewTitle/TODO__%Title\.value%__\d{8}_\d{6}",
@@ -3030,7 +3146,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewProj/NewTitle")
+        ).adjust_output_directory("NewProj/NewTitle", "")
         # 源节点得到 rel_dir + 拍平后的静态前缀（无模板可用，走简单回退）
         self.assertEqual(
             prompt["5"]["inputs"]["value"],
@@ -3097,7 +3213,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("MyProj/MyTitle")
+        ).adjust_output_directory("MyProj/MyTitle", "")
         # 模板变量被更新
         self.assertEqual(prompt["6"]["inputs"]["value"], "MyTitle")
         self.assertEqual(prompt["7"]["inputs"]["value"], "MyProj")
@@ -3220,7 +3336,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewTitle")
+        ).adjust_output_directory("NewTitle", "")
 
         # 1. 验证 prompt 被更新
         self.assertEqual(prompt["309:291"]["inputs"]["value"], "NewTitle")
@@ -3302,7 +3418,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         pair = WorkflowPromptPair(workflow, prompt)
         FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-        ).adjust_output_directory("NewProject/NewTitle")
+        ).adjust_output_directory("NewProject/NewTitle", "")
 
         # 验证主图 Node 309 实例 widgets_values 被扩展填充，且前置默认值与目标值正确设置
         self.assertEqual(
@@ -3372,7 +3488,7 @@ class TestAdjustOutputDirectory(unittest.TestCase):
         with self.assertRaises(ValueError):
             FilenameManager(
                 pair, pair.date_filename_nodes, pair.title_to_node, _NOW
-            ).adjust_output_directory("NewTitle")
+            ).adjust_output_directory("NewTitle", "")
 
 
 # #endregion

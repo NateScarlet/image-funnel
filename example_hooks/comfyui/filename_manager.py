@@ -12,11 +12,19 @@ FilenameManager：管理 ComfyUI 工作流中的输出文件名更新和目录�
 """
 
 import datetime
+import os
 import re
 from typing import Dict, List, Any, Optional, Tuple
 
 from .node_accessor import NodeAccessor
 from .prompt_locator import find_terminal_input, NodeInfo
+
+# 扁平文件名主体的长度上限：目标目录之外的层级全部拍平进该主体，
+# 过长的前缀会让 ComfyUI 网页端无法处理（分支反复调整时尤其明显）
+MAX_FLAT_NAME_LENGTH = 100
+
+# 模板占位符：截断时不得从内部切断
+_PLACEHOLDER_PATTERN = re.compile(r"%[^%]+%")
 
 
 class FilenameManager:
@@ -191,11 +199,13 @@ class FilenameManager:
                             )
                             src_inputs[src_key] = new_prefix
 
-    def adjust_output_directory(self, rel_dir: str) -> None:
+    def adjust_output_directory(self, rel_dir: str, source_rel_dir: str) -> None:
         """
         根据相对路径 rel_dir 调整所有输出节点的 filename_prefix，使输出文件总是
         直接落在 rel_dir 下，不创建任何子目录：rel_dir 之外的目录层级（字面目录、
         模板变量之间的分隔符）统一拍平为 __ 连接的文件名前缀。
+        source_rel_dir 是源图当前所在目录（相对输出根目录），用于先剥离上一代目标
+        目录，避免反复调整时把历史目录一代代累积进文件名。
         唯一的例外是模板中的非日期变量与 rel_dir 分段一一对应：此时变量值本身
         充当 rel_dir 路径（如 %Project.value%/%Title.value% 对应 NewProject/NewTitle），
         分隔符保留。
@@ -287,7 +297,9 @@ class FilenameManager:
                             continue
 
                 # 无法通过变量映射 rel_dir：调整模板使其直接落在 rel_dir 下
-                new_template = self._adjust_with_rel_dir(rel_dir, wf_template)
+                new_template = self._adjust_with_rel_dir(
+                    rel_dir, source_rel_dir, wf_template
+                )
                 if terminal_info and terminal_info.widgets_values:
                     for idx, val in enumerate(terminal_info.widgets_values):
                         if isinstance(val, str) and "%" in val:
@@ -300,7 +312,7 @@ class FilenameManager:
                 continue
 
             # 无模板：整个前缀视为静态路径，调整使其直接落在 rel_dir 下
-            new_val = self._adjust_with_rel_dir(rel_dir, original_val)
+            new_val = self._adjust_with_rel_dir(rel_dir, source_rel_dir, original_val)
             src_inputs[src_key] = new_val
 
             wf_src_info = self._accessor.get_node_by_id(src_node_id)
@@ -310,18 +322,84 @@ class FilenameManager:
                         wf_src_info.widgets_values[idx] = new_val
 
     @staticmethod
-    def _adjust_with_rel_dir(rel_dir: str, value: str) -> str:
+    def _adjust_with_rel_dir(rel_dir: str, source_rel_dir: str, value: str) -> str:
         """
         调整 value 使其直接落在 rel_dir 下：rel_dir 前缀保留为真实目录，
-        rel_dir 之外的所有目录层级拍平为 __ 连接。
-        rel_dir 为 . 或空时只拍平不拼前缀。
+        rel_dir 之外的所有目录层级拍平为 __ 连接，扁平主体受长度上限约束。
+        value 开头若是源图当前目录（上一代目标目录）则先剥离，避免历史目录累积；
+        只按源目录剥离：源图在输出根或目录不匹配时，原有层级全部保留。
+        rel_dir 为 . 或空时只剥离、拍平，不拼前缀。
         """
+        normalized = re.sub(r"[\\/]+", "/", value)
+        rest = FilenameManager._strip_dir_prefix(normalized, source_rel_dir)
+        if rest is None:
+            rest = normalized
+
+        flat = FilenameManager._limit_flat_name_length(
+            FilenameManager._flatten_path_segments(rest)
+        )
         if not rel_dir or rel_dir == ".":
-            return FilenameManager._flatten_path_segments(value)
-        prefix = f"{rel_dir}/"
-        if value.startswith(prefix):
-            return prefix + FilenameManager._flatten_path_segments(value[len(prefix) :])
-        return prefix + FilenameManager._flatten_path_segments(value)
+            return flat
+        return f"{rel_dir}/{flat}"
+
+    @staticmethod
+    def _strip_dir_prefix(value: str, dir_path: str) -> Optional[str]:
+        """
+        若 value 以 dir_path 加一个目录分隔符开头，返回剥离该前缀后的剩余部分。
+
+        value 需已归一化为 / 分隔。Windows 下目录比较不区分大小写（os.path.normcase），
+        剩余部分保留原始大小写。dir_path 为输出根目录（. 或空）时不剥离。
+        """
+        normalized_dir = dir_path.replace("\\", "/").strip("/")
+        if not normalized_dir or normalized_dir == ".":
+            return None
+        prefix_length = len(normalized_dir) + 1
+        candidate = value[:prefix_length]
+        if os.path.normcase(candidate) == os.path.normcase(f"{normalized_dir}/"):
+            return value[prefix_length:]
+        return None
+
+    @staticmethod
+    def _limit_flat_name_length(value: str) -> str:
+        """
+        把扁平主体限制在 MAX_FLAT_NAME_LENGTH 内。
+
+        超限时按 __ 段从头部整段丢弃直到不超限；若最后一段本身仍超限，
+        再对该段按字符截头保尾。截断点落在 %...% 模板占位符内部时保留原样：
+        无法在不破坏占位符的前提下满足上限，宁可超长。
+        """
+        if len(value) <= MAX_FLAT_NAME_LENGTH:
+            return value
+
+        # 从头部按 __ 段丢弃；位于占位符内部的 __ 不是段界，避免把占位符拆成残片
+        segment_start = 0
+        search_from = 0
+        while len(value) - segment_start > MAX_FLAT_NAME_LENGTH:
+            separator = value.find("__", search_from)
+            if separator == -1:
+                break
+            if FilenameManager._is_inside_placeholder(value, separator):
+                search_from = separator + 2
+                continue
+            segment_start = separator + 2
+            search_from = segment_start
+        body = value[segment_start:]
+        if len(body) <= MAX_FLAT_NAME_LENGTH:
+            return body
+
+        cut = len(body) - MAX_FLAT_NAME_LENGTH
+        for match in _PLACEHOLDER_PATTERN.finditer(body):
+            if match.start() < cut < match.end():
+                return body
+        return body[cut:]
+
+    @staticmethod
+    def _is_inside_placeholder(value: str, index: int) -> bool:
+        """判断位置是否落在某个 %...% 占位符内部"""
+        return any(
+            match.start() < index < match.end()
+            for match in _PLACEHOLDER_PATTERN.finditer(value)
+        )
 
     @staticmethod
     def _flatten_path_segments(value: str) -> str:

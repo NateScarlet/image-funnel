@@ -13,7 +13,7 @@ import logging
 import argparse
 
 from graphql_utils import GraphQLClient, progress_notification
-from .output_directory import resolve_output_rel_dir
+from .output_directory import get_source_rel_dir, resolve_output_rel_dir
 from .png_metadata import load_prompt_and_workflow
 from .workflow_prompt_pair import WorkflowPromptPair
 from .filename_manager import FilenameManager
@@ -246,7 +246,9 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                         "HOOK_OUTPUT_DIR is ':inherit:', skipping output directory adjustment."
                     )
                 else:
-                    filename_mgr.adjust_output_directory(rel_dir)
+                    # 源图当前目录用于剥离上一代目标目录；只在实际调整时才推算
+                    source_rel_dir = get_source_rel_dir(path, config.comfyui_output_dir)
+                    filename_mgr.adjust_output_directory(rel_dir, source_rel_dir)
 
                 # 所有输出路径统一按节点模型格式重排提示词（与 adjust_output_dir 同位置、全命令覆盖）
                 format_workflow_prompt_pair(pair)

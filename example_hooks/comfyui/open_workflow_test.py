@@ -127,6 +127,22 @@ class TestOpenWorkflow(unittest.TestCase):
             delivered["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI"
         )
 
+    def test_strips_previous_output_directory_before_applying_target(self):
+        """与复制增强一致：先剥离源图所在目录，再拼本次目标目录"""
+        workflow, prompt = _make_pair_fixture("A/B/C__D__image_")
+        sent, send = _make_sender()
+        _, activate = _make_activation()
+
+        open_workflow(
+            _make_request(r"C:\output\A\B\image.png", "Z"),
+            _make_loader(prompt, workflow),
+            send,
+            activate,
+            _NOW,
+        )
+
+        self.assertEqual(sent[0][1]["nodes"][0]["widgets_values"][0], "Z/C__D__image_")
+
     def test_inherit_passthrough_original_workflow(self):
         """:inherit: 时完全关闭目录调整，原样送达工作流"""
         workflow, prompt = _make_pair_fixture("ComfyUI")

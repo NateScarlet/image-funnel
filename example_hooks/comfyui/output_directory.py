@@ -89,6 +89,19 @@ def get_relative_output_dir(
     return rel_dir
 
 
+def get_source_rel_dir(image_path: str, comfyui_output_dir_env: str) -> str:
+    """返回源图当前所在目录相对 ComfyUI 输出根目录的路径（使用正斜杠）。
+
+    用于在调整输出目录前剥离上一代目标目录；图片位于输出根目录时返回 "."。
+    路径校验失败或找不到输出根目录时抛出 ValueError。
+    """
+    comfyui_output_dir = _resolve_comfyui_output_dir(image_path, comfyui_output_dir_env)
+    rel_dir = os.path.relpath(
+        os.path.dirname(os.path.abspath(image_path)), comfyui_output_dir
+    )
+    return rel_dir.replace("\\", "/")
+
+
 def get_branch_output_rel_dir(
     image_path: str, comfyui_output_dir_env: str, suffix: str
 ) -> str:
@@ -97,10 +110,7 @@ def get_branch_output_rel_dir(
     图片所在的目录层级同样相对 ComfyUI 输出根目录计算，因此根目录下的图得到
     `<suffix>`，子目录下的图得到同级 `<当前目录名>,<suffix>`。
     """
-    comfyui_output_dir = _resolve_comfyui_output_dir(image_path, comfyui_output_dir_env)
-    image_dir_rel_path = os.path.relpath(
-        os.path.dirname(os.path.abspath(image_path)), comfyui_output_dir
-    )
+    image_dir_rel_path = get_source_rel_dir(image_path, comfyui_output_dir_env)
     if image_dir_rel_path == ".":
         image_dir_rel_path = ""
 
