@@ -9,6 +9,17 @@ vi.mock("./client", () => ({
 import { getValidToken, tokenStore } from "./tokenManager";
 import { CombinedGraphQLErrors } from "@apollo/client/errors";
 
+// jsdom 未实现 Web Locks API，生产代码会退化为基于 localStorage 的轮询锁。
+// 该锁键与其他并行测试文件的 localStorage.clear() 共用同一份存储，偶发被清掉
+// 后抛出「lock ... stolen during execution」。这里注入立即授予的锁实现，让测试
+// 只验证刷新契约，不依赖真实的轮询计时与跨文件共享的存储状态。
+Object.defineProperty(navigator, "locks", {
+  configurable: true,
+  value: {
+    request: <T>(_name: string, callback: () => Promise<T>): Promise<T> => callback(),
+  },
+});
+
 // 令牌临期（少于 2 分钟）时 getValidToken 会触发刷新
 function seedExpiringTokens() {
   tokenStore.value = {
