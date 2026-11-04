@@ -6,12 +6,14 @@ command = "uv run runner.py comfyui remix"
 [directive]
 name = "remix"
 usage = """
-/remix [--add <tag>...] [--remove <tag>...] [--remove-again] [--branch <suffix>] [--lora <name> <weight>] [--cfg <weight>]... [--aspect <ratio>]... [--neg] [--region <region>]... [--node <node-id>]... [-S] [--keep] [--raw] [--hard] [--skip-add] [-u] [-j <N>]
-给当前目录所有 4 星图片的 ComfyUI 工作流应用全部编辑后入列生成。不带任何编辑项时等价于直接重新入列。
+/remix [--current] [--add <tag>...] [--remove <tag>...] [--remove-again] [--branch <suffix>] [--lora <name> <weight>] [--cfg <weight>]... [--aspect <ratio>]... [--neg] [--region <region>]... [--node <node-id>]... [-S] [--keep] [--raw] [--hard] [--skip-add] [-u] [-j <N>]
+给当前目录所有 4 星图片的 ComfyUI 工作流应用全部编辑后入列生成；指定 --current 时只处理笔记配套的当前图片。不带任何编辑项时等价于直接重新入列。
 在会话提交后触发，写入笔记时也触发，还可以手动通过笔记触发。
 
 多个各自产出多档的编辑之间取笛卡尔积，每个组合是一个独立变体、各自入列：
 `/remix --cfg 5:7:1 --aspect 16:9 --aspect 4:3` 产出 3×2=6 个变体。
+种子按 job 固定：job 1 沿用源图种子，job 2..N 各自取新种子，同一 job 内的所有变体共用该种子。
+多档变体不再自动换种子；需要更多噪波样本用 -j，需要 job 1 也换种子用 -u。
 
 编辑项：
 --add <tag>...       新增提示词，可多次指定。tag 含空格时用引号包裹（--add "long hair"），多个 tag 各自添加为一行
@@ -27,6 +29,8 @@ usage = """
 交换宽高（swap / exchange）、精确值（16:9）与常见比例序列。
 
 选项：
+--current            只处理笔记配套的当前图片（钩子上下文注入的图片），不按 HOOK_IMAGE_RATING 筛选；
+                     没有配套图片时报错并保留指令行，不会退回按评分批量处理
 --branch <suffix>    生成结果落到按 /branch 规则命名的新目录：根目录下为 <suffix>，子目录下为同级 <当前目录名>,<suffix>。
                      优先于 HOOK_OUTPUT_DIR（含 :inherit:）；目标目录已存在时正常写入。它不算编辑项：
                      仅带 --branch 而无其它编辑时仍受无改动跳过约束，需搭配 -S 才会重出
@@ -38,8 +42,8 @@ usage = """
 --raw                新增时不附加尾随逗号；移除时精确移除子串而不是整行
 --hard               移除时直接删除文本而不是注释掉（指定 --raw 时自动隐含）
 --skip-add           调权目标不存在时跳过添加，默认不存在时会添加
--u --update-seed     强制启用随机种子更新（多档变体或多次 job 时会自动启用）
--j --jobs <N>        每个变体发送工作流次数，默认使用 HOOK_JOBS 环境变量值
+-u --update-seed     强制每个 job 都更换种子（默认 job 1 沿用源图种子，job 2..N 各自更换）
+-j --jobs <N>        job 数，默认使用 HOOK_JOBS 环境变量值；每个 job 使用一份种子，同一 job 内的所有变体共用该种子
 移除动作没有范围概念：总是作用于所有 CLIPTextEncode 节点，--neg / --region / --node 对移除无效。
 未指定 --region 和 --node 时，新增优先插到本次移除唯一命中的那一行之后（原地替换），
 没有唯一命中时与调权一样默认使用 positive 区域（指定 --neg 时使用 negative 区域）。

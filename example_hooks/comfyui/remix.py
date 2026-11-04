@@ -78,6 +78,8 @@ class RemixRequest:
     keep: bool = False
     raw: bool = False
     hard: bool = False
+    # 只处理钩子上下文注入的配套图片：不参与编辑，只决定选图范围
+    current: bool = False
     # 新分支目录的后缀：只决定生成结果落到哪里，不改变提示词，因此不计入编辑项
     branch: Optional[str] = None
 
@@ -93,15 +95,6 @@ class RemixRequest:
             or self.cfgs
             or self.aspects
         )
-
-    @property
-    def edits_prompt_content(self) -> bool:
-        """是否改动了提示词内容（新增、移除、重放历史移除）而非纯参数调整。
-
-        内容一旦改动，用源图原种子提交就会得到与上一张重复的结果，因此这类编辑
-        必须更新种子；纯参数调整则相反，固定种子才便于对照。
-        """
-        return bool(self.add_tags or self.remove_tags or self.replay_removals)
 
     @property
     def targets_prompts(self) -> bool:
@@ -207,6 +200,7 @@ def from_args(args: argparse.Namespace) -> RemixRequest:
         keep=args.keep,
         raw=args.raw,
         hard=args.hard,
+        current=args.current,
         branch=_parse_branch_suffix(cast("Optional[str]", args.branch)),
     )
 

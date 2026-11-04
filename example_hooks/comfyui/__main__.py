@@ -22,6 +22,7 @@ from .prompt_locator import REGION_START_RE
 from .command_handlers import (
     COMMAND_HANDLERS,
     CommandContext,
+    SubmissionLedger,
     handle_set_model_format_cmd,
 )
 from .model_format import format_workflow_prompt_pair
@@ -74,6 +75,17 @@ def extract_lora_names(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
                 yield name_no_ext
 
 
+def _targets_from_config(config: ComfyUIConfig) -> List[Tuple[str, str]]:
+    """把钩子上下文注入的图片路径列表转成 (image_id, path) 目标。
+
+    image_id 缺失时留空，后续打标等依赖 ID 的操作自然跳过。
+    """
+    return [
+        (config.image_ids[idx] if idx < len(config.image_ids) else "", path)
+        for idx, path in enumerate(config.image_paths)
+    ]
+
+
 def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -> None:
     if config is None:
         config = ComfyUIConfig.from_env()
@@ -105,7 +117,16 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     # 汇总最终要处理 of (image_id, path) 列表
     targets: List[Tuple[str, str]] = []
-    if args.command == "remix":
+    if args.command == "remix" and request.current:
+        # --current 只处理钩子上下文注入的配套图片；缺失时直接报错中止，绝不退回
+        # 「目录 + 评分」批量取图，否则「只处理这一张」会静默变成批量处理
+        if not config.image_paths:
+            _write_action_override("KEEP", config.action_path)
+            raise ValueError(
+                "--current requires at least one companion image path from the hook context."
+            )
+        targets = _targets_from_config(config)
+    elif args.command == "remix":
         _LOGGER.debug(f"Command is {args.command}, fetching images via GraphQL...")
 
         directory_id = os.getenv("IMAGE_FUNNEL_DIRECTORY_ID")
@@ -135,9 +156,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         )
     elif config.image_paths:
         # queue 场景（手动派发或笔记触发）：使用传入的图片
-        for idx, path in enumerate(config.image_paths):
-            img_id = config.image_ids[idx] if idx < len(config.image_ids) else ""
-            targets.append((img_id, path))
+        targets = _targets_from_config(config)
 
     if max_match > 0 and len(targets) > max_match:
         _LOGGER.warning(
@@ -170,6 +189,9 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
 
     # 构建进度通知 tag
     progress_tag = str(uuid.uuid4())
+
+    # 一次 hook 执行共用一份提交台账：同一执行内完全相同的 prompt 只入列一次
+    submission_ledger = SubmissionLedger()
 
     # 根据命令构造频道和标题
     if args.command == "queue":
@@ -292,6 +314,7 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 history=op_history,
                 hook_name=config.hook_name,
                 baseline_prompt=baseline_prompt,
+                submission_ledger=submission_ledger,
                 now=now,
             )
             handler.run(ctx)
@@ -382,6 +405,12 @@ def get_parser() -> argparse.ArgumentParser:
         help="移除提示词，可多次指定；从所有 CLIPTextEncode 节点中移除",
     )
     remix_parser.add_argument(
+        "--current",
+        action="store_true",
+        help="只处理笔记配套的当前图片（钩子上下文注入的图片），不按 HOOK_IMAGE_RATING 筛选；"
+        "缺少配套图片时报错并保留指令行",
+    )
+    remix_parser.add_argument(
         "--branch",
         nargs="?",
         const=remix.BRANCH_VALUE_MISSING,
@@ -429,7 +458,8 @@ def get_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="N",
-        help="发送工作流次数，默认使用 HOOK_JOBS 环境变量值",
+        help="job 数，默认使用 HOOK_JOBS 环境变量值；每个 job 使用一份种子，"
+        "同一 job 内的所有变体共用该种子",
     )
     remix_parser.add_argument(
         "--neg",
@@ -474,7 +504,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--update-seed",
         "-u",
         action="store_true",
-        help="强制启用随机种子更新（在生成多个变体或多次 job 时会自动启用）",
+        help="强制每个 job 都更换种子（默认 job 1 沿用源图种子，job 2..N 各自更换）",
     )
     # 5. set-model-format
     set_fmt_parser = subparsers.add_parser(

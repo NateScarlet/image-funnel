@@ -193,6 +193,24 @@ class TestRemixBranch(unittest.TestCase):
         )
 
 
+class TestRemixCurrent(unittest.TestCase):
+    """`--current` 只决定选图范围，不算编辑项。"""
+
+    def test_current_flag_is_parsed(self) -> None:
+        self.assertTrue(_parse(["--current"]).current)
+
+    def test_current_is_not_an_edit(self) -> None:
+        self.assertFalse(_parse(["--current"]).has_edits)
+
+    def test_current_is_only_registered_on_remix(self) -> None:
+        """queue 不接受 `--current`：queue 的选图语义由触发场景决定。"""
+        with self.assertRaises(SystemExit):
+            get_parser().parse_args(["queue", "--current"])
+
+    def test_current_defaults_to_false(self) -> None:
+        self.assertFalse(_parse([]).current)
+
+
 class TestRemixVariantMatrix(unittest.TestCase):
     def _matrix(self, argv: List[str]) -> VariantMatrix:
         workflow, prompt = _workflow_and_prompt()

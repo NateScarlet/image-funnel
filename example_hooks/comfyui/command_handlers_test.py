@@ -23,7 +23,12 @@ from test_support import pin_tempdir
 pin_tempdir()
 
 from .__main__ import get_parser
-from .command_handlers import RemixHandler, CommandContext, _submit_jobs
+from .command_handlers import (
+    RemixHandler,
+    CommandContext,
+    SubmissionLedger,
+    _submit_pair,
+)
 from .filename_manager import FilenameManager
 from .model_format import ModelFormatConfig
 from .prompt_comment import strip_comments
@@ -45,6 +50,7 @@ def _context(
     request: RemixRequest,
     jobs: int = 1,
     history: Any = None,
+    ledger: Any = None,
 ) -> CommandContext:
     return CommandContext(
         img_id="img1",
@@ -60,6 +66,7 @@ def _context(
         hook_name="test_hook",
         # 基线在预处理完成之后、编辑之前取：测试里预处理只涉及日期求值，需先执行
         baseline_prompt=copy.deepcopy(prompt),
+        submission_ledger=ledger or SubmissionLedger(),
         now=_NOW,
     )
 
@@ -717,8 +724,10 @@ class TestRemixHandlerVariants(unittest.TestCase):
         )
 
     def test_jobs_multiplies_submissions(self) -> None:
-        """3 档 CFG × 2 个 job = 6 次提交。"""
-        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        """3 档 CFG × 2 个 job = 6 次提交；同一 job 内各变体共用该 job 的种子。"""
+        workflow, prompt = _workflow_and_prompt(
+            "masterpiece,", seed_strategy="randomize"
+        )
         ctx = _context(
             prompt,
             workflow,
@@ -732,7 +741,7 @@ class TestRemixHandlerVariants(unittest.TestCase):
         self.assertEqual(len(captured), 6)
         self.assertEqual(
             [sent_prompt["4"]["inputs"]["cfg"] for sent_prompt, _ in captured],
-            [5.0, 5.0, 6.0, 6.0, 7.0, 7.0],
+            [5.0, 6.0, 7.0, 5.0, 6.0, 7.0],
         )
 
     def test_no_edit_flags_submits_when_seed_changes(self) -> None:
@@ -835,7 +844,7 @@ class TestRemixSkipWithoutChange(unittest.TestCase):
         )
         pair = WorkflowPromptPair(changed_workflow, copy.deepcopy(prompt))
         with patch("comfyui.command_handlers._submit_fn") as submit:
-            submitted = _submit_jobs(ctx, pair, None)
+            submitted = _submit_pair(ctx, pair)
         self.assertFalse(submitted)
         submit.assert_not_called()
 
@@ -864,42 +873,133 @@ class TestRemixSkipWithoutChange(unittest.TestCase):
         )
 
 
-class TestRemixSeedPolicy(unittest.TestCase):
-    """种子更新：内容类编辑必定更新，纯参数调整只在需要多次提交时更新。"""
+class TestRemixJobSeedPolicy(unittest.TestCase):
+    """种子以 job 为单位：job 1 沿用源图种子，job 2..N 各取一个新种子，变体档位不再换种子。"""
 
-    def _seeds(self, argv: List[str], jobs: int = 1) -> List[float]:
+    def _captured(
+        self, argv: List[str], jobs: int = 1, seed_strategy: str = "randomize"
+    ) -> tuple[List[tuple[Dict[str, Any], Dict[str, Any]]], CommandContext]:
         workflow, prompt = _workflow_and_prompt(
-            "masterpiece,", seed_strategy="randomize"
+            "masterpiece,", seed_strategy=seed_strategy
         )
         ctx = _context(prompt, workflow, _request(argv), jobs=jobs)
         with patch("comfyui.command_handlers._submit_fn") as submit:
             captured = _submissions(submit)
             RemixHandler().run(ctx)
+        return captured, ctx
+
+    def _seeds(
+        self, argv: List[str], jobs: int = 1, seed_strategy: str = "randomize"
+    ) -> List[float]:
+        captured, _ = self._captured(argv, jobs=jobs, seed_strategy=seed_strategy)
         self.assertTrue(captured, "本次请求应至少提交一次")
         return [cast(float, p["4"]["inputs"]["seed"]) for p, _ in captured]
 
-    def test_requeue_always_updates_seed(self) -> None:
+    def test_requeue_updates_job_seed(self) -> None:
+        """重新入列（无任何编辑项）会让 job 1 换种子。"""
         self.assertNotEqual(self._seeds([])[0], 12345)
 
-    def test_content_edits_always_update_seed(self) -> None:
-        """新增提示词在单次提交下也必定换种子，否则提交出去的是同一张图。"""
-        self.assertNotEqual(self._seeds(["--add", "solosock"])[0], 12345)
+    def test_content_edit_keeps_source_seed(self) -> None:
+        """内容编辑不再自动换种子：定时微调要能在同一噪波下对照。"""
+        self.assertEqual(self._seeds(["--add", "solosock"])[0], 12345)
 
     def test_single_parameter_adjustment_keeps_seed(self) -> None:
-        """纯参数调整单档单次提交时保持基线种子，便于同一噪波下对照。"""
         self.assertEqual(self._seeds(["--cfg", "6"])[0], 12345)
 
-    def test_multiple_variants_force_seed_update(self) -> None:
-        """多档变体之间必须换种子，否则各变体退化成同一张图。"""
-        seeds = self._seeds(["--cfg", "6", "--cfg", "7"])
+    def test_variants_share_job_seed(self) -> None:
+        """无 -u、无 -j 时，多档变体的提交种子都等于源图种子。"""
+        seeds = self._seeds(["--cfg", "5:7:1"])
+        self.assertEqual(seeds, [12345, 12345, 12345])
+
+    def test_second_job_shares_one_new_seed(self) -> None:
+        """`-j 2`：job 1 的变体共享源图种子，job 2 的变体共享同一个新种子。"""
+        captured, _ = self._captured(["--cfg", "5:7:1"], jobs=2)
+        self.assertEqual(len(captured), 6)
+        seeds = [cast(float, p["4"]["inputs"]["seed"]) for p, _ in captured]
+        self.assertEqual(seeds[:3], [12345, 12345, 12345])
+        self.assertNotEqual(seeds[3], 12345)
+        self.assertEqual(seeds[3:], [seeds[3], seeds[3], seeds[3]])
+
+    def test_fixed_workflow_jobs_submit_once(self) -> None:
+        """fixed 种子工作流上 -j 3 只得到一份基线，因此只提交 1 次。"""
+        captured, _ = self._captured(
+            ["--add", "solosock"], jobs=3, seed_strategy="fixed"
+        )
+        self.assertEqual(len(captured), 1)
+
+    def test_no_change_variant_submitted_in_no_job(self) -> None:
+        """无改动变体（新增已存在的 tag）在任何 job 下都不提交。"""
+        for seed_strategy in ("fixed", "randomize"):
+            with self.subTest(seed_strategy=seed_strategy):
+                captured, ctx = self._captured(
+                    ["--add", "masterpiece"], jobs=2, seed_strategy=seed_strategy
+                )
+                self.assertEqual(captured, [])
+                self.assertTrue(ctx.skipped)
+
+    def test_no_skip_lets_identity_variant_submit(self) -> None:
+        """`-S` 放行「编辑后与基线相同」判定的变体。"""
+        captured, _ = self._captured(["--cfg", "8", "--no-skip"])
+        self.assertEqual(len(captured), 1)
+
+    def test_increment_strategy_advances_each_job(self) -> None:
+        """基线逐 job 递延：increment 策略下每个 job 的种子在前一个 job 的基础上递进。"""
+        self.assertEqual(
+            self._seeds([], jobs=2, seed_strategy="increment"), [12346, 12347]
+        )
+
+    def test_update_seed_flag_updates_every_job(self) -> None:
+        """`-u` 让每个 job 都换种子（含 job 1）。"""
+        seeds = self._seeds(["--cfg", "6", "--update-seed"], jobs=2)
         self.assertEqual(len(seeds), 2)
-        self.assertNotEqual(seeds[0], seeds[1])
+        for seed in seeds:
+            self.assertNotEqual(seed, 12345)
 
-    def test_multiple_jobs_force_seed_update(self) -> None:
-        self.assertNotEqual(self._seeds(["--cfg", "6"], jobs=2)[0], 12345)
+    def test_no_skip_lets_every_job_submit(self) -> None:
+        """`-S` 放行 job 基线去重：fixed 工作流上 -j 3 各 job 都提交。"""
+        captured, _ = self._captured(
+            ["--add", "solosock", "--no-skip"], jobs=3, seed_strategy="fixed"
+        )
+        self.assertEqual(len(captured), 3)
 
-    def test_update_seed_flag_forces_it(self) -> None:
-        self.assertNotEqual(self._seeds(["--cfg", "6", "--update-seed"])[0], 12345)
+
+class TestRemixExecutionLedger(unittest.TestCase):
+    """同一次执行内已提交的 prompt 只入列一次；`-S` 例外。"""
+
+    def test_same_prompt_submitted_once(self) -> None:
+        ledger = SubmissionLedger()
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            captured = _submissions(submit)
+            first = _context(
+                prompt, workflow, _request(["--add", "solosock"]), ledger=ledger
+            )
+            RemixHandler().run(first)
+            # 第二张图的工作流与第一张完全相同：同一执行内不应重复入列
+            second = _context(
+                prompt, workflow, _request(["--add", "solosock"]), ledger=ledger
+            )
+            RemixHandler().run(second)
+
+        self.assertEqual(len(captured), 1)
+        self.assertFalse(first.skipped)
+        self.assertTrue(second.skipped)
+
+    def test_no_skip_bypasses_execution_ledger(self) -> None:
+        ledger = SubmissionLedger()
+        workflow, prompt = _workflow_and_prompt("masterpiece,")
+        with patch("comfyui.command_handlers._submit_fn") as submit:
+            captured = _submissions(submit)
+            for _ in range(2):
+                ctx = _context(
+                    prompt,
+                    workflow,
+                    _request(["--add", "solosock", "--no-skip"]),
+                    ledger=ledger,
+                )
+                RemixHandler().run(ctx)
+
+        self.assertEqual(len(captured), 2)
 
 
 class TestSetModelFormatCommand(unittest.TestCase):

@@ -481,6 +481,143 @@ class TestComfyUIHook(unittest.TestCase):
             fake_filename_mgr.adjust_output_directory.assert_called_once_with("b1", ".")
             self.assertIn("分支 b1", stdout.getvalue())
 
+    def test_current_uses_companion_images_without_rating_filter(self):
+        """`--current` 只处理钩子上下文注入的配套图片，不按 HOOK_IMAGE_RATING 拉取目录。"""
+        import contextlib
+        import io
+        from typing import Any
+        from unittest.mock import patch, MagicMock
+        from PIL.PngImagePlugin import PngInfo
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": [
+                        "// #region positive\nmasterpiece,\n// #endregion"
+                    ],
+                },
+                {
+                    "id": "4",
+                    "type": "KSampler",
+                    "widgets_values": [12345, "fixed", 20, 8.0],
+                },
+            ]
+        }
+        prompt = {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "masterpiece,"}},
+            "4": {"class_type": "KSampler", "inputs": {"seed": 12345, "cfg": 8.0}},
+        }
+
+        def exit_side_effect(code: Any = 0) -> None:
+            raise SystemExit(code)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            os.makedirs(output_root)
+            image_path = os.path.join(output_root, "img.png")
+            info = PngInfo()
+            info.add_text("prompt", json.dumps(prompt))
+            info.add_text("workflow", json.dumps(workflow))
+            Image.new("RGB", (1, 1)).save(image_path, pnginfo=info)
+
+            # 配置里的评分与图片实际评分无关：--current 根本不会走到目录评分筛选
+            config = ComfyUIConfig(
+                image_paths=[image_path],
+                image_ids=["img:1"],
+                action_path="dummy_action_path",
+                trigger="note_dispatch",
+                hook_output_dir=":inherit:",
+                required_rating=4,
+            )
+            mock_client = MagicMock(spec=GraphQLClient)
+            stdout = io.StringIO()
+
+            with patch(
+                "sys.argv",
+                ["comfyui/__main__.py", "remix", "--current", "--add", "solosock"],
+            ), patch("sys.exit", side_effect=exit_side_effect), patch(
+                "comfyui.command_handlers._submit_fn"
+            ) as submit, patch(
+                "comfyui.__main__.operation_history.OperationHistory"
+            ), patch.dict(
+                os.environ,
+                {
+                    "IMAGE_FUNNEL_ROOT_DIR": temp_dir,
+                    "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "",
+                },
+            ), contextlib.redirect_stdout(
+                stdout
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    run_comfyui(mock_client, config)
+                self.assertEqual(cm.exception.code, 0)
+
+            mock_client.fetch_images.assert_not_called()
+            submit.assert_called_once()
+
+    def test_current_without_companion_images_fails_and_keeps_directive(self):
+        """`--current` 没有配套图片时必须报错（进程非 0 退出）并保留指令行。"""
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        config = ComfyUIConfig(
+            image_paths=[],
+            image_ids=[],
+            action_path="dummy_action_path",
+            trigger="note_dispatch",
+        )
+        mock_client = MagicMock(spec=GraphQLClient)
+        with patch(
+            "sys.argv", ["comfyui/__main__.py", "remix", "--current", "--add", "a"]
+        ), patch("comfyui.__main__._write_action_override") as mock_override:
+            with self.assertRaises(ValueError):
+                run_comfyui(mock_client, config)
+
+        mock_override.assert_called_once_with("KEEP", "dummy_action_path")
+        mock_client.fetch_images.assert_not_called()
+
+    def test_remix_without_current_still_fetches_by_rating(self):
+        """不带 `--current` 时选图行为不变：仍按目录 + 评分拉取，忽略配套图片列表。"""
+        from typing import Any
+        from unittest.mock import patch, MagicMock
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        def exit_side_effect(code: Any = 0) -> None:
+            raise SystemExit(code)
+
+        config = ComfyUIConfig(
+            image_paths=["companion.png"],
+            image_ids=["img:1"],
+            action_path="dummy_action_path",
+            trigger="post_commit_session",
+            required_rating=4,
+        )
+        mock_client = MagicMock(spec=GraphQLClient)
+        mock_client.fetch_images.return_value = []
+        with patch("sys.argv", ["comfyui/__main__.py", "remix", "--add", "a"]), patch(
+            "sys.exit", side_effect=exit_side_effect
+        ), patch("comfyui.__main__._write_action_override"), patch.dict(
+            os.environ,
+            {
+                "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                "IMAGE_FUNNEL_ROOT_DIR": "/mock/root",
+            },
+        ):
+            with self.assertRaises(SystemExit) as cm:
+                run_comfyui(mock_client, config)
+            self.assertEqual(cm.exception.code, 0)
+
+        mock_client.fetch_images.assert_called_once_with("dir:test", "/mock/root", 4)
+
     def test_duplicate_title_notification_reaches_progress_update(self):
         """同名节点被同步时，入列/重混入口通过既有进度通知告知用户一次"""
         import contextlib

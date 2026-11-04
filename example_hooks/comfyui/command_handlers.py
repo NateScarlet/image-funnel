@@ -8,6 +8,7 @@
 
 import copy
 import datetime
+import json
 import logging
 import uuid
 from typing import (
@@ -48,6 +49,28 @@ _LOGGER = logging.getLogger(__name__)
 SKIP_REASON_NO_CHANGE = "重混未产生任何改动"
 
 
+class SubmissionLedger:
+    """一次钩子执行内已提交的 prompt 台账。
+
+    prompt 是提交给 ComfyUI 的完整 API 结构，内容相同就意味着产出一张完全一样的图，
+    同一执行内重复提交没有意义。台账由最外层入口创建并注入，跨图片共享。
+    """
+
+    def __init__(self) -> None:
+        self._digests: Set[str] = set()
+
+    @staticmethod
+    def digest(prompt: Dict[str, Any]) -> str:
+        """把 prompt 归一化为可比较的文本：键序不影响判定。"""
+        return json.dumps(prompt, sort_keys=True, ensure_ascii=False)
+
+    def is_submitted(self, prompt: Dict[str, Any]) -> bool:
+        return self.digest(prompt) in self._digests
+
+    def record(self, prompt: Dict[str, Any]) -> None:
+        self._digests.add(self.digest(prompt))
+
+
 class CommandContext:
     """命令处理器上下文，封装图片环境及参数"""
 
@@ -65,6 +88,7 @@ class CommandContext:
         client: GraphQLClient,
         hook_name: str,
         baseline_prompt: Dict[str, Any],
+        submission_ledger: SubmissionLedger,
         now: datetime.datetime,
     ):
         self.img_id = img_id
@@ -81,6 +105,8 @@ class CommandContext:
         # 预处理完成、尚未应用任何编辑时的 prompt 快照：入列前以它判定本次提交是否
         # 只是重跑一张与源图完全相同的图
         self.baseline_prompt = baseline_prompt
+        # 本次 hook 执行内已提交的 prompt 台账，由最外层入口创建并在各图片间共享
+        self.submission_ledger = submission_ledger
         # 本图统一的时间取值，供预处理与提交路径共用
         self.now = now
         self._progress_tag = str(uuid.uuid4())
@@ -114,37 +140,22 @@ class CommandHandler(Protocol):
 
 
 class RemixHandler:
-    """remix 命令：按旗标集合执行 ComfyUI 编辑并提交。
+    """remix/queue 命令：按旗标集合执行 ComfyUI 编辑并提交。
 
-    是否真的入列由 `_submit_jobs` 按「即将提交的 prompt 是否与基线一致」判定，
-    因此无编辑项、无生效编辑、种子策略固定等空转情形都不会产生新图片。
+    种子以 job 为单位：每个 job 先生成一份基线（至多更新一次种子），同一 job 内的
+    所有变体共用该种子。是否入列由三道判定决定：编辑后相对所属 job 基线是否有改动、
+    是否与源图基线相同（空转保护）、本次执行内是否已提交过同一 prompt。`-S` 放行全部。
     """
 
     def run(self, ctx: CommandContext) -> None:
-        request = ctx.request
-        if not request.has_edits:
-            pair = WorkflowPromptPair(ctx.workflow, ctx.prompt)
-            if not _submit_jobs(ctx, pair, None):
-                ctx.skip(SKIP_REASON_NO_CHANGE)
-                return
-            ctx.update_label()
-            return
-
-        base_workflow = copy.deepcopy(ctx.workflow)
-        base_prompt = copy.deepcopy(ctx.prompt)
-        matrix = build_matrix(request, WorkflowPromptPair(base_workflow, base_prompt))
-
+        baselines = _job_baselines(ctx)
         submitted = 0
-        with progress_notification(
-            ctx.client, ctx.progress_tag, "ComfyUI 重混", "重混并提交"
-        ) as update:
-            for index, selection in enumerate(matrix.iter_variants()):
-                # 每个变体都从同一份基线出发：相对表达式的「当前值」不随变体顺序漂移
-                pair = WorkflowPromptPair(
-                    copy.deepcopy(base_workflow), copy.deepcopy(base_prompt)
-                )
-                _apply_edits(pair, request, selection, ctx.history)
-                if _submit_jobs(ctx, pair, index, update, submitted + 1, len(matrix)):
+        if ctx.request.has_edits:
+            submitted = self._submit_variants(ctx, baselines)
+        else:
+            # 无编辑项时基线本身即变体
+            for pair in baselines:
+                if _submit_pair(ctx, pair):
                     submitted += 1
 
         if submitted == 0:
@@ -152,51 +163,97 @@ class RemixHandler:
             return
         ctx.update_label()
 
+    def _submit_variants(
+        self, ctx: CommandContext, baselines: List[WorkflowPromptPair]
+    ) -> int:
+        request = ctx.request
+        # 矩阵只依赖基线取值，因此每个 job 各自求一次：相对表达式以所属 job 基线的当前值为准
+        matrices = [
+            build_matrix(
+                request,
+                WorkflowPromptPair(
+                    copy.deepcopy(baseline.workflow), copy.deepcopy(baseline.prompt)
+                ),
+            )
+            for baseline in baselines
+        ]
+        total = sum(len(matrix) for matrix in matrices)
+        variant_no = 0
+        submitted = 0
 
-def _submit_jobs(
+        with progress_notification(
+            ctx.client, ctx.progress_tag, "ComfyUI 重混", "重混并提交"
+        ) as update:
+            for baseline, matrix in zip(baselines, matrices):
+                for selection in matrix.iter_variants():
+                    variant_no += 1
+                    # 每个变体都从所属 job 的基线出发，不继承其他变体的中间状态
+                    pair = WorkflowPromptPair(
+                        copy.deepcopy(baseline.workflow),
+                        copy.deepcopy(baseline.prompt),
+                    )
+                    _apply_edits(pair, request, selection, ctx.history)
+                    if not request.no_skip and pair.prompt == baseline.prompt:
+                        # 编辑后与所属 job 基线相同：该变体本次不参与
+                        continue
+                    if _submit_pair(ctx, pair, update, f"变体 {variant_no}/{total}"):
+                        submitted += 1
+        return submitted
+
+
+def _job_baselines(ctx: CommandContext) -> List[WorkflowPromptPair]:
+    """按 -j 生成每个 job 的基线：从前一个 job 拷贝、至多更新一次种子，并按 prompt 去重。
+
+    种子是 job 级取值：job 1 沿用源图种子，job 2..N 各取一个新种子。基线逐 job 递延，
+    因此 increment/decrement 等策略会逐轮推进；固定种子的工作流各 job 得到完全相同的
+    prompt，去重后只剩一份基线，`-j N` 不会排出 N 张相同的图。`-S` 绕过去重，让每个
+    job 各自提交。
+    """
+    baselines: List[WorkflowPromptPair] = []
+    current = WorkflowPromptPair(copy.deepcopy(ctx.workflow), copy.deepcopy(ctx.prompt))
+    for job_index in range(ctx.jobs):
+        if job_index > 0:
+            current = WorkflowPromptPair(
+                copy.deepcopy(current.workflow), copy.deepcopy(current.prompt)
+            )
+        if _job_updates_seed(ctx.request, job_index):
+            if SeedManager(current, current.seed_nodes).update_seeds() == 0:
+                raise ValueError(f"Failed to update any seeds for image: {ctx.path}.")
+        if not ctx.request.no_skip and any(
+            existing.prompt == current.prompt for existing in baselines
+        ):
+            continue
+        baselines.append(current)
+    return baselines
+
+
+def _job_updates_seed(request: RemixRequest, job_index: int) -> bool:
+    """job 1 沿用源图种子（重新入列或 -u 时除外）；job 2..N 各取一个新种子。"""
+    return job_index > 0 or not request.has_edits or request.update_seed
+
+
+def _submit_pair(
     ctx: CommandContext,
     pair: WorkflowPromptPair,
-    variant_index: Optional[int],
     update: Optional[ProgressUpdate] = None,
-    variant_no: int = 0,
-    variant_total: int = 0,
+    progress: str = "",
 ) -> bool:
-    """提交单张图片的工作流至多 jobs 次，返回是否真的发生了提交。
+    """提交一份工作流副本，返回是否真的发生了提交。
 
-    入列前的最终关卡，queue 路径、无编辑项路径与每个变体路径共用：种子更新是在提交
-    边界才发生的隐式编辑，因此先更新种子再比较——种子策略随机化时比较结果自然不等，
-    而固定种子且无其他改动时即将提交的 prompt 与基线完全相同，提交出去只会得到另一
-    张与源图一模一样的图，此时跳过（`--no-skip` 例外）。
-
-    种子更新策略：改动提示词内容的编辑（新增 / 移除 / 重放历史移除）以及重新入列
-    必定更新，否则提交出去的就是与上一张完全相同的图；纯参数调整（提示词权重、
-    Lora、CFG、长宽比）只在用户显式要求（--update-seed）、需要多次提交（多 job）
-    或有多档变体时更新，好让同一噪波下的不同参数可以直接对照。
+    入列前的最终关卡，queue 路径、无编辑项路径与每个变体路径共用：先与源图基线
+    深比较（fixed 种子工作流上的重新入列因此仍被空转保护跳过），再查执行内台账
+    （同一执行内完全相同的 prompt 只发一次）。`-S` 绕过以上全部判定。
     """
-    seed_mgr = SeedManager(pair, pair.seed_nodes)
-    enable_seed_update = (
-        not ctx.request.has_edits
-        or ctx.request.edits_prompt_content
-        or ctx.request.update_seed
-        or ctx.jobs > 1
-        or (variant_index or 0) > 0
-    )
-
-    submitted = False
-    for j_idx in range(ctx.jobs):
-        if ctx.jobs > 1:
-            _LOGGER.debug("  -> Queueing run %d/%d", j_idx + 1, ctx.jobs)
-        if enable_seed_update:
-            if seed_mgr.update_seeds() == 0:
-                raise ValueError(f"Failed to update any seeds for image: {ctx.path}.")
-        if pair.prompt == ctx.baseline_prompt and not ctx.request.no_skip:
-            continue
-        if update is not None:
-            progress = f"变体 {variant_no}/{variant_total}，" if variant_total else ""
-            update(f"{progress}第 {j_idx + 1}/{ctx.jobs} 次提交")
-        _submit_fn(pair.prompt, pair.workflow, ctx.comfyui_url)
-        submitted = True
-    return submitted
+    if not ctx.request.no_skip:
+        if pair.prompt == ctx.baseline_prompt:
+            return False
+        if ctx.submission_ledger.is_submitted(pair.prompt):
+            return False
+    if update is not None:
+        update(progress)
+    _submit_fn(pair.prompt, pair.workflow, ctx.comfyui_url)
+    ctx.submission_ledger.record(pair.prompt)
+    return True
 
 
 # #region 变体内编辑
