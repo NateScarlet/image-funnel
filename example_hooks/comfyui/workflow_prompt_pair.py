@@ -29,7 +29,7 @@ class WorkflowPromptPair:
         self._workflow = workflow
         self._prompt = prompt
         self._nodes_cache: Dict[str, NodeInfo] = {}
-        self._title_to_node: Dict[str, str] = {}
+        self._title_to_node: Dict[str, List[str]] = {}
         self._seed_nodes: List[NodeInfo] = []
         self._date_filename_nodes: List[NodeInfo] = []
         self._analyze_nodes()
@@ -55,7 +55,13 @@ class WorkflowPromptPair:
         return self._date_filename_nodes
 
     @property
-    def title_to_node(self) -> Dict[str, str]:
+    def title_to_node(self) -> Dict[str, List[str]]:
+        """title → 同名候选节点 ID 集合。
+
+        顶层节点用 prompt 键（子图实例展开出的子节点会归一为
+        `subgraph:<sg>:<nid>`）；子图 definitions 内同名节点同样用该形式，
+        保证工作流侧与 prompt 侧能指向同一批候选。
+        """
         return self._title_to_node
 
     # #region NodeAccessor 接口实现
@@ -211,10 +217,39 @@ class WorkflowPromptPair:
                 self._nodes_cache[f"subgraph:{sg_id}:{child_nid}"] = info
                 self._check_seed_and_date(info, wv, disabled)
 
+        # #region 同名节点候选集合
+        # `%Title.key%` 的候选集合 = 顶层 prompt 同名节点 + 子图 definitions 内同名节点。
+        # 只记录一个节点会让 ComfyUI 实际读取的节点与这里修改的节点错位，因此同名
+        # 节点必须全部登记；子图节点统一用 `subgraph:<sg>:<nid>` 表征。
         for pid, pnode in self._prompt.items():
             title = pnode.get("_meta", {}).get("title")
-            if title:
-                self._title_to_node[title] = pid
+            if not title:
+                continue
+            info = self.get_node_by_id(pid)
+            candidate_id = (
+                f"subgraph:{info.subgraph_id}:{info.node_id}"
+                if info is not None and info.is_subgraph
+                else pid
+            )
+            self._add_title_candidate(str(title), candidate_id)
+
+        for sub in self._workflow.get("definitions", {}).get("subgraphs", []):
+            sg_id = sub.get("id")
+            if not sg_id:
+                continue
+            for node in sub.get("nodes", []):
+                title = node.get("title")
+                if title:
+                    self._add_title_candidate(
+                        str(title), f"subgraph:{sg_id}:{str(node.get('id'))}"
+                    )
+        # #endregion
+
+    def _add_title_candidate(self, title: str, node_id: str) -> None:
+        """登记同 title 的一个候选节点；重复登记（同一物理节点的多种表征）只保留一次"""
+        candidates = self._title_to_node.setdefault(title, [])
+        if node_id not in candidates:
+            candidates.append(node_id)
 
     def _check_seed_and_date(
         self, info: NodeInfo, wv: Optional[List[Any]], disabled: bool

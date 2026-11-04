@@ -79,6 +79,92 @@ class TestBuildCopyContent(unittest.TestCase):
         self.assertEqual(content["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI")
         self.assertIn("已复制", result.description)
 
+    def test_duplicate_title_nodes_notified_in_description(self):
+        """同名节点被同步时，复制增强通过既有的 description 通道提示用户"""
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+            ]
+        }
+        prompt: Dict[str, Any] = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        request = CopyRequest(
+            image_paths=[r"C:\output\New\image.png"],
+            comfyui_output_dir="",
+            hook_output_dir="",
+        )
+        result = build_copy_content(request, _make_loader(prompt, workflow), _NOW)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertIn("存在同名节点 Project", result.description)
+        content = json.loads(result.content)
+        self.assertEqual(content["nodes"][1]["widgets_values"][0], "New")
+        self.assertEqual(content["nodes"][2]["widgets_values"][0], "New")
+
+    def test_inconsistent_duplicate_titles_fail_fast(self):
+        """同名节点值不一致时复制增强直接报错，不产出可粘贴的错误工作流"""
+        workflow: Dict[str, Any] = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["DRAFT"]},
+            ]
+        }
+        prompt: Dict[str, Any] = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DRAFT"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        request = CopyRequest(
+            image_paths=[r"C:\output\New\image.png"],
+            comfyui_output_dir="",
+            hook_output_dir="",
+        )
+        with self.assertRaises(ValueError) as cm:
+            build_copy_content(request, _make_loader(prompt, workflow), _NOW)
+        message = str(cm.exception)
+        self.assertIn("Project", message)
+        self.assertIn("2=", message)
+        self.assertIn("3=", message)
+
     def test_normal_adjustment_keeps_date_template(self):
         """日期模板变量在复制结果中保持模板语法而非被求值"""
         workflow, prompt = _make_pair_fixture("C/D/%date:yyyyMMdd%image_")

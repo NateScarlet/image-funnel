@@ -449,6 +449,8 @@ class TestComfyUIHook(unittest.TestCase):
             mock_client = MagicMock(spec=GraphQLClient)
             mock_client.fetch_images.return_value = [("img:1", image_path)]
             fake_filename_mgr = MagicMock()
+            # 目录调整的真实契约返回可选提示文本，此处无同名节点
+            fake_filename_mgr.adjust_output_directory.return_value = None
             # 足够长的编辑项，确保摘要超过 40 字而被截断
             long_tag = "very_long_tag_" * 5
             stdout = io.StringIO()
@@ -478,6 +480,111 @@ class TestComfyUIHook(unittest.TestCase):
 
             fake_filename_mgr.adjust_output_directory.assert_called_once_with("b1", ".")
             self.assertIn("分支 b1", stdout.getvalue())
+
+    def test_duplicate_title_notification_reaches_progress_update(self):
+        """同名节点被同步时，入列/重混入口通过既有进度通知告知用户一次"""
+        import contextlib
+        import io
+        from typing import Any
+        from unittest.mock import patch, MagicMock
+        from PIL.PngImagePlugin import PngInfo
+        from .__main__ import run_comfyui
+        from .config import ComfyUIConfig
+        from graphql_utils import GraphQLClient
+
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {
+                    "id": "5",
+                    "type": "KSampler",
+                    "widgets_values": [12345, "fixed", 20, 8.0],
+                },
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601000000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "5": {"class_type": "KSampler", "inputs": {"seed": 12345, "cfg": 8.0}},
+        }
+
+        def exit_side_effect(code: Any = 0) -> None:
+            raise SystemExit(code)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            os.makedirs(output_root)
+            image_path = os.path.join(output_root, "img.png")
+            info = PngInfo()
+            info.add_text("prompt", json.dumps(prompt))
+            info.add_text("workflow", json.dumps(workflow))
+            Image.new("RGB", (1, 1)).save(image_path, pnginfo=info)
+
+            config = ComfyUIConfig(
+                image_paths=[],
+                image_ids=[],
+                action_path="dummy_action_path",
+                trigger="",
+                hook_output_dir=":inherit:",
+                jobs=1,
+            )
+            mock_client = MagicMock(spec=GraphQLClient)
+            mock_client.fetch_images.return_value = [("img:1", image_path)]
+            stdout = io.StringIO()
+
+            with patch(
+                "sys.argv", ["comfyui/__main__.py", "remix", "--branch", "b1"]
+            ), patch("sys.exit", side_effect=exit_side_effect), patch(
+                "comfyui.command_handlers._submit_fn"
+            ), patch(
+                "comfyui.__main__.operation_history.OperationHistory"
+            ), patch(
+                "comfyui.__main__._write_action_override"
+            ), patch.dict(
+                os.environ,
+                {
+                    "IMAGE_FUNNEL_DIRECTORY_ID": "dir:test",
+                    "IMAGE_FUNNEL_ROOT_DIR": temp_dir,
+                    "IMAGE_FUNNEL_DIRECTORY_REL_PATH": "",
+                },
+            ), contextlib.redirect_stdout(
+                stdout
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    run_comfyui(mock_client, config)
+                self.assertEqual(cm.exception.code, 0)
+
+            bodies = [
+                call.kwargs.get("body")
+                for call in mock_client.send_notification.call_args_list
+            ]
+            self.assertTrue(
+                any(
+                    isinstance(body, str) and "存在同名节点 Project" in body
+                    for body in bodies
+                )
+            )
+            # 进度通知会被后续图片覆盖并在退出时撤回，最终摘要必须同样带上提示
+            self.assertIn("存在同名节点 Project", stdout.getvalue())
 
     def test_queue_post_commit_session_fetches_unlabeled_images(self):
         from unittest.mock import patch, MagicMock

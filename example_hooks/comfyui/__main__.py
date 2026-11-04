@@ -185,6 +185,8 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
     has_errors = False
     success_count = 0
     skip_reasons: list[str] = []
+    # 同名节点提示同时进入最终摘要：进度通知会被后续图片覆盖并在退出时撤回
+    duplicate_notices: list[str] = []
     # 一次 hook 执行内只取一次时间：日期文件名模板据此在各张图上求值出稳定的快照
     now = datetime.datetime.now()
 
@@ -248,7 +250,14 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
                 else:
                     # 源图当前目录用于剥离上一代目标目录；只在实际调整时才推算
                     source_rel_dir = get_source_rel_dir(path, config.comfyui_output_dir)
-                    filename_mgr.adjust_output_directory(rel_dir, source_rel_dir)
+                    duplicate_message = filename_mgr.adjust_output_directory(
+                        rel_dir, source_rel_dir
+                    )
+                    # 存在同名节点时复用本次执行的进度通知告知用户（不新增通知通道），
+                    # 同时记入最终摘要，避免通知被后续进度覆盖后用户看不到
+                    if duplicate_message:
+                        update(duplicate_message)
+                        duplicate_notices.append(duplicate_message)
 
                 # 所有输出路径统一按节点模型格式重排提示词（与 adjust_output_dir 同位置、全命令覆盖）
                 format_workflow_prompt_pair(pair)
@@ -307,14 +316,16 @@ def run_comfyui(client: GraphQLClient, config: Optional[ComfyUIConfig] = None) -
         return summary if len(summary) <= 40 else summary[:40] + "…"
 
     action = describe_request()
+    # 同名节点提示并入最终结果摘要，保证用户一定能看到
+    notice_msg = "；" + "；".join(duplicate_notices) if duplicate_notices else ""
     if success_count > 0:
-        print(f"将 {success_count} 张图片{action}{skip_msg}")
+        print(f"将 {success_count} 张图片{action}{skip_msg}{notice_msg}")
     elif skip_reasons:
         summary = dict(Counter(skip_reasons))
         parts = [f"{n} 张：{r}" for r, n in summary.items()]
-        print(f"没有图片需要{action}（" + "；".join(parts) + "）")
+        print(f"没有图片需要{action}（" + "；".join(parts) + "）" + notice_msg)
     else:
-        print(f"没有图片需要{action}")
+        print(f"没有图片需要{action}{notice_msg}")
 
     if success_count == 0:
         _write_action_override("KEEP", config.action_path)

@@ -37,7 +37,7 @@ class FilenameManager:
         self,
         accessor: NodeAccessor,
         date_filename_nodes: List[NodeInfo],
-        title_to_node: Dict[str, str],
+        title_to_node: Dict[str, List[str]],
         now: datetime.datetime,
     ):
         self._accessor = accessor
@@ -68,9 +68,9 @@ class FilenameManager:
                 continue
 
             node_title = var_name.rsplit(".", 1)[0]
-            pid = self._title_to_node.get(node_title)
-            if pid and pid in prompt:
-                input_key = var_name.rsplit(".", 1)[1] if "." in var_name else "value"
+            input_key = var_name.rsplit(".", 1)[1] if "." in var_name else "value"
+            pid = self._first_prompt_key(node_title)
+            if pid is not None:
                 val = prompt[pid].get("inputs", {}).get(input_key)
                 if isinstance(val, str):
                     result = result.replace(placeholder, val)
@@ -84,6 +84,126 @@ class FilenameManager:
             result = result.replace(placeholder, new_date_str, 1)
 
         return result
+
+    # #region 同名候选节点
+    #
+    # 变量 `%Title.key%` 的候选集合由 WorkflowPromptPair 提供（顶层 prompt 同名节点 +
+    # 子图 definitions 内同名节点）。这里负责把候选 ID 翻译成 prompt 实际节点键、
+    # 读取/校验当前值并同步写入两侧。
+    #
+    # 观测到的 ComfyUI 前端表达式解析行为（searchAndReplace.ts，序列化 Save* 节点的
+    # filename_prefix 时执行）：匹配名优先取 properties["Node name for S&R"]、回退
+    # title；多个同名匹配时取「收集顺序的第一个」（collectAllNodes 先递归子图再收集
+    # 当前层）；替换值会被路径分隔符/控制字符过滤为 `_`；不区分节点 mute/bypass。
+    #
+    # 本实现不镜像这套顺序：它是前端内部实现，任何升级都可能变化，也没有文档承诺；
+    # 依赖它只会把「静默写错节点」换成另一种静默错位。改为把候选集合全部同步成同一个
+    # 值后，ComfyUI 无论按哪种顺序解析到的都是同一个结果。
+
+    def _prompt_keys_for_candidate(self, candidate_id: str) -> List[str]:
+        """把候选 ID 解析为 prompt 中的实际节点键。
+
+        子图候选以 `subgraph:<sg>:<nid>` 表征，其值在 prompt 中分散于各子图实例
+        展开出的 `<实例>:<nid>` 键；按 workflow 顶层实例节点的 type 找出同子图实例，
+        顺序与 workflow nodes 顺序一致。
+        """
+        if not candidate_id.startswith("subgraph:"):
+            return [candidate_id]
+        _, subgraph_id, child_id = candidate_id.split(":", 2)
+        keys: List[str] = []
+        for info in self._accessor.nodes_cache.values():
+            if info.is_subgraph or info.node_type != subgraph_id:
+                continue
+            key = f"{info.node_id}:{child_id}"
+            if key in self._accessor.prompt:
+                keys.append(key)
+        return keys
+
+    def _first_prompt_key(self, title: str) -> Optional[str]:
+        """取同名候选集合中第一个能在 prompt 读取的节点键。
+
+        同步阶段已把所有候选写成同一个值，展开模板时读哪一个都一致。
+        """
+        for candidate_id in self._title_to_node.get(title, []):
+            for key in self._prompt_keys_for_candidate(candidate_id):
+                if key in self._accessor.prompt:
+                    return key
+        return None
+
+    def _candidate_values(self, candidate_id: str, input_key: str) -> List[Any]:
+        """候选节点在各表征下的当前值。
+
+        子图候选同时读取 definitions 节点的 widget 与各实例的 prompt 输入：任一
+        不一致都说明无法安全确定唯一目标值。workflow 元数据缺失的候选没有可比较
+        的值：一致性判定跳过它，实际写入时才由写入接口报错。
+        """
+        info = self._accessor.get_node_by_id(candidate_id)
+        if info is None:
+            return []
+        values: List[Any] = []
+        if info.is_subgraph:
+            if info.widgets_values:
+                values.append(info.widgets_values[0])
+            for key in self._prompt_keys_for_candidate(candidate_id):
+                values.append(
+                    self._accessor.prompt.get(key, {})
+                    .get("inputs", {})
+                    .get(input_key, "")
+                )
+        elif candidate_id in self._accessor.prompt:
+            values.append(
+                self._accessor.prompt[candidate_id].get("inputs", {}).get(input_key, "")
+            )
+        return values
+
+    @staticmethod
+    def _candidate_label(candidate_id: str) -> str:
+        """候选 ID 的可读标签；子图候选附带所在子图 ID 便于定位"""
+        if candidate_id.startswith("subgraph:"):
+            _, subgraph_id, _ = candidate_id.split(":", 2)
+            return f"{candidate_id}（子图 {subgraph_id}）"
+        return candidate_id
+
+    def _assert_title_consistent(
+        self, title: str, candidate_ids: List[str], input_key: str
+    ) -> None:
+        """同名候选对同一 input key 的值必须一致，否则直接报错中止该图片。
+
+        报错信息包含 title、全部候选节点 ID 与子图 ID，便于用户删除重复节点。
+        """
+        parts: List[str] = []
+        inconsistent = False
+        reference_value: Any = None
+        has_reference = False
+        for candidate_id in candidate_ids:
+            values = self._candidate_values(candidate_id, input_key)
+            distinct: List[Any] = []
+            for value in values:
+                if not distinct or value != distinct[0]:
+                    distinct.append(value)
+                if not has_reference:
+                    reference_value = value
+                    has_reference = True
+                elif value != reference_value:
+                    inconsistent = True
+            if len(distinct) > 1:
+                inconsistent = True
+            rendered = "、".join(repr(value) for value in distinct)
+            parts.append(f"{FilenameManager._candidate_label(candidate_id)}={rendered}")
+
+        if inconsistent:
+            raise ValueError(
+                f"同名节点 '{title}' 的当前值不一致"
+                f"（{'；'.join(parts)}），无法安全确定输出目录，已跳过该图片"
+            )
+
+    def _write_candidate(self, candidate_id: str, input_key: str, value: str) -> None:
+        """把候选节点在 prompt 与 workflow 两侧都写成同一个值"""
+        for key in self._prompt_keys_for_candidate(candidate_id):
+            self._accessor.set_prompt_input(key, input_key, value)
+        self._accessor.update_workflow_node_text(candidate_id, value, input_key)
+
+    # #endregion
 
     def update_output_filenames(self) -> None:
         """
@@ -199,7 +319,9 @@ class FilenameManager:
                             )
                             src_inputs[src_key] = new_prefix
 
-    def adjust_output_directory(self, rel_dir: str, source_rel_dir: str) -> None:
+    def adjust_output_directory(
+        self, rel_dir: str, source_rel_dir: str
+    ) -> Optional[str]:
         """
         根据相对路径 rel_dir 调整所有输出节点的 filename_prefix，使输出文件总是
         直接落在 rel_dir 下，不创建任何子目录：rel_dir 之外的目录层级（字面目录、
@@ -210,8 +332,13 @@ class FilenameManager:
         充当 rel_dir 路径（如 %Project.value%/%Title.value% 对应 NewProject/NewTitle），
         分隔符保留。
         在 workflow 中保留模版变量语法，在 prompt 中求值展开为静态快照字符串。
+
+        返回给用户看的同名节点提示（存在多个同名候选并被同步时）；无重复时为 None。
+        同名候选值不一致时抛出 ValueError，调用方应跳过该图片，绝不静默渲染到错误目录。
         """
         prompt = self._accessor.prompt
+        duplicate_messages: List[str] = []
+        notified_titles: List[str] = []
         for node_id, node in prompt.items():
             inputs = node.get("inputs", {})
             if "filename_prefix" not in inputs:
@@ -237,6 +364,22 @@ class FilenameManager:
                         wf_template = val
                         break
 
+            non_date_vars: List[str] = []
+            if wf_template:
+                for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
+                    var_name = m.group(1)
+                    if not var_name.startswith("date:"):
+                        non_date_vars.append(var_name)
+
+            # 模板含非日期变量时先校验同名候选：即使本次不写入（已落在目标目录或
+            # 走拍平分支），交付的 workflow 仍会被 S&R 解析，任取一个候选就会静默错位
+            for var_name in non_date_vars:
+                node_title = var_name.rsplit(".", 1)[0]
+                input_key = var_name.rsplit(".", 1)[1] if "." in var_name else "value"
+                candidates = self._title_to_node.get(node_title)
+                if candidates:
+                    self._assert_title_consistent(node_title, candidates, input_key)
+
             # 已直接落在目标目录时不修改：prompt 侧是已求值的静态快照，
             # 空值占位符会残留连续分隔符（如 Title 为空使快照为 TODO//日期），
             # 直接用原始字符串会误判出剩余层级；先归一化分隔符得到实际落点，
@@ -254,21 +397,15 @@ class FilenameManager:
                 continue
 
             if wf_template:
-                non_date_vars: List[str] = []
-                for m in re.finditer(r"%([a-zA-Z_][a-zA-Z0-9_.]*?)%", wf_template):
-                    var_name = m.group(1)
-                    if not var_name.startswith("date:"):
-                        non_date_vars.append(var_name)
-
                 if non_date_vars:
                     rel_parts = [p for p in rel_dir.split("/") if p]
 
                     if len(rel_parts) == len(non_date_vars):
-                        updates: List[Tuple[str, str, str]] = []
+                        updates: List[Tuple[str, List[str], str, str]] = []
                         for i, var_name in enumerate(non_date_vars):
                             node_title = var_name.rsplit(".", 1)[0]
-                            pid = self._title_to_node.get(node_title)
-                            if pid is None:
+                            candidates = self._title_to_node.get(node_title)
+                            if not candidates:
                                 updates.clear()
                                 break
                             input_key = (
@@ -276,19 +413,37 @@ class FilenameManager:
                                 if "." in var_name
                                 else "value"
                             )
-                            updates.append((pid, input_key, rel_parts[i]))
+                            updates.append(
+                                (node_title, candidates, input_key, rel_parts[i])
+                            )
 
                         if updates:
-                            for pid, input_key, val in updates:
-                                if not self._accessor.get_node_by_id(pid):
-                                    raise ValueError(
-                                        f"Workflow node '{pid}' is missing in metadata"
+                            # 一致性已在写入前统一校验；这里再确认写入目标存在，
+                            # 避免只写进 prompt 却写不到 workflow 的半成品
+                            for node_title, candidates, input_key, _ in updates:
+                                for candidate_id in candidates:
+                                    if (
+                                        self._accessor.get_node_by_id(candidate_id)
+                                        is None
+                                    ):
+                                        raise ValueError(
+                                            f"Workflow node '{candidate_id}' is missing in metadata"
+                                        )
+                            for node_title, candidates, input_key, val in updates:
+                                if (
+                                    len(candidates) > 1
+                                    and node_title not in notified_titles
+                                ):
+                                    notified_titles.append(node_title)
+                                    labels = "、".join(
+                                        self._candidate_label(cid) for cid in candidates
                                     )
-                            for pid, input_key, val in updates:
-                                self._accessor.set_prompt_input(pid, input_key, val)
-                                self._accessor.update_workflow_node_text(
-                                    pid, val, input_key
-                                )
+                                    duplicate_messages.append(
+                                        f"存在同名节点 {node_title}"
+                                        f"（节点 ID {labels}），已同步"
+                                    )
+                                for candidate_id in candidates:
+                                    self._write_candidate(candidate_id, input_key, val)
                             # workflow 保留模板语法，prompt 中求值展开
                             eval_val = self._evaluate_template_for_prompt(
                                 wf_template, prompt, original_val
@@ -320,6 +475,8 @@ class FilenameManager:
                 for idx, val in enumerate(wf_src_info.widgets_values):
                     if isinstance(val, str):
                         wf_src_info.widgets_values[idx] = new_val
+
+        return "；".join(duplicate_messages) if duplicate_messages else None
 
     @staticmethod
     def _adjust_with_rel_dir(rel_dir: str, source_rel_dir: str, value: str) -> str:

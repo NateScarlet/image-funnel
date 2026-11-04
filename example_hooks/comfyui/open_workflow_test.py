@@ -68,6 +68,39 @@ def _make_pair_fixture(prefix: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return workflow, prompt
 
 
+def _make_duplicate_fixture() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """构造含两个同名 Project 节点的最小工作流/prompt 配对数据"""
+    workflow: Dict[str, Any] = {
+        "nodes": [
+            {
+                "id": "1",
+                "type": "SaveImage",
+                "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+            },
+            {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+            {"id": "3", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+        ]
+    }
+    prompt: Dict[str, Any] = {
+        "1": {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "TODO/20260601_120000"},
+            "_meta": {"title": "Save Image"},
+        },
+        "2": {
+            "class_type": "PrimitiveString",
+            "inputs": {"value": "TODO"},
+            "_meta": {"title": "Project"},
+        },
+        "3": {
+            "class_type": "PrimitiveString",
+            "inputs": {"value": "TODO"},
+            "_meta": {"title": "Project"},
+        },
+    }
+    return workflow, prompt
+
+
 def _make_sender() -> Tuple[List[Tuple[OpenRequest, Dict[str, Any]]], Any]:
     """构造注入的发送函数 mock：记录 (request, workflow) 调用并返回目标 sid"""
 
@@ -126,6 +159,25 @@ class TestOpenWorkflow(unittest.TestCase):
         self.assertEqual(
             delivered["nodes"][0]["widgets_values"][0], "sub1/sub2/ComfyUI"
         )
+
+    def test_duplicate_title_nodes_notified_in_result(self):
+        """同名节点被同步时，打开入口通过既有的结果描述通道提示用户"""
+        workflow, prompt = _make_duplicate_fixture()
+        sent, send = _make_sender()
+        _, activate = _make_activation()
+
+        result = open_workflow(
+            _make_request(r"C:\output\New\image.png"),
+            _make_loader(prompt, workflow),
+            send,
+            activate,
+            _NOW,
+        )
+
+        self.assertIn("存在同名节点 Project", result)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][1]["nodes"][1]["widgets_values"][0], "New")
+        self.assertEqual(sent[0][1]["nodes"][2]["widgets_values"][0], "New")
 
     def test_strips_previous_output_directory_before_applying_target(self):
         """与复制增强一致：先剥离源图所在目录，再拼本次目标目录"""

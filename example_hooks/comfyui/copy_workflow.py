@@ -51,7 +51,7 @@ def prepare_workflow(
     comfyui_output_dir: str,
     hook_output_dir: str,
     now: datetime.datetime,
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], Optional[str]]:
     """把图片内置工作流调整为「就地复用」版本并返回调整后的工作流。
 
     供复制增强与「在工作流页面打开」钩子共同调用，保证二者的输出目录调整与提示词
@@ -59,20 +59,24 @@ def prepare_workflow(
 
     :inherit: 时完全关闭输出目录自动调整（原样保留，仅重排标签格式）。就地修改传入的
     workflow，与既有入列、复制流程一致。
+
+    第二个返回值是给用户看的同名节点提示（存在多个同名候选并被同步时），
+    无重复时为 None；调用方通过各自已有的结果通道展示。
     """
     pair = WorkflowPromptPair(workflow, prompt)
+    duplicate_message: Optional[str] = None
     if hook_output_dir != ":inherit:":
         rel_dir = get_relative_output_dir(
             image_path, comfyui_output_dir, hook_output_dir
         )
         source_rel_dir = get_source_rel_dir(image_path, comfyui_output_dir)
-        FilenameManager(
+        duplicate_message = FilenameManager(
             pair, pair.date_filename_nodes, pair.title_to_node, now
         ).adjust_output_directory(rel_dir, source_rel_dir)
 
     # 所有输出路径统一按节点模型格式重排提示词（与入列、复制一致）
     format_workflow_prompt_pair(pair)
-    return pair.workflow
+    return pair.workflow, duplicate_message
 
 
 def build_copy_content(
@@ -102,7 +106,7 @@ def build_copy_content(
     else:
         description = "已复制 ComfyUI 工作流（输出目录已调整）"
 
-    adjusted = prepare_workflow(
+    adjusted, duplicate_message = prepare_workflow(
         image_path,
         prompt,
         workflow,
@@ -110,6 +114,9 @@ def build_copy_content(
         request.hook_output_dir,
         now,
     )
+    if duplicate_message:
+        # 复用本入口已有的结果说明通道提示同名节点，不新增通知通道
+        description = f"{description}；{duplicate_message}"
 
     return CopyResult(
         content=json.dumps(adjusted, ensure_ascii=False),

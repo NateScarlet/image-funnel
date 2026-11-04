@@ -147,7 +147,7 @@ def open_workflow(
             f"图片没有内嵌 ComfyUI 工作流，无法直接打开：{request.image_path}"
         )
 
-    adjusted = prepare_workflow(
+    adjusted, duplicate_message = prepare_workflow(
         request.image_path,
         prompt,
         workflow,
@@ -157,7 +157,11 @@ def open_workflow(
     )
     sid = send(request, adjusted)
     outcome = activate(sid)
-    return f"已在 ComfyUI 页面打开该图片的工作流（{describe_outcome(outcome)}）"
+    result = f"已在 ComfyUI 页面打开该图片的工作流（{describe_outcome(outcome)}）"
+    if duplicate_message:
+        # 复用本入口已有的结果描述通道提示同名节点，不新增通知通道
+        result = f"{result}；{duplicate_message}"
+    return result
 
 
 def _parse_single_image_path(raw: str, env_name: str) -> str:

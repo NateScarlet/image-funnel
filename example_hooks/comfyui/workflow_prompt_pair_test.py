@@ -3494,5 +3494,393 @@ class TestAdjustOutputDirectory(unittest.TestCase):
 # #endregion
 
 
+# #region 同名节点处理测试
+class TestDuplicateTitleNodes(unittest.TestCase):
+    """同名节点（复制粘贴后未发现）在调整输出目录时的判定与同步"""
+
+    def _mgr(self, workflow: Dict[str, Any], prompt: Dict[str, Any]):
+        pair = WorkflowPromptPair(workflow, prompt)
+        return (
+            FilenameManager(pair, pair.date_filename_nodes, pair.title_to_node, _NOW),
+            pair,
+        )
+
+    def test_title_to_node_includes_subgraph_candidates(self):
+        """title 映射升级为候选集合，子图候选以 subgraph:<sg>:<nid> 表征"""
+        workflow = {
+            "nodes": [
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "309", "type": "sg_123", "widgets_values": ["TODO"]},
+            ],
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "title": "Project",
+                                "widgets_values": ["TODO"],
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        prompt = {
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        pair = WorkflowPromptPair(workflow, prompt)
+        # 顶层候选用 prompt 键；子图候选与 definitions 节点合并为同一条 subgraph: ID
+        self.assertEqual(pair.title_to_node["Project"], ["2", "subgraph:sg_123:291"])
+
+    def test_duplicate_titles_synced_and_notified_once(self):
+        """两个同名顶层节点值一致时全部同步，且只产生一条提示"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        message = mgr.adjust_output_directory("New", "")
+
+        self.assertEqual(prompt["2"]["inputs"]["value"], "New")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "New")
+        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "New")
+        self.assertEqual(workflow["nodes"][2]["widgets_values"][0], "New")
+        self.assertRegex(prompt["1"]["inputs"]["filename_prefix"], r"New/\d{8}_\d{6}")
+        self.assertIsNotNone(message)
+        assert message is not None
+        self.assertIn("存在同名节点 Project", message)
+        self.assertIn("2", message)
+        self.assertIn("3", message)
+        # 同一 title 只提示一次
+        self.assertEqual(message.count("存在同名节点"), 1)
+
+    def test_inconsistent_duplicate_titles_fail_fast(self):
+        """同名节点值不一致时报错并列出 title 与全部候选节点 ID，且不做任何写入"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["DRAFT"]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DRAFT"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        with self.assertRaises(ValueError) as cm:
+            mgr.adjust_output_directory("New", "")
+        message = str(cm.exception)
+        self.assertIn("Project", message)
+        self.assertIn("2=", message)
+        self.assertIn("3=", message)
+        # 校验失败发生在写入之前：两侧均保持原值
+        self.assertEqual(prompt["2"]["inputs"]["value"], "TODO")
+        self.assertEqual(prompt["3"]["inputs"]["value"], "DRAFT")
+        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "TODO")
+        self.assertEqual(workflow["nodes"][2]["widgets_values"][0], "DRAFT")
+
+    def test_subgraph_and_top_level_duplicate_inconsistent_fail_fast(self):
+        """顶层与子图同名节点值不一致时报错，并同时列出节点 ID 与子图 ID"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {
+                    "id": "309",
+                    "type": "sg_123",
+                    "properties": {"proxyWidgets": [["291", "value"]]},
+                    "widgets_values": ["DRAFT"],
+                },
+            ],
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "title": "Project",
+                                "widgets_values": ["DRAFT"],
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DRAFT"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        with self.assertRaises(ValueError) as cm:
+            mgr.adjust_output_directory("New", "")
+        message = str(cm.exception)
+        self.assertIn("Project", message)
+        self.assertIn("2=", message)
+        self.assertIn("subgraph:sg_123:291", message)
+        self.assertIn("sg_123", message)
+
+    def test_subgraph_and_top_level_duplicate_consistent_synced(self):
+        """顶层与子图同名且值一致时全部同步（prompt、definitions、实例代理）"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {
+                    "id": "309",
+                    "type": "sg_123",
+                    "properties": {"proxyWidgets": [["291", "value"]]},
+                    "widgets_values": ["TODO"],
+                },
+            ],
+            "definitions": {
+                "subgraphs": [
+                    {
+                        "id": "sg_123",
+                        "nodes": [
+                            {
+                                "id": "291",
+                                "type": "PrimitiveString",
+                                "title": "Project",
+                                "widgets_values": ["TODO"],
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "309:291": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        message = mgr.adjust_output_directory("New", "")
+
+        self.assertEqual(prompt["2"]["inputs"]["value"], "New")
+        self.assertEqual(prompt["309:291"]["inputs"]["value"], "New")
+        self.assertEqual(
+            workflow["definitions"]["subgraphs"][0]["nodes"][0]["widgets_values"][0],
+            "New",
+        )
+        self.assertEqual(workflow["nodes"][2]["widgets_values"][0], "New")
+        self.assertRegex(prompt["1"]["inputs"]["filename_prefix"], r"New/\d{8}_\d{6}")
+        self.assertIsNotNone(message)
+        assert message is not None
+        self.assertIn("存在同名节点 Project", message)
+        self.assertIn("2", message)
+        self.assertIn("subgraph:sg_123:291", message)
+
+    def test_inconsistent_duplicates_fail_fast_even_when_already_in_target_dir(self):
+        """已落在目标目录而跳过写入时，同名候选不一致仍须报错
+
+        提前 continue 只是跳过本次写入；交付的 workflow 仍会由 S&R 解析变量，
+        任取一个候选求值就会静默错位。
+        """
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["DRAFT"]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DRAFT"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        with self.assertRaises(ValueError) as cm:
+            mgr.adjust_output_directory("TODO", "")
+        message = str(cm.exception)
+        self.assertIn("Project", message)
+        self.assertIn("2=", message)
+        self.assertIn("3=", message)
+
+    def test_inconsistent_duplicates_fail_fast_when_variable_count_mismatch(self):
+        """rel_dir 分段数与模板变量数不匹配（走拍平分支）时仍须校验同名候选"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": [
+                        "%Project.value%/%Title.value%/%date:yyyyMMdd_hhmmss%"
+                    ],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+                {"id": "3", "type": "PrimitiveString", "widgets_values": ["DRAFT"]},
+                {"id": "4", "type": "PrimitiveString", "widgets_values": [""]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO//20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+            "3": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "DRAFT"},
+                "_meta": {"title": "Project"},
+            },
+            "4": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": ""},
+                "_meta": {"title": "Title"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        with self.assertRaises(ValueError) as cm:
+            mgr.adjust_output_directory("SingleDir", "")
+        message = str(cm.exception)
+        self.assertIn("Project", message)
+        self.assertIn("2=", message)
+        self.assertIn("3=", message)
+
+    def test_single_candidate_has_no_duplicate_notification(self):
+        """单一候选节点行为与修复前一致：同步且不提示"""
+        workflow = {
+            "nodes": [
+                {
+                    "id": "1",
+                    "type": "SaveImage",
+                    "widgets_values": ["%Project.value%/%date:yyyyMMdd_hhmmss%"],
+                },
+                {"id": "2", "type": "PrimitiveString", "widgets_values": ["TODO"]},
+            ]
+        }
+        prompt = {
+            "1": {
+                "class_type": "SaveImage",
+                "inputs": {"filename_prefix": "TODO/20260601_120000"},
+                "_meta": {"title": "Save Image"},
+            },
+            "2": {
+                "class_type": "PrimitiveString",
+                "inputs": {"value": "TODO"},
+                "_meta": {"title": "Project"},
+            },
+        }
+        mgr, _ = self._mgr(workflow, prompt)
+        message = mgr.adjust_output_directory("New", "")
+
+        self.assertEqual(prompt["2"]["inputs"]["value"], "New")
+        self.assertEqual(workflow["nodes"][1]["widgets_values"][0], "New")
+        self.assertIsNone(message)
+
+
+# #endregion
+
+
 if __name__ == "__main__":
     unittest.main()
