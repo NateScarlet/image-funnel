@@ -22,6 +22,7 @@ logging.disable(logging.CRITICAL)
 # pyright: reportPrivateUsage=false
 from .autocomplete import (
     AutocompleteContext,
+    AutocompleteSuggestion,
     BRANCH_ACTION,
     NO_ACTION,
     WorkflowPromptProvider,
@@ -1197,6 +1198,49 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def _get_mock_region_prompt_meta(self) -> Dict[str, Any]:
         return {"node_1": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl"}}}
 
+    def _get_region_marker_workflow(self, names: List[str]) -> Dict[str, Any]:
+        """按给定顺序写入区域标记的工作流夹具"""
+        text = "".join(
+            f"// #region {name}\ntag_{name}\n// #endregion\n" for name in names
+        )
+        return {
+            "nodes": [
+                {
+                    "id": "node_1",
+                    "type": "CLIPTextEncode",
+                    "title": "Prompt",
+                    "widgets_values": [text],
+                }
+            ]
+        }
+
+    def _region_value_suggestions(self, workflow: Dict[str, Any]) -> List[str]:
+        """`--region ` 值补全产出的区域名顺序"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="--region",
+            cwords=["/remix", "--region"],
+            workflow=workflow,
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        return [s.displayText for s in RegionProvider().provide(context)]
+
+    def _region_option_suggestions(
+        self, workflow: Dict[str, Any]
+    ) -> List[AutocompleteSuggestion]:
+        """`/remix ` 空位产出的区域选项"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="/remix",
+            cwords=["/remix"],
+            parsed_args=self._make_parsed_args(command="remix"),
+            workflow=workflow,
+            prompt_meta=self._get_mock_region_prompt_meta(),
+        )
+        return list(RegionOptionProvider().provide(context))
+
     def _write_workflow_sample(self, workflow: Dict[str, Any], tmp_dir: str) -> str:
         """生成带 ComfyUI prompt/workflow 元数据的临时 PNG 样本，返回文件路径"""
         img = Image.new("RGB", (1, 1), "white")
@@ -1259,6 +1303,40 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         self.assertEqual([s.displayText for s in suggestions], ["positive", "negative"])
         self.assertEqual(suggestions[0].type, "region")
         self.assertEqual(suggestions[0].description, "区域: positive")
+
+    def test_region_providers_rank_positive_and_negative_first(self):
+        """两个区域补全入口都固定 positive、negative 置顶，其余区域保持扫描顺序。"""
+        workflow = self._get_region_marker_workflow(["negative", "custom", "positive"])
+
+        self.assertEqual(
+            self._region_value_suggestions(workflow), ["positive", "negative", "custom"]
+        )
+        self.assertEqual(
+            [s.displayText for s in self._region_option_suggestions(workflow)],
+            ["positive", "negative", "custom"],
+        )
+
+    def test_region_providers_suggest_only_existing_special_region(self):
+        """工作流只有 negative 时只产出 negative，不凭空补 positive。"""
+        workflow = self._get_region_marker_workflow(["negative"])
+
+        self.assertEqual(self._region_value_suggestions(workflow), ["negative"])
+        self.assertEqual(
+            [s.displayText for s in self._region_option_suggestions(workflow)],
+            ["negative"],
+        )
+
+    def test_region_providers_keep_scan_order_for_custom_regions(self):
+        """只有自定义区域时按扫描顺序产出，不额外出现 positive / negative。"""
+        workflow = self._get_region_marker_workflow(["custom_b", "custom_a"])
+
+        self.assertEqual(
+            self._region_value_suggestions(workflow), ["custom_b", "custom_a"]
+        )
+        self.assertEqual(
+            [s.displayText for s in self._region_option_suggestions(workflow)],
+            ["custom_b", "custom_a"],
+        )
 
     def test_region_option_provider_skips_when_query_typed(self):
         context = self._make_context(

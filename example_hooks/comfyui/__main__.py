@@ -34,6 +34,9 @@ from . import operation_history
 
 _LOGGER = logging.getLogger(__name__)
 
+# 补全排序偏好：这两个区域是提示词最常用的区域，总是排在其他区域之前
+_PREFERRED_REGION_NAMES = ("positive", "negative")
+
 
 def _write_action_override(action: str, action_path: str) -> None:
     """向 action_path 文件写入操作覆盖，通知 Runner 跳过默认行为"""
@@ -46,8 +49,13 @@ def _write_action_override(action: str, action_path: str) -> None:
 def extract_region_names(
     workflows: Iterable[Dict[str, Any]],
 ) -> Iterator[str]:
-    """从已解析的 workflow 数据中扫描区域标记，逐个 yield 区域名称。"""
+    """从已解析的 workflow 数据中扫描区域标记，按固定顺序 yield 区域名称。
+
+    positive、negative 是提示词最常用的两个区域，补全时固定排在最前；
+    其余区域保持扫描顺序（稳定排序，不按字母重排）。只为实际存在的区域产出名称。
+    """
     seen: Set[str] = set()
+    scanned_names: List[str] = []
     for workflow in workflows:
         for node in workflow.get("nodes", []):
             widgets_values = node.get("widgets_values")
@@ -61,7 +69,15 @@ def extract_region_names(
                     name = m.group(1)
                     if name and name not in seen:
                         seen.add(name)
-                        yield name
+                        scanned_names.append(name)
+
+    # 置顶需要先看到全部区域，因此这里先收集再按偏好顺序产出
+    for preferred_name in _PREFERRED_REGION_NAMES:
+        if preferred_name in seen:
+            yield preferred_name
+    for name in scanned_names:
+        if name not in _PREFERRED_REGION_NAMES:
+            yield name
 
 
 def extract_lora_names(prompts: Iterable[Dict[str, Any]]) -> Iterator[str]:
