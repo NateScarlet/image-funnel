@@ -5,6 +5,7 @@ vi.mock("./domain/useDevice", () => {
     default: () => ({
       pairingRequests: { value: [] },
       devices: { value: [] },
+      devicesLoaded: { value: true },
       isTrustedDevice: { value: false },
       refreshDevices: vi.fn(),
       refreshAuthStatus: vi.fn(),

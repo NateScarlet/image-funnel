@@ -7,6 +7,7 @@ export function useDevices() {
   const {
     pairingRequests,
     devices,
+    devicesLoaded,
     isTrustedDevice,
     refreshDevices,
     refreshAuthStatus,
@@ -28,6 +29,7 @@ export function useDevices() {
   return {
     visible,
     devices,
+    devicesLoaded,
     pairingRequests,
     isTrustedDevice,
     refreshDevices,

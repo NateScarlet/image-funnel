@@ -14,6 +14,11 @@ interface TokenStore {
 
 export const { model: tokenStore } = useStorage<TokenStore>(localStorage, "token_store_8b54ed");
 
+// 清除本机保存的令牌，使当前浏览器不再以设备身份访问服务端
+export function forgetTokens() {
+  tokenStore.value = undefined;
+}
+
 const flight = new SingleFlightGroup();
 const lockKey = "refresh_token_lock_8b54ed";
 
@@ -62,7 +67,7 @@ export async function refreshToken() {
           });
           if (hasAuthError) {
             // 当遭遇无效的或未授权的刷新令牌时，清除令牌数据并自动重定向到登录页面以防止重复发生死循环式请求
-            tokenStore.value = undefined;
+            forgetTokens();
             if (window.location.pathname !== "/auth") {
               window.location.href = `/auth?redirect=${encodeURIComponent(
                 window.location.pathname + window.location.search,
@@ -93,7 +98,7 @@ export async function refreshToken() {
           });
           if (hasAuthError) {
             // 当遭遇无效的或未授权的刷新令牌时，清除令牌数据并自动重定向到登录页面以防止重复发生死循环式请求
-            tokenStore.value = undefined;
+            forgetTokens();
             if (window.location.pathname !== "/auth") {
               window.location.href = `/auth?redirect=${encodeURIComponent(
                 window.location.pathname + window.location.search,

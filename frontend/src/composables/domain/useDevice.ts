@@ -31,6 +31,9 @@ const init = once(() => {
 
   const isTrustedDevice = computed(() => authData.value?.authStatus?.isTrustedDevice);
   const isTrustedIP = computed(() => authData.value?.authStatus?.isTrustedIP);
+  // 设备列表是否已真正加载完成：仅凭空列表无法区分「加载中」与「当前设备确实不在列表中」，
+  // 调用者需要据此判断能否断言某台设备未注册
+  const devicesLoaded = computed(() => devicesData.value != null);
   const canManageDevices = stableComputed(() => {
     return isTrustedDevice.value === true || isTrustedIP.value === true;
   });
@@ -115,6 +118,7 @@ const init = once(() => {
 
   return {
     devices: liveDevices,
+    devicesLoaded,
     pairingRequests,
     isTrustedDevice,
     refreshDevices,
