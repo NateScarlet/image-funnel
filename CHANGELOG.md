@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.10.0](https://github.com/NateScarlet/image-funnel/compare/v1.9.0...v1.10.0) (2026-11-07)
+
+
+### Features
+
+* **example-hooks/branch:** append danbooru tags to /branch completion ([45bf8d7](https://github.com/NateScarlet/image-funnel/commit/45bf8d761ef5717af4e7ed15367fc0d89535179c)), closes [#171](https://github.com/NateScarlet/image-funnel/issues/171)
+* **example-hooks/comfyui:** add --branch flag to /remix ([aa80ba3](https://github.com/NateScarlet/image-funnel/commit/aa80ba32c2ffa270de6f5c9e2cc280d9c27bf08c)), closes [#168](https://github.com/NateScarlet/image-funnel/issues/168)
+* **example-hooks/comfyui:** insert --add tags at the uniquely removed line ([ceacd84](https://github.com/NateScarlet/image-funnel/commit/ceacd84c381176e26f6557ad93ed526aaef17d64)), closes [#169](https://github.com/NateScarlet/image-funnel/issues/169)
+* **example-hooks/comfyui:** rank positive and negative regions first in autocomplete ([192925b](https://github.com/NateScarlet/image-funnel/commit/192925b01eb336d4197aaf1e11499527bb2fd416)), closes [#167](https://github.com/NateScarlet/image-funnel/issues/167)
+* **example-hooks/comfyui:** support processing only the current image in remix ([d960578](https://github.com/NateScarlet/image-funnel/commit/d960578e52deb74a0f8a63c705760cddbd018256)), closes [#173](https://github.com/NateScarlet/image-funnel/issues/173)
+* **frontend:** hint round changes by tinting the session backgrounds ([42f5dab](https://github.com/NateScarlet/image-funnel/commit/42f5dab9ed2c71839d5cb5ae454fe79098e7a4de)), closes [#163](https://github.com/NateScarlet/image-funnel/issues/163)
+* **image:** redirect full-size requests to raw URL and blind-sign width ([ce6a2b5](https://github.com/NateScarlet/image-funnel/commit/ce6a2b5eb3a6dea781156ccbfb7d38515de01e67)), closes [#128](https://github.com/NateScarlet/image-funnel/issues/128)
+
+
+### Bug Fixes
+
+* **example-hooks/comfyui:** should not accumulate previous output directories in filename prefix ([d41c9b1](https://github.com/NateScarlet/image-funnel/commit/d41c9b1660b3257a2360b6f3605435bdf83efb15)), closes [#175](https://github.com/NateScarlet/image-funnel/issues/175)
+* **example-hooks/comfyui:** should sync every node sharing a duplicated title when adjusting output directory ([91298b9](https://github.com/NateScarlet/image-funnel/commit/91298b9bbe23020a91ae21d564b2cf80ae47be71)), closes [#176](https://github.com/NateScarlet/image-funnel/issues/176)
+* **frontend:** should keep auto-navigation deterministic when stats change after commit ([cd77d97](https://github.com/NateScarlet/image-funnel/commit/cd77d9771c917c9d5830b14d314776523d561112)), closes [#162](https://github.com/NateScarlet/image-funnel/issues/162)
+* **frontend:** should not mark prior session images after a switch ([be3cb95](https://github.com/NateScarlet/image-funnel/commit/be3cb95dd2d01eec08d741a86573fc714630dd4d)), closes [#166](https://github.com/NateScarlet/image-funnel/issues/166)
+* **frontend:** should wait for the merged page to be visible before giving up auto-navigation ([4790e8f](https://github.com/NateScarlet/image-funnel/commit/4790e8f920e582eb47b42a822d3537d3dc871b6c)), closes [#170](https://github.com/NateScarlet/image-funnel/issues/170)
+* **image:** should reject stale signed image urls ([9106f9e](https://github.com/NateScarlet/image-funnel/commit/9106f9e6cc10800257a86bba39e882321db647c1)), closes [#117](https://github.com/NateScarlet/image-funnel/issues/117)
+* should keep note action controls below the editor so autocomplete cannot cover them ([00a0071](https://github.com/NateScarlet/image-funnel/commit/00a00710124f3c8f91df0f48d3d1a3e6f56e406e)), closes [#177](https://github.com/NateScarlet/image-funnel/issues/177)
+* should offer re-registering the current device right after it is deleted ([db43f62](https://github.com/NateScarlet/image-funnel/commit/db43f62e9060d31fffae1bda627fdc41b6c213bc))
+
 ## [1.9.0](https://github.com/NateScarlet/image-funnel/compare/v1.8.0...v1.9.0) (2026-10-27)
 
 
