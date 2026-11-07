@@ -116,12 +116,15 @@ vi.mock("@/graphql/generated", () => ({
   DispatchNoteHookDocument: "DispatchNoteHookDocument",
   HookAutocompleteDocument: "HookAutocompleteDocument",
 }));
-vi.mock("@floating-ui/vue", () => ({
-  useFloating: vi.fn(() => ({
+const mockUseFloating = vi.hoisted(() =>
+  vi.fn((_reference: { value: Element | null }, _floating: unknown) => ({
     floatingStyles: { value: {} },
     update: vi.fn(),
     placement: { value: "top-start" },
   })),
+);
+vi.mock("@floating-ui/vue", () => ({
+  useFloating: mockUseFloating,
   offset: vi.fn(() => vi.fn()),
   flip: vi.fn(() => vi.fn()),
   shift: vi.fn(() => vi.fn()),
@@ -205,6 +208,7 @@ describe("NoteEditor", () => {
   beforeEach(() => {
     mockQuery.mockReset();
     mockQuery.mockResolvedValue({ data: { hookAutocomplete: [] } });
+    mockUseFloating.mockClear();
     refreshOn.mockClear();
     timeNow.value = 1000000;
     clickOutsideHandlers.length = 0;
@@ -793,6 +797,64 @@ describe("NoteEditor", () => {
     expect(wrapper.text()).toContain("动作 (1)");
 
     mockHooksData.value.hooks = originalHooks;
+  });
+
+  test("动作控件位于文本框下方，且与文本框同属补全浮层的锚定区域", async () => {
+    const originalHooks = mockHooksData.value.hooks;
+    mockHooksData.value.hooks = originalHooks.map((h) =>
+      h.id === "hook3" ? { ...h, canDispatchByNote: true } : h,
+    );
+
+    try {
+      wrapper = mount(NoteEditor, {
+        props: {
+          modelValue: "/remove\n",
+          noteId: "note1",
+        },
+      });
+      await nextTick();
+
+      const textareaEl = wrapper.find("textarea").element;
+      const actionButton = wrapper.findAll("button").find((btn) => btn.text().includes("动作 ("));
+      if (!actionButton) throw new Error("未找到动作控件");
+      const actionButtonEl = actionButton.element;
+
+      // DOM 顺序：动作控件必须位于文本框之后
+      expect(
+        textareaEl.compareDocumentPosition(actionButtonEl) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      // 补全浮层的锚点同时包含文本框与动作控件：翻转至文本框下方展开时不会覆盖动作控件
+      const anchorEl = mockUseFloating.mock.calls
+        .map(([reference]) => reference.value)
+        .find((el) => el?.querySelector("textarea"));
+      if (!anchorEl) throw new Error("未找到包含文本框的补全浮层锚点");
+      expect(anchorEl.contains(textareaEl)).toBe(true);
+      expect(anchorEl.contains(actionButtonEl)).toBe(true);
+    } finally {
+      mockHooksData.value.hooks = originalHooks;
+    }
+  });
+
+  test("没有快捷指令且没有可派发动作时不渲染任何工具栏区域", async () => {
+    const originalHooks = mockHooksData.value.hooks;
+    // 仅保留无指令钩子：既不会产生快捷指令按钮，也不可派发
+    mockHooksData.value.hooks = hookList.filter((h) => h.directive === null);
+
+    try {
+      wrapper = mount(NoteEditor, {
+        props: {
+          modelValue: "plain text",
+          noteId: "note1",
+        },
+      });
+      await nextTick();
+
+      expect(wrapper.text()).not.toContain("常用指令");
+      expect(wrapper.text()).not.toContain("动作 (");
+    } finally {
+      mockHooksData.value.hooks = originalHooks;
+    }
   });
 
   test("ignores pointerenter events from touch input", async () => {

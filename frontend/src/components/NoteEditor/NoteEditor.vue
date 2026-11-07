@@ -1,91 +1,38 @@
 <template>
   <div class="flex flex-col w-full text-left">
-    <!-- 快捷指令按钮栏 + 派发按钮 -->
+    <!-- 快捷指令按钮栏 -->
     <div
-      v-if="directives.length || dispatchableHooks.length"
+      v-if="directives.length"
       class="flex flex-wrap gap-2 mb-3 items-center select-none text-left"
     >
-      <template v-if="directives.length">
+      <span
+        class="text-xs font-bold text-primary-400 uppercase tracking-wider flex items-center gap-1"
+      >
+        <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
+          <path :d="mdiConsole" fill="currentColor" />
+        </svg>
+        常用指令:
+      </span>
+      <button
+        v-for="h in directives"
+        :key="h.id"
+        type="button"
+        class="px-2 py-1 text-xs font-semibold rounded-lg bg-primary-800 hover:bg-primary-700 border border-primary-700/60 hover:border-secondary-500/50 text-primary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1 group"
+        :title="h.directive!.usage"
+        @click="onInsertDirective(h.directive!.name)"
+      >
+        <span class="text-secondary-400 group-hover:text-secondary-300"
+          >/{{ h.directive!.name }}</span
+        >
         <span
-          class="text-xs font-bold text-primary-400 uppercase tracking-wider flex items-center gap-1"
+          class="text-xs scale-90 origin-left font-normal text-primary-500 group-hover:text-primary-400"
+          >({{ h.name }})</span
         >
-          <svg class="w-4 h-4 text-secondary-400" viewBox="0 0 24 24">
-            <path :d="mdiConsole" fill="currentColor" />
-          </svg>
-          常用指令:
-        </span>
-        <button
-          v-for="h in directives"
-          :key="h.id"
-          type="button"
-          class="px-2 py-1 text-xs font-semibold rounded-lg bg-primary-800 hover:bg-primary-700 border border-primary-700/60 hover:border-secondary-500/50 text-primary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1 group"
-          :title="h.directive!.usage"
-          @click="onInsertDirective(h.directive!.name)"
-        >
-          <span class="text-secondary-400 group-hover:text-secondary-300"
-            >/{{ h.directive!.name }}</span
-          >
-          <span
-            class="text-xs scale-90 origin-left font-normal text-primary-500 group-hover:text-primary-400"
-            >({{ h.name }})</span
-          >
-        </button>
-      </template>
-
-      <!-- 派发按钮：可即时触发的笔记钩子，放入二级菜单防止误触 -->
-      <div v-if="dispatchableHooks.length" ref="dispatchMenuRef" class="relative">
-        <button
-          type="button"
-          class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
-          :disabled="isDispatching"
-          @click.stop="showDispatchMenu = !showDispatchMenu"
-        >
-          <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
-            <path :d="mdiLightningBolt" fill="currentColor" />
-          </svg>
-          <span>动作 ({{ dispatchableHooks.length }})</span>
-          <svg
-            class="w-3 h-3 text-secondary-400 transition-transform"
-            :class="{ 'rotate-180': showDispatchMenu }"
-            viewBox="0 0 24 24"
-          >
-            <path :d="mdiChevronDown" fill="currentColor" />
-          </svg>
-        </button>
-
-        <!-- 下拉菜单 -->
-        <div
-          v-if="showDispatchMenu"
-          class="absolute top-full left-0 mt-2 z-50 bg-primary-900 border border-primary-700 rounded-xl shadow-2xl p-2 w-fit min-w-40 flex flex-col gap-1"
-          @click.stop
-        >
-          <div
-            class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
-          >
-            选择动作
-          </div>
-          <button
-            v-for="h in dispatchableHooks"
-            :key="'dispatch-' + h.id"
-            type="button"
-            class="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm font-medium text-secondary-300 hover:bg-secondary-800 hover:text-white cursor-pointer whitespace-nowrap"
-            :disabled="isDispatching"
-            @click="
-              triggerDispatch(h.id, h.name);
-              showDispatchMenu = false;
-            "
-          >
-            <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
-              <path :d="mdiLightningBolt" fill="currentColor" />
-            </svg>
-            <span>{{ h.name }}</span>
-          </button>
-        </div>
-      </div>
+      </button>
     </div>
 
-    <!-- 文本编辑区 -->
-    <div class="relative w-full group">
+    <!-- 文本编辑区：文本框与下方动作栏共同构成补全浮层的锚定区域，浮层翻转至下方时不会遮挡动作栏 -->
+    <div ref="anchorRef" class="relative w-full group">
       <!-- 自动完成浮层 -->
       <Teleport :to="rendererEl">
         <div
@@ -190,6 +137,59 @@
         @blur="handleBlur"
         @focus="handleFocus"
       ></textarea>
+
+      <!-- 动作栏：可即时触发的笔记钩子，位于文本框下方以免被补全浮层遮挡 -->
+      <div
+        v-if="dispatchableHooks.length"
+        class="mt-3 flex flex-wrap gap-2 items-center select-none text-left"
+      >
+        <AppDropdown placement="bottom-start" content-class="w-fit min-w-40 flex flex-col gap-1">
+          <template #trigger="{ isOpen, toggle }">
+            <button
+              type="button"
+              class="px-2 py-1 text-xs font-semibold rounded-lg bg-secondary-900/60 hover:bg-secondary-800 border border-secondary-700/60 hover:border-secondary-500/50 text-secondary-300 hover:text-white transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+              :disabled="isDispatching"
+              @click.stop="toggle"
+            >
+              <svg class="w-3.5 h-3.5 text-secondary-400" viewBox="0 0 24 24">
+                <path :d="mdiLightningBolt" fill="currentColor" />
+              </svg>
+              <span>动作 ({{ dispatchableHooks.length }})</span>
+              <svg
+                class="w-3 h-3 text-secondary-400 transition-transform"
+                :class="{ 'rotate-180': isOpen }"
+                viewBox="0 0 24 24"
+              >
+                <path :d="mdiChevronDown" fill="currentColor" />
+              </svg>
+            </button>
+          </template>
+
+          <template #content="{ close }">
+            <div
+              class="px-3 py-2 text-xs font-bold text-primary-400 border-b border-primary-800 uppercase tracking-wider select-none"
+            >
+              选择动作
+            </div>
+            <button
+              v-for="h in dispatchableHooks"
+              :key="'dispatch-' + h.id"
+              type="button"
+              class="text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm font-medium text-secondary-300 hover:bg-secondary-800 hover:text-white cursor-pointer whitespace-nowrap"
+              :disabled="isDispatching"
+              @click="
+                triggerDispatch(h.id, h.name);
+                close();
+              "
+            >
+              <svg class="w-4 h-4 text-secondary-400 shrink-0" viewBox="0 0 24 24">
+                <path :d="mdiLightningBolt" fill="currentColor" />
+              </svg>
+              <span>{{ h.name }}</span>
+            </button>
+          </template>
+        </AppDropdown>
+      </div>
     </div>
   </div>
 </template>
@@ -205,6 +205,7 @@ import useTextAreaAutoHeight from "@/composables/useTextAreaAutoHeight";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useNotification from "@/composables/useNotification";
 import useClickOutside from "@/composables/useClickOutside";
+import AppDropdown from "@/components/AppDropdown.vue";
 import { mdiConsole, mdiLightningBolt, mdiChevronDown, mdiLoading } from "@mdi/js";
 import { useNoteAutocomplete, computeDirectiveInsertion } from "./useNoteAutocomplete";
 import type { InsertParams } from "./useNoteAutocomplete";
@@ -229,11 +230,13 @@ const model = defineModel<string>({ required: true });
 const emit = defineEmits<(e: "input") => void>();
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
+// 补全浮层的锚点：包含文本框与下方动作栏，使浮层无论在上方还是翻转至下方展开都不会覆盖动作控件
+const anchorRef = useTemplateRef<HTMLDivElement>("anchorRef");
 const floatingEl = ref<HTMLElement | null>(null);
 
 const rendererEl = useFullscreenRendererElement();
 
-const { floatingStyles } = useFloating(textareaRef, floatingEl, {
+const { floatingStyles } = useFloating(anchorRef, floatingEl, {
   placement: "top-start",
   strategy: "fixed",
   whileElementsMounted: autoUpdate,
@@ -267,14 +270,6 @@ const dispatchableHooks = computed(() => {
 
 const { showSuccess, showError, showInfo, remove } = useNotification();
 const isDispatching = ref(false);
-
-// 下拉菜单状态
-const showDispatchMenu = ref(false);
-const dispatchMenuRef = useTemplateRef<HTMLDivElement>("dispatchMenuRef");
-
-useClickOutside(dispatchMenuRef, () => {
-  showDispatchMenu.value = false;
-});
 
 // 点击补全浮层与文本框之外的区域时关闭补全，避免浮层遮挡上层内容
 useClickOutside(
