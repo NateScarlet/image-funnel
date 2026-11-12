@@ -182,14 +182,20 @@ func (t *autocompleteTrigger) buildEnv(ctx context.Context, target hookConfig, l
 }
 
 // parseLineContext 将 raw linePrefix 解析为类似 bash COMP_WORDS / COMP_CWORD 的上下文，
-// 使脚本无需自行实现参数位置解析。
+// 使脚本无需自行实现参数位置解析。已完成前缀与执行路径共用 splitArgs 的 shell 分词规则，
+// 使带引号的含空格参数在补全上下文中保持为一个词。
 func parseLineContext(linePrefix, query string) (cwords []string, cwordIdx int, prevWord string) {
 	completedPrefix := linePrefix
 	if query != "" {
 		completedPrefix = strings.TrimSuffix(linePrefix, query)
 	}
 
-	cwords = strings.Fields(completedPrefix)
+	cwords, err := splitArgs(completedPrefix)
+	if err != nil {
+		// 补全请求是半成品输入，不能因为前缀出现未闭合引号就让整次补全报错。
+		// 正常情况下 query 已从行尾去掉，前缀是配平的；这里只做防御性退回空白分词。
+		cwords = strings.Fields(completedPrefix)
+	}
 	// 光标所在位置恒为已解析出的词数：query 非空时它是被 query 替换掉的那个词的末尾，
 	// 为空时（行尾空格或整行空白）则是下一个待补全的词
 	cwordIdx = len(cwords)

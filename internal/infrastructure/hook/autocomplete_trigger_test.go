@@ -2,12 +2,14 @@ package hook
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	domhook "main/internal/domain/hook"
 	"main/internal/scalar"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestAutocomplete_SingleShot_Cancel 单次执行通道的取消：注入进程原语替身并断言它收到取消，
@@ -45,4 +47,21 @@ func TestAutocomplete_SingleShot_Cancel(t *testing.T) {
 
 	// 进程替身观察到取消，即取消被透传给了进程原语
 	process.canceled(t)
+}
+
+// TestAutocomplete_SingleShot_QuotedArgsStaySingleWord 单次执行通道：
+// 已完成的带引号参数在补全上下文中保持为一个词（与执行路径 splitArgs 一致）。
+func TestAutocomplete_SingleShot_QuotedArgsStaySingleWord(t *testing.T) {
+	env := newAutocompleteTestRunner(t, false, map[string]string{"IF_HELPER_ONESHOT": "1"}, nil, nil)
+
+	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", `/remix --add "long hair" --branch `, "")
+	require.NoError(t, err)
+	require.Len(t, suggestions, 1)
+
+	// 假服务回显环境变量，验证单次执行通道注入的 cwords 分词结果
+	var echo autocompleteEnvEcho
+	require.NoError(t, json.Unmarshal([]byte(suggestions[0].Description), &echo))
+	assert.JSONEq(t, `["/remix","--add","long hair","--branch"]`, echo.Cwords)
+	assert.Equal(t, "4", echo.CwordIdx)
+	assert.Equal(t, "--branch", echo.PrevWord)
 }

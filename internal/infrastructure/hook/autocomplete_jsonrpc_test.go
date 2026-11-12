@@ -44,6 +44,22 @@ type helperParams struct {
 	DirectoryRelPath string   `json:"directoryRelPath"`
 }
 
+// autocompleteEnvEcho 单次执行通道回显的补全上下文环境变量快照
+type autocompleteEnvEcho struct {
+	Cwords   string `json:"cwords"`
+	CwordIdx string `json:"cwordIdx"`
+	PrevWord string `json:"prevWord"`
+}
+
+// echoAutocompleteEnv 回显单次执行通道注入的补全上下文环境变量，供测试断言分词结果
+func echoAutocompleteEnv() string {
+	return mustJSON(autocompleteEnvEcho{
+		Cwords:   os.Getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORDS"),
+		CwordIdx: os.Getenv("IMAGE_FUNNEL_AUTOCOMPLETE_CWORD_IDX"),
+		PrevWord: os.Getenv("IMAGE_FUNNEL_AUTOCOMPLETE_PREV_WORD"),
+	})
+}
+
 func runAutocompleteHelper() {
 	pid := os.Getpid()
 	if f := os.Getenv("IF_HELPER_PID_FILE"); f != "" {
@@ -63,8 +79,14 @@ func runAutocompleteHelper() {
 	}
 
 	// 单次执行模式：输出一行 JSONL 建议后退出（os.Exit 避免测试框架追加的 PASS 污染 stdout）
+	// description 回显补全上下文环境变量，供单次执行通道断言 cwords 分词结果
 	if os.Getenv("IF_HELPER_ONESHOT") == "1" {
-		fmt.Printf(`{"text":"%d","displayText":"helper","type":"test"}`+"\n", pid)
+		fmt.Printf("%s\n", mustJSON(map[string]string{
+			"text":        strconv.Itoa(pid),
+			"displayText": "helper",
+			"description": echoAutocompleteEnv(),
+			"type":        "test",
+		}))
 		os.Exit(0)
 	}
 
@@ -388,6 +410,96 @@ func TestAutocomplete_JSONRPC_RequestContract(t *testing.T) {
 	// 目录上下文（rootDir / directoryRelPath）随请求参数逐请求传递
 	assert.Equal(t, env.tempDir, echo.RootDir)
 	assert.Equal(t, "", echo.DirectoryRelPath)
+}
+
+// TestAutocomplete_JSONRPC_QuotedArgsStaySingleWord 常驻通道：
+// 已完成的带引号参数与执行路径 splitArgs 使用同一套分词规则。
+func TestAutocomplete_JSONRPC_QuotedArgsStaySingleWord(t *testing.T) {
+	cases := []struct {
+		name         string
+		linePrefix   string
+		query        string
+		wantCwords   []string
+		wantCwordIdx int
+		wantPrevWord string
+	}{
+		{
+			name:         "double quote",
+			linePrefix:   `/remix --add "long hair" --branch `,
+			wantCwords:   []string{"/remix", "--add", "long hair", "--branch"},
+			wantCwordIdx: 4,
+			wantPrevWord: "--branch",
+		},
+		{
+			name:         "single quote",
+			linePrefix:   `/remix --add 'long hair' --branch `,
+			wantCwords:   []string{"/remix", "--add", "long hair", "--branch"},
+			wantCwordIdx: 4,
+			wantPrevWord: "--branch",
+		},
+		{
+			name:         "escaped double quote inside double quotes",
+			linePrefix:   `/remix --add "say \"hi\"" --branch `,
+			wantCwords:   []string{"/remix", "--add", `say "hi"`, "--branch"},
+			wantCwordIdx: 4,
+			wantPrevWord: "--branch",
+		},
+		{
+			name:         "backslash inside double quotes is kept",
+			linePrefix:   `/remix --add "elysia \(herrscher\)" `,
+			wantCwords:   []string{"/remix", "--add", `elysia \(herrscher\)`},
+			wantCwordIdx: 3,
+			wantPrevWord: `elysia \(herrscher\)`,
+		},
+		{
+			name:         "backslash outside quotes is kept",
+			linePrefix:   `/remix --add \(herrscher\) `,
+			wantCwords:   []string{"/remix", "--add", `\(herrscher\)`},
+			wantCwordIdx: 3,
+			wantPrevWord: `\(herrscher\)`,
+		},
+		{
+			// 正常补全请求：未完成的词由 query 从行尾去掉，剩余前缀是配平的
+			name:         "unfinished quoted word is removed with query",
+			linePrefix:   `/remix --add "long hair`,
+			query:        `"long hair`,
+			wantCwords:   []string{"/remix", "--add"},
+			wantCwordIdx: 2,
+			wantPrevWord: "--add",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newAutocompleteTestRunner(t, true, nil, nil, nil)
+
+			suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", tc.linePrefix, tc.query)
+			require.NoError(t, err)
+			require.Len(t, suggestions, 1)
+
+			var echo helperParams
+			require.NoError(t, json.Unmarshal([]byte(suggestions[0].Description), &echo))
+			assert.Equal(t, tc.wantCwords, echo.Cwords)
+			assert.Equal(t, tc.wantCwordIdx, echo.CwordIdx)
+			assert.Equal(t, tc.wantPrevWord, echo.PrevWord)
+		})
+	}
+}
+
+// TestAutocomplete_JSONRPC_UnterminatedQuoteFallsBackToWhitespace 常驻通道：
+// 半成品输入里的未闭合引号不能让整次补全失败，退回空白分词。
+func TestAutocomplete_JSONRPC_UnterminatedQuoteFallsBackToWhitespace(t *testing.T) {
+	env := newAutocompleteTestRunner(t, true, nil, nil, nil)
+
+	suggestions, err := env.runner.Autocomplete(context.Background(), env.hookID, "", `/remix --add "long hair`, "")
+	require.NoError(t, err, "未闭合引号不应让补全失败")
+	require.Len(t, suggestions, 1)
+
+	var echo helperParams
+	require.NoError(t, json.Unmarshal([]byte(suggestions[0].Description), &echo))
+	assert.Equal(t, []string{"/remix", "--add", `"long`, `hair`}, echo.Cwords)
+	assert.Equal(t, 4, echo.CwordIdx)
+	assert.Equal(t, "hair", echo.PrevWord)
 }
 
 func TestAutocomplete_JSONRPC_ScriptErrorKeepsCode(t *testing.T) {
