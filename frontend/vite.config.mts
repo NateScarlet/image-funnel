@@ -107,5 +107,9 @@ export default defineConfig(() => ({
     // 受限沙箱禁止子进程 stdio 管道，默认的 forks pool（子进程）无法启动；
     // threads 使用进程内 worker_threads，测试隔离在线程级进行
     pool: "threads",
+    // Node 25+ 默认暴露实验性 Web Storage 全局 localStorage（未指定 --localstorage-file 时取值为
+    // undefined）；vitest 的 jsdom 环境只安装全局尚不存在的键，导致 jsdom 的 localStorage 被跳过，
+    // 测试里拿到的 localStorage 恒为 undefined。关闭 Node 自带实现让 jsdom 的实现正常注入。
+    execArgv: ["--no-experimental-webstorage"],
   },
 }));
