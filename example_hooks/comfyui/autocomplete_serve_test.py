@@ -259,7 +259,8 @@ class TestServe(unittest.TestCase):
                 get_parser(),
                 DanbooruEnv(search_url="http://localhost"),
             ) as providers:
-                self.assertEqual(len(providers), 7)
+                # 6 个固定 provider + 分支名标签 provider + Danbooru provider
+                self.assertEqual(len(providers), 8)
                 fake_ctx.__enter__.assert_called_once()
             fake_ctx.__exit__.assert_called_once()
 

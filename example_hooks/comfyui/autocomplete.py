@@ -61,6 +61,7 @@ from .model_format import (
     existing_tags,
     format_prompt_text,
 )
+from .weight_parser import looks_like_weight
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -135,26 +136,38 @@ def classify_action(cwords: List[str], option_with_args: Set[str]) -> str:
     return action
 
 
-def action_tags(cwords: List[str], action: str) -> List[str]:
-    """取出当前动作已键入的位置值（可再按逗号拆分），供关联联想作为查询标签。"""
+def action_values(cwords: List[str], action: str) -> List[List[str]]:
+    """按旗标出现次数分组取出当前动作已键入的位置值（可再按逗号拆分）。
+
+    一次 `--add` 可以带多个值（`--add a b`），执行路径按出现次数分组解析，
+    因此这里保留分组：需要扁平化标签的场景用 `action_tags`，需要区分「权重要不要
+    丢掉」的场景（一次 `--add` 的最后一个 token 可能是权重）自己按组处理。
+    """
     flag = next((f for f, a in _ACTION_FLAGS.items() if a == action), None)
     if flag is None:
         return []
 
-    tags: List[str] = []
-    collecting = False
+    groups: List[List[str]] = []
+    collecting: Optional[List[str]] = None
     for word in cwords[1:]:
         if word.startswith("-"):
-            collecting = word == flag
+            collecting = [] if word == flag else None
+            if collecting is not None:
+                groups.append(collecting)
             continue
-        if not collecting:
+        if collecting is None:
             continue
         cleaned = word.strip().strip(",").strip('"').strip("'").strip()
         for part in cleaned.split(","):
             part_cleaned = part.strip()
             if part_cleaned:
-                tags.append(part_cleaned)
-    return tags
+                collecting.append(part_cleaned)
+    return groups
+
+
+def action_tags(cwords: List[str], action: str) -> List[str]:
+    """取出当前动作已键入的位置值（可再按逗号拆分），供关联联想作为查询标签。"""
+    return [tag for group in action_values(cwords, action) for tag in group]
 
 
 def quote_if_needed(val: str) -> str:
@@ -938,6 +951,150 @@ def _format_relative_time(created_at: str) -> str:
     return f"{days}天前"
 
 
+# #region 分支名（--branch）值补全
+
+# 同指令 `--add` 标签候选的类型与描述：前端按 type 归类，描述说明候选来源
+_BRANCH_TAG_TYPE = "branch"
+_BRANCH_TAG_DESCRIPTION = "同指令 --add 标签"
+
+
+def _branch_tag_form(tag: str) -> str:
+    """分支名固定取 sdxl 形态：分支名是目录名，不落到任何提示词节点。
+
+    与 `DanbooruProvider._format_for_target` 的分支分支同源，改分支命名形态时
+    只需改这里。
+    """
+    return format_prompt_text(tag, "sdxl")
+
+
+def _unquote_segment(segment: str) -> str:
+    """去掉一段分支名的首尾空白与引号（引号只是 shell 分词用的书写形态）。"""
+    return segment.strip().strip('"').strip("'").strip()
+
+
+@dataclass(frozen=True)
+class _BranchValue:
+    """`--branch` 值位置的输入拆分结果。
+
+    prefix 是用户已经写定的目录名部分（含末尾逗号），原样拼在候选前面，不重排；
+    current 是光标所在的这一段，既可能是名称的一部分，也可能已经是一个完整名称；
+    written 是前缀里已经写完的标签（sdxl 形态小写），避免重复建议已有标签。
+    """
+
+    prefix: str
+    current: str
+    written: Set[str]
+
+
+def _branch_value(query: str) -> _BranchValue:
+    """按最后一个逗号拆分 `--branch` 的值。"""
+    head, sep, tail = query.rpartition(",")
+    if not sep:
+        return _BranchValue(prefix="", current=_unquote_segment(tail), written=set())
+
+    written: Set[str] = set()
+    for segment in head.split(","):
+        form = _branch_tag_form(_unquote_segment(segment))
+        if form:
+            written.add(form.lower())
+    return _BranchValue(
+        prefix=f"{head}{sep}", current=_unquote_segment(tail), written=written
+    )
+
+
+def _mark_existing_branch_dir(
+    context: AutocompleteContext, suggestion: AutocompleteSuggestion
+) -> None:
+    """候选与已存在的分支目录同名时加「已存在」标记。
+
+    候选文本已是插入后的完整值（含已写前缀），直接拿它推算目标目录即可。
+    """
+    suffix = _unquote_segment(suggestion.text)
+    if branch_directory_exists(context.root_dir, context.directory_rel_path, suffix):
+        suggestion.style = "muted"
+        suggestion.description = f"(已存在) {suggestion.description}"
+
+
+def _add_action_tags(cwords: List[str]) -> List[str]:
+    """同一条指令里 `--add` 过的标签，按出现顺序。
+
+    `--add <tag> <weight>` 的权重只服务单个标签（与执行路径 `_split_add_occurrence`
+    一致），因此一次参数末尾像权重时丢掉它：权重位置补的是数字，不该进分支名。
+    多个值再拖一个权重在提交时本身就会报错，补全不做这种组合的额外判定。
+    """
+    tags: List[str] = []
+    for group in action_values(cwords, ADD_ACTION):
+        values = group
+        if len(values) > 1 and looks_like_weight(values[-1]):
+            values = values[:-1]
+        tags.extend(values)
+    return tags
+
+
+class BranchTagProvider(AutocompleteProvider):
+    """用同一条指令里 `--add` 过的标签补全 `--branch` 的值。
+
+    分支目录名常用标签拼成，而这条指令刚 `--add` 过的标签正是最想复用的候选。
+    它只依赖补全上下文，未配置任何 Danbooru 数据来源时同样给出；也不排斥
+    Danbooru / 历史候选——跨 provider 的同文本去重由产出循环负责。
+    """
+
+    def can_provide(self, context: AutocompleteContext) -> bool:
+        # `--branch` 只有一个值位置：值写完（后跟空格）后不再给候选。它本身是编辑
+        # 旗标，因此 `prev_word` 命中时也不会落在 `--region` / `--node` 的取值位置
+        if context.action != BRANCH_ACTION or context.prev_word != "--branch":
+            return False
+        # 正在输入旗标名本身（如 `--re`）：等它写完再补全
+        return not context.query.startswith("-")
+
+    def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        value = _branch_value(context.query)
+        current_lower = value.current.lower()
+
+        # 同一标签可能被写成 `long hair` 与 `long_hair`：格式化后同名只留一条
+        tags: List[str] = []
+        seen: Set[str] = set()
+        for tag in _add_action_tags(context.cleaned_cwords):
+            form = _branch_tag_form(tag)
+            key = form.lower()
+            if not key or key in seen or key in value.written:
+                continue
+            seen.add(key)
+            tags.append(form)
+
+        # 整词替换候选：当前段是名称的一部分，选中后替换成完整标签
+        matches = [tag for tag in tags if tag.lower().startswith(current_lower)]
+        for tag in matches:
+            suggestion = AutocompleteSuggestion(
+                text=quote_if_needed(f"{value.prefix}{tag}"),
+                displayText=tag,
+                description=_BRANCH_TAG_DESCRIPTION,
+                type=_BRANCH_TAG_TYPE,
+            )
+            _mark_existing_branch_dir(context, suggestion)
+            yield suggestion
+
+        # 追加候选：没写逗号时把已输入的半截当作完整名称，再拼一个标签成新目录名；
+        # 已经作为整词替换候选给出的标签不再追加，避免 `long,long_hair` 这类重复
+        if value.prefix or not value.current:
+            return
+        for tag in tags:
+            if tag in matches:
+                continue
+            full = f"{value.current},{tag}"
+            suggestion = AutocompleteSuggestion(
+                text=quote_if_needed(full),
+                displayText=full,
+                description=f"追加 {_BRANCH_TAG_DESCRIPTION}",
+                type=_BRANCH_TAG_TYPE,
+            )
+            _mark_existing_branch_dir(context, suggestion)
+            yield suggestion
+
+
+# #endregion
+
+
 def _build_seen_lower(seen_prompts: dict[str, str]) -> set[str]:
     """从 seen_prompts 提取所有提示词的小写集合，用于过滤。"""
     return {
@@ -988,7 +1145,7 @@ class DanbooruProvider(AutocompleteProvider):
         因此不依赖当前图片的工作流。
         """
         if context.action == BRANCH_ACTION:
-            return format_prompt_text(text, "sdxl")
+            return _branch_tag_form(text)
 
         prompt_meta = context.prompt_meta
         target = context.prompt_target
@@ -998,28 +1155,19 @@ class DanbooruProvider(AutocompleteProvider):
             prompt_meta, target.node_id, text, target.inference_text
         )
 
-    def _mark_existing_branch_dir(
-        self, context: AutocompleteContext, suggestion: AutocompleteSuggestion
-    ) -> None:
-        """候选与已存在的分支目录同名时加「已存在」标记。
-
-        分支名插入时已重排为下划线形态，直接拿它当后缀推算目录即可。
-        """
-        suffix = suggestion.text.strip().strip('"').strip("'")
-        if branch_directory_exists(
-            context.root_dir, context.directory_rel_path, suffix
-        ):
-            suggestion.style = "muted"
-            suggestion.description = f"(已存在) {suggestion.description}"
-
-    def _suggestion_text(self, context: AutocompleteContext, tag: str) -> str:
+    def _suggestion_text(
+        self, context: AutocompleteContext, tag: str, prefix: str = ""
+    ) -> str:
         """把标签转成可直接插入的补全文本。
 
         格式化必须先于引号包裹：anima 会把下划线换成空格，从而新增引号需求。
+        prefix 是 `--branch` 值里用户已经写定的部分，原样拼在候选前面。
         """
-        return quote_if_needed(self._format_for_target(context, tag))
+        return quote_if_needed(prefix + self._format_for_target(context, tag))
 
-    def _tag_insert_text(self, context: AutocompleteContext, tag: str) -> str:
+    def _tag_insert_text(
+        self, context: AutocompleteContext, tag: str, prefix: str = ""
+    ) -> str:
         """候选标签的插入文本。
 
         提示词里的括号需要反斜杠转义（避免被当成权重语法），但分支名是目录名，
@@ -1028,9 +1176,17 @@ class DanbooruProvider(AutocompleteProvider):
         escaped = tag
         if context.action != BRANCH_ACTION:
             escaped = tag.replace("(", r"\(").replace(")", r"\)")
-        return self._suggestion_text(context, escaped)
+        return self._suggestion_text(context, escaped, prefix)
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
+        # `--branch` 的值可以是 `b1,blue` 这样的多标签目录名：已写前缀原样拼回候选
+        # 前面，过滤与搜索只看最后一个逗号之后的当前段
+        branch = (
+            _branch_value(context.query) if context.action == BRANCH_ACTION else None
+        )
+        branch_prefix = branch.prefix if branch else ""
+        search_query = branch.current if branch else context.query
+
         # 已见提示词同样重排到目标格式后再比对：建议文本已经过格式化，拿它去比对
         # 原文形态的已见提示词会让「(已有)」标记失效。
         seen_in_target_format = {
@@ -1045,7 +1201,7 @@ class DanbooruProvider(AutocompleteProvider):
             if context.action == BRANCH_ACTION:
                 # 分支名与提示词内容无关：只标记目标目录是否已存在
                 for s in suggestions:
-                    self._mark_existing_branch_dir(context, s)
+                    _mark_existing_branch_dir(context, s)
                     yield s
                 return
 
@@ -1095,18 +1251,22 @@ class DanbooruProvider(AutocompleteProvider):
                 for prompt, created_at in history_prompts:
                     if prompt.lower() in seen_lower or prompt.lower() in exclude_lower:
                         continue
+                    if branch and _branch_tag_form(prompt).lower() in branch.written:
+                        # 历史回退只在当前段为空时发生（当前段非空走搜索），因此这里
+                        # 只需剔掉值里已经写过的标签，前缀照旧拼回候选
+                        continue
                     relative = (
                         _format_relative_time(created_at) if created_at else "之前"
                     )
                     suggestion = AutocompleteSuggestion(
-                        text=self._suggestion_text(context, prompt),
+                        text=self._suggestion_text(context, prompt, branch_prefix),
                         displayText=prompt,
                         description=f"({relative}历史添加) {prompt}",
                         type="danbooru",
                         style="muted",
                     )
                     if context.action == BRANCH_ACTION:
-                        self._mark_existing_branch_dir(context, suggestion)
+                        _mark_existing_branch_dir(context, suggestion)
                     yield suggestion
                     count += 1
                     if count >= 20:
@@ -1121,11 +1281,11 @@ class DanbooruProvider(AutocompleteProvider):
                     style="",
                 )
 
-        if context.query.strip():
+        if search_query.strip():
             # 用户正在打字，执行前缀语义搜索
             try:
                 tags = self.provider.search(
-                    context.query, cancel_token=context.cancel_token
+                    search_query, cancel_token=context.cancel_token
                 )
                 # 语义层降级提示项与标签分流：错误以建议项展示，字面结果照常返回
                 unavailable = [
@@ -1135,13 +1295,18 @@ class DanbooruProvider(AutocompleteProvider):
                 for item in tags:
                     if isinstance(item, SemanticLayerUnavailable):
                         continue
+                    if branch and _branch_tag_form(item.tag).lower() in branch.written:
+                        # 已经写在分支值里的标签不再重复建议
+                        continue
                     display = (
                         f"{item.tag} ({item.cn_name})" if item.cn_name else item.tag
                     )
                     desc = item.wiki if item.wiki else "Danbooru 标签"
                     suggestions.append(
                         AutocompleteSuggestion(
-                            text=self._tag_insert_text(context, item.tag),
+                            text=self._tag_insert_text(
+                                context, item.tag, branch_prefix
+                            ),
                             displayText=display,
                             description=desc,
                             type="danbooru",
@@ -1161,7 +1326,7 @@ class DanbooruProvider(AutocompleteProvider):
                 return
 
             # 完全匹配提升到最前（上游 embedding 排序可能不够准确）
-            q_lower = context.query.strip().lower()
+            q_lower = search_query.strip().lower()
             suggestions.sort(
                 key=lambda s: (
                     0
@@ -1366,6 +1531,8 @@ def build_providers(
                 WorkflowPromptProvider(),
                 RegionOptionProvider(),
                 NodeOptionProvider(),
+                # 同指令 `--add` 标签排在 Danbooru 之前：跨 provider 去重保留先出现的那条
+                BranchTagProvider(),
             ]
         )
         if danbooru.enabled:
@@ -1422,6 +1589,9 @@ def autocomplete(
         cancel_token=request.cancel_token,
     )
 
+    # 跨 provider 按插入文本去重：同一标签可能同时来自同指令 `--add` 与 Danbooru /
+    # 历史，保留先产出的一条；空文本的是「⚠ 失败」类提示项，不参与去重
+    yielded_texts: Set[str] = set()
     for provider in services.providers:
         # 取消检查点：请求方已不需要该结果时不再进入后续 provider（含其网络调用）
         if request.cancel_token.is_canceled():
@@ -1430,6 +1600,10 @@ def autocomplete(
             has_suggestions = False
             for suggestion in provider.provide(context):
                 has_suggestions = True
+                if suggestion.text:
+                    if suggestion.text in yielded_texts:
+                        continue
+                    yielded_texts.add(suggestion.text)
                 yield suggestion
             if has_suggestions and provider.is_exclusive:
                 break

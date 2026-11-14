@@ -27,6 +27,7 @@ from .autocomplete import (
     NO_ACTION,
     WorkflowPromptProvider,
     DanbooruProvider,
+    BranchTagProvider,
     NodeProvider,
     NodeOptionProvider,
     LoraProvider,
@@ -77,14 +78,29 @@ def _data_dir_env() -> Generator[str, None, None]:
             yield tmp_dir
 
 
+# `--branch` 值补全的典型指令：同一条指令里 `--add` 过的两个标签（其中一个带空格）
+_BRANCH_ADD_CWORDS = [
+    "/remix",
+    "--add",
+    "long_hair",
+    "--add",
+    "blue eyes",
+    "--branch",
+]
+
+
 def _request(
-    cwords: Optional[List[str]] = None, target_command: str = "remix"
+    cwords: Optional[List[str]] = None,
+    target_command: str = "remix",
+    *,
+    query: str = "",
+    prev_word: str = "",
 ) -> AutocompleteRequest:
     """构造一个补全请求上下文，默认落在「新增标签」这一编辑动作上。"""
     return AutocompleteRequest(
         target_command=target_command,
-        query="",
-        prev_word="",
+        query=query,
+        prev_word=prev_word,
         cwords=cwords if cwords is not None else ["/remix", "--add"],
         image_paths=[],
         root_dir="root",
@@ -1176,6 +1192,220 @@ class TestComfyUIAutocomplete(unittest.TestCase):
 
         self.assertEqual(context.action, BRANCH_ACTION)
         self.assertFalse(provider.can_provide(context))
+
+    # ---- 同指令 `--add` 标签用于 `--branch` 值补全 ----
+
+    def _branch_context(
+        self,
+        query: str,
+        cwords: Optional[List[str]] = None,
+        **kwargs: Any,
+    ) -> AutocompleteContext:
+        """构造 `--branch` 值位置的补全上下文，默认带上两个同指令 `--add` 标签。"""
+        return self._make_context(
+            target_command="remix",
+            query=query,
+            prev_word="--branch",
+            cwords=cwords if cwords is not None else list(_BRANCH_ADD_CWORDS),
+            **kwargs,
+        )
+
+    def test_branch_offers_same_directive_add_tags(self) -> None:
+        """空值位置给出同指令 `--add` 过的标签，按 sdxl 形态重排。"""
+        provider = BranchTagProvider()
+        context = self._branch_context("")
+
+        self.assertTrue(provider.can_provide(context))
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair", "blue_eyes"])
+        self.assertEqual(
+            [s.displayText for s in suggestions], ["long_hair", "blue_eyes"]
+        )
+        self.assertEqual({s.type for s in suggestions}, {"branch"})
+
+    def test_branch_offers_append_candidates_for_partial_name(self) -> None:
+        """没写逗号时把已输入的半截当作完整名称，给出追加候选。"""
+        suggestions = list(BranchTagProvider().provide(self._branch_context("b1")))
+
+        self.assertEqual(
+            [s.text for s in suggestions], ["b1,long_hair", "b1,blue_eyes"]
+        )
+        self.assertEqual(suggestions[0].displayText, "b1,long_hair")
+        self.assertTrue(suggestions[0].description.startswith("追加"))
+
+    def test_branch_prefix_match_skips_duplicate_append_candidate(self) -> None:
+        """已作为整词替换候选给出的标签不再给 `long,long_hair` 这类追加候选。"""
+        suggestions = list(BranchTagProvider().provide(self._branch_context("long")))
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair", "long,blue_eyes"])
+        self.assertEqual(suggestions[0].displayText, "long_hair")
+
+    def test_branch_comma_prefix_keeps_written_value(self) -> None:
+        """已写前缀（含逗号）原样拼在候选前面，用于拼多个标签组成的目录名。"""
+        suggestions = list(BranchTagProvider().provide(self._branch_context("b1,")))
+
+        self.assertEqual(
+            [s.text for s in suggestions], ["b1,long_hair", "b1,blue_eyes"]
+        )
+
+    def test_branch_skips_tags_already_in_value(self) -> None:
+        """分支值里已经出现过的标签不再给候选。"""
+        cwords = ["/remix", "--add", "b1", "--add", "long_hair", "--branch"]
+
+        suggestions = list(
+            BranchTagProvider().provide(self._branch_context("b1,", cwords))
+        )
+
+        self.assertEqual([s.text for s in suggestions], ["b1,long_hair"])
+
+    def test_branch_filters_by_current_segment_after_comma(self) -> None:
+        """逗号之后只按当前段过滤，前缀不参与匹配。"""
+        suggestions = list(BranchTagProvider().provide(self._branch_context("b1,blue")))
+
+        self.assertEqual([s.text for s in suggestions], ["b1,blue_eyes"])
+
+    def test_branch_ignores_add_weight_token(self) -> None:
+        """`--add <tag> <weight>` 只贡献 tag，权重表达式不进候选。"""
+        cwords = ["/remix", "--add", "long_hair", "1.2", "--branch"]
+
+        suggestions = list(
+            BranchTagProvider().provide(self._branch_context("", cwords))
+        )
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair"])
+
+    def test_branch_append_candidate_marks_existing_directory(self) -> None:
+        """按插入后的完整值判断分支目录是否已存在。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.makedirs(os.path.join(temp_dir, "b1,blue_eyes"))
+            context = self._branch_context(
+                "b1", root_dir=temp_dir, directory_rel_path=""
+            )
+            suggestions = list(BranchTagProvider().provide(context))
+
+        self.assertEqual(
+            [s.text for s in suggestions], ["b1,long_hair", "b1,blue_eyes"]
+        )
+        self.assertEqual(suggestions[0].style, "")
+        self.assertEqual(suggestions[1].style, "muted")
+        self.assertTrue(suggestions[1].description.startswith("(已存在)"))
+
+    def test_branch_tag_provider_stops_after_value(self) -> None:
+        """`--branch` 只有一个值位置：值写完（后跟空格）后不再给候选。"""
+        context = self._make_context(
+            target_command="remix",
+            query="",
+            prev_word="b1",
+            cwords=["/remix", "--branch", "b1"],
+        )
+
+        self.assertFalse(BranchTagProvider().can_provide(context))
+
+    def test_branch_danbooru_candidates_use_current_segment(self) -> None:
+        """Danbooru 搜索只看当前段，候选文本补回已写前缀。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("blue eyes", "蓝眼", "Blue eyes.", "General")
+        ]
+        context = self._make_context(
+            target_command="remix",
+            query="b1,blu",
+            prev_word="--branch",
+            cwords=["/remix", "--branch"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch"]
+            ),
+        )
+        provider = DanbooruProvider(
+            mock_provider, self._make_history(), NullSuggestionTextFormatter()
+        )
+
+        suggestions = list(provider.provide(context))
+
+        mock_provider.search.assert_called_once_with(
+            "blu", cancel_token=context.cancel_token
+        )
+        self.assertEqual([s.text for s in suggestions], ["b1,blue_eyes"])
+
+    def test_branch_history_falls_back_with_written_prefix(self) -> None:
+        """空当前段回退历史标签：候选拼回已写前缀，值里已写过的标签剔除。"""
+        context = self._make_context(
+            target_command="remix",
+            query="b1,blue_eyes,",
+            prev_word="--branch",
+            cwords=["/remix", "--branch"],
+            parsed_args=_parse_args_for_autocomplete(
+                get_parser(), "remix", ["/remix", "--branch"]
+            ),
+        )
+        history = self._make_history(
+            all_added=[
+                ("blue_eyes", "2026-01-01T00:00:00+00:00"),
+                ("red_hair", "2026-01-01T00:00:00+00:00"),
+            ]
+        )
+        provider = DanbooruProvider(MagicMock(), history, NullSuggestionTextFormatter())
+
+        suggestions = list(provider.provide(context))
+
+        self.assertEqual([s.text for s in suggestions], ["b1,blue_eyes,red_hair"])
+
+    def test_autocomplete_keeps_same_directive_tag_before_danbooru(self) -> None:
+        """真实产出循环里同指令标签排在前，跨 provider 同文本只保留第一条。"""
+        mock_provider = MagicMock()
+        mock_provider.search.return_value = [
+            DanbooruTag("long hair", "长发", "Long hair.", "General"),
+            DanbooruTag("long dress", "长裙", "Long dress.", "General"),
+        ]
+        services = AutocompleteServices(
+            parser=get_parser(),
+            providers=[
+                BranchTagProvider(),
+                DanbooruProvider(
+                    mock_provider, self._make_history(), NullSuggestionTextFormatter()
+                ),
+            ],
+        )
+        request = _request(
+            ["/remix", "--add", "long hair", "--branch"],
+            query="long",
+            prev_word="--branch",
+        )
+
+        suggestions = list(autocomplete(request, services))
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair", "long_dress"])
+        self.assertEqual(suggestions[0].type, "branch")
+        self.assertEqual(suggestions[1].type, "danbooru")
+
+    def test_branch_add_tags_work_without_danbooru_env(self) -> None:
+        """未配置任何数据来源时同指令 `--add` 标签照常给出且不报错。"""
+        request = _request(
+            ["/remix", "--add", "long_hair", "--branch"], prev_word="--branch"
+        )
+        with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
+            with build_providers(request, get_parser(), DanbooruEnv()) as providers:
+                services = AutocompleteServices(
+                    parser=get_parser(), providers=providers
+                )
+                suggestions = list(autocomplete(request, services))
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair"])
+
+    def test_branch_dedupes_add_tags_with_same_sdxl_form(self) -> None:
+        """同一标签写成空格与下划线两种形态时只留一条候选。"""
+        cwords = ["/remix", "--add", "long hair", "--add", "long_hair", "--branch"]
+
+        suggestions = list(
+            BranchTagProvider().provide(self._branch_context("", cwords))
+        )
+
+        self.assertEqual([s.text for s in suggestions], ["long_hair"])
+
+    def test_branch_skips_completion_while_typing_flag(self) -> None:
+        """正在输入旗标名（如 `--l`）时不给值候选。"""
+        self.assertFalse(BranchTagProvider().can_provide(self._branch_context("--l")))
 
     # ---- RegionOptionProvider tests ----
 
