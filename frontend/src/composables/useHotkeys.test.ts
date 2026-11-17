@@ -1,7 +1,14 @@
 import { test, expect, vi, afterEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, ref, nextTick } from "vue";
-import { useHotkeys, activeHotkeys, type HotkeyBindings } from "./useHotkeys";
+import {
+  useHotkeys,
+  activeHotkeys,
+  getHotkeyContext,
+  hasActiveScope,
+  isHotkeyEnabled,
+  type HotkeyBindings,
+} from "./useHotkeys";
 
 // 注册表是模块级单例，通过卸载宿主组件清理，避免用例之间互相污染
 const wrappers: ReturnType<typeof mount>[] = [];
@@ -38,6 +45,12 @@ function pressKey(key: string, init: KeyboardEventInit = {}) {
 
 function listedKeys() {
   return activeHotkeys.value.map((item) => `${item.keys[0].join("+")}:${item.invalid ?? "ok"}`);
+}
+
+function listedByDescription(description: string) {
+  const item = activeHotkeys.value.find((entry) => entry.description === description);
+  if (!item) throw new Error(`未找到快捷键声明: ${description}`);
+  return item;
 }
 
 // #region 应用自身快捷键
@@ -247,7 +260,7 @@ test("scope 决定同一声明的两个上下文中当下生效的那一个", as
     },
   });
   mountWithHotkeys(() => {
-    useHotkeys({ defineScope: viewerScope });
+    useHotkeys([], { defineScope: viewerScope });
     return () => h(viewerChild);
   });
   // 网格上下文：没有压入任何 scope
@@ -288,6 +301,90 @@ test("绑定内容变化时整体重新注册", async () => {
   pressKey("F7");
   expect(handler).toHaveBeenCalledTimes(1);
   expect(listedKeys()).toEqual(["F7:ok"]);
+});
+
+// #endregion
+
+// #region 启用判定与作用域
+
+test("enabledWhen 谓词为假时不派发，即使 enabled 为真", () => {
+  const handler = vi.fn();
+  mountWithHotkeys(() => {
+    useHotkeys({ F8: handler }, { description: "双条件", enabled: true, enabledWhen: () => false });
+  });
+
+  pressKey("F8");
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test("enabledWhen 谓词不绕过作用域匹配", async () => {
+  const scope = ref<string | undefined>(undefined);
+  const handler = vi.fn();
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: scope });
+    useHotkeys(
+      { F8: handler },
+      { description: "作用域内快捷键", scope: "viewer", enabledWhen: () => true },
+    );
+  });
+
+  pressKey("F8");
+  expect(handler).not.toHaveBeenCalled();
+
+  scope.value = "viewer";
+  await nextTick();
+  pressKey("F8");
+  expect(handler).toHaveBeenCalledTimes(1);
+});
+
+test("派发器与帮助列表对带 enabledWhen 的同一声明得出一致结论", async () => {
+  const enabled = ref(true);
+  const handler = vi.fn();
+  mountWithHotkeys(() => {
+    useHotkeys({ F8: handler }, { description: "条件快捷键", enabledWhen: () => enabled.value });
+  });
+
+  const item = listedByDescription("条件快捷键");
+  expect(isHotkeyEnabled(item, getHotkeyContext())).toBe(true);
+  pressKey("F8");
+  expect(handler).toHaveBeenCalledTimes(1);
+
+  enabled.value = false;
+  await nextTick();
+  expect(isHotkeyEnabled(item, getHotkeyContext())).toBe(false);
+  pressKey("F8");
+  expect(handler).toHaveBeenCalledTimes(1);
+});
+
+test("enabled 为假时派发与帮助列表均不启用该声明", () => {
+  const handler = vi.fn();
+  mountWithHotkeys(() => {
+    useHotkeys({ F8: handler }, { description: "关闭的快捷键", enabled: false });
+  });
+
+  const item = listedByDescription("关闭的快捷键");
+  expect(isHotkeyEnabled(item, getHotkeyContext())).toBe(false);
+  pressKey("F8");
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test("作用域栈通过语义化只读接口访问，谓词拿到只读视图", async () => {
+  const scope = ref<string | undefined>(undefined);
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: scope });
+  });
+
+  expect(hasActiveScope()).toBe(false);
+  expect(getHotkeyContext().activeScopes).toEqual([]);
+
+  scope.value = "viewer";
+  await nextTick();
+
+  expect(hasActiveScope()).toBe(true);
+  const ctx = getHotkeyContext();
+  expect(ctx.topmostScope).toBe("viewer");
+  expect(ctx.activeScopes).toEqual(["viewer"]);
+  expect(Object.isFrozen(ctx.activeScopes)).toBe(true);
 });
 
 // #endregion

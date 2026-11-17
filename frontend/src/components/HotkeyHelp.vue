@@ -86,17 +86,17 @@
 </template>
 
 <script setup lang="ts">
-import { activeHotkeys } from "../composables/useHotkeys";
+import { activeHotkeys, getHotkeyContext, isHotkeyEnabled } from "../composables/useHotkeys";
 import { mdiKeyboardOutline, mdiClose } from "@mdi/js";
-import { computed, toValue } from "vue";
+import { computed } from "vue";
 
 defineEmits<(e: "close") => void>();
 
 // 将可用的快捷键按 category 进行分组
 const groupedHotkeys = computed(() => {
-  const list = activeHotkeys.value.filter(
-    (item) => item.enabled === undefined || toValue(item.enabled),
-  );
+  // 与派发器共用启用判定；上下文只包含启用条件，不按作用域过滤展示
+  const ctx = getHotkeyContext();
+  const list = activeHotkeys.value.filter((item) => isHotkeyEnabled(item, ctx));
 
   const groups: Record<string, typeof list> = {};
   for (const item of list) {
