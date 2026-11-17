@@ -4,7 +4,6 @@ package localfs
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"unsafe"
 
@@ -101,24 +100,20 @@ func checkRecycleBinSupport(paths []string) error {
 	return nil
 }
 
-// trashOrDelete 将一系列物理路径对应的文件移入 Windows 系统回收站。
-// 如果 useSystemRecycleBin 为 false，则退化为直接删除物理文件。
-// 如果 useSystemRecycleBin 为 true，但文件所在盘符不支持回收站，则返回错误。
-func trashOrDelete(paths []string, useSystemRecycleBin bool) error {
+// systemTrashSweeper 把清扫目标投递到 Windows 系统回收站。
+// 平台能力差异已由构建标签表达，不再通过布尔参数逐层传递。
+type systemTrashSweeper struct{}
+
+// NewSystemTrashSweeper 创建 Windows 平台的系统回收站清扫 adapter。
+func NewSystemTrashSweeper() TrashSweeper {
+	return systemTrashSweeper{}
+}
+
+func (systemTrashSweeper) Sweep(paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
 
-	if !useSystemRecycleBin {
-		for _, p := range paths {
-			if err := os.RemoveAll(p); err != nil && !os.IsNotExist(err) {
-				return err
-			}
-		}
-		return nil
-	}
-
-	// 校验回收站支持
 	if err := checkRecycleBinSupport(paths); err != nil {
 		return err
 	}

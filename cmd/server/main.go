@@ -68,6 +68,16 @@ const defaultPort = "34898"
 
 var version = "dev"
 
+// newTrashSweeper 依据配置挑选清扫 adapter：
+// 开启系统回收站时使用构建标签对应的平台 adapter，否则直接物理删除。
+// 平台不支持系统回收站时由 adapter 在实际清扫时返回错误，不影响服务启动。
+func newTrashSweeper(useSystemRecycleBin bool) localfs.TrashSweeper {
+	if useSystemRecycleBin {
+		return localfs.NewSystemTrashSweeper()
+	}
+	return localfs.NewPhysicalDeleteSweeper()
+}
+
 func main() {
 	var (
 		logger *zap.Logger
@@ -130,7 +140,8 @@ func main() {
 
 	var imageRepo image.Repository = localfs.NewImageRepository(cfg.AbsRootDir, imageFactory, dirRepo)
 	imageFilterBuilder := image.NewFilterBuilder()
-	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder, cfg.UseSystemRecycleBin)
+	imgMover := localfs.NewImageMover(cfg.AbsRootDir, imageRepo, imageFilterBuilder)
+	imgTrasher := localfs.NewImageTrasher(cfg.AbsRootDir, imageRepo, imageFilterBuilder, newTrashSweeper(cfg.UseSystemRecycleBin), logger)
 	dirAnalyzerImpl := localfs.NewDirectoryAnalyzer(cfg.AbsRootDir, imageFactory, dirRepo)
 	singleFlightDirAnalyzer := concurrency.NewSingleFlightDirectoryAnalyzer(dirAnalyzerImpl)
 
@@ -267,7 +278,7 @@ func main() {
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
 	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
 	clipboard := clipboard.NewClipboard()
-	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgMover, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
+	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgTrasher, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {

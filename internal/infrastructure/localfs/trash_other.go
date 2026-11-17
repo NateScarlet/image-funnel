@@ -2,26 +2,20 @@
 
 package localfs
 
-import (
-	"fmt"
-	"os"
-)
+import "fmt"
 
-// trashOrDelete 非 Windows 系统只支持直接删除物理文件（当 useSystemRecycleBin 为 false 时）。
-// 如果用户显式将 useSystemRecycleBin 设为 true，则返回平台不支持的错误。
-func trashOrDelete(paths []string, useSystemRecycleBin bool) error {
+// systemTrashSweeper 非 Windows 平台不支持系统回收站，
+// 保持既有行为：不在启动时拒绝服务，而是把错误推迟到实际清扫时返回。
+type systemTrashSweeper struct{}
+
+// NewSystemTrashSweeper 创建非 Windows 平台的系统回收站清扫 adapter。
+func NewSystemTrashSweeper() TrashSweeper {
+	return systemTrashSweeper{}
+}
+
+func (systemTrashSweeper) Sweep(paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
-
-	if useSystemRecycleBin {
-		return fmt.Errorf("system recycle bin is not supported on this platform. please set IMAGE_FUNNEL_USE_SYSTEM_RECYCLE_BIN=false to use direct physical deletion")
-	}
-
-	for _, p := range paths {
-		if err := os.RemoveAll(p); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	return nil
+	return fmt.Errorf("system recycle bin is not supported on this platform. please set IMAGE_FUNNEL_USE_SYSTEM_RECYCLE_BIN=false to use direct physical deletion")
 }
