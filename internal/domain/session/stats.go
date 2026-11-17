@@ -6,11 +6,22 @@ import (
 	"main/internal/util"
 )
 
+// remainingInRound 返回本轮队列中尚未处理的图片数量，
+// 是「本轮是否走完」算术的唯一来源，供 Stats 与自动推进共用。
+func (s *Session) remainingInRound() int {
+	return len(s.queue) - s.currentIdx
+}
+
+// currentRoundDone 判断本轮是否已处理完
+func (s *Session) currentRoundDone() bool {
+	return s.remainingInRound() <= 0
+}
+
 // Stats 计算会话的统计信息，包括处理进度和各种操作的图片数量
 func (s *Session) Stats() *shared.StatsDTO {
 	var stats shared.StatsDTO
 	stats.TotalCount = len(s.queue)
-	stats.CurrentRoundRemaining = len(s.queue) - s.currentIdx
+	stats.CurrentRoundRemaining = s.remainingInRound()
 
 	filterFunc := s.imageFilterBuilder.Build(util.UnwrapPointer(s.filter))
 
@@ -51,7 +62,7 @@ func (s *Session) Stats() *shared.StatsDTO {
 	// 1. 所有图片都已处理 (remaining == 0)
 	// 2. 且保留的图片数量不超过目标保留数量 (否则需要开启新一轮)
 	// 注意：搁置 (Shelve) 的图片不计入目标保留数量计算，因为它们在本会话中被视为已丢弃
-	stats.IsCompleted = stats.CurrentRoundRemaining == 0 && (stats.TotalKept <= s.targetKeep)
+	stats.IsCompleted = s.currentRoundDone() && (stats.TotalKept <= s.targetKeep)
 
 	return &stats
 }

@@ -6,6 +6,7 @@ import (
 	"main/internal/domain/relpath"
 	"main/internal/scalar"
 	"main/internal/shared"
+	"slices"
 	"sort"
 	"time"
 )
@@ -161,6 +162,12 @@ func (s *Session) NextImages(count int) []*image.Image {
 		imgs[i] = s.images[idx]
 	}
 	return imgs
+}
+
+// knownImages 返回会话已知的全部图片（只增不减，含已处理与已被移出队列的）。
+// 改筛选以这些图片为候选集，磁盘读盘仅用于刷新它们的元数据引用。
+func (s *Session) knownImages() []*image.Image {
+	return slices.Clone(s.images)
 }
 
 // KeptImages 返回所有已被标记为保留的图片
