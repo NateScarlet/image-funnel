@@ -23,10 +23,12 @@ import (
 // GET 取回内容；两者共用同一签名 URL
 func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 
-// formatDecision 一次请求的响应形态：要么重定向到 raw URL，要么转码为本字段指定的格式
+// formatDecision 一次请求的响应形态：重定向到 raw URL、重定向到 w=源宽 的规范 URL，
+// 或转码为 format 指定的格式
 type formatDecision struct {
-	redirectToRaw bool
-	format        appimage.ImageFormat
+	redirectToRaw  bool
+	canonicalWidth int // >0 表示应 302 到 w=该宽度 的规范 URL
+	format         appimage.ImageFormat
 }
 
 func handleImage(
@@ -152,8 +154,8 @@ func handleImage(
 
 		// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
 		decodeStart := time.Now()
-	source, err := probe.Probe(r.Context(), absPath)
-	timing.DecodeMs = durationMs(time.Since(decodeStart))
+		source, err := probe.Probe(r.Context(), absPath)
+		timing.DecodeMs = durationMs(time.Since(decodeStart))
 		if err != nil {
 			handleAcquireError(w, logger, err)
 			return
@@ -163,7 +165,16 @@ func handleImage(
 		decision := decideFormat(accept, width, source.Width, util.Accepts(accept, source.ContentType))
 		if decision.redirectToRaw {
 			setTimingHeader()
-		if err := redirectToRaw(w, signer, relPath, query); err != nil {
+			if err := redirectToRaw(w, signer, relPath, query); err != nil {
+				handleAcquireError(w, logger, err)
+			}
+			return
+		}
+		// 源图 MIME 不被接受时，w 超过源宽的全尺寸诉求收敛到 w=源宽 的规范 URL。
+		// 该重定向只在探源未命中变体缓存后发生，命中路径不会走到这里
+		if decision.canonicalWidth > 0 {
+			setTimingHeader()
+			if err := redirectToCanonicalWidth(w, signer, relPath, query, decision.canonicalWidth); err != nil {
 				handleAcquireError(w, logger, err)
 			}
 			return
@@ -195,10 +206,10 @@ func handleImage(
 			return
 		}
 		timing.CacheHit = variantTiming.CacheHit
-	timing.QueueMs = durationMs(variantTiming.QueueDuration)
-	timing.EncodeMs = durationMs(variantTiming.EncodeDuration)
-	setTimingHeader()
-	if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
+		timing.QueueMs = durationMs(variantTiming.QueueDuration)
+		timing.EncodeMs = durationMs(variantTiming.EncodeDuration)
+		setTimingHeader()
+		if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
 			handleAcquireError(w, logger, err)
 		}
 	}
@@ -211,6 +222,12 @@ func decideFormat(accept string, width, sourceWidth int, sourceAcceptable bool) 
 	fullSize := width == 0 || (sourceWidth > 0 && width >= sourceWidth)
 	if fullSize && sourceAcceptable {
 		return formatDecision{redirectToRaw: true}
+	}
+	// 源图 MIME 不被接受时，全尺寸产物与 w=源宽 的转码产物字节相同；
+	// 让 w 严格大于源宽的请求 302 到该规范 URL，客户端便只占一个缓存条目。
+	// 严格大于（而非 >=）避免规范 URL 自重定向；源宽不可知（0）不重定向，保持按 w 转码
+	if !sourceAcceptable && sourceWidth > 0 && width > sourceWidth {
+		return formatDecision{canonicalWidth: sourceWidth}
 	}
 	return formatDecision{format: negotiateFormat(accept)}
 }
@@ -230,11 +247,10 @@ func negotiateFormat(accept string) appimage.ImageFormat {
 	return appimage.ImageFormatWebP
 }
 
-// redirectToRaw 让全尺寸诉求指向 raw URL：用请求自带的 t/s 现场签名，
-// 从而不会把磁盘现状（文件可能已变更）混入重定向目标
-func redirectToRaw(w http.ResponseWriter, signer *urlconv.Signer, relPath relpath.Path, query url.Values) error {
-	params := url.Values{}
-	params.Set("raw", "")
+// redirectSigned 用请求自带的 t/s 与指定参数现场签名并发出 302（无 body）。
+// t/s 取自已验签的请求而非磁盘，故不会把磁盘现状（文件可能已变更）混入目标；
+// 缓存头与 200 一致，Vary 由 handler 在参数解析阶段统一设置
+func redirectSigned(w http.ResponseWriter, signer *urlconv.Signer, relPath relpath.Path, query, params url.Values) error {
 	for _, key := range []string{"t", "s"} {
 		if value := query.Get(key); value != "" {
 			params.Set(key, value)
@@ -252,6 +268,20 @@ func redirectToRaw(w http.ResponseWriter, signer *urlconv.Signer, relPath relpat
 	// 302 不写 body；HEAD 走同一分支同样只有响应头
 	w.WriteHeader(http.StatusFound)
 	return nil
+}
+
+// redirectToRaw 让全尺寸且源图 MIME 可接受的诉求指向 raw URL
+func redirectToRaw(w http.ResponseWriter, signer *urlconv.Signer, relPath relpath.Path, query url.Values) error {
+	params := url.Values{}
+	params.Set("raw", "")
+	return redirectSigned(w, signer, relPath, query, params)
+}
+
+// redirectToCanonicalWidth 让源图 MIME 不被接受的全尺寸诉求收敛到 w=源宽 的规范 URL
+func redirectToCanonicalWidth(w http.ResponseWriter, signer *urlconv.Signer, relPath relpath.Path, query url.Values, width int) error {
+	params := url.Values{}
+	params.Set("w", strconv.Itoa(width))
+	return redirectSigned(w, signer, relPath, query, params)
 }
 
 // serveOriginal 返回原始图片文件

@@ -60,6 +60,31 @@ func TestGenerateSignedURL_Format(t *testing.T) {
 	assert.NotContains(t, sig, "/")
 }
 
+func TestGenerateSignedURL_BlindWidth(t *testing.T) {
+	// 盲签不变式：任意正数 w 都签发带 w 的 URL，与源宽无关。
+	// 源宽只有 /image 探源后才知道，签发侧不得读取源宽来决定是否签 w；
+	// writeSource 写入的是不含宽度信息的占位字节，恰好保证签发过程无法依赖源宽
+	signer, rootDir := newTestSigner(t)
+	relPath := "photo.jpg"
+	writeSource(t, filepath.Join(rootDir, relPath))
+
+	for _, width := range []int{256, 1024, 4096} {
+		t.Run(fmt.Sprintf("w=%d", width), func(t *testing.T) {
+			signedURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath), image.WithWidth(width))
+			require.NoError(t, err)
+
+			_, _, rawQuery := splitSignedURL(t, signedURL.String())
+			q, err := url.ParseQuery(rawQuery)
+			require.NoError(t, err)
+			assert.Equal(t, fmt.Sprintf("%d", width), q.Get("w"))
+
+			// 签发后即可验签通过（包括远大于占位文件的 4096）
+			_, err = signer.ValidateSignedURL(signedURL.String())
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestGenerateSignedURL_KeepsPathSeparatorsLiteral(t *testing.T) {
 	// 子目录必须以字面 "/" 作为分隔符呈现，不能整体转义成 %2F——
 	// 否则多级路径会塌成一段，服务端按路径分段处理时会当作单个文件名。

@@ -1006,9 +1006,78 @@ func TestHandleImage_CacheHitDoesNotProbeSource(t *testing.T) {
 	}
 }
 
-func TestHandleImage_WidthAboveSourceTranscodesWithClampedWidth(t *testing.T) {
-	// 源图 512 宽：w=1024/2048/4096 都超过源宽且源图 MIME 不被接受，
-	// 有效宽度应统一夹到 min(w, 源宽)=512
+func TestHandleImage_WidthAboveSourceNotAcceptableRedirectsToCanonicalWidth(t *testing.T) {
+	// 源图 512 宽，源图 MIME(jpeg) 不被 Accept(image/avif) 接受：
+	// w > 源宽的全尺寸诉求应收敛到 w=源宽 的规范 URL，且不同 w 的 Location 逐字节相同
+	logger := zap.NewNop()
+
+	processCalls := 0
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		processCalls++
+		_, err := w.Write([]byte("fake-avif"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	rootDir := t.TempDir()
+	signer := urlconv.NewSigner("test-secret", rootDir)
+	relPath := "image.jpg"
+	requireWriteSource(t, filepath.Join(rootDir, relPath), 512, 384)
+
+	probe := newCountingProbe()
+	handler := handleImage(logger, signer, coordinator, probe, rootDir)
+
+	// 规范 URL 的签名必须与对同一图片重新签发 w=512 一致
+	canonicalURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath), appimage.WithWidth(512))
+	require.NoError(t, err)
+
+	var locations []string
+	for _, width := range []int{1024, 2048, 4096} {
+		t.Run(fmt.Sprintf("w=%d", width), func(t *testing.T) {
+			req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(width)}, "image/avif")
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusFound {
+				t.Errorf("expected status 302, got %d", rr.Code)
+			}
+			if rr.Body.Len() != 0 {
+				t.Errorf("redirect 不应有 body, got %d bytes", rr.Body.Len())
+			}
+			if got := rr.Header().Get("Vary"); got != "Accept" {
+				t.Errorf("expected Vary: Accept, got %q", got)
+			}
+			if got := rr.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+				t.Errorf("expected immutable Cache-Control, got %q", got)
+			}
+			if got := rr.Header().Get("ETag"); got != `"immutable"` {
+				t.Errorf("expected ETag immutable, got %q", got)
+			}
+			if got := rr.Header().Get("Location"); got != canonicalURL.String() {
+				t.Errorf("Location 应与 w=源宽 重新签发一致\n got: %q\nwant: %q", got, canonicalURL.String())
+			}
+			locations = append(locations, rr.Header().Get("Location"))
+		})
+	}
+
+	require.Len(t, locations, 3)
+	require.Equal(t, locations[0], locations[1])
+	require.Equal(t, locations[1], locations[2])
+	if probe.probes != 3 {
+		t.Errorf("每个未命中请求应探源一次，got %d", probe.probes)
+	}
+	if processCalls != 0 {
+		t.Errorf("重定向不应触发转码，processor 调用 %d 次", processCalls)
+	}
+}
+
+func TestHandleImage_CanonicalWidthFollowupAndEqualWidth(t *testing.T) {
+	// 规范 URL 的两种到达方式都返回全尺寸转码产物且不再重定向：
+	// 直接请求 w=源宽，以及跟随 w>源宽 请求给出的 Location
 	logger := zap.NewNop()
 
 	var capturedWidths []int
@@ -1029,29 +1098,204 @@ func TestHandleImage_WidthAboveSourceTranscodesWithClampedWidth(t *testing.T) {
 
 	handler := testHandler(logger, signer, coordinator, rootDir)
 
-	for _, width := range []int{1024, 2048, 4096} {
-		t.Run(fmt.Sprintf("w=%d", width), func(t *testing.T) {
-			req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(width)}, "image/avif")
-			rr := httptest.NewRecorder()
+	// w == 源宽：直接返回转码产物，不重定向（否则规范 URL 会自重定向）
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(512)}, "image/avif")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
 
-			handler.ServeHTTP(rr, req)
-
-			if rr.Code != http.StatusOK {
-				t.Errorf("expected status 200, got %d", rr.Code)
-			}
-			if got := rr.Header().Get("Content-Type"); got != "image/avif" {
-				t.Errorf("expected image/avif, got %q", got)
-			}
-		})
+	if rr.Code != http.StatusOK {
+		t.Errorf("w=源宽 应返回 200，got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Content-Type"); got != "image/avif" {
+		t.Errorf("expected image/avif, got %q", got)
+	}
+	if got := rr.Header().Get("Location"); got != "" {
+		t.Errorf("w=源宽 不应再重定向，got Location %q", got)
 	}
 
-	if len(capturedWidths) != 3 {
-		t.Fatalf("expected one transcode per request, got %d", len(capturedWidths))
+	// 跟随 w>源宽 请求给出的 Location，应得到产物且不再重定向
+	overReq := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(4096)}, "image/avif")
+	overRR := httptest.NewRecorder()
+	handler.ServeHTTP(overRR, overReq)
+	location := overRR.Header().Get("Location")
+	require.NotEmpty(t, location)
+
+	follow := httptest.NewRequest(http.MethodGet, location, nil)
+	follow.Header.Set("Accept", "image/avif")
+	followRR := httptest.NewRecorder()
+	handler.ServeHTTP(followRR, follow)
+
+	if followRR.Code != http.StatusOK {
+		t.Errorf("跟随规范 URL 应返回 200，got %d", followRR.Code)
 	}
-	for i, got := range capturedWidths {
-		if got != 512 {
-			t.Errorf("第 %d 个请求的有效宽度应夹到源宽 512，got %d", i, got)
+	if got := followRR.Header().Get("Location"); got != "" {
+		t.Errorf("跟随规范 URL 不应再重定向，got Location %q", got)
+	}
+	if got := followRR.Header().Get("Content-Type"); got != "image/avif" {
+		t.Errorf("expected image/avif, got %q", got)
+	}
+
+	require.NotEmpty(t, capturedWidths)
+	for i, width := range capturedWidths {
+		if width != 512 {
+			t.Errorf("第 %d 个请求的有效宽度应为源宽 512，got %d", i, width)
 		}
+	}
+}
+
+func TestHandleImage_WidthBelowSourceStillTranscodes(t *testing.T) {
+	// w < 源宽且源图 MIME 不被接受：按 w 转码，不重定向，宽度不超过 w
+	logger := zap.NewNop()
+
+	var capturedWidth int
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedWidth = spec.Width()
+		_, err := w.Write([]byte("fake-avif"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	rootDir := t.TempDir()
+	signer := urlconv.NewSigner("test-secret", rootDir)
+	relPath := "image.jpg"
+	requireWriteSource(t, filepath.Join(rootDir, relPath), 512, 384)
+
+	handler := testHandler(logger, signer, coordinator, rootDir)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(256)}, "image/avif")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("w<源宽 应返回 200，got %d", rr.Code)
+	}
+	if capturedWidth != 256 {
+		t.Errorf("有效宽度应为 w=256，got %d", capturedWidth)
+	}
+}
+
+func TestHandleImage_CacheHitAboveSourceDoesNotRedirect(t *testing.T) {
+	// w>源宽但变体缓存已命中：直接服务缓存产物，不探源、不重定向（重定向不得发生在缓存命中路径）
+	logger := zap.NewNop()
+
+	processCalls := 0
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		processCalls++
+		_, err := w.Write([]byte("fresh-variant"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	rootDir := t.TempDir()
+	signer := urlconv.NewSigner("test-secret", rootDir)
+	relPath := "image.jpg"
+	requireWriteSource(t, filepath.Join(rootDir, relPath), 512, 384)
+
+	// 预置 w=4096、AVIF 的缓存产物
+	spec, err := appimage.NewSpec(4096, appimage.ImageFormatAVIF)
+	require.NoError(t, err)
+	key, err := appimage.VariantKey(filepath.Join(rootDir, relPath), spec, "test-encoder")
+	require.NoError(t, err)
+	require.NoError(t, cache.Save(context.Background(), key, bytes.NewReader([]byte("cached-variant"))))
+
+	probe := newCountingProbe()
+	handler := handleImage(logger, signer, coordinator, probe, rootDir)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(4096)}, "image/avif")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("缓存命中应返回 200，got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "" {
+		t.Errorf("缓存命中不应重定向，got Location %q", got)
+	}
+	if probe.probes != 0 {
+		t.Errorf("缓存命中不应探源，探针调用 %d 次", probe.probes)
+	}
+	if processCalls != 0 {
+		t.Errorf("缓存命中不应转码，processor 调用 %d 次", processCalls)
+	}
+	if got := rr.Body.String(); got != "cached-variant" {
+		t.Errorf("expected cached variant body, got %q", got)
+	}
+}
+
+func TestHandleImage_UnknownSourceWidthDoesNotRedirect(t *testing.T) {
+	// 源宽不可知（探针返回 0）时不重定向，保持按 w 转码的现有行为
+	logger := zap.NewNop()
+
+	var capturedWidth int
+	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+		capturedWidth = spec.Width()
+		_, err := w.Write([]byte("fake-webp"))
+		return err
+	}
+	cache := newStubCache()
+	queue := &stubQueue{processFunc: processFn}
+	processor := &stubProcessor{processFunc: processFn}
+	coordinator := appimage.NewTranscodeCoordinator(cache, processor, queue, "test-encoder", nil)
+
+	rootDir := t.TempDir()
+	signer := urlconv.NewSigner("test-secret", rootDir)
+	relPath := "photo.avif"
+	requireWriteFakeAVIF(t, filepath.Join(rootDir, relPath))
+
+	// 不可解码格式走 Meta 回退，宽度不可知
+	probe := appimage.NewSourceProbe(stubMetaReader{width: 0})
+	handler := handleImage(logger, signer, coordinator, probe, rootDir)
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(4096)}, "image/webp")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("源宽不可知时应返回 200，got %d", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "" {
+		t.Errorf("源宽不可知时不应重定向，got Location %q", got)
+	}
+	if capturedWidth != 4096 {
+		t.Errorf("宽度不可知时应保持 w=4096，got %d", capturedWidth)
+	}
+}
+
+func TestHandleImage_CanonicalWidthHEADRedirectHasNoBody(t *testing.T) {
+	// HEAD 命中规范宽度重定向分支：302 + Location + 无 body，缓存头与 GET 一致
+	logger := zap.NewNop()
+
+	coordinator := newTestCoordinator(nil)
+	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+	handler := testHandler(logger, signer, coordinator, rootDir)
+
+	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(4096)}, "image/avif")
+	req.Method = http.MethodHead
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Errorf("HEAD 规范宽度重定向应返回 302，got %d", rr.Code)
+	}
+	canonicalURL, err := signer.GenerateSignedURL(filepath.Join(rootDir, relPath), appimage.WithWidth(2048))
+	require.NoError(t, err)
+	if got := rr.Header().Get("Location"); got != canonicalURL.String() {
+		t.Errorf("HEAD Location 应与 w=源宽 重新签发一致\n got: %q\nwant: %q", got, canonicalURL.String())
+	}
+	if got := rr.Header().Get("Vary"); got != "Accept" {
+		t.Errorf("expected Vary: Accept, got %q", got)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+		t.Errorf("expected immutable Cache-Control, got %q", got)
+	}
+	if got := rr.Header().Get("ETag"); got != `"immutable"` {
+		t.Errorf("expected ETag immutable, got %q", got)
+	}
+	if rr.Body.Len() != 0 {
+		t.Errorf("HEAD redirect 不应有 body，got %d bytes", rr.Body.Len())
 	}
 }
 
