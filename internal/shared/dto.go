@@ -197,6 +197,10 @@ type TrashHistoryEdgeDTO struct {
 	Cursor string
 }
 
+// CurrentDirectoryStateVersion 目录状态持久化格式的当前版本号。
+// 所有写入路径统一引用此常量；升级格式时只改此处，并在仓储中补充对应的读取迁移。
+const CurrentDirectoryStateVersion = 3
+
 // DirectoryStateDTO 目录状态数据传输对象
 type DirectoryStateDTO struct {
 	Version     int                           `json:"version"`

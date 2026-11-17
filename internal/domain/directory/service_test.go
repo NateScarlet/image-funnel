@@ -5,6 +5,7 @@ import (
 	"iter"
 	"main/internal/domain/relpath"
 	"main/internal/pubsub"
+	"main/internal/scalar"
 	"main/internal/shared"
 	"os"
 	"path/filepath"
@@ -51,8 +52,10 @@ func (e *mockFileChangedPub) Subscribe(ctx context.Context) iter.Seq2[*FileChang
 }
 
 type mockRepository struct {
-	findErr error
-	findRes []*Directory
+	findErr      error
+	findRes      []*Directory
+	state        *shared.DirectoryStateDTO // ReadState 返回的既有状态，nil 表示尚无状态文件
+	writtenState *shared.DirectoryStateDTO // WriteState 捕获的落盘状态
 }
 
 func (m *mockRepository) Get(ctx context.Context, relPath relpath.Path) (*Directory, error) {
@@ -74,11 +77,20 @@ func (m *mockRepository) Find(ctx context.Context, relPath relpath.Path) iter.Se
 }
 
 func (m *mockRepository) ReadState(ctx context.Context, relPath relpath.Path) (*shared.DirectoryStateDTO, error) {
-	return nil, nil
+	return m.state, nil
 }
 
 func (m *mockRepository) WriteState(ctx context.Context, relPath relpath.Path, state *shared.DirectoryStateDTO) error {
+	m.writtenState = state
 	return nil
+}
+
+// newStateService 构造一个注入了指定仓储的目录服务，供状态读写测试使用
+func newStateService(t *testing.T, repo *mockRepository) *Service {
+	t.Helper()
+	s, cleanup := NewService(&mockWatcher{}, &mockFileChangedPub{}, testRootDir, repo, &mockRenamer{}, zap.NewNop())
+	t.Cleanup(cleanup)
+	return s
 }
 
 func TestService_SuggestDirectories_IgnoreNotExist(t *testing.T) {
@@ -199,3 +211,92 @@ func TestService_ResolvePathInput(t *testing.T) {
 		})
 	}
 }
+
+// #region 状态持久化
+func TestService_WriteState_NewStateUsesCurrentVersion(t *testing.T) {
+	ctx := context.Background()
+	repo := &mockRepository{}
+	s := newStateService(t, repo)
+
+	err := s.WriteState(ctx, dirAt(t, "subdir").ID(), &shared.DirectoryStateDTO{
+		Browse: &shared.DirectoryStateBrowseDTO{},
+	})
+	if err != nil {
+		t.Fatalf("WriteState() unexpected error: %v", err)
+	}
+	if repo.writtenState == nil {
+		t.Fatal("WriteState() 未写入任何状态")
+	}
+	assert.Equal(t, shared.CurrentDirectoryStateVersion, repo.writtenState.Version,
+		"新建状态的版本应引用当前版本常量，而不是散落的字面量")
+}
+
+// 合并判定必须覆盖 ImageFilters 的全部字段：ID/DirectoryID 此前被硬编码条件遗漏，
+// 新增字段也应无需改动合并代码即可被纳入
+func TestService_WriteState_LastSessionFilterMerge(t *testing.T) {
+	ctx := context.Background()
+	idFilter := []scalar.ID{scalar.ToID("img:1")}
+	dirFilter := []scalar.ID{scalar.ToID("dir:sub")}
+	oldFilter := shared.ImageFilters{Rating: []int{5}}
+
+	cases := []struct {
+		name     string
+		incoming shared.ImageFilters
+		want     shared.ImageFilters
+	}{
+		{name: "全零筛选条件不覆盖旧值", incoming: shared.ImageFilters{}, want: oldFilter},
+		{name: "Rating 非零时覆盖", incoming: shared.ImageFilters{Rating: []int{4}}, want: shared.ImageFilters{Rating: []int{4}}},
+		{name: "ID 字段非零时覆盖", incoming: shared.ImageFilters{ID: idFilter}, want: shared.ImageFilters{ID: idFilter}},
+		{name: "DirectoryID 字段非零时覆盖", incoming: shared.ImageFilters{DirectoryID: dirFilter}, want: shared.ImageFilters{DirectoryID: dirFilter}},
+		{name: "Label 字段非零时覆盖", incoming: shared.ImageFilters{Label: []string{"red"}}, want: shared.ImageFilters{Label: []string{"red"}}},
+		{name: "Query 字段非零时覆盖", incoming: shared.ImageFilters{Query: "cat"}, want: shared.ImageFilters{Query: "cat"}},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockRepository{state: &shared.DirectoryStateDTO{
+				Version: shared.CurrentDirectoryStateVersion,
+				LastSession: &shared.DirectoryStateLastSessionDTO{
+					ID:         scalar.ToID("sess:old"),
+					Filter:     oldFilter,
+					TargetKeep: 3,
+				},
+			}}
+			s := newStateService(t, repo)
+
+			err := s.WriteState(ctx, dirAt(t, "subdir").ID(), &shared.DirectoryStateDTO{
+				LastSession: &shared.DirectoryStateLastSessionDTO{Filter: tt.incoming},
+			})
+			if err != nil {
+				t.Fatalf("WriteState() unexpected error: %v", err)
+			}
+			assert.Equal(t, tt.want, repo.writtenState.LastSession.Filter)
+		})
+	}
+}
+
+func TestService_SaveLastSession_PreservesAllFilterFields(t *testing.T) {
+	ctx := context.Background()
+	filter := &shared.ImageFilters{
+		ID:          []scalar.ID{scalar.ToID("img:1")},
+		DirectoryID: []scalar.ID{scalar.ToID("dir:sub")},
+		Rating:      []int{3},
+		Label:       []string{"red"},
+		Query:       "cat",
+	}
+	repo := &mockRepository{}
+	s := newStateService(t, repo)
+
+	err := s.SaveLastSession(ctx, dirAt(t, "subdir").ID(), scalar.ToID("sess:1"), filter, 7)
+	if err != nil {
+		t.Fatalf("SaveLastSession() unexpected error: %v", err)
+	}
+	if repo.writtenState == nil || repo.writtenState.LastSession == nil {
+		t.Fatal("SaveLastSession() 未写入 LastSession")
+	}
+	assert.Equal(t, *filter, repo.writtenState.LastSession.Filter,
+		"SaveLastSession 应整体拷贝筛选条件，而不是逐字段硬编码")
+	assert.Equal(t, shared.CurrentDirectoryStateVersion, repo.writtenState.Version)
+}
+
+// #endregion

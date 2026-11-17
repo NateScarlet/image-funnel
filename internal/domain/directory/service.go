@@ -275,7 +275,7 @@ func (s *Service) WriteState(ctx context.Context, id scalar.ID, state *shared.Di
 	}
 	if existingState == nil {
 		existingState = &shared.DirectoryStateDTO{
-			Version: 2,
+			Version: shared.CurrentDirectoryStateVersion,
 		}
 	}
 
@@ -290,7 +290,7 @@ func (s *Service) WriteState(ctx context.Context, id scalar.ID, state *shared.Di
 				if !state.LastSession.ID.IsZero() {
 					existingState.LastSession.ID = state.LastSession.ID
 				}
-				if len(state.LastSession.Filter.Rating) > 0 || len(state.LastSession.Filter.Label) > 0 || state.LastSession.Filter.Query != "" {
+				if !state.LastSession.Filter.IsZero() {
 					existingState.LastSession.Filter = state.LastSession.Filter
 				}
 				if state.LastSession.TargetKeep != 0 {
@@ -325,24 +325,17 @@ func (s *Service) SaveLastSession(
 	}
 	if state == nil {
 		state = &shared.DirectoryStateDTO{
-			Version: 3,
+			Version: shared.CurrentDirectoryStateVersion,
 		}
 	}
-	var ratingVal []int
-	var labelVal []string
-	var queryVal string
+	var filterVal shared.ImageFilters
 	if filter != nil {
-		ratingVal = filter.Rating
-		labelVal = filter.Label
-		queryVal = filter.Query
+		// 整体拷贝，避免逐字段列举导致新增筛选字段被静默丢弃
+		filterVal = *filter
 	}
 	state.LastSession = &shared.DirectoryStateLastSessionDTO{
-		ID: sessionID,
-		Filter: shared.ImageFilters{
-			Rating: ratingVal,
-			Label:  labelVal,
-			Query:  queryVal,
-		},
+		ID:         sessionID,
+		Filter:     filterVal,
 		TargetKeep: targetKeep,
 	}
 	state.UpdatedAt = time.Now()

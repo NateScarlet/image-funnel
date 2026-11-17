@@ -17,6 +17,12 @@ import (
 // stateFileName 目录状态在磁盘上的文件名
 const stateFileName = ".io.github.natescarlet.image-funnel.state.json"
 
+// 历史版本号仅用于识别与迁移旧状态文件，写入路径统一引用 shared.CurrentDirectoryStateVersion
+const (
+	stateVersion1 = 1
+	stateVersion2 = 2
+)
+
 func NewDirectoryRepository(rootDir string) *DirectoryRepository {
 	return &DirectoryRepository{
 		rootDir: rootDir,
@@ -90,11 +96,11 @@ func (d *DirectoryRepository) ReadState(ctx context.Context, relPath relpath.Pat
 	}
 
 	switch state.Version {
-	case 1:
+	case stateVersion1:
 		return d.readStateV1(data)
-	case 2:
+	case stateVersion2:
 		return d.readStateV2(data)
-	case 3:
+	case shared.CurrentDirectoryStateVersion:
 		return &state, nil
 	default:
 		return nil, fmt.Errorf("got unexpected state version %d", state.Version)
@@ -107,7 +113,7 @@ func (d *DirectoryRepository) readStateV1(data []byte) (*shared.DirectoryStateDT
 	if err := json.Unmarshal(data, &stateV1); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state v1: %w", err)
 	}
-	if stateV1.Version != 1 {
+	if stateV1.Version != stateVersion1 {
 		return nil, fmt.Errorf("expected version 1, got %d", stateV1.Version)
 	}
 
@@ -140,7 +146,7 @@ func (d *DirectoryRepository) readStateV1(data []byte) (*shared.DirectoryStateDT
 	}
 
 	return &shared.DirectoryStateDTO{
-		Version:     3,
+		Version:     shared.CurrentDirectoryStateVersion,
 		Browse:      browseV3,
 		LastSession: lastSessionV3,
 		UpdatedAt:   stateV1.UpdatedAt,
@@ -152,7 +158,7 @@ func (d *DirectoryRepository) readStateV2(data []byte) (*shared.DirectoryStateDT
 	if err := json.Unmarshal(data, &stateV2); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state v2: %w", err)
 	}
-	if stateV2.Version != 2 {
+	if stateV2.Version != stateVersion2 {
 		return nil, fmt.Errorf("expected version 2, got %d", stateV2.Version)
 	}
 
@@ -188,7 +194,7 @@ func (d *DirectoryRepository) readStateV2(data []byte) (*shared.DirectoryStateDT
 	}
 
 	return &shared.DirectoryStateDTO{
-		Version:     3,
+		Version:     shared.CurrentDirectoryStateVersion,
 		Browse:      stateV2.Browse,
 		LastSession: lastSessionV3,
 		Default:     defaultV3,
@@ -207,7 +213,6 @@ func (d *DirectoryRepository) WriteState(ctx context.Context, relPath relpath.Pa
 		return nil
 	}
 
-	state.Version = 3
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
