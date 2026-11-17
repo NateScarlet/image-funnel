@@ -24,8 +24,6 @@ var (
 	getClipboardData        = user32.NewProc("GetClipboardData")
 	setClipboardData        = user32.NewProc("SetClipboardData")
 	registerClipboardFormat = user32.NewProc("RegisterClipboardFormatW")
-	enumClipboardFormats    = user32.NewProc("EnumClipboardFormats")
-	getClipboardFormatNameW = user32.NewProc("GetClipboardFormatNameW")
 	globalAlloc             = kernel32.NewProc("GlobalAlloc")
 	globalLock              = kernel32.NewProc("GlobalLock")
 	globalUnlock            = kernel32.NewProc("GlobalUnlock")
@@ -75,8 +73,8 @@ func openClipboardWithRetry() bool {
 	return false
 }
 
-// ReadCustomFormat 读取剪贴板中自定义格式的数据
-func (c *Clipboard) ReadCustomFormat(formatName string) (string, error) {
+// readCustomFormat 读取剪贴板中自定义格式的数据，仅供 ReadHTMLFormat 内部复用
+func (c *Clipboard) readCustomFormat(formatName string) (string, error) {
 	format, err := registerClipboardFormatW(formatName)
 	if err != nil {
 		return "", err
@@ -119,7 +117,7 @@ func (c *Clipboard) ReadCustomFormat(formatName string) (string, error) {
 
 // ReadHTMLFormat 读取剪贴板中 HTML Format (CF_HTML) 的内容
 func (c *Clipboard) ReadHTMLFormat() (string, error) {
-	raw, err := c.ReadCustomFormat("HTML Format")
+	raw, err := c.readCustomFormat("HTML Format")
 	if err != nil {
 		return "", err
 	}
@@ -153,50 +151,6 @@ func findCFHTMLOffset(raw, key string) int {
 		rest = rest[1:]
 	}
 	return offset
-}
-
-// ListFormats 枚举剪贴板中所有格式名称，用于调试
-func (c *Clipboard) ListFormats() []string {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	if !openClipboardWithRetry() {
-		return nil
-	}
-	defer closeClipboard.Call()
-
-	var formats []string
-	format, _, _ := enumClipboardFormats.Call(0)
-	for format != 0 {
-		name := formatName(uint32(format))
-		formats = append(formats, name)
-		format, _, _ = enumClipboardFormats.Call(format)
-	}
-	return formats
-}
-
-// formatName 根据格式 ID 获取名称
-func formatName(id uint32) string {
-	switch id {
-	case 1:
-		return "CF_TEXT"
-	case 2:
-		return "CF_BITMAP"
-	case 7:
-		return "CF_OEMTEXT"
-	case 8:
-		return "CF_DIB"
-	case 13:
-		return "CF_UNICODETEXT"
-	case 15:
-		return "CF_HDROP"
-	}
-	buf := make([]uint16, 256)
-	ret, _, _ := getClipboardFormatNameW.Call(uintptr(id), uintptr(unsafe.Pointer(&buf[0])), 256)
-	if ret > 0 {
-		return windows.UTF16ToString(buf[:ret])
-	}
-	return fmt.Sprintf("CF_#%d", id)
 }
 
 // AddFiles 将文件列表以 CF_HDROP 写入剪贴板，同时写回纯文本与 HTML 格式。

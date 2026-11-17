@@ -6,7 +6,6 @@ import (
 	"main/internal/domain/relpath"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"time"
 
 	"go.uber.org/zap"
@@ -32,44 +31,22 @@ func (h *Handler) AttachFileToClipboard(
 		)
 	}()
 
-	// 1. 平台检测 (需求 4)
-	// 如果非 Windows 平台，返回 supported: false 且不抛出错误
-	if runtime.GOOS != "windows" {
-		h.logger.Debug("Clipboard file attachment not supported on this platform", zap.String("goos", runtime.GOOS))
-		return &AttachFileToClipboardResult{
-			Supported: false,
-		}, nil
-	}
-
-	if h.clipboard == nil {
-		h.logger.Debug("Clipboard provider not configured")
-		return &AttachFileToClipboardResult{
-			Supported: false,
-		}, nil
-	}
-
-	// 2. 验证剪贴板中的随机数：从 HTML 格式的 meta 标签中读取
+	// 平台能力由适配器回答：非 Windows 实现直接返回「不支持」错误，
+	// 经下面的错误路径自然映射为 supported: false，无需在应用层重复判断 GOOS。
 	htmlContent, err := h.clipboard.ReadHTMLFormat()
 	if err != nil {
-		h.logger.Debug("Failed to read clipboard HTML", zap.Error(err))
-		// 如果读不到剪贴板 HTML，也作为不支持处理而不抛出错误（可能由于跨设备或者权限不足）
-		return &AttachFileToClipboardResult{
-			Supported: false,
-		}, nil
+		// 读不到剪贴板 HTML（平台不支持 / 跨设备 / 权限不足）统一降级为 supported: false
+		return h.clipboardUnsupported("read_html_format_failed", zap.Error(err))
 	}
 
 	clipboardNonce := extractClipboardNonce(htmlContent)
 	if clipboardNonce != nonce {
-		// 调试：列出当前剪贴板中所有格式
-		formats := h.clipboard.ListFormats()
-		h.logger.Debug("Clipboard nonce mismatch (this might indicate client & server are running on different machines)",
+		// nonce 不匹配通常意味着客户端与服务端不在同一台机器上，不抛错，降级为 supported: false
+		return h.clipboardUnsupported("nonce_mismatch",
 			zap.String("expected", nonce),
 			zap.String("got", clipboardNonce),
-			zap.Strings("allFormats", formats))
-		// 随机数验证失败时，由于这表明可能运行在不同的物理机器上，故不抛出错误，而是返回 supported: false
-		return &AttachFileToClipboardResult{
-			Supported: false,
-		}, nil
+			zap.String("hint", "client and server may be running on different machines"),
+		)
 	}
 
 	// 前端可能给出绝对路径或根相对路径两种形式，两种都要规整为已围栏的根相对路径
@@ -109,16 +86,25 @@ func (h *Handler) AttachFileToClipboard(
 	}, nil
 }
 
+// clipboardUnsupported 统一记录未能附加文件的具体原因，对外一律降级为 supported=false。
+// 所有失败情形都不抛错，由客户端统一降级为复制文本/路径；reason 仅供服务端诊断。
+func (h *Handler) clipboardUnsupported(reason string, fields ...zap.Field) (*AttachFileToClipboardResult, error) {
+	h.logger.Debug("clipboard file attachment unsupported",
+		append([]zap.Field{zap.String("reason", reason)}, fields...)...)
+	return &AttachFileToClipboardResult{Supported: false}, nil
+}
+
 // clipboardTokenMetaName 剪贴板令牌在 HTML meta 标签中的 name 属性值
 const clipboardTokenMetaName = "io.github.natescarlet.image-funnel.nonce"
 
+// clipboardNoncePattern 匹配剪贴板 HTML 中携带 nonce 的 meta 标签，包级只编译一次
+var clipboardNoncePattern = regexp.MustCompile(
+	`<meta\s+name="` + regexp.QuoteMeta(clipboardTokenMetaName) + `"\s+content="([^"]*)"`,
+)
+
 // extractClipboardNonce 从剪贴板 HTML 格式中提取随机数
 func extractClipboardNonce(htmlContent string) string {
-	// 匹配 <meta name="io.github.natescarlet.image-funnel.nonce" content="..."/>
-	pattern := regexp.MustCompile(
-		`<meta\s+name="` + regexp.QuoteMeta(clipboardTokenMetaName) + `"\s+content="([^"]*)"`,
-	)
-	matches := pattern.FindStringSubmatch(htmlContent)
+	matches := clipboardNoncePattern.FindStringSubmatch(htmlContent)
 	if len(matches) >= 2 {
 		return matches[1]
 	}

@@ -40,31 +40,26 @@ func TestAddFiles_ThenReadBack(t *testing.T) {
 
 	// MuMu 等进程会读取并重写剪贴板，重写期间存在清空旧数据的空窗；
 	// 有限时间内重试读回，直到目标格式出现或超时
+	htmlFormat, err := registerClipboardFormatW("HTML Format")
+	if err != nil {
+		t.Fatalf("register HTML Format failed: %v", err)
+	}
 	const readBackTimeout = 3 * time.Second
-	var formats []string
 	foundDrop, foundHTML := false, false
 	deadline := time.Now().Add(readBackTimeout)
 	for time.Now().Before(deadline) {
-		formats = c.ListFormats()
-		foundDrop, foundHTML = false, false
-		for _, f := range formats {
-			if f == "CF_HDROP" {
-				foundDrop = true
-			}
-			if f == "HTML Format" {
-				foundHTML = true
-			}
-		}
+		foundDrop = hasClipboardFormat(cfDropFiles)
+		foundHTML = hasClipboardFormat(htmlFormat)
 		if foundDrop && foundHTML {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	if !foundDrop {
-		t.Errorf("CF_HDROP not found in clipboard formats after AddFiles. Formats: %v", formats)
+		t.Error("CF_HDROP not found in clipboard after AddFiles")
 	}
 	if !foundHTML {
-		t.Errorf("HTML Format not found in clipboard formats after AddFiles. Formats: %v", formats)
+		t.Error("HTML Format not found in clipboard after AddFiles")
 	}
 
 	// 读回 HTML，验证 nonce 内容仍在（写入-读取 round-trip）
@@ -75,6 +70,16 @@ func TestAddFiles_ThenReadBack(t *testing.T) {
 	if !strings.Contains(gotHTML, "abc-123") {
 		t.Errorf("nonce missing after round-trip. HTML: %s", gotHTML)
 	}
+}
+
+// hasClipboardFormat 检查当前剪贴板是否包含指定格式，替代已移除的格式枚举方法
+func hasClipboardFormat(format uint32) bool {
+	if !openClipboardWithRetry() {
+		return false
+	}
+	defer closeClipboard.Call()
+	h, _, _ := getClipboardData.Call(uintptr(format))
+	return h != 0
 }
 
 func TestBuildCFHTML_RoundTrip(t *testing.T) {

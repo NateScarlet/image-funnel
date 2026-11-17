@@ -10,7 +10,9 @@ input AttachFileToClipboardInput {
 }
 
 type AttachFileToClipboardPayload {
-  "剪贴板增强功能是否受支持"
+  """
+  剪贴板文件附加是否成功。平台不支持、读不到剪贴板 HTML、nonce 校验不匹配等未能附加文件的情形均映射为 supported=false，客户端统一降级为复制文本或文件路径；路径校验失败与剪贴板写入失败仍通过 GraphQL 错误返回。
+  """
   supported: Boolean!
   clientMutationId: String
 }
