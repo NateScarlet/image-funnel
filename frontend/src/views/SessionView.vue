@@ -324,6 +324,13 @@ import useNotification from "@/composables/useNotification";
 import useDisplayedImage, { type ImageLoadedEvent } from "@/composables/useDisplayedImage";
 import useRatedRejectFlash from "@/composables/useRatedRejectFlash";
 import useRoundChangeFlash from "@/composables/useRoundChangeFlash";
+import useLoadLatencyRecorder from "@/composables/useLoadLatencyRecorder";
+import { useFileSystemContext } from "@/composables/useFileSystemContext";
+import {
+  submitLoadLatencySegment,
+  beaconLoadLatencySegment,
+} from "@/graphql/utils/loadLatencySubmit";
+import { createLoadLatencyRunId } from "@/utils/loadLatency/runId";
 import { getStarColorVar } from "@/utils/starConfig";
 
 const props = defineProps<{
@@ -403,6 +410,7 @@ const {
   gestureTargetId,
   handleImageLoaded: handleDisplayedImageLoaded,
   recordGestureEnd,
+  loadedRequests,
 } = useDisplayedImage(sessionId, () => currentImage.value?.id);
 
 // #region 换轮提示
@@ -560,7 +568,56 @@ useEventListeners(window, ({ on }) => {
   });
 });
 
-const { marking, mark: originalMarkImage } = useMarkImage(sessionId, loadedAt);
+// 归因记录复用启动时的 Meta 阈值；未开启时 recorder 的所有入口都是空操作
+const { loadLatencyThresholdMs } = useFileSystemContext();
+const loadLatencyRecorder = useLoadLatencyRecorder({
+  thresholdMs: loadLatencyThresholdMs,
+  submit: submitLoadLatencySegment,
+  beacon: beaconLoadLatencySegment,
+  createRunId: createLoadLatencyRunId,
+});
+
+// 会话切换即丢弃积压，不等待下一条动作到来，避免 pagehide 提交上一会话的数据
+watch(sessionId, () => loadLatencyRecorder.discard());
+
+// 页面隐藏/卸载时用 beacon 兜底，不让未提交积压静默消失
+useEventListeners(window, ({ on }) => {
+  on("pagehide", () => loadLatencyRecorder.flushOnHide(), { passive: true });
+});
+useEventListeners(document, ({ on }) => {
+  on(
+    "visibilitychange",
+    () => {
+      if (document.visibilityState === "hidden") {
+        loadLatencyRecorder.flushOnHide();
+      }
+    },
+    { passive: true },
+  );
+});
+
+const { marking, mark: originalMarkImage } = useMarkImage(sessionId, loadedAt, {
+  autoRejectTimeoutMs: () => (autoRejectEnabled.value ? autoRejectTimeoutSeconds.value * 1000 : 0),
+  onMark: (ctx) => {
+    loadLatencyRecorder.record({
+      sessionId: ctx.sessionId,
+      round: session.value?.currentRound ?? 0,
+      imageId: ctx.imageId,
+      dpr: window.devicePixelRatio || 1,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      autoRejectTimeoutMs: ctx.autoRejectTimeoutMs,
+      markIntervalMs: ctx.markIntervalMs,
+      loadMs: ctx.loadMs,
+      loadedAt: ctx.loadedAt?.toISOString() ?? ctx.markAt.toISOString(),
+      markAt: ctx.markAt.toISOString(),
+      requests: loadedRequests.value,
+    });
+    // 慢切换触发提交；提交是诊断旁路，不阻塞标记主流程。
+    // 错误通知由 Apollo 全局 ErrorLink 负责，这里只需吞掉 Promise 拒绝避免 unhandled rejection
+    void loadLatencyRecorder.maybeFlush(ctx.loadMs).catch(() => undefined);
+  },
+});
 // flash 信号按会话作用域隔离，防止提交后切换到下一目录会话时重放残留动画
 const {
   signal: ratedRejectSignal,

@@ -66,6 +66,12 @@ func handleImage(
 			return
 		}
 
+		// 分段耗时随响应头返回；命中状态与编码耗时由协调器给出，解码耗时在各分支就地测量
+		timing := ServerTiming{Encoder: coordinator.EncoderID()}
+		setTimingHeader := func() {
+			w.Header().Set("Server-Timing", FormatServerTiming(timing))
+		}
+
 		// 参数解析必须先于 304 短路：Vary 是否设置取决于 raw 是否出现
 		query := r.URL.Query()
 		raw := query.Has("raw")
@@ -78,6 +84,7 @@ func handleImage(
 
 		const etag = `"immutable"`
 		if r.Header.Get("If-None-Match") == etag {
+			setTimingHeader()
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
@@ -94,12 +101,15 @@ func handleImage(
 		// raw 是唯一直接返回全尺寸字节的入口：一次打开并嗅探 MIME 即可服务，
 		// 不读取宽度（源图尺寸能否解码与 raw 无关）
 		if raw {
+			decodeStart := time.Now()
 			source, err := probe.Open(absPath)
+			timing.DecodeMs = durationMs(time.Since(decodeStart))
 			if err != nil {
 				handleAcquireError(w, logger, err)
 				return
 			}
 			defer source.Reader.Close()
+			setTimingHeader()
 			serveOriginal(w, r, source.ContentType, relPath.Base(), source.Reader)
 			return
 		}
@@ -125,12 +135,14 @@ func handleImage(
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			file, err := coordinator.CachedVariant(r.Context(), absPath, spec)
+			file, variantTiming, err := coordinator.CachedVariant(r.Context(), absPath, spec)
 			if err != nil {
 				handleAcquireError(w, logger, err)
 				return
 			}
 			if file != nil {
+				timing.CacheHit = variantTiming.CacheHit
+				setTimingHeader()
 				if err := serveVariantFile(w, r, format, relPath.Base(), file); err != nil {
 					handleAcquireError(w, logger, err)
 				}
@@ -139,7 +151,9 @@ func handleImage(
 		}
 
 		// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
-		source, err := probe.Probe(r.Context(), absPath)
+		decodeStart := time.Now()
+	source, err := probe.Probe(r.Context(), absPath)
+	timing.DecodeMs = durationMs(time.Since(decodeStart))
 		if err != nil {
 			handleAcquireError(w, logger, err)
 			return
@@ -148,7 +162,8 @@ func handleImage(
 
 		decision := decideFormat(accept, width, source.Width, util.Accepts(accept, source.ContentType))
 		if decision.redirectToRaw {
-			if err := redirectToRaw(w, signer, relPath, query); err != nil {
+			setTimingHeader()
+		if err := redirectToRaw(w, signer, relPath, query); err != nil {
 				handleAcquireError(w, logger, err)
 			}
 			return
@@ -174,12 +189,16 @@ func handleImage(
 			priority = appimage.PrioLow
 		}
 
-		file, err := coordinator.Acquire(r.Context(), absPath, spec, priority)
+		file, variantTiming, err := coordinator.Acquire(r.Context(), absPath, spec, priority)
 		if err != nil {
 			handleAcquireError(w, logger, err)
 			return
 		}
-		if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
+		timing.CacheHit = variantTiming.CacheHit
+	timing.QueueMs = durationMs(variantTiming.QueueDuration)
+	timing.EncodeMs = durationMs(variantTiming.EncodeDuration)
+	setTimingHeader()
+	if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
 			handleAcquireError(w, logger, err)
 		}
 	}

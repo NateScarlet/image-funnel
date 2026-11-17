@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"time"
 )
 
 // Prio 转码任务的优先级。数值越大优先级越高，Consume 的阈值语义（返回 ≥ minPriority）
@@ -41,6 +42,16 @@ func (s Spec) Format() ImageFormat {
 	return s.format
 }
 
+// VariantTiming 一次变体取回的分段耗时，供图片响应的 Server-Timing 使用。
+// 队列等待由队列在认领任务时写入，编码耗时由 worker 在 Process 前后写入；
+// 指针随 TranscodeItem 在等待者与执行者之间共享
+type VariantTiming struct {
+	EnqueuedAt     time.Time
+	QueueDuration  time.Duration
+	EncodeDuration time.Duration
+	CacheHit       bool
+}
+
 // TranscodeItem 一次变体转码需求的不可变记录。只携带命令信息（去重键、源路径与规格），
 // 不携带文件对象或执行逻辑——执行由 worker 侧的 Processor 在拉取时完成，
 // 源文件状态（大小/修改时间）在执行时才解析，队列中等待不会导致状态过期
@@ -49,6 +60,7 @@ type TranscodeItem struct {
 	srcPath  string
 	spec     Spec
 	priority Prio
+	timing   *VariantTiming
 }
 
 // NewTranscodeItem 创建变体转码需求。key 是变体去重键（源路径+规格派生），
@@ -70,6 +82,7 @@ func (i TranscodeItem) Key() string      { return i.key }
 func (i TranscodeItem) SrcPath() string  { return i.srcPath }
 func (i TranscodeItem) Spec() Spec       { return i.spec }
 func (i TranscodeItem) Priority() Prio   { return i.priority }
+func (i TranscodeItem) Timing() *VariantTiming { return i.timing }
 
 // TranscodeWaiter 请求侧句柄：等待一次转码完成或显式撤回需求。
 // 多个等待者共享同一执行（同 key 去重）
@@ -80,6 +93,8 @@ type TranscodeWaiter interface {
 	// Cancel 显式撤回本等待者的需求登记。所有等待者都撤回且任务未启动时，
 	// 队列不会再将该任务交给 worker
 	Cancel()
+	// Timing 返回本次取回的分段耗时；缓存命中时 CacheHit 为真
+	Timing() *VariantTiming
 }
 
 // TranscodeJob worker 侧句柄。队列保证交给 worker 的都是仍有等待者的任务

@@ -44,6 +44,9 @@ type Config struct {
 	BaseURL                   string
 	HooksDir                  string
 	UseSystemRecycleBin       bool
+	// LoadLatencyThresholdMs 加载耗时采样阈值（毫秒）。零值表示完全关闭采集，
+	// 启动时通过 Meta 暴露给客户端；负值同样归一到零值，保证安全默认
+	LoadLatencyThresholdMs int
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -227,6 +230,19 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 
 	hooksDir := os.Getenv("IMAGE_FUNNEL_HOOK_DIR")
 
+	// 加载耗时采样阈值：无法解析的值与 ≤0 一样按关闭处理，避免误开启采集
+	loadLatencyThresholdMs := 0
+	if v := os.Getenv("IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			if i > 0 {
+				loadLatencyThresholdMs = i
+			}
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS, load latency sampling disabled",
+				zap.String("value", v))
+		}
+	}
+
 	useSystemRecycleBin := false
 	if v := os.Getenv("IMAGE_FUNNEL_USE_SYSTEM_RECYCLE_BIN"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
@@ -256,5 +272,6 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		BaseURL:                   baseURL,
 		HooksDir:                  hooksDir,
 		UseSystemRecycleBin:       useSystemRecycleBin,
+		LoadLatencyThresholdMs:    loadLatencyThresholdMs,
 	}, nil
 }

@@ -66,45 +66,61 @@ func VariantKey(absPath string, spec Spec, encoder string) (string, error) {
 	return base64.URLEncoding.EncodeToString(hash.Sum(nil)), nil
 }
 
+// EncoderID 当前生效的编码器标识，供响应头 desc 区分编码器
+func (c *TranscodeCoordinator) EncoderID() string { return c.encoderID }
+
 // CachedVariant 只查变体缓存：仅 stat 缓存文件，不打开源图、不入队。
 // 返回 (nil, nil) 表示缓存未命中。用于在决定直出/重定向之前免去一次源图打开
-func (c *TranscodeCoordinator) CachedVariant(ctx context.Context, absPath string, spec Spec) (File, error) {
+func (c *TranscodeCoordinator) CachedVariant(ctx context.Context, absPath string, spec Spec) (File, VariantTiming, error) {
 	key, err := VariantKey(absPath, spec, c.encoderID)
 	if err != nil {
-		return nil, err
+		return nil, VariantTiming{}, err
 	}
-	return c.cache.Lookup(ctx, key)
+	file, err := c.cache.Lookup(ctx, key)
+	return file, VariantTiming{CacheHit: file != nil}, err
 }
 
 // Acquire 获取一个图片变体：缓存命中直接返回；未命中入队等待转码完成。
 // priority 表达本次需求类别（用户查看=High，预载=Low）。
 // ctx 结束（客户端断开/请求放弃）时自动撤回需求登记——「撤回淘汰未启动任务」
 // 的语义由此保证，调用方无需手动 Cancel
-func (c *TranscodeCoordinator) Acquire(ctx context.Context, absPath string, spec Spec, priority Prio) (File, error) {
+func (c *TranscodeCoordinator) Acquire(ctx context.Context, absPath string, spec Spec, priority Prio) (File, VariantTiming, error) {
 	key, err := VariantKey(absPath, spec, c.encoderID)
 	if err != nil {
-		return nil, err
+		return nil, VariantTiming{}, err
 	}
 
 	file, err := c.cache.Lookup(ctx, key)
 	if err != nil {
-		return nil, err
+		return nil, VariantTiming{}, err
 	}
 	if file != nil {
-		return file, nil
+		return file, VariantTiming{CacheHit: true}, nil
 	}
 
+	// 计时指针随 item 进入队列：入队时刻由这里给出，排队时长由队列认领时写入，
+	// 编码时长由 worker 写入，三处共享同一结构避免额外的传递通道
+	timing := &VariantTiming{EnqueuedAt: time.Now()}
 	item, err := NewTranscodeItem(key, absPath, spec, priority)
 	if err != nil {
-		return nil, err
+		return nil, VariantTiming{}, err
 	}
+	item.timing = timing
 	waiter, err := c.queue.Enqueue(ctx, item)
 	if err != nil {
-		return nil, err
+		return nil, VariantTiming{}, err
 	}
 	// ctx 结束即撤回需求（HEAD abort / GET 放弃），无论 Wait 结果如何
 	defer waiter.Cancel()
-	return waiter.Wait(ctx)
+	file, err = waiter.Wait(ctx)
+	return file, derefTiming(waiter.Timing()), err
+}
+
+func derefTiming(t *VariantTiming) VariantTiming {
+	if t == nil {
+		return VariantTiming{}
+	}
+	return *t
 }
 
 // StartWorkers 启动 worker 池：n-1 个通用 worker（收全部优先级）+ 1 个高优先级
@@ -153,8 +169,12 @@ func (c *TranscodeCoordinator) runJob(ctx context.Context, job TranscodeJob) {
 
 	// 转码与请求生命周期解耦：使用独立 ctx，客户端断开不取消已开始的转码
 	// （已确认语义：已启动的任务跑完入缓存）
+	encodeStart := time.Now()
 	var buf transcodeBuffer
 	err := c.processor.Process(ctx, item.SrcPath(), spec, &buf)
+	if timing := item.Timing(); timing != nil {
+		timing.EncodeDuration = time.Since(encodeStart)
+	}
 	c.logger.Info("did transcode variant",
 		zap.String("key", item.Key()),
 		zap.Duration("duration", time.Since(start)),

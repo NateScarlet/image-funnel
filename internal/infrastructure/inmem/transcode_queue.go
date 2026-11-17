@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 	"sync"
+	"time"
 
 	appimage "main/internal/application/image"
 )
@@ -190,6 +191,10 @@ func (q *TranscodeQueue) Consume(ctx context.Context, minPriority appimage.Prio)
 				continue
 			}
 			bestEntry.claimed = true
+			// 认领时刻即排队结束：从首次入队到此刻的时长写入共享计时结构
+			if timing := bestEntry.item.Timing(); timing != nil && !timing.EnqueuedAt.IsZero() {
+				timing.QueueDuration = time.Since(timing.EnqueuedAt)
+			}
 			q.mu.Unlock()
 
 			job := &transcodeJob{entry: bestEntry}
@@ -227,4 +232,8 @@ func (w *transcodeWaiter) Wait(ctx context.Context) (appimage.File, error) {
 
 func (w *transcodeWaiter) Cancel() {
 	w.entry.removeWaiter()
+}
+
+func (w *transcodeWaiter) Timing() *appimage.VariantTiming {
+	return w.entry.item.Timing()
 }

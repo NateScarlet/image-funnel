@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import Time from "@/utils/Time";
 import { ImageAction } from "@/graphql/generated";
 import useMarkImage from "./useMarkImage";
@@ -15,6 +15,10 @@ vi.mock("@/composables/useNotification", () => ({
 
 beforeEach(() => {
   domainMocks.markImage.mockClear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("useMarkImage", () => {
@@ -39,5 +43,30 @@ describe("useMarkImage", () => {
     expect(action).toBe(ImageAction.KEEP);
     expect(duration).toMatch(/^P/);
     expect(marking.value).toBe(false);
+  });
+
+  test("标记上下文给出原始间隔与扣除自动排除设定后的加载耗时", async () => {
+    const t0 = Time.from("2026-11-16T10:00:00.000Z") ?? Time.now();
+    const t1 = t0.add(1000);
+    vi.spyOn(Time, "now").mockReturnValueOnce(t0).mockReturnValueOnce(t1);
+    const onMark = vi.fn();
+
+    const { mark } = useMarkImage("session-1", t0, {
+      autoRejectTimeoutMs: 300,
+      onMark,
+    });
+    await mark("img-1", ImageAction.KEEP);
+
+    expect(onMark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageId: "img-1",
+        markIntervalMs: 1000,
+        autoRejectTimeoutMs: 300,
+        loadMs: 700,
+        markAt: t1,
+        loadedAt: t0,
+      }),
+    );
+    expect(onMark.mock.calls[0][0].sessionId).toBe("session-1");
   });
 });

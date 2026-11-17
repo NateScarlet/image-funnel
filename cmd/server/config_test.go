@@ -44,3 +44,40 @@ func TestLoadConfig_ImageProcessorInvalidFailsFast(t *testing.T) {
 	require.Error(t, err, "invalid value must fail fast instead of silently falling back")
 	assert.Contains(t, err.Error(), "IMAGE_FUNNEL_IMAGE_PROCESSOR")
 }
+
+func TestLoadConfig_LoadLatencyThresholdDisabled(t *testing.T) {
+	// 未设置、零值与负值都表示完全关闭采集，零值是安全默认
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "unset", value: ""},
+		{name: "zero", value: "0"},
+		{name: "negative", value: "-5"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS", tc.value)
+
+			cfg, err := loadConfig(zap.NewNop(), "test")
+			require.NoError(t, err)
+			assert.Zero(t, cfg.LoadLatencyThresholdMs)
+		})
+	}
+}
+
+func TestLoadConfig_LoadLatencyThresholdEnabled(t *testing.T) {
+	t.Setenv("IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS", "750")
+
+	cfg, err := loadConfig(zap.NewNop(), "test")
+	require.NoError(t, err)
+	assert.Equal(t, 750, cfg.LoadLatencyThresholdMs)
+}
+
+func TestLoadConfig_LoadLatencyThresholdInvalidValueDisabled(t *testing.T) {
+	// 无法解析的值不能当作开启，否则会意外开始采集
+	t.Setenv("IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS", "fast")
+
+	cfg, err := loadConfig(zap.NewNop(), "test")
+	require.NoError(t, err)
+	assert.Zero(t, cfg.LoadLatencyThresholdMs)
+}

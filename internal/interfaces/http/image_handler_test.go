@@ -95,7 +95,7 @@ type stubQueue struct {
 
 func (q *stubQueue) Enqueue(ctx context.Context, item appimage.TranscodeItem) (appimage.TranscodeWaiter, error) {
 	q.enqueues++
-	w := &stubWaiter{done: make(chan struct{})}
+	w := &stubWaiter{done: make(chan struct{}), timing: item.Timing()}
 	var buf bytes.Buffer
 	err := q.processFunc(ctx, item.SrcPath(), item.Spec(), &buf)
 	if err == nil {
@@ -113,9 +113,10 @@ func (q *stubQueue) Consume(ctx context.Context, _ appimage.Prio) iter.Seq2[appi
 }
 
 type stubWaiter struct {
-	done chan struct{}
-	file appimage.File
-	err  error
+	done   chan struct{}
+	file   appimage.File
+	err    error
+	timing *appimage.VariantTiming
 }
 
 func (w *stubWaiter) Wait(ctx context.Context) (appimage.File, error) {
@@ -128,6 +129,8 @@ func (w *stubWaiter) Wait(ctx context.Context) (appimage.File, error) {
 }
 
 func (w *stubWaiter) Cancel() {}
+
+func (w *stubWaiter) Timing() *appimage.VariantTiming { return w.timing }
 
 // stubFile 模拟缓存文件
 type stubFile struct {

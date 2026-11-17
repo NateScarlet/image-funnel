@@ -100,7 +100,7 @@ func newFakeQueue() *fakeQueue {
 }
 
 func (q *fakeQueue) Enqueue(_ context.Context, item TranscodeItem) (TranscodeWaiter, error) {
-	w := &fakeWaiter{done: make(chan struct{})}
+	w := &fakeWaiter{done: make(chan struct{}), timing: item.Timing()}
 	job := &fakeJob{item: item, waiter: w}
 	q.pending <- job
 	return w, nil
@@ -136,10 +136,11 @@ func (j *fakeJob) Resolve(file File, err error) {
 }
 
 type fakeWaiter struct {
-	done chan struct{}
-	mu   sync.Mutex
-	file File
-	err  error
+	done   chan struct{}
+	mu     sync.Mutex
+	file   File
+	err    error
+	timing *VariantTiming
 }
 
 func (w *fakeWaiter) Wait(ctx context.Context) (File, error) {
@@ -154,6 +155,8 @@ func (w *fakeWaiter) Wait(ctx context.Context) (File, error) {
 }
 
 func (w *fakeWaiter) Cancel() {}
+
+func (w *fakeWaiter) Timing() *VariantTiming { return w.timing }
 
 func newTestCoordinator(processor Processor) *TranscodeCoordinator {
 	cache := &mockCache{files: make(map[string]File)}
@@ -173,12 +176,12 @@ func TestAcquireVariant_CacheHitBypassesQueue(t *testing.T) {
 	require.NoError(t, err)
 
 	// 预热进缓存
-	prew, err := c.Acquire(context.Background(), src, spec, PrioLow)
+	prew, _, err := c.Acquire(context.Background(), src, spec, PrioLow)
 	require.NoError(t, err)
 	require.NotNil(t, prew)
 
 	// 第二次请求应命中缓存
-	again, err := c.Acquire(context.Background(), src, spec, PrioHigh)
+	again, _, err := c.Acquire(context.Background(), src, spec, PrioHigh)
 	require.NoError(t, err)
 	require.NotNil(t, again)
 
@@ -197,7 +200,7 @@ func TestAcquireVariant_ProcessError(t *testing.T) {
 	spec, err := NewSpec(1024, ImageFormatWebP)
 	require.NoError(t, err)
 
-	file, err := c.Acquire(context.Background(), src, spec, PrioHigh)
+	file, _, err := c.Acquire(context.Background(), src, spec, PrioHigh)
 	assert.Nil(t, file)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")
@@ -212,7 +215,7 @@ func TestAcquireVariant_MissingSource(t *testing.T) {
 	spec, err := NewSpec(1024, ImageFormatWebP)
 	require.NoError(t, err)
 
-	file, err := c.Acquire(context.Background(), filepath.Join(t.TempDir(), "missing.png"), spec, PrioHigh)
+	file, _, err := c.Acquire(context.Background(), filepath.Join(t.TempDir(), "missing.png"), spec, PrioHigh)
 	assert.Nil(t, file)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, os.ErrNotExist), "error should wrap os.ErrNotExist, got %v", err)
@@ -232,7 +235,7 @@ func TestAcquireVariant_ZeroWidthWebPStillTranscodes(t *testing.T) {
 	spec, err := NewSpec(0, ImageFormatWebP)
 	require.NoError(t, err)
 
-	file, err := c.Acquire(context.Background(), src, spec, PrioHigh)
+	file, _, err := c.Acquire(context.Background(), src, spec, PrioHigh)
 	require.NoError(t, err)
 	require.NotNil(t, file)
 
@@ -253,18 +256,18 @@ func TestCachedVariant_DoesNotProcessSource(t *testing.T) {
 	require.NoError(t, err)
 
 	// 未命中
-	cached, err := c.CachedVariant(context.Background(), src, spec)
+	cached, _, err := c.CachedVariant(context.Background(), src, spec)
 	require.NoError(t, err)
 	assert.Nil(t, cached, "empty cache should miss")
 	assert.Empty(t, processor.calls, "cache lookup must not transcode")
 
 	// 预热后命中
-	file, err := c.Acquire(context.Background(), src, spec, PrioLow)
+	file, _, err := c.Acquire(context.Background(), src, spec, PrioLow)
 	require.NoError(t, err)
 	require.NotNil(t, file)
 	require.Equal(t, 1, len(processor.calls))
 
-	cached, err = c.CachedVariant(context.Background(), src, spec)
+	cached, _, err = c.CachedVariant(context.Background(), src, spec)
 	require.NoError(t, err)
 	require.NotNil(t, cached, "warmed cache should hit")
 	assert.Equal(t, 1, len(processor.calls), "cache lookup must not transcode")

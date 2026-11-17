@@ -582,11 +582,16 @@ import useNote from "@/composables/domain/useNote";
 import useModalDialog from "@/composables/useModalDialog";
 import { useClipboard } from "@/composables/useClipboard";
 import { useFileSystemContext } from "@/composables/useFileSystemContext";
+import { buildRequestRecord } from "@/utils/loadLatency/requestLog";
+import type { RequestRecord } from "@/utils/loadLatency/types";
+
+// 预载过的 URL 在本页有内存镜像，切换时无需再走网络；用集合记住以便归因判定
+const preloadedUrls = new Set<string>();
 
 const { revealInExplorer } = useOpenDir();
 
 const emit = defineEmits<{
-  (e: "image-loaded", payload: { id: string; time: Time }): void;
+  (e: "image-loaded", payload: { id: string; time: Time; requests?: RequestRecord[] }): void;
   (e: "request-next"): void;
 }>();
 
@@ -806,8 +811,12 @@ useAsyncTask({
     const preloadOne = async (url: string) => {
       // 阶段一：HEAD 登记需求。目标分辨率变化（本轮 task 被 abort 重算）时撤回
       const signal = ctx.signal();
+      const startedAt = Time.now();
+      preloadedUrls.add(url);
+      let serverTimingHeader: string | null = null;
       try {
-        await fetch(url, { method: "HEAD", signal });
+        const response = await fetch(url, { method: "HEAD", signal });
+        serverTimingHeader = response.headers.get("Server-Timing");
       } catch (err) {
         if (signal.aborted) {
           return;
@@ -821,11 +830,21 @@ useAsyncTask({
       // 阶段二：GET + decode 预下载（此时服务端缓存已就绪）
       const img = new window.Image();
       img.src = url;
+      const decodeStart = Time.now();
       try {
         await img.decode();
       } catch (err) {
         console.error("图片 decode 失败", url, err);
       }
+      pendingRequests.value.push(
+        buildRequestRecord(
+          url,
+          startedAt,
+          Time.now().sub(decodeStart),
+          preloadedUrls,
+          serverTimingHeader,
+        ),
+      );
     };
 
     const worker = async () => {
@@ -858,6 +877,8 @@ useGrabScroll(
 
 const imgEl = useTemplateRef("imgEl");
 const loadedId = ref("");
+// 自上次图片显示以来观察到的请求，随 image-loaded 一并交给归因记录
+const pendingRequests = ref<RequestRecord[]>([]);
 const loaded = computed(() => loadedId.value === image.id);
 const lastLoading = shallowRef({ image, startAt: Time.now() });
 const { currentTime, refreshOn } = useCurrentTime();
@@ -891,8 +912,19 @@ refreshOn(() => lastLoading.value.startAt.add(slowLoadingTimeoutMs + 1));
 function updateLoaded() {
   const el = imgEl.value;
   if (el?.complete) {
+    const isNew = loadedId.value !== el.dataset.imageId;
     loadedId.value = el.dataset.imageId || "";
-    emit("image-loaded", { id: loadedId.value, time: Time.now() });
+    if (isNew) {
+      // 显示请求用 loadstart 时刻起算；decode 由预载阶段测量，显示阶段不重复解码
+      pendingRequests.value.push(
+        buildRequestRecord(src.value, lastLoading.value.startAt, 0, preloadedUrls),
+      );
+    }
+    emit("image-loaded", {
+      id: loadedId.value,
+      time: Time.now(),
+      requests: isNew ? pendingRequests.value.splice(0) : [],
+    });
   }
 }
 

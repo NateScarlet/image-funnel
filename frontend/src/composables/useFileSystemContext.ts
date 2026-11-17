@@ -57,10 +57,16 @@ export function resolveDisplayName(
 export function useFileSystemContext() {
   const { data } = useQuery(MetaDocument);
   const rootPath = computed(() => data.value?.meta.rootAbsPath || "");
+  // 复用启动时的 Meta 查询，不新增请求；null 表示服务端关闭采集
+  const loadLatencyThresholdMs = computed(
+    () => data.value?.meta.loadLatencyThresholdMs ?? undefined,
+  );
 
   return {
     /** 服务端根目录的绝对物理路径；元数据未加载时为空串 */
     rootPath,
+    /** 加载耗时采样阈值（毫秒）；undefined 表示关闭 */
+    loadLatencyThresholdMs,
     absPath: (relPath: string | undefined): string => resolveAbsPath(rootPath.value, relPath),
     displayName: (relPath: string | undefined): string =>
       resolveDisplayName(rootPath.value, relPath),

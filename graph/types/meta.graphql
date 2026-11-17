@@ -9,4 +9,6 @@ type Meta {
   baseURL: String!
   "服务启动时间"
   serverStartTime: Time!
+  "加载耗时采样阈值（毫秒）。null 表示服务端关闭采集，客户端不应上报"
+  loadLatencyThresholdMs: Int
 }

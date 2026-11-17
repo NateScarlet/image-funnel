@@ -18,6 +18,7 @@ import (
 	appdirectory "main/internal/application/directory"
 	apphook "main/internal/application/hook"
 	appimage "main/internal/application/image"
+	apploadlatency "main/internal/application/loadlatency"
 	appnote "main/internal/application/note"
 	appnotification "main/internal/application/notification"
 	apppairing "main/internal/application/pairing"
@@ -85,6 +86,14 @@ func main() {
 	}
 
 	signer := urlconv.NewSigner(cfg.SecretKey, cfg.AbsRootDir)
+
+	// 加载延迟归因段的落盘目录：启动时解析为绝对路径并打出日志，便于确认写到了哪里
+	loadLatencyAppender, err := localfs.NewLoadLatencyAppender(filepath.Join(cfg.DataDir, "load-latency"))
+	if err != nil {
+		logger.Fatal("failed to resolve load latency directory", zap.Error(err))
+	}
+	logger.Info("load latency segment directory", zap.String("path", loadLatencyAppender.Dir()))
+	loadLatencyHandler := apploadlatency.NewHandler(loadLatencyAppender, logger)
 
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
@@ -281,9 +290,9 @@ func main() {
 
 	hookHandler := apphook.NewHandler(logger, hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler, loadLatencyHandler)
 
-	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL)
+	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL, cfg.LoadLatencyThresholdMs)
 
 	// 首次启动时自动拉起浏览器
 	go func() {

@@ -62,6 +62,11 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AppendLoadLatencySegmentPayload struct {
+		ClientMutationID func(childComplexity int) int
+		Path             func(childComplexity int) int
+	}
+
 	ApprovePairingRequestPayload struct {
 		ClientMutationID func(childComplexity int) int
 	}
@@ -287,11 +292,12 @@ type ComplexityRoot struct {
 	}
 
 	Meta struct {
-		BaseURL         func(childComplexity int) int
-		RootAbsPath     func(childComplexity int) int
-		RootPath        func(childComplexity int) int
-		ServerStartTime func(childComplexity int) int
-		Version         func(childComplexity int) int
+		BaseURL                func(childComplexity int) int
+		LoadLatencyThresholdMs func(childComplexity int) int
+		RootAbsPath            func(childComplexity int) int
+		RootPath               func(childComplexity int) int
+		ServerStartTime        func(childComplexity int) int
+		Version                func(childComplexity int) int
 	}
 
 	MoveImagesPayload struct {
@@ -301,6 +307,7 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		AppendLoadLatencySegment   func(childComplexity int, input AppendLoadLatencySegmentInput) int
 		ApprovePairingRequest      func(childComplexity int, input ApprovePairingRequestInput) int
 		AttachFileToClipboard      func(childComplexity int, input AttachFileToClipboardInput) int
 		BeginWebAuthnLogin         func(childComplexity int, input BeginWebAuthnLoginInput) int
@@ -620,6 +627,7 @@ type ImageResolver interface {
 }
 type MutationResolver interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (*CreateSessionPayload, error)
+	AppendLoadLatencySegment(ctx context.Context, input AppendLoadLatencySegmentInput) (*AppendLoadLatencySegmentPayload, error)
 	ApprovePairingRequest(ctx context.Context, input ApprovePairingRequestInput) (*ApprovePairingRequestPayload, error)
 	AttachFileToClipboard(ctx context.Context, input AttachFileToClipboardInput) (*AttachFileToClipboardPayload, error)
 	BeginWebAuthnLogin(ctx context.Context, input BeginWebAuthnLoginInput) (*BeginWebAuthnLoginPayload, error)
@@ -724,6 +732,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AppendLoadLatencySegmentPayload.clientMutationId":
+		if e.complexity.AppendLoadLatencySegmentPayload.ClientMutationID == nil {
+			break
+		}
+
+		return e.complexity.AppendLoadLatencySegmentPayload.ClientMutationID(childComplexity), true
+	case "AppendLoadLatencySegmentPayload.path":
+		if e.complexity.AppendLoadLatencySegmentPayload.Path == nil {
+			break
+		}
+
+		return e.complexity.AppendLoadLatencySegmentPayload.Path(childComplexity), true
 
 	case "ApprovePairingRequestPayload.clientMutationId":
 		if e.complexity.ApprovePairingRequestPayload.ClientMutationID == nil {
@@ -1517,6 +1538,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Meta.BaseURL(childComplexity), true
+	case "Meta.loadLatencyThresholdMs":
+		if e.complexity.Meta.LoadLatencyThresholdMs == nil {
+			break
+		}
+
+		return e.complexity.Meta.LoadLatencyThresholdMs(childComplexity), true
 	case "Meta.rootAbsPath":
 		if e.complexity.Meta.RootAbsPath == nil {
 			break
@@ -1561,6 +1588,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.MoveImagesPayload.TargetAbsoluteDirectory(childComplexity), true
 
+	case "Mutation.appendLoadLatencySegment":
+		if e.complexity.Mutation.AppendLoadLatencySegment == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_appendLoadLatencySegment_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AppendLoadLatencySegment(childComplexity, args["input"].(AppendLoadLatencySegmentInput)), true
 	case "Mutation.approvePairingRequest":
 		if e.complexity.Mutation.ApprovePairingRequest == nil {
 			break
@@ -2927,6 +2965,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputAppendLoadLatencySegmentInput,
 		ec.unmarshalInputApprovePairingRequestInput,
 		ec.unmarshalInputAttachFileToClipboardInput,
 		ec.unmarshalInputBeginWebAuthnLoginInput,
@@ -3445,6 +3484,8 @@ type Meta {
   baseURL: String!
   "服务启动时间"
   serverStartTime: Time!
+  "加载耗时采样阈值（毫秒）。null 表示服务端关闭采集，客户端不应上报"
+  loadLatencyThresholdMs: Int
 }`, BuiltIn: false},
 	{Name: "../../../graph/types/node.graphql", Input: `"""
 全局节点接口，所有实体类型统一实现此接口以支持 ID 解析。
@@ -4004,6 +4045,32 @@ type DeletedImage {
   "订阅指定会话的变更事件。会话状态变更时（标记、撤销、提交、更新配置）推送完整的会话对象。"
   sessionUpdated(id: ID!): Session!
 }`, BuiltIn: false},
+	{Name: "../../../graph/mutations/append_load_latency_segment.graphql", Input: `"追加一段加载耗时归因记录的输入"
+input AppendLoadLatencySegmentInput {
+  "客户端在页面加载时生成的 runId，32 位小写十六进制"
+  runId: String!
+  "一段 JSONL 文本（单行一个段对象），服务端不透明追加"
+  segment: String!
+  "客户端变更标识，用于关联请求与响应"
+  clientMutationId: String
+}
+
+"段落盘结果"
+type AppendLoadLatencySegmentPayload {
+  "写入文件的绝对路径"
+  path: String!
+  "客户端变更标识，用于关联请求与响应"
+  clientMutationId: String
+}
+
+extend type Mutation {
+  """
+  追加一段加载延迟归因记录。runId 非法或段超过 2MB 时整段拒绝；
+  重复段不去重，由读取侧按 (runId, segmentSeq) 保留首份。
+  """
+  appendLoadLatencySegment(input: AppendLoadLatencySegmentInput!): AppendLoadLatencySegmentPayload!
+}
+`, BuiltIn: false},
 	{Name: "../../../graph/mutations/approve_pairing_request.graphql", Input: `type ApprovePairingRequestPayload {
   clientMutationId: String
 }
@@ -4748,6 +4815,17 @@ func (ec *executionContext) field_Image_url_args(ctx context.Context, rawArgs ma
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_appendLoadLatencySegment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNAppendLoadLatencySegmentInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐAppendLoadLatencySegmentInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_approvePairingRequest_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5357,6 +5435,64 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AppendLoadLatencySegmentPayload_path(ctx context.Context, field graphql.CollectedField, obj *AppendLoadLatencySegmentPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppendLoadLatencySegmentPayload_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppendLoadLatencySegmentPayload_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppendLoadLatencySegmentPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AppendLoadLatencySegmentPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *AppendLoadLatencySegmentPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppendLoadLatencySegmentPayload_clientMutationId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientMutationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppendLoadLatencySegmentPayload_clientMutationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppendLoadLatencySegmentPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _ApprovePairingRequestPayload_clientMutationId(ctx context.Context, field graphql.CollectedField, obj *ApprovePairingRequestPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -9660,6 +9796,35 @@ func (ec *executionContext) fieldContext_Meta_serverStartTime(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Meta_loadLatencyThresholdMs(ctx context.Context, field graphql.CollectedField, obj *Meta) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Meta_loadLatencyThresholdMs,
+		func(ctx context.Context) (any, error) {
+			return obj.LoadLatencyThresholdMs, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Meta_loadLatencyThresholdMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Meta",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MoveImagesPayload_movedCount(ctx context.Context, field graphql.CollectedField, obj *MoveImagesPayload) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9788,6 +9953,53 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_appendLoadLatencySegment(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_appendLoadLatencySegment,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AppendLoadLatencySegment(ctx, fc.Args["input"].(AppendLoadLatencySegmentInput))
+		},
+		nil,
+		ec.marshalNAppendLoadLatencySegmentPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAppendLoadLatencySegmentPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_appendLoadLatencySegment(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_AppendLoadLatencySegmentPayload_path(ctx, field)
+			case "clientMutationId":
+				return ec.fieldContext_AppendLoadLatencySegmentPayload_clientMutationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AppendLoadLatencySegmentPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_appendLoadLatencySegment_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13219,6 +13431,8 @@ func (ec *executionContext) fieldContext_Query_meta(_ context.Context, field gra
 				return ec.fieldContext_Meta_baseURL(ctx, field)
 			case "serverStartTime":
 				return ec.fieldContext_Meta_serverStartTime(ctx, field)
+			case "loadLatencyThresholdMs":
+				return ec.fieldContext_Meta_loadLatencyThresholdMs(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Meta", field.Name)
 		},
@@ -18647,6 +18861,47 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputAppendLoadLatencySegmentInput(ctx context.Context, obj any) (AppendLoadLatencySegmentInput, error) {
+	var it AppendLoadLatencySegmentInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"runId", "segment", "clientMutationId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "runId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("runId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RunID = data
+		case "segment":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("segment"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Segment = data
+		case "clientMutationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientMutationId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientMutationID = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputApprovePairingRequestInput(ctx context.Context, obj any) (ApprovePairingRequestInput, error) {
 	var it ApprovePairingRequestInput
 	asMap := map[string]any{}
@@ -20393,6 +20648,47 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
+
+var appendLoadLatencySegmentPayloadImplementors = []string{"AppendLoadLatencySegmentPayload"}
+
+func (ec *executionContext) _AppendLoadLatencySegmentPayload(ctx context.Context, sel ast.SelectionSet, obj *AppendLoadLatencySegmentPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, appendLoadLatencySegmentPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AppendLoadLatencySegmentPayload")
+		case "path":
+			out.Values[i] = ec._AppendLoadLatencySegmentPayload_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientMutationId":
+			out.Values[i] = ec._AppendLoadLatencySegmentPayload_clientMutationId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
 
 var approvePairingRequestPayloadImplementors = []string{"ApprovePairingRequestPayload"}
 
@@ -22500,6 +22796,8 @@ func (ec *executionContext) _Meta(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "loadLatencyThresholdMs":
+			out.Values[i] = ec._Meta_loadLatencyThresholdMs(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -22591,6 +22889,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "createSession":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "appendLoadLatencySegment":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_appendLoadLatencySegment(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -25592,6 +25897,25 @@ func (ec *executionContext) marshalNAny2interface(ctx context.Context, sel ast.S
 	return res
 }
 
+func (ec *executionContext) unmarshalNAppendLoadLatencySegmentInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐAppendLoadLatencySegmentInput(ctx context.Context, v any) (AppendLoadLatencySegmentInput, error) {
+	res, err := ec.unmarshalInputAppendLoadLatencySegmentInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAppendLoadLatencySegmentPayload2mainᚋinternalᚋinterfacesᚋgraphqlᚐAppendLoadLatencySegmentPayload(ctx context.Context, sel ast.SelectionSet, v AppendLoadLatencySegmentPayload) graphql.Marshaler {
+	return ec._AppendLoadLatencySegmentPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAppendLoadLatencySegmentPayload2ᚖmainᚋinternalᚋinterfacesᚋgraphqlᚐAppendLoadLatencySegmentPayload(ctx context.Context, sel ast.SelectionSet, v *AppendLoadLatencySegmentPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AppendLoadLatencySegmentPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNApprovePairingRequestInput2mainᚋinternalᚋinterfacesᚋgraphqlᚐApprovePairingRequestInput(ctx context.Context, v any) (ApprovePairingRequestInput, error) {
 	res, err := ec.unmarshalInputApprovePairingRequestInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -26333,13 +26657,13 @@ func (ec *executionContext) marshalNImage2ᚖmainᚋinternalᚋsharedᚐImageDTO
 	return ec._Image(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.ImageAction, error) {
-	var res shared.ImageAction
+func (ec *executionContext) unmarshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.ImageActionMeta], error) {
+	var res enum.Enum[shared.ImageActionMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.ImageAction) graphql.Marshaler {
+func (ec *executionContext) marshalNImageAction2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.ImageActionMeta]) graphql.Marshaler {
 	return v
 }
 
@@ -26971,23 +27295,23 @@ func (ec *executionContext) marshalNNotificationEventType2mainᚋinternalᚋenum
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationPriority, error) {
-	var res shared.NotificationPriority
+func (ec *executionContext) unmarshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationPriorityMeta], error) {
+	var res enum.Enum[shared.NotificationPriorityMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationPriority2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationPriorityMeta]) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (shared.NotificationStatus, error) {
-	var res shared.NotificationStatus
+func (ec *executionContext) unmarshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, v any) (enum.Enum[shared.NotificationStatusMeta], error) {
+	var res enum.Enum[shared.NotificationStatusMeta]
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v shared.NotificationStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNNotificationStatus2mainᚋinternalᚋenumᚐEnum(ctx context.Context, sel ast.SelectionSet, v enum.Enum[shared.NotificationStatusMeta]) graphql.Marshaler {
 	return v
 }
 

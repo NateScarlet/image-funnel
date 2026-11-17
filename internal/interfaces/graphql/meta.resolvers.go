@@ -11,11 +11,18 @@ import (
 
 // Meta is the resolver for the meta field.
 func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
+	// 关闭采集时给客户端 null 而不是 0：让「未开启」与「阈值 0」在契约上一致
+	var threshold *int
+	if r.loadLatencyThresholdMs > 0 {
+		value := r.loadLatencyThresholdMs
+		threshold = &value
+	}
 	return &Meta{
-		RootAbsPath:     r.rootDir,
-		RootPath:        r.rootDir,
-		Version:         r.version,
-		BaseURL:         r.baseURL,
-		ServerStartTime: r.serverStartTime,
+		RootAbsPath:            r.rootDir,
+		RootPath:               r.rootDir,
+		Version:                r.version,
+		BaseURL:                r.baseURL,
+		ServerStartTime:        r.serverStartTime,
+		LoadLatencyThresholdMs: threshold,
 	}, nil
 }

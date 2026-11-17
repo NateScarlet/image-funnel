@@ -19,6 +19,24 @@ import (
 type Node interface {
 }
 
+// 追加一段加载耗时归因记录的输入
+type AppendLoadLatencySegmentInput struct {
+	// 客户端在页面加载时生成的 runId，32 位小写十六进制
+	RunID string `json:"runId"`
+	// 一段 JSONL 文本（单行一个段对象），服务端不透明追加
+	Segment string `json:"segment"`
+	// 客户端变更标识，用于关联请求与响应
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
+// 段落盘结果
+type AppendLoadLatencySegmentPayload struct {
+	// 写入文件的绝对路径
+	Path string `json:"path"`
+	// 客户端变更标识，用于关联请求与响应
+	ClientMutationID *string `json:"clientMutationId,omitempty"`
+}
+
 type ApprovePairingRequestInput struct {
 	Code             string  `json:"code"`
 	ClientMutationID *string `json:"clientMutationId,omitempty"`
@@ -265,6 +283,8 @@ type Meta struct {
 	BaseURL string `json:"baseURL"`
 	// 服务启动时间
 	ServerStartTime time.Time `json:"serverStartTime"`
+	// 加载耗时采样阈值（毫秒）。null 表示服务端关闭采集，客户端不应上报
+	LoadLatencyThresholdMs *int `json:"loadLatencyThresholdMs,omitempty"`
 }
 
 // 将符合条件的图片移动到指定子目录

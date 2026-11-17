@@ -15,15 +15,18 @@ type Resolver struct {
 	version         string
 	baseURL         string
 	serverStartTime time.Time
+	// loadLatencyThresholdMs 加载耗时采样阈值；≤0 表示关闭，对客户端暴露为 null
+	loadLatencyThresholdMs int
 }
 
-func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, version string, baseURL string) *Resolver {
+func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, version string, baseURL string, loadLatencyThresholdMs int) *Resolver {
 	return &Resolver{
-		app:             app,
-		rootDir:         rootDir,
-		signer:          signer,
-		version:         version,
-		baseURL:         baseURL,
-		serverStartTime: time.Now(),
+		app:                    app,
+		rootDir:                rootDir,
+		signer:                 signer,
+		version:                version,
+		baseURL:                baseURL,
+		serverStartTime:        time.Now(),
+		loadLatencyThresholdMs: loadLatencyThresholdMs,
 	}
 }
