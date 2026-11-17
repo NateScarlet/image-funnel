@@ -1,4 +1,12 @@
-// port from https://github.com/NateScarlet/iso8601/blob/1f881e261294d70e12d815a85b2995d5d1efbc87/pkg/iso8601/duration.go
+// 本文件是上游 ISO 8601 时长库的 vendored 副本（移植体），来源与固定提交：
+// https://github.com/NateScarlet/iso8601/blob/1f881e261294d70e12d815a85b2995d5d1efbc87/pkg/iso8601/duration.go
+//
+// 应用本身不是库、没有外部消费者，对本文件的依赖面仅有以下两项：
+// - 编码：Duration.fromMilliseconds(ms).toISOString() —— 由「标记图片」流程使用，生成随标记变更提交给后端的 ISO 8601 时长字符串（零值也必须兼容）。
+// - 解码：Duration.parse(value) 配合 valid 标志与 toMilliseconds() —— 由「垃圾箱历史保留期设置」使用，把配置的 ISO 8601 字符串换算为毫秒阈值。
+//
+// 其余公开成员均为随上游移植进来、应用当前未使用的代码。修改本文件或与上游同步时，
+// 只需保持上面声明的两项能力行为不变，无需维护其余成员的兼容性。
 
 // import createDate from './createDate';
 import roundDecimal from "./roundDecimal";
