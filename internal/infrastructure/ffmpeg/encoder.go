@@ -10,6 +10,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
+	"main/internal/shared/transcode"
 
 	"go.uber.org/zap"
 )
@@ -76,7 +77,7 @@ func (e *Encoder) ID() string { return appimage.EncoderSVTAV1 }
 // - "-pix_fmt yuv420p -color_range pc"：显式全范围，与 magick 输出一致
 //   （ffmpeg 默认标为受限范围 tv，会让黑位与对比度被压缩，实测影响约 0.6dB）
 // - 输出目标为临时文件路径（AVIF muxer 需要可寻址输出）
-func buildArgs(srcPath, outPath string, spec appimage.Spec) []string {
+func buildArgs(srcPath, outPath string, spec transcode.Spec) []string {
 	args := []string{
 		"-hide_banner", "-loglevel", "error",
 		"-y",
@@ -100,7 +101,7 @@ func buildArgs(srcPath, outPath string, spec appimage.Spec) []string {
 }
 
 // Process 执行一次 AVIF 转码，结果写入 w
-func (e *Encoder) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+func (e *Encoder) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 	outFile, err := os.CreateTemp(e.tempDir, "image-funnel-avif-*.avif")
 	if err != nil {
 		return fmt.Errorf("create temp file for avif transcode: %w", err)

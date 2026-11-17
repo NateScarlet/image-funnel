@@ -14,6 +14,7 @@ import (
 	appimage "main/internal/application/image"
 	"main/internal/domain/relpath"
 	"main/internal/infrastructure/urlconv"
+	"main/internal/shared/transcode"
 	"main/internal/util"
 
 	"go.uber.org/zap"
@@ -28,7 +29,7 @@ func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 type formatDecision struct {
 	redirectToRaw  bool
 	canonicalWidth int // >0 表示应 302 到 w=该宽度 的规范 URL
-	format         appimage.ImageFormat
+	format         transcode.ImageFormat
 }
 
 func handleImage(
@@ -132,7 +133,7 @@ func handleImage(
 
 		// w>0 时先只查变体缓存：命中即服务，整个过程不打开源图
 		if width > 0 {
-			spec, err := appimage.NewSpec(width, format)
+			spec, err := transcode.NewSpec(width, format)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -187,7 +188,7 @@ func handleImage(
 			effectiveWidth = source.Width
 		}
 
-		spec, err := appimage.NewSpec(effectiveWidth, decision.format)
+		spec, err := transcode.NewSpec(effectiveWidth, decision.format)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -195,9 +196,9 @@ func handleImage(
 
 		// HEAD = 登记需求并等待就绪（低优先级）；GET = 用户当前查看（高优先级）。
 		// 两者经由同一缓存与队列，GET 可搭乘进行中的同一转码
-		priority := appimage.PrioHigh
+		priority := transcode.PrioHigh
 		if isHEAD(r) {
-			priority = appimage.PrioLow
+			priority = transcode.PrioLow
 		}
 
 		file, variantTiming, err := coordinator.Acquire(r.Context(), absPath, spec, priority)
@@ -233,18 +234,18 @@ func decideFormat(accept string, width, sourceWidth int, sourceAcceptable bool) 
 }
 
 // negotiateFormat 根据 Accept 优先级选择转码目标格式
-func negotiateFormat(accept string) appimage.ImageFormat {
+func negotiateFormat(accept string) transcode.ImageFormat {
 	for _, pf := range util.PreferredImageFormats(accept) {
 		switch pf {
 		case "image/avif":
-			return appimage.ImageFormatAVIF
+			return transcode.ImageFormatAVIF
 		case "image/webp":
-			return appimage.ImageFormatWebP
+			return transcode.ImageFormatWebP
 		}
 	}
 
 	// 默认 WebP
-	return appimage.ImageFormatWebP
+	return transcode.ImageFormatWebP
 }
 
 // redirectSigned 用请求自带的 t/s 与指定参数现场签名并发出 302（无 body）。
@@ -299,7 +300,7 @@ func serveOriginal(w http.ResponseWriter, r *http.Request, contentType, filename
 }
 
 // serveVariantFile 打开缓存句柄并写出变体响应
-func serveVariantFile(w http.ResponseWriter, r *http.Request, format appimage.ImageFormat, filename string, file appimage.File) error {
+func serveVariantFile(w http.ResponseWriter, r *http.Request, format transcode.ImageFormat, filename string, file transcode.File) error {
 	reader, err := file.Open()
 	if err != nil {
 		return err
@@ -310,13 +311,13 @@ func serveVariantFile(w http.ResponseWriter, r *http.Request, format appimage.Im
 }
 
 // serveVariant 写出变体产物响应头与内容
-func serveVariant(w http.ResponseWriter, r *http.Request, format appimage.ImageFormat, filename string, reader io.ReadSeekCloser) {
+func serveVariant(w http.ResponseWriter, r *http.Request, format transcode.ImageFormat, filename string, reader io.ReadSeekCloser) {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"immutable"`)
 
 	// 根据转码格式显式设置 Content-Type
 	switch format {
-	case appimage.ImageFormatAVIF:
+	case transcode.ImageFormatAVIF:
 		w.Header().Set("Content-Type", "image/avif")
 	default:
 		w.Header().Set("Content-Type", "image/webp")

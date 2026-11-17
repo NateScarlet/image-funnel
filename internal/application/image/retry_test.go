@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"main/internal/shared"
+	"main/internal/shared/transcode"
 
 	"go.uber.org/zap"
 )
@@ -20,7 +21,7 @@ type mockProcessor struct {
 	resultMeta *shared.ImageMeta
 }
 
-func (m *mockProcessor) Process(ctx context.Context, srcPath string, spec Spec, w io.Writer) error {
+func (m *mockProcessor) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 	m.calls++
 	if m.calls <= len(m.errs) {
 		return m.errs[m.calls-1]
@@ -45,7 +46,7 @@ func TestRetryProcessor_Process_SuccessAfterRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond // 缩短退避以加速测试
 
-	spec, err := NewSpec(100, ImageFormatWebP)
+	spec, err := transcode.NewSpec(100, transcode.ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestRetryProcessor_Process_NonTargetErrorNoRetry(t *testing.T) {
 	p := NewRetryProcessor(mock, zap.NewNop())
 	p.backoff = 1 * time.Millisecond
 
-	spec, err := NewSpec(100, ImageFormatWebP)
+	spec, err := transcode.NewSpec(100, transcode.ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestRetryProcessor_Process_ContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	spec, err := NewSpec(100, ImageFormatWebP)
+	spec, err := transcode.NewSpec(100, transcode.ImageFormatWebP)
 	if err != nil {
 		t.Fatalf("new spec: %v", err)
 	}

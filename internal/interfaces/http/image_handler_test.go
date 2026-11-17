@@ -26,6 +26,7 @@ import (
 	appimage "main/internal/application/image"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/shared"
+	"main/internal/shared/transcode"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -34,11 +35,11 @@ import (
 
 // stubProcessor 模拟纯转码处理器（供 coordinator 使用）
 type stubProcessor struct {
-	processFunc func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error
+	processFunc func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error
 	metaCalls   int
 }
 
-func (m *stubProcessor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+func (m *stubProcessor) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 	return m.processFunc(ctx, srcPath, spec, w)
 }
 
@@ -51,15 +52,15 @@ func (m *stubProcessor) Meta(ctx context.Context, srcPath string) (*shared.Image
 // stubCache 模拟缓存：可预设已存在条目
 type stubCache struct {
 	mu      sync.Mutex
-	files   map[string]appimage.File
+	files   map[string]transcode.File
 	lookups int
 }
 
 func newStubCache() *stubCache {
-	return &stubCache{files: make(map[string]appimage.File)}
+	return &stubCache{files: make(map[string]transcode.File)}
 }
 
-func (c *stubCache) Lookup(_ context.Context, key string) (appimage.File, error) {
+func (c *stubCache) Lookup(_ context.Context, key string) (transcode.File, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lookups++
@@ -89,11 +90,11 @@ func (c *stubCache) Save(_ context.Context, key string, r io.Reader) error {
 
 // stubQueue 模拟队列：Enqueue 即同步执行并 resolve（模拟 worker 立即处理）
 type stubQueue struct {
-	processFunc func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error
+	processFunc func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error
 	enqueues    int
 }
 
-func (q *stubQueue) Enqueue(ctx context.Context, item appimage.TranscodeItem) (appimage.TranscodeWaiter, error) {
+func (q *stubQueue) Enqueue(ctx context.Context, item transcode.Item) (transcode.Waiter, error) {
 	q.enqueues++
 	w := &stubWaiter{done: make(chan struct{}), timing: item.Timing()}
 	var buf bytes.Buffer
@@ -106,20 +107,20 @@ func (q *stubQueue) Enqueue(ctx context.Context, item appimage.TranscodeItem) (a
 	return w, nil
 }
 
-func (q *stubQueue) Consume(ctx context.Context, _ appimage.Prio) iter.Seq2[appimage.TranscodeJob, error] {
-	return func(yield func(appimage.TranscodeJob, error) bool) {
+func (q *stubQueue) Consume(ctx context.Context, _ transcode.Prio) iter.Seq2[transcode.Job, error] {
+	return func(yield func(transcode.Job, error) bool) {
 		<-ctx.Done()
 	}
 }
 
 type stubWaiter struct {
 	done   chan struct{}
-	file   appimage.File
+	file   transcode.File
 	err    error
-	timing *appimage.VariantTiming
+	timing *transcode.VariantTiming
 }
 
-func (w *stubWaiter) Wait(ctx context.Context) (appimage.File, error) {
+func (w *stubWaiter) Wait(ctx context.Context) (transcode.File, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -128,9 +129,7 @@ func (w *stubWaiter) Wait(ctx context.Context) (appimage.File, error) {
 	return w.file, w.err
 }
 
-func (w *stubWaiter) Cancel() {}
-
-func (w *stubWaiter) Timing() *appimage.VariantTiming { return w.timing }
+func (w *stubWaiter) Timing() *transcode.VariantTiming { return w.timing }
 
 // stubFile 模拟缓存文件
 type stubFile struct {
@@ -150,7 +149,7 @@ func (m *stubReadSeekCloser) Close() error { return nil }
 // newCountingCoordinator 构造挂接可计数 stub 的 coordinator，
 // 用于断言「请求未查询变体缓存、未登记转码」
 func newCountingCoordinator() (coordinator *appimage.TranscodeCoordinator, cache *stubCache, queue *stubQueue, processor *stubProcessor) {
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		_, err := w.Write([]byte("fake-image"))
 		return err
 	}
@@ -162,7 +161,7 @@ func newCountingCoordinator() (coordinator *appimage.TranscodeCoordinator, cache
 
 // newTestCoordinator 构造挂接 stub 依赖的 coordinator（缓存为空、队列同步执行）
 func newTestCoordinator(processErr error) *appimage.TranscodeCoordinator {
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		if processErr != nil {
 			return processErr
 		}
@@ -361,8 +360,8 @@ func TestHandleImage_OtherError(t *testing.T) {
 func TestHandleImage_AcceptAVIF(t *testing.T) {
 	logger := zap.NewNop()
 
-	var capturedFormat appimage.ImageFormat
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	var capturedFormat transcode.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -383,7 +382,7 @@ func TestHandleImage_AcceptAVIF(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
-	if capturedFormat != appimage.ImageFormatAVIF {
+	if capturedFormat != transcode.ImageFormatAVIF {
 		t.Errorf("expected format AVIF for Accept: image/avif, got %v", capturedFormat)
 	}
 	if got := rr.Header().Get("Content-Type"); got != "image/avif" {
@@ -397,8 +396,8 @@ func TestHandleImage_AcceptAVIF(t *testing.T) {
 func TestHandleImage_AcceptWebP(t *testing.T) {
 	logger := zap.NewNop()
 
-	var capturedFormat appimage.ImageFormat
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	var capturedFormat transcode.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
 		_, err := w.Write([]byte("fake-webp"))
 		return err
@@ -419,7 +418,7 @@ func TestHandleImage_AcceptWebP(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
-	if capturedFormat != appimage.ImageFormatWebP {
+	if capturedFormat != transcode.ImageFormatWebP {
 		t.Errorf("expected format WebP for Accept: image/webp, got %v", capturedFormat)
 	}
 	if got := rr.Header().Get("Content-Type"); got != "image/webp" {
@@ -430,8 +429,8 @@ func TestHandleImage_AcceptWebP(t *testing.T) {
 func TestHandleImage_AcceptWithQValues(t *testing.T) {
 	logger := zap.NewNop()
 
-	var capturedFormat appimage.ImageFormat
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	var capturedFormat transcode.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -453,7 +452,7 @@ func TestHandleImage_AcceptWithQValues(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
-	if capturedFormat != appimage.ImageFormatWebP {
+	if capturedFormat != transcode.ImageFormatWebP {
 		t.Errorf("expected format WebP (higher q-value), got %v", capturedFormat)
 	}
 }
@@ -757,7 +756,7 @@ func TestHandleImage_WidthAboveSourceRedirectsToRaw(t *testing.T) {
 	// 且全过程只打开源图一次
 	logger := zap.NewNop()
 
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		_, err := w.Write([]byte("fake-image"))
 		return err
 	}
@@ -803,8 +802,8 @@ func TestHandleImage_TranscodesWhenSourceNotAcceptable(t *testing.T) {
 	// 无需缩放但源图 MIME 不被接受时仍需转码（例如 Accept 只收 avif）
 	logger := zap.NewNop()
 
-	var capturedFormat appimage.ImageFormat
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	var capturedFormat transcode.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -826,7 +825,7 @@ func TestHandleImage_TranscodesWhenSourceNotAcceptable(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
-	if capturedFormat != appimage.ImageFormatAVIF {
+	if capturedFormat != transcode.ImageFormatAVIF {
 		t.Errorf("expected AVIF transcode when source MIME not accepted, got %v", capturedFormat)
 	}
 }
@@ -834,8 +833,8 @@ func TestHandleImage_TranscodesWhenSourceNotAcceptable(t *testing.T) {
 func TestHandleImage_DefaultToWebPWhenNoAccept(t *testing.T) {
 	logger := zap.NewNop()
 
-	var capturedFormat appimage.ImageFormat
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	var capturedFormat transcode.ImageFormat
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedFormat = spec.Format()
 		_, err := w.Write([]byte("fake-webp"))
 		return err
@@ -856,7 +855,7 @@ func TestHandleImage_DefaultToWebPWhenNoAccept(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
 	}
-	if capturedFormat != appimage.ImageFormatWebP {
+	if capturedFormat != transcode.ImageFormatWebP {
 		t.Errorf("expected default WebP when no Accept, got %v", capturedFormat)
 	}
 	if got := rr.Header().Get("Content-Type"); got != "image/webp" {
@@ -967,7 +966,7 @@ func TestHandleImage_CacheHitDoesNotProbeSource(t *testing.T) {
 	logger := zap.NewNop()
 
 	processCalls := 0
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		processCalls++
 		_, err := w.Write([]byte("fresh-variant"))
 		return err
@@ -982,7 +981,7 @@ func TestHandleImage_CacheHitDoesNotProbeSource(t *testing.T) {
 	handler := handleImage(logger, signer, coordinator, probe, rootDir)
 
 	// 预置 w=1024、WebP 的缓存产物
-	spec, err := appimage.NewSpec(1024, appimage.ImageFormatWebP)
+	spec, err := transcode.NewSpec(1024, transcode.ImageFormatWebP)
 	require.NoError(t, err)
 	key, err := appimage.VariantKey(filepath.Join(rootDir, relPath), spec, "test-encoder")
 	require.NoError(t, err)
@@ -1012,7 +1011,7 @@ func TestHandleImage_WidthAboveSourceNotAcceptableRedirectsToCanonicalWidth(t *t
 	logger := zap.NewNop()
 
 	processCalls := 0
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		processCalls++
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -1081,7 +1080,7 @@ func TestHandleImage_CanonicalWidthFollowupAndEqualWidth(t *testing.T) {
 	logger := zap.NewNop()
 
 	var capturedWidths []int
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedWidths = append(capturedWidths, spec.Width())
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -1148,7 +1147,7 @@ func TestHandleImage_WidthBelowSourceStillTranscodes(t *testing.T) {
 	logger := zap.NewNop()
 
 	var capturedWidth int
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedWidth = spec.Width()
 		_, err := w.Write([]byte("fake-avif"))
 		return err
@@ -1181,7 +1180,7 @@ func TestHandleImage_CacheHitAboveSourceDoesNotRedirect(t *testing.T) {
 	logger := zap.NewNop()
 
 	processCalls := 0
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		processCalls++
 		_, err := w.Write([]byte("fresh-variant"))
 		return err
@@ -1197,7 +1196,7 @@ func TestHandleImage_CacheHitAboveSourceDoesNotRedirect(t *testing.T) {
 	requireWriteSource(t, filepath.Join(rootDir, relPath), 512, 384)
 
 	// 预置 w=4096、AVIF 的缓存产物
-	spec, err := appimage.NewSpec(4096, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(4096, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 	key, err := appimage.VariantKey(filepath.Join(rootDir, relPath), spec, "test-encoder")
 	require.NoError(t, err)
@@ -1231,7 +1230,7 @@ func TestHandleImage_UnknownSourceWidthDoesNotRedirect(t *testing.T) {
 	logger := zap.NewNop()
 
 	var capturedWidth int
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		capturedWidth = spec.Width()
 		_, err := w.Write([]byte("fake-webp"))
 		return err
@@ -1304,7 +1303,7 @@ func TestHandleImage_InvalidWidthReturns400(t *testing.T) {
 	logger := zap.NewNop()
 
 	processCalls := 0
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		processCalls++
 		_, err := w.Write([]byte("fake-image"))
 		return err
@@ -1425,7 +1424,7 @@ func TestHandleImage_NonDecodableSourceUsesMetaFallbackForRedirect(t *testing.T)
 	logger := zap.NewNop()
 
 	processCalls := 0
-	processFn := func(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+	processFn := func(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 		processCalls++
 		_, err := w.Write([]byte("fake-avif"))
 		return err

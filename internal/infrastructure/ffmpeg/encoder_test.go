@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"main/internal/shared/transcode"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,14 +14,12 @@ import (
 	"sync"
 	"testing"
 
-	appimage "main/internal/application/image"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuildArgs_Scaled(t *testing.T) {
-	spec, err := appimage.NewSpec(2048, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(2048, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	args := buildArgs("src/img.png", "out/result.avif", spec)
@@ -40,7 +39,7 @@ func TestBuildArgs_Scaled(t *testing.T) {
 
 func TestBuildArgs_FullResolution(t *testing.T) {
 	// 无宽度参数 = 全分辨率输出，不加 scale 滤镜
-	spec, err := appimage.NewSpec(0, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(0, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	args := buildArgs("src/img.png", "out/result.avif", spec)
@@ -53,7 +52,7 @@ func TestBuildArgs_FullResolution(t *testing.T) {
 func TestBuildArgs_PreservesFullColorRange(t *testing.T) {
 	// magick 输出标记 color_range=pc（全范围）；ffmpeg 默认 tv（受限范围）会让
 	// 黑位与对比度被压缩。实测此标记影响 PSNR 约 0.6dB，必须显式设为 pc
-	spec, err := appimage.NewSpec(1024, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(1024, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	args := buildArgs("src/img.png", "out/result.avif", spec)
@@ -78,7 +77,7 @@ func TestProcess_WritesOutput(t *testing.T) {
 	tempDir := t.TempDir()
 	p := NewEncoder(runner, tempDir)
 
-	spec, err := appimage.NewSpec(1024, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(1024, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	var out bytes.Buffer
@@ -96,7 +95,7 @@ func TestProcess_ErrorIncludesStderr(t *testing.T) {
 	runner := &fakeRunner{err: errors.New("exit status 1"), stderr: "encoder failed"}
 	p := NewEncoder(runner, t.TempDir())
 
-	spec, err := appimage.NewSpec(0, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(0, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	var out bytes.Buffer
@@ -134,7 +133,7 @@ func TestProcess_RealFFmpeg_ScaledOutputWidth(t *testing.T) {
 	createTestImage(t, src)
 
 	p := NewEncoder(procRunner{}, t.TempDir())
-	spec, err := appimage.NewSpec(1024, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(1024, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	var out bytes.Buffer
@@ -150,7 +149,7 @@ func TestProcess_RealFFmpeg_MarksFullColorRange(t *testing.T) {
 	createTestImage(t, src)
 
 	p := NewEncoder(procRunner{}, t.TempDir())
-	spec, err := appimage.NewSpec(512, appimage.ImageFormatAVIF)
+	spec, err := transcode.NewSpec(512, transcode.ImageFormatAVIF)
 	require.NoError(t, err)
 
 	var out bytes.Buffer

@@ -15,6 +15,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
+	"main/internal/shared/transcode"
 
 	_ "golang.org/x/image/webp"
 )
@@ -36,8 +37,8 @@ func NewHybridProcessor(fallback, avif appimage.Processor) *HybridProcessor {
 	}
 }
 
-func (p *HybridProcessor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
-	if spec.Format() == appimage.ImageFormatAVIF {
+func (p *HybridProcessor) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
+	if spec.Format() == transcode.ImageFormatAVIF {
 		return p.avif.Process(ctx, srcPath, spec, w)
 	}
 	return p.fallback.Process(ctx, srcPath, spec, w)

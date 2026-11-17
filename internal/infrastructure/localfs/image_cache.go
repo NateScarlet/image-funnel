@@ -8,6 +8,7 @@ import (
 	"time"
 
 	appimage "main/internal/application/image"
+	"main/internal/shared/transcode"
 	"main/internal/util"
 
 	"go.uber.org/zap"
@@ -42,7 +43,7 @@ type cachedFile struct {
 	path string
 }
 
-// Open 实现 appimage.File 接口，返回一个独立的文件读取器。
+// Open 实现 transcode.File 接口，返回一个独立的文件读取器。
 func (f *cachedFile) Open() (io.ReadSeekCloser, error) {
 	now := time.Now()
 	// 每次打开更新文件的访问与修改时间，以防其被缓存清理逻辑判定为过期
@@ -56,7 +57,7 @@ func (f *cachedFile) Open() (io.ReadSeekCloser, error) {
 }
 
 // Lookup 根据 key 获取文件句柄。如果文件不存在，返回 (nil, nil)。
-func (c *ImageCache) Lookup(ctx context.Context, key string) (appimage.File, error) {
+func (c *ImageCache) Lookup(ctx context.Context, key string) (transcode.File, error) {
 	path := c.getPath(key)
 	info, err := os.Stat(path)
 	if err != nil {

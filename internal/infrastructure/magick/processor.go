@@ -10,6 +10,7 @@ import (
 
 	appimage "main/internal/application/image"
 	"main/internal/shared"
+	"main/internal/shared/transcode"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -36,7 +37,7 @@ const webpQuality = 92
 
 // Process 执行一次转码，结果流式写入 w。源文件状态（修改时间/大小）在执行时读取，
 // 由调用方用于缓存键计算
-func (p *Processor) Process(ctx context.Context, srcPath string, spec appimage.Spec, w io.Writer) error {
+func (p *Processor) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
 	if err := p.sem.Acquire(ctx, 1); err != nil {
 		return err
 	}

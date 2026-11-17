@@ -6,22 +6,28 @@ import (
 	"sync"
 	"time"
 
-	appimage "main/internal/application/image"
+	"main/internal/shared/transcode"
 )
 
-// transcodeEntry 一个去重后的转码任务：需求记录 + 共享结果 + 等待者计数。
+// waiterRegistration 一次需求登记。ctx 即登记的生命周期：ctx 结束视为撤回。
+// 不单独保存「已撤回」标志——ctx.Err() 是唯一事实来源
+type waiterRegistration struct {
+	ctx context.Context
+}
+
+// transcodeEntry 一个去重后的转码任务：需求记录 + 共享结果 + 等待者登记。
 // 从被 Enqueue 创建到 Resolve 为止始终保留在队列映射中——即使已被 Consume
 // 取走执行——确保运行中的 key 也能去重（后到等待者搭同一趟执行）
 type transcodeEntry struct {
-	item  appimage.TranscodeItem
+	item  transcode.Item
 	queue *TranscodeQueue
 	mu    sync.Mutex
-	// waiters 等待者计数。受队列锁与 e.mu 双重保护：登记/撤回由队列锁串行化，
-	// e.mu 保证与结果字段的原子读写
-	waiters  int
+	// waiters 等待者登记集合。受队列锁与 e.mu 双重保护：登记由队列锁串行化，
+	// e.mu 保证与结果字段的原子读写。ctx 已结束的登记视为撤回
+	waiters  []waiterRegistration
 	claimed  bool
 	resolved bool
-	file     appimage.File
+	file     transcode.File
 	err      error
 	done     chan struct{}
 }
@@ -29,43 +35,33 @@ type transcodeEntry struct {
 // addWaiter 登记一个等待者。已解决的任务不再接受登记（本 key 需要重新入队）。
 // 调用方必须在持有队列锁时调用：映射中存在未解决任务与等待者计数增减的交错
 // 由队列锁串行化，entry 自身的 mu 只保护结果字段的读写
-func (e *transcodeEntry) addWaiter() bool {
+func (e *transcodeEntry) addWaiter(ctx context.Context) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.resolved {
 		return false
 	}
-	e.waiters++
+	e.waiters = append(e.waiters, waiterRegistration{ctx: ctx})
 	return true
 }
 
-// removeWaiter 撤回一个等待者的需求登记
-func (e *transcodeEntry) removeWaiter() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.waiters > 0 {
-		e.waiters--
-	}
-}
-
-// active 是否仍有等待者
-func (e *transcodeEntry) active() bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.waiters > 0
-}
-
-// waitersLocked 返回等待者计数。调用方必须已持有队列锁——等待者登记
-// （Enqueue/Cancel）在队列锁下串行化，故该读数不会错过并发登记
+// waitersLocked 返回仍活跃（ctx 未结束）的等待者登记数。调用方必须已持有队列锁——
+// 登记在队列锁下串行化，故该读数不会错过并发登记
 func (e *transcodeEntry) waitersLocked() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.waiters
+	active := 0
+	for _, registration := range e.waiters {
+		if registration.ctx.Err() == nil {
+			active++
+		}
+	}
+	return active
 }
 
 // finish 广播执行结果给所有等待者，并从队列映射中移除该任务
 // （此后同 key 的新需求才允许重新入队执行）
-func (q *TranscodeQueue) finish(entry *transcodeEntry, file appimage.File, err error) {
+func (q *TranscodeQueue) finish(entry *transcodeEntry, file transcode.File, err error) {
 	entry.mu.Lock()
 	if entry.resolved {
 		entry.mu.Unlock()
@@ -86,7 +82,7 @@ func (q *TranscodeQueue) finish(entry *transcodeEntry, file appimage.File, err e
 }
 
 // result 读取执行结果
-func (e *transcodeEntry) result() (appimage.File, error) {
+func (e *transcodeEntry) result() (transcode.File, error) {
 	<-e.done
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -102,6 +98,8 @@ type TranscodeQueue struct {
 	closed bool
 }
 
+var _ transcode.Queue = (*TranscodeQueue)(nil)
+
 func NewTranscodeQueue() *TranscodeQueue {
 	return &TranscodeQueue{
 		entries: make(map[string]*transcodeEntry),
@@ -110,8 +108,8 @@ func NewTranscodeQueue() *TranscodeQueue {
 }
 
 // Enqueue 登记一个变体转码需求。同 key 已有待执行任务时返回指向同一执行的等待者，
-// 且该任务的优先级提升为两者中较高者
-func (q *TranscodeQueue) Enqueue(ctx context.Context, item appimage.TranscodeItem) (appimage.TranscodeWaiter, error) {
+// 且该任务的优先级提升为两者中较高者。ctx 取消即撤回本次登记
+func (q *TranscodeQueue) Enqueue(ctx context.Context, item transcode.Item) (transcode.Waiter, error) {
 	for {
 		q.mu.Lock()
 		if q.closed {
@@ -120,7 +118,7 @@ func (q *TranscodeQueue) Enqueue(ctx context.Context, item appimage.TranscodeIte
 		}
 		if entry, ok := q.entries[item.Key()]; ok {
 			// 在持锁状态下登记等待者，避免与 Consume 的「取走并复查活跃」竞态窗口交错
-			if !entry.addWaiter() {
+			if !entry.addWaiter(ctx) {
 				// 任务刚好在登记前被解决，从映射中移除并重试以获得新任务
 				delete(q.entries, item.Key())
 				q.mu.Unlock()
@@ -134,9 +132,8 @@ func (q *TranscodeQueue) Enqueue(ctx context.Context, item appimage.TranscodeIte
 			q.mu.Unlock()
 			return &transcodeWaiter{entry: entry}, nil
 		}
-		entry := &transcodeEntry{item: item, done: make(chan struct{})}
-		entry.waiters = 1
-		entry.queue = q
+		entry := &transcodeEntry{item: item, done: make(chan struct{}), queue: q}
+		entry.addWaiter(ctx)
 		q.entries[item.Key()] = entry
 		close(q.notify)
 		q.notify = make(chan struct{})
@@ -147,8 +144,8 @@ func (q *TranscodeQueue) Enqueue(ctx context.Context, item appimage.TranscodeIte
 
 // Consume 迭代产出优先级 ≥ minPriority 且仍有等待者的任务。任务交出后从队列移除；
 // 结果通过 job.Resolve 广播。循环持续直到 ctx 取消
-func (q *TranscodeQueue) Consume(ctx context.Context, minPriority appimage.Prio) iter.Seq2[appimage.TranscodeJob, error] {
-	return func(yield func(appimage.TranscodeJob, error) bool) {
+func (q *TranscodeQueue) Consume(ctx context.Context, minPriority transcode.Prio) iter.Seq2[transcode.Job, error] {
+	return func(yield func(transcode.Job, error) bool) {
 		for {
 			if ctx.Err() != nil {
 				return
@@ -161,9 +158,7 @@ func (q *TranscodeQueue) Consume(ctx context.Context, minPriority appimage.Prio)
 			// 取走优先级最高且仍活跃的任务（未启动即撤光的任务在此被淘汰）。
 			// 已被认领（执行中/已 yield）的任务跳过但不从映射删除——运行中的
 			// key 保持可去重，直到 Resolve 后才允许同 key 重新入队
-			var (
-				bestEntry *transcodeEntry
-			)
+			var bestEntry *transcodeEntry
 			for key, entry := range q.entries {
 				if entry.claimed {
 					continue
@@ -210,9 +205,11 @@ type transcodeJob struct {
 	entry *transcodeEntry
 }
 
-func (j *transcodeJob) Item() appimage.TranscodeItem { return j.entry.item }
+var _ transcode.Job = (*transcodeJob)(nil)
 
-func (j *transcodeJob) Resolve(file appimage.File, err error) {
+func (j *transcodeJob) Item() transcode.Item { return j.entry.item }
+
+func (j *transcodeJob) Resolve(file transcode.File, err error) {
 	j.entry.queue.finish(j.entry, file, err)
 }
 
@@ -221,7 +218,9 @@ type transcodeWaiter struct {
 	entry *transcodeEntry
 }
 
-func (w *transcodeWaiter) Wait(ctx context.Context) (appimage.File, error) {
+var _ transcode.Waiter = (*transcodeWaiter)(nil)
+
+func (w *transcodeWaiter) Wait(ctx context.Context) (transcode.File, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -230,10 +229,6 @@ func (w *transcodeWaiter) Wait(ctx context.Context) (appimage.File, error) {
 	return w.entry.result()
 }
 
-func (w *transcodeWaiter) Cancel() {
-	w.entry.removeWaiter()
-}
-
-func (w *transcodeWaiter) Timing() *appimage.VariantTiming {
+func (w *transcodeWaiter) Timing() *transcode.VariantTiming {
 	return w.entry.item.Timing()
 }

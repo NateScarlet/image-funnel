@@ -3,12 +3,11 @@ package magick
 import (
 	"bytes"
 	"context"
+	"main/internal/shared/transcode"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	appimage "main/internal/application/image"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,7 +35,7 @@ func TestProcess_RealMagick_UsesConfiguredQuality(t *testing.T) {
 		t.Skipf("magick unavailable: %v", err)
 	}
 
-	spec, err := appimage.NewSpec(400, appimage.ImageFormatWebP)
+	spec, err := transcode.NewSpec(400, transcode.ImageFormatWebP)
 	require.NoError(t, err)
 
 	var out bytes.Buffer
