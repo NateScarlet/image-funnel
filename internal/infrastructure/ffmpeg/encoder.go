@@ -133,10 +133,12 @@ func (e *Encoder) Meta(ctx context.Context, srcPath string) (*shared.ImageMeta, 
 // 实际编码一张测试图验证 muxer 与编码器链路完整可用
 // （测试图用 64x64——SVT-AV1 要求最小 4x4；输出走临时文件——AVIF muxer
 // 不支持不可寻址输出）
-func DetectWithRunner(runner CommandRunner, tempDir string) *Encoder {
+// 失败时返回携带失败阶段上下文的 error：临时目录问题与 ffmpeg 执行问题可区分，
+// ffmpeg 原有的错误链（含 stderr）被完整保留
+func DetectWithRunner(runner CommandRunner, tempDir string) (*Encoder, error) {
 	outFile, err := os.CreateTemp(tempDir, "image-funnel-avif-probe-*.avif")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("create avif probe temp file: %w", err)
 	}
 	probeOut := outFile.Name()
 	outFile.Close()
@@ -151,17 +153,25 @@ func DetectWithRunner(runner CommandRunner, tempDir string) *Encoder {
 		probeOut,
 	}
 	if err := runner.Run(context.Background(), probe); err != nil {
-		return nil
+		return nil, fmt.Errorf("run avif probe encode: %w", err)
 	}
-	return NewEncoder(runner, tempDir)
+	return NewEncoder(runner, tempDir), nil
 }
 
 // Detect 探测系统 ffmpeg 可用性。成功返回 Encoder（main 用它做 AVIF 分支），
-// 失败记录 warn 日志并返回 nil（调用方回退 ImageMagick）
+// 失败记录携带具体原因的 warn 日志并返回 nil（调用方回退 ImageMagick）。
+// 作为最外层入口注入真实执行器与临时目录
 func Detect(logger *zap.Logger) *Encoder {
-	encoder := DetectWithRunner(procRunner{}, os.TempDir())
-	if encoder == nil {
-		logger.Warn("ffmpeg avif encoder not available, fallback to imagemagick for avif transcoding")
+	return detectWith(logger, procRunner{}, os.TempDir())
+}
+
+// detectWith 把探测依赖显式参数化，使失败日志的可诊断性可通过注入的假执行器验证。
+// warn 以 error 字段带上完整错误链，区分临时目录失败与 ffmpeg 执行失败
+func detectWith(logger *zap.Logger, runner CommandRunner, tempDir string) *Encoder {
+	encoder, err := DetectWithRunner(runner, tempDir)
+	if err != nil {
+		logger.Warn("ffmpeg avif encoder not available, fallback to imagemagick for avif transcoding",
+			zap.Error(err))
 		return nil
 	}
 	logger.Info("ffmpeg avif encoder detected")

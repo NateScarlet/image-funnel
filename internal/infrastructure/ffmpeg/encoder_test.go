@@ -16,6 +16,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestBuildArgs_Scaled(t *testing.T) {
@@ -106,23 +108,60 @@ func TestProcess_ErrorIncludesStderr(t *testing.T) {
 
 func TestDetect_SpawnsValidationEncode(t *testing.T) {
 	runner := &fakeRunner{payload: []byte("ok")}
-	encoder := DetectWithRunner(runner, t.TempDir())
+	encoder, err := DetectWithRunner(runner, t.TempDir())
+	require.NoError(t, err)
 	require.NotNil(t, encoder)
 	assert.Equal(t, encoderSVTAV1, encoder.ID())
 	assert.Equal(t, 1, runner.calls, "detection must run one validation encode")
 }
 
 func TestDetect_Unavailable(t *testing.T) {
-	runner := &fakeRunner{err: errors.New("executable file not found")}
-	encoder := DetectWithRunner(runner, t.TempDir())
+	runner := &fakeRunner{err: errors.New("exit status 1"), stderr: "avif muxer missing"}
+	encoder, err := DetectWithRunner(runner, t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "avif muxer missing", "probe error must carry ffmpeg stderr")
 	assert.Nil(t, encoder, "unavailable ffmpeg must return nil encoder")
+}
+
+func TestDetectWithRunner_CreateTempFailureReturnsDistinctError(t *testing.T) {
+	// 传入不存在的目录，稳定触发探测临时文件创建失败
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+	encoder, err := DetectWithRunner(&fakeRunner{payload: []byte("ok")}, missingDir)
+	require.Error(t, err)
+	assert.Nil(t, encoder)
+	assert.Contains(t, err.Error(), "create avif probe temp file", "temp-dir failure must be distinguishable from ffmpeg failure")
+}
+
+func TestDetect_WarnCarriesProbeError(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	runner := &fakeRunner{err: errors.New("exit status 1"), stderr: "avif muxer missing"}
+
+	encoder := detectWith(zap.New(core), runner, t.TempDir())
+	assert.Nil(t, encoder)
+
+	logs := observed.FilterMessage("ffmpeg avif encoder not available, fallback to imagemagick for avif transcoding").All()
+	require.Len(t, logs, 1)
+	assert.Contains(t, fmt.Sprint(logs[0].ContextMap()["error"]), "avif muxer missing", "warn must carry ffmpeg stderr for diagnosis")
+}
+
+func TestDetect_WarnDistinguishesTempDirFailure(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	encoder := detectWith(zap.New(core), &fakeRunner{}, missingDir)
+	assert.Nil(t, encoder)
+
+	logs := observed.FilterMessage("ffmpeg avif encoder not available, fallback to imagemagick for avif transcoding").All()
+	require.Len(t, logs, 1)
+	assert.Contains(t, fmt.Sprint(logs[0].ContextMap()["error"]), "create avif probe temp file", "warn must distinguish temp-dir failure from ffmpeg failure")
 }
 
 // #region 真实编码器集成测试（本机存在 ffmpeg 时运行）
 
 func realFFmpegAvailable(t *testing.T) bool {
 	t.Helper()
-	return DetectWithRunner(procRunner{}, t.TempDir()) != nil
+	encoder, err := DetectWithRunner(procRunner{}, t.TempDir())
+	return err == nil && encoder != nil
 }
 
 func TestProcess_RealFFmpeg_ScaledOutputWidth(t *testing.T) {
