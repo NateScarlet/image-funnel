@@ -4,22 +4,22 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT-MAP.md`** at the repo root — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
+- **`GLOSSARY-MAP.md`** at the repo root — it points at one `GLOSSARY.md` per context. Read each one relevant to the topic.
 - **`docs/adr/`** (Main App) and **`example_hooks/docs/adr/`** (Example Hooks) — read ADRs that touch the area you're about to work in.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-This repository is configured as a **multi-context** codebase (indicated by the presence of `CONTEXT-MAP.md` at the root):
+This repository is configured as a **multi-context** codebase (indicated by the presence of `GLOSSARY-MAP.md` at the root):
 
 ```
 /
-├── CONTEXT-MAP.md                      ← Points to context definitions
-├── CONTEXT.md                          ← Context definition for Main App
+├── GLOSSARY-MAP.md                      ← Points to context definitions
+├── GLOSSARY.md                          ← Context definition for Main App
 ├── docs/adr/                           ← Main App decisions
 └── example_hooks/
-    ├── CONTEXT.md                      ← Context definition for Example Hooks
+    ├── GLOSSARY.md                      ← Context definition for Example Hooks
     └── docs/adr/                       ← Example Hooks decisions
 ```
 
@@ -30,13 +30,13 @@ Numbering is **unique across the whole project**, not per context. When adding a
 ## Available Contexts
 
 1. **主应用 / Main App**: Core logic of ImageFunnel, including backend session routing, XMP sidecar reading, and frontend UI.
-   - Context Location: [CONTEXT.md](../../CONTEXT.md)
+   - Context Location: [GLOSSARY.md](../../GLOSSARY.md)
 2. **外部钩子示例 / Example Hooks**: Implementation logic for ComfyUI workflow adjustments, Danbooru autocomplete, etc.
-   - Context Location: [example_hooks/CONTEXT.md](../../example_hooks/CONTEXT.md)
+   - Context Location: [example_hooks/GLOSSARY.md](../../example_hooks/GLOSSARY.md)
 
 ## Use the glossary's vocabulary
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
