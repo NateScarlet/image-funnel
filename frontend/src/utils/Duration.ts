@@ -314,7 +314,7 @@ export default class Duration {
             d.hours += f * (Duration.DAY / Duration.HOUR / scale);
             break;
           default:
-            d.invalid = false;
+            d.invalid = true;
             return new Duration(d);
         }
       } else {
