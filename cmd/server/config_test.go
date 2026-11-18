@@ -73,6 +73,32 @@ func TestLoadConfig_LoadLatencyThresholdEnabled(t *testing.T) {
 	assert.Equal(t, 750, cfg.LoadLatencyThresholdMs)
 }
 
+func TestLoadConfig_TrainingSampleArchiveDisabledByDefault(t *testing.T) {
+	// 零值安全：未配置时完全不采集
+	t.Setenv("IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE", "")
+
+	cfg, err := loadConfig(zap.NewNop(), "test")
+	require.NoError(t, err)
+	assert.False(t, cfg.EnableTrainingSampleArchive)
+}
+
+func TestLoadConfig_TrainingSampleArchiveExplicitlyEnabled(t *testing.T) {
+	t.Setenv("IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE", "true")
+
+	cfg, err := loadConfig(zap.NewNop(), "test")
+	require.NoError(t, err)
+	assert.True(t, cfg.EnableTrainingSampleArchive)
+}
+
+func TestLoadConfig_TrainingSampleArchiveInvalidValueDisabled(t *testing.T) {
+	// 无法解析的值不能当作开启，否则会意外开始归档
+	t.Setenv("IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE", "yes")
+
+	cfg, err := loadConfig(zap.NewNop(), "test")
+	require.NoError(t, err)
+	assert.False(t, cfg.EnableTrainingSampleArchive)
+}
+
 func TestLoadConfig_LoadLatencyThresholdInvalidValueDisabled(t *testing.T) {
 	// 无法解析的值不能当作开启，否则会意外开始采集
 	t.Setenv("IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS", "fast")

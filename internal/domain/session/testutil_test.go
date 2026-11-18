@@ -258,4 +258,20 @@ func (s *FakeImageRepo) Find(ctx context.Context, relPath relpath.Path) iter.Seq
 
 var _ image.Repository = (*FakeImageRepo)(nil)
 
+// FakeSampleRecorder 记录 Commit 产生的样本，用于验证采集 seam
+type FakeSampleRecorder struct {
+	Samples []*Sample
+	Err     error
+}
+
+func (f *FakeSampleRecorder) Record(_ context.Context, sample *Sample) error {
+	if f.Err != nil {
+		return f.Err
+	}
+	f.Samples = append(f.Samples, sample)
+	return nil
+}
+
+var _ SampleRecorder = (*FakeSampleRecorder)(nil)
+
 // #endregion

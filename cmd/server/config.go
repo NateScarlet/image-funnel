@@ -47,6 +47,8 @@ type Config struct {
 	// LoadLatencyThresholdMs 加载耗时采样阈值（毫秒）。零值表示完全关闭采集，
 	// 启动时通过 Meta 暴露给客户端；负值同样归一到零值，保证安全默认
 	LoadLatencyThresholdMs int
+	// EnableTrainingSampleArchive 是否在主应用提交流程中采集训练样本；默认关闭，零值安全
+	EnableTrainingSampleArchive bool
 }
 
 func loadConfig(logger *zap.Logger, version string) (*Config, error) {
@@ -252,26 +254,36 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		}
 	}
 
+	enableTrainingSampleArchive := false
+	if v := os.Getenv("IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			enableTrainingSampleArchive = b
+		} else {
+			logger.Warn("invalid IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE, use default", zap.String("value", v))
+		}
+	}
+
 	return &Config{
-		Port:                      port,
-		RootDir:                   rootDir,
-		AbsRootDir:                absRootDir,
-		SecretKey:                 secretKey,
-		CorsHosts:                 corsHosts,
-		IsDev:                     isDev,
-		FrontendDir:               frontendDir,
-		MagickConcurrency:         magickConcurrency,
-		ImageProcessor:            imageProcessor,
-		EnableDirectoryStatsCache: enableDirectoryStatsCache,
-		IdleThreshold:             idleThreshold,
-		TrustedIPs:                trustedIPs,
-		TrustedProxies:            trustedProxies,
-		DataDir:                   dataDir,
-		WebAuthnRPID:              webauthnRPID,
-		WebAuthnRPOrigins:         webauthnRPOrigins,
-		BaseURL:                   baseURL,
-		HooksDir:                  hooksDir,
-		UseSystemRecycleBin:       useSystemRecycleBin,
-		LoadLatencyThresholdMs:    loadLatencyThresholdMs,
+		Port:                        port,
+		RootDir:                     rootDir,
+		AbsRootDir:                  absRootDir,
+		SecretKey:                   secretKey,
+		CorsHosts:                   corsHosts,
+		IsDev:                       isDev,
+		FrontendDir:                 frontendDir,
+		MagickConcurrency:           magickConcurrency,
+		ImageProcessor:              imageProcessor,
+		EnableDirectoryStatsCache:   enableDirectoryStatsCache,
+		IdleThreshold:               idleThreshold,
+		TrustedIPs:                  trustedIPs,
+		TrustedProxies:              trustedProxies,
+		DataDir:                     dataDir,
+		WebAuthnRPID:                webauthnRPID,
+		WebAuthnRPOrigins:           webauthnRPOrigins,
+		BaseURL:                     baseURL,
+		HooksDir:                    hooksDir,
+		UseSystemRecycleBin:         useSystemRecycleBin,
+		LoadLatencyThresholdMs:      loadLatencyThresholdMs,
+		EnableTrainingSampleArchive: enableTrainingSampleArchive,
 	}, nil
 }

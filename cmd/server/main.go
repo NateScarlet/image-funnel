@@ -39,6 +39,7 @@ import (
 	"main/internal/infrastructure/jwt"
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
+	"main/internal/infrastructure/samplearchive"
 	"main/internal/infrastructure/sqlite"
 	"main/internal/infrastructure/stdimage"
 	"main/internal/infrastructure/urlconv"
@@ -242,7 +243,25 @@ func main() {
 		defer cancel()
 	}
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, fileChangedTopic, metadataUpdatedTopic, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner)
+	// 训练样本归档默认关闭；开启时用项目内固定 data/ 目录，落盘布局为 data/cas/<分片>/<h>.data
+	var sampleRecorder session.SampleRecorder = session.NullSampleRecorder{}
+	if cfg.EnableTrainingSampleArchive {
+		dataRoot, err := filepath.Abs("data")
+		if err != nil {
+			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
+		}
+		recorder, err := samplearchive.NewRecorder(dataRoot,
+			samplearchive.NewMagickThumbnailer(cfg.MagickConcurrency),
+			samplearchive.PNGPromptReader{},
+		)
+		if err != nil {
+			logger.Fatal("failed to initialize training sample archive", zap.Error(err))
+		}
+		sampleRecorder = recorder
+		logger.Info("training sample archive enabled", zap.String("path", dataRoot))
+	}
+
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, fileChangedTopic, metadataUpdatedTopic, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner, sampleRecorder)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接

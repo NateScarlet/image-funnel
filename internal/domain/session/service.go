@@ -31,6 +31,7 @@ type Service struct {
 	rootDir            string
 	imageFilterBuilder *image.FilterBuilder
 	hookRunner         hook.Runner
+	sampleRecorder     SampleRecorder
 }
 
 func NewService(
@@ -45,6 +46,7 @@ func NewService(
 	rootDir string,
 	imageFilterBuilder *image.FilterBuilder,
 	hookRunner hook.Runner,
+	sampleRecorder SampleRecorder,
 ) (*Service, func()) {
 	s := &Service{
 		sessionRepo:        sessionRepo,
@@ -58,6 +60,7 @@ func NewService(
 		rootDir:            rootDir,
 		imageFilterBuilder: imageFilterBuilder,
 		hookRunner:         hookRunner,
+		sampleRecorder:     sampleRecorder,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

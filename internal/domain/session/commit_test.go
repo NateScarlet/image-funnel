@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
@@ -127,7 +129,7 @@ func TestService_Commit_ShouldOnlyWriteMatchingImages(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, NullSampleRecorder{})
 	defer cleanupService()
 
 	filter := &shared.ImageFilters{Rating: []int{0}}
@@ -197,7 +199,7 @@ func TestService_Commit_UpdatesInMemoryState(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, NullSampleRecorder{})
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
@@ -250,7 +252,7 @@ func TestService_Commit_UndoAndRecommit_ShouldWorkAsExpected(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, NullSampleRecorder{})
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
@@ -331,7 +333,7 @@ func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, NullSampleRecorder{})
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
@@ -369,6 +371,107 @@ func TestService_Commit_WithNullRatings_ShouldNotWrite(t *testing.T) {
 	require.True(t, sess.IsCommitted(img2.ID()))
 }
 
+func TestService_Commit_RecordsSampleForEachDecisionIncludingUnchangedRating(t *testing.T) {
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	file2 := filepath.Join(tempDir, "test2.jpg")
+	file3 := filepath.Join(tempDir, "test3.jpg")
+	for _, path := range []string{file1, file2, file3} {
+		require.NoError(t, os.WriteFile(path, []byte("fake"), 0644))
+	}
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeSessionRepo := NewFakeSessionRepo()
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
+	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
+	defer cleanup()
+
+	fakeScanner := &FakeImageRepo{
+		MetaRepo: fakeMeta,
+		BaseDir:  tempDir,
+		Images:   make(map[relpath.Path]*image.Image),
+	}
+	imageFb := image.NewFilterBuilder()
+	recorder := &FakeSampleRecorder{}
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, recorder)
+	defer cleanupService()
+
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	// img2 当前 rating 已是 5：KEEP 决策不会写盘，但仍必须产生样本
+	img2 := image.New(scalar.ToID("2"), "test2.jpg", testutil.Rel(t, "test2.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(5, "", time.Time{}, ""), 100, 100)
+	img3 := image.New(scalar.ToID("3"), "test3.jpg", testutil.Rel(t, "test3.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	for _, img := range []*image.Image{img1, img2, img3} {
+		fakeScanner.Images[img.RelPath()] = img
+	}
+
+	filter := &shared.ImageFilters{Rating: []int{0, 5}}
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), filter, 10, []*image.Image{img1, img2, img3}, imageFb)
+	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(img2.ID(), shared.ImageActionKeep))
+	require.NoError(t, sess.MarkImage(img3.ID(), shared.ImageActionReject))
+
+	writeActions := &shared.WriteActions{
+		KeepRating:   ptr(5),
+		ShelveRating: ptr(0),
+		RejectRating: ptr(-1),
+	}
+
+	written, matched, err := svc.Commit(context.Background(), sess, writeActions)
+	require.NoError(t, err)
+	assert.Equal(t, 2, written, "rating 未变的 img2 不应写盘")
+	assert.Equal(t, 3, matched)
+	require.Len(t, recorder.Samples, 3, "每条决策都应产生一条样本")
+
+	for i, sample := range recorder.Samples {
+		assert.Equal(t, scalar.ToID("d1"), sample.DirectoryID)
+		assert.Equal(t, scalar.ToID("s1"), sample.SessionID)
+		assert.Equal(t, sess.CurrentRound(), sample.Round)
+		assert.False(t, sample.Timestamp.IsZero())
+		assert.NotEmpty(t, sample.SourcePath)
+		assert.Equal(t, filepath.Join(tempDir, fmt.Sprintf("test%d.jpg", i+1)), sample.SourcePath)
+	}
+	assert.Equal(t, scalar.ToID("1"), recorder.Samples[0].ImageID)
+	assert.Equal(t, shared.ImageActionKeep, recorder.Samples[0].Action)
+	assert.Equal(t, 5, recorder.Samples[0].Rating)
+	assert.Equal(t, scalar.ToID("2"), recorder.Samples[1].ImageID)
+	assert.Equal(t, shared.ImageActionKeep, recorder.Samples[1].Action)
+	assert.Equal(t, 5, recorder.Samples[1].Rating)
+	assert.Equal(t, scalar.ToID("3"), recorder.Samples[2].ImageID)
+	assert.Equal(t, shared.ImageActionReject, recorder.Samples[2].Action)
+	assert.Equal(t, -1, recorder.Samples[2].Rating)
+}
+
+func TestService_Commit_RecorderError_ReturnedToCaller(t *testing.T) {
+	tempDir := t.TempDir()
+	file1 := filepath.Join(tempDir, "test1.jpg")
+	require.NoError(t, os.WriteFile(file1, []byte("fake"), 0644))
+
+	fakeMeta := NewFakeMetadataRepo()
+	fakeScanner := &FakeImageRepo{MetaRepo: fakeMeta, BaseDir: tempDir, Images: make(map[relpath.Path]*image.Image)}
+	fileChangedSub := &mockFileChangedSub{events: make(chan *directory.FileChangedEvent, 10)}
+	metadataUpdatedPub := &mockMetadataUpdatedPub{events: make(chan *shared.MetadataUpdatedEvent, 10)}
+	topic, cleanup := pubsub.NewInMemoryTopic[scalar.ID]()
+	defer cleanup()
+
+	imageFb := image.NewFilterBuilder()
+	recorder := &FakeSampleRecorder{Err: errors.New("archive failed")}
+	svc, cleanupService := NewService(NewFakeSessionRepo(), fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, recorder)
+	defer cleanupService()
+
+	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)
+	fakeScanner.Images[img1.RelPath()] = img1
+
+	sess := New(scalar.ToID("s1"), scalar.ToID("d1"), &shared.ImageFilters{Rating: []int{0}}, 10, []*image.Image{img1}, imageFb)
+	require.NoError(t, sess.MarkImage(img1.ID(), shared.ImageActionKeep))
+
+	written, _, err := svc.Commit(context.Background(), sess, &shared.WriteActions{KeepRating: ptr(5)})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "archive failed")
+	assert.Equal(t, 1, written, "归档失败不应阻断 XMP 写入")
+}
+
 func ptr(i int) *int {
 	return &i
 }
@@ -397,7 +500,7 @@ func TestService_Commit_DeletedFile_ShouldSkipWithoutError(t *testing.T) {
 	}
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{})
+	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, &FakeHookRunner{}, NullSampleRecorder{})
 	defer cleanupService()
 
 	img1 := image.New(scalar.ToID("1"), "test1.jpg", testutil.Rel(t, "test1.jpg"), scalar.ToID("d1"), 100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100)

@@ -214,6 +214,7 @@ func newNextRoundTestService(t *testing.T, sessionRepo *FakeSessionRepo, metaRep
 		imgRepo.BaseDir,
 		image.NewFilterBuilder(),
 		&FakeHookRunner{},
+		NullSampleRecorder{},
 	)
 	return svc, cleanup
 }

@@ -48,7 +48,7 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 // #endregion
 
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (written int, matched int, err error) {
-	var errs []error
+	errs := util.NewErrorsBuilder(0)
 
 	// 遍历所有持有且符合当前筛选条件的图片操作
 	for img, action := range session.Actions() {
@@ -78,19 +78,37 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 				// 文件不存在，直接忽略
 				continue
 			}
-			errs = append(errs, err)
+			errs.Add(err)
 			continue
 		}
 
 		// 如果 ID 不匹配（说明文件已被外部修改），记录错误并跳过
 		if currentImg.ID() != img.ID() {
 			absPath := img.RelPath().Abs(s.rootDir)
-			errs = append(errs, apperror.New(
+			errs.Add(apperror.New(
 				"IMAGE_MODIFIED_EXTERNALLY",
 				"image ID mismatch (file modified externally): "+absPath,
 				"图片 ID 不匹配（文件已被外部修改）: "+absPath,
 			))
 			continue
+		}
+
+		now := time.Now()
+		absPath := img.RelPath().Abs(s.rootDir)
+
+		// rating 未变仍是一次真实决策，必须在跳过写盘前先归档样本；
+		// 归档失败只汇入最终错误，不阻断 XMP 作为唯一真相源的写入
+		if err := s.sampleRecorder.Record(ctx, &Sample{
+			ImageID:     currentImg.ID(),
+			DirectoryID: session.DirectoryID(),
+			SessionID:   session.ID(),
+			Round:       session.CurrentRound(),
+			Action:      action,
+			Rating:      rating,
+			Timestamp:   now,
+			SourcePath:  absPath,
+		}); err != nil {
+			errs.Add(err)
 		}
 
 		// 如果当前磁盘状态（即刚刚加载的状态）已经符合目标 Rating，跳过写入
@@ -99,11 +117,10 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 			continue
 		}
 
-		xmpData := metadata.NewXMPData(rating, action.String(), time.Now(), currentImg.Label())
+		xmpData := metadata.NewXMPData(rating, action.String(), now, currentImg.Label())
 
-		absPath := img.RelPath().Abs(s.rootDir)
 		if err := s.metadataRepo.Write(absPath, xmpData); err != nil {
-			errs = append(errs, err)
+			errs.Add(err)
 			continue
 		}
 
@@ -154,9 +171,9 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 	dir, err := s.directoryResolver.GetDirectory(ctx, session.DirectoryID())
 	if err == nil && dir != nil {
 		if err := s.hookRunner.OnCommitSession(ctx, dir.RelPath()); err != nil {
-			errs = append(errs, err)
+			errs.Add(err)
 		}
 	}
 
-	return written, matched, errors.Join(errs...)
+	return written, matched, errs.Build()
 }
