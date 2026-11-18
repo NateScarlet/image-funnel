@@ -79,6 +79,12 @@ func newTrashSweeper(useSystemRecycleBin bool) localfs.TrashSweeper {
 	return localfs.NewPhysicalDeleteSweeper()
 }
 
+// sampleArchiveRoot 把训练样本归档根目录固定在 DataDir 下的 training-samples 子目录，并解析为绝对路径。
+// 与加载延迟归因一致，服务端不依赖进程当前工作目录。
+func sampleArchiveRoot(dataDir string) (string, error) {
+	return filepath.Abs(filepath.Join(dataDir, "training-samples"))
+}
+
 func main() {
 	var (
 		logger *zap.Logger
@@ -243,10 +249,10 @@ func main() {
 		defer cancel()
 	}
 
-	// 训练样本归档默认关闭；开启时用项目内固定 data/ 目录，落盘布局为 data/cas/<分片>/<h>.data
+	// 训练样本归档默认关闭；开启时落盘到 <DataDir>/training-samples/，布局为 <DataDir>/training-samples/cas/<分片>/<h>.data
 	var sampleRecorder session.SampleRecorder = session.NullSampleRecorder{}
 	if cfg.EnableTrainingSampleArchive {
-		dataRoot, err := filepath.Abs("data")
+		dataRoot, err := sampleArchiveRoot(cfg.DataDir)
 		if err != nil {
 			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
 		}

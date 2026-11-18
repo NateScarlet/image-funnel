@@ -45,7 +45,7 @@ type Recorder struct {
 }
 
 // NewRecorder 在 dataRoot 下建立 cas/ 目录与 samples.jsonl；dataRoot 由装配方给定，
-// 主应用固定传入项目内的 data 目录，使落盘布局为 data/cas/<分片>/<h>.data。
+// 主应用传入 DataDir 下的 training-samples 目录，使落盘布局为 <DataDir>/training-samples/cas/<分片>/<h>.data。
 func NewRecorder(dataRoot string, thumbs Thumbnailer, prompts PromptReader) (*Recorder, error) {
 	if err := os.MkdirAll(dataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create sample archive directory: %w", err)

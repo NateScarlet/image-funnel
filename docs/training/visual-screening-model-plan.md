@@ -19,7 +19,7 @@
 
 ### 2.2 事件字段
 
-事件写入 `data/samples.jsonl`（append-only，UTF-8，每行一个 JSON 对象）：
+事件写入 `<DataDir>/training-samples/samples.jsonl`（append-only，UTF-8，每行一个 JSON 对象）：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -37,10 +37,10 @@
 
 - 提交当下从原图生成固定 **224×224 居中裁剪 WebP** 缩略图（质量 75，数 KB 级），写入独立持久目录，不依赖会过期的变体缓存。
 - CID 计算：SHA-256 摘要 → CIDv1（version 1 / codec raw 0x55 / sha2-256 multihash 0x12）→ base32 大写无填充，首字符为多基前缀 `B`。
-- 令 `h = CID` 去掉首字符 `B`；分片目录取 `h` 的倒数第 3、2 位；文件路径为 `data/cas/<分片>/<h>.data`。
+- 令 `h = CID` 去掉首字符 `B`；分片目录取 `h` 的倒数第 3、2 位；文件路径为 `<DataDir>/training-samples/cas/<分片>/<h>.data`。
 - 分片布局与用户其它 IPFS 兼容 CAS 项目（如 `obsidian-content-addressed-attachments` 的 `formatRelPath`）一致，便于跨项目共用工具。
 - 相同字节只落盘一次；JSONL 只记 CID 引用。
-- 根目录固定为项目内 `data/cas/`，不在活跃图片目录、不被 retention 扫描、不在变体缓存路径上；由环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 显式开启，默认关闭。
+- 根目录固定为 `<DataDir>/training-samples/cas/`，不在活跃图片目录、不被 retention 扫描、不在变体缓存路径上；由环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 显式开启，默认关闭。`DataDir` 取 `IMAGE_FUNNEL_DATA_DIR`，未设置时回退到用户配置目录下的应用目录，与加载延迟归因共用同一数据根目录。
 
 ### 2.4 字符串指纹及其局限（必须随数据一起传播）
 
@@ -73,5 +73,5 @@
 ## 4. 配置与运维
 
 - 环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 开启；未设置、无效值或 `false` 均关闭（零值安全）。
-- 开启后启动时创建 `data/cas/` 与 `data/samples.jsonl`；日志会打印解析后的数据目录绝对路径。
+- 开启后启动时创建 `<DataDir>/training-samples/cas/` 与 `<DataDir>/training-samples/samples.jsonl`；日志会打印解析后的数据目录绝对路径。
 - 失败可见：缩略图生成、CAS 写入、JSONL 追加任一失败都会使 `Service.Commit` 返回错误。
