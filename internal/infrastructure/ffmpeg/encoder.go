@@ -144,8 +144,12 @@ func DetectWithRunner(runner CommandRunner, tempDir string) (*Encoder, error) {
 	outFile.Close()
 	defer os.Remove(probeOut)
 
+	// 与真实转码 buildArgs 对齐：-y 覆盖 CreateTemp 预建的空输出文件，
+	// -nostdin 防止无终端环境等待 Overwrite? 交互而挂起
 	probe := []string{
 		"-hide_banner", "-loglevel", "error",
+		"-y",
+		"-nostdin",
 		"-f", "lavfi", "-i", "color=black:s=64x64:d=0.1",
 		"-c:v", "libsvtav1",
 		"-still-picture", "1",

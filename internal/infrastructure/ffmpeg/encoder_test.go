@@ -123,6 +123,23 @@ func TestDetect_Unavailable(t *testing.T) {
 	assert.Nil(t, encoder, "unavailable ffmpeg must return nil encoder")
 }
 
+func TestDetectWithRunner_ProbeEnforcesOverwriteAndNoStdin(t *testing.T) {
+	// 真实 ffmpeg 在输出文件已存在且缺少 -y 时会提示 Overwrite? 并在 stdin EOF 后
+	// 失败退出；缺少 -nostdin 时则可能在无终端环境阻塞等待输入。探测命令必须像真实
+	// 转码一样带上这两个参数，否则 CreateTemp 预建的空输出文件会让探测误判为不可用。
+	runner := &interactiveGuardRunner{}
+	tempDir := t.TempDir()
+
+	encoder, err := DetectWithRunner(runner, tempDir)
+	require.NoError(t, err, "probe must overwrite preexisting output and stay non-interactive")
+	require.NotNil(t, encoder)
+	assert.Equal(t, 1, runner.calls, "detection must run one validation encode")
+
+	entries, err := os.ReadDir(tempDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "probe temp file must be removed after detection")
+}
+
 func TestDetectWithRunner_CreateTempFailureReturnsDistinctError(t *testing.T) {
 	// 传入不存在的目录，稳定触发探测临时文件创建失败
 	missingDir := filepath.Join(t.TempDir(), "does-not-exist")
@@ -240,6 +257,7 @@ func runMagick(t *testing.T, args []string) {
 
 // 编译期确认 fakeRunner 仍满足端口
 var _ CommandRunner = (*fakeRunner)(nil)
+var _ CommandRunner = (*interactiveGuardRunner)(nil)
 var _ io.Writer = (*bytes.Buffer)(nil)
 
 // fakeRunner 测试用命令执行器：执行成功时把 payload 写入 args 最后一项
@@ -263,4 +281,35 @@ func (f *fakeRunner) Run(_ context.Context, args []string) error {
 		return nil
 	}
 	return os.WriteFile(args[len(args)-1], f.payload, 0o644)
+}
+
+// interactiveGuardRunner 模拟真实 ffmpeg 在无终端环境下对已存在输出文件的处理：
+// 缺少 -y 时 Overwrite? 提示读到 EOF 后失败，缺少 -nostdin 时会阻塞等待 stdin。
+// 仅用于锁定探测命令的覆盖/无交互语义。
+type interactiveGuardRunner struct {
+	calls int
+}
+
+func (r *interactiveGuardRunner) Run(_ context.Context, args []string) error {
+	r.calls++
+	if len(args) == 0 {
+		return nil
+	}
+	outPath := args[len(args)-1]
+	if _, err := os.Stat(outPath); err == nil && !hasArg(args, "-y") {
+		return fmt.Errorf("ffmpeg error: %w: stderr: %q", errors.New("exit status 1"), "Not overwriting - exiting")
+	}
+	if !hasArg(args, "-nostdin") {
+		return errors.New("ffmpeg would block waiting for stdin without -nostdin")
+	}
+	return os.WriteFile(outPath, []byte("fake-avif-data"), 0o644)
+}
+
+func hasArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }
